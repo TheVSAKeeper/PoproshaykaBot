@@ -1,11 +1,11 @@
 ﻿using System.Text.Json;
+using System.Timers;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
 using TwitchLib.Communication.Clients;
-using TwitchLib.Communication.Interfaces;
 using TwitchLib.Communication.Models;
-using static PoproshaykaBot.WinForms.Bot;
+using Timer = System.Timers.Timer;
 
 namespace PoproshaykaBot.WinForms;
 
@@ -13,7 +13,16 @@ public class Bot : IDisposable
 {
     private readonly TwitchClient _client;
     private readonly TwitchSettings _settings;
+    private readonly Timer _timer2;
+    private readonly Dictionary<string, Person> _persons;
     private bool _disposed;
+
+    private bool hasChanges;
+
+    private string _channel;
+    private Timer _timer;
+
+    private int X1;
 
     public Bot(string accessToken) : this(accessToken, new())
     {
@@ -41,52 +50,23 @@ public class Bot : IDisposable
         _client.OnJoinedChannel += Сlient_OnJoinedChannel;
 
         var x = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "PoproshaykaBot", "counters.txt");
+            "PoproshaykaBot", "counters.txt");
 
         if (File.Exists(x))
         {
-
-            string json = File.ReadAllText(x);
+            var json = File.ReadAllText(x);
             var persons = JsonSerializer.Deserialize<List<Person>>(json);
             _persons = persons.ToDictionary(x => x.UserId, x => x);
         }
         else
         {
-            _persons = new Dictionary<string, Person>();
+            _persons = new();
         }
 
-        _timer2 = new System.Timers.Timer();
+        _timer2 = new();
         _timer2.Interval = 30_000;
         _timer2.Elapsed += Timer_Elapsed;
         _timer2.Start();
-    }
-
-    private void Timer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
-    {
-        SaveCounters();
-    }
-
-    bool hasChanges;
-    private void SaveCounters()
-    {
-        if (!hasChanges)
-        {
-            return;
-        }
-        hasChanges = false;
-
-        var x = _persons.Values.ToList();
-        string json = JsonSerializer.Serialize(x, new JsonSerializerOptions { WriteIndented = true });
-        var x2 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "PoproshaykaBot", "counters.txt");
-        File.WriteAllText(x2, json);
-    }
-
-    public class Person
-    {
-        public string UserId { get; set; }
-        public string Name { get; set; }
-        public int MessageCount { get; set; }
     }
 
     public event Action<string>? Connected;
@@ -150,6 +130,7 @@ public class Bot : IDisposable
     public void Disconnect()
     {
         _timer?.Dispose();
+
         if (_client.IsConnected)
         {
             _client.Disconnect();
@@ -176,6 +157,11 @@ public class Bot : IDisposable
         _disposed = true;
     }
 
+    private void Timer_Elapsed(object? sender, ElapsedEventArgs e)
+    {
+        SaveCounters();
+    }
+
     private void Client_OnLog(object sender, OnLogArgs e)
     {
         var logMessage = $"{e.DateTime}: {e.BotUsername} - {e.Data}";
@@ -185,14 +171,10 @@ public class Bot : IDisposable
 
     private void Client_OnConnected(object sender, OnConnectedArgs e)
     {
-        var connectionMessage = $"Подключен!";
+        var connectionMessage = "Подключен!";
         Console.WriteLine(connectionMessage);
         Connected?.Invoke(connectionMessage);
     }
-
-    private string _channel;
-    private System.Timers.Timer _timer;
-    private System.Timers.Timer _timer2;
 
     private void Сlient_OnJoinedChannel(object? sender, OnJoinedChannelArgs e)
     {
@@ -202,16 +184,13 @@ public class Bot : IDisposable
 
         _client.SendMessage(e.Channel, "ЭШКЕРЕ");
         _channel = e.Channel;
-        _timer = new System.Timers.Timer();
+        _timer = new();
         _timer.Interval = 60_000;
         _timer.Elapsed += _timer_Elapsed;
         _timer.Start();
     }
 
-    private int X1 = 0;
-    private Dictionary<string, Person> _persons;
-
-    private void _timer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
+    private void _timer_Elapsed(object? sender, ElapsedEventArgs e)
     {
         X1++;
         _client.SendMessage(_channel, "Присылайте деняк, пожалуйста, " + X1 + " раз прошу");
@@ -221,8 +200,10 @@ public class Bot : IDisposable
     {
         if (!_persons.ContainsKey(e.ChatMessage.UserId))
         {
-            _persons[e.ChatMessage.UserId] = new Person { UserId = e.ChatMessage.UserId, Name = e.ChatMessage.Username, MessageCount = 0 };
+            _persons[e.ChatMessage.UserId] = new()
+                { UserId = e.ChatMessage.UserId, Name = e.ChatMessage.Username, MessageCount = 0 };
         }
+
         _persons[e.ChatMessage.UserId].MessageCount++;
         hasChanges = true;
 
@@ -230,14 +211,42 @@ public class Bot : IDisposable
         {
             _client.SendMessage(e.ChatMessage.Channel, $"Привет, {e.ChatMessage.Username}!");
         }
+
         if (e.ChatMessage.Message.ToLower() == "!деньги")
         {
-            _client.SendMessage(e.ChatMessage.Channel, $"Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217");
+            _client.SendMessage(e.ChatMessage.Channel, "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217");
         }
+
         if (e.ChatMessage.Message.ToLower() == "!сколькосообщений")
         {
-            _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, $"У тебя " + _persons[e.ChatMessage.UserId].MessageCount + " сообщений");
+            _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, "У тебя " + _persons[e.ChatMessage.UserId].MessageCount + " сообщений");
         }
+
         LogMessage?.Invoke(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);
+    }
+
+    private void SaveCounters()
+    {
+        if (!hasChanges)
+        {
+            return;
+        }
+
+        hasChanges = false;
+
+        var x = _persons.Values.ToList();
+        var json = JsonSerializer.Serialize(x, new JsonSerializerOptions { WriteIndented = true });
+
+        var x2 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "PoproshaykaBot", "counters.txt");
+
+        File.WriteAllText(x2, json);
+    }
+
+    public class Person
+    {
+        public string UserId { get; set; }
+        public string Name { get; set; }
+        public int MessageCount { get; set; }
     }
 }
