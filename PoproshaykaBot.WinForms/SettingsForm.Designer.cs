@@ -34,22 +34,30 @@ partial class SettingsForm
         _resetButton = new Button();
         _botUsernameLabel = new Label();
         _botUsernameTextBox = new TextBox();
+        _botUsernameResetButton = new Button();
         _channelLabel = new Label();
         _channelTextBox = new TextBox();
+        _channelResetButton = new Button();
         _messagesAllowedLabel = new Label();
         _messagesAllowedNumeric = new NumericUpDown();
+        _messagesAllowedResetButton = new Button();
         _throttlingPeriodLabel = new Label();
         _throttlingPeriodNumeric = new NumericUpDown();
+        _throttlingPeriodResetButton = new Button();
         _oauthGroupBox = new GroupBox();
         _oauthInfoLabel = new Label();
         _scopesTextBox = new TextBox();
         _scopesLabel = new Label();
+        _scopesResetButton = new Button();
         _redirectUriTextBox = new TextBox();
         _redirectUriLabel = new Label();
+        _redirectUriResetButton = new Button();
         _clientSecretTextBox = new TextBox();
         _clientSecretLabel = new Label();
+        _clientSecretResetButton = new Button();
         _clientIdTextBox = new TextBox();
         _clientIdLabel = new Label();
+        _clientIdResetButton = new Button();
         ((System.ComponentModel.ISupportInitialize)_messagesAllowedNumeric).BeginInit();
         ((System.ComponentModel.ISupportInitialize)_throttlingPeriodNumeric).BeginInit();
         _oauthGroupBox.SuspendLayout();
@@ -111,9 +119,19 @@ partial class SettingsForm
         // 
         _botUsernameTextBox.Location = new Point(170, 17);
         _botUsernameTextBox.Name = "_botUsernameTextBox";
-        _botUsernameTextBox.Size = new Size(200, 23);
+        _botUsernameTextBox.Size = new Size(170, 23);
         _botUsernameTextBox.TabIndex = 5;
         _botUsernameTextBox.TextChanged += OnSettingChanged;
+        // 
+        // _botUsernameResetButton
+        // 
+        _botUsernameResetButton.Location = new Point(345, 17);
+        _botUsernameResetButton.Name = "_botUsernameResetButton";
+        _botUsernameResetButton.Size = new Size(25, 23);
+        _botUsernameResetButton.TabIndex = 6;
+        _botUsernameResetButton.Text = "↺";
+        _botUsernameResetButton.UseVisualStyleBackColor = true;
+        _botUsernameResetButton.Click += OnBotUsernameResetButtonClicked;
         // 
         // _channelLabel
         // 
@@ -128,9 +146,19 @@ partial class SettingsForm
         // 
         _channelTextBox.Location = new Point(170, 47);
         _channelTextBox.Name = "_channelTextBox";
-        _channelTextBox.Size = new Size(200, 23);
+        _channelTextBox.Size = new Size(170, 23);
         _channelTextBox.TabIndex = 7;
         _channelTextBox.TextChanged += OnSettingChanged;
+        // 
+        // _channelResetButton
+        // 
+        _channelResetButton.Location = new Point(345, 47);
+        _channelResetButton.Name = "_channelResetButton";
+        _channelResetButton.Size = new Size(25, 23);
+        _channelResetButton.TabIndex = 8;
+        _channelResetButton.Text = "↺";
+        _channelResetButton.UseVisualStyleBackColor = true;
+        _channelResetButton.Click += OnChannelResetButtonClicked;
         // 
         // _messagesAllowedLabel
         // 
@@ -152,6 +180,16 @@ partial class SettingsForm
         _messagesAllowedNumeric.Value = new decimal(new int[] { 750, 0, 0, 0 });
         _messagesAllowedNumeric.ValueChanged += OnSettingChanged;
         // 
+        // _messagesAllowedResetButton
+        // 
+        _messagesAllowedResetButton.Location = new Point(275, 77);
+        _messagesAllowedResetButton.Name = "_messagesAllowedResetButton";
+        _messagesAllowedResetButton.Size = new Size(25, 23);
+        _messagesAllowedResetButton.TabIndex = 10;
+        _messagesAllowedResetButton.Text = "↺";
+        _messagesAllowedResetButton.UseVisualStyleBackColor = true;
+        _messagesAllowedResetButton.Click += OnMessagesAllowedResetButtonClicked;
+        // 
         // _throttlingPeriodLabel
         // 
         _throttlingPeriodLabel.AutoSize = true;
@@ -172,20 +210,34 @@ partial class SettingsForm
         _throttlingPeriodNumeric.Value = new decimal(new int[] { 30, 0, 0, 0 });
         _throttlingPeriodNumeric.ValueChanged += OnSettingChanged;
         // 
+        // _throttlingPeriodResetButton
+        // 
+        _throttlingPeriodResetButton.Location = new Point(275, 107);
+        _throttlingPeriodResetButton.Name = "_throttlingPeriodResetButton";
+        _throttlingPeriodResetButton.Size = new Size(25, 23);
+        _throttlingPeriodResetButton.TabIndex = 12;
+        _throttlingPeriodResetButton.Text = "↺";
+        _throttlingPeriodResetButton.UseVisualStyleBackColor = true;
+        _throttlingPeriodResetButton.Click += OnThrottlingPeriodResetButtonClicked;
+        // 
         // _oauthGroupBox
         // 
         _oauthGroupBox.Controls.Add(_oauthInfoLabel);
         _oauthGroupBox.Controls.Add(_scopesTextBox);
         _oauthGroupBox.Controls.Add(_scopesLabel);
+        _oauthGroupBox.Controls.Add(_scopesResetButton);
         _oauthGroupBox.Controls.Add(_redirectUriTextBox);
         _oauthGroupBox.Controls.Add(_redirectUriLabel);
+        _oauthGroupBox.Controls.Add(_redirectUriResetButton);
         _oauthGroupBox.Controls.Add(_clientSecretTextBox);
         _oauthGroupBox.Controls.Add(_clientSecretLabel);
+        _oauthGroupBox.Controls.Add(_clientSecretResetButton);
         _oauthGroupBox.Controls.Add(_clientIdTextBox);
         _oauthGroupBox.Controls.Add(_clientIdLabel);
+        _oauthGroupBox.Controls.Add(_clientIdResetButton);
         _oauthGroupBox.Location = new Point(15, 140);
         _oauthGroupBox.Name = "_oauthGroupBox";
-        _oauthGroupBox.Size = new Size(355, 180);
+        _oauthGroupBox.Size = new Size(370, 180);
         _oauthGroupBox.TabIndex = 12;
         _oauthGroupBox.TabStop = false;
         _oauthGroupBox.Text = "OAuth настройки";
@@ -203,7 +255,7 @@ partial class SettingsForm
         // 
         _scopesTextBox.Location = new Point(95, 112);
         _scopesTextBox.Name = "_scopesTextBox";
-        _scopesTextBox.Size = new Size(250, 23);
+        _scopesTextBox.Size = new Size(220, 23);
         _scopesTextBox.TabIndex = 7;
         _scopesTextBox.TextChanged += OnSettingChanged;
         // 
@@ -216,11 +268,21 @@ partial class SettingsForm
         _scopesLabel.TabIndex = 6;
         _scopesLabel.Text = "Scopes:";
         // 
+        // _scopesResetButton
+        // 
+        _scopesResetButton.Location = new Point(320, 112);
+        _scopesResetButton.Name = "_scopesResetButton";
+        _scopesResetButton.Size = new Size(25, 23);
+        _scopesResetButton.TabIndex = 8;
+        _scopesResetButton.Text = "↺";
+        _scopesResetButton.UseVisualStyleBackColor = true;
+        _scopesResetButton.Click += OnScopesResetButtonClicked;
+        // 
         // _redirectUriTextBox
         // 
         _redirectUriTextBox.Location = new Point(95, 82);
         _redirectUriTextBox.Name = "_redirectUriTextBox";
-        _redirectUriTextBox.Size = new Size(250, 23);
+        _redirectUriTextBox.Size = new Size(220, 23);
         _redirectUriTextBox.TabIndex = 5;
         _redirectUriTextBox.TextChanged += OnSettingChanged;
         // 
@@ -233,11 +295,21 @@ partial class SettingsForm
         _redirectUriLabel.TabIndex = 4;
         _redirectUriLabel.Text = "Redirect URI:";
         // 
+        // _redirectUriResetButton
+        // 
+        _redirectUriResetButton.Location = new Point(320, 82);
+        _redirectUriResetButton.Name = "_redirectUriResetButton";
+        _redirectUriResetButton.Size = new Size(25, 23);
+        _redirectUriResetButton.TabIndex = 6;
+        _redirectUriResetButton.Text = "↺";
+        _redirectUriResetButton.UseVisualStyleBackColor = true;
+        _redirectUriResetButton.Click += OnRedirectUriResetButtonClicked;
+        // 
         // _clientSecretTextBox
         // 
         _clientSecretTextBox.Location = new Point(95, 52);
         _clientSecretTextBox.Name = "_clientSecretTextBox";
-        _clientSecretTextBox.Size = new Size(250, 23);
+        _clientSecretTextBox.Size = new Size(220, 23);
         _clientSecretTextBox.TabIndex = 3;
         _clientSecretTextBox.UseSystemPasswordChar = true;
         _clientSecretTextBox.TextChanged += OnSettingChanged;
@@ -251,11 +323,21 @@ partial class SettingsForm
         _clientSecretLabel.TabIndex = 2;
         _clientSecretLabel.Text = "Client Secret:";
         // 
+        // _clientSecretResetButton
+        // 
+        _clientSecretResetButton.Location = new Point(320, 52);
+        _clientSecretResetButton.Name = "_clientSecretResetButton";
+        _clientSecretResetButton.Size = new Size(25, 23);
+        _clientSecretResetButton.TabIndex = 4;
+        _clientSecretResetButton.Text = "↺";
+        _clientSecretResetButton.UseVisualStyleBackColor = true;
+        _clientSecretResetButton.Click += OnClientSecretResetButtonClicked;
+        // 
         // _clientIdTextBox
         // 
         _clientIdTextBox.Location = new Point(95, 22);
         _clientIdTextBox.Name = "_clientIdTextBox";
-        _clientIdTextBox.Size = new Size(250, 23);
+        _clientIdTextBox.Size = new Size(220, 23);
         _clientIdTextBox.TabIndex = 1;
         _clientIdTextBox.UseSystemPasswordChar = true;
         _clientIdTextBox.TextChanged += OnSettingChanged;
@@ -269,20 +351,34 @@ partial class SettingsForm
         _clientIdLabel.TabIndex = 0;
         _clientIdLabel.Text = "Client ID:";
         // 
+        // _clientIdResetButton
+        // 
+        _clientIdResetButton.Location = new Point(320, 22);
+        _clientIdResetButton.Name = "_clientIdResetButton";
+        _clientIdResetButton.Size = new Size(25, 23);
+        _clientIdResetButton.TabIndex = 2;
+        _clientIdResetButton.Text = "↺";
+        _clientIdResetButton.UseVisualStyleBackColor = true;
+        _clientIdResetButton.Click += OnClientIdResetButtonClicked;
+        // 
         // SettingsForm
         // 
         AcceptButton = _okButton;
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
         CancelButton = _cancelButton;
-        ClientSize = new Size(584, 445);
+        ClientSize = new Size(580, 445);
         Controls.Add(_oauthGroupBox);
+        Controls.Add(_throttlingPeriodResetButton);
         Controls.Add(_throttlingPeriodNumeric);
         Controls.Add(_throttlingPeriodLabel);
+        Controls.Add(_messagesAllowedResetButton);
         Controls.Add(_messagesAllowedNumeric);
         Controls.Add(_messagesAllowedLabel);
+        Controls.Add(_channelResetButton);
         Controls.Add(_channelTextBox);
         Controls.Add(_channelLabel);
+        Controls.Add(_botUsernameResetButton);
         Controls.Add(_botUsernameTextBox);
         Controls.Add(_botUsernameLabel);
         Controls.Add(_resetButton);
@@ -309,21 +405,29 @@ partial class SettingsForm
     private Button _resetButton;
     private Label _botUsernameLabel;
     private TextBox _botUsernameTextBox;
+    private Button _botUsernameResetButton;
     private Label _channelLabel;
     private TextBox _channelTextBox;
+    private Button _channelResetButton;
     private Label _messagesAllowedLabel;
     private NumericUpDown _messagesAllowedNumeric;
+    private Button _messagesAllowedResetButton;
     private Label _throttlingPeriodLabel;
     private NumericUpDown _throttlingPeriodNumeric;
+    private Button _throttlingPeriodResetButton;
     private GroupBox _oauthGroupBox;
     private Label _clientIdLabel;
     private TextBox _clientIdTextBox;
+    private Button _clientIdResetButton;
     private Label _clientSecretLabel;
     private TextBox _clientSecretTextBox;
+    private Button _clientSecretResetButton;
     private Label _redirectUriLabel;
     private TextBox _redirectUriTextBox;
+    private Button _redirectUriResetButton;
     private Label _scopesLabel;
     private TextBox _scopesTextBox;
+    private Button _scopesResetButton;
     private Label _oauthInfoLabel;
 
     #endregion

@@ -2,6 +2,7 @@
 
 public partial class SettingsForm : Form
 {
+    private static readonly TwitchSettings DefaultSettings = new();
     private AppSettings _settings;
     private bool _hasChanges;
 
@@ -10,6 +11,7 @@ public partial class SettingsForm : Form
         _settings = new();
         CopySettings(SettingsManager.Current, _settings);
         InitializeComponent();
+        SetPlaceholders();
         LoadSettingsToControls();
     }
 
@@ -59,6 +61,46 @@ public partial class SettingsForm : Form
         UpdateButtonStates();
     }
 
+    private void OnBotUsernameResetButtonClicked(object sender, EventArgs e)
+    {
+        _botUsernameTextBox.Text = DefaultSettings.BotUsername;
+    }
+
+    private void OnChannelResetButtonClicked(object sender, EventArgs e)
+    {
+        _channelTextBox.Text = DefaultSettings.Channel;
+    }
+
+    private void OnMessagesAllowedResetButtonClicked(object sender, EventArgs e)
+    {
+        _messagesAllowedNumeric.Value = DefaultSettings.MessagesAllowedInPeriod;
+    }
+
+    private void OnThrottlingPeriodResetButtonClicked(object sender, EventArgs e)
+    {
+        _throttlingPeriodNumeric.Value = DefaultSettings.ThrottlingPeriodSeconds;
+    }
+
+    private void OnClientIdResetButtonClicked(object sender, EventArgs e)
+    {
+        _clientIdTextBox.Text = DefaultSettings.ClientId;
+    }
+
+    private void OnClientSecretResetButtonClicked(object sender, EventArgs e)
+    {
+        _clientSecretTextBox.Text = DefaultSettings.ClientSecret;
+    }
+
+    private void OnRedirectUriResetButtonClicked(object sender, EventArgs e)
+    {
+        _redirectUriTextBox.Text = DefaultSettings.RedirectUri;
+    }
+
+    private void OnScopesResetButtonClicked(object sender, EventArgs e)
+    {
+        _scopesTextBox.Text = string.Join(" ", DefaultSettings.Scopes);
+    }
+
     private static void CopySettings(AppSettings source, AppSettings destination)
     {
         destination.Twitch.BotUsername = source.Twitch.BotUsername;
@@ -71,6 +113,16 @@ public partial class SettingsForm : Form
         destination.Twitch.RefreshToken = source.Twitch.RefreshToken;
         destination.Twitch.RedirectUri = source.Twitch.RedirectUri;
         destination.Twitch.Scopes = source.Twitch.Scopes;
+    }
+
+    private void SetPlaceholders()
+    {
+        _botUsernameTextBox.PlaceholderText = DefaultSettings.BotUsername;
+        _channelTextBox.PlaceholderText = DefaultSettings.Channel;
+        _clientIdTextBox.PlaceholderText = string.IsNullOrWhiteSpace(DefaultSettings.ClientId) ? "Введите Client ID" : DefaultSettings.ClientId;
+        _clientSecretTextBox.PlaceholderText = string.IsNullOrWhiteSpace(DefaultSettings.ClientSecret) ? "Введите Client Secret" : DefaultSettings.ClientSecret;
+        _redirectUriTextBox.PlaceholderText = DefaultSettings.RedirectUri;
+        _scopesTextBox.PlaceholderText = string.Join(" ", DefaultSettings.Scopes);
     }
 
     private void LoadSettingsToControls()
