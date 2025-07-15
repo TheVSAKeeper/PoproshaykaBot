@@ -54,6 +54,18 @@ public partial class MainForm : Form
         AddLogMessage($"[Прогресс] {message}");
     }
 
+    private void OnOAuthStatusChanged(string message)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action<string>(OnOAuthStatusChanged), message);
+            return;
+        }
+
+        _connectionStatusLabel.Text = message;
+        AddLogMessage($"[OAuth] {message}");
+    }
+
     private void OnBotConnected(string message)
     {
         if (InvokeRequired)
@@ -244,7 +256,6 @@ public partial class MainForm : Form
     {
         try
         {
-            // TODO: Убрать static шляпу
             var settings = SettingsManager.Current;
             AddLogMessage("Настройки Twitch загружены.");
         }
@@ -297,13 +308,22 @@ public partial class MainForm : Form
             }
         }
 
-        var oauthTask = TwitchOAuthService.StartOAuthFlowAsync(settings.ClientId,
-            settings.ClientSecret,
-            settings.Scopes,
-            settings.RedirectUri);
+        TwitchOAuthService.StatusChanged += OnOAuthStatusChanged;
 
-        var accessToken = await oauthTask;
-        AddLogMessage("OAuth авторизация завершена успешно.");
-        return accessToken;
+        try
+        {
+            var oauthTask = TwitchOAuthService.StartOAuthFlowAsync(settings.ClientId,
+                settings.ClientSecret,
+                settings.Scopes,
+                settings.RedirectUri);
+
+            var accessToken = await oauthTask;
+            AddLogMessage("OAuth авторизация завершена успешно.");
+            return accessToken;
+        }
+        finally
+        {
+            TwitchOAuthService.StatusChanged -= OnOAuthStatusChanged;
+        }
     }
 }
