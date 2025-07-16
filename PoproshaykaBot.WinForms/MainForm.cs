@@ -10,6 +10,7 @@ public partial class MainForm : Form
     {
         InitializeComponent();
         LoadSettings();
+        UpdateBroadcastButtonState();
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
     }
 
@@ -19,7 +20,7 @@ public partial class MainForm : Form
         _connectionCancellationTokenSource?.Dispose();
 
         // TODO: Исправить
-        DisconnectBotAsync().GetAwaiter().GetResult();
+        DisconnectBotAsync();
         base.OnFormClosed(e);
     }
 
@@ -40,6 +41,27 @@ public partial class MainForm : Form
             {
                 await DisconnectBotAsync();
             }
+        }
+    }
+
+    private void OnBroadcastButtonClicked(object sender, EventArgs e)
+    {
+        if (_bot == null)
+        {
+            return;
+        }
+
+        if (_bot.IsBroadcastActive)
+        {
+            _bot.StopBroadcast();
+            UpdateBroadcastButtonState();
+            AddLogMessage("Рассылка остановлена.");
+        }
+        else
+        {
+            _bot.StartBroadcast();
+            UpdateBroadcastButtonState();
+            AddLogMessage("Рассылка запущена.");
         }
     }
 
@@ -76,6 +98,8 @@ public partial class MainForm : Form
         }
 
         AddLogMessage($"Успешное подключение: {message}");
+
+        UpdateBroadcastButtonState();
     }
 
     private void OnBotLogMessage(string message)
@@ -115,6 +139,37 @@ public partial class MainForm : Form
         _logTextBox.AppendText($"{DateTime.Now:HH:mm:ss} - {message}{Environment.NewLine}");
         _logTextBox.SelectionStart = _logTextBox.Text.Length;
         _logTextBox.ScrollToCaret();
+    }
+
+    private void UpdateBroadcastButtonState()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(UpdateBroadcastButtonState);
+            return;
+        }
+
+        var isBroadcastActive = _bot is { IsBroadcastActive: true };
+        var isConnected = _isConnected;
+
+        if (isConnected == false)
+        {
+            _broadcastButton.Enabled = false;
+            _broadcastButton.Text = "Рассылка недоступна";
+            _broadcastButton.BackColor = SystemColors.Control;
+        }
+        else if (isBroadcastActive)
+        {
+            _broadcastButton.Enabled = true;
+            _broadcastButton.Text = "Остановить рассылку";
+            _broadcastButton.BackColor = Color.LightGreen;
+        }
+        else
+        {
+            _broadcastButton.Enabled = true;
+            _broadcastButton.Text = "Запустить рассылку";
+            _broadcastButton.BackColor = Color.Orange;
+        }
     }
 
     private async Task ConnectBotAsync()
@@ -165,6 +220,7 @@ public partial class MainForm : Form
             _isConnected = true;
             _connectButton.Text = "Отключить бота";
             _connectButton.BackColor = Color.LightGreen;
+            UpdateBroadcastButtonState();
             AddLogMessage("Бот успешно подключен!");
         }
         catch (OperationCanceledException)
@@ -223,6 +279,7 @@ public partial class MainForm : Form
         _isConnected = false;
         _connectButton.Text = "Подключить бота";
         _connectButton.BackColor = SystemColors.Control;
+        UpdateBroadcastButtonState();
 
         if (_bot == null)
         {
@@ -262,6 +319,7 @@ public partial class MainForm : Form
         _isConnected = false;
         _connectButton.Text = "Подключить бота";
         _connectButton.BackColor = SystemColors.Control;
+        UpdateBroadcastButtonState();
 
         AddLogMessage("Бот отключен.");
     }

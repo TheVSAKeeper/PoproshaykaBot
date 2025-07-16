@@ -16,8 +16,8 @@ public class Bot : IAsyncDisposable
     private readonly StatisticsCollector _statisticsCollector;
     private bool _disposed;
 
-    private string _channel;
-    private Timer _timer;
+    private string? _channel;
+    private Timer? _timer;
 
     private int X1;
 
@@ -49,6 +49,8 @@ public class Bot : IAsyncDisposable
     public event Action<string>? ConnectionProgress;
 
     public event Action<string>? LogMessage;
+
+    public bool IsBroadcastActive => _timer is { Enabled: true };
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -123,6 +125,31 @@ public class Bot : IAsyncDisposable
         await _statisticsCollector.StopAsync();
     }
 
+    public void StartBroadcast()
+    {
+        if (string.IsNullOrWhiteSpace(_channel))
+        {
+            return;
+        }
+
+        if (_timer == null)
+        {
+            _timer = new();
+            _timer.Interval = 60_000;
+            _timer.Elapsed += _timer_Elapsed;
+        }
+
+        if (_timer.Enabled == false)
+        {
+            _timer.Start();
+        }
+    }
+
+    public void StopBroadcast()
+    {
+        _timer?.Stop();
+    }
+
     public async ValueTask DisposeAsync()
     {
         await DisposeAsyncCore();
@@ -157,21 +184,23 @@ public class Bot : IAsyncDisposable
 
     private void Сlient_OnJoinedChannel(object? sender, OnJoinedChannelArgs e)
     {
-        var connectionMessage = $"Подключен к каналу {e.Channel}";
-        Console.WriteLine(connectionMessage);
-        Connected?.Invoke(connectionMessage);
-
         _client.SendMessage(e.Channel, "ЭЩКЕРЕ");
         _channel = e.Channel;
         X1 = 0;
-        _timer = new();
-        _timer.Interval = 60_000;
-        _timer.Elapsed += _timer_Elapsed;
-        _timer.Start();
+        StartBroadcast();
+
+        var connectionMessage = $"Подключен к каналу {e.Channel}";
+        Console.WriteLine(connectionMessage);
+        Connected?.Invoke(connectionMessage);
     }
 
     private void _timer_Elapsed(object? sender, ElapsedEventArgs e)
     {
+        if (string.IsNullOrWhiteSpace(_channel))
+        {
+            return;
+        }
+
         X1++;
         _client.SendMessage(_channel, "Присылайте деняк, пожалуйста, " + X1 + " раз прошу");
     }

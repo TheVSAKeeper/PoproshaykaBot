@@ -33,6 +33,7 @@ partial class MainForm
         _logTextBox = new TextBox();
         _logLabel = new Label();
         _settingsButton = new Button();
+        _broadcastButton = new Button();
         _connectionProgressBar = new ProgressBar();
         _connectionStatusLabel = new Label();
         SuspendLayout();
@@ -68,7 +69,7 @@ partial class MainForm
         _logLabel.Text = "Логи:";
         // 
         // _settingsButton
-        // 
+        //
         _settingsButton.Location = new Point(480, 20);
         _settingsButton.Name = "_settingsButton";
         _settingsButton.Size = new Size(80, 40);
@@ -76,6 +77,17 @@ partial class MainForm
         _settingsButton.Text = "Настройки";
         _settingsButton.UseVisualStyleBackColor = true;
         _settingsButton.Click += OnSettingsButtonClicked;
+        //
+        // _broadcastButton
+        //
+        _broadcastButton.Location = new Point(570, 20);
+        _broadcastButton.Name = "_broadcastButton";
+        _broadcastButton.Size = new Size(120, 40);
+        _broadcastButton.TabIndex = 4;
+        _broadcastButton.Text = "Рассылка недоступна";
+        _broadcastButton.UseVisualStyleBackColor = true;
+        _broadcastButton.Click += OnBroadcastButtonClicked;
+        _broadcastButton.Enabled = false;
         // 
         // _connectionProgressBar
         // 
@@ -103,6 +115,7 @@ partial class MainForm
         ClientSize = new Size(800, 450);
         Controls.Add(_connectButton);
         Controls.Add(_settingsButton);
+        Controls.Add(_broadcastButton);
         Controls.Add(_logLabel);
         Controls.Add(_logTextBox);
         Controls.Add(_connectionProgressBar);
@@ -117,6 +130,7 @@ partial class MainForm
     private TextBox _logTextBox;
     private Label _logLabel;
     private Button _settingsButton;
+    private Button _broadcastButton;
     private ProgressBar _connectionProgressBar;
     private Label _connectionStatusLabel;
 
