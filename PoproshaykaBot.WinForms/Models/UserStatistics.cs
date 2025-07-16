@@ -6,7 +6,7 @@ public class UserStatistics
 
     public string Name { get; set; } = string.Empty;
 
-    public int MessageCount { get; set; }
+    public ulong MessageCount { get; set; }
 
     public DateTime FirstSeen { get; set; } = DateTime.UtcNow;
 

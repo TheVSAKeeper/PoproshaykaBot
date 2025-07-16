@@ -1,4 +1,5 @@
-﻿using System.Timers;
+﻿using System.Globalization;
+using System.Timers;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
@@ -91,6 +92,7 @@ public class Bot : IAsyncDisposable
 
             ConnectionProgress?.Invoke("Инициализация статистики...");
             await _statisticsCollector.StartAsync();
+            _statisticsCollector.ResetBotStartTime();
         }
         catch (OperationCanceledException)
         {
@@ -110,6 +112,11 @@ public class Bot : IAsyncDisposable
 
         if (_client.IsConnected)
         {
+            if (string.IsNullOrWhiteSpace(_channel) == false)
+            {
+                _client.SendMessage(_channel, "Пока-пока! ❤️");
+            }
+
             _client.Disconnect();
         }
 
@@ -134,14 +141,14 @@ public class Bot : IAsyncDisposable
         _disposed = true;
     }
 
-    private void Client_OnLog(object sender, OnLogArgs e)
+    private void Client_OnLog(object? sender, OnLogArgs e)
     {
         var logMessage = $"{e.DateTime}: {e.BotUsername} - {e.Data}";
         Console.WriteLine(logMessage);
         LogMessage?.Invoke(logMessage);
     }
 
-    private void Client_OnConnected(object sender, OnConnectedArgs e)
+    private void Client_OnConnected(object? sender, OnConnectedArgs e)
     {
         var connectionMessage = "Подключен!";
         Console.WriteLine(connectionMessage);
@@ -154,8 +161,9 @@ public class Bot : IAsyncDisposable
         Console.WriteLine(connectionMessage);
         Connected?.Invoke(connectionMessage);
 
-        _client.SendMessage(e.Channel, "ЭШКЕРЕ");
+        _client.SendMessage(e.Channel, "ЭЩКЕРЕ");
         _channel = e.Channel;
+        X1 = 0;
         _timer = new();
         _timer.Interval = 60_000;
         _timer.Elapsed += _timer_Elapsed;
@@ -168,27 +176,116 @@ public class Bot : IAsyncDisposable
         _client.SendMessage(_channel, "Присылайте деняк, пожалуйста, " + X1 + " раз прошу");
     }
 
-    private async void Client_OnMessageReceived(object sender, OnMessageReceivedArgs e)
+    private void Client_OnMessageReceived(object? sender, OnMessageReceivedArgs e)
     {
-        await _statisticsCollector.TrackMessageAsync(e.ChatMessage.UserId, e.ChatMessage.Username);
+        _statisticsCollector.TrackMessage(e.ChatMessage.UserId, e.ChatMessage.Username);
 
-        if (e.ChatMessage.Message.ToLower() == "!привет")
+        switch (e.ChatMessage.Message.ToLower())
         {
-            _client.SendMessage(e.ChatMessage.Channel, $"Привет, {e.ChatMessage.Username}!");
-        }
+            case "!привет":
+                _client.SendMessage(e.ChatMessage.Channel, $"Привет, {e.ChatMessage.Username}!");
+                break;
 
-        if (e.ChatMessage.Message.ToLower() == "!деньги")
-        {
-            _client.SendMessage(e.ChatMessage.Channel, "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217");
-        }
+            case "!деньги":
+                _client.SendMessage(e.ChatMessage.Channel, "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217");
+                break;
 
-        if (e.ChatMessage.Message.ToLower() == "!сколькосообщений")
-        {
-            var userStats = await _statisticsCollector.GetUserStatisticsAsync(e.ChatMessage.UserId);
-            var messageCount = userStats?.MessageCount ?? 0;
-            _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, "У тебя " + messageCount + " сообщений");
+            case "!сколькосообщений":
+                {
+                    var userStats = _statisticsCollector.GetUserStatistics(e.ChatMessage.UserId);
+                    var messageCount = userStats?.MessageCount ?? 0;
+                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, $"У тебя {FormatNumber(messageCount)} сообщений");
+                    break;
+                }
+
+            case "!статистикабота":
+                {
+                    var botStats = _statisticsCollector.GetBotStatistics();
+                    var uptime = FormatTimeSpan(botStats.TotalUptime);
+                    var totalMessages = FormatNumber(botStats.TotalMessagesProcessed);
+                    var startTime = FormatDateTime(botStats.BotStartTime);
+
+                    var response = $"📊 Статистика бота: Обработано {totalMessages} сообщений | Время работы: {uptime} | Запущен: {startTime}";
+
+                    _client.SendMessage(e.ChatMessage.Channel, response);
+                    break;
+                }
+
+            case "!топпользователи":
+                {
+                    var topUsers = _statisticsCollector.GetTopUsers(5);
+
+                    if (topUsers.Count == 0)
+                    {
+                        _client.SendMessage(e.ChatMessage.Channel, "Пока нет данных о пользователях");
+                        return;
+                    }
+
+                    var response = "🏆 Топ-5 активных пользователей: ";
+
+                    for (var i = 0; i < topUsers.Count; i++)
+                    {
+                        var user = topUsers[i];
+                        response += $"{i + 1}. {user.Name} ({FormatNumber(user.MessageCount)})";
+
+                        if (i < topUsers.Count - 1)
+                        {
+                            response += " | ";
+                        }
+                    }
+
+                    _client.SendMessage(e.ChatMessage.Channel, response);
+                    break;
+                }
+
+            case "!мойпрофиль":
+                {
+                    var userStats = _statisticsCollector.GetUserStatistics(e.ChatMessage.UserId);
+
+                    if (userStats == null)
+                    {
+                        _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, "У тебя пока нет статистики");
+                        return;
+                    }
+
+                    var messageCount = FormatNumber(userStats.MessageCount);
+                    var firstSeen = FormatDateTime(userStats.FirstSeen);
+                    var lastSeen = FormatDateTime(userStats.LastSeen);
+
+                    var response = $"👤 Твой профиль: {messageCount} сообщений | Впервые: {firstSeen} | Последний раз: {lastSeen}";
+                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, response);
+                    break;
+                }
         }
 
         LogMessage?.Invoke(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);
+    }
+
+    private static string FormatTimeSpan(TimeSpan timeSpan)
+    {
+        if (timeSpan.TotalDays >= 1)
+        {
+            return $"{(int)timeSpan.TotalDays} дн. {timeSpan.Hours} ч. {timeSpan.Minutes} мин.";
+        }
+
+        if (timeSpan.TotalHours >= 1)
+        {
+            return $"{timeSpan.Hours} ч. {timeSpan.Minutes} мин.";
+        }
+
+        return $"{timeSpan.Minutes} мин. {timeSpan.Seconds} сек.";
+    }
+
+    private static string FormatNumber(ulong number)
+    {
+        return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
+    }
+
+    private static string FormatDateTime(DateTime dateTime)
+    {
+        var moscowTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+        var moscowTime = TimeZoneInfo.ConvertTimeFromUtc(dateTime, moscowTimeZone);
+
+        return moscowTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.GetCultureInfo("ru-RU")) + " по МСК";
     }
 }

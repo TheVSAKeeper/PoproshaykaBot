@@ -78,7 +78,7 @@ public class StatisticsCollector : IAsyncDisposable
         }
     }
 
-    public Task TrackMessageAsync(string userId, string username)
+    public void TrackMessage(string userId, string username)
     {
         if (string.IsNullOrWhiteSpace(userId))
         {
@@ -103,18 +103,39 @@ public class StatisticsCollector : IAsyncDisposable
         _botStatistics.IncrementMessagesProcessed();
 
         MarkAsChanged();
-        return Task.CompletedTask;
     }
 
-    public Task<UserStatistics?> GetUserStatisticsAsync(string userId)
+    public UserStatistics? GetUserStatistics(string userId)
     {
         if (string.IsNullOrWhiteSpace(userId))
         {
-            return Task.FromResult<UserStatistics?>(null);
+            return null;
         }
 
         _userStatistics.TryGetValue(userId, out var userStats);
-        return Task.FromResult(userStats);
+        return userStats;
+    }
+
+    public BotStatistics GetBotStatistics()
+    {
+        _botStatistics.UpdateUptime();
+        return _botStatistics;
+    }
+
+    public List<UserStatistics> GetTopUsers(int count = 10)
+    {
+        var topUsers = _userStatistics.Values
+            .OrderByDescending(x => x.MessageCount)
+            .Take(count)
+            .ToList();
+
+        return topUsers;
+    }
+
+    public void ResetBotStartTime()
+    {
+        _botStatistics.ResetStartTime();
+        MarkAsChanged();
     }
 
     public async ValueTask DisposeAsync()

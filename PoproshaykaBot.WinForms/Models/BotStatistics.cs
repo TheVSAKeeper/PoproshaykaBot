@@ -39,4 +39,11 @@ public class BotStatistics
         TotalUptime = DateTime.UtcNow - BotStartTime;
         UpdateTimestamp();
     }
+
+    public void ResetStartTime()
+    {
+        BotStartTime = DateTime.UtcNow;
+        TotalUptime = TimeSpan.Zero;
+        UpdateTimestamp();
+    }
 }
