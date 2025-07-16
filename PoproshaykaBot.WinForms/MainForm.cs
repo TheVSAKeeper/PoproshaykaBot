@@ -10,6 +10,7 @@ public partial class MainForm : Form
     {
         InitializeComponent();
         LoadSettings();
+        UpdateBroadcastButtonState();
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
     }
 
@@ -18,7 +19,8 @@ public partial class MainForm : Form
         _connectionCancellationTokenSource?.Cancel();
         _connectionCancellationTokenSource?.Dispose();
 
-        DisconnectBot();
+        // TODO: Исправить
+        DisconnectBotAsync();
         base.OnFormClosed(e);
     }
 
@@ -37,8 +39,29 @@ public partial class MainForm : Form
             }
             else
             {
-                DisconnectBot();
+                await DisconnectBotAsync();
             }
+        }
+    }
+
+    private void OnBroadcastButtonClicked(object sender, EventArgs e)
+    {
+        if (_bot == null)
+        {
+            return;
+        }
+
+        if (_bot.IsBroadcastActive)
+        {
+            _bot.StopBroadcast();
+            UpdateBroadcastButtonState();
+            AddLogMessage("Рассылка остановлена.");
+        }
+        else
+        {
+            _bot.StartBroadcast();
+            UpdateBroadcastButtonState();
+            AddLogMessage("Рассылка запущена.");
         }
     }
 
@@ -54,6 +77,18 @@ public partial class MainForm : Form
         AddLogMessage($"[Прогресс] {message}");
     }
 
+    private void OnOAuthStatusChanged(string message)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action<string>(OnOAuthStatusChanged), message);
+            return;
+        }
+
+        _connectionStatusLabel.Text = message;
+        AddLogMessage($"[OAuth] {message}");
+    }
+
     private void OnBotConnected(string message)
     {
         if (InvokeRequired)
@@ -63,6 +98,8 @@ public partial class MainForm : Form
         }
 
         AddLogMessage($"Успешное подключение: {message}");
+
+        UpdateBroadcastButtonState();
     }
 
     private void OnBotLogMessage(string message)
@@ -86,7 +123,9 @@ public partial class MainForm : Form
     private static Bot CreateBotWithSettings(string accessToken)
     {
         var settings = SettingsManager.Current.Twitch;
-        return new(accessToken, settings);
+        var statisticsCollector = new StatisticsCollector();
+
+        return new(accessToken, settings, statisticsCollector);
     }
 
     private void AddLogMessage(string message)
@@ -100,6 +139,37 @@ public partial class MainForm : Form
         _logTextBox.AppendText($"{DateTime.Now:HH:mm:ss} - {message}{Environment.NewLine}");
         _logTextBox.SelectionStart = _logTextBox.Text.Length;
         _logTextBox.ScrollToCaret();
+    }
+
+    private void UpdateBroadcastButtonState()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(UpdateBroadcastButtonState);
+            return;
+        }
+
+        var isBroadcastActive = _bot is { IsBroadcastActive: true };
+        var isConnected = _isConnected;
+
+        if (isConnected == false)
+        {
+            _broadcastButton.Enabled = false;
+            _broadcastButton.Text = "Рассылка недоступна";
+            _broadcastButton.BackColor = SystemColors.Control;
+        }
+        else if (isBroadcastActive)
+        {
+            _broadcastButton.Enabled = true;
+            _broadcastButton.Text = "Остановить рассылку";
+            _broadcastButton.BackColor = Color.LightGreen;
+        }
+        else
+        {
+            _broadcastButton.Enabled = true;
+            _broadcastButton.Text = "Запустить рассылку";
+            _broadcastButton.BackColor = Color.Orange;
+        }
     }
 
     private async Task ConnectBotAsync()
@@ -150,12 +220,13 @@ public partial class MainForm : Form
             _isConnected = true;
             _connectButton.Text = "Отключить бота";
             _connectButton.BackColor = Color.LightGreen;
+            UpdateBroadcastButtonState();
             AddLogMessage("Бот успешно подключен!");
         }
         catch (OperationCanceledException)
         {
             AddLogMessage("Подключение отменено пользователем.");
-            CleanupAfterConnectionFailure();
+            await CleanupAfterConnectionFailure();
         }
         catch (Exception exception)
         {
@@ -164,7 +235,7 @@ public partial class MainForm : Form
             MessageBox.Show($"Ошибка подключения бота: {exception.Message}", "Ошибка",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-            CleanupAfterConnectionFailure();
+            await CleanupAfterConnectionFailure();
         }
         finally
         {
@@ -196,17 +267,19 @@ public partial class MainForm : Form
         }
     }
 
-    private void CleanupAfterConnectionFailure()
+    private async Task CleanupAfterConnectionFailure()
     {
         if (InvokeRequired)
         {
-            Invoke(CleanupAfterConnectionFailure);
+            // TODO: Исправить
+            await Task.Run(async () => await CleanupAfterConnectionFailure());
             return;
         }
 
         _isConnected = false;
         _connectButton.Text = "Подключить бота";
         _connectButton.BackColor = SystemColors.Control;
+        UpdateBroadcastButtonState();
 
         if (_bot == null)
         {
@@ -216,11 +289,11 @@ public partial class MainForm : Form
         _bot.Connected -= OnBotConnected;
         _bot.LogMessage -= OnBotLogMessage;
         _bot.ConnectionProgress -= OnBotConnectionProgress;
-        _bot.Dispose();
+        await _bot.DisposeAsync();
         _bot = null;
     }
 
-    private void DisconnectBot()
+    private async Task DisconnectBotAsync()
     {
         AddLogMessage("Отключение бота...");
 
@@ -229,13 +302,24 @@ public partial class MainForm : Form
             _bot.Connected -= OnBotConnected;
             _bot.LogMessage -= OnBotLogMessage;
             _bot.ConnectionProgress -= OnBotConnectionProgress;
-            _bot.Dispose();
+
+            try
+            {
+                await _bot.DisconnectAsync();
+            }
+            catch (Exception exception)
+            {
+                AddLogMessage($"Ошибка при отключении бота: {exception.Message}");
+            }
+
+            await _bot.DisposeAsync();
             _bot = null;
         }
 
         _isConnected = false;
         _connectButton.Text = "Подключить бота";
         _connectButton.BackColor = SystemColors.Control;
+        UpdateBroadcastButtonState();
 
         AddLogMessage("Бот отключен.");
     }
@@ -244,7 +328,6 @@ public partial class MainForm : Form
     {
         try
         {
-            // TODO: Убрать static шляпу
             var settings = SettingsManager.Current;
             AddLogMessage("Настройки Twitch загружены.");
         }
@@ -297,13 +380,22 @@ public partial class MainForm : Form
             }
         }
 
-        var oauthTask = TwitchOAuthService.StartOAuthFlowAsync(settings.ClientId,
-            settings.ClientSecret,
-            settings.Scopes,
-            settings.RedirectUri);
+        TwitchOAuthService.StatusChanged += OnOAuthStatusChanged;
 
-        var accessToken = await oauthTask;
-        AddLogMessage("OAuth авторизация завершена успешно.");
-        return accessToken;
+        try
+        {
+            var oauthTask = TwitchOAuthService.StartOAuthFlowAsync(settings.ClientId,
+                settings.ClientSecret,
+                settings.Scopes,
+                settings.RedirectUri);
+
+            var accessToken = await oauthTask;
+            AddLogMessage("OAuth авторизация завершена успешно.");
+            return accessToken;
+        }
+        finally
+        {
+            TwitchOAuthService.StatusChanged -= OnOAuthStatusChanged;
+        }
     }
 }

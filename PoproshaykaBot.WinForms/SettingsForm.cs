@@ -1,31 +1,20 @@
-namespace PoproshaykaBot.WinForms;
+﻿namespace PoproshaykaBot.WinForms;
 
-public class SettingsForm : Form
+public partial class SettingsForm : Form
 {
-    private Button _okButton = null!;
-    private Button _cancelButton = null!;
-    private Button _applyButton = null!;
-    private Button _resetButton = null!;
-
-    private TextBox _botUsernameTextBox = null!;
-    private TextBox _channelTextBox = null!;
-    private NumericUpDown _messagesAllowedNumeric = null!;
-    private NumericUpDown _throttlingPeriodNumeric = null!;
-
-    private TextBox _clientIdTextBox = null!;
-    private TextBox _clientSecretTextBox = null!;
-    private TextBox _redirectUriTextBox = null!;
-    private TextBox _scopesTextBox = null!;
-
+    private static readonly TwitchSettings DefaultSettings = new();
     private AppSettings _settings;
     private bool _hasChanges;
+    private bool _tokensVisible;
 
     public SettingsForm()
     {
         _settings = new();
         CopySettings(SettingsManager.Current, _settings);
         InitializeComponent();
+        SetPlaceholders();
         LoadSettingsToControls();
+        LoadTokenInformation();
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -74,6 +63,270 @@ public class SettingsForm : Form
         UpdateButtonStates();
     }
 
+    private void OnBotUsernameResetButtonClicked(object sender, EventArgs e)
+    {
+        _botUsernameTextBox.Text = DefaultSettings.BotUsername;
+    }
+
+    private void OnChannelResetButtonClicked(object sender, EventArgs e)
+    {
+        _channelTextBox.Text = DefaultSettings.Channel;
+    }
+
+    private void OnMessagesAllowedResetButtonClicked(object sender, EventArgs e)
+    {
+        _messagesAllowedNumeric.Value = DefaultSettings.MessagesAllowedInPeriod;
+    }
+
+    private void OnThrottlingPeriodResetButtonClicked(object sender, EventArgs e)
+    {
+        _throttlingPeriodNumeric.Value = DefaultSettings.ThrottlingPeriodSeconds;
+    }
+
+    private void OnClientIdResetButtonClicked(object sender, EventArgs e)
+    {
+        _clientIdTextBox.Text = DefaultSettings.ClientId;
+    }
+
+    private void OnClientSecretResetButtonClicked(object sender, EventArgs e)
+    {
+        _clientSecretTextBox.Text = DefaultSettings.ClientSecret;
+    }
+
+    private void OnRedirectUriResetButtonClicked(object sender, EventArgs e)
+    {
+        _redirectUriTextBox.Text = DefaultSettings.RedirectUri;
+    }
+
+    private void OnScopesResetButtonClicked(object sender, EventArgs e)
+    {
+        _scopesTextBox.Text = string.Join(" ", DefaultSettings.Scopes);
+    }
+
+    private async void OnTestAuthButtonClicked(object sender, EventArgs e)
+    {
+        var clientId = _clientIdTextBox.Text.Trim();
+        var clientSecret = _clientSecretTextBox.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            _authStatusLabel.Text = "Введите Client ID";
+            _authStatusLabel.ForeColor = Color.Red;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(clientSecret))
+        {
+            _authStatusLabel.Text = "Введите Client Secret";
+            _authStatusLabel.ForeColor = Color.Red;
+            return;
+        }
+
+        _testAuthButton.Enabled = false;
+        _authStatusLabel.Text = "Тестирование...";
+        _authStatusLabel.ForeColor = Color.Blue;
+
+        TwitchOAuthService.StatusChanged += OnOAuthStatusChanged;
+
+        try
+        {
+            var scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var redirectUri = _redirectUriTextBox.Text.Trim();
+
+            if (scopes.Length == 0)
+            {
+                scopes = DefaultSettings.Scopes;
+            }
+
+            if (string.IsNullOrWhiteSpace(redirectUri))
+            {
+                redirectUri = DefaultSettings.RedirectUri;
+            }
+
+            var accessToken = await TwitchOAuthService.StartOAuthFlowAsync(clientId, clientSecret, scopes, redirectUri);
+
+            if (string.IsNullOrEmpty(accessToken) == false)
+            {
+                _authStatusLabel.Text = "Авторизация успешна!";
+                _authStatusLabel.ForeColor = Color.Green;
+
+                LoadTokenInformation();
+                _hasChanges = true;
+                UpdateButtonStates();
+            }
+        }
+        catch (Exception exception)
+        {
+            _authStatusLabel.Text = $"Ошибка: {exception.Message}";
+            _authStatusLabel.ForeColor = Color.Red;
+        }
+        finally
+        {
+            TwitchOAuthService.StatusChanged -= OnOAuthStatusChanged;
+            _testAuthButton.Enabled = true;
+        }
+    }
+
+    private void OnOAuthStatusChanged(string message)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action<string>(OnOAuthStatusChanged), message);
+            return;
+        }
+
+        _authStatusLabel.Text = message;
+        _authStatusLabel.ForeColor = Color.Blue;
+    }
+
+    private async void OnValidateTokenButtonClicked(object sender, EventArgs e)
+    {
+        var accessToken = _settings.Twitch.AccessToken;
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            _tokenStatusValueLabel.Text = "Токен отсутствует";
+            _tokenStatusValueLabel.ForeColor = Color.Red;
+            return;
+        }
+
+        _validateTokenButton.Enabled = false;
+        _tokenStatusValueLabel.Text = "Проверка...";
+        _tokenStatusValueLabel.ForeColor = Color.Blue;
+
+        try
+        {
+            var isValid = await TwitchOAuthService.IsTokenValidAsync(accessToken);
+
+            if (isValid)
+            {
+                _tokenStatusValueLabel.Text = "Действителен";
+                _tokenStatusValueLabel.ForeColor = Color.Green;
+            }
+            else
+            {
+                _tokenStatusValueLabel.Text = "Недействителен";
+                _tokenStatusValueLabel.ForeColor = Color.Red;
+            }
+        }
+        catch (Exception exception)
+        {
+            _tokenStatusValueLabel.Text = $"Ошибка: {exception.Message}";
+            _tokenStatusValueLabel.ForeColor = Color.Red;
+        }
+        finally
+        {
+            _validateTokenButton.Enabled = true;
+        }
+    }
+
+    private async void OnRefreshTokenButtonClicked(object sender, EventArgs e)
+    {
+        var clientId = _settings.Twitch.ClientId;
+        var clientSecret = _settings.Twitch.ClientSecret;
+        var refreshToken = _settings.Twitch.RefreshToken;
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            MessageBox.Show("Client ID и Client Secret должны быть настроены для обновления токена.",
+                "Настройки отсутствуют", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            MessageBox.Show("Refresh Token отсутствует. Требуется повторная авторизация.",
+                "Refresh Token отсутствует", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        _refreshTokenButton.Enabled = false;
+        _tokenStatusValueLabel.Text = "Обновление...";
+        _tokenStatusValueLabel.ForeColor = Color.Blue;
+
+        TwitchOAuthService.StatusChanged += OnTokenOperationStatusChanged;
+
+        try
+        {
+            var tokenResponse = await TwitchOAuthService.RefreshTokenAsync(clientId, clientSecret, refreshToken);
+
+            _settings.Twitch.AccessToken = tokenResponse.AccessToken;
+            _settings.Twitch.RefreshToken = tokenResponse.RefreshToken;
+
+            SettingsManager.SaveSettings(_settings);
+
+            LoadTokenInformation();
+            _tokenStatusValueLabel.Text = "Обновлен успешно";
+            _tokenStatusValueLabel.ForeColor = Color.Green;
+            _lastRefreshValueLabel.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss");
+            _lastRefreshValueLabel.ForeColor = Color.Black;
+
+            _hasChanges = true;
+            UpdateButtonStates();
+        }
+        catch (Exception exception)
+        {
+            _tokenStatusValueLabel.Text = $"Ошибка: {exception.Message}";
+            _tokenStatusValueLabel.ForeColor = Color.Red;
+
+            MessageBox.Show($"Не удалось обновить токен: {exception.Message}",
+                "Ошибка обновления токена", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            TwitchOAuthService.StatusChanged -= OnTokenOperationStatusChanged;
+            _refreshTokenButton.Enabled = true;
+        }
+    }
+
+    private void OnClearTokensButtonClicked(object sender, EventArgs e)
+    {
+        var result = MessageBox.Show("Вы уверены, что хотите очистить сохраненные токены?\n\nЭто потребует повторной авторизации при следующем подключении.",
+            "Подтверждение очистки токенов",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (result != DialogResult.Yes)
+        {
+            return;
+        }
+
+        _settings.Twitch.AccessToken = string.Empty;
+        _settings.Twitch.RefreshToken = string.Empty;
+
+        SettingsManager.SaveSettings(_settings);
+
+        LoadTokenInformation();
+        _tokenStatusValueLabel.Text = "Токены очищены";
+        _tokenStatusValueLabel.ForeColor = Color.Orange;
+        _lastRefreshValueLabel.Text = "Неизвестно";
+        _lastRefreshValueLabel.ForeColor = Color.Gray;
+
+        _hasChanges = true;
+        UpdateButtonStates();
+    }
+
+    private void OnTokenOperationStatusChanged(string message)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action<string>(OnTokenOperationStatusChanged), message);
+            return;
+        }
+
+        _tokenStatusValueLabel.Text = message;
+        _tokenStatusValueLabel.ForeColor = Color.Blue;
+    }
+
+    private void OnShowTokenButtonClicked(object sender, EventArgs e)
+    {
+        _tokensVisible = !_tokensVisible;
+        UpdateTokenDisplay();
+        UpdateShowTokenButton();
+    }
+
     private static void CopySettings(AppSettings source, AppSettings destination)
     {
         destination.Twitch.BotUsername = source.Twitch.BotUsername;
@@ -88,6 +341,33 @@ public class SettingsForm : Form
         destination.Twitch.Scopes = source.Twitch.Scopes;
     }
 
+    private void UpdateShowTokenButton()
+    {
+        _showTokenButton.Text = _tokensVisible ? "🙈" : "👁";
+    }
+
+    private void UpdateTokenDisplay()
+    {
+        var accessToken = _settings.Twitch.AccessToken;
+        var refreshToken = _settings.Twitch.RefreshToken;
+
+        _accessTokenTextBox.Text = string.IsNullOrWhiteSpace(accessToken) == false ? accessToken : "Не установлен";
+        _refreshTokenTextBox.Text = string.IsNullOrWhiteSpace(refreshToken) == false ? refreshToken : "Не установлен";
+
+        _accessTokenTextBox.UseSystemPasswordChar = _tokensVisible == false && string.IsNullOrWhiteSpace(accessToken) == false;
+        _refreshTokenTextBox.UseSystemPasswordChar = _tokensVisible == false && string.IsNullOrWhiteSpace(refreshToken) == false;
+    }
+
+    private void SetPlaceholders()
+    {
+        _botUsernameTextBox.PlaceholderText = DefaultSettings.BotUsername;
+        _channelTextBox.PlaceholderText = DefaultSettings.Channel;
+        _clientIdTextBox.PlaceholderText = string.IsNullOrWhiteSpace(DefaultSettings.ClientId) ? "Введите Client ID" : DefaultSettings.ClientId;
+        _clientSecretTextBox.PlaceholderText = string.IsNullOrWhiteSpace(DefaultSettings.ClientSecret) ? "Введите Client Secret" : DefaultSettings.ClientSecret;
+        _redirectUriTextBox.PlaceholderText = DefaultSettings.RedirectUri;
+        _scopesTextBox.PlaceholderText = string.Join(" ", DefaultSettings.Scopes);
+    }
+
     private void LoadSettingsToControls()
     {
         _botUsernameTextBox.Text = _settings.Twitch.BotUsername;
@@ -99,6 +379,8 @@ public class SettingsForm : Form
         _clientSecretTextBox.Text = _settings.Twitch.ClientSecret;
         _redirectUriTextBox.Text = _settings.Twitch.RedirectUri;
         _scopesTextBox.Text = string.Join(" ", _settings.Twitch.Scopes);
+
+        LoadTokenInformation();
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -122,6 +404,35 @@ public class SettingsForm : Form
         _applyButton.Enabled = _hasChanges;
     }
 
+    private void LoadTokenInformation()
+    {
+        var accessToken = _settings.Twitch.AccessToken;
+        var refreshToken = _settings.Twitch.RefreshToken;
+
+        UpdateTokenDisplay();
+        UpdateShowTokenButton();
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            _tokenStatusValueLabel.Text = "Токен отсутствует";
+            _tokenStatusValueLabel.ForeColor = Color.Red;
+        }
+        else
+        {
+            _tokenStatusValueLabel.Text = "Не проверен";
+            _tokenStatusValueLabel.ForeColor = Color.Gray;
+        }
+
+        var hasTokens = string.IsNullOrWhiteSpace(accessToken) == false;
+        var hasRefreshToken = string.IsNullOrWhiteSpace(refreshToken) == false;
+        var hasCredentials = string.IsNullOrWhiteSpace(_settings.Twitch.ClientId) == false && string.IsNullOrWhiteSpace(_settings.Twitch.ClientSecret) == false;
+
+        _validateTokenButton.Enabled = hasTokens;
+        _refreshTokenButton.Enabled = hasRefreshToken && hasCredentials;
+        _clearTokensButton.Enabled = hasTokens || hasRefreshToken;
+        _showTokenButton.Enabled = hasTokens || hasRefreshToken;
+    }
+
     private void ApplySettings()
     {
         try
@@ -139,145 +450,5 @@ public class SettingsForm : Form
             MessageBox.Show($"Ошибка сохранения настроек: {exception.Message}", "Ошибка",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-    }
-
-
-    private void InitializeComponent()
-    {
-        _okButton = new();
-        _cancelButton = new();
-        _applyButton = new();
-        _resetButton = new();
-
-        SuspendLayout();
-
-        InitializeTwitchControls();
-
-        _okButton.Location = new(335, 410);
-        _okButton.Size = new(75, 23);
-        _okButton.Text = "OK";
-        _okButton.DialogResult = DialogResult.OK;
-        _okButton.Click += OnOkButtonClicked;
-
-        _cancelButton.Location = new(416, 410);
-        _cancelButton.Size = new(75, 23);
-        _cancelButton.Text = "Отмена";
-        _cancelButton.DialogResult = DialogResult.Cancel;
-        _cancelButton.Click += OnCancelButtonClicked;
-
-        _applyButton.Location = new(497, 410);
-        _applyButton.Size = new(75, 23);
-        _applyButton.Text = "Применить";
-        _applyButton.Enabled = false;
-        _applyButton.Click += OnApplyButtonClicked;
-
-        _resetButton.Location = new(12, 410);
-        _resetButton.Size = new(75, 23);
-        _resetButton.Text = "Сброс";
-        _resetButton.Click += OnResetButtonClicked;
-
-        ClientSize = new(584, 445);
-        Text = "Настройки Twitch бота";
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        StartPosition = FormStartPosition.CenterParent;
-        AcceptButton = _okButton;
-        CancelButton = _cancelButton;
-
-        Controls.Add(_okButton);
-        Controls.Add(_cancelButton);
-        Controls.Add(_applyButton);
-        Controls.Add(_resetButton);
-
-        ResumeLayout(false);
-    }
-
-
-    private void InitializeTwitchControls()
-    {
-        var botUsernameLabel = new Label { Text = "Имя пользователя бота:", Location = new(15, 20), Size = new(150, 15) };
-
-        _botUsernameTextBox = new()
-            { Location = new(170, 17), Size = new(200, 23) };
-
-        _botUsernameTextBox.TextChanged += OnSettingChanged;
-
-        var channelLabel = new Label { Text = "Канал:", Location = new(15, 50), Size = new(150, 15) };
-
-        _channelTextBox = new()
-            { Location = new(170, 47), Size = new(200, 23) };
-
-        _channelTextBox.TextChanged += OnSettingChanged;
-
-        var messagesAllowedLabel = new Label { Text = "Сообщений в период:", Location = new(15, 80), Size = new(150, 15) };
-
-        _messagesAllowedNumeric = new()
-            { Location = new(170, 77), Size = new(100, 23), Minimum = 1, Maximum = 1000, Value = 750 };
-
-        _messagesAllowedNumeric.ValueChanged += OnSettingChanged;
-
-        var throttlingPeriodLabel = new Label { Text = "Период ограничения (сек):", Location = new(15, 110), Size = new(150, 15) };
-
-        _throttlingPeriodNumeric = new()
-            { Location = new(170, 107), Size = new(100, 23), Minimum = 1, Maximum = 300, Value = 30 };
-
-        _throttlingPeriodNumeric.ValueChanged += OnSettingChanged;
-
-        var oauthGroupBox = new GroupBox { Text = "OAuth настройки", Location = new(15, 140), Size = new(355, 180) };
-
-        var clientIdLabel = new Label { Text = "Client ID:", Location = new(10, 25), Size = new(80, 15) };
-
-        _clientIdTextBox = new()
-            { Location = new(95, 22), Size = new(250, 23) };
-
-        _clientIdTextBox.TextChanged += OnSettingChanged;
-
-        var clientSecretLabel = new Label { Text = "Client Secret:", Location = new(10, 55), Size = new(80, 15) };
-
-        _clientSecretTextBox = new()
-            { Location = new(95, 52), Size = new(250, 23), UseSystemPasswordChar = true };
-
-        _clientSecretTextBox.TextChanged += OnSettingChanged;
-
-        var redirectUriLabel = new Label { Text = "Redirect URI:", Location = new(10, 85), Size = new(80, 15) };
-
-        _redirectUriTextBox = new()
-            { Location = new(95, 82), Size = new(250, 23) };
-
-        _redirectUriTextBox.TextChanged += OnSettingChanged;
-
-        var scopesLabel = new Label { Text = "Scopes:", Location = new(10, 115), Size = new(80, 15) };
-
-        _scopesTextBox = new()
-            { Location = new(95, 112), Size = new(250, 23) };
-
-        _scopesTextBox.TextChanged += OnSettingChanged;
-
-        var oauthInfoLabel = new Label
-        {
-            Text = "Получите Client ID и Client Secret на https://dev.twitch.tv/console/apps\nScopes разделяйте пробелами (например: chat:read chat:edit)",
-            Location = new(10, 145),
-            Size = new(335, 30),
-            ForeColor = Color.Gray,
-        };
-
-        oauthGroupBox.Controls.AddRange(new Control[]
-        {
-            clientIdLabel, _clientIdTextBox,
-            clientSecretLabel, _clientSecretTextBox,
-            redirectUriLabel, _redirectUriTextBox,
-            scopesLabel, _scopesTextBox,
-            oauthInfoLabel,
-        });
-
-        Controls.AddRange(new Control[]
-        {
-            botUsernameLabel, _botUsernameTextBox,
-            channelLabel, _channelTextBox,
-            messagesAllowedLabel, _messagesAllowedNumeric,
-            throttlingPeriodLabel, _throttlingPeriodNumeric,
-            oauthGroupBox,
-        });
     }
 }

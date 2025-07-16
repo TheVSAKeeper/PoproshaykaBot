@@ -94,6 +94,8 @@ public static class TwitchOAuthService
             throw new ArgumentException("Refresh token не может быть пустым", nameof(refreshToken));
         }
 
+        StatusChanged?.Invoke("Обновление токена доступа...");
+
         using var client = new HttpClient();
         var tokenUrl = "https://id.twitch.tv/oauth2/token";
 
@@ -121,21 +123,17 @@ public static class TwitchOAuthService
             throw new InvalidOperationException("Не удалось десериализовать ответ сервера");
         }
 
+        StatusChanged?.Invoke("Токен доступа обновлен успешно!");
         return tokenResponse;
     }
 
-    /// <summary>
-    /// Получение валидного токена (с автоматическим обновлением при необходимости)
-    /// </summary>
-    /// <param name="clientId">ID клиента Twitch</param>
-    /// <param name="clientSecret">Секрет клиента Twitch</param>
-    /// <param name="currentToken">Текущий токен</param>
-    /// <param name="refreshToken">Refresh token</param>
-    /// <returns>Валидный токен доступа</returns>
     public static async Task<string> GetValidTokenAsync(string clientId, string clientSecret, string currentToken, string refreshToken)
     {
+        StatusChanged?.Invoke("Проверка действительности токена...");
+
         if (await IsTokenValidAsync(currentToken))
         {
+            StatusChanged?.Invoke("Токен действителен");
             return currentToken;
         }
 
