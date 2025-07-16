@@ -108,7 +108,7 @@ partial class MainForm
         _connectionStatusLabel.Size = new Size(0, 15);
         _connectionStatusLabel.TabIndex = 5;
         _connectionStatusLabel.Visible = false;
-        // 
+        //
         // MainForm
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);

@@ -64,33 +64,28 @@ public class Bot : IAsyncDisposable
 
         try
         {
-            // TODO: background worker
-            await Task.Run(() =>
+            ConnectionProgress?.Invoke("Подключение к серверу Twitch...");
+
+            _client.Connect();
+
+            var timeout = TimeSpan.FromSeconds(30);
+            var startTime = DateTime.UtcNow;
+
+            while (_client.IsConnected == false && DateTime.UtcNow - startTime < timeout)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ConnectionProgress?.Invoke("Подключение к серверу Twitch...");
+                ConnectionProgress?.Invoke("Ожидание подтверждения подключения...");
+                await Task.Delay(500, cancellationToken);
+            }
 
-                _client.Connect();
-
-                var timeout = TimeSpan.FromSeconds(30);
-                var startTime = DateTime.UtcNow;
-
-                while (_client.IsConnected == false && DateTime.UtcNow - startTime < timeout)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    ConnectionProgress?.Invoke("Ожидание подтверждения подключения...");
-                    Thread.Sleep(500);
-                }
-
-                if (_client.IsConnected)
-                {
-                    ConnectionProgress?.Invoke("Подключение установлено успешно");
-                }
-                else
-                {
-                    throw new TimeoutException("Превышено время ожидания подключения к Twitch");
-                }
-            }, cancellationToken);
+            if (_client.IsConnected)
+            {
+                ConnectionProgress?.Invoke("Подключение установлено успешно");
+            }
+            else
+            {
+                throw new TimeoutException("Превышено время ожидания подключения к Twitch");
+            }
 
             ConnectionProgress?.Invoke("Инициализация статистики...");
             await _statisticsCollector.StartAsync();
