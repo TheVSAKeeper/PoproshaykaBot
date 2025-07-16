@@ -29,6 +29,7 @@ partial class MainForm
     /// </summary>
     private void InitializeComponent()
     {
+        var resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
         _connectButton = new Button();
         _logTextBox = new TextBox();
         _logLabel = new Label();
@@ -50,13 +51,13 @@ partial class MainForm
         // 
         // _logTextBox
         // 
-        _logTextBox.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        _logTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
         _logTextBox.Location = new Point(12, 100);
         _logTextBox.Multiline = true;
         _logTextBox.Name = "_logTextBox";
         _logTextBox.ReadOnly = true;
         _logTextBox.ScrollBars = ScrollBars.Vertical;
-        _logTextBox.Size = new Size(776, 338);
+        _logTextBox.Size = new Size(761, 294);
         _logTextBox.TabIndex = 2;
         // 
         // _logLabel
@@ -69,7 +70,7 @@ partial class MainForm
         _logLabel.Text = "Логи:";
         // 
         // _settingsButton
-        //
+        // 
         _settingsButton.Location = new Point(480, 20);
         _settingsButton.Name = "_settingsButton";
         _settingsButton.Size = new Size(80, 40);
@@ -77,9 +78,10 @@ partial class MainForm
         _settingsButton.Text = "Настройки";
         _settingsButton.UseVisualStyleBackColor = true;
         _settingsButton.Click += OnSettingsButtonClicked;
-        //
+        // 
         // _broadcastButton
-        //
+        // 
+        _broadcastButton.Enabled = false;
         _broadcastButton.Location = new Point(570, 20);
         _broadcastButton.Name = "_broadcastButton";
         _broadcastButton.Size = new Size(120, 40);
@@ -87,7 +89,6 @@ partial class MainForm
         _broadcastButton.Text = "Рассылка недоступна";
         _broadcastButton.UseVisualStyleBackColor = true;
         _broadcastButton.Click += OnBroadcastButtonClicked;
-        _broadcastButton.Enabled = false;
         // 
         // _connectionProgressBar
         // 
@@ -112,7 +113,7 @@ partial class MainForm
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(800, 450);
+        ClientSize = new Size(785, 406);
         Controls.Add(_connectButton);
         Controls.Add(_settingsButton);
         Controls.Add(_broadcastButton);
@@ -120,6 +121,7 @@ partial class MainForm
         Controls.Add(_logTextBox);
         Controls.Add(_connectionProgressBar);
         Controls.Add(_connectionStatusLabel);
+        Icon = (Icon)resources.GetObject("$this.Icon");
         Name = "MainForm";
         Text = "Попрощайка Бот - Управление";
         ResumeLayout(false);

@@ -135,7 +135,7 @@ public class Bot : IAsyncDisposable
         if (_timer == null)
         {
             _timer = new();
-            _timer.Interval = 60_000;
+            _timer.Interval = 600_000;
             _timer.Elapsed += _timer_Elapsed;
         }
 
