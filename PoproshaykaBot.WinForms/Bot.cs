@@ -1,5 +1,4 @@
-﻿using System.Text.Json;
-using System.Timers;
+﻿using System.Timers;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
@@ -9,28 +8,22 @@ using Timer = System.Timers.Timer;
 
 namespace PoproshaykaBot.WinForms;
 
-public class Bot : IDisposable
+public class Bot : IAsyncDisposable
 {
     private readonly TwitchClient _client;
     private readonly TwitchSettings _settings;
-    private readonly Timer _timer2;
-    private readonly Dictionary<string, Person> _persons;
+    private readonly StatisticsCollector _statisticsCollector;
     private bool _disposed;
-
-    private bool hasChanges;
 
     private string _channel;
     private Timer _timer;
 
     private int X1;
 
-    public Bot(string accessToken) : this(accessToken, new())
-    {
-    }
-
-    public Bot(string accessToken, TwitchSettings settings)
+    public Bot(string accessToken, TwitchSettings settings, StatisticsCollector statisticsCollector)
     {
         _settings = settings;
+        _statisticsCollector = statisticsCollector;
 
         ConnectionCredentials credentials = new(_settings.BotUsername, accessToken);
 
@@ -48,25 +41,6 @@ public class Bot : IDisposable
         _client.OnMessageReceived += Client_OnMessageReceived;
         _client.OnConnected += Client_OnConnected;
         _client.OnJoinedChannel += Сlient_OnJoinedChannel;
-
-        var x = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "PoproshaykaBot", "counters.txt");
-
-        if (File.Exists(x))
-        {
-            var json = File.ReadAllText(x);
-            var persons = JsonSerializer.Deserialize<List<Person>>(json);
-            _persons = persons.ToDictionary(x => x.UserId, x => x);
-        }
-        else
-        {
-            _persons = new();
-        }
-
-        _timer2 = new();
-        _timer2.Interval = 30_000;
-        _timer2.Elapsed += Timer_Elapsed;
-        _timer2.Start();
     }
 
     public event Action<string>? Connected;
@@ -114,20 +88,23 @@ public class Bot : IDisposable
                     throw new TimeoutException("Превышено время ожидания подключения к Twitch");
                 }
             }, cancellationToken);
+
+            ConnectionProgress?.Invoke("Инициализация статистики...");
+            await _statisticsCollector.StartAsync();
         }
         catch (OperationCanceledException)
         {
             ConnectionProgress?.Invoke("Подключение отменено пользователем");
             throw;
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            ConnectionProgress?.Invoke($"Ошибка подключения: {ex.Message}");
+            ConnectionProgress?.Invoke($"Ошибка подключения: {exception.Message}");
             throw;
         }
     }
 
-    public void Disconnect()
+    public async Task DisconnectAsync()
     {
         _timer?.Dispose();
 
@@ -136,30 +113,25 @@ public class Bot : IDisposable
             _client.Disconnect();
         }
 
-        SaveCounters();
-        _timer2.Dispose();
+        await _statisticsCollector.StopAsync();
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        Dispose(true);
+        await DisposeAsyncCore();
         GC.SuppressFinalize(this);
     }
 
-    protected virtual void Dispose(bool disposing)
+    protected virtual async ValueTask DisposeAsyncCore()
     {
-        if (_disposed || disposing == false)
+        if (_disposed)
         {
             return;
         }
 
-        Disconnect();
+        await DisconnectAsync();
+        await _statisticsCollector.DisposeAsync();
         _disposed = true;
-    }
-
-    private void Timer_Elapsed(object? sender, ElapsedEventArgs e)
-    {
-        SaveCounters();
     }
 
     private void Client_OnLog(object sender, OnLogArgs e)
@@ -196,16 +168,9 @@ public class Bot : IDisposable
         _client.SendMessage(_channel, "Присылайте деняк, пожалуйста, " + X1 + " раз прошу");
     }
 
-    private void Client_OnMessageReceived(object sender, OnMessageReceivedArgs e)
+    private async void Client_OnMessageReceived(object sender, OnMessageReceivedArgs e)
     {
-        if (!_persons.ContainsKey(e.ChatMessage.UserId))
-        {
-            _persons[e.ChatMessage.UserId] = new()
-                { UserId = e.ChatMessage.UserId, Name = e.ChatMessage.Username, MessageCount = 0 };
-        }
-
-        _persons[e.ChatMessage.UserId].MessageCount++;
-        hasChanges = true;
+        await _statisticsCollector.TrackMessageAsync(e.ChatMessage.UserId, e.ChatMessage.Username);
 
         if (e.ChatMessage.Message.ToLower() == "!привет")
         {
@@ -219,34 +184,11 @@ public class Bot : IDisposable
 
         if (e.ChatMessage.Message.ToLower() == "!сколькосообщений")
         {
-            _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, "У тебя " + _persons[e.ChatMessage.UserId].MessageCount + " сообщений");
+            var userStats = await _statisticsCollector.GetUserStatisticsAsync(e.ChatMessage.UserId);
+            var messageCount = userStats?.MessageCount ?? 0;
+            _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, "У тебя " + messageCount + " сообщений");
         }
 
         LogMessage?.Invoke(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);
-    }
-
-    private void SaveCounters()
-    {
-        if (!hasChanges)
-        {
-            return;
-        }
-
-        hasChanges = false;
-
-        var x = _persons.Values.ToList();
-        var json = JsonSerializer.Serialize(x, new JsonSerializerOptions { WriteIndented = true });
-
-        var x2 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "PoproshaykaBot", "counters.txt");
-
-        File.WriteAllText(x2, json);
-    }
-
-    public class Person
-    {
-        public string UserId { get; set; }
-        public string Name { get; set; }
-        public int MessageCount { get; set; }
     }
 }

@@ -18,7 +18,8 @@ public partial class MainForm : Form
         _connectionCancellationTokenSource?.Cancel();
         _connectionCancellationTokenSource?.Dispose();
 
-        DisconnectBot();
+        // TODO: Исправить
+        DisconnectBotAsync().GetAwaiter().GetResult();
         base.OnFormClosed(e);
     }
 
@@ -37,7 +38,7 @@ public partial class MainForm : Form
             }
             else
             {
-                DisconnectBot();
+                await DisconnectBotAsync();
             }
         }
     }
@@ -98,7 +99,9 @@ public partial class MainForm : Form
     private static Bot CreateBotWithSettings(string accessToken)
     {
         var settings = SettingsManager.Current.Twitch;
-        return new(accessToken, settings);
+        var statisticsCollector = new StatisticsCollector();
+
+        return new(accessToken, settings, statisticsCollector);
     }
 
     private void AddLogMessage(string message)
@@ -167,7 +170,7 @@ public partial class MainForm : Form
         catch (OperationCanceledException)
         {
             AddLogMessage("Подключение отменено пользователем.");
-            CleanupAfterConnectionFailure();
+            await CleanupAfterConnectionFailure();
         }
         catch (Exception exception)
         {
@@ -176,7 +179,7 @@ public partial class MainForm : Form
             MessageBox.Show($"Ошибка подключения бота: {exception.Message}", "Ошибка",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-            CleanupAfterConnectionFailure();
+            await CleanupAfterConnectionFailure();
         }
         finally
         {
@@ -208,11 +211,12 @@ public partial class MainForm : Form
         }
     }
 
-    private void CleanupAfterConnectionFailure()
+    private async Task CleanupAfterConnectionFailure()
     {
         if (InvokeRequired)
         {
-            Invoke(CleanupAfterConnectionFailure);
+            // TODO: Исправить
+            await Task.Run(async () => await CleanupAfterConnectionFailure());
             return;
         }
 
@@ -228,11 +232,11 @@ public partial class MainForm : Form
         _bot.Connected -= OnBotConnected;
         _bot.LogMessage -= OnBotLogMessage;
         _bot.ConnectionProgress -= OnBotConnectionProgress;
-        _bot.Dispose();
+        await _bot.DisposeAsync();
         _bot = null;
     }
 
-    private void DisconnectBot()
+    private async Task DisconnectBotAsync()
     {
         AddLogMessage("Отключение бота...");
 
@@ -241,7 +245,17 @@ public partial class MainForm : Form
             _bot.Connected -= OnBotConnected;
             _bot.LogMessage -= OnBotLogMessage;
             _bot.ConnectionProgress -= OnBotConnectionProgress;
-            _bot.Dispose();
+
+            try
+            {
+                await _bot.DisconnectAsync();
+            }
+            catch (Exception exception)
+            {
+                AddLogMessage($"Ошибка при отключении бота: {exception.Message}");
+            }
+
+            await _bot.DisposeAsync();
             _bot = null;
         }
 
