@@ -33,6 +33,7 @@ partial class MainForm
         _connectButton = new Button();
         _logTextBox = new TextBox();
         _logLabel = new Label();
+        _chatDisplay = new ChatDisplay();
         _settingsButton = new Button();
         _broadcastButton = new Button();
         _connectionProgressBar = new ProgressBar();
@@ -48,26 +49,34 @@ partial class MainForm
         _connectButton.Text = "Подключить бота";
         _connectButton.UseVisualStyleBackColor = true;
         _connectButton.Click += OnConnectButtonClicked;
-        // 
+        //
         // _logTextBox
-        // 
-        _logTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        //
+        _logTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
         _logTextBox.Location = new Point(12, 100);
         _logTextBox.Multiline = true;
         _logTextBox.Name = "_logTextBox";
         _logTextBox.ReadOnly = true;
         _logTextBox.ScrollBars = ScrollBars.Vertical;
-        _logTextBox.Size = new Size(761, 294);
+        _logTextBox.Size = new Size(375, 294);
         _logTextBox.TabIndex = 2;
-        // 
+        //
         // _logLabel
-        // 
+        //
         _logLabel.AutoSize = true;
         _logLabel.Location = new Point(12, 80);
         _logLabel.Name = "_logLabel";
         _logLabel.Size = new Size(37, 15);
         _logLabel.TabIndex = 1;
         _logLabel.Text = "Логи:";
+        //
+        // _chatDisplay
+        //
+        _chatDisplay.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
+        _chatDisplay.Location = new Point(398, 80);
+        _chatDisplay.Name = "_chatDisplay";
+        _chatDisplay.Size = new Size(375, 314);
+        _chatDisplay.TabIndex = 6;
         // 
         // _settingsButton
         // 
@@ -119,6 +128,7 @@ partial class MainForm
         Controls.Add(_broadcastButton);
         Controls.Add(_logLabel);
         Controls.Add(_logTextBox);
+        Controls.Add(_chatDisplay);
         Controls.Add(_connectionProgressBar);
         Controls.Add(_connectionStatusLabel);
         Icon = (Icon)resources.GetObject("$this.Icon");
@@ -131,6 +141,7 @@ partial class MainForm
     private Button _connectButton;
     private TextBox _logTextBox;
     private Label _logLabel;
+    private ChatDisplay _chatDisplay;
     private Button _settingsButton;
     private Button _broadcastButton;
     private ProgressBar _connectionProgressBar;

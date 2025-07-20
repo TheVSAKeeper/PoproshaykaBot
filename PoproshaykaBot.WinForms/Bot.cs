@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using PoproshaykaBot.WinForms.Models;
+using System.Globalization;
 using System.Timers;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
@@ -43,6 +44,8 @@ public class Bot : IAsyncDisposable
         _client.OnConnected += Client_OnConnected;
         _client.OnJoinedChannel += Сlient_OnJoinedChannel;
     }
+
+    public event Action<ChatMessageData>? ChatMessageReceived;
 
     public event Action<string>? Connected;
 
@@ -204,21 +207,36 @@ public class Bot : IAsyncDisposable
     {
         _statisticsCollector.TrackMessage(e.ChatMessage.UserId, e.ChatMessage.Username);
 
+        var userMessage = new ChatMessageData
+        {
+            Timestamp = DateTime.UtcNow,
+            DisplayName = e.ChatMessage.DisplayName,
+            Message = e.ChatMessage.Message,
+            MessageType = ChatMessageType.UserMessage,
+        };
+
+        ChatMessageReceived?.Invoke(userMessage);
+
+        string? botResponse = null;
+
         switch (e.ChatMessage.Message.ToLower())
         {
             case "!привет":
-                _client.SendMessage(e.ChatMessage.Channel, $"Привет, {e.ChatMessage.Username}!");
+                botResponse = $"Привет, {e.ChatMessage.Username}!";
+                _client.SendMessage(e.ChatMessage.Channel, botResponse);
                 break;
 
             case "!деньги":
-                _client.SendMessage(e.ChatMessage.Channel, "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217");
+                botResponse = "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217";
+                _client.SendMessage(e.ChatMessage.Channel, botResponse);
                 break;
 
             case "!сколькосообщений":
                 {
                     var userStats = _statisticsCollector.GetUserStatistics(e.ChatMessage.UserId);
                     var messageCount = userStats?.MessageCount ?? 0;
-                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, $"У тебя {FormatNumber(messageCount)} сообщений");
+                    botResponse = $"У тебя {FormatNumber(messageCount)} сообщений";
+                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
                     break;
                 }
 
@@ -229,9 +247,9 @@ public class Bot : IAsyncDisposable
                     var totalMessages = FormatNumber(botStats.TotalMessagesProcessed);
                     var startTime = FormatDateTime(botStats.BotStartTime);
 
-                    var response = $"📊 Статистика бота: Обработано {totalMessages} сообщений | Время работы: {uptime} | Запущен: {startTime}";
+                    botResponse = $"📊 Статистика бота: Обработано {totalMessages} сообщений | Время работы: {uptime} | Запущен: {startTime}";
 
-                    _client.SendMessage(e.ChatMessage.Channel, response);
+                    _client.SendMessage(e.ChatMessage.Channel, botResponse);
                     break;
                 }
 
@@ -241,8 +259,9 @@ public class Bot : IAsyncDisposable
 
                     if (topUsers.Count == 0)
                     {
-                        _client.SendMessage(e.ChatMessage.Channel, "Пока нет данных о пользователях");
-                        return;
+                        botResponse = "Пока нет данных о пользователях";
+                        _client.SendMessage(e.ChatMessage.Channel, botResponse);
+                        break;
                     }
 
                     var response = "🏆 Топ-5 активных пользователей: ";
@@ -258,7 +277,8 @@ public class Bot : IAsyncDisposable
                         }
                     }
 
-                    _client.SendMessage(e.ChatMessage.Channel, response);
+                    botResponse = response;
+                    _client.SendMessage(e.ChatMessage.Channel, botResponse);
                     break;
                 }
 
@@ -268,18 +288,32 @@ public class Bot : IAsyncDisposable
 
                     if (userStats == null)
                     {
-                        _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, "У тебя пока нет статистики");
-                        return;
+                        botResponse = "У тебя пока нет статистики";
+                        _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
+                        break;
                     }
 
                     var messageCount = FormatNumber(userStats.MessageCount);
                     var firstSeen = FormatDateTime(userStats.FirstSeen);
                     var lastSeen = FormatDateTime(userStats.LastSeen);
 
-                    var response = $"👤 Твой профиль: {messageCount} сообщений | Впервые: {firstSeen} | Последний раз: {lastSeen}";
-                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, response);
+                    botResponse = $"👤 Твой профиль: {messageCount} сообщений | Впервые: {firstSeen} | Последний раз: {lastSeen}";
+                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
                     break;
                 }
+        }
+
+        if (string.IsNullOrEmpty(botResponse) == false)
+        {
+            var responseMessage = new ChatMessageData
+            {
+                Timestamp = DateTime.UtcNow,
+                DisplayName = _settings.BotUsername,
+                Message = botResponse,
+                MessageType = ChatMessageType.BotResponse,
+            };
+
+            ChatMessageReceived?.Invoke(responseMessage);
         }
 
         LogMessage?.Invoke(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);

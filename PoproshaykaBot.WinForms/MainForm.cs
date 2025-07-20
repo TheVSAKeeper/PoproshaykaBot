@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.WinForms;
+﻿using PoproshaykaBot.WinForms.Models;
+
+namespace PoproshaykaBot.WinForms;
 
 public partial class MainForm : Form
 {
@@ -101,6 +103,7 @@ public partial class MainForm : Form
             _bot.Connected += OnBotConnected;
             _bot.LogMessage += OnBotLogMessage;
             _bot.ConnectionProgress += OnBotConnectionProgress;
+            _bot.ChatMessageReceived += OnChatMessageReceived;
 
             _isConnected = true;
             _connectButton.Text = "Отключить бота";
@@ -150,6 +153,11 @@ public partial class MainForm : Form
     private void OnBotLogMessage(string message)
     {
         AddLogMessage($"[Бот] {message}");
+    }
+
+    private void OnChatMessageReceived(ChatMessageData chatMessage)
+    {
+        _chatDisplay.AddChatMessage(chatMessage);
     }
 
     private void OnSettingsButtonClicked(object sender, EventArgs e)
@@ -279,6 +287,7 @@ public partial class MainForm : Form
             _bot.Connected -= OnBotConnected;
             _bot.LogMessage -= OnBotLogMessage;
             _bot.ConnectionProgress -= OnBotConnectionProgress;
+            _bot.ChatMessageReceived -= OnChatMessageReceived;
 
             try
             {
