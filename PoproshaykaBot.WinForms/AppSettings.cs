@@ -3,6 +3,7 @@ namespace PoproshaykaBot.WinForms;
 public class AppSettings
 {
     public TwitchSettings Twitch { get; set; } = new();
+    public UiSettings Ui { get; set; } = new();
 }
 
 public class TwitchSettings
@@ -26,4 +27,10 @@ public class TwitchSettings
     public string RedirectUri { get; set; } = "http://localhost:8080";
 
     public string[] Scopes { get; set; } = ["chat:read", "chat:edit"];
+}
+
+public class UiSettings
+{
+    public bool ShowLogsPanel { get; set; } = true;
+    public bool ShowChatPanel { get; set; } = true;
 }

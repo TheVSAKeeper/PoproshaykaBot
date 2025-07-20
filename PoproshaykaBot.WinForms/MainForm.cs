@@ -14,7 +14,10 @@ public partial class MainForm : Form
         InitializeConnectionManager();
         LoadSettings();
         UpdateBroadcastButtonState();
+        InitializePanelVisibility();
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
+
+        KeyPreview = true;
     }
 
     protected override async void OnFormClosed(FormClosedEventArgs e)
@@ -24,6 +27,22 @@ public partial class MainForm : Form
 
         await DisconnectBotAsync();
         base.OnFormClosed(e);
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        switch (keyData)
+        {
+            case Keys.Alt | Keys.L:
+                OnToggleLogsButtonClicked(_toggleLogsButton, EventArgs.Empty);
+                return true;
+
+            case Keys.Alt | Keys.C:
+                OnToggleChatButtonClicked(_toggleChatButton, EventArgs.Empty);
+                return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private async void OnConnectButtonClicked(object sender, EventArgs e)
@@ -160,6 +179,22 @@ public partial class MainForm : Form
         _chatDisplay.AddChatMessage(chatMessage);
     }
 
+    private void OnToggleLogsButtonClicked(object sender, EventArgs e)
+    {
+        var settings = SettingsManager.Current;
+        settings.Ui.ShowLogsPanel = !settings.Ui.ShowLogsPanel;
+        SettingsManager.SaveSettings(settings);
+        UpdatePanelVisibility();
+    }
+
+    private void OnToggleChatButtonClicked(object sender, EventArgs e)
+    {
+        var settings = SettingsManager.Current;
+        settings.Ui.ShowChatPanel = !settings.Ui.ShowChatPanel;
+        SettingsManager.SaveSettings(settings);
+        UpdatePanelVisibility();
+    }
+
     private void OnSettingsButtonClicked(object sender, EventArgs e)
     {
         using var settingsForm = new SettingsForm();
@@ -179,6 +214,59 @@ public partial class MainForm : Form
         var statisticsCollector = new StatisticsCollector();
 
         return new(accessToken, settings, statisticsCollector);
+    }
+
+    private void InitializePanelVisibility()
+    {
+        UpdatePanelVisibility();
+    }
+
+    private void UpdatePanelVisibility()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(UpdatePanelVisibility);
+            return;
+        }
+
+        var settings = SettingsManager.Current.Ui;
+        var showLogs = settings.ShowLogsPanel;
+        var showChat = settings.ShowChatPanel;
+
+        _toggleLogsButton.Text = showLogs ? "Скрыть логи" : "Показать логи";
+        _toggleLogsButton.BackColor = showLogs ? Color.LightGreen : SystemColors.Control;
+
+        _toggleChatButton.Text = showChat ? "Скрыть чат" : "Показать чат";
+        _toggleChatButton.BackColor = showChat ? Color.LightGreen : SystemColors.Control;
+
+        _contentTableLayoutPanel.ColumnStyles.Clear();
+
+        if (showLogs && showChat)
+        {
+            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
+            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
+        }
+        else if (showLogs && showChat == false)
+        {
+            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
+            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
+        }
+        else if (showLogs == false && showChat)
+        {
+            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
+            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
+        }
+        else
+        {
+            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
+            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
+        }
+
+        _logLabel.Visible = showLogs;
+        _logTextBox.Visible = showLogs;
+        _chatDisplay.Visible = showChat;
+
+        _contentTableLayoutPanel.PerformLayout();
     }
 
     private void InitializeConnectionManager()

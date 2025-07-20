@@ -339,6 +339,8 @@ public partial class SettingsForm : Form
         destination.Twitch.RefreshToken = source.Twitch.RefreshToken;
         destination.Twitch.RedirectUri = source.Twitch.RedirectUri;
         destination.Twitch.Scopes = source.Twitch.Scopes;
+        destination.Ui.ShowLogsPanel = source.Ui.ShowLogsPanel;
+        destination.Ui.ShowChatPanel = source.Ui.ShowChatPanel;
     }
 
     private void UpdateShowTokenButton()
