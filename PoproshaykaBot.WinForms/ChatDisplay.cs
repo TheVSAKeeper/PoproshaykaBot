@@ -2,7 +2,7 @@
 
 namespace PoproshaykaBot.WinForms;
 
-public partial class ChatDisplay : UserControl
+public partial class ChatDisplay : UserControl, IChatDisplay
 {
     public ChatDisplay()
     {
@@ -80,6 +80,17 @@ public partial class ChatDisplay : UserControl
             _chatRichTextBox.SelectionStart = _chatRichTextBox.Text.Length;
             _chatRichTextBox.ScrollToCaret();
         }
+    }
+
+    public void ClearChat()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(ClearChat);
+            return;
+        }
+
+        _chatRichTextBox.Clear();
     }
 
     private void OnLoad(object sender, EventArgs e)

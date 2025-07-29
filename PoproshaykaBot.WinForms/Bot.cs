@@ -427,7 +427,7 @@ public class Bot : IAsyncDisposable
             _client.SendMessage(channel, personalMessage);
 
             // TODO: Подумать
-            await Task.Delay(5);
+            await Task.Delay(100);
         }
     }
 }
