@@ -15,6 +15,7 @@ public class Bot : IAsyncDisposable
     private readonly TwitchClient _client;
     private readonly TwitchSettings _settings;
     private readonly StatisticsCollector _statisticsCollector;
+    private readonly Dictionary<string, UserInfo> _seenUsers;
     private bool _disposed;
 
     private string? _channel;
@@ -26,6 +27,7 @@ public class Bot : IAsyncDisposable
     {
         _settings = settings;
         _statisticsCollector = statisticsCollector;
+        _seenUsers = [];
 
         ConnectionCredentials credentials = new(_settings.BotUsername, accessToken);
 
@@ -114,7 +116,17 @@ public class Bot : IAsyncDisposable
         {
             if (string.IsNullOrWhiteSpace(_channel) == false)
             {
-                _client.SendMessage(_channel, "Пока-пока! ❤️");
+                if (_settings.Messages.FarewellEnabled
+                    && string.IsNullOrWhiteSpace(_settings.Messages.Farewell) == false)
+                {
+                    await SendPersonalFarewellMessages(_channel, _settings.Messages.Farewell);
+                }
+
+                if (_settings.Messages.DisconnectionEnabled
+                    && string.IsNullOrWhiteSpace(_settings.Messages.Disconnection) == false)
+                {
+                    _client.SendMessage(_channel, _settings.Messages.Disconnection);
+                }
             }
 
             _client.Disconnect();
@@ -182,7 +194,12 @@ public class Bot : IAsyncDisposable
 
     private void Сlient_OnJoinedChannel(object? sender, OnJoinedChannelArgs e)
     {
-        _client.SendMessage(e.Channel, "ЭЩКЕРЕ");
+        if (_settings.Messages.ConnectionEnabled
+            && string.IsNullOrWhiteSpace(_settings.Messages.Connection) == false)
+        {
+            _client.SendMessage(e.Channel, _settings.Messages.Connection);
+        }
+
         _channel = e.Channel;
         X1 = 0;
         StartBroadcast();
@@ -213,15 +230,36 @@ public class Bot : IAsyncDisposable
             DisplayName = e.ChatMessage.DisplayName,
             Message = e.ChatMessage.Message,
             MessageType = ChatMessageType.UserMessage,
+            Status = GetUserStatusFlags(e.ChatMessage),
         };
 
         ChatMessageReceived?.Invoke(userMessage);
 
         string? botResponse = null;
 
+        var userInfo = new UserInfo(e.ChatMessage.UserId, e.ChatMessage.DisplayName);
+
+        if (_settings.Messages.WelcomeEnabled && _seenUsers.TryAdd(e.ChatMessage.UserId, userInfo))
+        {
+            var welcomeMessage = _settings.Messages.Welcome.Replace("{username}", e.ChatMessage.DisplayName);
+            _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
+
+            var welcomeResponse = new ChatMessageData
+            {
+                Timestamp = DateTime.UtcNow,
+                DisplayName = _settings.BotUsername,
+                Message = welcomeMessage,
+                MessageType = ChatMessageType.BotResponse,
+                Status = UserStatus.None,
+            };
+
+            ChatMessageReceived?.Invoke(welcomeResponse);
+        }
+
         switch (e.ChatMessage.Message.ToLower())
         {
             case "!привет":
+                // TODO: Обработать дублирование привета
                 botResponse = $"Привет, {e.ChatMessage.Username}!";
                 _client.SendMessage(e.ChatMessage.Channel, botResponse);
                 break;
@@ -301,6 +339,12 @@ public class Bot : IAsyncDisposable
                     _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
                     break;
                 }
+
+            case "!пока":
+                botResponse = _settings.Messages.Farewell.Replace("{username}", e.ChatMessage.DisplayName);
+                _client.SendMessage(e.ChatMessage.Channel, botResponse);
+                _seenUsers.Remove(e.ChatMessage.UserId);
+                break;
         }
 
         if (string.IsNullOrEmpty(botResponse) == false)
@@ -311,12 +355,40 @@ public class Bot : IAsyncDisposable
                 DisplayName = _settings.BotUsername,
                 Message = botResponse,
                 MessageType = ChatMessageType.BotResponse,
+                Status = UserStatus.None,
             };
 
             ChatMessageReceived?.Invoke(responseMessage);
         }
 
         LogMessage?.Invoke(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);
+    }
+
+    private static UserStatus GetUserStatusFlags(ChatMessage chatMessage)
+    {
+        var status = UserStatus.None;
+
+        if (chatMessage.IsBroadcaster)
+        {
+            status |= UserStatus.Broadcaster;
+        }
+
+        if (chatMessage.IsModerator)
+        {
+            status |= UserStatus.Moderator;
+        }
+
+        if (chatMessage.IsVip)
+        {
+            status |= UserStatus.Vip;
+        }
+
+        if (chatMessage.IsSubscriber)
+        {
+            status |= UserStatus.Subscriber;
+        }
+
+        return status;
     }
 
     private static string FormatTimeSpan(TimeSpan timeSpan)
@@ -346,4 +418,18 @@ public class Bot : IAsyncDisposable
 
         return moscowTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.GetCultureInfo("ru-RU")) + " по МСК";
     }
+
+    private async Task SendPersonalFarewellMessages(string channel, string farewellMessage)
+    {
+        foreach (var user in _seenUsers.Values)
+        {
+            var personalMessage = farewellMessage.Replace("{username}", user.DisplayName);
+            _client.SendMessage(channel, personalMessage);
+
+            // TODO: Подумать
+            await Task.Delay(100);
+        }
+    }
 }
+
+public record UserInfo(string UserId, string DisplayName);

@@ -37,6 +37,7 @@ partial class MainForm
         _broadcastButton = new Button();
         _toggleLogsButton = new Button();
         _toggleChatButton = new Button();
+        _openChatWindowButton = new Button();
         _connectionProgressBar = new ProgressBar();
         _connectionStatusLabel = new Label();
         _contentTableLayoutPanel = new TableLayoutPanel();
@@ -70,18 +71,20 @@ partial class MainForm
         //
         // _buttonTableLayoutPanel
         //
-        _buttonTableLayoutPanel.ColumnCount = 6;
+        _buttonTableLayoutPanel.ColumnCount = 7;
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80F));
+        _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
         _buttonTableLayoutPanel.Controls.Add(_toggleLogsButton, 0, 0);
         _buttonTableLayoutPanel.Controls.Add(_toggleChatButton, 1, 0);
-        _buttonTableLayoutPanel.Controls.Add(_connectButton, 3, 0);
-        _buttonTableLayoutPanel.Controls.Add(_settingsButton, 4, 0);
-        _buttonTableLayoutPanel.Controls.Add(_broadcastButton, 5, 0);
+        _buttonTableLayoutPanel.Controls.Add(_openChatWindowButton, 2, 0);
+        _buttonTableLayoutPanel.Controls.Add(_connectButton, 4, 0);
+        _buttonTableLayoutPanel.Controls.Add(_settingsButton, 5, 0);
+        _buttonTableLayoutPanel.Controls.Add(_broadcastButton, 6, 0);
         _buttonTableLayoutPanel.Dock = DockStyle.Fill;
         _buttonTableLayoutPanel.Location = new Point(15, 15);
         _buttonTableLayoutPanel.Name = "_buttonTableLayoutPanel";
@@ -111,6 +114,17 @@ partial class MainForm
         _toggleChatButton.Text = "Чат";
         _toggleChatButton.UseVisualStyleBackColor = true;
         _toggleChatButton.Click += OnToggleChatButtonClicked;
+        //
+        // _openChatWindowButton
+        //
+        _openChatWindowButton.Dock = DockStyle.Fill;
+        _openChatWindowButton.Location = new Point(163, 3);
+        _openChatWindowButton.Name = "_openChatWindowButton";
+        _openChatWindowButton.Size = new Size(94, 38);
+        _openChatWindowButton.TabIndex = 6;
+        _openChatWindowButton.Text = "Чат в окне (Alt+W)";
+        _openChatWindowButton.UseVisualStyleBackColor = true;
+        _openChatWindowButton.Click += OnOpenChatWindowButtonClicked;
         //
         // _connectButton
         //
@@ -239,6 +253,7 @@ partial class MainForm
     private TableLayoutPanel _contentTableLayoutPanel;
     private Button _toggleLogsButton;
     private Button _toggleChatButton;
+    private Button _openChatWindowButton;
     private Button _connectButton;
     private Button _settingsButton;
     private Button _broadcastButton;

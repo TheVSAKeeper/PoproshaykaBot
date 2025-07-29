@@ -27,6 +27,27 @@ public class TwitchSettings
     public string RedirectUri { get; set; } = "http://localhost:8080";
 
     public string[] Scopes { get; set; } = ["chat:read", "chat:edit"];
+
+    public MessageSettings Messages { get; set; } = new();
+}
+
+public class MessageSettings
+{
+    public bool WelcomeEnabled { get; set; } = false;
+
+    public string Welcome { get; set; } = "Добро пожаловать в чат, {username}! 👋";
+
+    public bool FarewellEnabled { get; set; } = false;
+
+    public string Farewell { get; set; } = "До свидания, {username}! Увидимся позже! ❤️";
+
+    public bool ConnectionEnabled { get; set; } = true;
+
+    public string Connection { get; set; } = "ЭЩКЕРЕ";
+
+    public bool DisconnectionEnabled { get; set; } = true;
+
+    public string Disconnection { get; set; } = "Пока-пока! ❤️";
 }
 
 public class UiSettings

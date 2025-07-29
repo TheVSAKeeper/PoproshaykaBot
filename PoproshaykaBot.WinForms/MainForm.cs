@@ -4,17 +4,24 @@ namespace PoproshaykaBot.WinForms;
 
 public partial class MainForm : Form
 {
+    private readonly ChatHistoryManager _chatHistoryManager;
     private Bot? _bot;
     private bool _isConnected;
     private BotConnectionManager? _connectionManager;
+    private ChatWindow? _chatWindow;
 
     public MainForm()
     {
+        _chatHistoryManager = new();
+
         InitializeComponent();
         InitializeConnectionManager();
         LoadSettings();
         UpdateBroadcastButtonState();
         InitializePanelVisibility();
+
+        _chatHistoryManager.RegisterChatDisplay(_chatDisplay);
+
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
@@ -24,6 +31,13 @@ public partial class MainForm : Form
     {
         _connectionManager?.CancelConnection();
         _connectionManager?.Dispose();
+
+        if (_chatWindow is { IsDisposed: false })
+        {
+            _chatWindow.FormClosed -= OnChatWindowClosed;
+            _chatWindow.Close();
+            _chatWindow = null;
+        }
 
         await DisconnectBotAsync();
         base.OnFormClosed(e);
@@ -39,6 +53,14 @@ public partial class MainForm : Form
 
             case Keys.Alt | Keys.C:
                 OnToggleChatButtonClicked(_toggleChatButton, EventArgs.Empty);
+                return true;
+
+            case Keys.Alt | Keys.W:
+                OnOpenChatWindowButtonClicked(_openChatWindowButton, EventArgs.Empty);
+                return true;
+
+            case Keys.Control | Keys.Shift | Keys.Delete:
+                ClearChatHistory();
                 return true;
         }
 
@@ -176,7 +198,7 @@ public partial class MainForm : Form
 
     private void OnChatMessageReceived(ChatMessageData chatMessage)
     {
-        _chatDisplay.AddChatMessage(chatMessage);
+        _chatHistoryManager.AddMessage(chatMessage);
     }
 
     private void OnToggleLogsButtonClicked(object sender, EventArgs e)
@@ -193,6 +215,36 @@ public partial class MainForm : Form
         settings.Ui.ShowChatPanel = !settings.Ui.ShowChatPanel;
         SettingsManager.SaveSettings(settings);
         UpdatePanelVisibility();
+    }
+
+    private void OnOpenChatWindowButtonClicked(object sender, EventArgs e)
+    {
+        if (_chatWindow == null || _chatWindow.IsDisposed)
+        {
+            _chatWindow = new(_chatHistoryManager);
+            _chatWindow.FormClosed += OnChatWindowClosed;
+            _chatWindow.Show(this);
+            _openChatWindowButton.Text = "Закрыть окно (Alt+W)";
+            _openChatWindowButton.BackColor = Color.LightGreen;
+        }
+        else
+        {
+            _chatWindow.Close();
+        }
+    }
+
+    private void OnChatWindowClosed(object? sender, FormClosedEventArgs e)
+    {
+        _openChatWindowButton.Text = "Чат в окне (Alt+W)";
+        _openChatWindowButton.BackColor = SystemColors.Control;
+
+        if (_chatWindow == null)
+        {
+            return;
+        }
+
+        _chatWindow.FormClosed -= OnChatWindowClosed;
+        _chatWindow = null;
     }
 
     private void OnSettingsButtonClicked(object sender, EventArgs e)
@@ -214,6 +266,23 @@ public partial class MainForm : Form
         var statisticsCollector = new StatisticsCollector();
 
         return new(accessToken, settings, statisticsCollector);
+    }
+
+    private void ClearChatHistory()
+    {
+        var result = MessageBox.Show("Вы уверены, что хотите очистить всю историю сообщений чата?\n\nЭто действие нельзя отменить.",
+            "Очистка истории чата",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button2);
+
+        if (result != DialogResult.Yes)
+        {
+            return;
+        }
+
+        _chatHistoryManager.ClearHistory();
+        AddLogMessage("История сообщений чата очищена.");
     }
 
     private void InitializePanelVisibility()

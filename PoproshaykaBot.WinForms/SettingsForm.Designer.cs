@@ -43,6 +43,23 @@ partial class SettingsForm
         _messagesAllowedResetButton = new Button();
         _messagesAllowedNumeric = new NumericUpDown();
         _messagesAllowedLabel = new Label();
+        _messagesTabPage = new TabPage();
+        _disconnectionMessageResetButton = new Button();
+        _disconnectionMessageTextBox = new TextBox();
+        _disconnectionMessageLabel = new Label();
+        _disconnectionMessageEnabledCheckBox = new CheckBox();
+        _connectionMessageResetButton = new Button();
+        _connectionMessageTextBox = new TextBox();
+        _connectionMessageLabel = new Label();
+        _connectionMessageEnabledCheckBox = new CheckBox();
+        _farewellMessageResetButton = new Button();
+        _farewellMessageTextBox = new TextBox();
+        _farewellMessageLabel = new Label();
+        _farewellMessageEnabledCheckBox = new CheckBox();
+        _welcomeMessageResetButton = new Button();
+        _welcomeMessageTextBox = new TextBox();
+        _welcomeMessageLabel = new Label();
+        _welcomeMessageEnabledCheckBox = new CheckBox();
         _oauthTabPage = new TabPage();
         _showTokenButton = new Button();
         _clearTokensButton = new Button();
@@ -81,6 +98,7 @@ partial class SettingsForm
         _rateLimitingTabPage.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)_throttlingPeriodNumeric).BeginInit();
         ((System.ComponentModel.ISupportInitialize)_messagesAllowedNumeric).BeginInit();
+        _messagesTabPage.SuspendLayout();
         _oauthTabPage.SuspendLayout();
         SuspendLayout();
         // 
@@ -88,6 +106,7 @@ partial class SettingsForm
         // 
         _tabControl.Controls.Add(_basicTabPage);
         _tabControl.Controls.Add(_rateLimitingTabPage);
+        _tabControl.Controls.Add(_messagesTabPage);
         _tabControl.Controls.Add(_oauthTabPage);
         _tabControl.Location = new Point(12, 12);
         _tabControl.Name = "_tabControl";
@@ -106,7 +125,7 @@ partial class SettingsForm
         _basicTabPage.Location = new Point(4, 24);
         _basicTabPage.Name = "_basicTabPage";
         _basicTabPage.Padding = new Padding(3);
-        _basicTabPage.Size = new Size(548, 364);
+        _basicTabPage.Size = new Size(548, 442);
         _basicTabPage.TabIndex = 0;
         _basicTabPage.Text = "Основные";
         _basicTabPage.UseVisualStyleBackColor = true;
@@ -176,7 +195,7 @@ partial class SettingsForm
         _rateLimitingTabPage.Location = new Point(4, 24);
         _rateLimitingTabPage.Name = "_rateLimitingTabPage";
         _rateLimitingTabPage.Padding = new Padding(3);
-        _rateLimitingTabPage.Size = new Size(548, 364);
+        _rateLimitingTabPage.Size = new Size(548, 442);
         _rateLimitingTabPage.TabIndex = 1;
         _rateLimitingTabPage.Text = "Ограничения";
         _rateLimitingTabPage.UseVisualStyleBackColor = true;
@@ -240,6 +259,186 @@ partial class SettingsForm
         _messagesAllowedLabel.Size = new Size(129, 15);
         _messagesAllowedLabel.TabIndex = 0;
         _messagesAllowedLabel.Text = "Сообщений в период:";
+        // 
+        // _messagesTabPage
+        // 
+        _messagesTabPage.Controls.Add(_disconnectionMessageResetButton);
+        _messagesTabPage.Controls.Add(_disconnectionMessageTextBox);
+        _messagesTabPage.Controls.Add(_disconnectionMessageLabel);
+        _messagesTabPage.Controls.Add(_disconnectionMessageEnabledCheckBox);
+        _messagesTabPage.Controls.Add(_connectionMessageResetButton);
+        _messagesTabPage.Controls.Add(_connectionMessageTextBox);
+        _messagesTabPage.Controls.Add(_connectionMessageLabel);
+        _messagesTabPage.Controls.Add(_connectionMessageEnabledCheckBox);
+        _messagesTabPage.Controls.Add(_farewellMessageResetButton);
+        _messagesTabPage.Controls.Add(_farewellMessageTextBox);
+        _messagesTabPage.Controls.Add(_farewellMessageLabel);
+        _messagesTabPage.Controls.Add(_farewellMessageEnabledCheckBox);
+        _messagesTabPage.Controls.Add(_welcomeMessageResetButton);
+        _messagesTabPage.Controls.Add(_welcomeMessageTextBox);
+        _messagesTabPage.Controls.Add(_welcomeMessageLabel);
+        _messagesTabPage.Controls.Add(_welcomeMessageEnabledCheckBox);
+        _messagesTabPage.Location = new Point(4, 24);
+        _messagesTabPage.Name = "_messagesTabPage";
+        _messagesTabPage.Padding = new Padding(3);
+        _messagesTabPage.Size = new Size(548, 442);
+        _messagesTabPage.TabIndex = 3;
+        _messagesTabPage.Text = "Сообщения";
+        _messagesTabPage.UseVisualStyleBackColor = true;
+        // 
+        // _disconnectionMessageResetButton
+        // 
+        _disconnectionMessageResetButton.Location = new Point(470, 420);
+        _disconnectionMessageResetButton.Name = "_disconnectionMessageResetButton";
+        _disconnectionMessageResetButton.Size = new Size(25, 23);
+        _disconnectionMessageResetButton.TabIndex = 15;
+        _disconnectionMessageResetButton.Text = "↺";
+        _disconnectionMessageResetButton.UseVisualStyleBackColor = true;
+        _disconnectionMessageResetButton.Click += OnDisconnectionMessageResetButtonClicked;
+        // 
+        // _disconnectionMessageTextBox
+        // 
+        _disconnectionMessageTextBox.Location = new Point(15, 420);
+        _disconnectionMessageTextBox.Name = "_disconnectionMessageTextBox";
+        _disconnectionMessageTextBox.Size = new Size(450, 23);
+        _disconnectionMessageTextBox.TabIndex = 14;
+        _disconnectionMessageTextBox.TextChanged += OnSettingChanged;
+        // 
+        // _disconnectionMessageLabel
+        // 
+        _disconnectionMessageLabel.AutoSize = true;
+        _disconnectionMessageLabel.Location = new Point(18, 403);
+        _disconnectionMessageLabel.Name = "_disconnectionMessageLabel";
+        _disconnectionMessageLabel.Size = new Size(135, 15);
+        _disconnectionMessageLabel.TabIndex = 13;
+        _disconnectionMessageLabel.Text = "Текст при отключении:";
+        // 
+        // _disconnectionMessageEnabledCheckBox
+        // 
+        _disconnectionMessageEnabledCheckBox.AutoSize = true;
+        _disconnectionMessageEnabledCheckBox.Location = new Point(18, 373);
+        _disconnectionMessageEnabledCheckBox.Name = "_disconnectionMessageEnabledCheckBox";
+        _disconnectionMessageEnabledCheckBox.Size = new Size(244, 19);
+        _disconnectionMessageEnabledCheckBox.TabIndex = 12;
+        _disconnectionMessageEnabledCheckBox.Text = "Включить сообщение при отключении";
+        _disconnectionMessageEnabledCheckBox.UseVisualStyleBackColor = true;
+        _disconnectionMessageEnabledCheckBox.CheckedChanged += OnSettingChanged;
+        // 
+        // _connectionMessageResetButton
+        // 
+        _connectionMessageResetButton.Location = new Point(470, 330);
+        _connectionMessageResetButton.Name = "_connectionMessageResetButton";
+        _connectionMessageResetButton.Size = new Size(25, 23);
+        _connectionMessageResetButton.TabIndex = 11;
+        _connectionMessageResetButton.Text = "↺";
+        _connectionMessageResetButton.UseVisualStyleBackColor = true;
+        _connectionMessageResetButton.Click += OnConnectionMessageResetButtonClicked;
+        // 
+        // _connectionMessageTextBox
+        // 
+        _connectionMessageTextBox.Location = new Point(15, 330);
+        _connectionMessageTextBox.Name = "_connectionMessageTextBox";
+        _connectionMessageTextBox.Size = new Size(450, 23);
+        _connectionMessageTextBox.TabIndex = 10;
+        _connectionMessageTextBox.TextChanged += OnSettingChanged;
+        // 
+        // _connectionMessageLabel
+        // 
+        _connectionMessageLabel.AutoSize = true;
+        _connectionMessageLabel.Location = new Point(18, 313);
+        _connectionMessageLabel.Name = "_connectionMessageLabel";
+        _connectionMessageLabel.Size = new Size(143, 15);
+        _connectionMessageLabel.TabIndex = 9;
+        _connectionMessageLabel.Text = "Текст при подключении:";
+        // 
+        // _connectionMessageEnabledCheckBox
+        // 
+        _connectionMessageEnabledCheckBox.AutoSize = true;
+        _connectionMessageEnabledCheckBox.Location = new Point(18, 283);
+        _connectionMessageEnabledCheckBox.Name = "_connectionMessageEnabledCheckBox";
+        _connectionMessageEnabledCheckBox.Size = new Size(252, 19);
+        _connectionMessageEnabledCheckBox.TabIndex = 8;
+        _connectionMessageEnabledCheckBox.Text = "Включить сообщение при подключении";
+        _connectionMessageEnabledCheckBox.UseVisualStyleBackColor = true;
+        _connectionMessageEnabledCheckBox.CheckedChanged += OnSettingChanged;
+        // 
+        // _farewellMessageResetButton
+        // 
+        _farewellMessageResetButton.Location = new Point(470, 200);
+        _farewellMessageResetButton.Name = "_farewellMessageResetButton";
+        _farewellMessageResetButton.Size = new Size(25, 23);
+        _farewellMessageResetButton.TabIndex = 7;
+        _farewellMessageResetButton.Text = "↺";
+        _farewellMessageResetButton.UseVisualStyleBackColor = true;
+        _farewellMessageResetButton.Click += OnFarewellMessageResetButtonClicked;
+        // 
+        // _farewellMessageTextBox
+        // 
+        _farewellMessageTextBox.Location = new Point(15, 200);
+        _farewellMessageTextBox.Multiline = true;
+        _farewellMessageTextBox.Name = "_farewellMessageTextBox";
+        _farewellMessageTextBox.Size = new Size(450, 60);
+        _farewellMessageTextBox.TabIndex = 6;
+        _farewellMessageTextBox.TextChanged += OnSettingChanged;
+        // 
+        // _farewellMessageLabel
+        // 
+        _farewellMessageLabel.AutoSize = true;
+        _farewellMessageLabel.Location = new Point(18, 183);
+        _farewellMessageLabel.Name = "_farewellMessageLabel";
+        _farewellMessageLabel.Size = new Size(100, 15);
+        _farewellMessageLabel.TabIndex = 5;
+        _farewellMessageLabel.Text = "Текст прощания:";
+        // 
+        // _farewellMessageEnabledCheckBox
+        // 
+        _farewellMessageEnabledCheckBox.AutoSize = true;
+        _farewellMessageEnabledCheckBox.Location = new Point(18, 153);
+        _farewellMessageEnabledCheckBox.Name = "_farewellMessageEnabledCheckBox";
+        _farewellMessageEnabledCheckBox.Size = new Size(224, 19);
+        _farewellMessageEnabledCheckBox.TabIndex = 4;
+        _farewellMessageEnabledCheckBox.Text = "Включить прощальные сообщения";
+        _farewellMessageEnabledCheckBox.UseVisualStyleBackColor = true;
+        _farewellMessageEnabledCheckBox.CheckedChanged += OnSettingChanged;
+        // 
+        // _welcomeMessageResetButton
+        // 
+        _welcomeMessageResetButton.Location = new Point(470, 70);
+        _welcomeMessageResetButton.Name = "_welcomeMessageResetButton";
+        _welcomeMessageResetButton.Size = new Size(25, 23);
+        _welcomeMessageResetButton.TabIndex = 3;
+        _welcomeMessageResetButton.Text = "↺";
+        _welcomeMessageResetButton.UseVisualStyleBackColor = true;
+        _welcomeMessageResetButton.Click += OnWelcomeMessageResetButtonClicked;
+        // 
+        // _welcomeMessageTextBox
+        // 
+        _welcomeMessageTextBox.Location = new Point(15, 70);
+        _welcomeMessageTextBox.Multiline = true;
+        _welcomeMessageTextBox.Name = "_welcomeMessageTextBox";
+        _welcomeMessageTextBox.Size = new Size(450, 60);
+        _welcomeMessageTextBox.TabIndex = 2;
+        _welcomeMessageTextBox.TextChanged += OnSettingChanged;
+        // 
+        // _welcomeMessageLabel
+        // 
+        _welcomeMessageLabel.AutoSize = true;
+        _welcomeMessageLabel.Location = new Point(18, 53);
+        _welcomeMessageLabel.Name = "_welcomeMessageLabel";
+        _welcomeMessageLabel.Size = new Size(110, 15);
+        _welcomeMessageLabel.TabIndex = 1;
+        _welcomeMessageLabel.Text = "Текст приветствия:";
+        // 
+        // _welcomeMessageEnabledCheckBox
+        // 
+        _welcomeMessageEnabledCheckBox.AutoSize = true;
+        _welcomeMessageEnabledCheckBox.Location = new Point(18, 23);
+        _welcomeMessageEnabledCheckBox.Name = "_welcomeMessageEnabledCheckBox";
+        _welcomeMessageEnabledCheckBox.Size = new Size(241, 19);
+        _welcomeMessageEnabledCheckBox.TabIndex = 0;
+        _welcomeMessageEnabledCheckBox.Text = "Включить приветственные сообщения";
+        _welcomeMessageEnabledCheckBox.UseVisualStyleBackColor = true;
+        _welcomeMessageEnabledCheckBox.CheckedChanged += OnSettingChanged;
         // 
         // _oauthTabPage
         // 
@@ -544,7 +743,7 @@ partial class SettingsForm
         // 
         _okButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         _okButton.DialogResult = DialogResult.OK;
-        _okButton.Location = new Point(335, 488);
+        _okButton.Location = new Point(335, 487);
         _okButton.Name = "_okButton";
         _okButton.Size = new Size(75, 23);
         _okButton.TabIndex = 14;
@@ -556,7 +755,7 @@ partial class SettingsForm
         // 
         _cancelButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         _cancelButton.DialogResult = DialogResult.Cancel;
-        _cancelButton.Location = new Point(416, 488);
+        _cancelButton.Location = new Point(416, 487);
         _cancelButton.Name = "_cancelButton";
         _cancelButton.Size = new Size(75, 23);
         _cancelButton.TabIndex = 15;
@@ -568,7 +767,7 @@ partial class SettingsForm
         // 
         _applyButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         _applyButton.Enabled = false;
-        _applyButton.Location = new Point(497, 488);
+        _applyButton.Location = new Point(497, 487);
         _applyButton.Name = "_applyButton";
         _applyButton.Size = new Size(75, 23);
         _applyButton.TabIndex = 16;
@@ -579,7 +778,7 @@ partial class SettingsForm
         // _resetButton
         // 
         _resetButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-        _resetButton.Location = new Point(12, 488);
+        _resetButton.Location = new Point(12, 487);
         _resetButton.Name = "_resetButton";
         _resetButton.Size = new Size(75, 23);
         _resetButton.TabIndex = 17;
@@ -593,7 +792,7 @@ partial class SettingsForm
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
         CancelButton = _cancelButton;
-        ClientSize = new Size(580, 523);
+        ClientSize = new Size(583, 522);
         Controls.Add(_tabControl);
         Controls.Add(_resetButton);
         Controls.Add(_applyButton);
@@ -612,6 +811,8 @@ partial class SettingsForm
         _rateLimitingTabPage.PerformLayout();
         ((System.ComponentModel.ISupportInitialize)_throttlingPeriodNumeric).EndInit();
         ((System.ComponentModel.ISupportInitialize)_messagesAllowedNumeric).EndInit();
+        _messagesTabPage.ResumeLayout(false);
+        _messagesTabPage.PerformLayout();
         _oauthTabPage.ResumeLayout(false);
         _oauthTabPage.PerformLayout();
         ResumeLayout(false);
@@ -620,6 +821,7 @@ partial class SettingsForm
     private TabControl _tabControl;
     private TabPage _basicTabPage;
     private TabPage _rateLimitingTabPage;
+    private TabPage _messagesTabPage;
     private TabPage _oauthTabPage;
     private Button _okButton;
     private Button _cancelButton;
@@ -665,6 +867,22 @@ partial class SettingsForm
     private Button _refreshTokenButton;
     private Button _clearTokensButton;
     private Button _showTokenButton;
+    private CheckBox _welcomeMessageEnabledCheckBox;
+    private Label _welcomeMessageLabel;
+    private TextBox _welcomeMessageTextBox;
+    private Button _welcomeMessageResetButton;
+    private CheckBox _farewellMessageEnabledCheckBox;
+    private Label _farewellMessageLabel;
+    private TextBox _farewellMessageTextBox;
+    private Button _farewellMessageResetButton;
+    private CheckBox _connectionMessageEnabledCheckBox;
+    private Label _connectionMessageLabel;
+    private TextBox _connectionMessageTextBox;
+    private Button _connectionMessageResetButton;
+    private CheckBox _disconnectionMessageEnabledCheckBox;
+    private Label _disconnectionMessageLabel;
+    private TextBox _disconnectionMessageTextBox;
+    private Button _disconnectionMessageResetButton;
 
     #endregion
 }

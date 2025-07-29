@@ -6,4 +6,5 @@ public class ChatMessageData
     public string DisplayName { get; init; } = string.Empty;
     public string Message { get; init; } = string.Empty;
     public ChatMessageType MessageType { get; init; }
+    public UserStatus Status { get; init; } = UserStatus.None;
 }

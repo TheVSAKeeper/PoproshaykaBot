@@ -3,6 +3,7 @@
 public partial class SettingsForm : Form
 {
     private static readonly TwitchSettings DefaultSettings = new();
+    private static readonly MessageSettings DefaultMessageSettings = new();
     private AppSettings _settings;
     private bool _hasChanges;
     private bool _tokensVisible;
@@ -327,6 +328,30 @@ public partial class SettingsForm : Form
         UpdateShowTokenButton();
     }
 
+    private void OnWelcomeMessageResetButtonClicked(object sender, EventArgs e)
+    {
+        _welcomeMessageTextBox.Text = DefaultMessageSettings.Welcome;
+        _welcomeMessageEnabledCheckBox.Checked = DefaultMessageSettings.WelcomeEnabled;
+    }
+
+    private void OnFarewellMessageResetButtonClicked(object sender, EventArgs e)
+    {
+        _farewellMessageTextBox.Text = DefaultMessageSettings.Farewell;
+        _farewellMessageEnabledCheckBox.Checked = DefaultMessageSettings.FarewellEnabled;
+    }
+
+    private void OnConnectionMessageResetButtonClicked(object sender, EventArgs e)
+    {
+        _connectionMessageTextBox.Text = DefaultMessageSettings.Connection;
+        _connectionMessageEnabledCheckBox.Checked = DefaultMessageSettings.ConnectionEnabled;
+    }
+
+    private void OnDisconnectionMessageResetButtonClicked(object sender, EventArgs e)
+    {
+        _disconnectionMessageTextBox.Text = DefaultMessageSettings.Disconnection;
+        _disconnectionMessageEnabledCheckBox.Checked = DefaultMessageSettings.DisconnectionEnabled;
+    }
+
     private static void CopySettings(AppSettings source, AppSettings destination)
     {
         destination.Twitch.BotUsername = source.Twitch.BotUsername;
@@ -339,6 +364,14 @@ public partial class SettingsForm : Form
         destination.Twitch.RefreshToken = source.Twitch.RefreshToken;
         destination.Twitch.RedirectUri = source.Twitch.RedirectUri;
         destination.Twitch.Scopes = source.Twitch.Scopes;
+        destination.Twitch.Messages.WelcomeEnabled = source.Twitch.Messages.WelcomeEnabled;
+        destination.Twitch.Messages.Welcome = source.Twitch.Messages.Welcome;
+        destination.Twitch.Messages.FarewellEnabled = source.Twitch.Messages.FarewellEnabled;
+        destination.Twitch.Messages.Farewell = source.Twitch.Messages.Farewell;
+        destination.Twitch.Messages.ConnectionEnabled = source.Twitch.Messages.ConnectionEnabled;
+        destination.Twitch.Messages.Connection = source.Twitch.Messages.Connection;
+        destination.Twitch.Messages.DisconnectionEnabled = source.Twitch.Messages.DisconnectionEnabled;
+        destination.Twitch.Messages.Disconnection = source.Twitch.Messages.Disconnection;
         destination.Ui.ShowLogsPanel = source.Ui.ShowLogsPanel;
         destination.Ui.ShowChatPanel = source.Ui.ShowChatPanel;
     }
@@ -368,6 +401,10 @@ public partial class SettingsForm : Form
         _clientSecretTextBox.PlaceholderText = string.IsNullOrWhiteSpace(DefaultSettings.ClientSecret) ? "Введите Client Secret" : DefaultSettings.ClientSecret;
         _redirectUriTextBox.PlaceholderText = DefaultSettings.RedirectUri;
         _scopesTextBox.PlaceholderText = string.Join(" ", DefaultSettings.Scopes);
+        _welcomeMessageTextBox.PlaceholderText = DefaultMessageSettings.Welcome;
+        _farewellMessageTextBox.PlaceholderText = DefaultMessageSettings.Farewell;
+        _connectionMessageTextBox.PlaceholderText = DefaultMessageSettings.Connection;
+        _disconnectionMessageTextBox.PlaceholderText = DefaultMessageSettings.Disconnection;
     }
 
     private void LoadSettingsToControls()
@@ -381,6 +418,15 @@ public partial class SettingsForm : Form
         _clientSecretTextBox.Text = _settings.Twitch.ClientSecret;
         _redirectUriTextBox.Text = _settings.Twitch.RedirectUri;
         _scopesTextBox.Text = string.Join(" ", _settings.Twitch.Scopes);
+
+        _welcomeMessageEnabledCheckBox.Checked = _settings.Twitch.Messages.WelcomeEnabled;
+        _welcomeMessageTextBox.Text = _settings.Twitch.Messages.Welcome;
+        _farewellMessageEnabledCheckBox.Checked = _settings.Twitch.Messages.FarewellEnabled;
+        _farewellMessageTextBox.Text = _settings.Twitch.Messages.Farewell;
+        _connectionMessageEnabledCheckBox.Checked = _settings.Twitch.Messages.ConnectionEnabled;
+        _connectionMessageTextBox.Text = _settings.Twitch.Messages.Connection;
+        _disconnectionMessageEnabledCheckBox.Checked = _settings.Twitch.Messages.DisconnectionEnabled;
+        _disconnectionMessageTextBox.Text = _settings.Twitch.Messages.Disconnection;
 
         LoadTokenInformation();
 
@@ -399,6 +445,15 @@ public partial class SettingsForm : Form
         _settings.Twitch.ClientSecret = _clientSecretTextBox.Text.Trim();
         _settings.Twitch.RedirectUri = _redirectUriTextBox.Text.Trim();
         _settings.Twitch.Scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        _settings.Twitch.Messages.WelcomeEnabled = _welcomeMessageEnabledCheckBox.Checked;
+        _settings.Twitch.Messages.Welcome = _welcomeMessageTextBox.Text.Trim();
+        _settings.Twitch.Messages.FarewellEnabled = _farewellMessageEnabledCheckBox.Checked;
+        _settings.Twitch.Messages.Farewell = _farewellMessageTextBox.Text.Trim();
+        _settings.Twitch.Messages.ConnectionEnabled = _connectionMessageEnabledCheckBox.Checked;
+        _settings.Twitch.Messages.Connection = _connectionMessageTextBox.Text.Trim();
+        _settings.Twitch.Messages.DisconnectionEnabled = _disconnectionMessageEnabledCheckBox.Checked;
+        _settings.Twitch.Messages.Disconnection = _disconnectionMessageTextBox.Text.Trim();
     }
 
     private void UpdateButtonStates()

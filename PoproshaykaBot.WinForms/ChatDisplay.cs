@@ -2,7 +2,7 @@
 
 namespace PoproshaykaBot.WinForms;
 
-public partial class ChatDisplay : UserControl
+public partial class ChatDisplay : UserControl, IChatDisplay
 {
     public ChatDisplay()
     {
@@ -35,7 +35,8 @@ public partial class ChatDisplay : UserControl
                 _chatRichTextBox.SelectionColor = Color.Gray;
                 _chatRichTextBox.AppendText(timestampPart);
 
-                _chatRichTextBox.SelectionColor = Color.DarkBlue;
+                var usernameColor = GetUsernameColor(chatMessage);
+                _chatRichTextBox.SelectionColor = usernameColor;
                 _chatRichTextBox.AppendText(usernamePart);
 
                 _chatRichTextBox.SelectionColor = Color.Black;
@@ -81,6 +82,17 @@ public partial class ChatDisplay : UserControl
         }
     }
 
+    public void ClearChat()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(ClearChat);
+            return;
+        }
+
+        _chatRichTextBox.Clear();
+    }
+
     private void OnLoad(object sender, EventArgs e)
     {
         var welcomeMessage = new ChatMessageData
@@ -89,8 +101,39 @@ public partial class ChatDisplay : UserControl
             DisplayName = "Система",
             Message = "Чат готов к отображению сообщений. Подключите бота для начала работы.",
             MessageType = ChatMessageType.SystemNotification,
+            Status = UserStatus.None,
         };
 
         AddChatMessage(welcomeMessage);
+    }
+
+    private static Color GetUsernameColor(ChatMessageData chatMessage)
+    {
+        if (chatMessage.MessageType != ChatMessageType.UserMessage)
+        {
+            return Color.DarkBlue;
+        }
+
+        if (chatMessage.Status.HasFlag(UserStatus.Broadcaster))
+        {
+            return Color.FromArgb(147, 39, 143);
+        }
+
+        if (chatMessage.Status.HasFlag(UserStatus.Moderator))
+        {
+            return Color.FromArgb(0, 128, 0);
+        }
+
+        if (chatMessage.Status.HasFlag(UserStatus.Vip))
+        {
+            return Color.FromArgb(255, 140, 0);
+        }
+
+        if (chatMessage.Status.HasFlag(UserStatus.Subscriber))
+        {
+            return Color.FromArgb(30, 144, 255);
+        }
+
+        return Color.DarkBlue;
     }
 }

@@ -28,14 +28,7 @@ public static class SettingsManager
             var json = File.ReadAllText(SettingsFilePath, Encoding.UTF8);
             var settings = JsonSerializer.Deserialize<AppSettings>(json, GetJsonOptions());
 
-            if (settings == null)
-            {
-                throw new InvalidOperationException("Не удалось десериализовать настройки");
-            }
-
-            ValidateSettings(settings);
-
-            _currentSettings = settings;
+            _currentSettings = settings ?? throw new InvalidOperationException("Не удалось десериализовать настройки");
             return settings;
         }
         catch (Exception exception)
@@ -51,8 +44,6 @@ public static class SettingsManager
     {
         try
         {
-            ValidateSettings(settings);
-
             Directory.CreateDirectory(SettingsDirectory);
 
             var json = JsonSerializer.Serialize(settings, GetJsonOptions());
@@ -69,29 +60,6 @@ public static class SettingsManager
     private static AppSettings CreateDefaultSettings()
     {
         return new();
-    }
-
-    private static void ValidateSettings(AppSettings settings)
-    {
-        if (string.IsNullOrWhiteSpace(settings.Twitch.BotUsername))
-        {
-            settings.Twitch.BotUsername = "bobito217";
-        }
-
-        if (string.IsNullOrWhiteSpace(settings.Twitch.Channel))
-        {
-            settings.Twitch.Channel = "bobito217";
-        }
-
-        if (settings.Twitch.MessagesAllowedInPeriod <= 0)
-        {
-            settings.Twitch.MessagesAllowedInPeriod = 750;
-        }
-
-        if (settings.Twitch.ThrottlingPeriodSeconds <= 0)
-        {
-            settings.Twitch.ThrottlingPeriodSeconds = 30;
-        }
     }
 
     private static JsonSerializerOptions GetJsonOptions()
