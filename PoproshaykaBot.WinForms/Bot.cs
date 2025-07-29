@@ -213,6 +213,7 @@ public class Bot : IAsyncDisposable
             DisplayName = e.ChatMessage.DisplayName,
             Message = e.ChatMessage.Message,
             MessageType = ChatMessageType.UserMessage,
+            Status = GetUserStatusFlags(e.ChatMessage),
         };
 
         ChatMessageReceived?.Invoke(userMessage);
@@ -311,12 +312,40 @@ public class Bot : IAsyncDisposable
                 DisplayName = _settings.BotUsername,
                 Message = botResponse,
                 MessageType = ChatMessageType.BotResponse,
+                Status = UserStatus.None,
             };
 
             ChatMessageReceived?.Invoke(responseMessage);
         }
 
         LogMessage?.Invoke(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);
+    }
+
+    private static UserStatus GetUserStatusFlags(ChatMessage chatMessage)
+    {
+        var status = UserStatus.None;
+
+        if (chatMessage.IsBroadcaster)
+        {
+            status |= UserStatus.Broadcaster;
+        }
+
+        if (chatMessage.IsModerator)
+        {
+            status |= UserStatus.Moderator;
+        }
+
+        if (chatMessage.IsVip)
+        {
+            status |= UserStatus.Vip;
+        }
+
+        if (chatMessage.IsSubscriber)
+        {
+            status |= UserStatus.Subscriber;
+        }
+
+        return status;
     }
 
     private static string FormatTimeSpan(TimeSpan timeSpan)
