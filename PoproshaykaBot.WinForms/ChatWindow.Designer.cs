@@ -29,6 +29,7 @@ partial class ChatWindow
     /// </summary>
     private void InitializeComponent()
     {
+        var resources = new System.ComponentModel.ComponentResourceManager(typeof(ChatWindow));
         _chatDisplay = new ChatDisplay();
         SuspendLayout();
         // 
@@ -46,6 +47,7 @@ partial class ChatWindow
         AutoScaleMode = AutoScaleMode.Font;
         ClientSize = new Size(498, 357);
         Controls.Add(_chatDisplay);
+        Icon = (Icon)resources.GetObject("$this.Icon");
         MinimumSize = new Size(300, 200);
         Name = "ChatWindow";
         StartPosition = FormStartPosition.CenterParent;

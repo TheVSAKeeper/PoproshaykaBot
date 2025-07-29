@@ -145,7 +145,7 @@ public class Bot : IAsyncDisposable
         if (_timer == null)
         {
             _timer = new();
-            _timer.Interval = 600_000;
+            _timer.Interval = 900_000;
             _timer.Elapsed += _timer_Elapsed;
         }
 
@@ -217,7 +217,7 @@ public class Bot : IAsyncDisposable
         }
 
         X1++;
-        _client.SendMessage(_channel, "Присылайте деняк, пожалуйста, " + X1 + " раз прошу");
+        _client.SendMessage(_channel, "Присылайте деняк, пожалуйста, " + X1 + " раз прошу. https://bob217.ru/donate/");
     }
 
     private void Client_OnMessageReceived(object? sender, OnMessageReceivedArgs e)

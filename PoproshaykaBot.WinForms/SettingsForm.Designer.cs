@@ -28,6 +28,7 @@ partial class SettingsForm
     /// </summary>
     private void InitializeComponent()
     {
+        var resources = new System.ComponentModel.ComponentResourceManager(typeof(SettingsForm));
         _tabControl = new TabControl();
         _basicTabPage = new TabPage();
         _channelResetButton = new Button();
@@ -111,7 +112,7 @@ partial class SettingsForm
         _tabControl.Location = new Point(12, 12);
         _tabControl.Name = "_tabControl";
         _tabControl.SelectedIndex = 0;
-        _tabControl.Size = new Size(556, 470);
+        _tabControl.Size = new Size(556, 486);
         _tabControl.TabIndex = 13;
         // 
         // _basicTabPage
@@ -125,7 +126,7 @@ partial class SettingsForm
         _basicTabPage.Location = new Point(4, 24);
         _basicTabPage.Name = "_basicTabPage";
         _basicTabPage.Padding = new Padding(3);
-        _basicTabPage.Size = new Size(548, 442);
+        _basicTabPage.Size = new Size(548, 458);
         _basicTabPage.TabIndex = 0;
         _basicTabPage.Text = "Основные";
         _basicTabPage.UseVisualStyleBackColor = true;
@@ -195,7 +196,7 @@ partial class SettingsForm
         _rateLimitingTabPage.Location = new Point(4, 24);
         _rateLimitingTabPage.Name = "_rateLimitingTabPage";
         _rateLimitingTabPage.Padding = new Padding(3);
-        _rateLimitingTabPage.Size = new Size(548, 442);
+        _rateLimitingTabPage.Size = new Size(548, 458);
         _rateLimitingTabPage.TabIndex = 1;
         _rateLimitingTabPage.Text = "Ограничения";
         _rateLimitingTabPage.UseVisualStyleBackColor = true;
@@ -281,7 +282,7 @@ partial class SettingsForm
         _messagesTabPage.Location = new Point(4, 24);
         _messagesTabPage.Name = "_messagesTabPage";
         _messagesTabPage.Padding = new Padding(3);
-        _messagesTabPage.Size = new Size(548, 442);
+        _messagesTabPage.Size = new Size(548, 458);
         _messagesTabPage.TabIndex = 3;
         _messagesTabPage.Text = "Сообщения";
         _messagesTabPage.UseVisualStyleBackColor = true;
@@ -473,7 +474,7 @@ partial class SettingsForm
         _oauthTabPage.Location = new Point(4, 24);
         _oauthTabPage.Name = "_oauthTabPage";
         _oauthTabPage.Padding = new Padding(3);
-        _oauthTabPage.Size = new Size(548, 442);
+        _oauthTabPage.Size = new Size(548, 458);
         _oauthTabPage.TabIndex = 2;
         _oauthTabPage.Text = "OAuth";
         _oauthTabPage.UseVisualStyleBackColor = true;
@@ -743,7 +744,7 @@ partial class SettingsForm
         // 
         _okButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         _okButton.DialogResult = DialogResult.OK;
-        _okButton.Location = new Point(335, 487);
+        _okButton.Location = new Point(335, 504);
         _okButton.Name = "_okButton";
         _okButton.Size = new Size(75, 23);
         _okButton.TabIndex = 14;
@@ -755,7 +756,7 @@ partial class SettingsForm
         // 
         _cancelButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         _cancelButton.DialogResult = DialogResult.Cancel;
-        _cancelButton.Location = new Point(416, 487);
+        _cancelButton.Location = new Point(416, 504);
         _cancelButton.Name = "_cancelButton";
         _cancelButton.Size = new Size(75, 23);
         _cancelButton.TabIndex = 15;
@@ -767,7 +768,7 @@ partial class SettingsForm
         // 
         _applyButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         _applyButton.Enabled = false;
-        _applyButton.Location = new Point(497, 487);
+        _applyButton.Location = new Point(497, 504);
         _applyButton.Name = "_applyButton";
         _applyButton.Size = new Size(75, 23);
         _applyButton.TabIndex = 16;
@@ -778,7 +779,7 @@ partial class SettingsForm
         // _resetButton
         // 
         _resetButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-        _resetButton.Location = new Point(12, 487);
+        _resetButton.Location = new Point(12, 504);
         _resetButton.Name = "_resetButton";
         _resetButton.Size = new Size(75, 23);
         _resetButton.TabIndex = 17;
@@ -792,13 +793,14 @@ partial class SettingsForm
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
         CancelButton = _cancelButton;
-        ClientSize = new Size(583, 522);
+        ClientSize = new Size(583, 539);
         Controls.Add(_tabControl);
         Controls.Add(_resetButton);
         Controls.Add(_applyButton);
         Controls.Add(_cancelButton);
         Controls.Add(_okButton);
         FormBorderStyle = FormBorderStyle.FixedDialog;
+        Icon = (Icon)resources.GetObject("$this.Icon");
         MaximizeBox = false;
         MinimizeBox = false;
         Name = "SettingsForm";
