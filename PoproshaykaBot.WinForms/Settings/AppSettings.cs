@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.WinForms;
+namespace PoproshaykaBot.WinForms.Settings;
 
 public class AppSettings
 {

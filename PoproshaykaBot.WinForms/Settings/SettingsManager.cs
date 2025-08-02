@@ -2,7 +2,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
-namespace PoproshaykaBot.WinForms;
+namespace PoproshaykaBot.WinForms.Settings;
 
 public static class SettingsManager
 {

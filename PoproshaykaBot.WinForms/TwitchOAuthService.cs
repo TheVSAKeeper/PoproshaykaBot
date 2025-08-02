@@ -1,3 +1,4 @@
+using PoproshaykaBot.WinForms.Settings;
 using System.Diagnostics;
 using System.Net;
 using System.Text;

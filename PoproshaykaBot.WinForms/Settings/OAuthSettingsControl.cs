@@ -1,107 +1,66 @@
-﻿namespace PoproshaykaBot.WinForms;
+﻿namespace PoproshaykaBot.WinForms.Settings;
 
-public partial class SettingsForm : Form
+public partial class OAuthSettingsControl : UserControl
 {
     private static readonly TwitchSettings DefaultSettings = new();
-    private static readonly MessageSettings DefaultMessageSettings = new();
-    private AppSettings _settings;
-    private bool _hasChanges;
+    private AppSettings _settings = new();
     private bool _tokensVisible;
 
-    public SettingsForm()
+    public OAuthSettingsControl()
     {
-        _settings = new();
-        CopySettings(SettingsManager.Current, _settings);
         InitializeComponent();
         SetPlaceholders();
-        LoadSettingsToControls();
+    }
+
+    public event EventHandler? SettingChanged;
+
+    public void LoadSettings(AppSettings settings)
+    {
+        _settings = settings;
+
+        _clientIdTextBox.Text = settings.Twitch.ClientId;
+        _clientSecretTextBox.Text = settings.Twitch.ClientSecret;
+        _redirectUriTextBox.Text = settings.Twitch.RedirectUri;
+        _scopesTextBox.Text = string.Join(" ", settings.Twitch.Scopes);
+
         LoadTokenInformation();
+    }
+
+    public void SaveSettings(AppSettings settings)
+    {
+        settings.Twitch.ClientId = _clientIdTextBox.Text.Trim();
+        settings.Twitch.ClientSecret = _clientSecretTextBox.Text.Trim();
+        settings.Twitch.RedirectUri = _redirectUriTextBox.Text.Trim();
+        settings.Twitch.Scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
     {
-        _hasChanges = true;
-        UpdateButtonStates();
-    }
-
-    private void OnOkButtonClicked(object sender, EventArgs e)
-    {
-        if (_hasChanges)
-        {
-            ApplySettings();
-        }
-
-        DialogResult = DialogResult.OK;
-        Close();
-    }
-
-    private void OnCancelButtonClicked(object sender, EventArgs e)
-    {
-        DialogResult = DialogResult.Cancel;
-        Close();
-    }
-
-    private void OnApplyButtonClicked(object sender, EventArgs e)
-    {
-        ApplySettings();
-    }
-
-    private void OnResetButtonClicked(object sender, EventArgs e)
-    {
-        var result = MessageBox.Show("Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?",
-            "Подтверждение сброса",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question);
-
-        if (result != DialogResult.Yes)
-        {
-            return;
-        }
-
-        _settings = new();
-        LoadSettingsToControls();
-        _hasChanges = true;
-        UpdateButtonStates();
-    }
-
-    private void OnBotUsernameResetButtonClicked(object sender, EventArgs e)
-    {
-        _botUsernameTextBox.Text = DefaultSettings.BotUsername;
-    }
-
-    private void OnChannelResetButtonClicked(object sender, EventArgs e)
-    {
-        _channelTextBox.Text = DefaultSettings.Channel;
-    }
-
-    private void OnMessagesAllowedResetButtonClicked(object sender, EventArgs e)
-    {
-        _messagesAllowedNumeric.Value = DefaultSettings.MessagesAllowedInPeriod;
-    }
-
-    private void OnThrottlingPeriodResetButtonClicked(object sender, EventArgs e)
-    {
-        _throttlingPeriodNumeric.Value = DefaultSettings.ThrottlingPeriodSeconds;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnClientIdResetButtonClicked(object sender, EventArgs e)
     {
-        _clientIdTextBox.Text = DefaultSettings.ClientId;
+        ResetClientId();
+        SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnClientSecretResetButtonClicked(object sender, EventArgs e)
     {
-        _clientSecretTextBox.Text = DefaultSettings.ClientSecret;
+        ResetClientSecret();
+        SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnRedirectUriResetButtonClicked(object sender, EventArgs e)
     {
-        _redirectUriTextBox.Text = DefaultSettings.RedirectUri;
+        ResetRedirectUri();
+        SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnScopesResetButtonClicked(object sender, EventArgs e)
     {
-        _scopesTextBox.Text = string.Join(" ", DefaultSettings.Scopes);
+        ResetScopes();
+        SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private async void OnTestAuthButtonClicked(object sender, EventArgs e)
@@ -152,8 +111,7 @@ public partial class SettingsForm : Form
                 _authStatusLabel.ForeColor = Color.Green;
 
                 LoadTokenInformation();
-                _hasChanges = true;
-                UpdateButtonStates();
+                SettingChanged?.Invoke(this, EventArgs.Empty);
             }
         }
         catch (Exception exception)
@@ -264,8 +222,7 @@ public partial class SettingsForm : Form
             _lastRefreshValueLabel.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss");
             _lastRefreshValueLabel.ForeColor = Color.Black;
 
-            _hasChanges = true;
-            UpdateButtonStates();
+            SettingChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -305,8 +262,7 @@ public partial class SettingsForm : Form
         _lastRefreshValueLabel.Text = "Неизвестно";
         _lastRefreshValueLabel.ForeColor = Color.Gray;
 
-        _hasChanges = true;
-        UpdateButtonStates();
+        SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnTokenOperationStatusChanged(string message)
@@ -328,52 +284,24 @@ public partial class SettingsForm : Form
         UpdateShowTokenButton();
     }
 
-    private void OnWelcomeMessageResetButtonClicked(object sender, EventArgs e)
+    private void ResetClientId()
     {
-        _welcomeMessageTextBox.Text = DefaultMessageSettings.Welcome;
-        _welcomeMessageEnabledCheckBox.Checked = DefaultMessageSettings.WelcomeEnabled;
+        _clientIdTextBox.Text = DefaultSettings.ClientId;
     }
 
-    private void OnFarewellMessageResetButtonClicked(object sender, EventArgs e)
+    private void ResetClientSecret()
     {
-        _farewellMessageTextBox.Text = DefaultMessageSettings.Farewell;
-        _farewellMessageEnabledCheckBox.Checked = DefaultMessageSettings.FarewellEnabled;
+        _clientSecretTextBox.Text = DefaultSettings.ClientSecret;
     }
 
-    private void OnConnectionMessageResetButtonClicked(object sender, EventArgs e)
+    private void ResetRedirectUri()
     {
-        _connectionMessageTextBox.Text = DefaultMessageSettings.Connection;
-        _connectionMessageEnabledCheckBox.Checked = DefaultMessageSettings.ConnectionEnabled;
+        _redirectUriTextBox.Text = DefaultSettings.RedirectUri;
     }
 
-    private void OnDisconnectionMessageResetButtonClicked(object sender, EventArgs e)
+    private void ResetScopes()
     {
-        _disconnectionMessageTextBox.Text = DefaultMessageSettings.Disconnection;
-        _disconnectionMessageEnabledCheckBox.Checked = DefaultMessageSettings.DisconnectionEnabled;
-    }
-
-    private static void CopySettings(AppSettings source, AppSettings destination)
-    {
-        destination.Twitch.BotUsername = source.Twitch.BotUsername;
-        destination.Twitch.Channel = source.Twitch.Channel;
-        destination.Twitch.MessagesAllowedInPeriod = source.Twitch.MessagesAllowedInPeriod;
-        destination.Twitch.ThrottlingPeriodSeconds = source.Twitch.ThrottlingPeriodSeconds;
-        destination.Twitch.ClientId = source.Twitch.ClientId;
-        destination.Twitch.ClientSecret = source.Twitch.ClientSecret;
-        destination.Twitch.AccessToken = source.Twitch.AccessToken;
-        destination.Twitch.RefreshToken = source.Twitch.RefreshToken;
-        destination.Twitch.RedirectUri = source.Twitch.RedirectUri;
-        destination.Twitch.Scopes = source.Twitch.Scopes;
-        destination.Twitch.Messages.WelcomeEnabled = source.Twitch.Messages.WelcomeEnabled;
-        destination.Twitch.Messages.Welcome = source.Twitch.Messages.Welcome;
-        destination.Twitch.Messages.FarewellEnabled = source.Twitch.Messages.FarewellEnabled;
-        destination.Twitch.Messages.Farewell = source.Twitch.Messages.Farewell;
-        destination.Twitch.Messages.ConnectionEnabled = source.Twitch.Messages.ConnectionEnabled;
-        destination.Twitch.Messages.Connection = source.Twitch.Messages.Connection;
-        destination.Twitch.Messages.DisconnectionEnabled = source.Twitch.Messages.DisconnectionEnabled;
-        destination.Twitch.Messages.Disconnection = source.Twitch.Messages.Disconnection;
-        destination.Ui.ShowLogsPanel = source.Ui.ShowLogsPanel;
-        destination.Ui.ShowChatPanel = source.Ui.ShowChatPanel;
+        _scopesTextBox.Text = string.Join(" ", DefaultSettings.Scopes);
     }
 
     private void UpdateShowTokenButton()
@@ -395,70 +323,10 @@ public partial class SettingsForm : Form
 
     private void SetPlaceholders()
     {
-        _botUsernameTextBox.PlaceholderText = DefaultSettings.BotUsername;
-        _channelTextBox.PlaceholderText = DefaultSettings.Channel;
         _clientIdTextBox.PlaceholderText = string.IsNullOrWhiteSpace(DefaultSettings.ClientId) ? "Введите Client ID" : DefaultSettings.ClientId;
         _clientSecretTextBox.PlaceholderText = string.IsNullOrWhiteSpace(DefaultSettings.ClientSecret) ? "Введите Client Secret" : DefaultSettings.ClientSecret;
         _redirectUriTextBox.PlaceholderText = DefaultSettings.RedirectUri;
         _scopesTextBox.PlaceholderText = string.Join(" ", DefaultSettings.Scopes);
-        _welcomeMessageTextBox.PlaceholderText = DefaultMessageSettings.Welcome;
-        _farewellMessageTextBox.PlaceholderText = DefaultMessageSettings.Farewell;
-        _connectionMessageTextBox.PlaceholderText = DefaultMessageSettings.Connection;
-        _disconnectionMessageTextBox.PlaceholderText = DefaultMessageSettings.Disconnection;
-    }
-
-    private void LoadSettingsToControls()
-    {
-        _botUsernameTextBox.Text = _settings.Twitch.BotUsername;
-        _channelTextBox.Text = _settings.Twitch.Channel;
-        _messagesAllowedNumeric.Value = _settings.Twitch.MessagesAllowedInPeriod;
-        _throttlingPeriodNumeric.Value = _settings.Twitch.ThrottlingPeriodSeconds;
-
-        _clientIdTextBox.Text = _settings.Twitch.ClientId;
-        _clientSecretTextBox.Text = _settings.Twitch.ClientSecret;
-        _redirectUriTextBox.Text = _settings.Twitch.RedirectUri;
-        _scopesTextBox.Text = string.Join(" ", _settings.Twitch.Scopes);
-
-        _welcomeMessageEnabledCheckBox.Checked = _settings.Twitch.Messages.WelcomeEnabled;
-        _welcomeMessageTextBox.Text = _settings.Twitch.Messages.Welcome;
-        _farewellMessageEnabledCheckBox.Checked = _settings.Twitch.Messages.FarewellEnabled;
-        _farewellMessageTextBox.Text = _settings.Twitch.Messages.Farewell;
-        _connectionMessageEnabledCheckBox.Checked = _settings.Twitch.Messages.ConnectionEnabled;
-        _connectionMessageTextBox.Text = _settings.Twitch.Messages.Connection;
-        _disconnectionMessageEnabledCheckBox.Checked = _settings.Twitch.Messages.DisconnectionEnabled;
-        _disconnectionMessageTextBox.Text = _settings.Twitch.Messages.Disconnection;
-
-        LoadTokenInformation();
-
-        _hasChanges = false;
-        UpdateButtonStates();
-    }
-
-    private void SaveSettingsFromControls()
-    {
-        _settings.Twitch.BotUsername = _botUsernameTextBox.Text.Trim();
-        _settings.Twitch.Channel = _channelTextBox.Text.Trim();
-        _settings.Twitch.MessagesAllowedInPeriod = (int)_messagesAllowedNumeric.Value;
-        _settings.Twitch.ThrottlingPeriodSeconds = (int)_throttlingPeriodNumeric.Value;
-
-        _settings.Twitch.ClientId = _clientIdTextBox.Text.Trim();
-        _settings.Twitch.ClientSecret = _clientSecretTextBox.Text.Trim();
-        _settings.Twitch.RedirectUri = _redirectUriTextBox.Text.Trim();
-        _settings.Twitch.Scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-        _settings.Twitch.Messages.WelcomeEnabled = _welcomeMessageEnabledCheckBox.Checked;
-        _settings.Twitch.Messages.Welcome = _welcomeMessageTextBox.Text.Trim();
-        _settings.Twitch.Messages.FarewellEnabled = _farewellMessageEnabledCheckBox.Checked;
-        _settings.Twitch.Messages.Farewell = _farewellMessageTextBox.Text.Trim();
-        _settings.Twitch.Messages.ConnectionEnabled = _connectionMessageEnabledCheckBox.Checked;
-        _settings.Twitch.Messages.Connection = _connectionMessageTextBox.Text.Trim();
-        _settings.Twitch.Messages.DisconnectionEnabled = _disconnectionMessageEnabledCheckBox.Checked;
-        _settings.Twitch.Messages.Disconnection = _disconnectionMessageTextBox.Text.Trim();
-    }
-
-    private void UpdateButtonStates()
-    {
-        _applyButton.Enabled = _hasChanges;
     }
 
     private void LoadTokenInformation()
@@ -488,24 +356,5 @@ public partial class SettingsForm : Form
         _refreshTokenButton.Enabled = hasRefreshToken && hasCredentials;
         _clearTokensButton.Enabled = hasTokens || hasRefreshToken;
         _showTokenButton.Enabled = hasTokens || hasRefreshToken;
-    }
-
-    private void ApplySettings()
-    {
-        try
-        {
-            SaveSettingsFromControls();
-            SettingsManager.SaveSettings(_settings);
-            _hasChanges = false;
-            UpdateButtonStates();
-
-            MessageBox.Show("Настройки успешно сохранены.", "Настройки",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (Exception exception)
-        {
-            MessageBox.Show($"Ошибка сохранения настроек: {exception.Message}", "Ошибка",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
     }
 }

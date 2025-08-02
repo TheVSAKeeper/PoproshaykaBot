@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.WinForms.Models;
+using PoproshaykaBot.WinForms.Settings;
 using System.Globalization;
 using System.Timers;
 using TwitchLib.Client;
@@ -455,8 +456,6 @@ public class Bot : IAsyncDisposable
 
         return moscowTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.GetCultureInfo("ru-RU")) + " по МСК";
     }
-
-
 }
 
 public record UserInfo(string UserId, string DisplayName);
