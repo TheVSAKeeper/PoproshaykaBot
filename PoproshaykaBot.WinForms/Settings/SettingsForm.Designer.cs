@@ -37,6 +37,8 @@ partial class SettingsForm
         _rateLimitingSettingsControl = new RateLimitingSettingsControl();
         _messagesTabPage = new TabPage();
         _messagesSettingsControl = new MessagesSettingsControl();
+        _httpServerTabPage = new TabPage();
+        _httpServerSettingsControl = new HttpServerSettingsControl();
         _oauthTabPage = new TabPage();
         _oauthSettingsControl = new OAuthSettingsControl();
         _buttonPanel = new FlowLayoutPanel();
@@ -49,12 +51,13 @@ partial class SettingsForm
         _basicTabPage.SuspendLayout();
         _rateLimitingTabPage.SuspendLayout();
         _messagesTabPage.SuspendLayout();
+        _httpServerTabPage.SuspendLayout();
         _oauthTabPage.SuspendLayout();
         _buttonPanel.SuspendLayout();
         SuspendLayout();
-        //
+        // 
         // _mainTableLayout
-        //
+        // 
         _mainTableLayout.ColumnCount = 1;
         _mainTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _mainTableLayout.Controls.Add(_tabControl, 0, 0);
@@ -68,12 +71,13 @@ partial class SettingsForm
         _mainTableLayout.RowStyles.Add(new RowStyle());
         _mainTableLayout.Size = new Size(583, 539);
         _mainTableLayout.TabIndex = 0;
-        //
+        // 
         // _tabControl
-        //
+        // 
         _tabControl.Controls.Add(_basicTabPage);
         _tabControl.Controls.Add(_rateLimitingTabPage);
         _tabControl.Controls.Add(_messagesTabPage);
+        _tabControl.Controls.Add(_httpServerTabPage);
         _tabControl.Controls.Add(_oauthTabPage);
         _tabControl.Dock = DockStyle.Fill;
         _tabControl.Location = new Point(15, 15);
@@ -83,7 +87,7 @@ partial class SettingsForm
         _tabControl.TabIndex = 13;
         // 
         // _basicTabPage
-        //
+        // 
         _basicTabPage.Controls.Add(_basicSettingsControl);
         _basicTabPage.Location = new Point(4, 24);
         _basicTabPage.Name = "_basicTabPage";
@@ -94,7 +98,7 @@ partial class SettingsForm
         _basicTabPage.UseVisualStyleBackColor = true;
         // 
         // _basicSettingsControl
-        //
+        // 
         _basicSettingsControl.Dock = DockStyle.Fill;
         _basicSettingsControl.Location = new Point(10, 10);
         _basicSettingsControl.Name = "_basicSettingsControl";
@@ -108,7 +112,7 @@ partial class SettingsForm
         _rateLimitingTabPage.Location = new Point(4, 24);
         _rateLimitingTabPage.Name = "_rateLimitingTabPage";
         _rateLimitingTabPage.Padding = new Padding(10);
-        _rateLimitingTabPage.Size = new Size(192, 72);
+        _rateLimitingTabPage.Size = new Size(545, 452);
         _rateLimitingTabPage.TabIndex = 1;
         _rateLimitingTabPage.Text = "Ограничения";
         _rateLimitingTabPage.UseVisualStyleBackColor = true;
@@ -118,7 +122,7 @@ partial class SettingsForm
         _rateLimitingSettingsControl.Dock = DockStyle.Fill;
         _rateLimitingSettingsControl.Location = new Point(10, 10);
         _rateLimitingSettingsControl.Name = "_rateLimitingSettingsControl";
-        _rateLimitingSettingsControl.Size = new Size(172, 52);
+        _rateLimitingSettingsControl.Size = new Size(525, 432);
         _rateLimitingSettingsControl.TabIndex = 0;
         _rateLimitingSettingsControl.SettingChanged += OnSettingChanged;
         // 
@@ -128,7 +132,7 @@ partial class SettingsForm
         _messagesTabPage.Location = new Point(4, 24);
         _messagesTabPage.Name = "_messagesTabPage";
         _messagesTabPage.Padding = new Padding(10);
-        _messagesTabPage.Size = new Size(192, 72);
+        _messagesTabPage.Size = new Size(545, 452);
         _messagesTabPage.TabIndex = 3;
         _messagesTabPage.Text = "Сообщения";
         _messagesTabPage.UseVisualStyleBackColor = true;
@@ -138,12 +142,32 @@ partial class SettingsForm
         _messagesSettingsControl.Dock = DockStyle.Fill;
         _messagesSettingsControl.Location = new Point(10, 10);
         _messagesSettingsControl.Name = "_messagesSettingsControl";
-        _messagesSettingsControl.Size = new Size(172, 52);
+        _messagesSettingsControl.Size = new Size(525, 432);
         _messagesSettingsControl.TabIndex = 0;
         _messagesSettingsControl.SettingChanged += OnSettingChanged;
         // 
+        // _httpServerTabPage
+        // 
+        _httpServerTabPage.Controls.Add(_httpServerSettingsControl);
+        _httpServerTabPage.Location = new Point(4, 24);
+        _httpServerTabPage.Name = "_httpServerTabPage";
+        _httpServerTabPage.Padding = new Padding(10);
+        _httpServerTabPage.Size = new Size(545, 452);
+        _httpServerTabPage.TabIndex = 4;
+        _httpServerTabPage.Text = "HTTP Сервер";
+        _httpServerTabPage.UseVisualStyleBackColor = true;
+        // 
+        // _httpServerSettingsControl
+        // 
+        _httpServerSettingsControl.Dock = DockStyle.Fill;
+        _httpServerSettingsControl.Location = new Point(10, 10);
+        _httpServerSettingsControl.Name = "_httpServerSettingsControl";
+        _httpServerSettingsControl.Size = new Size(525, 432);
+        _httpServerSettingsControl.TabIndex = 0;
+        _httpServerSettingsControl.SettingChanged += OnSettingChanged;
+        // 
         // _oauthTabPage
-        //
+        // 
         _oauthTabPage.Controls.Add(_oauthSettingsControl);
         _oauthTabPage.Location = new Point(4, 24);
         _oauthTabPage.Name = "_oauthTabPage";
@@ -154,16 +178,16 @@ partial class SettingsForm
         _oauthTabPage.UseVisualStyleBackColor = true;
         // 
         // _oauthSettingsControl
-        //
+        // 
         _oauthSettingsControl.Dock = DockStyle.Fill;
         _oauthSettingsControl.Location = new Point(10, 10);
         _oauthSettingsControl.Name = "_oauthSettingsControl";
         _oauthSettingsControl.Size = new Size(525, 432);
         _oauthSettingsControl.TabIndex = 0;
         _oauthSettingsControl.SettingChanged += OnSettingChanged;
-        //
+        // 
         // _buttonPanel
-        //
+        // 
         _buttonPanel.AutoSize = true;
         _buttonPanel.Controls.Add(_resetButton);
         _buttonPanel.Controls.Add(_okButton);
@@ -173,12 +197,13 @@ partial class SettingsForm
         _buttonPanel.FlowDirection = FlowDirection.RightToLeft;
         _buttonPanel.Location = new Point(15, 501);
         _buttonPanel.Name = "_buttonPanel";
-        _buttonPanel.Size = new Size(553, 25);
+        _buttonPanel.Size = new Size(553, 23);
         _buttonPanel.TabIndex = 1;
-        //
+        // 
         // _resetButton
-        //
+        // 
         _resetButton.Anchor = AnchorStyles.Left;
+        _resetButton.Location = new Point(475, 0);
         _resetButton.Margin = new Padding(0, 0, 3, 0);
         _resetButton.Name = "_resetButton";
         _resetButton.Size = new Size(75, 23);
@@ -186,10 +211,11 @@ partial class SettingsForm
         _resetButton.Text = "Сброс";
         _resetButton.UseVisualStyleBackColor = true;
         _resetButton.Click += OnResetButtonClicked;
-        //
+        // 
         // _okButton
-        //
+        // 
         _okButton.DialogResult = DialogResult.OK;
+        _okButton.Location = new Point(397, 0);
         _okButton.Margin = new Padding(0, 0, 3, 0);
         _okButton.Name = "_okButton";
         _okButton.Size = new Size(75, 23);
@@ -197,10 +223,11 @@ partial class SettingsForm
         _okButton.Text = "OK";
         _okButton.UseVisualStyleBackColor = true;
         _okButton.Click += OnOkButtonClicked;
-        //
+        // 
         // _cancelButton
-        //
+        // 
         _cancelButton.DialogResult = DialogResult.Cancel;
+        _cancelButton.Location = new Point(319, 0);
         _cancelButton.Margin = new Padding(0, 0, 3, 0);
         _cancelButton.Name = "_cancelButton";
         _cancelButton.Size = new Size(75, 23);
@@ -208,10 +235,11 @@ partial class SettingsForm
         _cancelButton.Text = "Отмена";
         _cancelButton.UseVisualStyleBackColor = true;
         _cancelButton.Click += OnCancelButtonClicked;
-        //
+        // 
         // _applyButton
-        //
+        // 
         _applyButton.Enabled = false;
+        _applyButton.Location = new Point(241, 0);
         _applyButton.Margin = new Padding(0, 0, 3, 0);
         _applyButton.Name = "_applyButton";
         _applyButton.Size = new Size(75, 23);
@@ -228,7 +256,6 @@ partial class SettingsForm
         CancelButton = _cancelButton;
         ClientSize = new Size(583, 539);
         Controls.Add(_mainTableLayout);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
         Icon = (Icon)resources.GetObject("$this.Icon");
         MaximizeBox = false;
         MinimizeBox = false;
@@ -241,6 +268,7 @@ partial class SettingsForm
         _basicTabPage.ResumeLayout(false);
         _rateLimitingTabPage.ResumeLayout(false);
         _messagesTabPage.ResumeLayout(false);
+        _httpServerTabPage.ResumeLayout(false);
         _oauthTabPage.ResumeLayout(false);
         _buttonPanel.ResumeLayout(false);
         ResumeLayout(false);
@@ -253,10 +281,12 @@ partial class SettingsForm
     private TabPage _basicTabPage;
     private TabPage _rateLimitingTabPage;
     private TabPage _messagesTabPage;
+    private TabPage _httpServerTabPage;
     private TabPage _oauthTabPage;
     private BasicSettingsControl _basicSettingsControl;
     private RateLimitingSettingsControl _rateLimitingSettingsControl;
     private MessagesSettingsControl _messagesSettingsControl;
+    private HttpServerSettingsControl _httpServerSettingsControl;
     private OAuthSettingsControl _oauthSettingsControl;
     private FlowLayoutPanel _buttonPanel;
     private Button _resetButton;

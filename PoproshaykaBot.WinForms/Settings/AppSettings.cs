@@ -28,6 +28,12 @@ public class TwitchSettings
 
     public string[] Scopes { get; set; } = ["chat:read", "chat:edit"];
 
+    public int HttpServerPort { get; set; } = 8080;
+
+    public bool HttpServerEnabled { get; set; } = true;
+
+    public bool ObsOverlayEnabled { get; set; } = true;
+
     public MessageSettings Messages { get; set; } = new();
 }
 

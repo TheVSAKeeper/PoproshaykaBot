@@ -5,6 +5,7 @@ public partial class OAuthSettingsControl : UserControl
     private static readonly TwitchSettings DefaultSettings = new();
     private AppSettings _settings = new();
     private bool _tokensVisible;
+    private bool _redirectUriEditable;
 
     public OAuthSettingsControl()
     {
@@ -24,6 +25,7 @@ public partial class OAuthSettingsControl : UserControl
         _scopesTextBox.Text = string.Join(" ", settings.Twitch.Scopes);
 
         LoadTokenInformation();
+        UpdateRedirectUriEditState();
     }
 
     public void SaveSettings(AppSettings settings)
@@ -55,6 +57,17 @@ public partial class OAuthSettingsControl : UserControl
     {
         ResetRedirectUri();
         SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnRedirectUriEditButtonClicked(object sender, EventArgs e)
+    {
+        _redirectUriEditable = !_redirectUriEditable;
+        UpdateRedirectUriEditState();
+
+        if (_redirectUriEditable == false)
+        {
+            SettingChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void OnScopesResetButtonClicked(object sender, EventArgs e)
@@ -103,7 +116,7 @@ public partial class OAuthSettingsControl : UserControl
                 redirectUri = DefaultSettings.RedirectUri;
             }
 
-            var accessToken = await TwitchOAuthService.StartOAuthFlowAsync(clientId, clientSecret, scopes, redirectUri);
+            var accessToken = await TwitchOAuthService.StartOAuthFlowAsync(clientId, clientSecret, null, scopes, redirectUri);
 
             if (string.IsNullOrEmpty(accessToken) == false)
             {
@@ -356,5 +369,18 @@ public partial class OAuthSettingsControl : UserControl
         _refreshTokenButton.Enabled = hasRefreshToken && hasCredentials;
         _clearTokensButton.Enabled = hasTokens || hasRefreshToken;
         _showTokenButton.Enabled = hasTokens || hasRefreshToken;
+    }
+
+    private void UpdateRedirectUriEditState()
+    {
+        _redirectUriTextBox.ReadOnly = !_redirectUriEditable;
+        _redirectUriEditButton.Text = _redirectUriEditable ? "💾" : "✏";
+        _redirectUriResetButton.Enabled = _redirectUriEditable;
+
+        if (_redirectUriEditable)
+        {
+            _redirectUriTextBox.Focus();
+            _redirectUriTextBox.SelectAll();
+        }
     }
 }

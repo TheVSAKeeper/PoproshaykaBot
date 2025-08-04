@@ -41,6 +41,7 @@
             _redirectUriLabel = new Label();
             _redirectUriPanel = new Panel();
             _redirectUriTextBox = new TextBox();
+            _redirectUriEditButton = new Button();
             _redirectUriResetButton = new Button();
             _scopesLabel = new Label();
             _scopesPanel = new Panel();
@@ -228,6 +229,7 @@
             // _redirectUriPanel
             // 
             _redirectUriPanel.Controls.Add(_redirectUriTextBox);
+            _redirectUriPanel.Controls.Add(_redirectUriEditButton);
             _redirectUriPanel.Controls.Add(_redirectUriResetButton);
             _redirectUriPanel.Dock = DockStyle.Fill;
             _redirectUriPanel.Location = new Point(85, 73);
@@ -241,9 +243,21 @@
             _redirectUriTextBox.Location = new Point(0, 0);
             _redirectUriTextBox.Margin = new Padding(0, 0, 3, 0);
             _redirectUriTextBox.Name = "_redirectUriTextBox";
-            _redirectUriTextBox.Size = new Size(425, 23);
+            _redirectUriTextBox.ReadOnly = true;
+            _redirectUriTextBox.Size = new Size(395, 23);
             _redirectUriTextBox.TabIndex = 7;
             _redirectUriTextBox.TextChanged += OnSettingChanged;
+            // 
+            // _redirectUriEditButton
+            // 
+            _redirectUriEditButton.Dock = DockStyle.Right;
+            _redirectUriEditButton.Location = new Point(395, 0);
+            _redirectUriEditButton.Name = "_redirectUriEditButton";
+            _redirectUriEditButton.Size = new Size(30, 29);
+            _redirectUriEditButton.TabIndex = 8;
+            _redirectUriEditButton.Text = "✏";
+            _redirectUriEditButton.UseVisualStyleBackColor = true;
+            _redirectUriEditButton.Click += OnRedirectUriEditButtonClicked;
             // 
             // _redirectUriResetButton
             // 
@@ -251,7 +265,7 @@
             _redirectUriResetButton.Location = new Point(425, 0);
             _redirectUriResetButton.Name = "_redirectUriResetButton";
             _redirectUriResetButton.Size = new Size(25, 29);
-            _redirectUriResetButton.TabIndex = 8;
+            _redirectUriResetButton.TabIndex = 9;
             _redirectUriResetButton.Text = "↺";
             _redirectUriResetButton.UseVisualStyleBackColor = true;
             _redirectUriResetButton.Click += OnRedirectUriResetButtonClicked;
@@ -338,7 +352,7 @@
             _tokenManagementSection.RowStyles.Add(new RowStyle());
             _tokenManagementSection.RowStyles.Add(new RowStyle());
             _tokenManagementSection.RowStyles.Add(new RowStyle());
-            _tokenManagementSection.Size = new Size(538, 139);
+            _tokenManagementSection.Size = new Size(538, 135);
             _tokenManagementSection.TabIndex = 14;
             // 
             // _accessTokenLabel
@@ -468,15 +482,16 @@
             _tokenButtonsPanel.Location = new Point(0, 110);
             _tokenButtonsPanel.Margin = new Padding(0, 10, 0, 0);
             _tokenButtonsPanel.Name = "_tokenButtonsPanel";
-            _tokenButtonsPanel.Size = new Size(538, 29);
+            _tokenButtonsPanel.Size = new Size(538, 25);
             _tokenButtonsPanel.TabIndex = 27;
             // 
             // _validateTokenButton
             // 
+            _validateTokenButton.AutoSize = true;
             _validateTokenButton.Location = new Point(0, 0);
             _validateTokenButton.Margin = new Padding(0, 0, 5, 0);
             _validateTokenButton.Name = "_validateTokenButton";
-            _validateTokenButton.Size = new Size(100, 23);
+            _validateTokenButton.Size = new Size(100, 25);
             _validateTokenButton.TabIndex = 22;
             _validateTokenButton.Text = "Проверить";
             _validateTokenButton.UseVisualStyleBackColor = true;
@@ -484,10 +499,11 @@
             // 
             // _refreshTokenButton
             // 
+            _refreshTokenButton.AutoSize = true;
             _refreshTokenButton.Location = new Point(105, 0);
             _refreshTokenButton.Margin = new Padding(0, 0, 5, 0);
             _refreshTokenButton.Name = "_refreshTokenButton";
-            _refreshTokenButton.Size = new Size(100, 23);
+            _refreshTokenButton.Size = new Size(100, 25);
             _refreshTokenButton.TabIndex = 23;
             _refreshTokenButton.Text = "Обновить";
             _refreshTokenButton.UseVisualStyleBackColor = true;
@@ -495,9 +511,11 @@
             // 
             // _clearTokensButton
             // 
-            _clearTokensButton.Location = new Point(213, 3);
+            _clearTokensButton.AutoSize = true;
+            _clearTokensButton.Location = new Point(210, 0);
+            _clearTokensButton.Margin = new Padding(0, 0, 5, 0);
             _clearTokensButton.Name = "_clearTokensButton";
-            _clearTokensButton.Size = new Size(100, 23);
+            _clearTokensButton.Size = new Size(100, 25);
             _clearTokensButton.TabIndex = 24;
             _clearTokensButton.Text = "Очистить";
             _clearTokensButton.UseVisualStyleBackColor = true;
@@ -512,7 +530,7 @@
             _testAuthSection.Controls.Add(_testAuthButton, 0, 0);
             _testAuthSection.Controls.Add(_authStatusLabel, 1, 0);
             _testAuthSection.Dock = DockStyle.Fill;
-            _testAuthSection.Location = new Point(5, 304);
+            _testAuthSection.Location = new Point(5, 300);
             _testAuthSection.Margin = new Padding(0, 0, 0, 10);
             _testAuthSection.Name = "_testAuthSection";
             _testAuthSection.RowCount = 1;
@@ -546,7 +564,7 @@
             _oauthInfoLabel.AutoSize = true;
             _oauthInfoLabel.Dock = DockStyle.Fill;
             _oauthInfoLabel.ForeColor = Color.Gray;
-            _oauthInfoLabel.Location = new Point(8, 343);
+            _oauthInfoLabel.Location = new Point(8, 339);
             _oauthInfoLabel.Name = "_oauthInfoLabel";
             _oauthInfoLabel.Size = new Size(532, 30);
             _oauthInfoLabel.TabIndex = 28;
@@ -578,6 +596,7 @@
             _refreshTokenPanel.ResumeLayout(false);
             _refreshTokenPanel.PerformLayout();
             _tokenButtonsPanel.ResumeLayout(false);
+            _tokenButtonsPanel.PerformLayout();
             _testAuthSection.ResumeLayout(false);
             _testAuthSection.PerformLayout();
             ResumeLayout(false);
@@ -604,6 +623,7 @@
         private Button _clientSecretResetButton;
         private Label _redirectUriLabel;
         private TextBox _redirectUriTextBox;
+        private Button _redirectUriEditButton;
         private Button _redirectUriResetButton;
         private Label _scopesLabel;
         private TextBox _scopesTextBox;

@@ -71,6 +71,9 @@ public partial class SettingsForm : Form
         destination.Twitch.RefreshToken = source.Twitch.RefreshToken;
         destination.Twitch.RedirectUri = source.Twitch.RedirectUri;
         destination.Twitch.Scopes = source.Twitch.Scopes;
+        destination.Twitch.HttpServerPort = source.Twitch.HttpServerPort;
+        destination.Twitch.HttpServerEnabled = source.Twitch.HttpServerEnabled;
+        destination.Twitch.ObsOverlayEnabled = source.Twitch.ObsOverlayEnabled;
         destination.Twitch.Messages.WelcomeEnabled = source.Twitch.Messages.WelcomeEnabled;
         destination.Twitch.Messages.Welcome = source.Twitch.Messages.Welcome;
         destination.Twitch.Messages.FarewellEnabled = source.Twitch.Messages.FarewellEnabled;
@@ -88,6 +91,7 @@ public partial class SettingsForm : Form
         _basicSettingsControl.LoadSettings(_settings.Twitch);
         _rateLimitingSettingsControl.LoadSettings(_settings.Twitch);
         _messagesSettingsControl.LoadSettings(_settings.Twitch.Messages);
+        _httpServerSettingsControl.LoadSettings(_settings.Twitch);
         _oauthSettingsControl.LoadSettings(_settings);
 
         _hasChanges = false;
@@ -99,6 +103,7 @@ public partial class SettingsForm : Form
         _basicSettingsControl.SaveSettings(_settings.Twitch);
         _rateLimitingSettingsControl.SaveSettings(_settings.Twitch);
         _messagesSettingsControl.SaveSettings(_settings.Twitch.Messages);
+        _httpServerSettingsControl.SaveSettings(_settings.Twitch);
         _oauthSettingsControl.SaveSettings(_settings);
     }
 
