@@ -35,6 +35,8 @@ public class TwitchSettings
     public bool ObsOverlayEnabled { get; set; } = true;
 
     public MessageSettings Messages { get; set; } = new();
+
+    public ObsChatSettings ObsChat { get; set; } = new();
 }
 
 public class MessageSettings
@@ -60,4 +62,27 @@ public class UiSettings
 {
     public bool ShowLogsPanel { get; set; } = true;
     public bool ShowChatPanel { get; set; } = true;
+}
+
+public class ObsChatSettings
+{
+    public string BackgroundColor { get; set; } = "rgba(0, 0, 0, 0.7)";
+    public string TextColor { get; set; } = "#ffffff";
+    public string UsernameColor { get; set; } = "#9146ff";
+    public string SystemMessageColor { get; set; } = "#ffcc00";
+    public string TimestampColor { get; set; } = "#999999";
+
+    public string FontFamily { get; set; } = "Arial, sans-serif";
+    public int FontSize { get; set; } = 14;
+    public bool FontBold { get; set; } = false;
+
+    public int Padding { get; set; } = 5;
+    public int Margin { get; set; } = 5;
+    public int BorderRadius { get; set; } = 5;
+
+    public int AnimationDuration { get; set; } = 300;
+    public bool EnableAnimations { get; set; } = true;
+
+    public int MaxMessages { get; set; } = 50;
+    public bool ShowTimestamp { get; set; } = true;
 }

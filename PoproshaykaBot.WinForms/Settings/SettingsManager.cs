@@ -12,6 +12,8 @@ public static class SettingsManager
     private static readonly string SettingsFilePath = Path.Combine(SettingsDirectory, "settings.json");
 
     private static AppSettings? _currentSettings;
+
+    public static event Action<ObsChatSettings>? ChatSettingsChanged;
     public static AppSettings Current => _currentSettings ??= LoadSettings();
 
     public static AppSettings LoadSettings()
@@ -50,6 +52,8 @@ public static class SettingsManager
             File.WriteAllText(SettingsFilePath, json, Encoding.UTF8);
 
             _currentSettings = settings;
+
+            ChatSettingsChanged?.Invoke(settings.Twitch.ObsChat);
         }
         catch (Exception exception)
         {

@@ -1,4 +1,5 @@
 using PoproshaykaBot.WinForms.Models;
+using PoproshaykaBot.WinForms.Settings;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -153,6 +154,42 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
         _cancellationTokenSource?.Dispose();
     }
 
+    public void NotifyChatSettingsChanged(ObsChatSettings settings)
+    {
+        try
+        {
+            var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings);
+
+            var sseMessage = new
+            {
+                type = "chat_settings_changed",
+                settings = cssSettings,
+            };
+
+            var json = JsonSerializer.Serialize(sseMessage);
+
+            lock (_sseClients)
+            {
+                if (_sseClients.Count == 0)
+                {
+                    LogMessage?.Invoke("Нет подключенных SSE клиентов для отправки уведомления о настройках");
+                    return;
+                }
+            }
+
+            SendSseToAllClients(json);
+            LogMessage?.Invoke($"Отправлено уведомление об изменении настроек чата {_sseClients.Count} клиентам");
+        }
+        catch (JsonException ex)
+        {
+            LogMessage?.Invoke($"Ошибка сериализации настроек для SSE: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            LogMessage?.Invoke($"Ошибка отправки уведомления о настройках чата: {ex.Message}");
+        }
+    }
+
     private async Task HandleRequestsAsync()
     {
         while (_isRunning && _cancellationTokenSource.Token.IsCancellationRequested == false)
@@ -202,6 +239,10 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
 
                 case "/api/history":
                     ServeHistory(response);
+                    break;
+
+                case "/api/chat-settings":
+                    ServeChatSettings(response);
                     break;
 
                 default:
@@ -332,38 +373,65 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                    <title>PoproshaykaBot Chat Overlay</title>
                    <meta charset='utf-8'>
                    <style>
-                       body { 
-                           background: transparent; 
-                           font-family: Arial, sans-serif; 
-                           margin: 0; 
-                           padding: 10px; 
-                           color: white;
+                       :root {
+                           --chat-bg-color: rgba(0, 0, 0, 0.7);
+                           --chat-text-color: #ffffff;
+                           --chat-username-color: #9146ff;
+                           --chat-system-color: #ffcc00;
+                           --chat-timestamp-color: #999999;
+                           --chat-font-family: Arial, sans-serif;
+                           --chat-font-size: 14px;
+                           --chat-font-weight: normal;
+                           --chat-padding: 5px;
+                           --chat-margin: 5px 0;
+                           --chat-border-radius: 5px;
+                           --chat-animation-duration: 0.3s;
                        }
-                       .message { 
-                           margin: 5px 0; 
-                           animation: slideIn 0.3s ease-out; 
-                           padding: 5px;
-                           border-radius: 5px;
-                           background: rgba(0, 0, 0, 0.7);
+
+                       body {
+                           background: transparent;
+                           font-family: var(--chat-font-family);
+                           font-size: var(--chat-font-size);
+                           font-weight: var(--chat-font-weight);
+                           margin: 0;
+                           padding: var(--chat-padding);
+                           color: var(--chat-text-color);
                        }
-                       @keyframes slideIn { 
-                           from { transform: translateX(-100%); opacity: 0; } 
+
+                       .message {
+                           margin: var(--chat-margin);
+                           animation: slideIn var(--chat-animation-duration) ease-out;
+                           padding: var(--chat-padding);
+                           border-radius: var(--chat-border-radius);
+                           background: var(--chat-bg-color);
+                       }
+
+                       .message.no-animation {
+                           animation: none;
+                       }
+
+                       @keyframes slideIn {
+                           from { transform: translateX(-100%); opacity: 0; }
                            to { transform: translateX(0); opacity: 1; }
                        }
-                       .username { 
-                           font-weight: bold; 
-                           color: #9146ff;
+
+                       .username {
+                           font-weight: bold;
+                           color: var(--chat-username-color);
                        }
-                       .timestamp { 
-                           color: #999; 
-                           font-size: 0.8em; 
+
+                       .timestamp {
+                           color: var(--chat-timestamp-color);
+                           font-size: 0.8em;
                            margin-right: 5px;
                        }
+
                        .message-text {
-                           color: white;
+                           color: var(--chat-text-color);
                        }
+
                        .system-message {
-                           color: #ffcc00;
+                           color: var(--chat-system-color);
                            font-style: italic;
                        }
                    </style>
@@ -372,10 +440,12 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                    <div id='chat'></div>
                    <script>
                        const chatContainer = document.getElementById('chat');
-                       const maxMessages = 50;
+                       let maxMessages = 50;
+                       let showTimestamp = true;
+                       let enableAnimations = true;
 
                        const eventSource = new EventSource('/events');
-                       
+
                        eventSource.onmessage = function(event) {
                            try {
                                const data = JSON.parse(event.data);
@@ -383,6 +453,8 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                                    addMessage(data.message);
                                } else if (data.type === 'clear') {
                                    clearChat();
+                               } else if (data.type === 'chat_settings_changed') {
+                                   updateChatSettings(data.settings);
                                }
                            } catch (e) {
                                console.error('Ошибка парсинга SSE данных:', e);
@@ -393,32 +465,38 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                            console.error('SSE ошибка:', event);
                        };
 
-                       function addMessage(message) {
+                       function addMessage(message, isHistoryMessage = false) {
                            const messageDiv = document.createElement('div');
                            messageDiv.className = 'message';
-                           
+
+                           if (isHistoryMessage || !enableAnimations) {
+                               messageDiv.classList.add('no-animation');
+                           }
+
                            const timestamp = new Date(message.timestamp).toLocaleTimeString();
                            const isSystemMessage = message.messageType !== 'UserMessage';
-                           
+
+                           let timestampHtml = showTimestamp ? `<span class='timestamp'>${timestamp}</span>` : '';
+
                            if (isSystemMessage) {
                                messageDiv.innerHTML = `
-                                   <span class='timestamp'>${timestamp}</span>
+                                   ${timestampHtml}
                                    <span class='system-message'>${message.message}</span>
                                `;
                            } else {
                                messageDiv.innerHTML = `
-                                   <span class='timestamp'>${timestamp}</span>
+                                   ${timestampHtml}
                                    <span class='username'>${message.username}:</span>
                                    <span class='message-text'> ${message.message}</span>
                                `;
                            }
-                           
+
                            chatContainer.appendChild(messageDiv);
-                           
+
                            while (chatContainer.children.length > maxMessages) {
                                chatContainer.removeChild(chatContainer.firstChild);
                            }
-                           
+
                            chatContainer.scrollTop = chatContainer.scrollHeight;
                        }
 
@@ -426,10 +504,40 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                            chatContainer.innerHTML = '';
                        }
 
+                       function updateChatSettings(settings) {
+                           const root = document.documentElement;
+
+                           if (settings.backgroundColor) root.style.setProperty('--chat-bg-color', settings.backgroundColor);
+                           if (settings.textColor) root.style.setProperty('--chat-text-color', settings.textColor);
+                           if (settings.usernameColor) root.style.setProperty('--chat-username-color', settings.usernameColor);
+                           if (settings.systemMessageColor) root.style.setProperty('--chat-system-color', settings.systemMessageColor);
+                           if (settings.timestampColor) root.style.setProperty('--chat-timestamp-color', settings.timestampColor);
+                           if (settings.fontFamily) root.style.setProperty('--chat-font-family', settings.fontFamily);
+                           if (settings.fontSize) root.style.setProperty('--chat-font-size', settings.fontSize);
+                           if (settings.fontWeight) root.style.setProperty('--chat-font-weight', settings.fontWeight);
+                           if (settings.padding) root.style.setProperty('--chat-padding', settings.padding);
+                           if (settings.margin) root.style.setProperty('--chat-margin', settings.margin);
+                           if (settings.borderRadius) root.style.setProperty('--chat-border-radius', settings.borderRadius);
+                           if (settings.animationDuration) root.style.setProperty('--chat-animation-duration', settings.animationDuration);
+
+                           if (settings.maxMessages !== undefined) maxMessages = settings.maxMessages;
+                           if (settings.showTimestamp !== undefined) showTimestamp = settings.showTimestamp;
+                           if (settings.enableAnimations !== undefined) enableAnimations = settings.enableAnimations;
+
+                           console.log('Настройки чата обновлены:', settings);
+                       }
+
+                       fetch('/api/chat-settings')
+                           .then(response => response.json())
+                           .then(settings => {
+                               updateChatSettings(settings);
+                           })
+                           .catch(error => console.error('Ошибка загрузки настроек чата:', error));
+
                        fetch('/api/history')
                            .then(response => response.json())
                            .then(messages => {
-                               messages.forEach(message => addMessage(message));
+                               messages.forEach(message => addMessage(message, true));
                            })
                            .catch(error => console.error('Ошибка загрузки истории:', error));
                    </script>
@@ -492,6 +600,49 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
         }
     }
 
+    private void ServeChatSettings(HttpListenerResponse response)
+    {
+        try
+        {
+            var settings = SettingsManager.Current.Twitch.ObsChat;
+            var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings);
+
+            var json = JsonSerializer.Serialize(cssSettings);
+            var buffer = Encoding.UTF8.GetBytes(json);
+
+            response.ContentType = "application/json; charset=utf-8";
+            response.Headers.Add("Access-Control-Allow-Origin", "*");
+            response.Headers.Add("Cache-Control", "no-cache");
+            response.ContentLength64 = buffer.Length;
+            response.OutputStream.Write(buffer, 0, buffer.Length);
+
+            LogMessage?.Invoke("Настройки чата успешно отданы клиенту");
+        }
+        catch (JsonException ex)
+        {
+            LogMessage?.Invoke($"Ошибка сериализации настроек чата: {ex.Message}");
+            response.StatusCode = 500;
+            WriteErrorResponse(response, "Ошибка обработки настроек");
+        }
+        catch (Exception ex)
+        {
+            LogMessage?.Invoke($"Ошибка отдачи настроек чата: {ex.Message}");
+            response.StatusCode = 500;
+            WriteErrorResponse(response, "Внутренняя ошибка сервера");
+        }
+        finally
+        {
+            try
+            {
+                response.Close();
+            }
+            catch (Exception ex)
+            {
+                LogMessage?.Invoke($"Ошибка закрытия ответа: {ex.Message}");
+            }
+        }
+    }
+
     private void SendSseToAllClients(string data)
     {
         lock (_sseClients)
@@ -523,6 +674,24 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
             {
                 LogMessage?.Invoke($"Удалено {disconnectedClients.Count} отключившихся SSE клиентов");
             }
+        }
+    }
+
+    private void WriteErrorResponse(HttpListenerResponse response, string errorMessage)
+    {
+        try
+        {
+            var errorObj = new { error = errorMessage };
+            var json = JsonSerializer.Serialize(errorObj);
+            var buffer = Encoding.UTF8.GetBytes(json);
+
+            response.ContentType = "application/json; charset=utf-8";
+            response.ContentLength64 = buffer.Length;
+            response.OutputStream.Write(buffer, 0, buffer.Length);
+        }
+        catch (Exception ex)
+        {
+            LogMessage?.Invoke($"Ошибка записи ошибки в ответ: {ex.Message}");
         }
     }
 }

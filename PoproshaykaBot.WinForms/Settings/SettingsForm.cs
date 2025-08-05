@@ -82,6 +82,21 @@ public partial class SettingsForm : Form
         destination.Twitch.Messages.Connection = source.Twitch.Messages.Connection;
         destination.Twitch.Messages.DisconnectionEnabled = source.Twitch.Messages.DisconnectionEnabled;
         destination.Twitch.Messages.Disconnection = source.Twitch.Messages.Disconnection;
+        destination.Twitch.ObsChat.BackgroundColor = source.Twitch.ObsChat.BackgroundColor;
+        destination.Twitch.ObsChat.TextColor = source.Twitch.ObsChat.TextColor;
+        destination.Twitch.ObsChat.UsernameColor = source.Twitch.ObsChat.UsernameColor;
+        destination.Twitch.ObsChat.SystemMessageColor = source.Twitch.ObsChat.SystemMessageColor;
+        destination.Twitch.ObsChat.TimestampColor = source.Twitch.ObsChat.TimestampColor;
+        destination.Twitch.ObsChat.FontFamily = source.Twitch.ObsChat.FontFamily;
+        destination.Twitch.ObsChat.FontSize = source.Twitch.ObsChat.FontSize;
+        destination.Twitch.ObsChat.FontBold = source.Twitch.ObsChat.FontBold;
+        destination.Twitch.ObsChat.Padding = source.Twitch.ObsChat.Padding;
+        destination.Twitch.ObsChat.Margin = source.Twitch.ObsChat.Margin;
+        destination.Twitch.ObsChat.BorderRadius = source.Twitch.ObsChat.BorderRadius;
+        destination.Twitch.ObsChat.AnimationDuration = source.Twitch.ObsChat.AnimationDuration;
+        destination.Twitch.ObsChat.EnableAnimations = source.Twitch.ObsChat.EnableAnimations;
+        destination.Twitch.ObsChat.MaxMessages = source.Twitch.ObsChat.MaxMessages;
+        destination.Twitch.ObsChat.ShowTimestamp = source.Twitch.ObsChat.ShowTimestamp;
         destination.Ui.ShowLogsPanel = source.Ui.ShowLogsPanel;
         destination.Ui.ShowChatPanel = source.Ui.ShowChatPanel;
     }
@@ -93,6 +108,7 @@ public partial class SettingsForm : Form
         _messagesSettingsControl.LoadSettings(_settings.Twitch.Messages);
         _httpServerSettingsControl.LoadSettings(_settings.Twitch);
         _oauthSettingsControl.LoadSettings(_settings);
+        _obsChatSettingsControl.LoadSettings(_settings.Twitch.ObsChat);
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -105,6 +121,7 @@ public partial class SettingsForm : Form
         _messagesSettingsControl.SaveSettings(_settings.Twitch.Messages);
         _httpServerSettingsControl.SaveSettings(_settings.Twitch);
         _oauthSettingsControl.SaveSettings(_settings);
+        _obsChatSettingsControl.SaveSettings(_settings.Twitch.ObsChat);
     }
 
     private void UpdateButtonStates()

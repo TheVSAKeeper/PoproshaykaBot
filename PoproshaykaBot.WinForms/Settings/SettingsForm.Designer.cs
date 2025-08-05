@@ -41,6 +41,8 @@ partial class SettingsForm
         _httpServerSettingsControl = new HttpServerSettingsControl();
         _oauthTabPage = new TabPage();
         _oauthSettingsControl = new OAuthSettingsControl();
+        _obsChatTabPage = new TabPage();
+        _obsChatSettingsControl = new ObsChatSettingsControl();
         _buttonPanel = new FlowLayoutPanel();
         _resetButton = new Button();
         _okButton = new Button();
@@ -53,6 +55,7 @@ partial class SettingsForm
         _messagesTabPage.SuspendLayout();
         _httpServerTabPage.SuspendLayout();
         _oauthTabPage.SuspendLayout();
+        _obsChatTabPage.SuspendLayout();
         _buttonPanel.SuspendLayout();
         SuspendLayout();
         // 
@@ -69,7 +72,7 @@ partial class SettingsForm
         _mainTableLayout.RowCount = 2;
         _mainTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         _mainTableLayout.RowStyles.Add(new RowStyle());
-        _mainTableLayout.Size = new Size(583, 539);
+        _mainTableLayout.Size = new Size(626, 635);
         _mainTableLayout.TabIndex = 0;
         // 
         // _tabControl
@@ -79,11 +82,12 @@ partial class SettingsForm
         _tabControl.Controls.Add(_messagesTabPage);
         _tabControl.Controls.Add(_httpServerTabPage);
         _tabControl.Controls.Add(_oauthTabPage);
+        _tabControl.Controls.Add(_obsChatTabPage);
         _tabControl.Dock = DockStyle.Fill;
         _tabControl.Location = new Point(15, 15);
         _tabControl.Name = "_tabControl";
         _tabControl.SelectedIndex = 0;
-        _tabControl.Size = new Size(553, 480);
+        _tabControl.Size = new Size(596, 576);
         _tabControl.TabIndex = 13;
         // 
         // _basicTabPage
@@ -186,6 +190,26 @@ partial class SettingsForm
         _oauthSettingsControl.TabIndex = 0;
         _oauthSettingsControl.SettingChanged += OnSettingChanged;
         // 
+        // _obsChatTabPage
+        // 
+        _obsChatTabPage.Controls.Add(_obsChatSettingsControl);
+        _obsChatTabPage.Location = new Point(4, 24);
+        _obsChatTabPage.Name = "_obsChatTabPage";
+        _obsChatTabPage.Padding = new Padding(10);
+        _obsChatTabPage.Size = new Size(588, 548);
+        _obsChatTabPage.TabIndex = 5;
+        _obsChatTabPage.Text = "OBS Чат";
+        _obsChatTabPage.UseVisualStyleBackColor = true;
+        // 
+        // _obsChatSettingsControl
+        // 
+        _obsChatSettingsControl.Dock = DockStyle.Fill;
+        _obsChatSettingsControl.Location = new Point(10, 10);
+        _obsChatSettingsControl.Name = "_obsChatSettingsControl";
+        _obsChatSettingsControl.Size = new Size(568, 528);
+        _obsChatSettingsControl.TabIndex = 0;
+        _obsChatSettingsControl.SettingChanged += OnSettingChanged;
+        // 
         // _buttonPanel
         // 
         _buttonPanel.AutoSize = true;
@@ -195,15 +219,15 @@ partial class SettingsForm
         _buttonPanel.Controls.Add(_applyButton);
         _buttonPanel.Dock = DockStyle.Fill;
         _buttonPanel.FlowDirection = FlowDirection.RightToLeft;
-        _buttonPanel.Location = new Point(15, 501);
+        _buttonPanel.Location = new Point(15, 597);
         _buttonPanel.Name = "_buttonPanel";
-        _buttonPanel.Size = new Size(553, 23);
+        _buttonPanel.Size = new Size(596, 23);
         _buttonPanel.TabIndex = 1;
         // 
         // _resetButton
         // 
         _resetButton.Anchor = AnchorStyles.Left;
-        _resetButton.Location = new Point(475, 0);
+        _resetButton.Location = new Point(518, 0);
         _resetButton.Margin = new Padding(0, 0, 3, 0);
         _resetButton.Name = "_resetButton";
         _resetButton.Size = new Size(75, 23);
@@ -215,7 +239,7 @@ partial class SettingsForm
         // _okButton
         // 
         _okButton.DialogResult = DialogResult.OK;
-        _okButton.Location = new Point(397, 0);
+        _okButton.Location = new Point(440, 0);
         _okButton.Margin = new Padding(0, 0, 3, 0);
         _okButton.Name = "_okButton";
         _okButton.Size = new Size(75, 23);
@@ -227,7 +251,7 @@ partial class SettingsForm
         // _cancelButton
         // 
         _cancelButton.DialogResult = DialogResult.Cancel;
-        _cancelButton.Location = new Point(319, 0);
+        _cancelButton.Location = new Point(362, 0);
         _cancelButton.Margin = new Padding(0, 0, 3, 0);
         _cancelButton.Name = "_cancelButton";
         _cancelButton.Size = new Size(75, 23);
@@ -239,7 +263,7 @@ partial class SettingsForm
         // _applyButton
         // 
         _applyButton.Enabled = false;
-        _applyButton.Location = new Point(241, 0);
+        _applyButton.Location = new Point(284, 0);
         _applyButton.Margin = new Padding(0, 0, 3, 0);
         _applyButton.Name = "_applyButton";
         _applyButton.Size = new Size(75, 23);
@@ -254,7 +278,7 @@ partial class SettingsForm
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
         CancelButton = _cancelButton;
-        ClientSize = new Size(583, 539);
+        ClientSize = new Size(626, 635);
         Controls.Add(_mainTableLayout);
         Icon = (Icon)resources.GetObject("$this.Icon");
         MaximizeBox = false;
@@ -270,6 +294,7 @@ partial class SettingsForm
         _messagesTabPage.ResumeLayout(false);
         _httpServerTabPage.ResumeLayout(false);
         _oauthTabPage.ResumeLayout(false);
+        _obsChatTabPage.ResumeLayout(false);
         _buttonPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
@@ -283,11 +308,13 @@ partial class SettingsForm
     private TabPage _messagesTabPage;
     private TabPage _httpServerTabPage;
     private TabPage _oauthTabPage;
+    private TabPage _obsChatTabPage;
     private BasicSettingsControl _basicSettingsControl;
     private RateLimitingSettingsControl _rateLimitingSettingsControl;
     private MessagesSettingsControl _messagesSettingsControl;
     private HttpServerSettingsControl _httpServerSettingsControl;
     private OAuthSettingsControl _oauthSettingsControl;
+    private ObsChatSettingsControl _obsChatSettingsControl;
     private FlowLayoutPanel _buttonPanel;
     private Button _resetButton;
     private Button _okButton;

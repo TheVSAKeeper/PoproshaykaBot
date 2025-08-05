@@ -76,6 +76,8 @@ public partial class MainForm : Form
         {
             try
             {
+                SettingsManager.ChatSettingsChanged -= _httpServer.NotifyChatSettingsChanged;
+
                 await _httpServer.StopAsync();
                 _httpServer.Dispose();
             }
@@ -595,6 +597,8 @@ public partial class MainForm : Form
 
             _httpServer = new(_chatHistoryManager, settings.HttpServerPort);
             _httpServer.LogMessage += OnHttpServerLogMessage;
+
+            SettingsManager.ChatSettingsChanged += _httpServer.NotifyChatSettingsChanged;
 
             await _httpServer.StartAsync();
 
