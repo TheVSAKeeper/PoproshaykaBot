@@ -2,6 +2,9 @@
 using PoproshaykaBot.WinForms.Settings;
 using System.Globalization;
 using System.Timers;
+using TwitchLib.Api;
+using TwitchLib.Api.Helix.Models.Chat.Badges;
+using TwitchLib.Api.Helix.Models.Chat.Emotes;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
@@ -14,15 +17,20 @@ namespace PoproshaykaBot.WinForms;
 public class Bot : IAsyncDisposable
 {
     private readonly TwitchClient _client;
+    private readonly TwitchAPI _twitchApi;
     private readonly TwitchSettings _settings;
     private readonly StatisticsCollector _statisticsCollector;
     private readonly Dictionary<string, UserInfo> _seenUsers;
+
+    private readonly Dictionary<string, GlobalEmote> _globalEmotes = new();
+    private readonly Dictionary<string, Dictionary<string, BadgeVersion>> _globalBadges = new(); // [badgeType][version]
     private bool _disposed;
 
     private string? _channel;
     private Timer? _timer;
 
     private int X1;
+    private bool _isEmotesAndBadgesLoaded;
 
     public Bot(string accessToken, TwitchSettings settings, StatisticsCollector statisticsCollector)
     {
@@ -46,6 +54,10 @@ public class Bot : IAsyncDisposable
         _client.OnMessageReceived += Client_OnMessageReceived;
         _client.OnConnected += Client_OnConnected;
         _client.OnJoinedChannel += Сlient_OnJoinedChannel;
+
+        _twitchApi = new();
+        _twitchApi.Settings.ClientId = _settings.ClientId;
+        _twitchApi.Settings.AccessToken = accessToken;
     }
 
     public event Action<ChatMessageData>? ChatMessageReceived;
@@ -96,6 +108,9 @@ public class Bot : IAsyncDisposable
             ConnectionProgress?.Invoke("Инициализация статистики...");
             await _statisticsCollector.StartAsync();
             _statisticsCollector.ResetBotStartTime();
+
+            ConnectionProgress?.Invoke("Загрузка эмодзи и бэйджей...");
+            await LoadEmotesAndBadgesAsync();
         }
         catch (OperationCanceledException)
         {
@@ -242,6 +257,10 @@ public class Bot : IAsyncDisposable
             Message = e.ChatMessage.Message,
             MessageType = ChatMessageType.UserMessage,
             Status = GetUserStatusFlags(e.ChatMessage),
+
+            Emotes = ExtractEmotes(e.ChatMessage),
+            Badges = e.ChatMessage.Badges,
+            BadgeUrls = ExtractBadgeUrls(e.ChatMessage.Badges),
         };
 
         ChatMessageReceived?.Invoke(userMessage);
@@ -455,6 +474,156 @@ public class Bot : IAsyncDisposable
         var moscowTime = TimeZoneInfo.ConvertTimeFromUtc(dateTime, moscowTimeZone);
 
         return moscowTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.GetCultureInfo("ru-RU")) + " по МСК";
+    }
+
+    private async Task LoadEmotesAndBadgesAsync()
+    {
+        if (_isEmotesAndBadgesLoaded)
+        {
+            return;
+        }
+
+        try
+        {
+            var emotesResponse = await _twitchApi.Helix.Chat.GetGlobalEmotesAsync();
+
+            if (emotesResponse?.GlobalEmotes != null)
+            {
+                foreach (var emote in emotesResponse.GlobalEmotes)
+                {
+                    _globalEmotes[emote.Id] = emote;
+                }
+
+                LogMessage?.Invoke($"Загружено {_globalEmotes.Count} глобальных эмодзи");
+            }
+
+            var badgesResponse = await _twitchApi.Helix.Chat.GetGlobalChatBadgesAsync();
+
+            if (badgesResponse?.EmoteSet != null)
+            {
+                foreach (var badgeSet in badgesResponse.EmoteSet)
+                {
+                    _globalBadges[badgeSet.SetId] = new();
+
+                    foreach (var version in badgeSet.Versions)
+                    {
+                        _globalBadges[badgeSet.SetId][version.Id] = version;
+                    }
+                }
+
+                LogMessage?.Invoke($"Загружено {_globalBadges.Count} типов глобальных бэйджей");
+            }
+
+            _isEmotesAndBadgesLoaded = true;
+
+            // TODO: Поддержка Template для URL генерации
+            // TODO: Загрузка канальных эмодзи
+            // TODO: Поддержка BTTV/FFZ эмодзи
+        }
+        catch (Exception ex)
+        {
+            LogMessage?.Invoke($"Ошибка загрузки эмодзи и бэйджей: {ex.Message}");
+        }
+    }
+
+    private GlobalEmote? GetGlobalEmote(string emoteId)
+    {
+        return _globalEmotes.GetValueOrDefault(emoteId);
+    }
+
+    private BadgeVersion? GetBadgeVersion(string badgeType, string version)
+    {
+        return _globalBadges.TryGetValue(badgeType, out var versions)
+               && versions.TryGetValue(version, out var badge)
+            ? badge
+            : null;
+    }
+
+    private string GetEmoteImageUrl(GlobalEmote emote, EmoteSize size)
+    {
+        return size switch
+        {
+            EmoteSize.Small => emote.Images.Url1X,
+            EmoteSize.Medium => emote.Images.Url2X,
+            EmoteSize.Large => emote.Images.Url4X,
+            _ => emote.Images.Url1X,
+        };
+    }
+
+    private string GetBadgeImageUrl(BadgeVersion badge, BadgeSize size)
+    {
+        return size switch
+        {
+            BadgeSize.Small => badge.ImageUrl1x,
+            BadgeSize.Medium => badge.ImageUrl2x,
+            BadgeSize.Large => badge.ImageUrl4x,
+            _ => badge.ImageUrl1x,
+        };
+    }
+
+    private List<EmoteInfo> ExtractEmotes(ChatMessage chatMessage)
+    {
+        var emotes = new List<EmoteInfo>();
+
+        if (chatMessage.EmoteSet?.Emotes == null || _isEmotesAndBadgesLoaded == false)
+        {
+            return emotes;
+        }
+
+        foreach (var emote in chatMessage.EmoteSet.Emotes)
+        {
+            string imageUrl;
+
+            var globalEmote = GetGlobalEmote(emote.Id);
+
+            if (globalEmote != null)
+            {
+                var emoteSize = _settings.ObsChat.EmoteSize;
+                imageUrl = GetEmoteImageUrl(globalEmote, emoteSize);
+            }
+            else
+            {
+                imageUrl = emote.ImageUrl;
+            }
+
+            emotes.Add(new()
+            {
+                Id = emote.Id,
+                Name = emote.Name,
+                ImageUrl = imageUrl,
+                StartIndex = emote.StartIndex,
+                EndIndex = emote.EndIndex,
+            });
+        }
+
+        return emotes;
+    }
+
+    private Dictionary<string, string> ExtractBadgeUrls(List<KeyValuePair<string, string>> badges)
+    {
+        var badgeUrls = new Dictionary<string, string>();
+
+        if (_isEmotesAndBadgesLoaded == false)
+        {
+            return badgeUrls;
+        }
+
+        foreach (var badge in badges)
+        {
+            var badgeVersion = GetBadgeVersion(badge.Key, badge.Value);
+
+            if (badgeVersion == null)
+            {
+                continue;
+            }
+
+            var badgeSize = _settings.ObsChat.BadgeSize;
+            var imageUrl = GetBadgeImageUrl(badgeVersion, badgeSize);
+            var key = $"{badge.Key}/{badge.Value}";
+            badgeUrls[key] = imageUrl;
+        }
+
+        return badgeUrls;
     }
 }
 

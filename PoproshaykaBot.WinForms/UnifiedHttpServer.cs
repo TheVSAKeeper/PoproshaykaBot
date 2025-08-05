@@ -121,6 +121,22 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                     message = chatMessage.Message,
                     timestamp = chatMessage.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     messageType = chatMessage.MessageType.ToString(),
+                    emotes = chatMessage.Emotes.Select(e => new
+                        {
+                            id = e.Id,
+                            name = e.Name,
+                            imageUrl = e.ImageUrl,
+                            startIndex = e.StartIndex,
+                            endIndex = e.EndIndex,
+                        })
+                        .ToArray(),
+                    badges = chatMessage.Badges.Select(b => new
+                        {
+                            type = b.Key,
+                            version = b.Value,
+                            imageUrl = chatMessage.BadgeUrls.TryGetValue($"{b.Key}/{b.Value}", out var url) ? url : "",
+                        })
+                        .ToArray(),
                 },
             };
 
@@ -364,6 +380,8 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
         }
     }
 
+    // TODO: Удалить избыточные сообщения при обновлении настроек
+    // TODO: Поправить отображение бейджей и эмодзи в историчных сообщениях
     private string GetObsOverlayHtml()
     {
         return """
@@ -386,6 +404,9 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                            --chat-margin: 5px 0;
                            --chat-border-radius: 5px;
                            --chat-animation-duration: 0.3s;
+
+                           --emote-size: 28px;
+                           --badge-size: 18px;
                        }
 
                        body {
@@ -433,6 +454,20 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                        .system-message {
                            color: var(--chat-system-color);
                            font-style: italic;
+                       }
+
+                       .badge {
+                           width: var(--badge-size);
+                           height: var(--badge-size);
+                           margin-right: 2px;
+                           vertical-align: middle;
+                           border-radius: 2px;
+                       }
+
+                       .emote {
+                           height: var(--emote-size);
+                           vertical-align: middle;
+                           margin: 0 1px;
                        }
                    </style>
                </head>
@@ -484,10 +519,14 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                                    <span class='system-message'>${message.message}</span>
                                `;
                            } else {
+                               const badgesHtml = renderBadges(message.badges || []);
+                               const messageWithEmotes = renderMessageWithEmotes(message.message, message.emotes || []);
+
                                messageDiv.innerHTML = `
                                    ${timestampHtml}
+                                   ${badgesHtml}
                                    <span class='username'>${message.username}:</span>
-                                   <span class='message-text'> ${message.message}</span>
+                                   <span class='message-text'> ${messageWithEmotes}</span>
                                `;
                            }
 
@@ -502,6 +541,61 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
 
                        function clearChat() {
                            chatContainer.innerHTML = '';
+                       }
+
+                       function renderBadges(badges) {
+                           if (!badges || badges.length === 0) return '';
+
+                           return badges.map(badge => {
+                               if (!badge.imageUrl) return '';
+                               return `<img src="${badge.imageUrl}" alt="${badge.type}" title="${badge.type} ${badge.version}" class="badge">`;
+                           }).join('');
+                       }
+
+                       function renderMessageWithEmotes(message, emotes) {
+                           if (!emotes || emotes.length === 0) return escapeHtml(message);
+
+                           const sortedEmotes = emotes.sort((a, b) => b.startIndex - a.startIndex);
+
+                           let result = message;
+                           for (const emote of sortedEmotes) {
+                               if (emote.imageUrl && emote.startIndex >= 0 && emote.endIndex >= emote.startIndex) {
+                                   const before = result.substring(0, emote.startIndex);
+                                   const after = result.substring(emote.endIndex + 1);
+                                   const emoteImg = `<img src="${emote.imageUrl}" alt="${emote.name}" title="${emote.name}" class="emote">`;
+                                   result = before + emoteImg + after;
+                               }
+                           }
+
+                           return escapeHtml(result, true); // true = не экранировать HTML теги img
+                       }
+
+                       function escapeHtml(text, preserveImgTags = false) {
+                           if (preserveImgTags) {
+                               const imgTags = [];
+                               text = text.replace(/<img[^>]*>/g, (match) => {
+                                   imgTags.push(match);
+                                   return `__IMG_PLACEHOLDER_${imgTags.length - 1}__`;
+                               });
+
+                               text = text.replace(/&/g, '&amp;')
+                                         .replace(/</g, '&lt;')
+                                         .replace(/>/g, '&gt;')
+                                         .replace(/"/g, '&quot;')
+                                         .replace(/'/g, '&#039;');
+
+                               text = text.replace(/__IMG_PLACEHOLDER_(\d+)__/g, (match, index) => {
+                                   return imgTags[parseInt(index)];
+                               });
+
+                               return text;
+                           }
+
+                           return text.replace(/&/g, '&amp;')
+                                     .replace(/</g, '&lt;')
+                                     .replace(/>/g, '&gt;')
+                                     .replace(/"/g, '&quot;')
+                                     .replace(/'/g, '&#039;');
                        }
 
                        function updateChatSettings(settings) {
@@ -519,6 +613,9 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
                            if (settings.margin) root.style.setProperty('--chat-margin', settings.margin);
                            if (settings.borderRadius) root.style.setProperty('--chat-border-radius', settings.borderRadius);
                            if (settings.animationDuration) root.style.setProperty('--chat-animation-duration', settings.animationDuration);
+
+                           if (settings.emoteSize) root.style.setProperty('--emote-size', settings.emoteSize);
+                           if (settings.badgeSize) root.style.setProperty('--badge-size', settings.badgeSize);
 
                            if (settings.maxMessages !== undefined) maxMessages = settings.maxMessages;
                            if (settings.showTimestamp !== undefined) showTimestamp = settings.showTimestamp;
