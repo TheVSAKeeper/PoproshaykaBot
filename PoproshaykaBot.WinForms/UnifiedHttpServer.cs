@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace PoproshaykaBot.WinForms;
 
 // TODO: Смешение ответственностей
-public class UnifiedHttpServer : IChatDisplay, IDisposable
+public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
 {
     private readonly HttpListener _httpListener;
     private readonly ChatHistoryManager _chatHistoryManager;
@@ -163,9 +163,15 @@ public class UnifiedHttpServer : IChatDisplay, IDisposable
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        StopAsync().Wait();
+        await DisposeAsyncCore();
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
+        await StopAsync();
         _httpListener?.Close();
         _cancellationTokenSource?.Dispose();
     }

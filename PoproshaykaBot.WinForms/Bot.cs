@@ -23,7 +23,7 @@ public class Bot : IAsyncDisposable
     private readonly Dictionary<string, UserInfo> _seenUsers;
 
     private readonly Dictionary<string, GlobalEmote> _globalEmotes = new();
-    private readonly Dictionary<string, Dictionary<string, BadgeVersion>> _globalBadges = new();
+    private readonly Dictionary<string, BadgeEmoteSet> _globalBadges = new();
     private bool _disposed;
 
     private string? _channel;
@@ -74,15 +74,21 @@ public class Bot : IAsyncDisposable
     {
         if (_client.IsConnected)
         {
-            ConnectionProgress?.Invoke("Бот уже подключен");
+            var message = "Бот уже подключен";
+            ConnectionProgress?.Invoke(message);
+            LogMessage?.Invoke(message);
             return;
         }
 
-        ConnectionProgress?.Invoke("Инициализация подключения...");
+        var initMessage = "Инициализация подключения...";
+        ConnectionProgress?.Invoke(initMessage);
+        LogMessage?.Invoke(initMessage);
 
         try
         {
-            ConnectionProgress?.Invoke("Подключение к серверу Twitch...");
+            var connectingMessage = "Подключение к серверу Twitch...";
+            ConnectionProgress?.Invoke(connectingMessage);
+            LogMessage?.Invoke(connectingMessage);
 
             _client.Connect();
 
@@ -92,34 +98,46 @@ public class Bot : IAsyncDisposable
             while (_client.IsConnected == false && DateTime.UtcNow - startTime < timeout)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ConnectionProgress?.Invoke("Ожидание подтверждения подключения...");
+                var waitingMessage = "Ожидание подтверждения подключения...";
+                ConnectionProgress?.Invoke(waitingMessage);
+                LogMessage?.Invoke(waitingMessage);
                 await Task.Delay(500, cancellationToken);
             }
 
             if (_client.IsConnected)
             {
-                ConnectionProgress?.Invoke("Подключение установлено успешно");
+                var successMessage = "Подключение установлено успешно";
+                ConnectionProgress?.Invoke(successMessage);
+                LogMessage?.Invoke(successMessage);
             }
             else
             {
                 throw new TimeoutException("Превышено время ожидания подключения к Twitch");
             }
 
-            ConnectionProgress?.Invoke("Инициализация статистики...");
+            var statsMessage = "Инициализация статистики...";
+            ConnectionProgress?.Invoke(statsMessage);
+            LogMessage?.Invoke(statsMessage);
             await _statisticsCollector.StartAsync();
             _statisticsCollector.ResetBotStartTime();
 
-            ConnectionProgress?.Invoke("Загрузка эмодзи и бэйджей...");
+            var emotesMessage = "Загрузка эмодзи и бэйджей...";
+            ConnectionProgress?.Invoke(emotesMessage);
+            LogMessage?.Invoke(emotesMessage);
             await LoadEmotesAndBadgesAsync();
         }
         catch (OperationCanceledException)
         {
-            ConnectionProgress?.Invoke("Подключение отменено пользователем");
+            var cancelMessage = "Подключение отменено пользователем";
+            ConnectionProgress?.Invoke(cancelMessage);
+            LogMessage?.Invoke(cancelMessage);
             throw;
         }
         catch (Exception exception)
         {
-            ConnectionProgress?.Invoke($"Ошибка подключения: {exception.Message}");
+            var errorMessage = $"Ошибка подключения: {exception.Message}";
+            ConnectionProgress?.Invoke(errorMessage);
+            LogMessage?.Invoke(errorMessage);
             throw;
         }
     }
@@ -216,6 +234,7 @@ public class Bot : IAsyncDisposable
         var connectionMessage = "Подключен!";
         Console.WriteLine(connectionMessage);
         Connected?.Invoke(connectionMessage);
+        LogMessage?.Invoke(connectionMessage);
     }
 
     private void Сlient_OnJoinedChannel(object? sender, OnJoinedChannelArgs e)
@@ -233,6 +252,7 @@ public class Bot : IAsyncDisposable
         var connectionMessage = $"Подключен к каналу {e.Channel}";
         Console.WriteLine(connectionMessage);
         Connected?.Invoke(connectionMessage);
+        LogMessage?.Invoke(connectionMessage);
     }
 
     private void _timer_Elapsed(object? sender, ElapsedEventArgs e)
@@ -503,12 +523,7 @@ public class Bot : IAsyncDisposable
             {
                 foreach (var badgeSet in badgesResponse.EmoteSet)
                 {
-                    _globalBadges[badgeSet.SetId] = new();
-
-                    foreach (var version in badgeSet.Versions)
-                    {
-                        _globalBadges[badgeSet.SetId][version.Id] = version;
-                    }
+                    _globalBadges[badgeSet.SetId] = badgeSet;
                 }
 
                 LogMessage?.Invoke($"Загружено {_globalBadges.Count} типов глобальных бэйджей");
@@ -533,9 +548,8 @@ public class Bot : IAsyncDisposable
 
     private BadgeVersion? GetBadgeVersion(string badgeType, string version)
     {
-        return _globalBadges.TryGetValue(badgeType, out var versions)
-               && versions.TryGetValue(version, out var badge)
-            ? badge
+        return _globalBadges.TryGetValue(badgeType, out var badgeSet)
+            ? badgeSet.Versions.FirstOrDefault(badgeVersion => badgeVersion.Id == version)
             : null;
     }
 

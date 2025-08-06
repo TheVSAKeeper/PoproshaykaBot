@@ -78,8 +78,7 @@ public partial class MainForm : Form
             {
                 SettingsManager.ChatSettingsChanged -= _httpServer.NotifyChatSettingsChanged;
 
-                await _httpServer.StopAsync();
-                _httpServer.Dispose();
+                await _httpServer.DisposeAsync();
             }
             catch (Exception ex)
             {
@@ -164,10 +163,6 @@ public partial class MainForm : Form
         else if (result is { IsSuccess: true, Bot: not null })
         {
             _bot = result.Bot;
-            _bot.Connected += OnBotConnected;
-            _bot.LogMessage += OnBotLogMessage;
-            _bot.ConnectionProgress += OnBotConnectionProgress;
-            _bot.ChatMessageReceived += OnChatMessageReceived;
 
             _isConnected = true;
             _connectButton.Text = "Отключить бота";
@@ -186,7 +181,6 @@ public partial class MainForm : Form
         }
 
         _connectionStatusLabel.Text = message;
-        AddLogMessage($"[Прогресс] {message}");
     }
 
     private void OnOAuthStatusChanged(string message)
@@ -208,8 +202,6 @@ public partial class MainForm : Form
             Invoke(new Action<string>(OnBotConnected), message);
             return;
         }
-
-        AddLogMessage($"Успешное подключение: {message}");
 
         UpdateBroadcastButtonState();
     }
@@ -294,12 +286,17 @@ public partial class MainForm : Form
         AddLogMessage($"HTTP: {message}");
     }
 
-    private static Bot CreateBotWithSettings(string accessToken)
+    private Bot CreateBotWithSettings(string accessToken)
     {
         var settings = SettingsManager.Current.Twitch;
         var statisticsCollector = new StatisticsCollector();
 
-        return new(accessToken, settings, statisticsCollector);
+        var bot = new Bot(accessToken, settings, statisticsCollector);
+        bot.Connected += OnBotConnected;
+        bot.LogMessage += OnBotLogMessage;
+        bot.ConnectionProgress += OnBotConnectionProgress;
+        bot.ChatMessageReceived += OnChatMessageReceived;
+        return bot;
     }
 
     private void ClearChatHistory()
