@@ -86,20 +86,6 @@ public class ObsChatSettings
     public int MaxMessages { get; set; } = 50;
     public bool ShowTimestamp { get; set; } = true;
 
-    public EmoteSize EmoteSize { get; set; } = EmoteSize.Medium;
-    public BadgeSize BadgeSize { get; set; } = BadgeSize.Small;
-}
-
-public enum EmoteSize
-{
-    Small = 1,
-    Medium = 2,
-    Large = 4,
-}
-
-public enum BadgeSize
-{
-    Small = 1,
-    Medium = 2,
-    Large = 4,
+    public int EmoteSizePixels { get; set; } = 28;
+    public int BadgeSizePixels { get; set; } = 18;
 }

@@ -43,35 +43,13 @@ public class ObsChatCssSettings
             MaxMessages = ValidateRange(safeSettings.MaxMessages, 10, 200),
             ShowTimestamp = safeSettings.ShowTimestamp,
 
-            EmoteSize = GetEmoteSizeInPixels(safeSettings.EmoteSize),
-            BadgeSize = GetBadgeSizeInPixels(safeSettings.BadgeSize),
+            EmoteSize = $"{ValidateRange(safeSettings.EmoteSizePixels, 16, 128)}px",
+            BadgeSize = $"{ValidateRange(safeSettings.BadgeSizePixels, 12, 72)}px",
         };
     }
 
     private static int ValidateRange(int value, int min, int max)
     {
         return Math.Max(min, Math.Min(max, value));
-    }
-
-    private static string GetEmoteSizeInPixels(EmoteSize size)
-    {
-        return size switch
-        {
-            PoproshaykaBot.WinForms.Settings.EmoteSize.Small => "28px",
-            PoproshaykaBot.WinForms.Settings.EmoteSize.Medium => "56px",
-            PoproshaykaBot.WinForms.Settings.EmoteSize.Large => "112px",
-            _ => "28px",
-        };
-    }
-
-    private static string GetBadgeSizeInPixels(BadgeSize size)
-    {
-        return size switch
-        {
-            PoproshaykaBot.WinForms.Settings.BadgeSize.Small => "18px",
-            PoproshaykaBot.WinForms.Settings.BadgeSize.Medium => "36px",
-            PoproshaykaBot.WinForms.Settings.BadgeSize.Large => "72px",
-            _ => "18px",
-        };
     }
 }

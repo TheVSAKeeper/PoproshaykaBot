@@ -23,7 +23,7 @@ public class Bot : IAsyncDisposable
     private readonly Dictionary<string, UserInfo> _seenUsers;
 
     private readonly Dictionary<string, GlobalEmote> _globalEmotes = new();
-    private readonly Dictionary<string, Dictionary<string, BadgeVersion>> _globalBadges = new(); // [badgeType][version]
+    private readonly Dictionary<string, Dictionary<string, BadgeVersion>> _globalBadges = new();
     private bool _disposed;
 
     private string? _channel;
@@ -539,25 +539,23 @@ public class Bot : IAsyncDisposable
             : null;
     }
 
-    private string GetEmoteImageUrl(GlobalEmote emote, EmoteSize size)
+    private string GetEmoteImageUrl(GlobalEmote emote, int sizePixels)
     {
-        return size switch
+        return sizePixels switch
         {
-            EmoteSize.Small => emote.Images.Url1X,
-            EmoteSize.Medium => emote.Images.Url2X,
-            EmoteSize.Large => emote.Images.Url4X,
-            _ => emote.Images.Url1X,
+            <= 32 => emote.Images.Url1X,
+            <= 64 => emote.Images.Url2X,
+            _ => emote.Images.Url4X,
         };
     }
 
-    private string GetBadgeImageUrl(BadgeVersion badge, BadgeSize size)
+    private string GetBadgeImageUrl(BadgeVersion badge, int sizePixels)
     {
-        return size switch
+        return sizePixels switch
         {
-            BadgeSize.Small => badge.ImageUrl1x,
-            BadgeSize.Medium => badge.ImageUrl2x,
-            BadgeSize.Large => badge.ImageUrl4x,
-            _ => badge.ImageUrl1x,
+            <= 24 => badge.ImageUrl1x,
+            <= 48 => badge.ImageUrl2x,
+            _ => badge.ImageUrl4x,
         };
     }
 
@@ -578,8 +576,8 @@ public class Bot : IAsyncDisposable
 
             if (globalEmote != null)
             {
-                var emoteSize = _settings.ObsChat.EmoteSize;
-                imageUrl = GetEmoteImageUrl(globalEmote, emoteSize);
+                var emoteSizePixels = _settings.ObsChat.EmoteSizePixels;
+                imageUrl = GetEmoteImageUrl(globalEmote, emoteSizePixels);
             }
             else
             {
@@ -617,8 +615,8 @@ public class Bot : IAsyncDisposable
                 continue;
             }
 
-            var badgeSize = _settings.ObsChat.BadgeSize;
-            var imageUrl = GetBadgeImageUrl(badgeVersion, badgeSize);
+            var badgeSizePixels = _settings.ObsChat.BadgeSizePixels;
+            var imageUrl = GetBadgeImageUrl(badgeVersion, badgeSizePixels);
             var key = $"{badge.Key}/{badge.Value}";
             badgeUrls[key] = imageUrl;
         }

@@ -33,6 +33,9 @@ public partial class ObsChatSettingsControl : UserControl
 
         _maxMessagesNumeric.Value = settings.MaxMessages;
         _showTimestampCheckBox.Checked = settings.ShowTimestamp;
+
+        _emoteSizeNumeric.Value = settings.EmoteSizePixels;
+        _badgeSizeNumeric.Value = settings.BadgeSizePixels;
     }
 
     public void SaveSettings(ObsChatSettings settings)
@@ -56,6 +59,9 @@ public partial class ObsChatSettingsControl : UserControl
 
         settings.MaxMessages = (int)_maxMessagesNumeric.Value;
         settings.ShowTimestamp = _showTimestampCheckBox.Checked;
+
+        settings.EmoteSizePixels = (int)_emoteSizeNumeric.Value;
+        settings.BadgeSizePixels = (int)_badgeSizeNumeric.Value;
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -132,6 +138,18 @@ public partial class ObsChatSettingsControl : UserControl
     private void OnMaxMessagesResetButtonClicked(object sender, EventArgs e)
     {
         _maxMessagesNumeric.Value = DefaultSettings.MaxMessages;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnEmoteSizeResetButtonClicked(object sender, EventArgs e)
+    {
+        _emoteSizeNumeric.Value = DefaultSettings.EmoteSizePixels;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnBadgeSizeResetButtonClicked(object sender, EventArgs e)
+    {
+        _badgeSizeNumeric.Value = DefaultSettings.BadgeSizePixels;
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
