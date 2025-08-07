@@ -27,11 +27,11 @@ public class ObsChatCssSettings
 
         return new()
         {
-            BackgroundColor = safeSettings.BackgroundColor ?? "rgba(0, 0, 0, 0.7)",
-            TextColor = safeSettings.TextColor ?? "#ffffff",
-            UsernameColor = safeSettings.UsernameColor ?? "#9146ff",
-            SystemMessageColor = safeSettings.SystemMessageColor ?? "#ffcc00",
-            TimestampColor = safeSettings.TimestampColor ?? "#999999",
+            BackgroundColor = ColorToCssString(safeSettings.BackgroundColor),
+            TextColor = ColorToCssString(safeSettings.TextColor),
+            UsernameColor = ColorToCssString(safeSettings.UsernameColor),
+            SystemMessageColor = ColorToCssString(safeSettings.SystemMessageColor),
+            TimestampColor = ColorToCssString(safeSettings.TimestampColor),
             FontFamily = safeSettings.FontFamily ?? "Arial, sans-serif",
             FontSize = $"{ValidateRange(safeSettings.FontSize, 8, 72)}px",
             FontWeight = safeSettings.FontBold ? "bold" : "normal",
@@ -51,5 +51,16 @@ public class ObsChatCssSettings
     private static int ValidateRange(int value, int min, int max)
     {
         return Math.Max(min, Math.Min(max, value));
+    }
+
+    private static string ColorToCssString(Color color)
+    {
+        if (color.A == 255)
+        {
+            return ColorTranslator.ToHtml(color);
+        }
+
+        var alpha = Math.Round(color.A / 255.0, 2);
+        return $"rgba({color.R}, {color.G}, {color.B}, {alpha})";
     }
 }

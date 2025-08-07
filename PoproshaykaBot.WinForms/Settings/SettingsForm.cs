@@ -59,6 +59,7 @@ public partial class SettingsForm : Form
         UpdateButtonStates();
     }
 
+    // TODO: Кровь из глаз
     private static void CopySettings(AppSettings source, AppSettings destination)
     {
         destination.Twitch.BotUsername = source.Twitch.BotUsername;
@@ -109,6 +110,7 @@ public partial class SettingsForm : Form
         _httpServerSettingsControl.LoadSettings(_settings.Twitch);
         _oauthSettingsControl.LoadSettings(_settings);
         _obsChatSettingsControl.LoadSettings(_settings.Twitch.ObsChat);
+        _miscSettingsControl.LoadSettings(_settings);
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -122,6 +124,7 @@ public partial class SettingsForm : Form
         _httpServerSettingsControl.SaveSettings(_settings.Twitch);
         _oauthSettingsControl.SaveSettings(_settings);
         _obsChatSettingsControl.SaveSettings(_settings.Twitch.ObsChat);
+        _miscSettingsControl.SaveSettings(_settings);
     }
 
     private void UpdateButtonStates()

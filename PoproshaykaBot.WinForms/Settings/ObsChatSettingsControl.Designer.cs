@@ -32,19 +32,19 @@
             _colorsTabPage = new TabPage();
             _colorsTableLayout = new TableLayoutPanel();
             _backgroundColorLabel = new Label();
-            _backgroundColorTextBox = new TextBox();
+            _backgroundColorButton = new Button();
             _backgroundColorResetButton = new Button();
             _textColorLabel = new Label();
-            _textColorTextBox = new TextBox();
+            _textColorButton = new Button();
             _textColorResetButton = new Button();
             _usernameColorLabel = new Label();
-            _usernameColorTextBox = new TextBox();
+            _usernameColorButton = new Button();
             _usernameColorResetButton = new Button();
             _systemMessageColorLabel = new Label();
-            _systemMessageColorTextBox = new TextBox();
+            _systemMessageColorButton = new Button();
             _systemMessageColorResetButton = new Button();
             _timestampColorLabel = new Label();
-            _timestampColorTextBox = new TextBox();
+            _timestampColorButton = new Button();
             _timestampColorResetButton = new Button();
             _fontsTabPage = new TabPage();
             _fontsTableLayout = new TableLayoutPanel();
@@ -66,6 +66,12 @@
             _borderRadiusLabel = new Label();
             _borderRadiusNumeric = new NumericUpDown();
             _borderRadiusResetButton = new Button();
+            _emoteSizeLabel = new Label();
+            _emoteSizeNumeric = new NumericUpDown();
+            _emoteSizeResetButton = new Button();
+            _badgeSizeLabel = new Label();
+            _badgeSizeNumeric = new NumericUpDown();
+            _badgeSizeResetButton = new Button();
             _animationsTabPage = new TabPage();
             _animationsTableLayout = new TableLayoutPanel();
             _enableAnimationsCheckBox = new CheckBox();
@@ -78,12 +84,6 @@
             _maxMessagesNumeric = new NumericUpDown();
             _maxMessagesResetButton = new Button();
             _showTimestampCheckBox = new CheckBox();
-            _emoteSizeLabel = new Label();
-            _emoteSizeNumeric = new NumericUpDown();
-            _emoteSizeResetButton = new Button();
-            _badgeSizeLabel = new Label();
-            _badgeSizeNumeric = new NumericUpDown();
-            _badgeSizeResetButton = new Button();
             _mainTabControl.SuspendLayout();
             _colorsTabPage.SuspendLayout();
             _colorsTableLayout.SuspendLayout();
@@ -95,18 +95,18 @@
             ((System.ComponentModel.ISupportInitialize)_paddingNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)_marginNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)_borderRadiusNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)_emoteSizeNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)_badgeSizeNumeric).BeginInit();
             _animationsTabPage.SuspendLayout();
             _animationsTableLayout.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)_animationDurationNumeric).BeginInit();
             _limitsTabPage.SuspendLayout();
             _limitsTableLayout.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)_maxMessagesNumeric).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)_emoteSizeNumeric).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)_badgeSizeNumeric).BeginInit();
             SuspendLayout();
-            //
+            // 
             // _mainTabControl
-            //
+            // 
             _mainTabControl.Controls.Add(_colorsTabPage);
             _mainTabControl.Controls.Add(_fontsTabPage);
             _mainTabControl.Controls.Add(_layoutTabPage);
@@ -116,16 +116,16 @@
             _mainTabControl.Location = new Point(0, 0);
             _mainTabControl.Name = "_mainTabControl";
             _mainTabControl.SelectedIndex = 0;
-            _mainTabControl.Size = new Size(548, 581);
+            _mainTabControl.Size = new Size(549, 561);
             _mainTabControl.TabIndex = 0;
-            //
+            // 
             // _colorsTabPage
-            //
+            // 
             _colorsTabPage.Controls.Add(_colorsTableLayout);
             _colorsTabPage.Location = new Point(4, 24);
             _colorsTabPage.Name = "_colorsTabPage";
             _colorsTabPage.Padding = new Padding(3);
-            _colorsTabPage.Size = new Size(540, 553);
+            _colorsTabPage.Size = new Size(541, 533);
             _colorsTabPage.TabIndex = 0;
             _colorsTabPage.Text = "Цвета";
             _colorsTabPage.UseVisualStyleBackColor = true;
@@ -137,19 +137,19 @@
             _colorsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             _colorsTableLayout.ColumnStyles.Add(new ColumnStyle());
             _colorsTableLayout.Controls.Add(_backgroundColorLabel, 0, 0);
-            _colorsTableLayout.Controls.Add(_backgroundColorTextBox, 1, 0);
+            _colorsTableLayout.Controls.Add(_backgroundColorButton, 1, 0);
             _colorsTableLayout.Controls.Add(_backgroundColorResetButton, 2, 0);
             _colorsTableLayout.Controls.Add(_textColorLabel, 0, 1);
-            _colorsTableLayout.Controls.Add(_textColorTextBox, 1, 1);
+            _colorsTableLayout.Controls.Add(_textColorButton, 1, 1);
             _colorsTableLayout.Controls.Add(_textColorResetButton, 2, 1);
             _colorsTableLayout.Controls.Add(_usernameColorLabel, 0, 2);
-            _colorsTableLayout.Controls.Add(_usernameColorTextBox, 1, 2);
+            _colorsTableLayout.Controls.Add(_usernameColorButton, 1, 2);
             _colorsTableLayout.Controls.Add(_usernameColorResetButton, 2, 2);
             _colorsTableLayout.Controls.Add(_systemMessageColorLabel, 0, 3);
-            _colorsTableLayout.Controls.Add(_systemMessageColorTextBox, 1, 3);
+            _colorsTableLayout.Controls.Add(_systemMessageColorButton, 1, 3);
             _colorsTableLayout.Controls.Add(_systemMessageColorResetButton, 2, 3);
             _colorsTableLayout.Controls.Add(_timestampColorLabel, 0, 4);
-            _colorsTableLayout.Controls.Add(_timestampColorTextBox, 1, 4);
+            _colorsTableLayout.Controls.Add(_timestampColorButton, 1, 4);
             _colorsTableLayout.Controls.Add(_timestampColorResetButton, 2, 4);
             _colorsTableLayout.Dock = DockStyle.Fill;
             _colorsTableLayout.Location = new Point(3, 3);
@@ -162,37 +162,38 @@
             _colorsTableLayout.RowStyles.Add(new RowStyle());
             _colorsTableLayout.RowStyles.Add(new RowStyle());
             _colorsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            _colorsTableLayout.Size = new Size(534, 547);
+            _colorsTableLayout.Size = new Size(535, 527);
             _colorsTableLayout.TabIndex = 0;
             // 
             // _backgroundColorLabel
             // 
             _backgroundColorLabel.AutoSize = true;
             _backgroundColorLabel.Dock = DockStyle.Fill;
-            _backgroundColorLabel.Location = new Point(3, 3);
+            _backgroundColorLabel.Location = new Point(13, 13);
             _backgroundColorLabel.Margin = new Padding(3);
             _backgroundColorLabel.Name = "_backgroundColorLabel";
-            _backgroundColorLabel.Size = new Size(100, 23);
+            _backgroundColorLabel.Size = new Size(100, 25);
             _backgroundColorLabel.TabIndex = 0;
             _backgroundColorLabel.Text = "Цвет фона:";
             _backgroundColorLabel.TextAlign = ContentAlignment.MiddleLeft;
             // 
-            // _backgroundColorTextBox
+            // _backgroundColorButton
             // 
-            _backgroundColorTextBox.Dock = DockStyle.Fill;
-            _backgroundColorTextBox.Location = new Point(109, 3);
-            _backgroundColorTextBox.Name = "_backgroundColorTextBox";
-            _backgroundColorTextBox.Size = new Size(370, 23);
-            _backgroundColorTextBox.TabIndex = 1;
-            _backgroundColorTextBox.TextChanged += OnSettingChanged;
-            //
+            _backgroundColorButton.Dock = DockStyle.Fill;
+            _backgroundColorButton.Location = new Point(119, 13);
+            _backgroundColorButton.Name = "_backgroundColorButton";
+            _backgroundColorButton.Size = new Size(357, 25);
+            _backgroundColorButton.TabIndex = 1;
+            _backgroundColorButton.UseVisualStyleBackColor = false;
+            _backgroundColorButton.Click += OnBackgroundColorButtonClicked;
+            // 
             // _backgroundColorResetButton
-            //
+            // 
             _backgroundColorResetButton.AutoSize = true;
-            _backgroundColorResetButton.Location = new Point(485, 3);
+            _backgroundColorResetButton.Location = new Point(482, 13);
             _backgroundColorResetButton.MinimumSize = new Size(40, 23);
             _backgroundColorResetButton.Name = "_backgroundColorResetButton";
-            _backgroundColorResetButton.Size = new Size(40, 23);
+            _backgroundColorResetButton.Size = new Size(40, 25);
             _backgroundColorResetButton.TabIndex = 2;
             _backgroundColorResetButton.Text = "↻";
             _backgroundColorResetButton.UseVisualStyleBackColor = true;
@@ -202,63 +203,65 @@
             // 
             _textColorLabel.AutoSize = true;
             _textColorLabel.Dock = DockStyle.Fill;
-            _textColorLabel.Location = new Point(3, 32);
+            _textColorLabel.Location = new Point(13, 44);
             _textColorLabel.Margin = new Padding(3);
             _textColorLabel.Name = "_textColorLabel";
-            _textColorLabel.Size = new Size(100, 23);
+            _textColorLabel.Size = new Size(100, 25);
             _textColorLabel.TabIndex = 3;
             _textColorLabel.Text = "Цвет текста:";
             _textColorLabel.TextAlign = ContentAlignment.MiddleLeft;
             // 
-            // _textColorTextBox
+            // _textColorButton
             // 
-            _textColorTextBox.Dock = DockStyle.Fill;
-            _textColorTextBox.Location = new Point(109, 32);
-            _textColorTextBox.Name = "_textColorTextBox";
-            _textColorTextBox.Size = new Size(370, 23);
-            _textColorTextBox.TabIndex = 4;
-            _textColorTextBox.TextChanged += OnSettingChanged;
-            //
+            _textColorButton.Dock = DockStyle.Fill;
+            _textColorButton.Location = new Point(119, 44);
+            _textColorButton.Name = "_textColorButton";
+            _textColorButton.Size = new Size(357, 25);
+            _textColorButton.TabIndex = 4;
+            _textColorButton.UseVisualStyleBackColor = false;
+            _textColorButton.Click += OnTextColorButtonClicked;
+            // 
             // _textColorResetButton
-            //
+            // 
             _textColorResetButton.AutoSize = true;
-            _textColorResetButton.Location = new Point(485, 32);
+            _textColorResetButton.Location = new Point(482, 44);
             _textColorResetButton.MinimumSize = new Size(40, 23);
             _textColorResetButton.Name = "_textColorResetButton";
-            _textColorResetButton.Size = new Size(40, 23);
+            _textColorResetButton.Size = new Size(40, 25);
             _textColorResetButton.TabIndex = 5;
             _textColorResetButton.Text = "↻";
             _textColorResetButton.UseVisualStyleBackColor = true;
             _textColorResetButton.Click += OnTextColorResetButtonClicked;
-            //
+            // 
             // _usernameColorLabel
-            //
+            // 
             _usernameColorLabel.AutoSize = true;
             _usernameColorLabel.Dock = DockStyle.Fill;
-            _usernameColorLabel.Location = new Point(3, 61);
+            _usernameColorLabel.Location = new Point(13, 75);
             _usernameColorLabel.Margin = new Padding(3);
             _usernameColorLabel.Name = "_usernameColorLabel";
-            _usernameColorLabel.Size = new Size(100, 23);
+            _usernameColorLabel.Size = new Size(100, 25);
             _usernameColorLabel.TabIndex = 6;
             _usernameColorLabel.Text = "Цвет имени:";
             _usernameColorLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
-            // _usernameColorTextBox
-            //
-            _usernameColorTextBox.Dock = DockStyle.Fill;
-            _usernameColorTextBox.Location = new Point(109, 61);
-            _usernameColorTextBox.Name = "_usernameColorTextBox";
-            _usernameColorTextBox.Size = new Size(370, 23);
-            _usernameColorTextBox.TabIndex = 7;
-            _usernameColorTextBox.TextChanged += OnSettingChanged;
-            //
+            // 
+            // _usernameColorButton
+            // 
+            _usernameColorButton.Dock = DockStyle.Fill;
+            _usernameColorButton.Location = new Point(119, 75);
+            _usernameColorButton.Name = "_usernameColorButton";
+            _usernameColorButton.Size = new Size(357, 25);
+            _usernameColorButton.TabIndex = 7;
+            _usernameColorButton.UseVisualStyleBackColor = false;
+            _usernameColorButton.Click += OnUsernameColorButtonClicked;
+            // 
             // _usernameColorResetButton
-            //
+            // 
             _usernameColorResetButton.AutoSize = true;
-            _usernameColorResetButton.Location = new Point(485, 61);
+            _usernameColorResetButton.Location = new Point(482, 75);
             _usernameColorResetButton.MinimumSize = new Size(40, 23);
             _usernameColorResetButton.Name = "_usernameColorResetButton";
-            _usernameColorResetButton.Size = new Size(40, 23);
+            _usernameColorResetButton.Size = new Size(40, 25);
             _usernameColorResetButton.TabIndex = 8;
             _usernameColorResetButton.Text = "↻";
             _usernameColorResetButton.UseVisualStyleBackColor = true;
@@ -268,75 +271,77 @@
             // 
             _systemMessageColorLabel.AutoSize = true;
             _systemMessageColorLabel.Dock = DockStyle.Fill;
-            _systemMessageColorLabel.Location = new Point(3, 90);
+            _systemMessageColorLabel.Location = new Point(13, 106);
             _systemMessageColorLabel.Margin = new Padding(3);
             _systemMessageColorLabel.Name = "_systemMessageColorLabel";
-            _systemMessageColorLabel.Size = new Size(100, 23);
+            _systemMessageColorLabel.Size = new Size(100, 25);
             _systemMessageColorLabel.TabIndex = 9;
             _systemMessageColorLabel.Text = "Цвет системных:";
             _systemMessageColorLabel.TextAlign = ContentAlignment.MiddleLeft;
             // 
-            // _systemMessageColorTextBox
+            // _systemMessageColorButton
             // 
-            _systemMessageColorTextBox.Dock = DockStyle.Fill;
-            _systemMessageColorTextBox.Location = new Point(109, 90);
-            _systemMessageColorTextBox.Name = "_systemMessageColorTextBox";
-            _systemMessageColorTextBox.Size = new Size(370, 23);
-            _systemMessageColorTextBox.TabIndex = 10;
-            _systemMessageColorTextBox.TextChanged += OnSettingChanged;
-            //
+            _systemMessageColorButton.Dock = DockStyle.Fill;
+            _systemMessageColorButton.Location = new Point(119, 106);
+            _systemMessageColorButton.Name = "_systemMessageColorButton";
+            _systemMessageColorButton.Size = new Size(357, 25);
+            _systemMessageColorButton.TabIndex = 10;
+            _systemMessageColorButton.UseVisualStyleBackColor = false;
+            _systemMessageColorButton.Click += OnSystemMessageColorButtonClicked;
+            // 
             // _systemMessageColorResetButton
-            //
+            // 
             _systemMessageColorResetButton.AutoSize = true;
-            _systemMessageColorResetButton.Location = new Point(485, 90);
+            _systemMessageColorResetButton.Location = new Point(482, 106);
             _systemMessageColorResetButton.MinimumSize = new Size(40, 23);
             _systemMessageColorResetButton.Name = "_systemMessageColorResetButton";
-            _systemMessageColorResetButton.Size = new Size(40, 23);
+            _systemMessageColorResetButton.Size = new Size(40, 25);
             _systemMessageColorResetButton.TabIndex = 11;
             _systemMessageColorResetButton.Text = "↻";
             _systemMessageColorResetButton.UseVisualStyleBackColor = true;
             _systemMessageColorResetButton.Click += OnSystemMessageColorResetButtonClicked;
-            //
+            // 
             // _timestampColorLabel
-            //
+            // 
             _timestampColorLabel.AutoSize = true;
             _timestampColorLabel.Dock = DockStyle.Fill;
-            _timestampColorLabel.Location = new Point(3, 119);
+            _timestampColorLabel.Location = new Point(13, 137);
             _timestampColorLabel.Margin = new Padding(3);
             _timestampColorLabel.Name = "_timestampColorLabel";
-            _timestampColorLabel.Size = new Size(100, 23);
+            _timestampColorLabel.Size = new Size(100, 25);
             _timestampColorLabel.TabIndex = 12;
             _timestampColorLabel.Text = "Цвет времени:";
             _timestampColorLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
-            // _timestampColorTextBox
-            //
-            _timestampColorTextBox.Dock = DockStyle.Fill;
-            _timestampColorTextBox.Location = new Point(109, 119);
-            _timestampColorTextBox.Name = "_timestampColorTextBox";
-            _timestampColorTextBox.Size = new Size(370, 23);
-            _timestampColorTextBox.TabIndex = 13;
-            _timestampColorTextBox.TextChanged += OnSettingChanged;
-            //
+            // 
+            // _timestampColorButton
+            // 
+            _timestampColorButton.Dock = DockStyle.Fill;
+            _timestampColorButton.Location = new Point(119, 137);
+            _timestampColorButton.Name = "_timestampColorButton";
+            _timestampColorButton.Size = new Size(357, 25);
+            _timestampColorButton.TabIndex = 13;
+            _timestampColorButton.UseVisualStyleBackColor = false;
+            _timestampColorButton.Click += OnTimestampColorButtonClicked;
+            // 
             // _timestampColorResetButton
-            //
+            // 
             _timestampColorResetButton.AutoSize = true;
-            _timestampColorResetButton.Location = new Point(485, 119);
+            _timestampColorResetButton.Location = new Point(482, 137);
             _timestampColorResetButton.MinimumSize = new Size(40, 23);
             _timestampColorResetButton.Name = "_timestampColorResetButton";
-            _timestampColorResetButton.Size = new Size(40, 23);
+            _timestampColorResetButton.Size = new Size(40, 25);
             _timestampColorResetButton.TabIndex = 14;
             _timestampColorResetButton.Text = "↻";
             _timestampColorResetButton.UseVisualStyleBackColor = true;
             _timestampColorResetButton.Click += OnTimestampColorResetButtonClicked;
-            //
+            // 
             // _fontsTabPage
-            //
+            // 
             _fontsTabPage.Controls.Add(_fontsTableLayout);
             _fontsTabPage.Location = new Point(4, 24);
             _fontsTabPage.Name = "_fontsTabPage";
             _fontsTabPage.Padding = new Padding(3);
-            _fontsTabPage.Size = new Size(540, 553);
+            _fontsTabPage.Size = new Size(541, 533);
             _fontsTabPage.TabIndex = 1;
             _fontsTabPage.Text = "Шрифт";
             _fontsTabPage.UseVisualStyleBackColor = true;
@@ -363,17 +368,17 @@
             _fontsTableLayout.RowStyles.Add(new RowStyle());
             _fontsTableLayout.RowStyles.Add(new RowStyle());
             _fontsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            _fontsTableLayout.Size = new Size(534, 547);
+            _fontsTableLayout.Size = new Size(535, 527);
             _fontsTableLayout.TabIndex = 0;
             // 
             // _fontFamilyLabel
             // 
             _fontFamilyLabel.AutoSize = true;
             _fontFamilyLabel.Dock = DockStyle.Fill;
-            _fontFamilyLabel.Location = new Point(3, 3);
+            _fontFamilyLabel.Location = new Point(13, 13);
             _fontFamilyLabel.Margin = new Padding(3);
             _fontFamilyLabel.Name = "_fontFamilyLabel";
-            _fontFamilyLabel.Size = new Size(118, 23);
+            _fontFamilyLabel.Size = new Size(118, 25);
             _fontFamilyLabel.TabIndex = 0;
             _fontFamilyLabel.Text = "Семейство шрифта:";
             _fontFamilyLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -381,56 +386,56 @@
             // _fontFamilyTextBox
             // 
             _fontFamilyTextBox.Dock = DockStyle.Fill;
-            _fontFamilyTextBox.Location = new Point(127, 3);
+            _fontFamilyTextBox.Location = new Point(137, 13);
             _fontFamilyTextBox.Name = "_fontFamilyTextBox";
-            _fontFamilyTextBox.Size = new Size(352, 23);
+            _fontFamilyTextBox.Size = new Size(339, 23);
             _fontFamilyTextBox.TabIndex = 1;
             _fontFamilyTextBox.TextChanged += OnSettingChanged;
-            //
+            // 
             // _fontFamilyResetButton
-            //
+            // 
             _fontFamilyResetButton.AutoSize = true;
-            _fontFamilyResetButton.Location = new Point(485, 3);
+            _fontFamilyResetButton.Location = new Point(482, 13);
             _fontFamilyResetButton.MinimumSize = new Size(40, 23);
             _fontFamilyResetButton.Name = "_fontFamilyResetButton";
-            _fontFamilyResetButton.Size = new Size(40, 23);
+            _fontFamilyResetButton.Size = new Size(40, 25);
             _fontFamilyResetButton.TabIndex = 2;
             _fontFamilyResetButton.Text = "↻";
             _fontFamilyResetButton.UseVisualStyleBackColor = true;
             _fontFamilyResetButton.Click += OnFontFamilyResetButtonClicked;
-            //
+            // 
             // _fontSizeLabel
-            //
+            // 
             _fontSizeLabel.AutoSize = true;
             _fontSizeLabel.Dock = DockStyle.Fill;
-            _fontSizeLabel.Location = new Point(3, 32);
+            _fontSizeLabel.Location = new Point(13, 44);
             _fontSizeLabel.Margin = new Padding(3);
             _fontSizeLabel.Name = "_fontSizeLabel";
-            _fontSizeLabel.Size = new Size(118, 23);
+            _fontSizeLabel.Size = new Size(118, 25);
             _fontSizeLabel.TabIndex = 3;
             _fontSizeLabel.Text = "Размер шрифта:";
             _fontSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
+            // 
             // _fontSizeNumeric
-            //
+            // 
             _fontSizeNumeric.Dock = DockStyle.Fill;
-            _fontSizeNumeric.Location = new Point(127, 32);
+            _fontSizeNumeric.Location = new Point(137, 44);
             _fontSizeNumeric.Maximum = new decimal(new int[] { 72, 0, 0, 0 });
             _fontSizeNumeric.Minimum = new decimal(new int[] { 8, 0, 0, 0 });
-            _fontSizeNumeric.MinimumSize = new Size(80, 23);
+            _fontSizeNumeric.MinimumSize = new Size(80, 0);
             _fontSizeNumeric.Name = "_fontSizeNumeric";
-            _fontSizeNumeric.Size = new Size(352, 23);
+            _fontSizeNumeric.Size = new Size(339, 23);
             _fontSizeNumeric.TabIndex = 4;
             _fontSizeNumeric.Value = new decimal(new int[] { 14, 0, 0, 0 });
             _fontSizeNumeric.ValueChanged += OnSettingChanged;
-            //
+            // 
             // _fontSizeResetButton
-            //
+            // 
             _fontSizeResetButton.AutoSize = true;
-            _fontSizeResetButton.Location = new Point(485, 32);
+            _fontSizeResetButton.Location = new Point(482, 44);
             _fontSizeResetButton.MinimumSize = new Size(40, 23);
             _fontSizeResetButton.Name = "_fontSizeResetButton";
-            _fontSizeResetButton.Size = new Size(40, 23);
+            _fontSizeResetButton.Size = new Size(40, 25);
             _fontSizeResetButton.TabIndex = 5;
             _fontSizeResetButton.Text = "↻";
             _fontSizeResetButton.UseVisualStyleBackColor = true;
@@ -440,21 +445,21 @@
             // 
             _fontBoldCheckBox.AutoSize = true;
             _fontBoldCheckBox.Dock = DockStyle.Fill;
-            _fontBoldCheckBox.Location = new Point(3, 61);
+            _fontBoldCheckBox.Location = new Point(13, 75);
             _fontBoldCheckBox.Name = "_fontBoldCheckBox";
-            _fontBoldCheckBox.Size = new Size(118, 24);
+            _fontBoldCheckBox.Size = new Size(118, 19);
             _fontBoldCheckBox.TabIndex = 6;
             _fontBoldCheckBox.Text = "Жирный шрифт";
             _fontBoldCheckBox.UseVisualStyleBackColor = true;
             _fontBoldCheckBox.CheckedChanged += OnSettingChanged;
-            //
+            // 
             // _layoutTabPage
-            //
+            // 
             _layoutTabPage.Controls.Add(_layoutTableLayout);
             _layoutTabPage.Location = new Point(4, 24);
             _layoutTabPage.Name = "_layoutTabPage";
             _layoutTabPage.Padding = new Padding(3);
-            _layoutTabPage.Size = new Size(540, 553);
+            _layoutTabPage.Size = new Size(541, 533);
             _layoutTabPage.TabIndex = 2;
             _layoutTabPage.Text = "Размеры и отступы";
             _layoutTabPage.UseVisualStyleBackColor = true;
@@ -492,40 +497,40 @@
             _layoutTableLayout.RowStyles.Add(new RowStyle());
             _layoutTableLayout.RowStyles.Add(new RowStyle());
             _layoutTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            _layoutTableLayout.Size = new Size(534, 547);
+            _layoutTableLayout.Size = new Size(535, 527);
             _layoutTableLayout.TabIndex = 0;
             // 
             // _paddingLabel
             // 
             _paddingLabel.AutoSize = true;
             _paddingLabel.Dock = DockStyle.Fill;
-            _paddingLabel.Location = new Point(3, 3);
+            _paddingLabel.Location = new Point(13, 13);
             _paddingLabel.Margin = new Padding(3);
             _paddingLabel.Name = "_paddingLabel";
-            _paddingLabel.Size = new Size(115, 23);
+            _paddingLabel.Size = new Size(125, 25);
             _paddingLabel.TabIndex = 0;
             _paddingLabel.Text = "Внутренний отступ:";
             _paddingLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
+            // 
             // _paddingNumeric
-            //
+            // 
             _paddingNumeric.Dock = DockStyle.Fill;
-            _paddingNumeric.Location = new Point(124, 3);
+            _paddingNumeric.Location = new Point(144, 13);
             _paddingNumeric.Maximum = new decimal(new int[] { 50, 0, 0, 0 });
-            _paddingNumeric.MinimumSize = new Size(80, 23);
+            _paddingNumeric.MinimumSize = new Size(80, 0);
             _paddingNumeric.Name = "_paddingNumeric";
-            _paddingNumeric.Size = new Size(355, 23);
+            _paddingNumeric.Size = new Size(332, 23);
             _paddingNumeric.TabIndex = 1;
             _paddingNumeric.Value = new decimal(new int[] { 5, 0, 0, 0 });
             _paddingNumeric.ValueChanged += OnSettingChanged;
-            //
+            // 
             // _paddingResetButton
-            //
+            // 
             _paddingResetButton.AutoSize = true;
-            _paddingResetButton.Location = new Point(485, 3);
+            _paddingResetButton.Location = new Point(482, 13);
             _paddingResetButton.MinimumSize = new Size(40, 23);
             _paddingResetButton.Name = "_paddingResetButton";
-            _paddingResetButton.Size = new Size(40, 23);
+            _paddingResetButton.Size = new Size(40, 25);
             _paddingResetButton.TabIndex = 2;
             _paddingResetButton.Text = "↻";
             _paddingResetButton.UseVisualStyleBackColor = true;
@@ -535,81 +540,155 @@
             // 
             _marginLabel.AutoSize = true;
             _marginLabel.Dock = DockStyle.Fill;
-            _marginLabel.Location = new Point(3, 32);
+            _marginLabel.Location = new Point(13, 44);
             _marginLabel.Margin = new Padding(3);
             _marginLabel.Name = "_marginLabel";
-            _marginLabel.Size = new Size(115, 23);
+            _marginLabel.Size = new Size(125, 25);
             _marginLabel.TabIndex = 3;
             _marginLabel.Text = "Внешний отступ:";
             _marginLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
+            // 
             // _marginNumeric
-            //
+            // 
             _marginNumeric.Dock = DockStyle.Fill;
-            _marginNumeric.Location = new Point(124, 32);
+            _marginNumeric.Location = new Point(144, 44);
             _marginNumeric.Maximum = new decimal(new int[] { 50, 0, 0, 0 });
-            _marginNumeric.MinimumSize = new Size(80, 23);
+            _marginNumeric.MinimumSize = new Size(80, 0);
             _marginNumeric.Name = "_marginNumeric";
-            _marginNumeric.Size = new Size(355, 23);
+            _marginNumeric.Size = new Size(332, 23);
             _marginNumeric.TabIndex = 4;
             _marginNumeric.Value = new decimal(new int[] { 5, 0, 0, 0 });
             _marginNumeric.ValueChanged += OnSettingChanged;
-            //
+            // 
             // _marginResetButton
-            //
+            // 
             _marginResetButton.AutoSize = true;
-            _marginResetButton.Location = new Point(485, 32);
+            _marginResetButton.Location = new Point(482, 44);
             _marginResetButton.MinimumSize = new Size(40, 23);
             _marginResetButton.Name = "_marginResetButton";
-            _marginResetButton.Size = new Size(40, 23);
+            _marginResetButton.Size = new Size(40, 25);
             _marginResetButton.TabIndex = 5;
             _marginResetButton.Text = "↻";
             _marginResetButton.UseVisualStyleBackColor = true;
             _marginResetButton.Click += OnMarginResetButtonClicked;
-            //
+            // 
             // _borderRadiusLabel
-            //
+            // 
             _borderRadiusLabel.AutoSize = true;
             _borderRadiusLabel.Dock = DockStyle.Fill;
-            _borderRadiusLabel.Location = new Point(3, 61);
+            _borderRadiusLabel.Location = new Point(13, 75);
             _borderRadiusLabel.Margin = new Padding(3);
             _borderRadiusLabel.Name = "_borderRadiusLabel";
-            _borderRadiusLabel.Size = new Size(115, 24);
+            _borderRadiusLabel.Size = new Size(125, 25);
             _borderRadiusLabel.TabIndex = 6;
             _borderRadiusLabel.Text = "Скругление углов:";
             _borderRadiusLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
+            // 
             // _borderRadiusNumeric
-            //
+            // 
             _borderRadiusNumeric.Dock = DockStyle.Fill;
-            _borderRadiusNumeric.Location = new Point(124, 61);
+            _borderRadiusNumeric.Location = new Point(144, 75);
             _borderRadiusNumeric.Maximum = new decimal(new int[] { 50, 0, 0, 0 });
-            _borderRadiusNumeric.MinimumSize = new Size(80, 23);
+            _borderRadiusNumeric.MinimumSize = new Size(80, 0);
             _borderRadiusNumeric.Name = "_borderRadiusNumeric";
-            _borderRadiusNumeric.Size = new Size(355, 23);
+            _borderRadiusNumeric.Size = new Size(332, 23);
             _borderRadiusNumeric.TabIndex = 7;
             _borderRadiusNumeric.Value = new decimal(new int[] { 5, 0, 0, 0 });
             _borderRadiusNumeric.ValueChanged += OnSettingChanged;
-            //
+            // 
             // _borderRadiusResetButton
-            //
+            // 
             _borderRadiusResetButton.AutoSize = true;
-            _borderRadiusResetButton.Location = new Point(485, 61);
+            _borderRadiusResetButton.Location = new Point(482, 75);
             _borderRadiusResetButton.MinimumSize = new Size(40, 23);
             _borderRadiusResetButton.Name = "_borderRadiusResetButton";
-            _borderRadiusResetButton.Size = new Size(40, 23);
+            _borderRadiusResetButton.Size = new Size(40, 25);
             _borderRadiusResetButton.TabIndex = 8;
             _borderRadiusResetButton.Text = "↻";
             _borderRadiusResetButton.UseVisualStyleBackColor = true;
             _borderRadiusResetButton.Click += OnBorderRadiusResetButtonClicked;
-            //
+            // 
+            // _emoteSizeLabel
+            // 
+            _emoteSizeLabel.AutoSize = true;
+            _emoteSizeLabel.Dock = DockStyle.Fill;
+            _emoteSizeLabel.Location = new Point(13, 106);
+            _emoteSizeLabel.Margin = new Padding(3);
+            _emoteSizeLabel.Name = "_emoteSizeLabel";
+            _emoteSizeLabel.Size = new Size(125, 25);
+            _emoteSizeLabel.TabIndex = 9;
+            _emoteSizeLabel.Text = "Размер эмодзи (px):";
+            _emoteSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _emoteSizeNumeric
+            // 
+            _emoteSizeNumeric.Dock = DockStyle.Fill;
+            _emoteSizeNumeric.Location = new Point(144, 106);
+            _emoteSizeNumeric.Maximum = new decimal(new int[] { 128, 0, 0, 0 });
+            _emoteSizeNumeric.Minimum = new decimal(new int[] { 16, 0, 0, 0 });
+            _emoteSizeNumeric.MinimumSize = new Size(80, 0);
+            _emoteSizeNumeric.Name = "_emoteSizeNumeric";
+            _emoteSizeNumeric.Size = new Size(332, 23);
+            _emoteSizeNumeric.TabIndex = 10;
+            _emoteSizeNumeric.Value = new decimal(new int[] { 28, 0, 0, 0 });
+            _emoteSizeNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _emoteSizeResetButton
+            // 
+            _emoteSizeResetButton.AutoSize = true;
+            _emoteSizeResetButton.Location = new Point(482, 106);
+            _emoteSizeResetButton.MinimumSize = new Size(40, 23);
+            _emoteSizeResetButton.Name = "_emoteSizeResetButton";
+            _emoteSizeResetButton.Size = new Size(40, 25);
+            _emoteSizeResetButton.TabIndex = 11;
+            _emoteSizeResetButton.Text = "↻";
+            _emoteSizeResetButton.UseVisualStyleBackColor = true;
+            _emoteSizeResetButton.Click += OnEmoteSizeResetButtonClicked;
+            // 
+            // _badgeSizeLabel
+            // 
+            _badgeSizeLabel.AutoSize = true;
+            _badgeSizeLabel.Dock = DockStyle.Fill;
+            _badgeSizeLabel.Location = new Point(13, 137);
+            _badgeSizeLabel.Margin = new Padding(3);
+            _badgeSizeLabel.Name = "_badgeSizeLabel";
+            _badgeSizeLabel.Size = new Size(125, 25);
+            _badgeSizeLabel.TabIndex = 12;
+            _badgeSizeLabel.Text = "Размер бэйджей (px):";
+            _badgeSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _badgeSizeNumeric
+            // 
+            _badgeSizeNumeric.Dock = DockStyle.Fill;
+            _badgeSizeNumeric.Location = new Point(144, 137);
+            _badgeSizeNumeric.Maximum = new decimal(new int[] { 72, 0, 0, 0 });
+            _badgeSizeNumeric.Minimum = new decimal(new int[] { 12, 0, 0, 0 });
+            _badgeSizeNumeric.MinimumSize = new Size(80, 0);
+            _badgeSizeNumeric.Name = "_badgeSizeNumeric";
+            _badgeSizeNumeric.Size = new Size(332, 23);
+            _badgeSizeNumeric.TabIndex = 13;
+            _badgeSizeNumeric.Value = new decimal(new int[] { 18, 0, 0, 0 });
+            _badgeSizeNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _badgeSizeResetButton
+            // 
+            _badgeSizeResetButton.AutoSize = true;
+            _badgeSizeResetButton.Location = new Point(482, 137);
+            _badgeSizeResetButton.MinimumSize = new Size(40, 23);
+            _badgeSizeResetButton.Name = "_badgeSizeResetButton";
+            _badgeSizeResetButton.Size = new Size(40, 25);
+            _badgeSizeResetButton.TabIndex = 14;
+            _badgeSizeResetButton.Text = "↻";
+            _badgeSizeResetButton.UseVisualStyleBackColor = true;
+            _badgeSizeResetButton.Click += OnBadgeSizeResetButtonClicked;
+            // 
             // _animationsTabPage
-            //
+            // 
             _animationsTabPage.Controls.Add(_animationsTableLayout);
             _animationsTabPage.Location = new Point(4, 24);
             _animationsTabPage.Name = "_animationsTabPage";
             _animationsTabPage.Padding = new Padding(3);
-            _animationsTabPage.Size = new Size(540, 553);
+            _animationsTabPage.Size = new Size(541, 533);
             _animationsTabPage.TabIndex = 3;
             _animationsTabPage.Text = "Анимации";
             _animationsTabPage.UseVisualStyleBackColor = true;
@@ -632,14 +711,14 @@
             _animationsTableLayout.RowStyles.Add(new RowStyle());
             _animationsTableLayout.RowStyles.Add(new RowStyle());
             _animationsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            _animationsTableLayout.Size = new Size(534, 547);
+            _animationsTableLayout.Size = new Size(535, 527);
             _animationsTableLayout.TabIndex = 0;
             // 
             // _enableAnimationsCheckBox
             // 
             _enableAnimationsCheckBox.AutoSize = true;
             _enableAnimationsCheckBox.Dock = DockStyle.Fill;
-            _enableAnimationsCheckBox.Location = new Point(3, 3);
+            _enableAnimationsCheckBox.Location = new Point(13, 13);
             _enableAnimationsCheckBox.Name = "_enableAnimationsCheckBox";
             _enableAnimationsCheckBox.Size = new Size(140, 19);
             _enableAnimationsCheckBox.TabIndex = 0;
@@ -651,46 +730,46 @@
             // 
             _animationDurationLabel.AutoSize = true;
             _animationDurationLabel.Dock = DockStyle.Fill;
-            _animationDurationLabel.Location = new Point(3, 28);
+            _animationDurationLabel.Location = new Point(13, 38);
             _animationDurationLabel.Margin = new Padding(3);
             _animationDurationLabel.Name = "_animationDurationLabel";
-            _animationDurationLabel.Size = new Size(140, 23);
+            _animationDurationLabel.Size = new Size(140, 25);
             _animationDurationLabel.TabIndex = 1;
             _animationDurationLabel.Text = "Длительность (мс):";
             _animationDurationLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
+            // 
             // _animationDurationNumeric
-            //
+            // 
             _animationDurationNumeric.Dock = DockStyle.Fill;
-            _animationDurationNumeric.Location = new Point(149, 28);
+            _animationDurationNumeric.Location = new Point(159, 38);
             _animationDurationNumeric.Maximum = new decimal(new int[] { 2000, 0, 0, 0 });
             _animationDurationNumeric.Minimum = new decimal(new int[] { 100, 0, 0, 0 });
-            _animationDurationNumeric.MinimumSize = new Size(80, 23);
+            _animationDurationNumeric.MinimumSize = new Size(80, 0);
             _animationDurationNumeric.Name = "_animationDurationNumeric";
-            _animationDurationNumeric.Size = new Size(330, 23);
+            _animationDurationNumeric.Size = new Size(317, 23);
             _animationDurationNumeric.TabIndex = 2;
             _animationDurationNumeric.Value = new decimal(new int[] { 300, 0, 0, 0 });
             _animationDurationNumeric.ValueChanged += OnSettingChanged;
-            //
+            // 
             // _animationDurationResetButton
-            //
+            // 
             _animationDurationResetButton.AutoSize = true;
-            _animationDurationResetButton.Location = new Point(485, 28);
+            _animationDurationResetButton.Location = new Point(482, 38);
             _animationDurationResetButton.MinimumSize = new Size(40, 23);
             _animationDurationResetButton.Name = "_animationDurationResetButton";
-            _animationDurationResetButton.Size = new Size(40, 23);
+            _animationDurationResetButton.Size = new Size(40, 25);
             _animationDurationResetButton.TabIndex = 3;
             _animationDurationResetButton.Text = "↻";
             _animationDurationResetButton.UseVisualStyleBackColor = true;
             _animationDurationResetButton.Click += OnAnimationDurationResetButtonClicked;
-            //
+            // 
             // _limitsTabPage
-            //
+            // 
             _limitsTabPage.Controls.Add(_limitsTableLayout);
             _limitsTabPage.Location = new Point(4, 24);
             _limitsTabPage.Name = "_limitsTabPage";
             _limitsTabPage.Padding = new Padding(3);
-            _limitsTabPage.Size = new Size(540, 553);
+            _limitsTabPage.Size = new Size(541, 533);
             _limitsTabPage.TabIndex = 4;
             _limitsTabPage.Text = "Прочее";
             _limitsTabPage.UseVisualStyleBackColor = true;
@@ -713,41 +792,41 @@
             _limitsTableLayout.RowStyles.Add(new RowStyle());
             _limitsTableLayout.RowStyles.Add(new RowStyle());
             _limitsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            _limitsTableLayout.Size = new Size(534, 547);
+            _limitsTableLayout.Size = new Size(535, 527);
             _limitsTableLayout.TabIndex = 0;
             // 
             // _maxMessagesLabel
             // 
             _maxMessagesLabel.AutoSize = true;
             _maxMessagesLabel.Dock = DockStyle.Fill;
-            _maxMessagesLabel.Location = new Point(3, 3);
+            _maxMessagesLabel.Location = new Point(13, 13);
             _maxMessagesLabel.Margin = new Padding(3);
             _maxMessagesLabel.Name = "_maxMessagesLabel";
-            _maxMessagesLabel.Size = new Size(128, 23);
+            _maxMessagesLabel.Size = new Size(128, 25);
             _maxMessagesLabel.TabIndex = 0;
             _maxMessagesLabel.Text = "Макс. сообщений:";
             _maxMessagesLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
+            // 
             // _maxMessagesNumeric
-            //
+            // 
             _maxMessagesNumeric.Dock = DockStyle.Fill;
-            _maxMessagesNumeric.Location = new Point(137, 3);
+            _maxMessagesNumeric.Location = new Point(147, 13);
             _maxMessagesNumeric.Maximum = new decimal(new int[] { 200, 0, 0, 0 });
             _maxMessagesNumeric.Minimum = new decimal(new int[] { 10, 0, 0, 0 });
-            _maxMessagesNumeric.MinimumSize = new Size(80, 23);
+            _maxMessagesNumeric.MinimumSize = new Size(80, 0);
             _maxMessagesNumeric.Name = "_maxMessagesNumeric";
-            _maxMessagesNumeric.Size = new Size(342, 23);
+            _maxMessagesNumeric.Size = new Size(329, 23);
             _maxMessagesNumeric.TabIndex = 1;
             _maxMessagesNumeric.Value = new decimal(new int[] { 50, 0, 0, 0 });
             _maxMessagesNumeric.ValueChanged += OnSettingChanged;
-            //
+            // 
             // _maxMessagesResetButton
-            //
+            // 
             _maxMessagesResetButton.AutoSize = true;
-            _maxMessagesResetButton.Location = new Point(485, 3);
+            _maxMessagesResetButton.Location = new Point(482, 13);
             _maxMessagesResetButton.MinimumSize = new Size(40, 23);
             _maxMessagesResetButton.Name = "_maxMessagesResetButton";
-            _maxMessagesResetButton.Size = new Size(40, 23);
+            _maxMessagesResetButton.Size = new Size(40, 25);
             _maxMessagesResetButton.TabIndex = 2;
             _maxMessagesResetButton.Text = "↻";
             _maxMessagesResetButton.UseVisualStyleBackColor = true;
@@ -757,95 +836,21 @@
             // 
             _showTimestampCheckBox.AutoSize = true;
             _showTimestampCheckBox.Dock = DockStyle.Fill;
-            _showTimestampCheckBox.Location = new Point(3, 32);
+            _showTimestampCheckBox.Location = new Point(13, 44);
             _showTimestampCheckBox.Name = "_showTimestampCheckBox";
             _showTimestampCheckBox.Size = new Size(128, 19);
             _showTimestampCheckBox.TabIndex = 3;
             _showTimestampCheckBox.Text = "Показывать время";
             _showTimestampCheckBox.UseVisualStyleBackColor = true;
             _showTimestampCheckBox.CheckedChanged += OnSettingChanged;
-            //
-            // _emoteSizeLabel
-            //
-            _emoteSizeLabel.AutoSize = true;
-            _emoteSizeLabel.Dock = DockStyle.Fill;
-            _emoteSizeLabel.Location = new Point(3, 90);
-            _emoteSizeLabel.Margin = new Padding(3);
-            _emoteSizeLabel.Name = "_emoteSizeLabel";
-            _emoteSizeLabel.Size = new Size(115, 23);
-            _emoteSizeLabel.TabIndex = 9;
-            _emoteSizeLabel.Text = "Размер эмодзи (px):";
-            _emoteSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
-            // _emoteSizeNumeric
-            //
-            _emoteSizeNumeric.Dock = DockStyle.Fill;
-            _emoteSizeNumeric.Location = new Point(124, 90);
-            _emoteSizeNumeric.Maximum = new decimal(new int[] { 128, 0, 0, 0 });
-            _emoteSizeNumeric.Minimum = new decimal(new int[] { 16, 0, 0, 0 });
-            _emoteSizeNumeric.MinimumSize = new Size(80, 23);
-            _emoteSizeNumeric.Name = "_emoteSizeNumeric";
-            _emoteSizeNumeric.Size = new Size(355, 23);
-            _emoteSizeNumeric.TabIndex = 10;
-            _emoteSizeNumeric.Value = new decimal(new int[] { 28, 0, 0, 0 });
-            _emoteSizeNumeric.ValueChanged += OnSettingChanged;
-            //
-            // _emoteSizeResetButton
-            //
-            _emoteSizeResetButton.AutoSize = true;
-            _emoteSizeResetButton.Location = new Point(485, 90);
-            _emoteSizeResetButton.MinimumSize = new Size(40, 23);
-            _emoteSizeResetButton.Name = "_emoteSizeResetButton";
-            _emoteSizeResetButton.Size = new Size(40, 23);
-            _emoteSizeResetButton.TabIndex = 11;
-            _emoteSizeResetButton.Text = "↻";
-            _emoteSizeResetButton.UseVisualStyleBackColor = true;
-            _emoteSizeResetButton.Click += OnEmoteSizeResetButtonClicked;
-            //
-            // _badgeSizeLabel
-            //
-            _badgeSizeLabel.AutoSize = true;
-            _badgeSizeLabel.Dock = DockStyle.Fill;
-            _badgeSizeLabel.Location = new Point(3, 119);
-            _badgeSizeLabel.Margin = new Padding(3);
-            _badgeSizeLabel.Name = "_badgeSizeLabel";
-            _badgeSizeLabel.Size = new Size(115, 24);
-            _badgeSizeLabel.TabIndex = 12;
-            _badgeSizeLabel.Text = "Размер бэйджей (px):";
-            _badgeSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
-            // _badgeSizeNumeric
-            //
-            _badgeSizeNumeric.Dock = DockStyle.Fill;
-            _badgeSizeNumeric.Location = new Point(124, 119);
-            _badgeSizeNumeric.Maximum = new decimal(new int[] { 72, 0, 0, 0 });
-            _badgeSizeNumeric.Minimum = new decimal(new int[] { 12, 0, 0, 0 });
-            _badgeSizeNumeric.MinimumSize = new Size(80, 23);
-            _badgeSizeNumeric.Name = "_badgeSizeNumeric";
-            _badgeSizeNumeric.Size = new Size(355, 23);
-            _badgeSizeNumeric.TabIndex = 13;
-            _badgeSizeNumeric.Value = new decimal(new int[] { 18, 0, 0, 0 });
-            _badgeSizeNumeric.ValueChanged += OnSettingChanged;
-            //
-            // _badgeSizeResetButton
-            //
-            _badgeSizeResetButton.AutoSize = true;
-            _badgeSizeResetButton.Location = new Point(485, 119);
-            _badgeSizeResetButton.MinimumSize = new Size(40, 23);
-            _badgeSizeResetButton.Name = "_badgeSizeResetButton";
-            _badgeSizeResetButton.Size = new Size(40, 23);
-            _badgeSizeResetButton.TabIndex = 14;
-            _badgeSizeResetButton.Text = "↻";
-            _badgeSizeResetButton.UseVisualStyleBackColor = true;
-            _badgeSizeResetButton.Click += OnBadgeSizeResetButtonClicked;
-            //
+            // 
             // ObsChatSettingsControl
-            //
+            // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             Controls.Add(_mainTabControl);
             Name = "ObsChatSettingsControl";
-            Size = new Size(548, 581);
+            Size = new Size(549, 561);
             _mainTabControl.ResumeLayout(false);
             _colorsTabPage.ResumeLayout(false);
             _colorsTableLayout.ResumeLayout(false);
@@ -860,6 +865,8 @@
             ((System.ComponentModel.ISupportInitialize)_paddingNumeric).EndInit();
             ((System.ComponentModel.ISupportInitialize)_marginNumeric).EndInit();
             ((System.ComponentModel.ISupportInitialize)_borderRadiusNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)_emoteSizeNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)_badgeSizeNumeric).EndInit();
             _animationsTabPage.ResumeLayout(false);
             _animationsTableLayout.ResumeLayout(false);
             _animationsTableLayout.PerformLayout();
@@ -868,8 +875,6 @@
             _limitsTableLayout.ResumeLayout(false);
             _limitsTableLayout.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)_maxMessagesNumeric).EndInit();
-            ((System.ComponentModel.ISupportInitialize)_emoteSizeNumeric).EndInit();
-            ((System.ComponentModel.ISupportInitialize)_badgeSizeNumeric).EndInit();
             ResumeLayout(false);
         }
 
@@ -879,19 +884,19 @@
         private TabPage _colorsTabPage;
         private TableLayoutPanel _colorsTableLayout;
         private Label _backgroundColorLabel;
-        private TextBox _backgroundColorTextBox;
+        private Button _backgroundColorButton;
         private Button _backgroundColorResetButton;
         private Label _textColorLabel;
-        private TextBox _textColorTextBox;
+        private Button _textColorButton;
         private Button _textColorResetButton;
         private Label _usernameColorLabel;
-        private TextBox _usernameColorTextBox;
+        private Button _usernameColorButton;
         private Button _usernameColorResetButton;
         private Label _systemMessageColorLabel;
-        private TextBox _systemMessageColorTextBox;
+        private Button _systemMessageColorButton;
         private Button _systemMessageColorResetButton;
         private Label _timestampColorLabel;
-        private TextBox _timestampColorTextBox;
+        private Button _timestampColorButton;
         private Button _timestampColorResetButton;
         private TabPage _fontsTabPage;
         private TableLayoutPanel _fontsTableLayout;

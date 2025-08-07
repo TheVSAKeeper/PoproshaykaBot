@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.WinForms.Settings;
+﻿using Cyotek.Windows.Forms;
+
+namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class ObsChatSettingsControl : UserControl
 {
@@ -14,11 +16,13 @@ public partial class ObsChatSettingsControl : UserControl
 
     public void LoadSettings(ObsChatSettings settings)
     {
-        _backgroundColorTextBox.Text = settings.BackgroundColor;
-        _textColorTextBox.Text = settings.TextColor;
-        _usernameColorTextBox.Text = settings.UsernameColor;
-        _systemMessageColorTextBox.Text = settings.SystemMessageColor;
-        _timestampColorTextBox.Text = settings.TimestampColor;
+        _backgroundColorButton.BackColor = settings.BackgroundColor;
+        _textColorButton.BackColor = settings.TextColor;
+        _usernameColorButton.BackColor = settings.UsernameColor;
+        _systemMessageColorButton.BackColor = settings.SystemMessageColor;
+        _timestampColorButton.BackColor = settings.TimestampColor;
+
+        UpdateColorButtons();
 
         _fontFamilyTextBox.Text = settings.FontFamily;
         _fontSizeNumeric.Value = settings.FontSize;
@@ -40,11 +44,11 @@ public partial class ObsChatSettingsControl : UserControl
 
     public void SaveSettings(ObsChatSettings settings)
     {
-        settings.BackgroundColor = ValidateColorValue(_backgroundColorTextBox.Text.Trim()) ?? DefaultSettings.BackgroundColor;
-        settings.TextColor = ValidateColorValue(_textColorTextBox.Text.Trim()) ?? DefaultSettings.TextColor;
-        settings.UsernameColor = ValidateColorValue(_usernameColorTextBox.Text.Trim()) ?? DefaultSettings.UsernameColor;
-        settings.SystemMessageColor = ValidateColorValue(_systemMessageColorTextBox.Text.Trim()) ?? DefaultSettings.SystemMessageColor;
-        settings.TimestampColor = ValidateColorValue(_timestampColorTextBox.Text.Trim()) ?? DefaultSettings.TimestampColor;
+        settings.BackgroundColor = _backgroundColorButton.BackColor;
+        settings.TextColor = _textColorButton.BackColor;
+        settings.UsernameColor = _usernameColorButton.BackColor;
+        settings.SystemMessageColor = _systemMessageColorButton.BackColor;
+        settings.TimestampColor = _timestampColorButton.BackColor;
 
         settings.FontFamily = ValidateFontFamily(_fontFamilyTextBox.Text.Trim()) ?? DefaultSettings.FontFamily;
         settings.FontSize = (int)_fontSizeNumeric.Value;
@@ -71,31 +75,36 @@ public partial class ObsChatSettingsControl : UserControl
 
     private void OnBackgroundColorResetButtonClicked(object sender, EventArgs e)
     {
-        _backgroundColorTextBox.Text = DefaultSettings.BackgroundColor;
+        _backgroundColorButton.BackColor = DefaultSettings.BackgroundColor;
+        UpdateColorButtons();
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnTextColorResetButtonClicked(object sender, EventArgs e)
     {
-        _textColorTextBox.Text = DefaultSettings.TextColor;
+        _textColorButton.BackColor = DefaultSettings.TextColor;
+        UpdateColorButtons();
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnUsernameColorResetButtonClicked(object sender, EventArgs e)
     {
-        _usernameColorTextBox.Text = DefaultSettings.UsernameColor;
+        _usernameColorButton.BackColor = DefaultSettings.UsernameColor;
+        UpdateColorButtons();
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnSystemMessageColorResetButtonClicked(object sender, EventArgs e)
     {
-        _systemMessageColorTextBox.Text = DefaultSettings.SystemMessageColor;
+        _systemMessageColorButton.BackColor = DefaultSettings.SystemMessageColor;
+        UpdateColorButtons();
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnTimestampColorResetButtonClicked(object sender, EventArgs e)
     {
-        _timestampColorTextBox.Text = DefaultSettings.TimestampColor;
+        _timestampColorButton.BackColor = DefaultSettings.TimestampColor;
+        UpdateColorButtons();
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -153,47 +162,54 @@ public partial class ObsChatSettingsControl : UserControl
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void SetPlaceholders()
+    private void OnBackgroundColorButtonClicked(object sender, EventArgs e)
     {
-        _backgroundColorTextBox.PlaceholderText = DefaultSettings.BackgroundColor;
-        _textColorTextBox.PlaceholderText = DefaultSettings.TextColor;
-        _usernameColorTextBox.PlaceholderText = DefaultSettings.UsernameColor;
-        _systemMessageColorTextBox.PlaceholderText = DefaultSettings.SystemMessageColor;
-        _timestampColorTextBox.PlaceholderText = DefaultSettings.TimestampColor;
-
-        _fontFamilyTextBox.PlaceholderText = DefaultSettings.FontFamily;
+        if (ShowColorPickerDialog(_backgroundColorButton))
+        {
+            UpdateColorButtons();
+            SettingChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
-    private string? ValidateColorValue(string colorValue)
+    private void OnTextColorButtonClicked(object sender, EventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(colorValue))
+        if (ShowColorPickerDialog(_textColorButton))
         {
-            return null;
+            UpdateColorButtons();
+            SettingChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
 
-        if (colorValue.StartsWith('#') && colorValue.Length is 4 or 7)
+    private void OnUsernameColorButtonClicked(object sender, EventArgs e)
+    {
+        if (ShowColorPickerDialog(_usernameColorButton))
         {
-            return colorValue;
+            UpdateColorButtons();
+            SettingChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
 
-        if (colorValue.StartsWith("rgb(") && colorValue.EndsWith(')'))
+    private void OnSystemMessageColorButtonClicked(object sender, EventArgs e)
+    {
+        if (ShowColorPickerDialog(_systemMessageColorButton))
         {
-            return colorValue;
+            UpdateColorButtons();
+            SettingChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
 
-        if (colorValue.StartsWith("rgba(") && colorValue.EndsWith(')'))
+    private void OnTimestampColorButtonClicked(object sender, EventArgs e)
+    {
+        if (ShowColorPickerDialog(_timestampColorButton))
         {
-            return colorValue;
+            UpdateColorButtons();
+            SettingChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
 
-        var namedColors = new[] { "white", "black", "red", "green", "blue", "yellow", "orange", "purple", "pink", "gray", "grey" };
-
-        if (namedColors.Contains(colorValue.ToLower()))
-        {
-            return colorValue;
-        }
-
-        return null;
+    private void SetPlaceholders()
+    {
+        _fontFamilyTextBox.PlaceholderText = DefaultSettings.FontFamily;
     }
 
     private string? ValidateFontFamily(string fontFamily)
@@ -209,5 +225,40 @@ public partial class ObsChatSettingsControl : UserControl
         }
 
         return fontFamily;
+    }
+
+    private bool ShowColorPickerDialog(Button colorButton)
+    {
+        using var colorPickerDialog = new ColorPickerDialog();
+        colorPickerDialog.Color = colorButton.BackColor;
+        colorPickerDialog.ShowAlphaChannel = true;
+
+        if (colorPickerDialog.ShowDialog(this) == DialogResult.OK)
+        {
+            colorButton.BackColor = colorPickerDialog.Color;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void UpdateColorButtons()
+    {
+        _backgroundColorButton.Text = GetColorDisplayText(_backgroundColorButton.BackColor);
+        _textColorButton.Text = GetColorDisplayText(_textColorButton.BackColor);
+        _usernameColorButton.Text = GetColorDisplayText(_usernameColorButton.BackColor);
+        _systemMessageColorButton.Text = GetColorDisplayText(_systemMessageColorButton.BackColor);
+        _timestampColorButton.Text = GetColorDisplayText(_timestampColorButton.BackColor);
+    }
+
+    private string GetColorDisplayText(Color color)
+    {
+        if (color.A == 255)
+        {
+            return ColorTranslator.ToHtml(color);
+        }
+
+        var alpha = Math.Round(color.A / 255.0, 2);
+        return $"rgba({color.R}, {color.G}, {color.B}, {alpha})";
     }
 }

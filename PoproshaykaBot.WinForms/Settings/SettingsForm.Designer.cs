@@ -43,6 +43,8 @@ partial class SettingsForm
         _oauthSettingsControl = new OAuthSettingsControl();
         _obsChatTabPage = new TabPage();
         _obsChatSettingsControl = new ObsChatSettingsControl();
+        _miscTabPage = new TabPage();
+        _miscSettingsControl = new MiscSettingsControl();
         _buttonPanel = new FlowLayoutPanel();
         _resetButton = new Button();
         _okButton = new Button();
@@ -56,6 +58,7 @@ partial class SettingsForm
         _httpServerTabPage.SuspendLayout();
         _oauthTabPage.SuspendLayout();
         _obsChatTabPage.SuspendLayout();
+        _miscTabPage.SuspendLayout();
         _buttonPanel.SuspendLayout();
         SuspendLayout();
         // 
@@ -83,6 +86,7 @@ partial class SettingsForm
         _tabControl.Controls.Add(_httpServerTabPage);
         _tabControl.Controls.Add(_oauthTabPage);
         _tabControl.Controls.Add(_obsChatTabPage);
+        _tabControl.Controls.Add(_miscTabPage);
         _tabControl.Dock = DockStyle.Fill;
         _tabControl.Location = new Point(15, 15);
         _tabControl.Name = "_tabControl";
@@ -209,7 +213,27 @@ partial class SettingsForm
         _obsChatSettingsControl.Size = new Size(568, 528);
         _obsChatSettingsControl.TabIndex = 0;
         _obsChatSettingsControl.SettingChanged += OnSettingChanged;
-        // 
+        //
+        // _miscTabPage
+        //
+        _miscTabPage.Controls.Add(_miscSettingsControl);
+        _miscTabPage.Location = new Point(4, 24);
+        _miscTabPage.Name = "_miscTabPage";
+        _miscTabPage.Padding = new Padding(10);
+        _miscTabPage.Size = new Size(588, 548);
+        _miscTabPage.TabIndex = 6;
+        _miscTabPage.Text = "Прочее";
+        _miscTabPage.UseVisualStyleBackColor = true;
+        //
+        // _miscSettingsControl
+        //
+        _miscSettingsControl.Dock = DockStyle.Fill;
+        _miscSettingsControl.Location = new Point(10, 10);
+        _miscSettingsControl.Name = "_miscSettingsControl";
+        _miscSettingsControl.Size = new Size(568, 528);
+        _miscSettingsControl.TabIndex = 0;
+        _miscSettingsControl.SettingChanged += OnSettingChanged;
+        //
         // _buttonPanel
         // 
         _buttonPanel.AutoSize = true;
@@ -295,6 +319,7 @@ partial class SettingsForm
         _httpServerTabPage.ResumeLayout(false);
         _oauthTabPage.ResumeLayout(false);
         _obsChatTabPage.ResumeLayout(false);
+        _miscTabPage.ResumeLayout(false);
         _buttonPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
@@ -309,12 +334,14 @@ partial class SettingsForm
     private TabPage _httpServerTabPage;
     private TabPage _oauthTabPage;
     private TabPage _obsChatTabPage;
+    private TabPage _miscTabPage;
     private BasicSettingsControl _basicSettingsControl;
     private RateLimitingSettingsControl _rateLimitingSettingsControl;
     private MessagesSettingsControl _messagesSettingsControl;
     private HttpServerSettingsControl _httpServerSettingsControl;
     private OAuthSettingsControl _oauthSettingsControl;
     private ObsChatSettingsControl _obsChatSettingsControl;
+    private MiscSettingsControl _miscSettingsControl;
     private FlowLayoutPanel _buttonPanel;
     private Button _resetButton;
     private Button _okButton;

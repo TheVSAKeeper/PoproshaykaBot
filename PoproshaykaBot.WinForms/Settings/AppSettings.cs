@@ -66,11 +66,11 @@ public class UiSettings
 
 public class ObsChatSettings
 {
-    public string BackgroundColor { get; set; } = "rgba(0, 0, 0, 0.7)";
-    public string TextColor { get; set; } = "#ffffff";
-    public string UsernameColor { get; set; } = "#9146ff";
-    public string SystemMessageColor { get; set; } = "#ffcc00";
-    public string TimestampColor { get; set; } = "#999999";
+    public AppColor BackgroundColor { get; set; } = AppColor.FromArgb(179, 0, 0, 0);
+    public AppColor TextColor { get; set; } = AppColor.FromArgb(255, 255, 255);
+    public AppColor UsernameColor { get; set; } = AppColor.FromArgb(145, 70, 255);
+    public AppColor SystemMessageColor { get; set; } = AppColor.FromArgb(255, 204, 0);
+    public AppColor TimestampColor { get; set; } = AppColor.FromArgb(153, 153, 153);
 
     public string FontFamily { get; set; } = "Arial, sans-serif";
     public int FontSize { get; set; } = 14;
@@ -88,4 +88,37 @@ public class ObsChatSettings
 
     public int EmoteSizePixels { get; set; } = 28;
     public int BadgeSizePixels { get; set; } = 18;
+}
+
+// TODO: Костыль из-за того, что сериализатор не умеет работать с системным Color
+public class AppColor(byte a, byte r, byte g, byte b)
+{
+    private AppColor(byte r, byte g, byte b) : this(255, r, g, b)
+    {
+    }
+
+    public byte A { get; set; } = a;
+    public byte R { get; set; } = r;
+    public byte G { get; set; } = g;
+    public byte B { get; set; } = b;
+
+    public static implicit operator Color(AppColor appColor)
+    {
+        return Color.FromArgb(appColor.A, appColor.R, appColor.G, appColor.B);
+    }
+
+    public static implicit operator AppColor(Color color)
+    {
+        return new(color.A, color.R, color.G, color.B);
+    }
+
+    public static AppColor FromArgb(byte a, byte r, byte g, byte b)
+    {
+        return new(a, r, g, b);
+    }
+
+    public static AppColor FromArgb(byte r, byte g, byte b)
+    {
+        return new(r, g, b);
+    }
 }
