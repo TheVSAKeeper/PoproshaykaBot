@@ -43,6 +43,8 @@ partial class SettingsForm
         _oauthSettingsControl = new OAuthSettingsControl();
         _obsChatTabPage = new TabPage();
         _obsChatSettingsControl = new ObsChatSettingsControl();
+        _autoBroadcastTabPage = new TabPage();
+        _autoBroadcastSettingsControl = new AutoBroadcastSettingsControl();
         _miscTabPage = new TabPage();
         _miscSettingsControl = new MiscSettingsControl();
         _buttonPanel = new FlowLayoutPanel();
@@ -58,6 +60,7 @@ partial class SettingsForm
         _httpServerTabPage.SuspendLayout();
         _oauthTabPage.SuspendLayout();
         _obsChatTabPage.SuspendLayout();
+        _autoBroadcastTabPage.SuspendLayout();
         _miscTabPage.SuspendLayout();
         _buttonPanel.SuspendLayout();
         SuspendLayout();
@@ -86,6 +89,7 @@ partial class SettingsForm
         _tabControl.Controls.Add(_httpServerTabPage);
         _tabControl.Controls.Add(_oauthTabPage);
         _tabControl.Controls.Add(_obsChatTabPage);
+        _tabControl.Controls.Add(_autoBroadcastTabPage);
         _tabControl.Controls.Add(_miscTabPage);
         _tabControl.Dock = DockStyle.Fill;
         _tabControl.Location = new Point(15, 15);
@@ -214,6 +218,26 @@ partial class SettingsForm
         _obsChatSettingsControl.TabIndex = 0;
         _obsChatSettingsControl.SettingChanged += OnSettingChanged;
         //
+        // _autoBroadcastTabPage
+        //
+        _autoBroadcastTabPage.Controls.Add(_autoBroadcastSettingsControl);
+        _autoBroadcastTabPage.Location = new Point(4, 24);
+        _autoBroadcastTabPage.Name = "_autoBroadcastTabPage";
+        _autoBroadcastTabPage.Padding = new Padding(10);
+        _autoBroadcastTabPage.Size = new Size(588, 548);
+        _autoBroadcastTabPage.TabIndex = 6;
+        _autoBroadcastTabPage.Text = "Автоматический режим";
+        _autoBroadcastTabPage.UseVisualStyleBackColor = true;
+        //
+        // _autoBroadcastSettingsControl
+        //
+        _autoBroadcastSettingsControl.Dock = DockStyle.Fill;
+        _autoBroadcastSettingsControl.Location = new Point(10, 10);
+        _autoBroadcastSettingsControl.Name = "_autoBroadcastSettingsControl";
+        _autoBroadcastSettingsControl.Size = new Size(568, 528);
+        _autoBroadcastSettingsControl.TabIndex = 0;
+        _autoBroadcastSettingsControl.SettingChanged += OnSettingChanged;
+        //
         // _miscTabPage
         //
         _miscTabPage.Controls.Add(_miscSettingsControl);
@@ -221,7 +245,7 @@ partial class SettingsForm
         _miscTabPage.Name = "_miscTabPage";
         _miscTabPage.Padding = new Padding(10);
         _miscTabPage.Size = new Size(588, 548);
-        _miscTabPage.TabIndex = 6;
+        _miscTabPage.TabIndex = 7;
         _miscTabPage.Text = "Прочее";
         _miscTabPage.UseVisualStyleBackColor = true;
         //
@@ -319,6 +343,7 @@ partial class SettingsForm
         _httpServerTabPage.ResumeLayout(false);
         _oauthTabPage.ResumeLayout(false);
         _obsChatTabPage.ResumeLayout(false);
+        _autoBroadcastTabPage.ResumeLayout(false);
         _miscTabPage.ResumeLayout(false);
         _buttonPanel.ResumeLayout(false);
         ResumeLayout(false);
@@ -334,6 +359,7 @@ partial class SettingsForm
     private TabPage _httpServerTabPage;
     private TabPage _oauthTabPage;
     private TabPage _obsChatTabPage;
+    private TabPage _autoBroadcastTabPage;
     private TabPage _miscTabPage;
     private BasicSettingsControl _basicSettingsControl;
     private RateLimitingSettingsControl _rateLimitingSettingsControl;
@@ -341,6 +367,7 @@ partial class SettingsForm
     private HttpServerSettingsControl _httpServerSettingsControl;
     private OAuthSettingsControl _oauthSettingsControl;
     private ObsChatSettingsControl _obsChatSettingsControl;
+    private AutoBroadcastSettingsControl _autoBroadcastSettingsControl;
     private MiscSettingsControl _miscSettingsControl;
     private FlowLayoutPanel _buttonPanel;
     private Button _resetButton;

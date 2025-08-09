@@ -98,6 +98,10 @@ public partial class SettingsForm : Form
         destination.Twitch.ObsChat.EnableAnimations = source.Twitch.ObsChat.EnableAnimations;
         destination.Twitch.ObsChat.MaxMessages = source.Twitch.ObsChat.MaxMessages;
         destination.Twitch.ObsChat.ShowTimestamp = source.Twitch.ObsChat.ShowTimestamp;
+        destination.Twitch.AutoBroadcast.AutoBroadcastEnabled = source.Twitch.AutoBroadcast.AutoBroadcastEnabled;
+        destination.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled = source.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled;
+        destination.Twitch.AutoBroadcast.StreamStartMessage = source.Twitch.AutoBroadcast.StreamStartMessage;
+        destination.Twitch.AutoBroadcast.StreamStopMessage = source.Twitch.AutoBroadcast.StreamStopMessage;
         destination.Ui.ShowLogsPanel = source.Ui.ShowLogsPanel;
         destination.Ui.ShowChatPanel = source.Ui.ShowChatPanel;
     }
@@ -110,6 +114,7 @@ public partial class SettingsForm : Form
         _httpServerSettingsControl.LoadSettings(_settings.Twitch);
         _oauthSettingsControl.LoadSettings(_settings);
         _obsChatSettingsControl.LoadSettings(_settings.Twitch.ObsChat);
+        _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.LoadSettings(_settings);
 
         _hasChanges = false;
@@ -124,6 +129,7 @@ public partial class SettingsForm : Form
         _httpServerSettingsControl.SaveSettings(_settings.Twitch);
         _oauthSettingsControl.SaveSettings(_settings);
         _obsChatSettingsControl.SaveSettings(_settings.Twitch.ObsChat);
+        _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.SaveSettings(_settings);
     }
 

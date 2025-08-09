@@ -168,6 +168,7 @@ public partial class MainForm : Form
             _connectButton.Text = "Отключить бота";
             _connectButton.BackColor = Color.LightGreen;
             UpdateBroadcastButtonState();
+            UpdateStreamStatus();
             AddLogMessage("Бот успешно подключен!");
         }
     }
@@ -204,6 +205,7 @@ public partial class MainForm : Form
         }
 
         UpdateBroadcastButtonState();
+        UpdateStreamStatus();
     }
 
     private void OnBotLogMessage(string message)
@@ -219,7 +221,7 @@ public partial class MainForm : Form
     private void OnToggleLogsButtonClicked(object sender, EventArgs e)
     {
         var settings = SettingsManager.Current;
-        settings.Ui.ShowLogsPanel = !settings.Ui.ShowLogsPanel;
+        settings.Ui.ShowLogsPanel = settings.Ui.ShowLogsPanel == false;
         SettingsManager.SaveSettings(settings);
         UpdatePanelVisibility();
     }
@@ -227,7 +229,7 @@ public partial class MainForm : Form
     private void OnToggleChatButtonClicked(object sender, EventArgs e)
     {
         var settings = SettingsManager.Current;
-        settings.Ui.ShowChatPanel = !settings.Ui.ShowChatPanel;
+        settings.Ui.ShowChatPanel = settings.Ui.ShowChatPanel == false;
         SettingsManager.SaveSettings(settings);
         UpdatePanelVisibility();
     }
@@ -286,6 +288,48 @@ public partial class MainForm : Form
         AddLogMessage($"HTTP: {message}");
     }
 
+    private void OnStreamStatusChanged()
+    {
+        UpdateStreamStatus();
+    }
+
+    private void UpdateStreamStatus()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(UpdateStreamStatus);
+            return;
+        }
+
+        if (_bot == null)
+        {
+            _streamStatusLabel.Text = "Статус стрима: Неизвестен";
+            _streamStatusLabel.ForeColor = SystemColors.ControlText;
+            return;
+        }
+
+        var status = _bot.StreamStatus;
+
+        switch (status)
+        {
+            case StreamStatus.Online:
+                _streamStatusLabel.Text = "🔴 Стрим онлайн";
+                _streamStatusLabel.ForeColor = Color.Green;
+                break;
+
+            case StreamStatus.Offline:
+                _streamStatusLabel.Text = "⚫ Стрим офлайн";
+                _streamStatusLabel.ForeColor = Color.Gray;
+                break;
+
+            case StreamStatus.Unknown:
+            default:
+                _streamStatusLabel.Text = "Статус стрима: Неизвестен";
+                _streamStatusLabel.ForeColor = SystemColors.ControlText;
+                break;
+        }
+    }
+
     private Bot CreateBotWithSettings(string accessToken)
     {
         var settings = SettingsManager.Current.Twitch;
@@ -296,6 +340,7 @@ public partial class MainForm : Form
         bot.LogMessage += OnBotLogMessage;
         bot.ConnectionProgress += OnBotConnectionProgress;
         bot.ChatMessageReceived += OnChatMessageReceived;
+        bot.StreamStatusChanged += OnStreamStatusChanged;
         return bot;
     }
 
@@ -476,6 +521,7 @@ public partial class MainForm : Form
             _bot.LogMessage -= OnBotLogMessage;
             _bot.ConnectionProgress -= OnBotConnectionProgress;
             _bot.ChatMessageReceived -= OnChatMessageReceived;
+            _bot.StreamStatusChanged -= OnStreamStatusChanged;
 
             try
             {
@@ -494,6 +540,7 @@ public partial class MainForm : Form
         _connectButton.Text = "Подключить бота";
         _connectButton.BackColor = SystemColors.Control;
         UpdateBroadcastButtonState();
+        UpdateStreamStatus();
 
         AddLogMessage("Бот отключен.");
     }

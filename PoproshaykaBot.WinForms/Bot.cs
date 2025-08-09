@@ -10,6 +10,7 @@ using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
 using TwitchLib.Communication.Clients;
 using TwitchLib.Communication.Models;
+using TwitchLib.EventSub.Websockets.Core.EventArgs.Stream;
 using Timer = System.Timers.Timer;
 
 namespace PoproshaykaBot.WinForms;
@@ -24,6 +25,7 @@ public class Bot : IAsyncDisposable
 
     private readonly Dictionary<string, GlobalEmote> _globalEmotes = new();
     private readonly Dictionary<string, BadgeEmoteSet> _globalBadges = new();
+    private readonly StreamStatusManager? _streamStatusManager;
     private bool _disposed;
 
     private string? _channel;
@@ -58,6 +60,15 @@ public class Bot : IAsyncDisposable
         _twitchApi = new();
         _twitchApi.Settings.ClientId = _settings.ClientId;
         _twitchApi.Settings.AccessToken = accessToken;
+
+        if (_settings.AutoBroadcast.AutoBroadcastEnabled)
+        {
+            _streamStatusManager = new();
+            _streamStatusManager.StreamStarted += OnStreamStarted;
+            _streamStatusManager.StreamStopped += OnStreamStopped;
+            _streamStatusManager.StatusChanged += OnStreamStatusChanged;
+            _streamStatusManager.ErrorOccurred += OnStreamErrorOccurred;
+        }
     }
 
     public event Action<ChatMessageData>? ChatMessageReceived;
@@ -68,7 +79,11 @@ public class Bot : IAsyncDisposable
 
     public event Action<string>? LogMessage;
 
+    public event Action? StreamStatusChanged;
+
     public bool IsBroadcastActive => _timer is { Enabled: true };
+
+    public StreamStatus StreamStatus => _streamStatusManager?.CurrentStatus ?? StreamStatus.Unknown;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -125,6 +140,14 @@ public class Bot : IAsyncDisposable
             ConnectionProgress?.Invoke(emotesMessage);
             LogMessage?.Invoke(emotesMessage);
             await LoadEmotesAndBadgesAsync();
+
+            if (_streamStatusManager != null)
+            {
+                var streamMessage = "Инициализация мониторинга стрима...";
+                ConnectionProgress?.Invoke(streamMessage);
+                LogMessage?.Invoke(streamMessage);
+                await InitializeStreamMonitoringAsync();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -176,6 +199,11 @@ public class Bot : IAsyncDisposable
             _client.Disconnect();
         }
 
+        if (_streamStatusManager != null)
+        {
+            await _streamStatusManager.StopMonitoringAsync();
+        }
+
         await _statisticsCollector.StopAsync();
     }
 
@@ -218,8 +246,60 @@ public class Bot : IAsyncDisposable
         }
 
         await DisconnectAsync();
+
+        if (_streamStatusManager != null)
+        {
+            await _streamStatusManager.DisposeAsync();
+        }
+
         await _statisticsCollector.DisposeAsync();
         _disposed = true;
+    }
+
+    private void OnStreamStarted(StreamOnlineArgs args)
+    {
+        if (_settings.AutoBroadcast.AutoBroadcastEnabled && IsBroadcastActive == false)
+        {
+            StartBroadcast();
+            LogMessage?.Invoke("🔴 Стрим запущен. Автоматически запускаю рассылку.");
+
+            if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
+                && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage) == false
+                && string.IsNullOrEmpty(_channel) == false)
+            {
+                _client.SendMessage(_channel, _settings.AutoBroadcast.StreamStartMessage);
+            }
+        }
+
+        StreamStatusChanged?.Invoke();
+    }
+
+    private void OnStreamStopped(StreamOfflineArgs args)
+    {
+        if (_settings.AutoBroadcast.AutoBroadcastEnabled && IsBroadcastActive)
+        {
+            StopBroadcast();
+            LogMessage?.Invoke("⚫ Стрим завершен. Автоматически останавливаю рассылку.");
+
+            if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
+                && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage) == false
+                && string.IsNullOrEmpty(_channel) == false)
+            {
+                _client.SendMessage(_channel, _settings.AutoBroadcast.StreamStopMessage);
+            }
+        }
+
+        StreamStatusChanged?.Invoke();
+    }
+
+    private void OnStreamStatusChanged(string status)
+    {
+        LogMessage?.Invoke($"EventSub: {status}");
+    }
+
+    private void OnStreamErrorOccurred(string error)
+    {
+        LogMessage?.Invoke($"Ошибка EventSub: {error}");
     }
 
     private void Client_OnLog(object? sender, OnLogArgs e)
@@ -247,7 +327,11 @@ public class Bot : IAsyncDisposable
 
         _channel = e.Channel;
         X1 = 0;
-        StartBroadcast();
+
+        if (_settings.AutoBroadcast.AutoBroadcastEnabled == false)
+        {
+            StartBroadcast();
+        }
 
         var connectionMessage = $"Подключен к каналу {e.Channel}";
         Console.WriteLine(connectionMessage);
@@ -494,6 +578,46 @@ public class Bot : IAsyncDisposable
         var moscowTime = TimeZoneInfo.ConvertTimeFromUtc(dateTime, moscowTimeZone);
 
         return moscowTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.GetCultureInfo("ru-RU")) + " по МСК";
+    }
+
+    private async Task InitializeStreamMonitoringAsync()
+    {
+        if (_streamStatusManager == null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (string.IsNullOrEmpty(_settings.ClientId))
+            {
+                LogMessage?.Invoke("Client ID не установлен. Мониторинг стрима недоступен.");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_twitchApi.Settings.AccessToken))
+            {
+                LogMessage?.Invoke("Access Token не установлен. Мониторинг стрима недоступен.");
+                return;
+            }
+
+            await _streamStatusManager.InitializeAsync("", _settings.ClientId, _twitchApi.Settings.AccessToken);
+
+            var broadcasterUserId = await _streamStatusManager.GetBroadcasterUserIdAsync(_settings.Channel);
+
+            if (string.IsNullOrEmpty(broadcasterUserId))
+            {
+                LogMessage?.Invoke($"Не удалось получить ID пользователя для канала {_settings.Channel}");
+                return;
+            }
+
+            await _streamStatusManager.InitializeAsync(broadcasterUserId, _settings.ClientId, _twitchApi.Settings.AccessToken);
+            await _streamStatusManager.StartMonitoringAsync();
+        }
+        catch (Exception ex)
+        {
+            LogMessage?.Invoke($"Ошибка инициализации мониторинга стрима: {ex.Message}");
+        }
     }
 
     private async Task LoadEmotesAndBadgesAsync()

@@ -37,6 +37,8 @@ public class TwitchSettings
     public MessageSettings Messages { get; set; } = new();
 
     public ObsChatSettings ObsChat { get; set; } = new();
+
+    public AutoBroadcastSettings AutoBroadcast { get; set; } = new();
 }
 
 public class MessageSettings
@@ -121,4 +123,15 @@ public class AppColor(byte a, byte r, byte g, byte b)
     {
         return new(r, g, b);
     }
+}
+
+public class AutoBroadcastSettings
+{
+    public bool AutoBroadcastEnabled { get; set; } = false;
+
+    public bool StreamStatusNotificationsEnabled { get; set; } = true;
+
+    public string StreamStartMessage { get; set; } = "🔴 Стрим запущен! Начинаю рассылку.";
+
+    public string StreamStopMessage { get; set; } = "⚫ Стрим завершен. Рассылка остановлена.";
 }

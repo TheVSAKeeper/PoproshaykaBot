@@ -40,6 +40,7 @@ partial class MainForm
         _openChatWindowButton = new Button();
         _connectionProgressBar = new ProgressBar();
         _connectionStatusLabel = new Label();
+        _streamStatusLabel = new Label();
         _contentTableLayoutPanel = new TableLayoutPanel();
         _logLabel = new Label();
         _chatDisplay = new ChatDisplay();
@@ -56,13 +57,15 @@ partial class MainForm
         _mainTableLayoutPanel.Controls.Add(_buttonTableLayoutPanel, 0, 0);
         _mainTableLayoutPanel.Controls.Add(_connectionProgressBar, 0, 1);
         _mainTableLayoutPanel.Controls.Add(_connectionStatusLabel, 0, 2);
-        _mainTableLayoutPanel.Controls.Add(_contentTableLayoutPanel, 0, 3);
+        _mainTableLayoutPanel.Controls.Add(_streamStatusLabel, 0, 3);
+        _mainTableLayoutPanel.Controls.Add(_contentTableLayoutPanel, 0, 4);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
         _mainTableLayoutPanel.Padding = new Padding(12);
-        _mainTableLayoutPanel.RowCount = 4;
+        _mainTableLayoutPanel.RowCount = 5;
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -181,7 +184,18 @@ partial class MainForm
         _connectionStatusLabel.TabIndex = 2;
         _connectionStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         _connectionStatusLabel.Visible = false;
-        // 
+        //
+        // _streamStatusLabel
+        //
+        _streamStatusLabel.AutoSize = true;
+        _streamStatusLabel.Dock = DockStyle.Fill;
+        _streamStatusLabel.Location = new Point(15, 112);
+        _streamStatusLabel.Name = "_streamStatusLabel";
+        _streamStatusLabel.Size = new Size(755, 25);
+        _streamStatusLabel.TabIndex = 3;
+        _streamStatusLabel.Text = "Статус стрима: Неизвестен";
+        _streamStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
+        //
         // _contentTableLayoutPanel
         // 
         _contentTableLayoutPanel.ColumnCount = 2;
@@ -259,6 +273,7 @@ partial class MainForm
     private Button _broadcastButton;
     private ProgressBar _connectionProgressBar;
     private Label _connectionStatusLabel;
+    private Label _streamStatusLabel;
     private Label _logLabel;
     private TextBox _logTextBox;
     private ChatDisplay _chatDisplay;
