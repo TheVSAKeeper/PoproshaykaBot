@@ -8,8 +8,6 @@ using TwitchLib.Api.Helix.Models.Chat.Emotes;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
-using TwitchLib.Communication.Clients;
-using TwitchLib.Communication.Models;
 using TwitchLib.EventSub.Websockets.Core.EventArgs.Stream;
 using Timer = System.Timers.Timer;
 
@@ -34,36 +32,30 @@ public class Bot : IAsyncDisposable
     private int X1;
     private bool _isEmotesAndBadgesLoaded;
 
-    public Bot(string accessToken, TwitchSettings settings, StatisticsCollector statisticsCollector)
+    public Bot(
+        string accessToken,
+        TwitchSettings settings,
+        StatisticsCollector statisticsCollector,
+        TwitchClient client,
+        TwitchAPI twitchApi,
+        StreamStatusManager? streamStatusManager = null)
     {
         _settings = settings;
         _statisticsCollector = statisticsCollector;
         _seenUsers = [];
 
-        ConnectionCredentials credentials = new(_settings.BotUsername, accessToken);
-
-        ClientOptions clientOptions = new()
-        {
-            MessagesAllowedInPeriod = _settings.MessagesAllowedInPeriod,
-            ThrottlingPeriod = TimeSpan.FromSeconds(_settings.ThrottlingPeriodSeconds),
-        };
-
-        WebSocketClient customClient = new(clientOptions);
-        _client = new(customClient);
-        _client.Initialize(credentials, _settings.Channel);
+        _client = client;
 
         _client.OnLog += Client_OnLog;
         _client.OnMessageReceived += Client_OnMessageReceived;
         _client.OnConnected += Client_OnConnected;
         _client.OnJoinedChannel += Сlient_OnJoinedChannel;
 
-        _twitchApi = new();
-        _twitchApi.Settings.ClientId = _settings.ClientId;
-        _twitchApi.Settings.AccessToken = accessToken;
+        _twitchApi = twitchApi;
 
         if (_settings.AutoBroadcast.AutoBroadcastEnabled)
         {
-            _streamStatusManager = new();
+            _streamStatusManager = streamStatusManager ?? throw new ArgumentNullException(nameof(streamStatusManager));
             _streamStatusManager.StreamStarted += OnStreamStarted;
             _streamStatusManager.StreamStopped += OnStreamStopped;
             _streamStatusManager.StatusChanged += OnStreamStatusChanged;

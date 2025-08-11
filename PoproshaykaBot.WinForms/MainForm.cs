@@ -6,24 +6,46 @@ namespace PoproshaykaBot.WinForms;
 public partial class MainForm : Form
 {
     private readonly ChatHistoryManager _chatHistoryManager;
+    private readonly StatisticsCollector _statisticsCollector;
+    private readonly SettingsManager _settingsManager;
+    private readonly BotConnectionManager _connectionManager;
+    private readonly UnifiedHttpServer? _httpServer;
+    private readonly TwitchOAuthService _oauthService;
     private Bot? _bot;
     private bool _isConnected;
-    private BotConnectionManager? _connectionManager;
     private ChatWindow? _chatWindow;
-    private UnifiedHttpServer? _httpServer;
 
-    public MainForm()
+    public MainForm(
+        StatisticsCollector statisticsCollector,
+        ChatHistoryManager chatHistoryManager,
+        UnifiedHttpServer? httpServer,
+        BotConnectionManager connectionManager,
+        SettingsManager settingsManager,
+        TwitchOAuthService oauthService)
     {
-        _chatHistoryManager = new();
+        _statisticsCollector = statisticsCollector;
+        _chatHistoryManager = chatHistoryManager;
+        _httpServer = httpServer;
+        _connectionManager = connectionManager;
+        _settingsManager = settingsManager;
+        _oauthService = oauthService;
 
         InitializeComponent();
-        InitializeConnectionManager();
+
+        _connectionManager.ProgressChanged += OnConnectionProgress;
+        _connectionManager.ConnectionCompleted += OnConnectionCompleted;
+
         LoadSettings();
         UpdateBroadcastButtonState();
         InitializePanelVisibility();
-        InitializeHttpServer();
 
         _chatHistoryManager.RegisterChatDisplay(_chatDisplay);
+
+        if (_httpServer != null)
+        {
+            _httpServer.LogMessage += OnHttpServerLogMessage;
+            _settingsManager.ChatSettingsChanged += _httpServer.NotifyChatSettingsChanged;
+        }
 
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
@@ -32,8 +54,8 @@ public partial class MainForm : Form
 
     protected override async void OnFormClosed(FormClosedEventArgs e)
     {
-        _connectionManager?.CancelConnection();
-        _connectionManager?.Dispose();
+        _connectionManager.CancelConnection();
+        _connectionManager.Dispose();
 
         if (_chatWindow is { IsDisposed: false })
         {
@@ -76,7 +98,7 @@ public partial class MainForm : Form
         {
             try
             {
-                SettingsManager.ChatSettingsChanged -= _httpServer.NotifyChatSettingsChanged;
+                _settingsManager.ChatSettingsChanged -= _httpServer.NotifyChatSettingsChanged;
 
                 await _httpServer.DisposeAsync();
             }
@@ -93,7 +115,7 @@ public partial class MainForm : Form
     {
         if (_isConnected == false)
         {
-            if (_connectionManager?.IsBusy == true)
+            if (_connectionManager.IsBusy)
             {
                 return;
             }
@@ -102,7 +124,7 @@ public partial class MainForm : Form
         }
         else
         {
-            if (_connectionManager?.IsBusy == true)
+            if (_connectionManager.IsBusy)
             {
                 _connectionManager.CancelConnection();
                 AddLogMessage("Отмена подключения...");
@@ -163,6 +185,11 @@ public partial class MainForm : Form
         else if (result is { IsSuccess: true, Bot: not null })
         {
             _bot = result.Bot;
+            _bot.Connected += OnBotConnected;
+            _bot.LogMessage += OnBotLogMessage;
+            _bot.ConnectionProgress += OnBotConnectionProgress;
+            _bot.ChatMessageReceived += OnChatMessageReceived;
+            _bot.StreamStatusChanged += OnStreamStatusChanged;
 
             _isConnected = true;
             _connectButton.Text = "Отключить бота";
@@ -182,18 +209,6 @@ public partial class MainForm : Form
         }
 
         _connectionStatusLabel.Text = message;
-    }
-
-    private void OnOAuthStatusChanged(string message)
-    {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<string>(OnOAuthStatusChanged), message);
-            return;
-        }
-
-        _connectionStatusLabel.Text = message;
-        AddLogMessage($"[OAuth] {message}");
     }
 
     private void OnBotConnected(string message)
@@ -220,17 +235,17 @@ public partial class MainForm : Form
 
     private void OnToggleLogsButtonClicked(object sender, EventArgs e)
     {
-        var settings = SettingsManager.Current;
+        var settings = _settingsManager.Current;
         settings.Ui.ShowLogsPanel = settings.Ui.ShowLogsPanel == false;
-        SettingsManager.SaveSettings(settings);
+        _settingsManager.SaveSettings(settings);
         UpdatePanelVisibility();
     }
 
     private void OnToggleChatButtonClicked(object sender, EventArgs e)
     {
-        var settings = SettingsManager.Current;
+        var settings = _settingsManager.Current;
         settings.Ui.ShowChatPanel = settings.Ui.ShowChatPanel == false;
-        SettingsManager.SaveSettings(settings);
+        _settingsManager.SaveSettings(settings);
         UpdatePanelVisibility();
     }
 
@@ -266,7 +281,7 @@ public partial class MainForm : Form
 
     private void OnSettingsButtonClicked(object sender, EventArgs e)
     {
-        using var settingsForm = new SettingsForm();
+        using var settingsForm = new SettingsForm(_settingsManager, _oauthService);
 
         if (settingsForm.ShowDialog(this) != DialogResult.OK)
         {
@@ -291,6 +306,18 @@ public partial class MainForm : Form
     private void OnStreamStatusChanged()
     {
         UpdateStreamStatus();
+    }
+
+    private void OnOAuthStatusChanged(string message)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action<string>(OnOAuthStatusChanged), message);
+            return;
+        }
+
+        _connectionStatusLabel.Text = message;
+        AddLogMessage($"[OAuth] {message}");
     }
 
     private void UpdateStreamStatus()
@@ -330,20 +357,6 @@ public partial class MainForm : Form
         }
     }
 
-    private Bot CreateBotWithSettings(string accessToken)
-    {
-        var settings = SettingsManager.Current.Twitch;
-        var statisticsCollector = new StatisticsCollector();
-
-        var bot = new Bot(accessToken, settings, statisticsCollector);
-        bot.Connected += OnBotConnected;
-        bot.LogMessage += OnBotLogMessage;
-        bot.ConnectionProgress += OnBotConnectionProgress;
-        bot.ChatMessageReceived += OnChatMessageReceived;
-        bot.StreamStatusChanged += OnStreamStatusChanged;
-        return bot;
-    }
-
     private void ClearChatHistory()
     {
         var result = MessageBox.Show("Вы уверены, что хотите очистить всю историю сообщений чата?\n\nЭто действие нельзя отменить.",
@@ -374,7 +387,7 @@ public partial class MainForm : Form
             return;
         }
 
-        var settings = SettingsManager.Current.Ui;
+        var settings = _settingsManager.Current.Ui;
         var showLogs = settings.ShowLogsPanel;
         var showChat = settings.ShowChatPanel;
 
@@ -414,16 +427,9 @@ public partial class MainForm : Form
         _contentTableLayoutPanel.PerformLayout();
     }
 
-    private void InitializeConnectionManager()
-    {
-        _connectionManager = new(CreateBotWithSettings, GetAccessTokenAsync);
-        _connectionManager.ProgressChanged += OnConnectionProgress;
-        _connectionManager.ConnectionCompleted += OnConnectionCompleted;
-    }
-
     private void StartBotConnection()
     {
-        if (_connectionManager?.IsBusy == true)
+        if (_connectionManager.IsBusy)
         {
             return;
         }
@@ -434,7 +440,7 @@ public partial class MainForm : Form
 
         try
         {
-            _connectionManager?.StartConnection();
+            _connectionManager.StartConnection();
         }
         catch (InvalidOperationException exception)
         {
@@ -549,113 +555,12 @@ public partial class MainForm : Form
     {
         try
         {
-            var settings = SettingsManager.Current;
+            var settings = _settingsManager.Current;
             AddLogMessage("Настройки Twitch загружены.");
         }
         catch (Exception exception)
         {
             AddLogMessage($"Ошибка загрузки настроек: {exception.Message}");
-        }
-    }
-
-    private async Task<string?> GetAccessTokenAsync()
-    {
-        var settings = SettingsManager.Current.Twitch;
-
-        if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret))
-        {
-            MessageBox.Show("OAuth настройки не настроены.\n\n" + "Пожалуйста, настройте ClientId и ClientSecret в настройках приложения.",
-                "Настройки OAuth",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(settings.AccessToken) == false)
-        {
-            if (await TwitchOAuthService.IsTokenValidAsync(settings.AccessToken))
-            {
-                AddLogMessage("Используется сохраненный токен доступа.");
-                return settings.AccessToken;
-            }
-
-            if (string.IsNullOrWhiteSpace(settings.RefreshToken) == false)
-            {
-                try
-                {
-                    AddLogMessage("Обновление токена доступа...");
-
-                    var validToken = await TwitchOAuthService.GetValidTokenAsync(settings.ClientId,
-                        settings.ClientSecret,
-                        settings.AccessToken,
-                        settings.RefreshToken);
-
-                    AddLogMessage("Токен доступа обновлен.");
-                    return validToken;
-                }
-                catch (Exception exception)
-                {
-                    AddLogMessage($"Не удалось обновить токен: {exception.Message}");
-                }
-            }
-        }
-
-        TwitchOAuthService.StatusChanged += OnOAuthStatusChanged;
-
-        try
-        {
-            var oauthTask = TwitchOAuthService.StartOAuthFlowAsync(settings.ClientId,
-                settings.ClientSecret,
-                _httpServer,
-                settings.Scopes,
-                settings.RedirectUri);
-
-            var accessToken = await oauthTask;
-            AddLogMessage("OAuth авторизация завершена успешно.");
-            return accessToken;
-        }
-        finally
-        {
-            TwitchOAuthService.StatusChanged -= OnOAuthStatusChanged;
-        }
-    }
-
-    private async void InitializeHttpServer()
-    {
-        var settings = SettingsManager.Current.Twitch;
-
-        if (settings.HttpServerEnabled == false)
-        {
-            AddLogMessage("HTTP сервер отключен в настройках.");
-            return;
-        }
-
-        try
-        {
-            if (PortValidator.ValidateAndResolvePortConflictAsync(SettingsManager.Current) == false)
-            {
-                AddLogMessage("Не удалось разрешить конфликт портов. HTTP сервер не запущен.");
-                return;
-            }
-
-            _httpServer = new(_chatHistoryManager, settings.HttpServerPort);
-            _httpServer.LogMessage += OnHttpServerLogMessage;
-
-            SettingsManager.ChatSettingsChanged += _httpServer.NotifyChatSettingsChanged;
-
-            await _httpServer.StartAsync();
-
-            AddLogMessage($"HTTP сервер запущен на порту {settings.HttpServerPort}");
-
-            if (settings.ObsOverlayEnabled)
-            {
-                AddLogMessage($"OBS overlay доступен по адресу: http://localhost:{settings.HttpServerPort}/chat");
-            }
-        }
-        catch (Exception ex)
-        {
-            AddLogMessage($"Ошибка запуска HTTP сервера: {ex.Message}");
         }
     }
 }

@@ -17,10 +17,10 @@ public class StreamStatusManager : IAsyncDisposable
     private bool _isInitialized;
     private int _reconnectAttempts;
 
-    public StreamStatusManager()
+    public StreamStatusManager(EventSubWebsocketClient eventSubClient, TwitchAPI twitchApi)
     {
-        _eventSubClient = new();
-        _twitchApi = new();
+        _eventSubClient = eventSubClient;
+        _twitchApi = twitchApi;
 
         _eventSubClient.WebsocketConnected += OnWebsocketConnected;
         _eventSubClient.WebsocketDisconnected += OnWebsocketDisconnected;
@@ -194,26 +194,24 @@ public class StreamStatusManager : IAsyncDisposable
             StatusChanged?.Invoke($"Попытка переподключения {_reconnectAttempts}/{MaxReconnectAttempts} через {delay / 1000:F0} сек...");
             await Task.Delay(TimeSpan.FromMilliseconds(delay));
 
+            try
+            {
+                var success = await _eventSubClient.ReconnectAsync();
 
-                try
+                if (success)
                 {
-                    var success = await _eventSubClient.ReconnectAsync();
-
-                    if (success)
-                    {
-                        _reconnectAttempts = 0;
-                        StatusChanged?.Invoke("Переподключение успешно");
-                    }
-                    else
-                    {
-                        ErrorOccurred?.Invoke($"Не удалось переподключиться (попытка {_reconnectAttempts}/{MaxReconnectAttempts})");
-                    }
+                    _reconnectAttempts = 0;
+                    StatusChanged?.Invoke("Переподключение успешно");
                 }
-                catch (Exception ex)
+                else
                 {
-                    ErrorOccurred?.Invoke($"Ошибка переподключения (попытка {_reconnectAttempts}/{MaxReconnectAttempts}): {ex.Message}");
+                    ErrorOccurred?.Invoke($"Не удалось переподключиться (попытка {_reconnectAttempts}/{MaxReconnectAttempts})");
                 }
-
+            }
+            catch (Exception ex)
+            {
+                ErrorOccurred?.Invoke($"Ошибка переподключения (попытка {_reconnectAttempts}/{MaxReconnectAttempts}): {ex.Message}");
+            }
         }
         else if (_reconnectAttempts >= MaxReconnectAttempts)
         {

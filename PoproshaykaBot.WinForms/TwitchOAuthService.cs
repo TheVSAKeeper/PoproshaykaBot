@@ -7,11 +7,11 @@ using System.Text.Json.Serialization;
 
 namespace PoproshaykaBot.WinForms;
 
-public static class TwitchOAuthService
+public class TwitchOAuthService(SettingsManager settingsManager)
 {
-    public static event Action<string>? StatusChanged;
+    public event Action<string>? StatusChanged;
 
-    public static async Task<string> StartOAuthFlowAsync(string clientId, string clientSecret, UnifiedHttpServer? httpServer = null, string[]? scopes = null, string? redirectUri = null)
+    public async Task<string> StartOAuthFlowAsync(string clientId, string clientSecret, UnifiedHttpServer? httpServer = null, string[]? scopes = null, string? redirectUri = null)
     {
         if (string.IsNullOrWhiteSpace(clientId))
         {
@@ -23,7 +23,7 @@ public static class TwitchOAuthService
             throw new ArgumentException("Секрет клиента не может быть пустым", nameof(clientSecret));
         }
 
-        var settings = SettingsManager.Current.Twitch;
+        var settings = settingsManager.Current.Twitch;
         scopes ??= settings.Scopes;
         redirectUri ??= settings.RedirectUri;
 
@@ -77,7 +77,7 @@ public static class TwitchOAuthService
         return accessToken;
     }
 
-    public static async Task<bool> IsTokenValidAsync(string token)
+    public async Task<bool> IsTokenValidAsync(string token)
     {
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -98,7 +98,7 @@ public static class TwitchOAuthService
         }
     }
 
-    public static async Task<TokenResponse> RefreshTokenAsync(string clientId, string clientSecret, string refreshToken)
+    public async Task<TokenResponse> RefreshTokenAsync(string clientId, string clientSecret, string refreshToken)
     {
         if (string.IsNullOrWhiteSpace(refreshToken))
         {
@@ -138,7 +138,7 @@ public static class TwitchOAuthService
         return tokenResponse;
     }
 
-    public static async Task<string> GetValidTokenAsync(string clientId, string clientSecret, string currentToken, string refreshToken)
+    public async Task<string> GetValidTokenAsync(string clientId, string clientSecret, string currentToken, string refreshToken)
     {
         StatusChanged?.Invoke("Проверка действительности токена...");
 
@@ -157,7 +157,7 @@ public static class TwitchOAuthService
         return tokenResponse.AccessToken;
     }
 
-    private static async Task<string> ExchangeCodeForTokenAsync(string clientId, string clientSecret, string authorizationCode, string redirectUri)
+    private async Task<string> ExchangeCodeForTokenAsync(string clientId, string clientSecret, string authorizationCode, string redirectUri)
     {
         using var client = new HttpClient();
         var tokenUrl = "https://id.twitch.tv/oauth2/token";
@@ -187,15 +187,15 @@ public static class TwitchOAuthService
             throw new InvalidOperationException("Не удалось десериализовать ответ сервера");
         }
 
-        var settings = SettingsManager.Current;
+        var settings = settingsManager.Current;
         settings.Twitch.AccessToken = tokenResponse.AccessToken;
         settings.Twitch.RefreshToken = tokenResponse.RefreshToken;
-        SettingsManager.SaveSettings(settings);
+        settingsManager.SaveSettings(settings);
 
         return tokenResponse.AccessToken;
     }
 
-    private static async Task<string> StartLocalHttpServerAsync(string redirectUri)
+    private async Task<string> StartLocalHttpServerAsync(string redirectUri)
     {
         using var listener = new HttpListener();
         listener.Prefixes.Add($"{redirectUri}/");

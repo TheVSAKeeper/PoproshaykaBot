@@ -4,52 +4,33 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
-public static class SettingsManager
+public class SettingsManager
 {
-    private static readonly string SettingsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+    private readonly string _settingsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "PoproshaykaBot");
 
-    private static readonly string SettingsFilePath = Path.Combine(SettingsDirectory, "settings.json");
+    private readonly string _settingsFilePath;
 
-    private static AppSettings? _currentSettings;
+    private AppSettings? _currentSettings;
 
-    public static event Action<ObsChatSettings>? ChatSettingsChanged;
-    public static AppSettings Current => _currentSettings ??= LoadSettings();
-
-    public static AppSettings LoadSettings()
+    public SettingsManager()
     {
-        try
-        {
-            if (File.Exists(SettingsFilePath) == false)
-            {
-                var defaultSettings = CreateDefaultSettings();
-                SaveSettings(defaultSettings);
-                return defaultSettings;
-            }
-
-            var json = File.ReadAllText(SettingsFilePath, Encoding.UTF8);
-            var settings = JsonSerializer.Deserialize<AppSettings>(json, GetJsonOptions());
-
-            _currentSettings = settings ?? throw new InvalidOperationException("Не удалось десериализовать настройки");
-            return settings;
-        }
-        catch (Exception exception)
-        {
-            Console.WriteLine($"Неожиданная ошибка загрузки настроек: {exception.Message}");
-            var defaultSettings = CreateDefaultSettings();
-            _currentSettings = defaultSettings;
-            return defaultSettings;
-        }
+        _settingsFilePath = Path.Combine(_settingsDirectory, "settings.json");
+        _currentSettings = LoadSettings();
     }
 
-    public static void SaveSettings(AppSettings settings)
+    public event Action<ObsChatSettings>? ChatSettingsChanged;
+
+    public AppSettings Current => _currentSettings ?? throw new InvalidOperationException("Settings not loaded");
+
+    public void SaveSettings(AppSettings settings)
     {
         try
         {
-            Directory.CreateDirectory(SettingsDirectory);
+            Directory.CreateDirectory(_settingsDirectory);
 
             var json = JsonSerializer.Serialize(settings, GetJsonOptions());
-            File.WriteAllText(SettingsFilePath, json, Encoding.UTF8);
+            File.WriteAllText(_settingsFilePath, json, Encoding.UTF8);
 
             _currentSettings = settings;
 
@@ -74,5 +55,31 @@ public static class SettingsManager
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         };
+    }
+
+    private AppSettings LoadSettings()
+    {
+        try
+        {
+            if (File.Exists(_settingsFilePath) == false)
+            {
+                var defaultSettings = CreateDefaultSettings();
+                SaveSettings(defaultSettings);
+                return defaultSettings;
+            }
+
+            var json = File.ReadAllText(_settingsFilePath, Encoding.UTF8);
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, GetJsonOptions());
+
+            _currentSettings = settings ?? throw new InvalidOperationException("Не удалось десериализовать настройки");
+            return settings;
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"Неожиданная ошибка загрузки настроек: {exception.Message}");
+            var defaultSettings = CreateDefaultSettings();
+            _currentSettings = defaultSettings;
+            return defaultSettings;
+        }
     }
 }

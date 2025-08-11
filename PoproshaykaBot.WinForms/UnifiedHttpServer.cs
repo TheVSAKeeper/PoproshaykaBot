@@ -12,15 +12,17 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
     private readonly HttpListener _httpListener;
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly List<HttpListenerResponse> _sseClients = [];
+    private readonly SettingsManager _settingsManager;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly int _port;
     private TaskCompletionSource<string>? _oauthCodeTask;
     private bool _isRunning;
     private Task? _serverTask;
 
-    public UnifiedHttpServer(ChatHistoryManager chatHistoryManager, int port = 8080)
+    public UnifiedHttpServer(ChatHistoryManager chatHistoryManager, SettingsManager settingsManager, int port = 8080)
     {
         _chatHistoryManager = chatHistoryManager;
+        _settingsManager = settingsManager;
         _port = port;
         _httpListener = new();
         _cancellationTokenSource = new();
@@ -169,13 +171,6 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 
-    protected virtual async ValueTask DisposeAsyncCore()
-    {
-        await StopAsync();
-        _httpListener?.Close();
-        _cancellationTokenSource?.Dispose();
-    }
-
     public void NotifyChatSettingsChanged(ObsChatSettings settings)
     {
         try
@@ -210,6 +205,13 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         {
             LogMessage?.Invoke($"Ошибка отправки уведомления о настройках чата: {ex.Message}");
         }
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
+        await StopAsync();
+        _httpListener?.Close();
+        _cancellationTokenSource?.Dispose();
     }
 
     private async Task HandleRequestsAsync()
@@ -707,7 +709,7 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
     {
         try
         {
-            var settings = SettingsManager.Current.Twitch.ObsChat;
+            var settings = _settingsManager.Current.Twitch.ObsChat;
             var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings);
 
             var json = JsonSerializer.Serialize(cssSettings);

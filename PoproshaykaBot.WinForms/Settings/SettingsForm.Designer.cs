@@ -40,13 +40,11 @@ partial class SettingsForm
         _httpServerTabPage = new TabPage();
         _httpServerSettingsControl = new HttpServerSettingsControl();
         _oauthTabPage = new TabPage();
-        _oauthSettingsControl = new OAuthSettingsControl();
         _obsChatTabPage = new TabPage();
         _obsChatSettingsControl = new ObsChatSettingsControl();
         _autoBroadcastTabPage = new TabPage();
         _autoBroadcastSettingsControl = new AutoBroadcastSettingsControl();
         _miscTabPage = new TabPage();
-        _miscSettingsControl = new MiscSettingsControl();
         _buttonPanel = new FlowLayoutPanel();
         _resetButton = new Button();
         _okButton = new Button();

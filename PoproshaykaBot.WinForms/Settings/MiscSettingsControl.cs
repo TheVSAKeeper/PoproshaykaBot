@@ -5,8 +5,11 @@ namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class MiscSettingsControl : UserControl
 {
-    public MiscSettingsControl()
+    private readonly SettingsManager _settingsManager;
+
+    public MiscSettingsControl(SettingsManager settingsManager)
     {
+        _settingsManager = settingsManager;
         InitializeComponent();
     }
 
@@ -59,7 +62,7 @@ public partial class MiscSettingsControl : UserControl
         try
         {
             var defaultSettings = new AppSettings();
-            SettingsManager.SaveSettings(defaultSettings);
+            _settingsManager.SaveSettings(defaultSettings);
 
             MessageBox.Show("Настройки успешно сброшены к значениям по умолчанию.\n\nПерезапустите приложение для применения изменений.",
                 "Сброс настроек", MessageBoxButtons.OK, MessageBoxIcon.Information);

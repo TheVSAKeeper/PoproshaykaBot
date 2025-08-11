@@ -3,12 +3,16 @@
 public partial class OAuthSettingsControl : UserControl
 {
     private static readonly TwitchSettings DefaultSettings = new();
+    private readonly SettingsManager _settingsManager;
+    private readonly TwitchOAuthService _oauthService;
     private AppSettings _settings = new();
     private bool _tokensVisible;
     private bool _redirectUriEditable;
 
-    public OAuthSettingsControl()
+    public OAuthSettingsControl(SettingsManager settingsManager, TwitchOAuthService oauthService)
     {
+        _settingsManager = settingsManager;
+        _oauthService = oauthService;
         InitializeComponent();
         SetPlaceholders();
     }
@@ -99,7 +103,13 @@ public partial class OAuthSettingsControl : UserControl
         _authStatusLabel.Text = "Тестирование...";
         _authStatusLabel.ForeColor = Color.Blue;
 
-        TwitchOAuthService.StatusChanged += OnOAuthStatusChanged;
+        if (_oauthService == null)
+        {
+            MessageBox.Show("OAuthService не инициализирован", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        _oauthService.StatusChanged += OnOAuthStatusChanged;
 
         try
         {
@@ -116,7 +126,7 @@ public partial class OAuthSettingsControl : UserControl
                 redirectUri = DefaultSettings.RedirectUri;
             }
 
-            var accessToken = await TwitchOAuthService.StartOAuthFlowAsync(clientId, clientSecret, null, scopes, redirectUri);
+            var accessToken = await _oauthService.StartOAuthFlowAsync(clientId, clientSecret, null, scopes, redirectUri);
 
             if (string.IsNullOrEmpty(accessToken) == false)
             {
@@ -134,7 +144,7 @@ public partial class OAuthSettingsControl : UserControl
         }
         finally
         {
-            TwitchOAuthService.StatusChanged -= OnOAuthStatusChanged;
+            _oauthService.StatusChanged -= OnOAuthStatusChanged;
             _testAuthButton.Enabled = true;
         }
     }
@@ -168,7 +178,7 @@ public partial class OAuthSettingsControl : UserControl
 
         try
         {
-            var isValid = await TwitchOAuthService.IsTokenValidAsync(accessToken);
+            var isValid = await _oauthService.IsTokenValidAsync(accessToken);
 
             if (isValid)
             {
@@ -218,16 +228,22 @@ public partial class OAuthSettingsControl : UserControl
         _tokenStatusValueLabel.Text = "Обновление...";
         _tokenStatusValueLabel.ForeColor = Color.Blue;
 
-        TwitchOAuthService.StatusChanged += OnTokenOperationStatusChanged;
+        if (_oauthService == null)
+        {
+            MessageBox.Show("OAuthService не инициализирован", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        _oauthService.StatusChanged += OnTokenOperationStatusChanged;
 
         try
         {
-            var tokenResponse = await TwitchOAuthService.RefreshTokenAsync(clientId, clientSecret, refreshToken);
+            var tokenResponse = await _oauthService.RefreshTokenAsync(clientId, clientSecret, refreshToken);
 
             _settings.Twitch.AccessToken = tokenResponse.AccessToken;
             _settings.Twitch.RefreshToken = tokenResponse.RefreshToken;
 
-            SettingsManager.SaveSettings(_settings);
+            _settingsManager?.SaveSettings(_settings);
 
             LoadTokenInformation();
             _tokenStatusValueLabel.Text = "Обновлен успешно";
@@ -247,7 +263,7 @@ public partial class OAuthSettingsControl : UserControl
         }
         finally
         {
-            TwitchOAuthService.StatusChanged -= OnTokenOperationStatusChanged;
+            _oauthService.StatusChanged -= OnTokenOperationStatusChanged;
             _refreshTokenButton.Enabled = true;
         }
     }
@@ -267,7 +283,7 @@ public partial class OAuthSettingsControl : UserControl
         _settings.Twitch.AccessToken = string.Empty;
         _settings.Twitch.RefreshToken = string.Empty;
 
-        SettingsManager.SaveSettings(_settings);
+        _settingsManager?.SaveSettings(_settings);
 
         LoadTokenInformation();
         _tokenStatusValueLabel.Text = "Токены очищены";

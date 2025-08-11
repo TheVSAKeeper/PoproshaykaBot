@@ -2,14 +2,21 @@
 
 public partial class SettingsForm : Form
 {
+    private readonly SettingsManager _settingsManager;
     private AppSettings _settings;
     private bool _hasChanges;
 
-    public SettingsForm()
+    public SettingsForm(SettingsManager settingsManager, TwitchOAuthService oauthService)
     {
+        _settingsManager = settingsManager;
         _settings = new();
-        CopySettings(SettingsManager.Current, _settings);
+
+        CopySettings(settingsManager.Current, _settings);
         InitializeComponent();
+
+        _oauthSettingsControl = new(settingsManager, oauthService);
+        _miscSettingsControl = new(settingsManager);
+
         LoadSettingsToControls();
     }
 
@@ -143,7 +150,7 @@ public partial class SettingsForm : Form
         try
         {
             SaveSettingsFromControls();
-            SettingsManager.SaveSettings(_settings);
+            _settingsManager.SaveSettings(_settings);
             _hasChanges = false;
             UpdateButtonStates();
 
