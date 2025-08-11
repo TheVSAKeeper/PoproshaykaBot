@@ -1,14 +1,13 @@
-﻿using PoproshaykaBot.WinForms.Chat;
+﻿using PoproshaykaBot.WinForms.Broadcast;
+using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Models;
 using PoproshaykaBot.WinForms.Settings;
 using System.Globalization;
-using System.Timers;
 using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
 using TwitchLib.EventSub.Websockets.Core.EventArgs.Stream;
-using Timer = System.Timers.Timer;
 
 namespace PoproshaykaBot.WinForms;
 
@@ -22,12 +21,10 @@ public class Bot : IAsyncDisposable
 
     private readonly ChatDecorationsProvider _chatDecorations;
     private readonly StreamStatusManager? _streamStatusManager;
+    private readonly BroadcastScheduler _broadcastScheduler;
     private bool _disposed;
 
     private string? _channel;
-    private Timer? _timer;
-
-    private int X1;
 
     public Bot(
         string accessToken,
@@ -36,6 +33,7 @@ public class Bot : IAsyncDisposable
         TwitchClient client,
         TwitchAPI twitchApi,
         ChatDecorationsProvider chatDecorationsProvider,
+        BroadcastScheduler broadcastScheduler,
         StreamStatusManager? streamStatusManager = null)
     {
         _settings = settings;
@@ -51,6 +49,7 @@ public class Bot : IAsyncDisposable
 
         _twitchApi = twitchApi;
         _chatDecorations = chatDecorationsProvider;
+        _broadcastScheduler = broadcastScheduler;
 
         if (_settings.AutoBroadcast.AutoBroadcastEnabled)
         {
@@ -72,7 +71,7 @@ public class Bot : IAsyncDisposable
 
     public event Action? StreamStatusChanged;
 
-    public bool IsBroadcastActive => _timer is { Enabled: true };
+    public bool IsBroadcastActive => _broadcastScheduler.IsActive;
 
     public StreamStatus StreamStatus => _streamStatusManager?.CurrentStatus ?? StreamStatus.Unknown;
 
@@ -159,8 +158,6 @@ public class Bot : IAsyncDisposable
 
     public async Task DisconnectAsync()
     {
-        _timer?.Dispose();
-
         if (_client.IsConnected)
         {
             if (string.IsNullOrWhiteSpace(_channel) == false)
@@ -206,22 +203,12 @@ public class Bot : IAsyncDisposable
             return;
         }
 
-        if (_timer == null)
-        {
-            _timer = new();
-            _timer.Interval = 900_000;
-            _timer.Elapsed += _timer_Elapsed;
-        }
-
-        if (_timer.Enabled == false)
-        {
-            _timer.Start();
-        }
+        _broadcastScheduler.Start(_channel);
     }
 
     public void StopBroadcast()
     {
-        _timer?.Stop();
+        _broadcastScheduler.Stop();
     }
 
     public async ValueTask DisposeAsync()
@@ -244,6 +231,7 @@ public class Bot : IAsyncDisposable
             await _streamStatusManager.DisposeAsync();
         }
 
+        await _broadcastScheduler.DisposeAsync();
         await _statisticsCollector.DisposeAsync();
         _disposed = true;
     }
@@ -318,7 +306,6 @@ public class Bot : IAsyncDisposable
         }
 
         _channel = e.Channel;
-        X1 = 0;
 
         if (_settings.AutoBroadcast.AutoBroadcastEnabled == false)
         {
@@ -329,17 +316,6 @@ public class Bot : IAsyncDisposable
         Console.WriteLine(connectionMessage);
         Connected?.Invoke(connectionMessage);
         LogMessage?.Invoke(connectionMessage);
-    }
-
-    private void _timer_Elapsed(object? sender, ElapsedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(_channel))
-        {
-            return;
-        }
-
-        X1++;
-        _client.SendMessage(_channel, "Присылайте деняк, пожалуйста, " + X1 + " раз прошу. https://bob217.ru/donate/");
     }
 
     private void Client_OnMessageReceived(object? sender, OnMessageReceivedArgs e)

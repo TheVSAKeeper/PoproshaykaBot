@@ -18,6 +18,8 @@ public partial class AutoBroadcastSettingsControl : UserControl
         _streamNotificationsEnabledCheckBox.Checked = settings.StreamStatusNotificationsEnabled;
         _streamStartMessageTextBox.Text = settings.StreamStartMessage;
         _streamStopMessageTextBox.Text = settings.StreamStopMessage;
+        _broadcastIntervalNumericUpDown.Value = Math.Max(1, settings.BroadcastIntervalMinutes);
+        _broadcastTemplateTextBox.Text = settings.BroadcastMessageTemplate;
 
         UpdateControlsState();
     }
@@ -28,6 +30,8 @@ public partial class AutoBroadcastSettingsControl : UserControl
         settings.StreamStatusNotificationsEnabled = _streamNotificationsEnabledCheckBox.Checked;
         settings.StreamStartMessage = _streamStartMessageTextBox.Text.Trim();
         settings.StreamStopMessage = _streamStopMessageTextBox.Text.Trim();
+        settings.BroadcastIntervalMinutes = (int)_broadcastIntervalNumericUpDown.Value;
+        settings.BroadcastMessageTemplate = _broadcastTemplateTextBox.Text.Trim();
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -45,11 +49,16 @@ public partial class AutoBroadcastSettingsControl : UserControl
         _streamStopMessageTextBox.Enabled = autoBroadcastEnabled && _streamNotificationsEnabledCheckBox.Checked;
         _streamStartMessageLabel.Enabled = autoBroadcastEnabled;
         _streamStopMessageLabel.Enabled = autoBroadcastEnabled;
+        _broadcastIntervalLabel.Enabled = autoBroadcastEnabled;
+        _broadcastIntervalNumericUpDown.Enabled = autoBroadcastEnabled;
+        _broadcastTemplateLabel.Enabled = autoBroadcastEnabled;
+        _broadcastTemplateTextBox.Enabled = autoBroadcastEnabled;
     }
 
     private void SetPlaceholders()
     {
         _streamStartMessageTextBox.PlaceholderText = DefaultSettings.StreamStartMessage;
         _streamStopMessageTextBox.PlaceholderText = DefaultSettings.StreamStopMessage;
+        _broadcastTemplateTextBox.PlaceholderText = DefaultSettings.BroadcastMessageTemplate;
     }
 }

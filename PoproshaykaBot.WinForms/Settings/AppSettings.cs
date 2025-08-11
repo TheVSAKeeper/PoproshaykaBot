@@ -134,4 +134,8 @@ public class AutoBroadcastSettings
     public string StreamStartMessage { get; set; } = "🔴 Стрим запущен! Начинаю рассылку.";
 
     public string StreamStopMessage { get; set; } = "⚫ Стрим завершен. Рассылка остановлена.";
+
+    public int BroadcastIntervalMinutes { get; set; } = 15;
+
+    public string BroadcastMessageTemplate { get; set; } = "Присылайте деняк, пожалуйста, {counter} раз прошу. https://bob217.ru/donate/";
 }

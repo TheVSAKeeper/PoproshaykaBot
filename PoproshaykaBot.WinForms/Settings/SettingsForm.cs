@@ -110,6 +110,8 @@ public partial class SettingsForm : Form
         destination.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled = source.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled;
         destination.Twitch.AutoBroadcast.StreamStartMessage = source.Twitch.AutoBroadcast.StreamStartMessage;
         destination.Twitch.AutoBroadcast.StreamStopMessage = source.Twitch.AutoBroadcast.StreamStopMessage;
+        destination.Twitch.AutoBroadcast.BroadcastIntervalMinutes = source.Twitch.AutoBroadcast.BroadcastIntervalMinutes;
+        destination.Twitch.AutoBroadcast.BroadcastMessageTemplate = source.Twitch.AutoBroadcast.BroadcastMessageTemplate;
         destination.Ui.ShowLogsPanel = source.Ui.ShowLogsPanel;
         destination.Ui.ShowChatPanel = source.Ui.ShowChatPanel;
     }

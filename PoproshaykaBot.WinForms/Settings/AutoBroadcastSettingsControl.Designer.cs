@@ -35,8 +35,13 @@ namespace PoproshaykaBot.WinForms.Settings
             _streamStartMessageTextBox = new TextBox();
             _streamStopMessageLabel = new Label();
             _streamStopMessageTextBox = new TextBox();
+            _broadcastIntervalLabel = new Label();
+            _broadcastIntervalNumericUpDown = new NumericUpDown();
+            _broadcastTemplateLabel = new Label();
+            _broadcastTemplateTextBox = new TextBox();
             _infoLabel = new Label();
             _mainTableLayoutPanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)_broadcastIntervalNumericUpDown).BeginInit();
             SuspendLayout();
             // 
             // _mainTableLayoutPanel
@@ -49,12 +54,20 @@ namespace PoproshaykaBot.WinForms.Settings
             _mainTableLayoutPanel.Controls.Add(_streamStartMessageTextBox, 0, 3);
             _mainTableLayoutPanel.Controls.Add(_streamStopMessageLabel, 0, 4);
             _mainTableLayoutPanel.Controls.Add(_streamStopMessageTextBox, 0, 5);
-            _mainTableLayoutPanel.Controls.Add(_infoLabel, 0, 6);
+            _mainTableLayoutPanel.Controls.Add(_broadcastIntervalLabel, 0, 6);
+            _mainTableLayoutPanel.Controls.Add(_broadcastIntervalNumericUpDown, 0, 7);
+            _mainTableLayoutPanel.Controls.Add(_broadcastTemplateLabel, 0, 8);
+            _mainTableLayoutPanel.Controls.Add(_broadcastTemplateTextBox, 0, 9);
+            _mainTableLayoutPanel.Controls.Add(_infoLabel, 0, 10);
             _mainTableLayoutPanel.Dock = DockStyle.Fill;
             _mainTableLayoutPanel.Location = new Point(0, 0);
             _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
-            _mainTableLayoutPanel.RowCount = 8;
+            _mainTableLayoutPanel.RowCount = 12;
             _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
+            _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
             _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
             _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
             _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
@@ -62,7 +75,7 @@ namespace PoproshaykaBot.WinForms.Settings
             _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
             _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 60F));
             _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            _mainTableLayoutPanel.Size = new Size(400, 300);
+            _mainTableLayoutPanel.Size = new Size(400, 360);
             _mainTableLayoutPanel.TabIndex = 0;
             // 
             // _autoBroadcastEnabledCheckBox
@@ -129,15 +142,57 @@ namespace PoproshaykaBot.WinForms.Settings
             _streamStopMessageTextBox.TabIndex = 5;
             _streamStopMessageTextBox.TextChanged += OnSettingChanged;
             // 
+            // _broadcastIntervalLabel
+            // 
+            _broadcastIntervalLabel.AutoSize = true;
+            _broadcastIntervalLabel.Dock = DockStyle.Fill;
+            _broadcastIntervalLabel.Location = new Point(3, 200);
+            _broadcastIntervalLabel.Name = "_broadcastIntervalLabel";
+            _broadcastIntervalLabel.Size = new Size(394, 25);
+            _broadcastIntervalLabel.TabIndex = 6;
+            _broadcastIntervalLabel.Text = "Интервал рассылки (минуты):";
+            _broadcastIntervalLabel.TextAlign = ContentAlignment.BottomLeft;
+            // 
+            // _broadcastIntervalNumericUpDown
+            // 
+            _broadcastIntervalNumericUpDown.Dock = DockStyle.Left;
+            _broadcastIntervalNumericUpDown.Location = new Point(3, 228);
+            _broadcastIntervalNumericUpDown.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            _broadcastIntervalNumericUpDown.Maximum = new decimal(new int[] { 1440, 0, 0, 0 });
+            _broadcastIntervalNumericUpDown.Name = "_broadcastIntervalNumericUpDown";
+            _broadcastIntervalNumericUpDown.Size = new Size(120, 23);
+            _broadcastIntervalNumericUpDown.TabIndex = 7;
+            _broadcastIntervalNumericUpDown.ValueChanged += OnSettingChanged;
+            // 
+            // _broadcastTemplateLabel
+            // 
+            _broadcastTemplateLabel.AutoSize = true;
+            _broadcastTemplateLabel.Dock = DockStyle.Fill;
+            _broadcastTemplateLabel.Location = new Point(3, 255);
+            _broadcastTemplateLabel.Name = "_broadcastTemplateLabel";
+            _broadcastTemplateLabel.Size = new Size(394, 25);
+            _broadcastTemplateLabel.TabIndex = 8;
+            _broadcastTemplateLabel.Text = "Шаблон сообщения рассылки:";
+            _broadcastTemplateLabel.TextAlign = ContentAlignment.BottomLeft;
+            // 
+            // _broadcastTemplateTextBox
+            // 
+            _broadcastTemplateTextBox.Dock = DockStyle.Fill;
+            _broadcastTemplateTextBox.Location = new Point(3, 283);
+            _broadcastTemplateTextBox.Name = "_broadcastTemplateTextBox";
+            _broadcastTemplateTextBox.Size = new Size(394, 23);
+            _broadcastTemplateTextBox.TabIndex = 9;
+            _broadcastTemplateTextBox.TextChanged += OnSettingChanged;
+            // 
             // _infoLabel
             // 
             _infoLabel.AutoSize = true;
             _infoLabel.Dock = DockStyle.Fill;
             _infoLabel.ForeColor = SystemColors.GrayText;
-            _infoLabel.Location = new Point(3, 170);
+            _infoLabel.Location = new Point(3, 310);
             _infoLabel.Name = "_infoLabel";
             _infoLabel.Size = new Size(394, 60);
-            _infoLabel.TabIndex = 6;
+            _infoLabel.TabIndex = 10;
             _infoLabel.Text = "ℹ️ Автоматическое управление использует EventSub WebSocket для отслеживания статуса стрима. Рассылка будет автоматически запускаться при начале стрима и останавливаться при его завершении.";
             // 
             // AutoBroadcastSettingsControl
@@ -146,9 +201,10 @@ namespace PoproshaykaBot.WinForms.Settings
             AutoScaleMode = AutoScaleMode.Font;
             Controls.Add(_mainTableLayoutPanel);
             Name = "AutoBroadcastSettingsControl";
-            Size = new Size(400, 300);
+            Size = new Size(400, 360);
             _mainTableLayoutPanel.ResumeLayout(false);
             _mainTableLayoutPanel.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)_broadcastIntervalNumericUpDown).EndInit();
             ResumeLayout(false);
         }
 
@@ -161,6 +217,10 @@ namespace PoproshaykaBot.WinForms.Settings
         private TextBox _streamStartMessageTextBox;
         private Label _streamStopMessageLabel;
         private TextBox _streamStopMessageTextBox;
+        private Label _broadcastIntervalLabel;
+        private NumericUpDown _broadcastIntervalNumericUpDown;
+        private Label _broadcastTemplateLabel;
+        private TextBox _broadcastTemplateTextBox;
         private Label _infoLabel;
     }
 }

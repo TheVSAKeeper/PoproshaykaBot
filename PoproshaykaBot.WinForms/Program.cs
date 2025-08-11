@@ -1,3 +1,4 @@
+using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Settings;
 using TwitchLib.Api;
@@ -73,12 +74,18 @@ public static class Program
             twitchApi.Settings.ClientId = settingsManager.Current.Twitch.ClientId;
             twitchApi.Settings.AccessToken = accessToken;
 
+            var messageProvider = new Func<int, string>(counter => settingsManager.Current.Twitch.AutoBroadcast.BroadcastMessageTemplate
+                .Replace("{counter}", counter.ToString()));
+
+            var broadcastScheduler = new BroadcastScheduler(twitchClient, settingsManager, messageProvider);
+
             var bot = new Bot(accessToken,
                 settingsManager.Current.Twitch,
                 statistics,
                 twitchClient,
                 twitchApi,
                 chatDecorationsProvider,
+                broadcastScheduler,
                 streamStatusManager);
 
             return bot;
