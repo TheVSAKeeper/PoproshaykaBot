@@ -9,10 +9,11 @@ public enum PortConflictResolution
     OpenSettings,
 }
 
-public class PortValidator
+public class PortValidator(SettingsManager settingsManager)
 {
-    public bool ValidateAndResolvePortConflict(AppSettings settings, SettingsManager settingsManager)
+    public bool ValidateAndResolvePortConflict()
     {
+        var settings = settingsManager.Current;
         var redirectUri = settings.Twitch.RedirectUri;
         var serverPort = settings.Twitch.HttpServerPort;
 

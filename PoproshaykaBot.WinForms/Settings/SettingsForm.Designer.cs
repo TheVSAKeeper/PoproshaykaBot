@@ -38,7 +38,6 @@ partial class SettingsForm
         _messagesTabPage = new TabPage();
         _messagesSettingsControl = new MessagesSettingsControl();
         _httpServerTabPage = new TabPage();
-        _httpServerSettingsControl = new HttpServerSettingsControl();
         _oauthTabPage = new TabPage();
         _obsChatTabPage = new TabPage();
         _obsChatSettingsControl = new ObsChatSettingsControl();

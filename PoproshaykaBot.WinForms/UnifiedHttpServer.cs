@@ -9,14 +9,13 @@ namespace PoproshaykaBot.WinForms;
 // TODO: Смешение ответственностей
 public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
 {
-    private readonly HttpListener _httpListener;
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly List<HttpListenerResponse> _sseClients = [];
     private readonly SettingsManager _settingsManager;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly int _port;
+    private HttpListener _httpListener;
     private TaskCompletionSource<string>? _oauthCodeTask;
-    private bool _isRunning;
     private Task? _serverTask;
 
     public UnifiedHttpServer(ChatHistoryManager chatHistoryManager, SettingsManager settingsManager, int port = 8080)
@@ -24,25 +23,32 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         _chatHistoryManager = chatHistoryManager;
         _settingsManager = settingsManager;
         _port = port;
-        _httpListener = new();
         _cancellationTokenSource = new();
 
-        _httpListener.Prefixes.Add($"http://localhost:{port}/");
+        _httpListener = CreateListener(port);
     }
 
     public event Action<string>? LogMessage;
 
+    public bool IsRunning { get; private set; }
+
     public Task StartAsync()
     {
-        if (_isRunning)
+        if (IsRunning)
         {
             return Task.CompletedTask;
         }
 
         try
         {
+            if (_httpListener.IsListening == false)
+            {
+                _httpListener.Close();
+                _httpListener = CreateListener(_port);
+            }
+
             _httpListener.Start();
-            _isRunning = true;
+            IsRunning = true;
 
             _chatHistoryManager.RegisterChatDisplay(this);
             _serverTask = HandleRequestsAsync();
@@ -60,14 +66,14 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
 
     public async Task StopAsync()
     {
-        if (_isRunning == false)
+        if (IsRunning == false)
         {
             return;
         }
 
         try
         {
-            _isRunning = false;
+            IsRunning = false;
             await _cancellationTokenSource.CancelAsync();
 
             _chatHistoryManager.UnregisterChatDisplay(this);
@@ -214,9 +220,16 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         _cancellationTokenSource?.Dispose();
     }
 
+    private HttpListener CreateListener(int port)
+    {
+        var httpListener = new HttpListener();
+        httpListener.Prefixes.Add($"http://localhost:{port}/");
+        return httpListener;
+    }
+
     private async Task HandleRequestsAsync()
     {
-        while (_isRunning && _cancellationTokenSource.Token.IsCancellationRequested == false)
+        while (IsRunning && _cancellationTokenSource.Token.IsCancellationRequested == false)
         {
             try
             {

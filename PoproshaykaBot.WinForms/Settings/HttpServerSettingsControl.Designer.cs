@@ -42,6 +42,8 @@
             _obsUrlLabel = new Label();
             _buttonsPanel = new Panel();
             _copyUrlButton = new Button();
+            _startServerButton = new Button();
+            _stopServerButton = new Button();
             _restartServerButton = new Button();
             _separatorPanel2 = new Panel();
             _infoPanel = new Panel();
@@ -187,6 +189,8 @@
             // _buttonsPanel
             // 
             _buttonsPanel.Controls.Add(_copyUrlButton);
+            _buttonsPanel.Controls.Add(_startServerButton);
+            _buttonsPanel.Controls.Add(_stopServerButton);
             _buttonsPanel.Controls.Add(_restartServerButton);
             _buttonsPanel.Dock = DockStyle.Fill;
             _buttonsPanel.Location = new Point(3, 158);
@@ -204,12 +208,32 @@
             _copyUrlButton.UseVisualStyleBackColor = true;
             _copyUrlButton.Click += OnCopyUrlButtonClicked;
             // 
+            // _startServerButton
+            // 
+            _startServerButton.Location = new Point(130, 5);
+            _startServerButton.Name = "_startServerButton";
+            _startServerButton.Size = new Size(90, 25);
+            _startServerButton.TabIndex = 1;
+            _startServerButton.Text = "Старт";
+            _startServerButton.UseVisualStyleBackColor = true;
+            _startServerButton.Click += OnStartServerButtonClicked;
+            // 
+            // _stopServerButton
+            // 
+            _stopServerButton.Location = new Point(226, 5);
+            _stopServerButton.Name = "_stopServerButton";
+            _stopServerButton.Size = new Size(90, 25);
+            _stopServerButton.TabIndex = 2;
+            _stopServerButton.Text = "Стоп";
+            _stopServerButton.UseVisualStyleBackColor = true;
+            _stopServerButton.Click += OnStopServerButtonClicked;
+            // 
             // _restartServerButton
             // 
-            _restartServerButton.Location = new Point(130, 5);
+            _restartServerButton.Location = new Point(322, 5);
             _restartServerButton.Name = "_restartServerButton";
             _restartServerButton.Size = new Size(140, 25);
-            _restartServerButton.TabIndex = 1;
+            _restartServerButton.TabIndex = 3;
             _restartServerButton.Text = "Перезапустить сервер";
             _restartServerButton.UseVisualStyleBackColor = true;
             _restartServerButton.Click += OnRestartServerButtonClicked;
@@ -275,6 +299,8 @@
         private Label _obsUrlLabel;
         private Panel _buttonsPanel;
         private Button _copyUrlButton;
+        private Button _startServerButton;
+        private Button _stopServerButton;
         private Button _restartServerButton;
         private Panel _separatorPanel2;
         private Panel _infoPanel;

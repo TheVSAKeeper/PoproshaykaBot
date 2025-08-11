@@ -11,43 +11,43 @@ namespace PoproshaykaBot.WinForms;
 public static class Program
 {
     [STAThread]
-    private static void Main()
+    private static async Task Main()
     {
         ApplicationConfiguration.Initialize();
 
         var settingsManager = new SettingsManager();
         var statistics = new StatisticsCollector();
-
         var oauthService = new TwitchOAuthService(settingsManager);
-
         var chatHistoryManager = new ChatHistoryManager();
-
-        UnifiedHttpServer? httpServer = null;
-
         var twitchSettings = settingsManager.Current.Twitch;
+        var portValidator = new PortValidator(settingsManager);
+        var httpServerEnabled = twitchSettings.HttpServerEnabled;
+        var portValidationPassed = false;
 
-        var portValidator = new PortValidator();
-
-        if (twitchSettings.HttpServerEnabled)
+        if (httpServerEnabled)
         {
-            if (portValidator.ValidateAndResolvePortConflict(settingsManager.Current, settingsManager))
-            {
-                httpServer = new(chatHistoryManager, settingsManager, twitchSettings.HttpServerPort);
+            portValidationPassed = portValidator.ValidateAndResolvePortConflict();
+        }
 
-                try
-                {
-                    httpServer.StartAsync().GetAwaiter().GetResult();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Ошибка запуска HTTP сервера: {ex.Message}");
-                    httpServer = null;
-                }
-            }
-            else
+        var resolvedPort = settingsManager.Current.Twitch.HttpServerPort;
+        var httpServer = new UnifiedHttpServer(chatHistoryManager, settingsManager, resolvedPort);
+        var httpServerStarted = false;
+
+        if (httpServerEnabled && portValidationPassed)
+        {
+            try
             {
-                Console.WriteLine("Не удалось разрешить конфликт портов. HTTP сервер не запущен.");
+                await httpServer.StartAsync();
+                httpServerStarted = true;
             }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка запуска HTTP сервера: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+        else if (httpServerEnabled && portValidationPassed == false)
+        {
+            MessageBox.Show("Не удалось разрешить конфликт портов. HTTP сервер не запущен.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
         var twitchApi = new TwitchAPI();
@@ -87,7 +87,7 @@ public static class Program
 
             if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret))
             {
-                Console.WriteLine("OAuth настройки не настроены (ClientId/ClientSecret).");
+                MessageBox.Show("OAuth настройки не настроены (ClientId/ClientSecret).", "Ошибка конфигурации OAuth", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return null;
             }
 
@@ -115,7 +115,7 @@ public static class Program
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Не удалось обновить токен: {ex.Message}");
+                        MessageBox.Show($"Не удалось обновить токен доступа: {ex.Message}", "Ошибка обновления токена", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
             }
@@ -124,7 +124,7 @@ public static class Program
             {
                 var accessToken = await oauthService.StartOAuthFlowAsync(settings.ClientId,
                     settings.ClientSecret,
-                    httpServer,
+                    httpServerStarted ? httpServer : null,
                     settings.Scopes,
                     settings.RedirectUri);
 
@@ -133,14 +133,19 @@ public static class Program
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"OAuth авторизация не удалась: {ex.Message}");
+                MessageBox.Show($"OAuth авторизация не удалась: {ex.Message}", "Ошибка OAuth авторизации", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return null;
             }
         }
 
         var connectionManager = new BotConnectionManager(BotFactory, GetAccessTokenAsync);
 
-        using var mainForm = new MainForm(statistics, chatHistoryManager, httpServer, connectionManager, settingsManager, oauthService);
+        using var mainForm = new MainForm(chatHistoryManager,
+            httpServer,
+            connectionManager,
+            settingsManager,
+            oauthService);
+
         Application.Run(mainForm);
     }
 }

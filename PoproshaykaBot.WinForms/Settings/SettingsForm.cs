@@ -6,17 +6,18 @@ public partial class SettingsForm : Form
     private AppSettings _settings;
     private bool _hasChanges;
 
-    public SettingsForm(SettingsManager settingsManager, TwitchOAuthService oauthService)
+    public SettingsForm(SettingsManager settingsManager, TwitchOAuthService oauthService, UnifiedHttpServer httpServer)
     {
         _settingsManager = settingsManager;
         _settings = new();
 
         CopySettings(settingsManager.Current, _settings);
-        InitializeComponent();
 
         _oauthSettingsControl = new(settingsManager, oauthService);
         _miscSettingsControl = new(settingsManager);
+        _httpServerSettingsControl = new(httpServer);
 
+        InitializeComponent();
         LoadSettingsToControls();
     }
 

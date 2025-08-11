@@ -3,11 +3,15 @@
 public partial class HttpServerSettingsControl : UserControl
 {
     private static readonly TwitchSettings DefaultSettings = new();
+    private readonly UnifiedHttpServer _server;
 
-    public HttpServerSettingsControl()
+    public HttpServerSettingsControl(UnifiedHttpServer server)
     {
         InitializeComponent();
         SetPlaceholders();
+
+        _server = server;
+        UpdateServerStatus();
     }
 
     public event EventHandler? SettingChanged;
@@ -32,12 +36,14 @@ public partial class HttpServerSettingsControl : UserControl
     private void OnSettingChanged(object? sender, EventArgs e)
     {
         UpdateObsUrl();
+        UpdateServerStatus();
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnHttpServerEnabledChanged(object? sender, EventArgs e)
     {
         UpdateControlsState();
+        UpdateServerStatus();
         OnSettingChanged(sender, e);
     }
 
@@ -64,11 +70,73 @@ public partial class HttpServerSettingsControl : UserControl
         }
     }
 
-    private void OnRestartServerButtonClicked(object sender, EventArgs e)
+    private async void OnStartServerButtonClicked(object sender, EventArgs e)
     {
-        // TODO: Реализовать перезапуск сервера
-        MessageBox.Show("Функция перезапуска сервера будет реализована позже.", "Информация",
-            MessageBoxButtons.OK, MessageBoxIcon.Information);
+        try
+        {
+            if (_httpServerEnabledCheckBox.Checked == false)
+            {
+                MessageBox.Show("HTTP сервер отключен настройкой. Включите сервер, чтобы запустить.", "Информация",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (_server.IsRunning == false)
+            {
+                await _server.StartAsync();
+                UpdateServerStatus();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка запуска сервера: {ex.Message}", "Ошибка",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async void OnStopServerButtonClicked(object sender, EventArgs e)
+    {
+        try
+        {
+            if (_server.IsRunning)
+            {
+                await _server.StopAsync();
+                UpdateServerStatus();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка остановки сервера: {ex.Message}", "Ошибка",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async void OnRestartServerButtonClicked(object sender, EventArgs e)
+    {
+        if (_httpServerEnabledCheckBox.Checked == false)
+        {
+            MessageBox.Show("HTTP сервер отключен настройкой. Включите сервер, чтобы выполнить перезапуск.", "Информация",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            if (_server.IsRunning)
+            {
+                await _server.StopAsync();
+            }
+
+            await _server.StartAsync();
+            UpdateServerStatus();
+            MessageBox.Show("HTTP сервер перезапущен.", "Информация",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка перезапуска сервера: {ex.Message}", "Ошибка",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void SetPlaceholders()
@@ -85,22 +153,41 @@ public partial class HttpServerSettingsControl : UserControl
         _portResetButton.Enabled = enabled;
         _obsOverlayEnabledCheckBox.Enabled = enabled;
         _copyUrlButton.Enabled = enabled;
+        _startServerButton.Enabled = enabled && _server.IsRunning == false;
+        _stopServerButton.Enabled = enabled && _server.IsRunning;
         _restartServerButton.Enabled = enabled;
     }
 
     private void UpdateServerStatus()
     {
-        // TODO: Получать реальный статус сервера
-        if (_httpServerEnabledCheckBox.Checked)
-        {
-            _serverStatusLabel.Text = "Статус сервера: ● Готов к запуску";
-            _serverStatusLabel.ForeColor = Color.Orange;
-        }
-        else
+        var enabled = _httpServerEnabledCheckBox.Checked;
+
+        if (enabled == false)
         {
             _serverStatusLabel.Text = "Статус сервера: ○ Отключен";
             _serverStatusLabel.ForeColor = Color.Gray;
+            _startServerButton.Enabled = false;
+            _stopServerButton.Enabled = false;
+            _restartServerButton.Enabled = false;
+            return;
         }
+
+        if (_server.IsRunning)
+        {
+            _serverStatusLabel.Text = "Статус сервера: ● Запущен";
+            _serverStatusLabel.ForeColor = Color.Green;
+            _startServerButton.Enabled = false;
+            _stopServerButton.Enabled = true;
+        }
+        else
+        {
+            _serverStatusLabel.Text = "Статус сервера: ● Готов к запуску";
+            _serverStatusLabel.ForeColor = Color.Orange;
+            _startServerButton.Enabled = true;
+            _stopServerButton.Enabled = false;
+        }
+
+        _restartServerButton.Enabled = true;
     }
 
     private void UpdateObsUrl()

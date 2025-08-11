@@ -6,24 +6,21 @@ namespace PoproshaykaBot.WinForms;
 public partial class MainForm : Form
 {
     private readonly ChatHistoryManager _chatHistoryManager;
-    private readonly StatisticsCollector _statisticsCollector;
     private readonly SettingsManager _settingsManager;
     private readonly BotConnectionManager _connectionManager;
-    private readonly UnifiedHttpServer? _httpServer;
+    private readonly UnifiedHttpServer _httpServer;
     private readonly TwitchOAuthService _oauthService;
     private Bot? _bot;
     private bool _isConnected;
     private ChatWindow? _chatWindow;
 
     public MainForm(
-        StatisticsCollector statisticsCollector,
         ChatHistoryManager chatHistoryManager,
-        UnifiedHttpServer? httpServer,
+        UnifiedHttpServer httpServer,
         BotConnectionManager connectionManager,
         SettingsManager settingsManager,
         TwitchOAuthService oauthService)
     {
-        _statisticsCollector = statisticsCollector;
         _chatHistoryManager = chatHistoryManager;
         _httpServer = httpServer;
         _connectionManager = connectionManager;
@@ -41,11 +38,8 @@ public partial class MainForm : Form
 
         _chatHistoryManager.RegisterChatDisplay(_chatDisplay);
 
-        if (_httpServer != null)
-        {
-            _httpServer.LogMessage += OnHttpServerLogMessage;
-            _settingsManager.ChatSettingsChanged += _httpServer.NotifyChatSettingsChanged;
-        }
+        _httpServer.LogMessage += OnHttpServerLogMessage;
+        _settingsManager.ChatSettingsChanged += _httpServer.NotifyChatSettingsChanged;
 
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
@@ -281,7 +275,7 @@ public partial class MainForm : Form
 
     private void OnSettingsButtonClicked(object sender, EventArgs e)
     {
-        using var settingsForm = new SettingsForm(_settingsManager, _oauthService);
+        using var settingsForm = new SettingsForm(_settingsManager, _oauthService, _httpServer);
 
         if (settingsForm.ShowDialog(this) != DialogResult.OK)
         {
