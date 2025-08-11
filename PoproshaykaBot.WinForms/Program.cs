@@ -1,3 +1,4 @@
+using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Settings;
 using TwitchLib.Api;
 using TwitchLib.Client;
@@ -53,6 +54,7 @@ public static class Program
         var twitchApi = new TwitchAPI();
         var eventSubClient = new EventSubWebsocketClient();
         var streamStatusManager = new StreamStatusManager(eventSubClient, twitchApi);
+        var chatDecorationsProvider = new ChatDecorationsProvider(twitchApi);
 
         Bot BotFactory(string accessToken)
         {
@@ -76,6 +78,7 @@ public static class Program
                 statistics,
                 twitchClient,
                 twitchApi,
+                chatDecorationsProvider,
                 streamStatusManager);
 
             return bot;
