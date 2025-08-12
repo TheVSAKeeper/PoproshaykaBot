@@ -78,6 +78,7 @@ public static class Program
                 .Replace("{counter}", counter.ToString()));
 
             var broadcastScheduler = new BroadcastScheduler(twitchClient, settingsManager, messageProvider);
+            var audienceTracker = new AudienceTracker(settingsManager);
 
             var bot = new Bot(accessToken,
                 settingsManager.Current.Twitch,
@@ -85,6 +86,7 @@ public static class Program
                 twitchClient,
                 twitchApi,
                 chatDecorationsProvider,
+                audienceTracker,
                 broadcastScheduler,
                 streamStatusManager);
 

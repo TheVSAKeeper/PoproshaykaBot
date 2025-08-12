@@ -17,8 +17,7 @@ public class Bot : IAsyncDisposable
     private readonly TwitchAPI _twitchApi;
     private readonly TwitchSettings _settings;
     private readonly StatisticsCollector _statisticsCollector;
-    private readonly Dictionary<string, UserInfo> _seenUsers;
-
+    private readonly AudienceTracker _audienceTracker;
     private readonly ChatDecorationsProvider _chatDecorations;
     private readonly StreamStatusManager? _streamStatusManager;
     private readonly BroadcastScheduler _broadcastScheduler;
@@ -33,12 +32,13 @@ public class Bot : IAsyncDisposable
         TwitchClient client,
         TwitchAPI twitchApi,
         ChatDecorationsProvider chatDecorationsProvider,
+        AudienceTracker audienceTracker,
         BroadcastScheduler broadcastScheduler,
         StreamStatusManager? streamStatusManager = null)
     {
         _settings = settings;
         _statisticsCollector = statisticsCollector;
-        _seenUsers = [];
+        _audienceTracker = audienceTracker;
 
         _client = client;
 
@@ -164,12 +164,11 @@ public class Bot : IAsyncDisposable
             {
                 var messages = new List<string>();
 
-                if (_settings.Messages.FarewellEnabled
-                    && string.IsNullOrWhiteSpace(_settings.Messages.Farewell) == false)
+                var collectiveFarewell = _audienceTracker.CreateCollectiveFarewell();
+
+                if (string.IsNullOrWhiteSpace(collectiveFarewell) == false)
                 {
-                    var userNames = string.Join(", ", _seenUsers.Values.Select(u => u.DisplayName));
-                    var farewellMessage = _settings.Messages.Farewell.Replace("{username}", userNames);
-                    messages.Add(farewellMessage);
+                    messages.Add(collectiveFarewell);
                 }
 
                 if (_settings.Messages.DisconnectionEnabled
@@ -183,6 +182,8 @@ public class Bot : IAsyncDisposable
                     var combinedMessage = string.Join(" ", messages);
                     _client.SendMessage(_channel, combinedMessage);
                 }
+
+                _audienceTracker.ClearAll();
             }
 
             _client.Disconnect();
@@ -339,23 +340,27 @@ public class Bot : IAsyncDisposable
 
         string? botResponse = null;
 
-        var userInfo = new UserInfo(e.ChatMessage.UserId, e.ChatMessage.DisplayName);
+        var isFirstSeen = _audienceTracker.OnUserMessage(e.ChatMessage.UserId, e.ChatMessage.DisplayName);
 
-        if (_settings.Messages.WelcomeEnabled && _seenUsers.TryAdd(e.ChatMessage.UserId, userInfo))
+        if (_settings.Messages.WelcomeEnabled && isFirstSeen)
         {
-            var welcomeMessage = _settings.Messages.Welcome.Replace("{username}", e.ChatMessage.DisplayName);
-            _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
+            var welcomeMessage = _audienceTracker.CreateWelcome(e.ChatMessage.DisplayName);
 
-            var welcomeResponse = new ChatMessageData
+            if (string.IsNullOrWhiteSpace(welcomeMessage) == false)
             {
-                Timestamp = DateTime.UtcNow,
-                DisplayName = _settings.BotUsername,
-                Message = welcomeMessage,
-                MessageType = ChatMessageType.BotResponse,
-                Status = UserStatus.None,
-            };
+                _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
 
-            ChatMessageReceived?.Invoke(welcomeResponse);
+                var welcomeResponse = new ChatMessageData
+                {
+                    Timestamp = DateTime.UtcNow,
+                    DisplayName = _settings.BotUsername,
+                    Message = welcomeMessage,
+                    MessageType = ChatMessageType.BotResponse,
+                    Status = UserStatus.None,
+                };
+
+                ChatMessageReceived?.Invoke(welcomeResponse);
+            }
         }
 
         switch (e.ChatMessage.Message.ToLower())
@@ -444,35 +449,16 @@ public class Bot : IAsyncDisposable
 
             case "!пользователи":
             case "!чат":
-                if (_seenUsers.Count == 0)
-                {
-                    botResponse = "В чате пока нет активных пользователей";
-                    _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                    break;
-                }
-
-                var userNames = _seenUsers.Values.Select(x => x.DisplayName).ToList();
-                var userCount = userNames.Count;
-
-                if (userCount <= 10)
-                {
-                    var userList = string.Join(", ", userNames);
-                    botResponse = $"👥 Активные пользователи чата ({userCount}): {userList}";
-                }
-                else
-                {
-                    var firstUsers = userNames.Take(8).ToList();
-                    var userList = string.Join(", ", firstUsers);
-                    botResponse = $"👥 Активные пользователи чата ({userCount}): {userList} и ещё {userCount - 8}";
-                }
-
+                botResponse = _audienceTracker.BuildActiveUsersSummary();
                 _client.SendMessage(e.ChatMessage.Channel, botResponse);
                 break;
 
             case "!пока":
-                botResponse = _settings.Messages.Farewell.Replace("{username}", e.ChatMessage.DisplayName);
-                _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                _seenUsers.Remove(e.ChatMessage.UserId);
+                if ((botResponse = _audienceTracker.CreateFarewell(e.ChatMessage.UserId, e.ChatMessage.DisplayName)) != null)
+                {
+                    _client.SendMessage(e.ChatMessage.Channel, botResponse);
+                }
+
                 break;
         }
 
@@ -588,5 +574,3 @@ public class Bot : IAsyncDisposable
         }
     }
 }
-
-public record UserInfo(string UserId, string DisplayName);
