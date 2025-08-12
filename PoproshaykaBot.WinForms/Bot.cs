@@ -2,7 +2,6 @@
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Models;
 using PoproshaykaBot.WinForms.Settings;
-using System.Globalization;
 using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
@@ -19,6 +18,7 @@ public class Bot : IAsyncDisposable
     private readonly StatisticsCollector _statisticsCollector;
     private readonly AudienceTracker _audienceTracker;
     private readonly ChatDecorationsProvider _chatDecorations;
+    private readonly ChatCommandProcessor _commandProcessor;
     private readonly StreamStatusManager? _streamStatusManager;
     private readonly BroadcastScheduler _broadcastScheduler;
     private bool _disposed;
@@ -34,6 +34,7 @@ public class Bot : IAsyncDisposable
         ChatDecorationsProvider chatDecorationsProvider,
         AudienceTracker audienceTracker,
         BroadcastScheduler broadcastScheduler,
+        ChatCommandProcessor commandProcessor,
         StreamStatusManager? streamStatusManager = null)
     {
         _settings = settings;
@@ -50,6 +51,7 @@ public class Bot : IAsyncDisposable
         _twitchApi = twitchApi;
         _chatDecorations = chatDecorationsProvider;
         _broadcastScheduler = broadcastScheduler;
+        _commandProcessor = commandProcessor;
 
         if (_settings.AutoBroadcast.AutoBroadcastEnabled)
         {
@@ -363,117 +365,49 @@ public class Bot : IAsyncDisposable
             }
         }
 
-        switch (e.ChatMessage.Message.ToLower())
+        var context = new CommandContext
         {
-            case "!привет":
-                // TODO: Обработать дублирование привета
-                botResponse = $"Привет, {e.ChatMessage.Username}!";
-                _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                break;
+            Channel = e.ChatMessage.Channel,
+            MessageId = e.ChatMessage.Id,
+            UserId = e.ChatMessage.UserId,
+            Username = e.ChatMessage.Username,
+            DisplayName = e.ChatMessage.DisplayName,
+        };
 
-            case "!деньги":
-                botResponse = "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217";
-                _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                break;
-
-            case "!сколькосообщений":
-                {
-                    var userStats = _statisticsCollector.GetUserStatistics(e.ChatMessage.UserId);
-                    var messageCount = userStats?.MessageCount ?? 0;
-                    botResponse = $"У тебя {FormatNumber(messageCount)} сообщений";
-                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
-                    break;
-                }
-
-            case "!статистикабота":
-                {
-                    var botStats = _statisticsCollector.GetBotStatistics();
-                    var uptime = FormatTimeSpan(botStats.TotalUptime);
-                    var totalMessages = FormatNumber(botStats.TotalMessagesProcessed);
-                    var startTime = FormatDateTime(botStats.BotStartTime);
-
-                    botResponse = $"📊 Статистика бота: Обработано {totalMessages} сообщений | Время работы: {uptime} | Запущен: {startTime}";
-
-                    _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                    break;
-                }
-
-            case "!топпользователи":
-                {
-                    var topUsers = _statisticsCollector.GetTopUsers(5);
-
-                    if (topUsers.Count == 0)
-                    {
-                        botResponse = "Пока нет данных о пользователях";
-                        _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                        break;
-                    }
-
-                    var response = "🏆 Топ-5 активных пользователей: ";
-
-                    for (var i = 0; i < topUsers.Count; i++)
-                    {
-                        var user = topUsers[i];
-                        response += $"{i + 1}. {user.Name} ({FormatNumber(user.MessageCount)})";
-
-                        if (i < topUsers.Count - 1)
-                        {
-                            response += " | ";
-                        }
-                    }
-
-                    botResponse = response;
-                    _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                    break;
-                }
-
-            case "!мойпрофиль":
-                {
-                    var userStats = _statisticsCollector.GetUserStatistics(e.ChatMessage.UserId);
-
-                    if (userStats == null)
-                    {
-                        botResponse = "У тебя пока нет статистики";
-                        _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
-                        break;
-                    }
-
-                    var messageCount = FormatNumber(userStats.MessageCount);
-                    var firstSeen = FormatDateTime(userStats.FirstSeen);
-                    var lastSeen = FormatDateTime(userStats.LastSeen);
-
-                    botResponse = $"👤 Твой профиль: {messageCount} сообщений | Впервые: {firstSeen} | Последний раз: {lastSeen}";
-                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
-                    break;
-                }
-
-            case "!пользователи":
-            case "!чат":
-                botResponse = _audienceTracker.BuildActiveUsersSummary();
-                _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                break;
-
-            case "!пока":
-                if ((botResponse = _audienceTracker.CreateFarewell(e.ChatMessage.UserId, e.ChatMessage.DisplayName)) != null)
-                {
-                    _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                }
-
-                break;
+        if (_commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response) == false)
+        {
+            response = _commandProcessor.HandleUnknown(e.ChatMessage.Message, context);
         }
 
-        if (string.IsNullOrEmpty(botResponse) == false)
+        if (response != null)
         {
-            var responseMessage = new ChatMessageData
+            switch (response.Delivery)
             {
-                Timestamp = DateTime.UtcNow,
-                DisplayName = _settings.BotUsername,
-                Message = botResponse,
-                MessageType = ChatMessageType.BotResponse,
-                Status = UserStatus.None,
-            };
+                case DeliveryType.Reply:
+                    _client.SendReply(context.Channel, response.ReplyToMessageId ?? context.MessageId, response.Text);
+                    break;
 
-            ChatMessageReceived?.Invoke(responseMessage);
+                case DeliveryType.Normal:
+                default:
+                    _client.SendMessage(context.Channel, response.Text);
+                    break;
+            }
+
+            botResponse = response.Text;
+
+            if (string.IsNullOrEmpty(botResponse) == false)
+            {
+                var responseMessage = new ChatMessageData
+                {
+                    Timestamp = DateTime.UtcNow,
+                    DisplayName = _settings.BotUsername,
+                    Message = botResponse,
+                    MessageType = ChatMessageType.BotResponse,
+                    Status = UserStatus.None,
+                };
+
+                ChatMessageReceived?.Invoke(responseMessage);
+            }
         }
 
         LogMessage?.Invoke(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);
@@ -504,34 +438,6 @@ public class Bot : IAsyncDisposable
         }
 
         return status;
-    }
-
-    private static string FormatTimeSpan(TimeSpan timeSpan)
-    {
-        if (timeSpan.TotalDays >= 1)
-        {
-            return $"{(int)timeSpan.TotalDays} дн. {timeSpan.Hours} ч. {timeSpan.Minutes} мин.";
-        }
-
-        if (timeSpan.TotalHours >= 1)
-        {
-            return $"{timeSpan.Hours} ч. {timeSpan.Minutes} мин.";
-        }
-
-        return $"{timeSpan.Minutes} мин. {timeSpan.Seconds} сек.";
-    }
-
-    private static string FormatNumber(ulong number)
-    {
-        return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
-    }
-
-    private static string FormatDateTime(DateTime dateTime)
-    {
-        var moscowTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
-        var moscowTime = TimeZoneInfo.ConvertTimeFromUtc(dateTime, moscowTimeZone);
-
-        return moscowTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.GetCultureInfo("ru-RU")) + " по МСК";
     }
 
     private async Task InitializeStreamMonitoringAsync()

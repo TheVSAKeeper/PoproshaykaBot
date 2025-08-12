@@ -1,5 +1,6 @@
 using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.WinForms.Chat.Commands;
 using PoproshaykaBot.WinForms.Settings;
 using TwitchLib.Api;
 using TwitchLib.Client;
@@ -80,6 +81,21 @@ public static class Program
             var broadcastScheduler = new BroadcastScheduler(twitchClient, settingsManager, messageProvider);
             var audienceTracker = new AudienceTracker(settingsManager);
 
+            var commands = new List<IChatCommand>
+            {
+                new HelloCommand(),
+                new DonateCommand(),
+                new HowManyMessagesCommand(statistics),
+                new BotStatsCommand(statistics),
+                new TopUsersCommand(statistics),
+                new MyProfileCommand(statistics),
+                new ActiveUsersCommand(audienceTracker),
+                new ByeCommand(audienceTracker),
+            };
+
+            var commandProcessor = new ChatCommandProcessor(commands);
+            commandProcessor.Register(new HelpCommand(commandProcessor.GetAllCommands));
+
             var bot = new Bot(accessToken,
                 settingsManager.Current.Twitch,
                 statistics,
@@ -88,6 +104,7 @@ public static class Program
                 chatDecorationsProvider,
                 audienceTracker,
                 broadcastScheduler,
+                commandProcessor,
                 streamStatusManager);
 
             return bot;
