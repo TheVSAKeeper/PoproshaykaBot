@@ -19,11 +19,12 @@ public class Bot : IAsyncDisposable
     private readonly AudienceTracker _audienceTracker;
     private readonly ChatDecorationsProvider _chatDecorations;
     private readonly ChatCommandProcessor _commandProcessor;
-    private readonly StreamStatusManager? _streamStatusManager;
+    private readonly StreamStatusManager _streamStatusManager;
     private readonly BroadcastScheduler _broadcastScheduler;
     private bool _disposed;
 
     private string? _channel;
+    private bool _streamHandlersAttached;
 
     public Bot(
         string accessToken,
@@ -35,7 +36,7 @@ public class Bot : IAsyncDisposable
         AudienceTracker audienceTracker,
         BroadcastScheduler broadcastScheduler,
         ChatCommandProcessor commandProcessor,
-        StreamStatusManager? streamStatusManager = null)
+        StreamStatusManager streamStatusManager)
     {
         _settings = settings;
         _statisticsCollector = statisticsCollector;
@@ -52,15 +53,8 @@ public class Bot : IAsyncDisposable
         _chatDecorations = chatDecorationsProvider;
         _broadcastScheduler = broadcastScheduler;
         _commandProcessor = commandProcessor;
-
-        if (_settings.AutoBroadcast.AutoBroadcastEnabled)
-        {
-            _streamStatusManager = streamStatusManager ?? throw new ArgumentNullException(nameof(streamStatusManager));
-            _streamStatusManager.StreamStarted += OnStreamStarted;
-            _streamStatusManager.StreamStopped += OnStreamStopped;
-            _streamStatusManager.StatusChanged += OnStreamStatusChanged;
-            _streamStatusManager.ErrorOccurred += OnStreamErrorOccurred;
-        }
+        _streamStatusManager = streamStatusManager;
+        AttachStreamStatusHandlers();
     }
 
     public event Action<ChatMessageData>? ChatMessageReceived;
@@ -75,7 +69,8 @@ public class Bot : IAsyncDisposable
 
     public bool IsBroadcastActive => _broadcastScheduler.IsActive;
 
-    public StreamStatus StreamStatus => _streamStatusManager?.CurrentStatus ?? StreamStatus.Unknown;
+    public StreamStatus StreamStatus => _streamStatusManager.CurrentStatus;
+    public StreamInfo? CurrentStream => _streamStatusManager.CurrentStream;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -134,7 +129,7 @@ public class Bot : IAsyncDisposable
             await _chatDecorations.LoadAsync();
             LogMessage?.Invoke($"Загружено {_chatDecorations.GlobalEmotesCount} глобальных эмодзи и {_chatDecorations.GlobalBadgeSetsCount} типов глобальных бэйджей");
 
-            if (_streamStatusManager != null)
+            if (_settings.AutoBroadcast.AutoBroadcastEnabled)
             {
                 var streamMessage = "Инициализация мониторинга стрима...";
                 ConnectionProgress?.Invoke(streamMessage);
@@ -191,7 +186,7 @@ public class Bot : IAsyncDisposable
             _client.Disconnect();
         }
 
-        if (_streamStatusManager != null)
+        if (_settings.AutoBroadcast.AutoBroadcastEnabled)
         {
             await _streamStatusManager.StopMonitoringAsync();
         }
@@ -228,12 +223,8 @@ public class Bot : IAsyncDisposable
         }
 
         await DisconnectAsync();
-
-        if (_streamStatusManager != null)
-        {
-            await _streamStatusManager.DisposeAsync();
-        }
-
+        DetachStreamStatusHandlers();
+        await _streamStatusManager.DisposeAsync();
         await _broadcastScheduler.DisposeAsync();
         await _statisticsCollector.DisposeAsync();
         _disposed = true;
@@ -440,6 +431,34 @@ public class Bot : IAsyncDisposable
         return status;
     }
 
+    private void AttachStreamStatusHandlers()
+    {
+        if (_streamHandlersAttached)
+        {
+            return;
+        }
+
+        _streamStatusManager.StreamStarted += OnStreamStarted;
+        _streamStatusManager.StreamStopped += OnStreamStopped;
+        _streamStatusManager.StatusChanged += OnStreamStatusChanged;
+        _streamStatusManager.ErrorOccurred += OnStreamErrorOccurred;
+        _streamHandlersAttached = true;
+    }
+
+    private void DetachStreamStatusHandlers()
+    {
+        if (_streamHandlersAttached == false)
+        {
+            return;
+        }
+
+        _streamStatusManager.StreamStarted -= OnStreamStarted;
+        _streamStatusManager.StreamStopped -= OnStreamStopped;
+        _streamStatusManager.StatusChanged -= OnStreamStatusChanged;
+        _streamStatusManager.ErrorOccurred -= OnStreamErrorOccurred;
+        _streamHandlersAttached = false;
+    }
+
     private async Task InitializeStreamMonitoringAsync()
     {
         if (_streamStatusManager == null)
@@ -461,18 +480,8 @@ public class Bot : IAsyncDisposable
                 return;
             }
 
-            await _streamStatusManager.InitializeAsync("", _settings.ClientId, _twitchApi.Settings.AccessToken);
-
-            var broadcasterUserId = await _streamStatusManager.GetBroadcasterUserIdAsync(_settings.Channel);
-
-            if (string.IsNullOrEmpty(broadcasterUserId))
-            {
-                LogMessage?.Invoke($"Не удалось получить ID пользователя для канала {_settings.Channel}");
-                return;
-            }
-
-            await _streamStatusManager.InitializeAsync(broadcasterUserId, _settings.ClientId, _twitchApi.Settings.AccessToken);
-            await _streamStatusManager.StartMonitoringAsync();
+            await _streamStatusManager.InitializeAsync(_settings.ClientId, _twitchApi.Settings.AccessToken);
+            await _streamStatusManager.StartMonitoringAsync(_settings.Channel);
         }
         catch (Exception ex)
         {

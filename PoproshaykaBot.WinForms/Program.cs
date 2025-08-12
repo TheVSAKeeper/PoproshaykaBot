@@ -75,8 +75,17 @@ public static class Program
             twitchApi.Settings.ClientId = settingsManager.Current.Twitch.ClientId;
             twitchApi.Settings.AccessToken = accessToken;
 
-            var messageProvider = new Func<int, string>(counter => settingsManager.Current.Twitch.AutoBroadcast.BroadcastMessageTemplate
-                .Replace("{counter}", counter.ToString()));
+            var messageProvider = new Func<int, string>(counter =>
+            {
+                var template = settingsManager.Current.Twitch.AutoBroadcast.BroadcastMessageTemplate;
+                var info = streamStatusManager.CurrentStream;
+
+                return template
+                    .Replace("{counter}", counter.ToString())
+                    .Replace("{title}", info?.Title ?? string.Empty)
+                    .Replace("{game}", info?.GameName ?? string.Empty)
+                    .Replace("{viewers}", info?.ViewerCount.ToString() ?? string.Empty);
+            });
 
             var broadcastScheduler = new BroadcastScheduler(twitchClient, settingsManager, messageProvider);
             var audienceTracker = new AudienceTracker(settingsManager);
@@ -91,6 +100,7 @@ public static class Program
                 new MyProfileCommand(statistics),
                 new ActiveUsersCommand(audienceTracker),
                 new ByeCommand(audienceTracker),
+                new StreamInfoCommand(streamStatusManager),
             };
 
             var commandProcessor = new ChatCommandProcessor(commands);

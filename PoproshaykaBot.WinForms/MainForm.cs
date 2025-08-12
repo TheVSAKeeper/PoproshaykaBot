@@ -300,6 +300,7 @@ public partial class MainForm : Form
     private void OnStreamStatusChanged()
     {
         UpdateStreamStatus();
+        UpdateStreamInfo();
     }
 
     private void OnOAuthStatusChanged(string message)
@@ -326,6 +327,7 @@ public partial class MainForm : Form
         {
             _streamStatusLabel.Text = "Статус стрима: Неизвестен";
             _streamStatusLabel.ForeColor = SystemColors.ControlText;
+            _streamInfoLabel.Text = "—";
             return;
         }
 
@@ -336,19 +338,46 @@ public partial class MainForm : Form
             case StreamStatus.Online:
                 _streamStatusLabel.Text = "🔴 Стрим онлайн";
                 _streamStatusLabel.ForeColor = Color.Green;
+                UpdateStreamInfo();
                 break;
 
             case StreamStatus.Offline:
                 _streamStatusLabel.Text = "⚫ Стрим офлайн";
                 _streamStatusLabel.ForeColor = Color.Gray;
+                _streamInfoLabel.Text = "—";
                 break;
 
             case StreamStatus.Unknown:
             default:
                 _streamStatusLabel.Text = "Статус стрима: Неизвестен";
                 _streamStatusLabel.ForeColor = SystemColors.ControlText;
+                _streamInfoLabel.Text = "—";
                 break;
         }
+    }
+
+    private void UpdateStreamInfo()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(UpdateStreamInfo);
+            return;
+        }
+
+        if (_bot?.CurrentStream == null)
+        {
+            _streamInfoLabel.Text = "—";
+            return;
+        }
+
+        var info = _bot.CurrentStream;
+        var duration = DateTime.UtcNow - info.StartedAt;
+        var hours = (int)duration.TotalHours;
+        var minutes = duration.Minutes;
+
+        var title = string.IsNullOrWhiteSpace(info.Title) ? "Без названия" : info.Title;
+        var game = string.IsNullOrWhiteSpace(info.GameName) ? "Без категории" : info.GameName;
+        _streamInfoLabel.Text = $"Название: {title} | Игра: {game} | Зрителей: {info.ViewerCount} | В эфире: {hours:0}ч {minutes:00}м";
     }
 
     private void ClearChatHistory()

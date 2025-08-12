@@ -40,10 +40,11 @@ public class StreamStatusManager : IAsyncDisposable
     public event Action<StreamOfflineArgs>? StreamStopped;
 
     public StreamStatus CurrentStatus { get; private set; } = StreamStatus.Unknown;
+    public StreamInfo? CurrentStream { get; private set; }
 
     public bool IsConnected => _eventSubClient != null && _disposed == false;
 
-    public async Task InitializeAsync(string broadcasterUserId, string clientId, string accessToken)
+    public Task InitializeAsync(string clientId, string accessToken)
     {
         if (string.IsNullOrEmpty(clientId))
         {
@@ -55,30 +56,42 @@ public class StreamStatusManager : IAsyncDisposable
             throw new ArgumentException("Access Token не может быть пустым", nameof(accessToken));
         }
 
-        _broadcasterUserId = broadcasterUserId;
+        _broadcasterUserId = null;
 
         _twitchApi.Settings.ClientId = clientId;
         _twitchApi.Settings.AccessToken = accessToken;
 
         _isInitialized = true;
+        return Task.CompletedTask;
     }
 
-    public async Task StartMonitoringAsync()
+    public async Task StartMonitoringAsync(string channelName)
     {
         if (_isInitialized == false)
         {
             throw new InvalidOperationException("StreamStatusManager не инициализирован. Вызовите InitializeAsync сначала.");
         }
 
-        if (string.IsNullOrEmpty(_broadcasterUserId))
+        if (string.IsNullOrWhiteSpace(channelName))
         {
-            throw new InvalidOperationException("BroadcasterUserId не установлен.");
+            ErrorOccurred?.Invoke("Имя канала не может быть пустым");
+            return;
         }
 
+        var userId = await GetBroadcasterUserIdAsync(channelName);
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return;
+        }
+
+        _broadcasterUserId = userId;
         _reconnectAttempts = 0;
 
         try
         {
+            await RefreshCurrentStatusAsync();
+
             StatusChanged?.Invoke("Подключение к EventSub WebSocket...");
 
             var connected = await _eventSubClient.ConnectAsync();
@@ -116,43 +129,6 @@ public class StreamStatusManager : IAsyncDisposable
         catch (Exception ex)
         {
             ErrorOccurred?.Invoke($"Ошибка остановки мониторинга: {ex.Message}");
-        }
-    }
-
-    public async Task<string?> GetBroadcasterUserIdAsync(string channelName)
-    {
-        if (string.IsNullOrEmpty(channelName))
-        {
-            ErrorOccurred?.Invoke("Имя канала не может быть пустым");
-            return null;
-        }
-
-        if (string.IsNullOrEmpty(_twitchApi.Settings.ClientId) || string.IsNullOrEmpty(_twitchApi.Settings.AccessToken))
-        {
-            ErrorOccurred?.Invoke("TwitchAPI не настроен. Убедитесь, что ClientId и AccessToken установлены.");
-            return null;
-        }
-
-        try
-        {
-            StatusChanged?.Invoke($"Получение ID пользователя для канала: {channelName}");
-
-            var users = await _twitchApi.Helix.Users.GetUsersAsync(logins: [channelName]);
-
-            if (users?.Users == null || users.Users.Length == 0)
-            {
-                ErrorOccurred?.Invoke($"Пользователь с именем '{channelName}' не найден");
-                return null;
-            }
-
-            var userId = users.Users.First().Id;
-            StatusChanged?.Invoke($"ID пользователя получен: {userId}");
-            return userId;
-        }
-        catch (Exception ex)
-        {
-            ErrorOccurred?.Invoke($"Ошибка получения ID пользователя: {ex.Message}");
-            return null;
         }
     }
 
@@ -231,20 +207,112 @@ public class StreamStatusManager : IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    private Task OnStreamOnline(object sender, StreamOnlineArgs e)
+    private async Task OnStreamOnline(object sender, StreamOnlineArgs e)
     {
         CurrentStatus = StreamStatus.Online;
         StatusChanged?.Invoke($"🔴 Стрим запущен: {e.Notification.Payload.Event.Type}");
+        await RefreshCurrentStatusAsync();
         StreamStarted?.Invoke(e);
-        return Task.CompletedTask;
     }
 
     private Task OnStreamOffline(object sender, StreamOfflineArgs e)
     {
         CurrentStatus = StreamStatus.Offline;
         StatusChanged?.Invoke("⚫ Стрим завершен");
+        CurrentStream = null;
         StreamStopped?.Invoke(e);
         return Task.CompletedTask;
+    }
+
+    private async Task<string?> GetBroadcasterUserIdAsync(string channelName)
+    {
+        if (string.IsNullOrEmpty(channelName))
+        {
+            ErrorOccurred?.Invoke("Имя канала не может быть пустым");
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(_twitchApi.Settings.ClientId) || string.IsNullOrEmpty(_twitchApi.Settings.AccessToken))
+        {
+            ErrorOccurred?.Invoke("TwitchAPI не настроен. Убедитесь, что ClientId и AccessToken установлены.");
+            return null;
+        }
+
+        try
+        {
+            StatusChanged?.Invoke($"Получение ID пользователя для канала: {channelName}");
+
+            var users = await _twitchApi.Helix.Users.GetUsersAsync(logins: [channelName]);
+
+            if (users?.Users == null || users.Users.Length == 0)
+            {
+                ErrorOccurred?.Invoke($"Пользователь с именем '{channelName}' не найден");
+                return null;
+            }
+
+            var userId = users.Users.First().Id;
+            StatusChanged?.Invoke($"ID пользователя получен: {userId}");
+            return userId;
+        }
+        catch (Exception ex)
+        {
+            ErrorOccurred?.Invoke($"Ошибка получения ID пользователя: {ex.Message}");
+            return null;
+        }
+    }
+
+    private async Task RefreshCurrentStatusAsync()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_broadcasterUserId))
+            {
+                return;
+            }
+
+            var response = await _twitchApi.Helix.Streams.GetStreamsAsync(userIds: [_broadcasterUserId]);
+            var isOnline = response?.Streams != null && response.Streams.Length > 0;
+            var newStatus = isOnline ? StreamStatus.Online : StreamStatus.Offline;
+
+            if (CurrentStatus != newStatus)
+            {
+                CurrentStatus = newStatus;
+            }
+
+            if (isOnline)
+            {
+                var stream = response!.Streams[0];
+
+                CurrentStream = new()
+                {
+                    Id = stream.Id,
+                    UserId = stream.UserId,
+                    UserLogin = stream.UserLogin,
+                    UserName = stream.UserName,
+                    GameId = stream.GameId,
+                    GameName = stream.GameName,
+                    Title = stream.Title,
+                    Language = stream.Language,
+                    ViewerCount = stream.ViewerCount,
+                    StartedAt = stream.StartedAt,
+                    ThumbnailUrl = stream.ThumbnailUrl,
+                    Tags = stream.Tags ?? [],
+                    IsMature = stream.IsMature,
+                };
+            }
+            else
+            {
+                CurrentStream = null;
+            }
+
+            StatusChanged?.Invoke(isOnline
+                ? "Текущий статус: онлайн (по данным API)"
+                : "Текущий статус: офлайн (по данным API)");
+        }
+        catch (Exception exception)
+        {
+            ErrorOccurred?.Invoke($"Ошибка получения текущего статуса стрима: {exception.Message}");
+        }
     }
 
     private async Task CreateEventSubSubscriptions()

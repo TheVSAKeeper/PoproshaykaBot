@@ -41,6 +41,7 @@ partial class MainForm
         _connectionProgressBar = new ProgressBar();
         _connectionStatusLabel = new Label();
         _streamStatusLabel = new Label();
+        _streamInfoLabel = new Label();
         _contentTableLayoutPanel = new TableLayoutPanel();
         _logLabel = new Label();
         _chatDisplay = new ChatDisplay();
@@ -58,13 +59,15 @@ partial class MainForm
         _mainTableLayoutPanel.Controls.Add(_connectionProgressBar, 0, 1);
         _mainTableLayoutPanel.Controls.Add(_connectionStatusLabel, 0, 2);
         _mainTableLayoutPanel.Controls.Add(_streamStatusLabel, 0, 3);
-        _mainTableLayoutPanel.Controls.Add(_contentTableLayoutPanel, 0, 4);
+        _mainTableLayoutPanel.Controls.Add(_streamInfoLabel, 0, 4);
+        _mainTableLayoutPanel.Controls.Add(_contentTableLayoutPanel, 0, 5);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
         _mainTableLayoutPanel.Padding = new Padding(12);
-        _mainTableLayoutPanel.RowCount = 5;
+        _mainTableLayoutPanel.RowCount = 6;
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
@@ -205,13 +208,24 @@ partial class MainForm
         _contentTableLayoutPanel.Controls.Add(_chatDisplay, 1, 0);
         _contentTableLayoutPanel.Controls.Add(_logTextBox, 0, 1);
         _contentTableLayoutPanel.Dock = DockStyle.Fill;
-        _contentTableLayoutPanel.Location = new Point(15, 115);
+        _contentTableLayoutPanel.Location = new Point(15, 140);
         _contentTableLayoutPanel.Name = "_contentTableLayoutPanel";
         _contentTableLayoutPanel.RowCount = 2;
         _contentTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
         _contentTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _contentTableLayoutPanel.Size = new Size(755, 276);
+        _contentTableLayoutPanel.Size = new Size(755, 251);
         _contentTableLayoutPanel.TabIndex = 3;
+        // 
+        // _streamInfoLabel
+        // 
+        _streamInfoLabel.AutoSize = true;
+        _streamInfoLabel.Dock = DockStyle.Fill;
+        _streamInfoLabel.Location = new Point(15, 137);
+        _streamInfoLabel.Name = "_streamInfoLabel";
+        _streamInfoLabel.Size = new Size(755, 25);
+        _streamInfoLabel.TabIndex = 4;
+        _streamInfoLabel.Text = "—";
+        _streamInfoLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // _logLabel
         // 
@@ -274,6 +288,7 @@ partial class MainForm
     private ProgressBar _connectionProgressBar;
     private Label _connectionStatusLabel;
     private Label _streamStatusLabel;
+    private Label _streamInfoLabel;
     private Label _logLabel;
     private TextBox _logTextBox;
     private ChatDisplay _chatDisplay;
