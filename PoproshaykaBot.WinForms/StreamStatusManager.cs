@@ -16,6 +16,8 @@ public class StreamStatusManager : IAsyncDisposable
     private bool _disposed;
     private bool _isInitialized;
     private int _reconnectAttempts;
+    private bool _stopRequested;
+    private CancellationTokenSource? _reconnectCts;
 
     public StreamStatusManager(EventSubWebsocketClient eventSubClient, TwitchAPI twitchApi)
     {
@@ -42,8 +44,6 @@ public class StreamStatusManager : IAsyncDisposable
     public StreamStatus CurrentStatus { get; private set; } = StreamStatus.Unknown;
     public StreamInfo? CurrentStream { get; private set; }
 
-    public bool IsConnected => _eventSubClient != null && _disposed == false;
-
     public Task InitializeAsync(string clientId, string accessToken)
     {
         if (string.IsNullOrEmpty(clientId))
@@ -61,7 +61,10 @@ public class StreamStatusManager : IAsyncDisposable
         _twitchApi.Settings.ClientId = clientId;
         _twitchApi.Settings.AccessToken = accessToken;
 
+        _stopRequested = false;
         _isInitialized = true;
+        CurrentStatus = StreamStatus.Unknown;
+        CurrentStream = null;
         return Task.CompletedTask;
     }
 
@@ -87,6 +90,7 @@ public class StreamStatusManager : IAsyncDisposable
 
         _broadcasterUserId = userId;
         _reconnectAttempts = 0;
+        _stopRequested = false;
 
         try
         {
@@ -121,9 +125,14 @@ public class StreamStatusManager : IAsyncDisposable
 
         try
         {
+            _stopRequested = true;
+            _reconnectCts?.Cancel();
+            _reconnectCts?.Dispose();
+            _reconnectCts = null;
             StatusChanged?.Invoke("Отключение от EventSub WebSocket...");
             await _eventSubClient.DisconnectAsync();
             CurrentStatus = StreamStatus.Unknown;
+            CurrentStream = null;
             StatusChanged?.Invoke("Мониторинг стрима остановлен");
         }
         catch (Exception ex)
@@ -140,8 +149,20 @@ public class StreamStatusManager : IAsyncDisposable
         }
 
         _disposed = true;
+        _stopRequested = true;
+        _reconnectCts?.Cancel();
+        _reconnectCts?.Dispose();
+        _reconnectCts = null;
 
         await StopMonitoringAsync();
+
+        _eventSubClient.WebsocketConnected -= OnWebsocketConnected;
+        _eventSubClient.WebsocketDisconnected -= OnWebsocketDisconnected;
+        _eventSubClient.WebsocketReconnected -= OnWebsocketReconnected;
+        _eventSubClient.ErrorOccurred -= OnErrorOccurred;
+
+        _eventSubClient.StreamOnline -= OnStreamOnline;
+        _eventSubClient.StreamOffline -= OnStreamOffline;
 
         GC.SuppressFinalize(this);
     }
@@ -162,13 +183,29 @@ public class StreamStatusManager : IAsyncDisposable
         StatusChanged?.Invoke("EventSub WebSocket отключен");
         CurrentStatus = StreamStatus.Unknown;
 
+        if (_disposed || _stopRequested)
+        {
+            return;
+        }
+
         if (_reconnectAttempts < MaxReconnectAttempts)
         {
             _reconnectAttempts++;
             var delay = 1000 * Math.Pow(2, _reconnectAttempts - 1);
 
             StatusChanged?.Invoke($"Попытка переподключения {_reconnectAttempts}/{MaxReconnectAttempts} через {delay / 1000:F0} сек...");
-            await Task.Delay(TimeSpan.FromMilliseconds(delay));
+            _reconnectCts?.Cancel();
+            _reconnectCts?.Dispose();
+            _reconnectCts = new();
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(delay), _reconnectCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
 
             try
             {
@@ -192,12 +229,17 @@ public class StreamStatusManager : IAsyncDisposable
         else if (_reconnectAttempts >= MaxReconnectAttempts)
         {
             ErrorOccurred?.Invoke($"Превышено максимальное количество попыток переподключения ({MaxReconnectAttempts}). Мониторинг стрима остановлен.");
+            _stopRequested = true;
         }
     }
 
     private Task OnWebsocketReconnected(object sender, EventArgs e)
     {
-        StatusChanged?.Invoke($"EventSub WebSocket переподключен (Session: {_eventSubClient.SessionId})");
+        if (_stopRequested == false)
+        {
+            StatusChanged?.Invoke($"EventSub WebSocket переподключен (Session: {_eventSubClient.SessionId})");
+        }
+
         return Task.CompletedTask;
     }
 

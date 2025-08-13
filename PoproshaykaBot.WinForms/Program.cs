@@ -106,8 +106,7 @@ public static class Program
             var commandProcessor = new ChatCommandProcessor(commands);
             commandProcessor.Register(new HelpCommand(commandProcessor.GetAllCommands));
 
-            var bot = new Bot(accessToken,
-                settingsManager.Current.Twitch,
+            var bot = new Bot(settingsManager.Current.Twitch,
                 statistics,
                 twitchClient,
                 twitchApi,

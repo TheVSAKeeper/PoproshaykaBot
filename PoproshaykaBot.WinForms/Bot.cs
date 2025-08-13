@@ -2,6 +2,7 @@
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Models;
 using PoproshaykaBot.WinForms.Settings;
+using System.Text;
 using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
@@ -12,6 +13,8 @@ namespace PoproshaykaBot.WinForms;
 
 public class Bot : IAsyncDisposable
 {
+    private const int CharsLimit = 500;
+
     private readonly TwitchClient _client;
     private readonly TwitchAPI _twitchApi;
     private readonly TwitchSettings _settings;
@@ -21,13 +24,12 @@ public class Bot : IAsyncDisposable
     private readonly ChatCommandProcessor _commandProcessor;
     private readonly StreamStatusManager _streamStatusManager;
     private readonly BroadcastScheduler _broadcastScheduler;
-    private bool _disposed;
 
+    private bool _disposed;
     private string? _channel;
     private bool _streamHandlersAttached;
 
     public Bot(
-        string accessToken,
         TwitchSettings settings,
         StatisticsCollector statisticsCollector,
         TwitchClient client,
@@ -177,7 +179,7 @@ public class Bot : IAsyncDisposable
                 if (messages.Count > 0)
                 {
                     var combinedMessage = string.Join(" ", messages);
-                    _client.SendMessage(_channel, combinedMessage);
+                    SendMessageSmart(_channel, combinedMessage);
                 }
 
                 _audienceTracker.ClearAll();
@@ -226,7 +228,7 @@ public class Bot : IAsyncDisposable
         DetachStreamStatusHandlers();
         await _streamStatusManager.DisposeAsync();
         await _broadcastScheduler.DisposeAsync();
-        await _statisticsCollector.DisposeAsync();
+        await _statisticsCollector.StopAsync();
         _disposed = true;
     }
 
@@ -241,7 +243,7 @@ public class Bot : IAsyncDisposable
                 && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage) == false
                 && string.IsNullOrEmpty(_channel) == false)
             {
-                _client.SendMessage(_channel, _settings.AutoBroadcast.StreamStartMessage);
+                SendMessageSmart(_channel, _settings.AutoBroadcast.StreamStartMessage);
             }
         }
 
@@ -259,7 +261,7 @@ public class Bot : IAsyncDisposable
                 && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage) == false
                 && string.IsNullOrEmpty(_channel) == false)
             {
-                _client.SendMessage(_channel, _settings.AutoBroadcast.StreamStopMessage);
+                SendMessageSmart(_channel, _settings.AutoBroadcast.StreamStopMessage);
             }
         }
 
@@ -296,7 +298,7 @@ public class Bot : IAsyncDisposable
         if (_settings.Messages.ConnectionEnabled
             && string.IsNullOrWhiteSpace(_settings.Messages.Connection) == false)
         {
-            _client.SendMessage(e.Channel, _settings.Messages.Connection);
+            SendMessageSmart(e.Channel, _settings.Messages.Connection);
         }
 
         _channel = e.Channel;
@@ -341,7 +343,7 @@ public class Bot : IAsyncDisposable
 
             if (string.IsNullOrWhiteSpace(welcomeMessage) == false)
             {
-                _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
+                SendReplySmart(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
 
                 var welcomeResponse = new ChatMessageData
                 {
@@ -375,12 +377,12 @@ public class Bot : IAsyncDisposable
             switch (response.Delivery)
             {
                 case DeliveryType.Reply:
-                    _client.SendReply(context.Channel, response.ReplyToMessageId ?? context.MessageId, response.Text);
+                    SendReplySmart(context.Channel, response.ReplyToMessageId ?? context.MessageId, response.Text);
                     break;
 
                 case DeliveryType.Normal:
                 default:
-                    _client.SendMessage(context.Channel, response.Text);
+                    SendMessageSmart(context.Channel, response.Text);
                     break;
             }
 
@@ -429,6 +431,55 @@ public class Bot : IAsyncDisposable
         }
 
         return status;
+    }
+
+    private static IEnumerable<string> SplitByLimit(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+        {
+            yield return text;
+            yield break;
+        }
+
+        var parts = text.Split(" | ");
+        var builder = new StringBuilder();
+
+        foreach (var part in parts)
+        {
+            var isFirstInChunk = builder.Length == 0;
+            var candidate = isFirstInChunk ? part : " | " + part;
+
+            if (builder.Length + candidate.Length <= maxLength)
+            {
+                builder.Append(candidate);
+            }
+            else
+            {
+                if (builder.Length > 0)
+                {
+                    yield return builder.ToString();
+                    builder.Clear();
+                }
+
+                if (part.Length > maxLength)
+                {
+                    for (var i = 0; i < part.Length; i += maxLength)
+                    {
+                        var length = Math.Min(maxLength, part.Length - i);
+                        yield return part.Substring(i, length);
+                    }
+                }
+                else
+                {
+                    builder.Append(part);
+                }
+            }
+        }
+
+        if (builder.Length > 0)
+        {
+            yield return builder.ToString();
+        }
     }
 
     private void AttachStreamStatusHandlers()
@@ -486,6 +537,22 @@ public class Bot : IAsyncDisposable
         catch (Exception ex)
         {
             LogMessage?.Invoke($"Ошибка инициализации мониторинга стрима: {ex.Message}");
+        }
+    }
+
+    private void SendMessageSmart(string channel, string text)
+    {
+        foreach (var chunk in SplitByLimit(text, CharsLimit))
+        {
+            _client.SendMessage(channel, chunk);
+        }
+    }
+
+    private void SendReplySmart(string channel, string replyToMessageId, string text)
+    {
+        foreach (var chunk in SplitByLimit(text, CharsLimit))
+        {
+            _client.SendReply(channel, replyToMessageId, chunk);
         }
     }
 }
