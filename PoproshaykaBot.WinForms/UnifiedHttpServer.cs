@@ -17,6 +17,11 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         WriteIndented = false,
     };
 
+    private static readonly string ObsOverlayHtmlContent = LoadResourceText($"{typeof(UnifiedHttpServer).Namespace}.Assets.ObsOverlay.html");
+    private static readonly string ObsOverlayCssContent = LoadResourceText($"{typeof(UnifiedHttpServer).Namespace}.Assets.obs.css");
+    private static readonly byte[] ObsOverlayJsContent = LoadResourceBytes($"{typeof(UnifiedHttpServer).Namespace}.Assets.obs.js");
+    private static readonly byte[] FaviconIcoContent = LoadResourceBytes($"{typeof(UnifiedHttpServer).Namespace}.icon.ico");
+
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly List<HttpListenerResponse> _sseClients = [];
     private readonly SettingsManager _settingsManager;
@@ -228,6 +233,35 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         _cancellationTokenSource?.Dispose();
     }
 
+    private static string LoadResourceText(string resourceName)
+    {
+        var assembly = typeof(UnifiedHttpServer).Assembly;
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+
+        if (stream == null)
+        {
+            throw new InvalidOperationException($"Ресурс не найден: {resourceName}");
+        }
+
+        using var reader = new StreamReader(stream, Encoding.UTF8, true);
+        return reader.ReadToEnd();
+    }
+
+    private static byte[] LoadResourceBytes(string resourceName)
+    {
+        var assembly = typeof(UnifiedHttpServer).Assembly;
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+
+        if (stream == null)
+        {
+            throw new InvalidOperationException($"Ресурс не найден: {resourceName}");
+        }
+
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.ToArray();
+    }
+
     private HttpListener CreateListener(int port)
     {
         var httpListener = new HttpListener();
@@ -276,6 +310,18 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
 
                 case "/chat":
                     ServeObsOverlay(response);
+                    break;
+
+                case "/assets/obs.css":
+                    ServeText(response, "text/css; charset=utf-8", ObsOverlayCssContent);
+                    break;
+
+                case "/assets/obs.js":
+                    ServeBytes(response, "application/javascript; charset=utf-8", ObsOverlayJsContent);
+                    break;
+
+                case "/favicon.ico":
+                    ServeBytes(response, "image/x-icon", FaviconIcoContent);
                     break;
 
                 case "/events":
@@ -391,8 +437,7 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
     {
         try
         {
-            var html = GetObsOverlayHtml();
-            var buffer = Encoding.UTF8.GetBytes(html);
+            var buffer = Encoding.UTF8.GetBytes(ObsOverlayHtmlContent);
 
             response.ContentType = "text/html; charset=utf-8";
             response.ContentLength64 = buffer.Length;
@@ -411,275 +456,6 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
 
     // TODO: Удалить избыточные сообщения при обновлении настроек
     // TODO: Поправить отображение бейджей и эмодзи в историчных сообщениях
-    private string GetObsOverlayHtml()
-    {
-        return """
-               <!DOCTYPE html>
-               <html>
-               <head>
-                   <title>PoproshaykaBot Chat Overlay</title>
-                   <meta charset='utf-8'>
-                   <style>
-                       :root {
-                           --chat-bg-color: #000000b5;
-                           --chat-text-color: #ffffff;
-                           --chat-username-color: #9146ff;
-                           --chat-system-color: #ffcc00;
-                           --chat-timestamp-color: #999999;
-                           --chat-font-family: Arial, sans-serif;
-                           --chat-font-size: 14px;
-                           --chat-font-weight: normal;
-                           --chat-padding: 5px;
-                           --chat-margin: 5px 0;
-                           --chat-border-radius: 5px;
-                           --chat-animation-duration: 0.3s;
-
-                           --emote-size: 28px;
-                           --badge-size: 18px;
-                       }
-
-                       body {
-                           background: transparent;
-                           font-family: var(--chat-font-family);
-                           font-size: var(--chat-font-size);
-                           font-weight: var(--chat-font-weight);
-                           margin: 0;
-                           padding: var(--chat-padding);
-                           color: var(--chat-text-color);
-                       }
-
-                       .message {
-                           margin: var(--chat-margin);
-                           animation: slideIn var(--chat-animation-duration) ease-out;
-                           padding: var(--chat-padding);
-                           border-radius: var(--chat-border-radius);
-                           background: var(--chat-bg-color);
-                       }
-
-                       .message.no-animation {
-                           animation: none;
-                       }
-
-                       @keyframes slideIn {
-                           from { transform: translateX(-100%); opacity: 0; }
-                           to { transform: translateX(0); opacity: 1; }
-                       }
-
-                       .username {
-                           font-weight: bold;
-                           color: var(--chat-username-color);
-                       }
-
-                       .timestamp {
-                           color: var(--chat-timestamp-color);
-                           font-size: 0.8em;
-                           margin-right: 5px;
-                       }
-
-                       .message-text {
-                           color: var(--chat-text-color);
-                       }
-
-                       .system-message {
-                           color: var(--chat-system-color);
-                           font-style: italic;
-                       }
-
-                       .badge {
-                           width: var(--badge-size);
-                           height: var(--badge-size);
-                           margin-right: 2px;
-                           vertical-align: middle;
-                           border-radius: 2px;
-                       }
-
-                       .emote {
-                           height: var(--emote-size);
-                           vertical-align: middle;
-                           margin: 0 1px;
-                       }
-                   </style>
-               </head>
-               <body>
-                   <div id='chat'></div>
-                   <script>
-                       const chatContainer = document.getElementById('chat');
-                       let maxMessages = 50;
-                       let showTimestamp = true;
-                       let enableAnimations = true;
-
-                       const eventSource = new EventSource('/events');
-
-                       eventSource.onmessage = function(event) {
-                           try {
-                               const data = JSON.parse(event.data);
-                               if (data.type === 'message') {
-                                   addMessage(data.message);
-                               } else if (data.type === 'clear') {
-                                   clearChat();
-                               } else if (data.type === 'chat_settings_changed') {
-                                   updateChatSettings(data.settings);
-                               }
-                           } catch (e) {
-                               console.error('Ошибка парсинга SSE данных:', e);
-                           }
-                       };
-
-                       eventSource.onerror = function(event) {
-                           console.error('SSE ошибка:', event);
-                       };
-
-                       function addMessage(message, isHistoryMessage = false) {
-                           const messageDiv = document.createElement('div');
-                           messageDiv.className = 'message';
-
-                           if (isHistoryMessage || !enableAnimations) {
-                               messageDiv.classList.add('no-animation');
-                           }
-
-                           const timestamp = new Date(message.timestamp).toLocaleTimeString();
-                           const isSystemMessage = message.messageType !== 'UserMessage';
-
-                           let timestampHtml = showTimestamp ? `<span class='timestamp'>${timestamp}</span>` : '';
-
-                           if (isSystemMessage) {
-                               messageDiv.innerHTML = `
-                                   ${timestampHtml}
-                                   <span class='system-message'>${message.message}</span>
-                               `;
-                           } else {
-                               const badgesHtml = renderBadges(message.badges || []);
-                               const messageWithEmotes = renderMessageWithEmotes(message.message, message.emotes || []);
-
-                               messageDiv.innerHTML = `
-                                   ${timestampHtml}
-                                   ${badgesHtml}
-                                   <span class='username'>${message.username}:</span>
-                                   <span class='message-text'> ${messageWithEmotes}</span>
-                               `;
-                           }
-
-                           chatContainer.appendChild(messageDiv);
-
-                           while (chatContainer.children.length > maxMessages) {
-                               chatContainer.removeChild(chatContainer.firstChild);
-                           }
-
-                           chatContainer.scrollTop = chatContainer.scrollHeight;
-                       }
-
-                       function clearChat() {
-                           chatContainer.innerHTML = '';
-                       }
-
-                       function renderBadges(badges) {
-                           if (!badges || badges.length === 0) return '';
-
-                           return badges.map(badge => {
-                               if (!badge.imageUrl) return '';
-                               return `<img src="${badge.imageUrl}" alt="${badge.type}" title="${badge.type} ${badge.version}" class="badge">`;
-                           }).join('');
-                       }
-
-                       function renderMessageWithEmotes(message, emotes) {
-                           if (!emotes || emotes.length === 0) return escapeHtml(message);
-
-                           const sortedEmotes = emotes.sort((a, b) => b.startIndex - a.startIndex);
-
-                           let result = message;
-                           for (const emote of sortedEmotes) {
-                               if (emote.imageUrl && emote.startIndex >= 0 && emote.endIndex >= emote.startIndex) {
-                                   const before = result.substring(0, emote.startIndex);
-                                   const after = result.substring(emote.endIndex + 1);
-                                   const emoteImg = `<img src="${emote.imageUrl}" alt="${emote.name}" title="${emote.name}" class="emote">`;
-                                   result = before + emoteImg + after;
-                               }
-                           }
-
-                           return escapeHtml(result, true); // true = не экранировать HTML теги img
-                       }
-
-                       function escapeHtml(text, preserveImgTags = false) {
-                           if (preserveImgTags) {
-                               const imgTags = [];
-                               text = text.replace(/<img[^>]*>/g, (match) => {
-                                   imgTags.push(match);
-                                   return `__IMG_PLACEHOLDER_${imgTags.length - 1}__`;
-                               });
-
-                               text = text.replace(/&/g, '&amp;')
-                                         .replace(/</g, '&lt;')
-                                         .replace(/>/g, '&gt;')
-                                         .replace(/"/g, '&quot;')
-                                         .replace(/'/g, '&#039;');
-
-                               text = text.replace(/__IMG_PLACEHOLDER_(\d+)__/g, (match, index) => {
-                                   return imgTags[parseInt(index)];
-                               });
-
-                               return text;
-                           }
-
-                           return text.replace(/&/g, '&amp;')
-                                     .replace(/</g, '&lt;')
-                                     .replace(/>/g, '&gt;')
-                                     .replace(/"/g, '&quot;')
-                                     .replace(/'/g, '&#039;');
-                       }
-
-                       function updateChatSettings(settings) {
-                           if (typeof settings === 'string') {
-                               try {
-                                   settings = JSON.parse(settings);
-                               } catch (e) {
-                                   console.error('Некорректные настройки чата (ожидался объект):', e);
-                                   return;
-                               }
-                           }
-                           const root = document.documentElement;
-
-                           if (settings.backgroundColor) root.style.setProperty('--chat-bg-color', settings.backgroundColor);
-                           if (settings.textColor) root.style.setProperty('--chat-text-color', settings.textColor);
-                           if (settings.usernameColor) root.style.setProperty('--chat-username-color', settings.usernameColor);
-                           if (settings.systemMessageColor) root.style.setProperty('--chat-system-color', settings.systemMessageColor);
-                           if (settings.timestampColor) root.style.setProperty('--chat-timestamp-color', settings.timestampColor);
-                           if (settings.fontFamily) root.style.setProperty('--chat-font-family', settings.fontFamily);
-                           if (settings.fontSize) root.style.setProperty('--chat-font-size', settings.fontSize);
-                           if (settings.fontWeight) root.style.setProperty('--chat-font-weight', settings.fontWeight);
-                           if (settings.padding) root.style.setProperty('--chat-padding', settings.padding);
-                           if (settings.margin) root.style.setProperty('--chat-margin', settings.margin);
-                           if (settings.borderRadius) root.style.setProperty('--chat-border-radius', settings.borderRadius);
-                           if (settings.animationDuration) root.style.setProperty('--chat-animation-duration', settings.animationDuration);
-
-                           if (settings.emoteSize) root.style.setProperty('--emote-size', settings.emoteSize);
-                           if (settings.badgeSize) root.style.setProperty('--badge-size', settings.badgeSize);
-
-                           if (settings.maxMessages !== undefined) maxMessages = settings.maxMessages;
-                           if (settings.showTimestamp !== undefined) showTimestamp = settings.showTimestamp;
-                           if (settings.enableAnimations !== undefined) enableAnimations = settings.enableAnimations;
-
-                           console.log('Настройки чата обновлены:', settings);
-                       }
-
-                       fetch('/api/chat-settings')
-                           .then(response => response.json())
-                           .then(settings => {
-                               updateChatSettings(settings);
-                           })
-                           .catch(error => console.error('Ошибка загрузки настроек чата:', error));
-
-                       fetch('/api/history')
-                           .then(response => response.json())
-                           .then(messages => {
-                               messages.forEach(message => addMessage(message, true));
-                           })
-                           .catch(error => console.error('Ошибка загрузки истории:', error));
-                   </script>
-               </body>
-               </html>
-               """;
-    }
-
     private void HandleSseConnection(HttpListenerResponse response)
     {
         try
@@ -741,7 +517,7 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
             var settings = _settingsManager.Current.Twitch.ObsChat;
             var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings);
 
-            var json = JsonSerializer.Serialize(cssSettings);
+            var json = JsonSerializer.Serialize(cssSettings, JsonSerializerOptions);
             var buffer = Encoding.UTF8.GetBytes(json);
 
             response.ContentType = "application/json; charset=utf-8";
@@ -827,5 +603,22 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         {
             LogMessage?.Invoke($"Ошибка записи ошибки в ответ: {ex.Message}");
         }
+    }
+
+    private void ServeText(HttpListenerResponse response, string contentType, string text)
+    {
+        var buffer = Encoding.UTF8.GetBytes(text);
+        response.ContentType = contentType;
+        response.ContentLength64 = buffer.Length;
+        response.OutputStream.Write(buffer, 0, buffer.Length);
+        response.Close();
+    }
+
+    private void ServeBytes(HttpListenerResponse response, string contentType, byte[] bytes)
+    {
+        response.ContentType = contentType;
+        response.ContentLength64 = bytes.Length;
+        response.OutputStream.Write(bytes, 0, bytes.Length);
+        response.Close();
     }
 }

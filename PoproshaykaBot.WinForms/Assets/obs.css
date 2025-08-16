@@ -1,0 +1,84 @@
+:root {
+    --chat-bg-color: #000000b5;
+    --chat-text-color: #ffffff;
+    --chat-username-color: #9146ff;
+    --chat-system-color: #ffcc00;
+    --chat-timestamp-color: #999999;
+    --chat-font-family: Arial, sans-serif;
+    --chat-font-size: 14px;
+    --chat-font-weight: normal;
+    --chat-padding: 5px;
+    --chat-margin: 5px 0;
+    --chat-border-radius: 5px;
+    --chat-animation-duration: 0.3s;
+
+    --emote-size: 28px;
+    --badge-size: 18px;
+}
+
+body {
+    font-family: var(--chat-font-family);
+    font-size: var(--chat-font-size);
+    font-weight: var(--chat-font-weight);
+    margin: 0;
+    padding: var(--chat-padding);
+    color: var(--chat-text-color);
+    background: transparent;
+}
+
+.message {
+    margin: var(--chat-margin);
+    padding: var(--chat-padding);
+    animation: slideIn var(--chat-animation-duration) ease-out;
+    border-radius: var(--chat-border-radius);
+    background: var(--chat-bg-color);
+}
+
+.message.no-animation {
+    animation: none;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.username {
+    font-weight: bold;
+    color: var(--chat-username-color);
+}
+
+.timestamp {
+    font-size: 0.8em;
+    margin-right: 5px;
+    color: var(--chat-timestamp-color);
+}
+
+.message-text {
+    color: var(--chat-text-color);
+}
+
+.system-message {
+    font-style: italic;
+    color: var(--chat-system-color);
+}
+
+.badge {
+    width: var(--badge-size);
+    height: var(--badge-size);
+    margin-right: 2px;
+    vertical-align: middle;
+    border-radius: 2px;
+}
+
+.emote {
+    height: var(--emote-size);
+    margin: 0 1px;
+    vertical-align: middle;
+}
