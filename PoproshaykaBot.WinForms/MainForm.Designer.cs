@@ -30,6 +30,7 @@ partial class MainForm
     private void InitializeComponent()
     {
         var resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
+		components = new System.ComponentModel.Container();
         _mainTableLayoutPanel = new TableLayoutPanel();
         _buttonTableLayoutPanel = new TableLayoutPanel();
         _connectButton = new Button();
@@ -46,6 +47,7 @@ partial class MainForm
         _logLabel = new Label();
         _chatDisplay = new ChatDisplay();
         _logTextBox = new TextBox();
+		_streamInfoTimer = new System.Windows.Forms.Timer(components);
         _mainTableLayoutPanel.SuspendLayout();
         _buttonTableLayoutPanel.SuspendLayout();
         _contentTableLayoutPanel.SuspendLayout();
@@ -226,6 +228,11 @@ partial class MainForm
         _streamInfoLabel.TabIndex = 4;
         _streamInfoLabel.Text = "—";
         _streamInfoLabel.TextAlign = ContentAlignment.MiddleLeft;
+		// 
+		// _streamInfoTimer
+		// 
+		_streamInfoTimer.Interval = 60000;
+		_streamInfoTimer.Tick += OnStreamInfoTimerTick;
         // 
         // _logLabel
         // 
@@ -292,6 +299,7 @@ partial class MainForm
     private Label _logLabel;
     private TextBox _logTextBox;
     private ChatDisplay _chatDisplay;
+	private System.Windows.Forms.Timer _streamInfoTimer;
 
     #endregion
 }

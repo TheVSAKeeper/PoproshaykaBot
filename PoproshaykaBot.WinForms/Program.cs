@@ -14,7 +14,7 @@ namespace PoproshaykaBot.WinForms;
 public static class Program
 {
     [STAThread]
-    private static async Task Main()
+    private static void Main()
     {
         ApplicationConfiguration.Initialize();
 
@@ -40,7 +40,7 @@ public static class Program
         {
             try
             {
-                await httpServer.StartAsync();
+                httpServer.StartAsync().GetAwaiter().GetResult();
                 httpServerStarted = true;
             }
             catch (Exception ex)

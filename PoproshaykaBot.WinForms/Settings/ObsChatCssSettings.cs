@@ -2,7 +2,7 @@ namespace PoproshaykaBot.WinForms.Settings;
 
 public class ObsChatCssSettings
 {
-    public string BackgroundColor { get; set; } = "rgba(0, 0, 0, 0.7)";
+    public string BackgroundColor { get; set; } = "#000000b5";
     public string TextColor { get; set; } = "#ffffff";
     public string UsernameColor { get; set; } = "#9146ff";
     public string SystemMessageColor { get; set; } = "#ffcc00";
@@ -57,10 +57,9 @@ public class ObsChatCssSettings
     {
         if (color.A == 255)
         {
-            return ColorTranslator.ToHtml(color);
+            return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
         }
 
-        var alpha = Math.Round(color.A / 255.0, 2);
-        return $"rgba({color.R}, {color.G}, {color.B}, {alpha})";
+        return $"#{color.R:X2}{color.G:X2}{color.B:X2}{color.A:X2}";
     }
 }

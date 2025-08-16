@@ -74,7 +74,8 @@ public sealed class ChatCommandProcessor
 
         if (_tokenToCommand.TryGetValue(token, out var command) == false)
         {
-            return false;
+            response = HandleUnknown(messageText, context);
+            return true;
         }
 
         var args = string.IsNullOrWhiteSpace(argsString)
@@ -100,7 +101,7 @@ public sealed class ChatCommandProcessor
         return true;
     }
 
-    public OutgoingMessage HandleUnknown(string originalText, CommandContext context)
+    private OutgoingMessage HandleUnknown(string originalText, CommandContext context)
     {
         try
         {

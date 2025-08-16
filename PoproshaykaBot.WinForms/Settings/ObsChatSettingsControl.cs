@@ -253,12 +253,6 @@ public partial class ObsChatSettingsControl : UserControl
 
     private string GetColorDisplayText(Color color)
     {
-        if (color.A == 255)
-        {
-            return ColorTranslator.ToHtml(color);
-        }
-
-        var alpha = Math.Round(color.A / 255.0, 2);
-        return $"rgba({color.R}, {color.G}, {color.B}, {alpha})";
+        return ColorTranslator.ToHtml(color);
     }
 }

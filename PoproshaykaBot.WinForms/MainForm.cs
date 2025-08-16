@@ -303,6 +303,19 @@ public partial class MainForm : Form
         UpdateStreamInfo();
     }
 
+    private void OnStreamInfoTimerTick(object? sender, EventArgs e)
+    {
+        if (_bot == null)
+        {
+            return;
+        }
+
+        if (_bot.StreamStatus == StreamStatus.Online)
+        {
+            UpdateStreamInfo();
+        }
+    }
+
     private void OnOAuthStatusChanged(string message)
     {
         if (InvokeRequired)
@@ -339,12 +352,24 @@ public partial class MainForm : Form
                 _streamStatusLabel.Text = "🔴 Стрим онлайн";
                 _streamStatusLabel.ForeColor = Color.Green;
                 UpdateStreamInfo();
+
+                if (_streamInfoTimer.Enabled == false)
+                {
+                    _streamInfoTimer.Start();
+                }
+
                 break;
 
             case StreamStatus.Offline:
                 _streamStatusLabel.Text = "⚫ Стрим офлайн";
                 _streamStatusLabel.ForeColor = Color.Gray;
                 _streamInfoLabel.Text = "—";
+
+                if (_streamInfoTimer.Enabled)
+                {
+                    _streamInfoTimer.Stop();
+                }
+
                 break;
 
             case StreamStatus.Unknown:
@@ -352,6 +377,12 @@ public partial class MainForm : Form
                 _streamStatusLabel.Text = "Статус стрима: Неизвестен";
                 _streamStatusLabel.ForeColor = SystemColors.ControlText;
                 _streamInfoLabel.Text = "—";
+
+                if (_streamInfoTimer.Enabled)
+                {
+                    _streamInfoTimer.Stop();
+                }
+
                 break;
         }
     }

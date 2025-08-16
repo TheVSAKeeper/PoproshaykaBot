@@ -369,7 +369,6 @@ public class Bot : IAsyncDisposable
 
         if (_commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response) == false)
         {
-            response = _commandProcessor.HandleUnknown(e.ChatMessage.Message, context);
         }
 
         if (response != null)

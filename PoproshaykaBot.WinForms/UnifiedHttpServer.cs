@@ -2,6 +2,7 @@ using PoproshaykaBot.WinForms.Models;
 using PoproshaykaBot.WinForms.Settings;
 using System.Net;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms;
@@ -9,6 +10,13 @@ namespace PoproshaykaBot.WinForms;
 // TODO: Смешение ответственностей
 public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
 {
+    private static readonly JsonSerializerOptions JsonSerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = false,
+    };
+
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly List<HttpListenerResponse> _sseClients = [];
     private readonly SettingsManager _settingsManager;
@@ -189,7 +197,7 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
                 settings = cssSettings,
             };
 
-            var json = JsonSerializer.Serialize(sseMessage);
+            var json = JsonSerializer.Serialize(sseMessage, JsonSerializerOptions);
 
             lock (_sseClients)
             {
@@ -413,7 +421,7 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
                    <meta charset='utf-8'>
                    <style>
                        :root {
-                           --chat-bg-color: rgba(0, 0, 0, 0.7);
+                           --chat-bg-color: #000000b5;
                            --chat-text-color: #ffffff;
                            --chat-username-color: #9146ff;
                            --chat-system-color: #ffcc00;
@@ -620,6 +628,14 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
                        }
 
                        function updateChatSettings(settings) {
+                           if (typeof settings === 'string') {
+                               try {
+                                   settings = JSON.parse(settings);
+                               } catch (e) {
+                                   console.error('Некорректные настройки чата (ожидался объект):', e);
+                                   return;
+                               }
+                           }
                            const root = document.documentElement;
 
                            if (settings.backgroundColor) root.style.setProperty('--chat-bg-color', settings.backgroundColor);
