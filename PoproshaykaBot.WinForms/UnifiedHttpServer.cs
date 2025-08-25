@@ -490,6 +490,22 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
                     message = msg.Message,
                     timestamp = msg.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     messageType = msg.MessageType.ToString(),
+                    emotes = msg.Emotes.Select(e => new
+                        {
+                            id = e.Id,
+                            name = e.Name,
+                            imageUrl = e.ImageUrl,
+                            startIndex = e.StartIndex,
+                            endIndex = e.EndIndex,
+                        })
+                        .ToArray(),
+                    badges = msg.Badges.Select(b => new
+                        {
+                            type = b.Key,
+                            version = b.Value,
+                            imageUrl = msg.BadgeUrls.TryGetValue($"{b.Key}/{b.Value}", out var url) ? url : string.Empty,
+                        })
+                        .ToArray(),
                 });
 
             var json = JsonSerializer.Serialize(history);

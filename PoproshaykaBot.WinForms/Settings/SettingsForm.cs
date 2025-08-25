@@ -106,6 +106,8 @@ public partial class SettingsForm : Form
         destination.Twitch.ObsChat.EnableAnimations = source.Twitch.ObsChat.EnableAnimations;
         destination.Twitch.ObsChat.MaxMessages = source.Twitch.ObsChat.MaxMessages;
         destination.Twitch.ObsChat.ShowTimestamp = source.Twitch.ObsChat.ShowTimestamp;
+        destination.Twitch.ObsChat.EmoteSizePixels = source.Twitch.ObsChat.EmoteSizePixels;
+        destination.Twitch.ObsChat.BadgeSizePixels = source.Twitch.ObsChat.BadgeSizePixels;
         destination.Twitch.AutoBroadcast.AutoBroadcastEnabled = source.Twitch.AutoBroadcast.AutoBroadcastEnabled;
         destination.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled = source.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled;
         destination.Twitch.AutoBroadcast.StreamStartMessage = source.Twitch.AutoBroadcast.StreamStartMessage;
