@@ -40,6 +40,16 @@ public partial class ObsChatSettingsControl : UserControl
 
         _emoteSizeNumeric.Value = settings.EmoteSizePixels;
         _badgeSizeNumeric.Value = settings.BadgeSizePixels;
+
+        _showUserTypeBordersCheckBox.Checked = settings.ShowUserTypeBorders;
+        _highlightFirstTimeUsersCheckBox.Checked = settings.HighlightFirstTimeUsers;
+        _highlightMentionsCheckBox.Checked = settings.HighlightMentions;
+        _enableMessageShadowsCheckBox.Checked = settings.EnableMessageShadows;
+        _enableSpecialEffectsCheckBox.Checked = settings.EnableSpecialEffects;
+
+        _enableSmoothScrollCheckBox.Checked = settings.EnableSmoothScroll;
+        _autoScrollEnabledCheckBox.Checked = settings.AutoScrollEnabled;
+        _scrollAnimationDurationNumeric.Value = settings.ScrollAnimationDuration;
     }
 
     public void SaveSettings(ObsChatSettings settings)
@@ -66,6 +76,16 @@ public partial class ObsChatSettingsControl : UserControl
 
         settings.EmoteSizePixels = (int)_emoteSizeNumeric.Value;
         settings.BadgeSizePixels = (int)_badgeSizeNumeric.Value;
+
+        settings.ShowUserTypeBorders = _showUserTypeBordersCheckBox.Checked;
+        settings.HighlightFirstTimeUsers = _highlightFirstTimeUsersCheckBox.Checked;
+        settings.HighlightMentions = _highlightMentionsCheckBox.Checked;
+        settings.EnableMessageShadows = _enableMessageShadowsCheckBox.Checked;
+        settings.EnableSpecialEffects = _enableSpecialEffectsCheckBox.Checked;
+
+        settings.EnableSmoothScroll = _enableSmoothScrollCheckBox.Checked;
+        settings.AutoScrollEnabled = _autoScrollEnabledCheckBox.Checked;
+        settings.ScrollAnimationDuration = (int)_scrollAnimationDurationNumeric.Value;
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -159,6 +179,12 @@ public partial class ObsChatSettingsControl : UserControl
     private void OnBadgeSizeResetButtonClicked(object sender, EventArgs e)
     {
         _badgeSizeNumeric.Value = DefaultSettings.BadgeSizePixels;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnScrollAnimationDurationResetButtonClicked(object sender, EventArgs e)
+    {
+        _scrollAnimationDurationNumeric.Value = 300;
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 

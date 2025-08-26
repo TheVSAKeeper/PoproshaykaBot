@@ -84,6 +84,16 @@
             _maxMessagesNumeric = new NumericUpDown();
             _maxMessagesResetButton = new Button();
             _showTimestampCheckBox = new CheckBox();
+            _showUserTypeBordersCheckBox = new CheckBox();
+            _highlightFirstTimeUsersCheckBox = new CheckBox();
+            _highlightMentionsCheckBox = new CheckBox();
+            _enableMessageShadowsCheckBox = new CheckBox();
+            _enableSpecialEffectsCheckBox = new CheckBox();
+            _enableSmoothScrollCheckBox = new CheckBox();
+            _autoScrollEnabledCheckBox = new CheckBox();
+            _scrollAnimationDurationLabel = new Label();
+            _scrollAnimationDurationNumeric = new NumericUpDown();
+            _scrollAnimationDurationResetButton = new Button();
             _mainTabControl.SuspendLayout();
             _colorsTabPage.SuspendLayout();
             _colorsTableLayout.SuspendLayout();
@@ -784,11 +794,29 @@
             _limitsTableLayout.Controls.Add(_maxMessagesNumeric, 1, 0);
             _limitsTableLayout.Controls.Add(_maxMessagesResetButton, 2, 0);
             _limitsTableLayout.Controls.Add(_showTimestampCheckBox, 0, 1);
+            _limitsTableLayout.Controls.Add(_showUserTypeBordersCheckBox, 0, 2);
+            _limitsTableLayout.Controls.Add(_highlightFirstTimeUsersCheckBox, 0, 3);
+            _limitsTableLayout.Controls.Add(_highlightMentionsCheckBox, 0, 4);
+            _limitsTableLayout.Controls.Add(_enableMessageShadowsCheckBox, 0, 5);
+            _limitsTableLayout.Controls.Add(_enableSpecialEffectsCheckBox, 0, 6);
+            _limitsTableLayout.Controls.Add(_enableSmoothScrollCheckBox, 0, 7);
+            _limitsTableLayout.Controls.Add(_autoScrollEnabledCheckBox, 0, 8);
+            _limitsTableLayout.Controls.Add(_scrollAnimationDurationLabel, 0, 9);
+            _limitsTableLayout.Controls.Add(_scrollAnimationDurationNumeric, 1, 9);
+            _limitsTableLayout.Controls.Add(_scrollAnimationDurationResetButton, 2, 9);
             _limitsTableLayout.Dock = DockStyle.Fill;
             _limitsTableLayout.Location = new Point(3, 3);
             _limitsTableLayout.Name = "_limitsTableLayout";
             _limitsTableLayout.Padding = new Padding(10);
-            _limitsTableLayout.RowCount = 3;
+            _limitsTableLayout.RowCount = 11;
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
             _limitsTableLayout.RowStyles.Add(new RowStyle());
             _limitsTableLayout.RowStyles.Add(new RowStyle());
             _limitsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -843,6 +871,127 @@
             _showTimestampCheckBox.Text = "Показывать время";
             _showTimestampCheckBox.UseVisualStyleBackColor = true;
             _showTimestampCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _showUserTypeBordersCheckBox
+            // 
+            _showUserTypeBordersCheckBox.AutoSize = true;
+            _showUserTypeBordersCheckBox.Dock = DockStyle.Fill;
+            _showUserTypeBordersCheckBox.Location = new Point(13, 69);
+            _showUserTypeBordersCheckBox.Name = "_showUserTypeBordersCheckBox";
+            _showUserTypeBordersCheckBox.Size = new Size(200, 19);
+            _showUserTypeBordersCheckBox.TabIndex = 4;
+            _showUserTypeBordersCheckBox.Text = "Показывать рамки типов пользователей";
+            _showUserTypeBordersCheckBox.UseVisualStyleBackColor = true;
+            _showUserTypeBordersCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _highlightFirstTimeUsersCheckBox
+            // 
+            _highlightFirstTimeUsersCheckBox.AutoSize = true;
+            _highlightFirstTimeUsersCheckBox.Dock = DockStyle.Fill;
+            _highlightFirstTimeUsersCheckBox.Location = new Point(13, 94);
+            _highlightFirstTimeUsersCheckBox.Name = "_highlightFirstTimeUsersCheckBox";
+            _highlightFirstTimeUsersCheckBox.Size = new Size(200, 19);
+            _highlightFirstTimeUsersCheckBox.TabIndex = 5;
+            _highlightFirstTimeUsersCheckBox.Text = "Выделять новых пользователей";
+            _highlightFirstTimeUsersCheckBox.UseVisualStyleBackColor = true;
+            _highlightFirstTimeUsersCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _highlightMentionsCheckBox
+            // 
+            _highlightMentionsCheckBox.AutoSize = true;
+            _highlightMentionsCheckBox.Dock = DockStyle.Fill;
+            _highlightMentionsCheckBox.Location = new Point(13, 119);
+            _highlightMentionsCheckBox.Name = "_highlightMentionsCheckBox";
+            _highlightMentionsCheckBox.Size = new Size(200, 19);
+            _highlightMentionsCheckBox.TabIndex = 6;
+            _highlightMentionsCheckBox.Text = "Выделять упоминания (@имя)";
+            _highlightMentionsCheckBox.UseVisualStyleBackColor = true;
+            _highlightMentionsCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _enableMessageShadowsCheckBox
+            // 
+            _enableMessageShadowsCheckBox.AutoSize = true;
+            _enableMessageShadowsCheckBox.Dock = DockStyle.Fill;
+            _enableMessageShadowsCheckBox.Location = new Point(13, 144);
+            _enableMessageShadowsCheckBox.Name = "_enableMessageShadowsCheckBox";
+            _enableMessageShadowsCheckBox.Size = new Size(200, 19);
+            _enableMessageShadowsCheckBox.TabIndex = 7;
+            _enableMessageShadowsCheckBox.Text = "Включить тени сообщений";
+            _enableMessageShadowsCheckBox.UseVisualStyleBackColor = true;
+            _enableMessageShadowsCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _enableSpecialEffectsCheckBox
+            // 
+            _enableSpecialEffectsCheckBox.AutoSize = true;
+            _enableSpecialEffectsCheckBox.Dock = DockStyle.Fill;
+            _enableSpecialEffectsCheckBox.Location = new Point(13, 169);
+            _enableSpecialEffectsCheckBox.Name = "_enableSpecialEffectsCheckBox";
+            _enableSpecialEffectsCheckBox.Size = new Size(200, 19);
+            _enableSpecialEffectsCheckBox.TabIndex = 8;
+            _enableSpecialEffectsCheckBox.Text = "Включить спецэффекты";
+            _enableSpecialEffectsCheckBox.UseVisualStyleBackColor = true;
+            _enableSpecialEffectsCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _enableSmoothScrollCheckBox
+            // 
+            _enableSmoothScrollCheckBox.AutoSize = true;
+            _enableSmoothScrollCheckBox.Dock = DockStyle.Fill;
+            _enableSmoothScrollCheckBox.Location = new Point(13, 194);
+            _enableSmoothScrollCheckBox.Name = "_enableSmoothScrollCheckBox";
+            _enableSmoothScrollCheckBox.Size = new Size(200, 19);
+            _enableSmoothScrollCheckBox.TabIndex = 9;
+            _enableSmoothScrollCheckBox.Text = "Включить плавную прокрутку";
+            _enableSmoothScrollCheckBox.UseVisualStyleBackColor = true;
+            _enableSmoothScrollCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _autoScrollEnabledCheckBox
+            // 
+            _autoScrollEnabledCheckBox.AutoSize = true;
+            _autoScrollEnabledCheckBox.Dock = DockStyle.Fill;
+            _autoScrollEnabledCheckBox.Location = new Point(13, 219);
+            _autoScrollEnabledCheckBox.Name = "_autoScrollEnabledCheckBox";
+            _autoScrollEnabledCheckBox.Size = new Size(200, 19);
+            _autoScrollEnabledCheckBox.TabIndex = 10;
+            _autoScrollEnabledCheckBox.Text = "Автоматическая прокрутка";
+            _autoScrollEnabledCheckBox.UseVisualStyleBackColor = true;
+            _autoScrollEnabledCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _scrollAnimationDurationLabel
+            // 
+            _scrollAnimationDurationLabel.AutoSize = true;
+            _scrollAnimationDurationLabel.Dock = DockStyle.Fill;
+            _scrollAnimationDurationLabel.Location = new Point(13, 244);
+            _scrollAnimationDurationLabel.Margin = new Padding(3);
+            _scrollAnimationDurationLabel.Name = "_scrollAnimationDurationLabel";
+            _scrollAnimationDurationLabel.Size = new Size(200, 25);
+            _scrollAnimationDurationLabel.TabIndex = 11;
+            _scrollAnimationDurationLabel.Text = "Длительность анимации прокрутки (мс):";
+            _scrollAnimationDurationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _scrollAnimationDurationNumeric
+            // 
+            _scrollAnimationDurationNumeric.Dock = DockStyle.Fill;
+            _scrollAnimationDurationNumeric.Location = new Point(219, 244);
+            _scrollAnimationDurationNumeric.Maximum = new decimal(new int[] { 2000, 0, 0, 0 });
+            _scrollAnimationDurationNumeric.Minimum = new decimal(new int[] { 100, 0, 0, 0 });
+            _scrollAnimationDurationNumeric.MinimumSize = new Size(80, 0);
+            _scrollAnimationDurationNumeric.Name = "_scrollAnimationDurationNumeric";
+            _scrollAnimationDurationNumeric.Size = new Size(257, 23);
+            _scrollAnimationDurationNumeric.TabIndex = 12;
+            _scrollAnimationDurationNumeric.Value = new decimal(new int[] { 300, 0, 0, 0 });
+            _scrollAnimationDurationNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _scrollAnimationDurationResetButton
+            // 
+            _scrollAnimationDurationResetButton.AutoSize = true;
+            _scrollAnimationDurationResetButton.Location = new Point(482, 244);
+            _scrollAnimationDurationResetButton.MinimumSize = new Size(40, 23);
+            _scrollAnimationDurationResetButton.Name = "_scrollAnimationDurationResetButton";
+            _scrollAnimationDurationResetButton.Size = new Size(40, 25);
+            _scrollAnimationDurationResetButton.TabIndex = 13;
+            _scrollAnimationDurationResetButton.Text = "↻";
+            _scrollAnimationDurationResetButton.UseVisualStyleBackColor = true;
+            _scrollAnimationDurationResetButton.Click += OnScrollAnimationDurationResetButtonClicked;
             // 
             // ObsChatSettingsControl
             // 
@@ -936,5 +1085,15 @@
         private NumericUpDown _maxMessagesNumeric;
         private Button _maxMessagesResetButton;
         private CheckBox _showTimestampCheckBox;
+        private CheckBox _showUserTypeBordersCheckBox;
+        private CheckBox _highlightFirstTimeUsersCheckBox;
+        private CheckBox _highlightMentionsCheckBox;
+        private CheckBox _enableMessageShadowsCheckBox;
+        private CheckBox _enableSpecialEffectsCheckBox;
+        private CheckBox _enableSmoothScrollCheckBox;
+        private CheckBox _autoScrollEnabledCheckBox;
+        private Label _scrollAnimationDurationLabel;
+        private NumericUpDown _scrollAnimationDurationNumeric;
+        private Button _scrollAnimationDurationResetButton;
     }
 }

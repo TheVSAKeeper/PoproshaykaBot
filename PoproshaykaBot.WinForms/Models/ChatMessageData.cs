@@ -7,6 +7,7 @@ public class ChatMessageData
     public string Message { get; init; } = string.Empty;
     public ChatMessageType MessageType { get; init; }
     public UserStatus Status { get; init; } = UserStatus.None;
+    public bool IsFirstTime { get; init; } = false;
 
     public List<EmoteInfo> Emotes { get; init; } = [];
     public List<KeyValuePair<string, string>> Badges { get; init; } = [];

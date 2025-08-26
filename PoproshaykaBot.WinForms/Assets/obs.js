@@ -3,6 +3,118 @@ let maxMessages = 50;
 let showTimestamp = true;
 let enableAnimations = true;
 
+let showUserTypeBorders = true;
+let highlightFirstTimeUsers = true;
+let isHighlightMentions = true;
+let enableMessageShadows = true;
+let enableSpecialEffects = true;
+
+let enableSmoothScroll = true;
+let scrollAnimationDuration = 300;
+let autoScrollEnabled = true;
+let scrollPaused = false;
+let scrollToBottomThreshold = 100;
+let lastScrollTime = 0;
+let scrollAnimationId = null;
+
+const animationTypes = {
+    'slideInRight': 'slide-in-right',
+    'slideInLeft': 'slide-in-left',
+    'fadeInUp': 'fade-in-up',
+    'bounceIn': 'bounce-in'
+};
+
+function smoothScrollToBottom() {
+    if (!autoScrollEnabled || scrollPaused) return;
+
+    const currentTime = Date.now();
+    if (currentTime - lastScrollTime < 16) return; // Throttle to ~60fps
+    lastScrollTime = currentTime;
+
+    if (scrollAnimationId) {
+        cancelAnimationFrame(scrollAnimationId);
+    }
+
+    if (enableSmoothScroll && 'scrollBehavior' in document.documentElement.style) {
+        chatContainer.scrollTo({
+            top: chatContainer.scrollHeight,
+            behavior: 'smooth'
+        });
+    } else {
+        const startTop = chatContainer.scrollTop;
+        const targetTop = chatContainer.scrollHeight - chatContainer.clientHeight;
+        const distance = targetTop - startTop;
+
+        if (Math.abs(distance) < 1) {
+            chatContainer.scrollTop = targetTop;
+            return;
+        }
+
+        const startTime = performance.now();
+
+        function animateScroll(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / scrollAnimationDuration, 1);
+
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+
+            chatContainer.scrollTop = startTop + distance * easeOut;
+
+            if (progress < 1) {
+                scrollAnimationId = requestAnimationFrame(animateScroll);
+            } else {
+                scrollAnimationId = null;
+            }
+        }
+
+        scrollAnimationId = requestAnimationFrame(animateScroll);
+    }
+}
+
+function isNearBottom() {
+    return chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight <= scrollToBottomThreshold;
+}
+
+function handleUserScroll() {
+    if (!isNearBottom()) {
+        scrollPaused = true;
+        setTimeout(() => {
+            scrollPaused = false;
+        }, 3000);
+    }
+}
+
+if (chatContainer) {
+    let scrollTimeout;
+    chatContainer.addEventListener('scroll', () => {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(handleUserScroll, 50);
+    }, { passive: true });
+}
+
+function getUserTypeClasses(userStatus) {
+    const classes = [];
+
+    if (userStatus & 1) classes.push('broadcaster');
+    if (userStatus & 2) classes.push('moderator');
+    if (userStatus & 4) classes.push('vip');
+    if (userStatus & 8) classes.push('subscriber');
+
+    return classes;
+}
+
+function getAnimationType(userStatus, messageType) {
+    if (messageType !== 'UserMessage') {
+        return 'fade-in-up';
+    }
+
+    if (userStatus & 1) {
+        return 'slide-in-left';
+    }
+
+    return 'slide-in-right';
+}
+
 function initEventSource() {
     const eventSource = new EventSource('/events');
 
@@ -32,6 +144,24 @@ function addMessage(message, isHistoryMessage = false) {
 
     if (isHistoryMessage || !enableAnimations) {
         messageDiv.classList.add('no-animation');
+    } else {
+        const animationType = getAnimationType(message.status || 0, message.messageType);
+        messageDiv.classList.add(animationType);
+    }
+
+    const userTypeClasses = getUserTypeClasses(message.status || 0);
+    userTypeClasses.forEach(cls => messageDiv.classList.add(cls));
+
+    if (enableSpecialEffects) {
+        if (message.status & 1) { // Broadcaster
+            messageDiv.classList.add('special-effect');
+        } else if (message.status & 4) { // VIP
+            messageDiv.classList.add('special-effect');
+        }
+    }
+
+    if (message.isFirstTime && highlightFirstTimeUsers) {
+        messageDiv.classList.add('first-time');
     }
 
     const timestamp = new Date(message.timestamp).toLocaleTimeString();
@@ -48,10 +178,13 @@ function addMessage(message, isHistoryMessage = false) {
         const badgesHtml = renderBadges(message.badges || []);
         const messageWithEmotes = renderMessageWithEmotes(message.message, message.emotes || []);
 
+        const usernameClasses = ['username', ...userTypeClasses].join(' ');
+        const usernameHtml = `<span class='${usernameClasses}'>${message.displayName || message.username}:</span>`;
+
         messageDiv.innerHTML = `
             ${timestampHtml}
             ${badgesHtml}
-            <span class='username'>${message.username}:</span>
+            ${usernameHtml}
             <span class='message-text'> ${messageWithEmotes}</span>
         `;
     }
@@ -62,7 +195,11 @@ function addMessage(message, isHistoryMessage = false) {
         chatContainer.removeChild(chatContainer.firstChild);
     }
 
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    if (!isHistoryMessage) {
+        requestAnimationFrame(() => smoothScrollToBottom());
+    } else {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
 }
 
 function clearChat() {
@@ -79,7 +216,9 @@ function renderBadges(badges) {
 }
 
 function renderMessageWithEmotes(message, emotes) {
-    if (!emotes || emotes.length === 0) return escapeHtml(message);
+    if (!emotes || emotes.length === 0) {
+        return highlightMentions(escapeHtml(message));
+    }
 
     const sortedEmotes = emotes.sort((a, b) => b.startIndex - a.startIndex);
 
@@ -88,12 +227,26 @@ function renderMessageWithEmotes(message, emotes) {
         if (emote.imageUrl && emote.startIndex >= 0 && emote.endIndex >= emote.startIndex) {
             const before = result.substring(0, emote.startIndex);
             const after = result.substring(emote.endIndex + 1);
-            const emoteImg = `<img src=\"${emote.imageUrl}\" alt=\"${emote.name}\" title=\"${emote.name}\" class=\"emote\">`;
+
+            const animatedClass = enableSpecialEffects && isAnimatedEmote(emote.name) ? ' animated' : '';
+            const emoteImg = `<img src=\"${emote.imageUrl}\" alt=\"${emote.name}\" title=\"${emote.name}\" class=\"emote${animatedClass}\">`;
+
             result = before + emoteImg + after;
         }
     }
 
-    return escapeHtml(result, true); // true = не экранировать HTML теги img
+    return highlightMentions(escapeHtml(result, true)); // true = не экранировать HTML теги img
+}
+
+function isAnimatedEmote(emoteName) {
+    const animatedEmotes = ['Kappa', 'PogChamp', 'KEKW', 'EZ', 'PauseChamp'];
+    return animatedEmotes.includes(emoteName);
+}
+
+function highlightMentions(text) {
+    if (!isHighlightMentions) return text;
+
+    return text.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
 }
 
 function escapeHtml(text, preserveImgTags = false) {
@@ -149,9 +302,35 @@ function updateChatSettings(settings) {
     if (settings.emoteSize) root.style.setProperty('--emote-size', settings.emoteSize);
     if (settings.badgeSize) root.style.setProperty('--badge-size', settings.badgeSize);
 
+    if (settings.showUserTypeBorders !== undefined) {
+        showUserTypeBorders = settings.showUserTypeBorders;
+        root.style.setProperty('--show-user-type-borders', showUserTypeBorders ? '1' : '0');
+    }
+    if (settings.highlightFirstTimeUsers !== undefined) {
+        highlightFirstTimeUsers = settings.highlightFirstTimeUsers;
+        root.style.setProperty('--highlight-first-time-users', highlightFirstTimeUsers ? '1' : '0');
+    }
+    if (settings.highlightMentions !== undefined) {
+        isHighlightMentions = settings.highlightMentions;
+        root.style.setProperty('--highlight-mentions', isHighlightMentions ? '1' : '0');
+    }
+    if (settings.enableMessageShadows !== undefined) {
+        enableMessageShadows = settings.enableMessageShadows;
+        root.style.setProperty('--enable-message-shadows', enableMessageShadows ? '1' : '0');
+    }
+    if (settings.enableSpecialEffects !== undefined) {
+        enableSpecialEffects = settings.enableSpecialEffects;
+        root.style.setProperty('--enable-special-effects', enableSpecialEffects ? '1' : '0');
+    }
+
     if (settings.maxMessages !== undefined) maxMessages = settings.maxMessages;
     if (settings.showTimestamp !== undefined) showTimestamp = settings.showTimestamp;
     if (settings.enableAnimations !== undefined) enableAnimations = settings.enableAnimations;
+
+    if (settings.enableSmoothScroll !== undefined) enableSmoothScroll = settings.enableSmoothScroll;
+    if (settings.scrollAnimationDuration !== undefined) scrollAnimationDuration = settings.scrollAnimationDuration;
+    if (settings.autoScrollEnabled !== undefined) autoScrollEnabled = settings.autoScrollEnabled;
+    if (settings.scrollToBottomThreshold !== undefined) scrollToBottomThreshold = settings.scrollToBottomThreshold;
 
     console.log('Настройки чата обновлены:', settings);
 }

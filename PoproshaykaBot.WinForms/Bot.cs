@@ -318,6 +318,8 @@ public class Bot : IAsyncDisposable
     {
         _statisticsCollector.TrackMessage(e.ChatMessage.UserId, e.ChatMessage.Username);
 
+        var isFirstSeen = _audienceTracker.OnUserMessage(e.ChatMessage.UserId, e.ChatMessage.DisplayName);
+
         var userMessage = new ChatMessageData
         {
             Timestamp = DateTime.UtcNow,
@@ -325,6 +327,7 @@ public class Bot : IAsyncDisposable
             Message = e.ChatMessage.Message,
             MessageType = ChatMessageType.UserMessage,
             Status = GetUserStatusFlags(e.ChatMessage),
+            IsFirstTime = isFirstSeen,
 
             Emotes = _chatDecorations.ExtractEmotes(e.ChatMessage, _settings.ObsChat.EmoteSizePixels),
             Badges = e.ChatMessage.Badges,
@@ -332,10 +335,6 @@ public class Bot : IAsyncDisposable
         };
 
         ChatMessageReceived?.Invoke(userMessage);
-
-        string? botResponse = null;
-
-        var isFirstSeen = _audienceTracker.OnUserMessage(e.ChatMessage.UserId, e.ChatMessage.DisplayName);
 
         if (_settings.Messages.WelcomeEnabled && isFirstSeen)
         {
@@ -385,7 +384,7 @@ public class Bot : IAsyncDisposable
                     break;
             }
 
-            botResponse = response.Text;
+            var botResponse = response.Text;
 
             if (string.IsNullOrEmpty(botResponse) == false)
             {

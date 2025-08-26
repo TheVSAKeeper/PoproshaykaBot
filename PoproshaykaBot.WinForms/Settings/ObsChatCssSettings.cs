@@ -21,6 +21,17 @@ public class ObsChatCssSettings
     public string EmoteSize { get; set; } = "28px";
     public string BadgeSize { get; set; } = "18px";
 
+    public bool ShowUserTypeBorders { get; set; } = true;
+    public bool HighlightFirstTimeUsers { get; set; } = true;
+    public bool HighlightMentions { get; set; } = true;
+    public bool EnableMessageShadows { get; set; } = true;
+    public bool EnableSpecialEffects { get; set; } = true;
+
+    public bool EnableSmoothScroll { get; set; } = true;
+    public int ScrollAnimationDuration { get; set; } = 300;
+    public bool AutoScrollEnabled { get; set; } = true;
+    public int ScrollToBottomThreshold { get; set; } = 100;
+
     public static ObsChatCssSettings FromObsChatSettings(ObsChatSettings? settings)
     {
         var safeSettings = settings ?? new ObsChatSettings();
@@ -45,6 +56,17 @@ public class ObsChatCssSettings
 
             EmoteSize = $"{ValidateRange(safeSettings.EmoteSizePixels, 16, 128)}px",
             BadgeSize = $"{ValidateRange(safeSettings.BadgeSizePixels, 12, 72)}px",
+
+            ShowUserTypeBorders = safeSettings.ShowUserTypeBorders,
+            HighlightFirstTimeUsers = safeSettings.HighlightFirstTimeUsers,
+            HighlightMentions = safeSettings.HighlightMentions,
+            EnableMessageShadows = safeSettings.EnableMessageShadows,
+            EnableSpecialEffects = safeSettings.EnableSpecialEffects,
+
+            EnableSmoothScroll = safeSettings.EnableSmoothScroll,
+            ScrollAnimationDuration = safeSettings.ScrollAnimationDuration,
+            AutoScrollEnabled = safeSettings.AutoScrollEnabled,
+            ScrollToBottomThreshold = safeSettings.ScrollToBottomThreshold,
         };
     }
 

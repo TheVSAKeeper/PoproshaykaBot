@@ -90,6 +90,17 @@ public class ObsChatSettings
 
     public int EmoteSizePixels { get; set; } = 28;
     public int BadgeSizePixels { get; set; } = 18;
+
+    public bool ShowUserTypeBorders { get; set; } = true;
+    public bool HighlightFirstTimeUsers { get; set; } = true;
+    public bool HighlightMentions { get; set; } = true;
+    public bool EnableMessageShadows { get; set; } = true;
+    public bool EnableSpecialEffects { get; set; } = true;
+
+    public bool EnableSmoothScroll { get; set; } = true;
+    public int ScrollAnimationDuration { get; set; } = 300;
+    public bool AutoScrollEnabled { get; set; } = true;
+    public int ScrollToBottomThreshold { get; set; } = 100;
 }
 
 // TODO: Костыль из-за того, что сериализатор не умеет работать с системным Color

@@ -136,29 +136,7 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
             var messageData = new
             {
                 type = "message",
-                message = new
-                {
-                    username = chatMessage.DisplayName,
-                    message = chatMessage.Message,
-                    timestamp = chatMessage.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    messageType = chatMessage.MessageType.ToString(),
-                    emotes = chatMessage.Emotes.Select(e => new
-                        {
-                            id = e.Id,
-                            name = e.Name,
-                            imageUrl = e.ImageUrl,
-                            startIndex = e.StartIndex,
-                            endIndex = e.EndIndex,
-                        })
-                        .ToArray(),
-                    badges = chatMessage.Badges.Select(b => new
-                        {
-                            type = b.Key,
-                            version = b.Value,
-                            imageUrl = chatMessage.BadgeUrls.TryGetValue($"{b.Key}/{b.Value}", out var url) ? url : "",
-                        })
-                        .ToArray(),
-                },
+                message = ToServerMessage(chatMessage),
             };
 
             var json = JsonSerializer.Serialize(messageData);
@@ -231,6 +209,35 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         await StopAsync();
         _httpListener?.Close();
         _cancellationTokenSource?.Dispose();
+    }
+
+    private static object ToServerMessage(ChatMessageData chatMessage)
+    {
+        return new
+        {
+            username = chatMessage.DisplayName,
+            message = chatMessage.Message,
+            timestamp = chatMessage.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            messageType = chatMessage.MessageType.ToString(),
+            isFirstTime = chatMessage.IsFirstTime,
+            status = chatMessage.Status,
+            emotes = chatMessage.Emotes.Select(e => new
+                {
+                    id = e.Id,
+                    name = e.Name,
+                    imageUrl = e.ImageUrl,
+                    startIndex = e.StartIndex,
+                    endIndex = e.EndIndex,
+                })
+                .ToArray(),
+            badges = chatMessage.Badges.Select(b => new
+                {
+                    type = b.Key,
+                    version = b.Value,
+                    imageUrl = chatMessage.BadgeUrls.GetValueOrDefault($"{b.Key}/{b.Value}", ""),
+                })
+                .ToArray(),
+        };
     }
 
     private static string LoadResourceText(string resourceName)
@@ -484,29 +491,7 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         {
             var history = _chatHistoryManager.GetHistory()
                 .TakeLast(10)
-                .Select(msg => new
-                {
-                    username = msg.DisplayName,
-                    message = msg.Message,
-                    timestamp = msg.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    messageType = msg.MessageType.ToString(),
-                    emotes = msg.Emotes.Select(e => new
-                        {
-                            id = e.Id,
-                            name = e.Name,
-                            imageUrl = e.ImageUrl,
-                            startIndex = e.StartIndex,
-                            endIndex = e.EndIndex,
-                        })
-                        .ToArray(),
-                    badges = msg.Badges.Select(b => new
-                        {
-                            type = b.Key,
-                            version = b.Value,
-                            imageUrl = msg.BadgeUrls.TryGetValue($"{b.Key}/{b.Value}", out var url) ? url : string.Empty,
-                        })
-                        .ToArray(),
-                });
+                .Select(ToServerMessage);
 
             var json = JsonSerializer.Serialize(history);
             var buffer = Encoding.UTF8.GetBytes(json);

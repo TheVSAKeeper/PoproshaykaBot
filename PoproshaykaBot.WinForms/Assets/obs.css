@@ -14,31 +14,174 @@
 
     --emote-size: 28px;
     --badge-size: 18px;
+
+    --broadcaster-color: #ff6b6b;
+    --moderator-color: #51cf66;
+    --vip-color: #845ef7;
+    --subscriber-color: #339af0;
+    --firsttime-color: #ffd43b;
+
+    --shadow-small: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-large: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+
+    --line-height: 1.4;
+    --letter-spacing: 0.025em;
+
+    --show-user-type-borders: 1;
+    --highlight-first-time-users: 1;
+    --highlight-mentions: 1;
+    --enable-message-shadows: 1;
+    --enable-special-effects: 1;
+}
+
+html {
+    overflow: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar {
+    display: none;
+    width: 0 !important;
+    height: 0 !important;
 }
 
 body {
     font-family: var(--chat-font-family);
     font-size: var(--chat-font-size);
     font-weight: var(--chat-font-weight);
+    line-height: var(--line-height);
+    overflow-x: hidden;
+    overflow-y: hidden;
+    height: 100vh;
     margin: 0;
     padding: var(--chat-padding);
+    letter-spacing: var(--letter-spacing);
     color: var(--chat-text-color);
     background: transparent;
+    scroll-behavior: smooth;
+
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+body::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+#chat {
+    overflow-x: hidden;
+    overflow-y: auto;
+    height: 100vh;
+    max-height: 100vh;
+    scroll-behavior: smooth;
+
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#chat::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+* {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+    display: none;
+    width: 0 !important;
+    height: 0 !important;
 }
 
 .message {
+    position: relative;
+    overflow: hidden;
     margin: var(--chat-margin);
     padding: var(--chat-padding);
-    animation: slideIn var(--chat-animation-duration) ease-out;
+    transition: all 0.2s ease;
+    transform: translateZ(0);
+    animation: slideInRight var(--chat-animation-duration) ease-out;
+    word-wrap: break-word;
     border-radius: var(--chat-border-radius);
     background: var(--chat-bg-color);
+    box-shadow: calc(var(--enable-message-shadows) * var(--shadow-small));
+
+    backdrop-filter: blur(2px);
 }
 
 .message.no-animation {
     animation: none;
 }
 
-@keyframes slideIn {
+/* User type differentiation */
+.message.broadcaster {
+    border-left: calc(var(--show-user-type-borders) * 3px) solid var(--broadcaster-color);
+    box-shadow: calc(var(--enable-message-shadows) * var(--shadow-small)),
+    calc(var(--enable-special-effects) * 0px0px10pxrgba(255, 107, 107, 0.3));
+}
+
+.message.moderator {
+    border-left: calc(var(--show-user-type-borders) * 2px) solid var(--moderator-color);
+    box-shadow: calc(var(--enable-message-shadows) * var(--shadow-small)),
+    calc(var(--enable-special-effects) * 0px0px8pxrgba(81, 207, 102, 0.2));
+}
+
+.message.vip {
+    border-left: calc(var(--show-user-type-borders) * 2px) solid var(--vip-color);
+    box-shadow: calc(var(--enable-message-shadows) * var(--shadow-small)),
+    calc(var(--enable-special-effects) * 0px0px8pxrgba(132, 94, 247, 0.2));
+}
+
+.message.subscriber {
+    border-left: calc(var(--show-user-type-borders) * 1px) solid var(--subscriber-color);
+    box-shadow: calc(var(--enable-message-shadows) * var(--shadow-small)),
+    calc(var(--enable-special-effects) * 0px0px6pxrgba(51, 154, 240, 0.15));
+}
+
+.message.first-time {
+    animation: calc(var(--highlight-first-time-users) * bounceIn) var(--chat-animation-duration) ease-out;
+    border-left: calc(var(--highlight-first-time-users) * 1px) dashed var(--firsttime-color);
+);
+    box-shadow: calc(var(--enable-message-shadows) * var(--shadow-small)),
+    calc(var(--highlight-first-time-users) * 0px0px8pxrgba(255, 212, 59, 0.3)
+}
+
+.message.broadcaster.special-effect {
+    animation: calc(var(--enable-special-effects) * pulse) 2s infinite alternate;
+}
+
+.message.vip.special-effect::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    content: "";
+    animation: calc(var(--enable-special-effects) * sparkle) 3s infinite;
+    pointer-events: none;
+    background: linear-gradient(45deg, transparent 30%, rgba(132, 94, 247, 0.1) 50%, transparent 70%);
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideInLeft {
     from {
         transform: translateX(-100%);
         opacity: 0;
@@ -49,36 +192,164 @@ body {
     }
 }
 
+@keyframes fadeInUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes bounceIn {
+    0% {
+        transform: scale(0.3) translateX(100%);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.05) translateX(-10px);
+    }
+    70% {
+        transform: scale(0.9) translateX(5px);
+    }
+    100% {
+        transform: scale(1) translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: var(--shadow-small), 0 0 10px rgba(255, 107, 107, 0.3);
+    }
+    50% {
+        box-shadow: var(--shadow-small), 0 0 20px rgba(255, 107, 107, 0.6);
+    }
+}
+
+@keyframes sparkle {
+    0%, 100% {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    50% {
+        transform: translateX(100%);
+        opacity: 1;
+    }
+}
+
+.message.slide-in-left {
+    animation: slideInLeft var(--chat-animation-duration) ease-out;
+}
+
+.message.slide-in-right {
+    animation: slideInRight var(--chat-animation-duration) ease-out;
+}
+
+.message.fade-in-up {
+    animation: fadeInUp var(--chat-animation-duration) ease-out;
+}
+
+.message.bounce-in {
+    animation: bounceIn var(--chat-animation-duration) ease-out;
+}
+
 .username {
     font-weight: bold;
+    letter-spacing: 0.5px;
     color: var(--chat-username-color);
+    text-shadow: var(--text-shadow);
 }
 
 .timestamp {
     font-size: 0.8em;
     margin-right: 5px;
+    opacity: 0.9;
     color: var(--chat-timestamp-color);
+    text-shadow: var(--text-shadow);
 }
 
 .message-text {
+    line-height: var(--line-height);
     color: var(--chat-text-color);
+    text-shadow: var(--text-shadow);
 }
 
 .system-message {
+    font-weight: 500;
     font-style: italic;
     color: var(--chat-system-color);
+    text-shadow: var(--text-shadow);
+}
+
+.mention {
+    font-weight: bold;
+    padding: calc(var(--highlight-mentions) * 1px3px);
+    color: calc(var(--highlight-mentions) * var(--chat-username-color));
+    border-radius: calc(var(--highlight-mentions) * 3px);
+    background: calc(var(--highlight-mentions) * rgba(145, 70, 255, 0.2));
 }
 
 .badge {
     width: var(--badge-size);
     height: var(--badge-size);
-    margin-right: 2px;
+    margin-right: 3px;
+    transition: transform 0.2s ease;
     vertical-align: middle;
-    border-radius: 2px;
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .emote {
     height: var(--emote-size);
-    margin: 0 1px;
+    margin: 0 2px;
+    transition: transform 0.2s ease;
     vertical-align: middle;
+    border-radius: 4px;
+}
+
+.emote.animated {
+    animation: calc(var(--enable-special-effects) * emoteFloat) 2s ease-in-out infinite alternate;
+}
+
+@keyframes emoteFloat {
+    0% {
+        transform: translateY(0px) scale(1);
+    }
+    100% {
+        transform: translateY(-2px) scale(1.05);
+    }
+}
+
+.username.broadcaster {
+    font-weight: 900;
+    background: linear-gradient(45deg, var(--broadcaster-color), #ff8a8a);
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+    -webkit-text-fill-color: transparent;
+}
+
+.message.first-time .username {
+    position: relative;
+}
+
+.message.first-time .username::after {
+    font-size: 0.8em;
+    margin-left: 4px;
+    content: "✨";
+    animation: calc(var(--highlight-first-time-users) * twinkle) 1.5s ease-in-out infinite;
+}
+
+@keyframes twinkle {
+    0%, 100% {
+        opacity: 0.7;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.2);
+    }
 }
