@@ -553,4 +553,19 @@ public class Bot : IAsyncDisposable
             _client.SendReply(channel, replyToMessageId, chunk);
         }
     }
+
+    // TODO: Вынести в настройки
+    public void SendPunishmentMessage(string userName, ulong removedMessages)
+    {
+        if (_channel == null || !_client.IsConnected)
+        {
+            return;
+        }
+
+        var punishmentMessage = $"🏴‍☠️ ВНИМАНИЕ! Пользователь @{userName} был лично наказан СЕРЁГОЙ ПИРАТОМ! "
+                                + $"⚔️ Убрано {removedMessages} сообщений из статистики. "
+                                + $"💀 #пиратская_справедливость";
+
+        SendMessageSmart(_channel, punishmentMessage);
+    }
 }

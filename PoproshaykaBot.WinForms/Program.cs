@@ -177,12 +177,15 @@ public static class Program
         }
 
         var connectionManager = new BotConnectionManager(BotFactory, GetAccessTokenAsync);
+        statistics.LoadStatisticsAsync().GetAwaiter().GetResult();
 
+        // TODO: Изменить время жизни бота
         using var mainForm = new MainForm(chatHistoryManager,
             httpServer,
             connectionManager,
             settingsManager,
-            oauthService);
+            oauthService,
+            statistics);
 
         Application.Run(mainForm);
     }

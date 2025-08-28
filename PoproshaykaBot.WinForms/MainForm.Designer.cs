@@ -35,6 +35,7 @@ partial class MainForm
         _buttonTableLayoutPanel = new TableLayoutPanel();
         _connectButton = new Button();
         _settingsButton = new Button();
+        _userStatisticsButton = new Button();
         _broadcastButton = new Button();
         _toggleLogsButton = new Button();
         _toggleChatButton = new Button();
@@ -79,20 +80,22 @@ partial class MainForm
         //
         // _buttonTableLayoutPanel
         //
-        _buttonTableLayoutPanel.ColumnCount = 7;
+        _buttonTableLayoutPanel.ColumnCount = 8;
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90F));
+        _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
         _buttonTableLayoutPanel.Controls.Add(_toggleLogsButton, 0, 0);
         _buttonTableLayoutPanel.Controls.Add(_toggleChatButton, 1, 0);
         _buttonTableLayoutPanel.Controls.Add(_openChatWindowButton, 2, 0);
         _buttonTableLayoutPanel.Controls.Add(_connectButton, 4, 0);
         _buttonTableLayoutPanel.Controls.Add(_settingsButton, 5, 0);
-        _buttonTableLayoutPanel.Controls.Add(_broadcastButton, 6, 0);
+        _buttonTableLayoutPanel.Controls.Add(_userStatisticsButton, 6, 0);
+        _buttonTableLayoutPanel.Controls.Add(_broadcastButton, 7, 0);
         _buttonTableLayoutPanel.Dock = DockStyle.Fill;
         _buttonTableLayoutPanel.Location = new Point(15, 15);
         _buttonTableLayoutPanel.Name = "_buttonTableLayoutPanel";
@@ -144,9 +147,9 @@ partial class MainForm
         _connectButton.Text = "Подключить бота";
         _connectButton.UseVisualStyleBackColor = true;
         _connectButton.Click += OnConnectButtonClicked;
-        // 
+        //
         // _settingsButton
-        // 
+        //
         _settingsButton.Dock = DockStyle.Fill;
         _settingsButton.Location = new Point(538, 3);
         _settingsButton.Name = "_settingsButton";
@@ -155,12 +158,23 @@ partial class MainForm
         _settingsButton.Text = "Настройки";
         _settingsButton.UseVisualStyleBackColor = true;
         _settingsButton.Click += OnSettingsButtonClicked;
-        // 
+        //
+        // _userStatisticsButton
+        //
+        _userStatisticsButton.Dock = DockStyle.Fill;
+        _userStatisticsButton.Location = new Point(628, 3);
+        _userStatisticsButton.Name = "_userStatisticsButton";
+        _userStatisticsButton.Size = new Size(114, 38);
+        _userStatisticsButton.TabIndex = 7;
+        _userStatisticsButton.Text = "Статистика (Alt+U)";
+        _userStatisticsButton.UseVisualStyleBackColor = true;
+        _userStatisticsButton.Click += OnUserStatisticsButtonClicked;
+        //
         // _broadcastButton
-        // 
+        //
         _broadcastButton.Dock = DockStyle.Fill;
         _broadcastButton.Enabled = false;
-        _broadcastButton.Location = new Point(628, 3);
+        _broadcastButton.Location = new Point(748, 3);
         _broadcastButton.Name = "_broadcastButton";
         _broadcastButton.Size = new Size(124, 38);
         _broadcastButton.TabIndex = 4;
@@ -291,6 +305,7 @@ partial class MainForm
     private Button _openChatWindowButton;
     private Button _connectButton;
     private Button _settingsButton;
+    private Button _userStatisticsButton;
     private Button _broadcastButton;
     private ProgressBar _connectionProgressBar;
     private Label _connectionStatusLabel;

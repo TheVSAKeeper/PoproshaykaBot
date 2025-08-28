@@ -10,22 +10,27 @@ public partial class MainForm : Form
     private readonly BotConnectionManager _connectionManager;
     private readonly UnifiedHttpServer _httpServer;
     private readonly TwitchOAuthService _oauthService;
+    private readonly StatisticsCollector _statisticsCollector;
+
     private Bot? _bot;
     private bool _isConnected;
     private ChatWindow? _chatWindow;
+    private UserStatisticsForm? _юзерФорма;
 
     public MainForm(
         ChatHistoryManager chatHistoryManager,
         UnifiedHttpServer httpServer,
         BotConnectionManager connectionManager,
         SettingsManager settingsManager,
-        TwitchOAuthService oauthService)
+        TwitchOAuthService oauthService,
+        StatisticsCollector statisticsCollector)
     {
         _chatHistoryManager = chatHistoryManager;
         _httpServer = httpServer;
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
         _oauthService = oauthService;
+        _statisticsCollector = statisticsCollector;
 
         InitializeComponent();
 
@@ -58,6 +63,12 @@ public partial class MainForm : Form
             _chatWindow = null;
         }
 
+        if (_юзерФорма is { IsDisposed: false })
+        {
+            _юзерФорма.Close();
+            _юзерФорма = null;
+        }
+
         await DisconnectBotAsync();
         base.OnFormClosed(e);
     }
@@ -76,6 +87,10 @@ public partial class MainForm : Form
 
             case Keys.Alt | Keys.W:
                 OnOpenChatWindowButtonClicked(_openChatWindowButton, EventArgs.Empty);
+                return true;
+
+            case Keys.Alt | Keys.U:
+                OnOpenUserStatistics();
                 return true;
 
             case Keys.Control | Keys.Shift | Keys.Delete:
@@ -259,6 +274,20 @@ public partial class MainForm : Form
         }
     }
 
+    private void OnOpenUserStatistics()
+    {
+        if (_юзерФорма == null || _юзерФорма.IsDisposed)
+        {
+            _юзерФорма = new(_statisticsCollector, _bot);
+            _юзерФорма.Show(this);
+        }
+        else
+        {
+            _юзерФорма.UpdateBotReference(_bot);
+            _юзерФорма.Focus();
+        }
+    }
+
     private void OnChatWindowClosed(object? sender, FormClosedEventArgs e)
     {
         _openChatWindowButton.Text = "Чат в окне (Alt+W)";
@@ -284,6 +313,11 @@ public partial class MainForm : Form
 
         LoadSettings();
         AddLogMessage("Настройки обновлены.");
+    }
+
+    private void OnUserStatisticsButtonClicked(object sender, EventArgs e)
+    {
+        OnOpenUserStatistics();
     }
 
     private void OnHttpServerLogMessage(string message)

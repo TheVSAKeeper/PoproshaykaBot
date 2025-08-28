@@ -132,6 +132,61 @@ public class StatisticsCollector : IAsyncDisposable
         return topUsers;
     }
 
+    public List<UserStatistics> GetAllUsers()
+    {
+        return _userStatistics.Values.ToList();
+    }
+
+    public bool IncrementUserMessages(string userId, ulong delta)
+    {
+        return UpdateUserMessages(userId, delta, (stats, d) => stats.MessageCount += d);
+    }
+
+    public bool DecrementUserMessages(string userId, ulong delta)
+    {
+        return UpdateUserMessages(userId, delta, (stats, d) =>
+        {
+            if (stats.MessageCount >= d)
+            {
+                stats.MessageCount -= d;
+            }
+            else
+            {
+                stats.MessageCount = 0;
+            }
+        });
+    }
+
+    // TODO: Канкаренси
+    private bool UpdateUserMessages(string userId, ulong delta, Action<UserStatistics, ulong> updateAction)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            throw new ArgumentException("ID пользователя не может быть null или пустым.", nameof(userId));
+        }
+
+        if (delta == 0)
+        {
+            return false;
+        }
+
+        if (!_userStatistics.TryGetValue(userId, out var stats))
+        {
+            return false;
+        }
+
+        updateAction(stats, delta);
+        stats.LastSeen = DateTime.UtcNow;
+
+        MarkAsChanged();
+        return true;
+    }
+
+    public Task SaveNowAsync()
+    {
+        return SaveStatisticsAsync(true);
+    }
+
     public void ResetBotStartTime()
     {
         _botStatistics.ResetStartTime();
@@ -142,6 +197,27 @@ public class StatisticsCollector : IAsyncDisposable
     {
         await DisposeAsyncCore();
         GC.SuppressFinalize(this);
+    }
+
+    public async Task LoadStatisticsAsync()
+    {
+        try
+        {
+            var userStats = await LoadUserStatisticsAsync();
+            _userStatistics.Clear();
+
+            foreach (var (id, userStatistic) in userStats)
+            {
+                _userStatistics[id] = userStatistic;
+            }
+
+            _botStatistics = await LoadBotStatisticsAsync();
+            _hasChanges = false;
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"Ошибка загрузки статистики: {exception.Message}", exception);
+        }
     }
 
     protected virtual async ValueTask DisposeAsyncCore()
@@ -186,27 +262,6 @@ public class StatisticsCollector : IAsyncDisposable
         catch (Exception exception)
         {
             throw new InvalidOperationException($"Ошибка сохранения статистики: {exception.Message}", exception);
-        }
-    }
-
-    private async Task LoadStatisticsAsync()
-    {
-        try
-        {
-            var userStats = await LoadUserStatisticsAsync();
-            _userStatistics.Clear();
-
-            foreach (var (id, userStatistic) in userStats)
-            {
-                _userStatistics[id] = userStatistic;
-            }
-
-            _botStatistics = await LoadBotStatisticsAsync();
-            _hasChanges = false;
-        }
-        catch (Exception exception)
-        {
-            throw new InvalidOperationException($"Ошибка загрузки статистики: {exception.Message}", exception);
         }
     }
 
