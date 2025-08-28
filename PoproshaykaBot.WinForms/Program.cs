@@ -101,6 +101,7 @@ public static class Program
                 new ActiveUsersCommand(audienceTracker),
                 new ByeCommand(audienceTracker),
                 new StreamInfoCommand(streamStatusManager),
+                new TrumpCommand(settingsManager),
             };
 
             var commandProcessor = new ChatCommandProcessor(commands);

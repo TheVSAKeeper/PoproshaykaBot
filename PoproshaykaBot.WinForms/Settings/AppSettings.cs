@@ -4,6 +4,7 @@ public class AppSettings
 {
     public TwitchSettings Twitch { get; set; } = new();
     public UiSettings Ui { get; set; } = new();
+    public SpecialCommandsSettings SpecialCommands { get; set; } = new();
 }
 
 public class TwitchSettings
@@ -149,4 +150,17 @@ public class AutoBroadcastSettings
     public int BroadcastIntervalMinutes { get; set; } = 15;
 
     public string BroadcastMessageTemplate { get; set; } = "Присылайте деняк, пожалуйста, {counter} раз прошу. https://bob217.ru/donate/";
+}
+
+public class SpecialCommandsSettings
+{
+    public decimal X2IllsonCoins { get; set; } = 93.94m;
+
+    public decimal X2IllsonPurchasePrice { get; set; } = 33.08m;
+
+    public List<string> AllowedUsers { get; set; } = ["qp_illson"];
+
+    public string SuccessMessage { get; set; } = "Держи бро! 👋";
+
+    public string UnauthorizedMessage { get; set; } = "Ты новенький? 🤔 Подрасти сначала для таких вещей.";
 }
