@@ -30,14 +30,57 @@ public class SettingsManager
             Directory.CreateDirectory(_settingsDirectory);
 
             var json = JsonSerializer.Serialize(settings, GetJsonOptions());
-            File.WriteAllText(_settingsFilePath, json, Encoding.UTF8);
+
+            var tempFilePath = _settingsFilePath + ".tmp";
+            File.WriteAllText(tempFilePath, json, Encoding.UTF8);
+
+            var backupCreated = false;
+
+            if (File.Exists(_settingsFilePath) && !File.Exists(_settingsFilePath + ".bak"))
+            {
+                File.Copy(_settingsFilePath, _settingsFilePath + ".bak", true);
+                backupCreated = true;
+            }
+
+            File.Replace(tempFilePath, _settingsFilePath, _settingsFilePath + ".old");
+
+            var oldFilePath = _settingsFilePath + ".old";
+
+            if (File.Exists(oldFilePath))
+            {
+                try
+                {
+                    File.Delete(oldFilePath);
+                }
+                catch
+                {
+                }
+            }
 
             _currentSettings = settings;
 
             ChatSettingsChanged?.Invoke(settings.Twitch.ObsChat);
+
+            if (backupCreated)
+            {
+                Console.WriteLine($"Создан бэкап настроек: {_settingsFilePath}.bak");
+            }
         }
         catch (Exception exception)
         {
+            if (File.Exists(_settingsFilePath + ".bak"))
+            {
+                try
+                {
+                    File.Copy(_settingsFilePath + ".bak", _settingsFilePath, true);
+                    Console.WriteLine("Восстановлены настройки из бэкапа");
+                }
+                catch (Exception backupException)
+                {
+                    Console.WriteLine($"Ошибка восстановления из бэкапа: {backupException.Message}");
+                }
+            }
+
             throw new InvalidOperationException($"Ошибка сохранения настроек: {exception.Message}", exception);
         }
     }
@@ -61,7 +104,7 @@ public class SettingsManager
     {
         try
         {
-            if (File.Exists(_settingsFilePath) == false)
+            if (!File.Exists(_settingsFilePath))
             {
                 var defaultSettings = CreateDefaultSettings();
                 SaveSettings(defaultSettings);
@@ -77,9 +120,35 @@ public class SettingsManager
         catch (Exception exception)
         {
             Console.WriteLine($"Неожиданная ошибка загрузки настроек: {exception.Message}");
+            CreateBackupFile(_settingsFilePath, "invalid");
+
             var defaultSettings = CreateDefaultSettings();
             _currentSettings = defaultSettings;
             return defaultSettings;
+        }
+    }
+
+    private void CreateBackupFile(string originalPath, string suffix)
+    {
+        if (!File.Exists(originalPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var fileName = Path.GetFileNameWithoutExtension(originalPath);
+            var extension = Path.GetExtension(originalPath);
+            var backupFileName = $"{fileName}.{suffix}-{timestamp}{extension}";
+            var backupPath = Path.Combine(Path.GetDirectoryName(originalPath)!, backupFileName);
+
+            File.Copy(originalPath, backupPath, true);
+            Console.WriteLine($"Создан бэкап поврежденного файла: {backupPath}");
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"Ошибка создания бэкапа файла: {exception.Message}");
         }
     }
 }
