@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.WinForms.Settings;
+﻿using System.Text.Json;
+
+namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class SettingsForm : Form
 {
@@ -11,7 +13,7 @@ public partial class SettingsForm : Form
         _settingsManager = settingsManager;
         _settings = new();
 
-        CopySettings(settingsManager.Current, _settings);
+        _settings = CopySettings(settingsManager.Current);
 
         _oauthSettingsControl = new(settingsManager, oauthService);
         _miscSettingsControl = new(settingsManager);
@@ -67,60 +69,10 @@ public partial class SettingsForm : Form
         UpdateButtonStates();
     }
 
-    // TODO: Кровь из глаз
-    private static void CopySettings(AppSettings source, AppSettings destination)
+    private static AppSettings CopySettings(AppSettings source)
     {
-        destination.Twitch.BotUsername = source.Twitch.BotUsername;
-        destination.Twitch.Channel = source.Twitch.Channel;
-        destination.Twitch.MessagesAllowedInPeriod = source.Twitch.MessagesAllowedInPeriod;
-        destination.Twitch.ThrottlingPeriodSeconds = source.Twitch.ThrottlingPeriodSeconds;
-        destination.Twitch.ClientId = source.Twitch.ClientId;
-        destination.Twitch.ClientSecret = source.Twitch.ClientSecret;
-        destination.Twitch.AccessToken = source.Twitch.AccessToken;
-        destination.Twitch.RefreshToken = source.Twitch.RefreshToken;
-        destination.Twitch.RedirectUri = source.Twitch.RedirectUri;
-        destination.Twitch.Scopes = source.Twitch.Scopes;
-        destination.Twitch.HttpServerPort = source.Twitch.HttpServerPort;
-        destination.Twitch.HttpServerEnabled = source.Twitch.HttpServerEnabled;
-        destination.Twitch.ObsOverlayEnabled = source.Twitch.ObsOverlayEnabled;
-        destination.Twitch.Messages.WelcomeEnabled = source.Twitch.Messages.WelcomeEnabled;
-        destination.Twitch.Messages.Welcome = source.Twitch.Messages.Welcome;
-        destination.Twitch.Messages.FarewellEnabled = source.Twitch.Messages.FarewellEnabled;
-        destination.Twitch.Messages.Farewell = source.Twitch.Messages.Farewell;
-        destination.Twitch.Messages.ConnectionEnabled = source.Twitch.Messages.ConnectionEnabled;
-        destination.Twitch.Messages.Connection = source.Twitch.Messages.Connection;
-        destination.Twitch.Messages.DisconnectionEnabled = source.Twitch.Messages.DisconnectionEnabled;
-        destination.Twitch.Messages.Disconnection = source.Twitch.Messages.Disconnection;
-        destination.Twitch.ObsChat.BackgroundColor = source.Twitch.ObsChat.BackgroundColor;
-        destination.Twitch.ObsChat.TextColor = source.Twitch.ObsChat.TextColor;
-        destination.Twitch.ObsChat.UsernameColor = source.Twitch.ObsChat.UsernameColor;
-        destination.Twitch.ObsChat.SystemMessageColor = source.Twitch.ObsChat.SystemMessageColor;
-        destination.Twitch.ObsChat.TimestampColor = source.Twitch.ObsChat.TimestampColor;
-        destination.Twitch.ObsChat.FontFamily = source.Twitch.ObsChat.FontFamily;
-        destination.Twitch.ObsChat.FontSize = source.Twitch.ObsChat.FontSize;
-        destination.Twitch.ObsChat.FontBold = source.Twitch.ObsChat.FontBold;
-        destination.Twitch.ObsChat.Padding = source.Twitch.ObsChat.Padding;
-        destination.Twitch.ObsChat.Margin = source.Twitch.ObsChat.Margin;
-        destination.Twitch.ObsChat.BorderRadius = source.Twitch.ObsChat.BorderRadius;
-        destination.Twitch.ObsChat.AnimationDuration = source.Twitch.ObsChat.AnimationDuration;
-        destination.Twitch.ObsChat.EnableAnimations = source.Twitch.ObsChat.EnableAnimations;
-        destination.Twitch.ObsChat.MaxMessages = source.Twitch.ObsChat.MaxMessages;
-        destination.Twitch.ObsChat.ShowTimestamp = source.Twitch.ObsChat.ShowTimestamp;
-        destination.Twitch.ObsChat.EmoteSizePixels = source.Twitch.ObsChat.EmoteSizePixels;
-        destination.Twitch.ObsChat.BadgeSizePixels = source.Twitch.ObsChat.BadgeSizePixels;
-        destination.Twitch.ObsChat.UserMessageAnimation = source.Twitch.ObsChat.UserMessageAnimation;
-        destination.Twitch.ObsChat.BotMessageAnimation = source.Twitch.ObsChat.BotMessageAnimation;
-        destination.Twitch.ObsChat.SystemMessageAnimation = source.Twitch.ObsChat.SystemMessageAnimation;
-        destination.Twitch.ObsChat.BroadcasterMessageAnimation = source.Twitch.ObsChat.BroadcasterMessageAnimation;
-        destination.Twitch.ObsChat.FirstTimeUserMessageAnimation = source.Twitch.ObsChat.FirstTimeUserMessageAnimation;
-        destination.Twitch.AutoBroadcast.AutoBroadcastEnabled = source.Twitch.AutoBroadcast.AutoBroadcastEnabled;
-        destination.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled = source.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled;
-        destination.Twitch.AutoBroadcast.StreamStartMessage = source.Twitch.AutoBroadcast.StreamStartMessage;
-        destination.Twitch.AutoBroadcast.StreamStopMessage = source.Twitch.AutoBroadcast.StreamStopMessage;
-        destination.Twitch.AutoBroadcast.BroadcastIntervalMinutes = source.Twitch.AutoBroadcast.BroadcastIntervalMinutes;
-        destination.Twitch.AutoBroadcast.BroadcastMessageTemplate = source.Twitch.AutoBroadcast.BroadcastMessageTemplate;
-        destination.Ui.ShowLogsPanel = source.Ui.ShowLogsPanel;
-        destination.Ui.ShowChatPanel = source.Ui.ShowChatPanel;
+        var json = JsonSerializer.Serialize(source);
+        return JsonSerializer.Deserialize<AppSettings>(json)!;
     }
 
     private void LoadSettingsToControls()

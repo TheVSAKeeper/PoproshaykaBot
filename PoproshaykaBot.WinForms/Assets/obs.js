@@ -23,6 +23,11 @@ let systemMessageAnimation = 'fade-in-up';
 let broadcasterMessageAnimation = 'slide-in-left';
 let firstTimeUserMessageAnimation = 'bounce-in';
 
+let enableMessageFadeOut = true;
+let messageLifetime = 30000;
+let fadeOutAnimationType = 'fade-out';
+let fadeOutDuration = 1000;
+
 function smoothScrollToBottom() {
     if (!autoScrollEnabled || scrollPaused) return;
 
@@ -145,6 +150,45 @@ function initEventSource() {
     };
 }
 
+function fadeOutMessage(messageDiv) {
+    if (!enableMessageFadeOut) return;
+
+    let animationClass = 'fade-out';
+    switch (fadeOutAnimationType) {
+        case 'fade-out':
+            animationClass = 'fade-out';
+            break;
+        case 'slide-out-left':
+            animationClass = 'slide-out-left';
+            break;
+        case 'slide-out-right':
+            animationClass = 'slide-out-right';
+            break;
+        case 'scale-down':
+            animationClass = 'scale-down';
+            break;
+        case 'shrink-up':
+            animationClass = 'shrink-up';
+            break;
+        case 'no-animation':
+        default:
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+            }, 100);
+            return;
+    }
+
+    messageDiv.classList.add(animationClass);
+
+    setTimeout(() => {
+        if (messageDiv.parentNode) {
+            messageDiv.parentNode.removeChild(messageDiv);
+        }
+    }, fadeOutDuration);
+}
+
 function addMessage(message, isHistoryMessage = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message';
@@ -159,7 +203,17 @@ function addMessage(message, isHistoryMessage = false) {
     const userTypeClasses = getUserTypeClasses(message.status || 0);
     userTypeClasses.forEach(cls => messageDiv.classList.add(cls));
 
-    if (enableSpecialEffects) {
+    if (!showUserTypeBorders) {
+        messageDiv.classList.add('no-borders');
+    }
+
+    if (!enableMessageShadows) {
+        messageDiv.classList.add('no-shadows');
+    }
+
+    if (!enableSpecialEffects) {
+        messageDiv.classList.add('no-special-effects');
+    } else {
         if (message.status & 1) { // Broadcaster
             messageDiv.classList.add('special-effect');
         } else if (message.status & 4) { // VIP
@@ -167,8 +221,16 @@ function addMessage(message, isHistoryMessage = false) {
         }
     }
 
-    if (message.isFirstTime && highlightFirstTimeUsers) {
-        messageDiv.classList.add('first-time');
+    if (message.isFirstTime) {
+        if (highlightFirstTimeUsers) {
+            messageDiv.classList.add('first-time');
+        } else {
+            messageDiv.classList.add('first-time', 'no-first-time-effects');
+        }
+    }
+
+    if (!isHighlightMentions) {
+        messageDiv.classList.add('no-mentions');
     }
 
     const timestamp = new Date(message.timestamp).toLocaleTimeString();
@@ -197,6 +259,10 @@ function addMessage(message, isHistoryMessage = false) {
     }
 
     chatContainer.appendChild(messageDiv);
+
+    if (!isHistoryMessage && enableMessageFadeOut) {
+        setTimeout(() => fadeOutMessage(messageDiv), messageLifetime);
+    }
 
     while (chatContainer.children.length > maxMessages) {
         chatContainer.removeChild(chatContainer.firstChild);
@@ -242,7 +308,7 @@ function renderMessageWithEmotes(message, emotes) {
         }
     }
 
-    return highlightMentions(escapeHtml(result, true)); // true = не экранировать HTML теги img
+    return highlightMentions(escapeHtml(result, true));
 }
 
 function isAnimatedEmote(emoteName) {
@@ -311,23 +377,58 @@ function updateChatSettings(settings) {
 
     if (settings.showUserTypeBorders !== undefined) {
         showUserTypeBorders = settings.showUserTypeBorders;
-        root.style.setProperty('--show-user-type-borders', showUserTypeBorders ? '1' : '0');
+        const messages = document.querySelectorAll('.message');
+        messages.forEach(message => {
+            if (showUserTypeBorders) {
+                message.classList.remove('no-borders');
+            } else {
+                message.classList.add('no-borders');
+            }
+        });
     }
     if (settings.highlightFirstTimeUsers !== undefined) {
         highlightFirstTimeUsers = settings.highlightFirstTimeUsers;
-        root.style.setProperty('--highlight-first-time-users', highlightFirstTimeUsers ? '1' : '0');
+        const firstTimeMessages = document.querySelectorAll('.message.first-time');
+        firstTimeMessages.forEach(message => {
+            if (highlightFirstTimeUsers) {
+                message.classList.remove('no-first-time-effects');
+            } else {
+                message.classList.add('no-first-time-effects');
+            }
+        });
     }
     if (settings.highlightMentions !== undefined) {
         isHighlightMentions = settings.highlightMentions;
-        root.style.setProperty('--highlight-mentions', isHighlightMentions ? '1' : '0');
+        const messages = document.querySelectorAll('.message');
+        messages.forEach(message => {
+            if (isHighlightMentions) {
+                message.classList.remove('no-mentions');
+            } else {
+                message.classList.add('no-mentions');
+            }
+        });
     }
     if (settings.enableMessageShadows !== undefined) {
         enableMessageShadows = settings.enableMessageShadows;
-        root.style.setProperty('--enable-message-shadows', enableMessageShadows ? '1' : '0');
+        const messages = document.querySelectorAll('.message');
+        messages.forEach(message => {
+            if (enableMessageShadows) {
+                message.classList.remove('no-shadows');
+            } else {
+                message.classList.add('no-shadows');
+            }
+        });
     }
     if (settings.enableSpecialEffects !== undefined) {
         enableSpecialEffects = settings.enableSpecialEffects;
-        root.style.setProperty('--enable-special-effects', enableSpecialEffects ? '1' : '0');
+        const messages = document.querySelectorAll('.message');
+        messages.forEach(message => {
+            if (enableSpecialEffects) {
+                message.classList.remove('no-special-effects');
+            } else {
+                message.classList.add('no-special-effects');
+            }
+        });
     }
 
     if (settings.maxMessages !== undefined) maxMessages = settings.maxMessages;
@@ -344,6 +445,11 @@ function updateChatSettings(settings) {
     if (settings.systemMessageAnimation) systemMessageAnimation = settings.systemMessageAnimation;
     if (settings.broadcasterMessageAnimation) broadcasterMessageAnimation = settings.broadcasterMessageAnimation;
     if (settings.firstTimeUserMessageAnimation) firstTimeUserMessageAnimation = settings.firstTimeUserMessageAnimation;
+
+    if (settings.enableMessageFadeOut !== undefined) enableMessageFadeOut = settings.enableMessageFadeOut;
+    if (settings.messageLifetimeSeconds !== undefined) messageLifetime = settings.messageLifetimeSeconds * 1000;
+    if (settings.fadeOutAnimationType !== undefined) fadeOutAnimationType = settings.fadeOutAnimationType;
+    if (settings.fadeOutAnimationDurationMs !== undefined) fadeOutDuration = settings.fadeOutAnimationDurationMs;
 
     console.log('Настройки чата обновлены:', settings);
 }

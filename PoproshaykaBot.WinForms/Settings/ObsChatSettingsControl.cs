@@ -10,7 +10,7 @@ public partial class ObsChatSettingsControl : UserControl
     {
         InitializeComponent();
         SetPlaceholders();
-        InitializeMessageAnimationControls();
+        InitializeAnimationControls();
     }
 
     public event EventHandler? SettingChanged;
@@ -51,6 +51,11 @@ public partial class ObsChatSettingsControl : UserControl
         _enableSmoothScrollCheckBox.Checked = settings.EnableSmoothScroll;
         _autoScrollEnabledCheckBox.Checked = settings.AutoScrollEnabled;
         _scrollAnimationDurationNumeric.Value = settings.ScrollAnimationDuration;
+
+        _enableMessageFadeOutCheckBox.Checked = settings.EnableMessageFadeOut;
+        _messageLifetimeNumeric.Value = settings.MessageLifetimeSeconds;
+        SetAnimationTypeInComboBox(_fadeOutAnimationComboBox, settings.FadeOutAnimationType);
+        _fadeOutAnimationDurationNumeric.Value = settings.FadeOutAnimationDurationMs;
 
         SetAnimationTypeInComboBox(_userMessageAnimationComboBox, settings.UserMessageAnimation);
         SetAnimationTypeInComboBox(_botMessageAnimationComboBox, settings.BotMessageAnimation);
@@ -93,6 +98,11 @@ public partial class ObsChatSettingsControl : UserControl
         settings.EnableSmoothScroll = _enableSmoothScrollCheckBox.Checked;
         settings.AutoScrollEnabled = _autoScrollEnabledCheckBox.Checked;
         settings.ScrollAnimationDuration = (int)_scrollAnimationDurationNumeric.Value;
+
+        settings.EnableMessageFadeOut = _enableMessageFadeOutCheckBox.Checked;
+        settings.MessageLifetimeSeconds = (int)_messageLifetimeNumeric.Value;
+        settings.FadeOutAnimationType = GetAnimationTypeFromComboBox(_fadeOutAnimationComboBox);
+        settings.FadeOutAnimationDurationMs = (int)_fadeOutAnimationDurationNumeric.Value;
 
         settings.UserMessageAnimation = GetAnimationTypeFromComboBox(_userMessageAnimationComboBox);
         settings.BotMessageAnimation = GetAnimationTypeFromComboBox(_botMessageAnimationComboBox);
@@ -177,6 +187,12 @@ public partial class ObsChatSettingsControl : UserControl
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnEnableAnimationsResetButtonClicked(object sender, EventArgs e)
+    {
+        _enableAnimationsCheckBox.Checked = DefaultSettings.EnableAnimations;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     private void OnMaxMessagesResetButtonClicked(object sender, EventArgs e)
     {
         _maxMessagesNumeric.Value = DefaultSettings.MaxMessages;
@@ -198,6 +214,60 @@ public partial class ObsChatSettingsControl : UserControl
     private void OnScrollAnimationDurationResetButtonClicked(object sender, EventArgs e)
     {
         _scrollAnimationDurationNumeric.Value = 300;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnEnableMessageFadeOutResetButtonClicked(object sender, EventArgs e)
+    {
+        _enableMessageFadeOutCheckBox.Checked = DefaultSettings.EnableMessageFadeOut;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnMessageLifetimeResetButtonClicked(object sender, EventArgs e)
+    {
+        _messageLifetimeNumeric.Value = DefaultSettings.MessageLifetimeSeconds;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnFadeOutAnimationResetButtonClicked(object sender, EventArgs e)
+    {
+        _fadeOutAnimationComboBox.SelectedIndex = 5; // Исчезновение (FadeOut)
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnFadeOutAnimationDurationResetButtonClicked(object sender, EventArgs e)
+    {
+        _fadeOutAnimationDurationNumeric.Value = DefaultSettings.FadeOutAnimationDurationMs;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnUserMessageAnimationResetButtonClicked(object sender, EventArgs e)
+    {
+        SetAnimationTypeInComboBox(_userMessageAnimationComboBox, DefaultSettings.UserMessageAnimation);
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnBotMessageAnimationResetButtonClicked(object sender, EventArgs e)
+    {
+        SetAnimationTypeInComboBox(_botMessageAnimationComboBox, DefaultSettings.BotMessageAnimation);
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnSystemMessageAnimationResetButtonClicked(object sender, EventArgs e)
+    {
+        SetAnimationTypeInComboBox(_systemMessageAnimationComboBox, DefaultSettings.SystemMessageAnimation);
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnBroadcasterMessageAnimationResetButtonClicked(object sender, EventArgs e)
+    {
+        SetAnimationTypeInComboBox(_broadcasterMessageAnimationComboBox, DefaultSettings.BroadcasterMessageAnimation);
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnFirstTimeUserMessageAnimationResetButtonClicked(object sender, EventArgs e)
+    {
+        SetAnimationTypeInComboBox(_firstTimeUserMessageAnimationComboBox, DefaultSettings.FirstTimeUserMessageAnimation);
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -251,15 +321,19 @@ public partial class ObsChatSettingsControl : UserControl
         _fontFamilyTextBox.PlaceholderText = DefaultSettings.FontFamily;
     }
 
-    private void InitializeMessageAnimationControls()
+    private void InitializeAnimationControls()
     {
-        var comboBoxes = new[]
+        var messageComboBoxes = new[]
         {
-            _userMessageAnimationComboBox, _botMessageAnimationComboBox,
-            _systemMessageAnimationComboBox, _broadcasterMessageAnimationComboBox, _firstTimeUserMessageAnimationComboBox,
+            _userMessageAnimationComboBox,
+            _botMessageAnimationComboBox,
+            _systemMessageAnimationComboBox,
+            _broadcasterMessageAnimationComboBox,
+            _firstTimeUserMessageAnimationComboBox,
+            _fadeOutAnimationComboBox,
         };
 
-        foreach (var comboBox in comboBoxes)
+        foreach (var comboBox in messageComboBoxes)
         {
             comboBox.Items.AddRange(MessageAnimationType.DisplayNames);
             comboBox.SelectedIndexChanged += OnSettingChanged;
@@ -275,6 +349,11 @@ public partial class ObsChatSettingsControl : UserControl
             2 => MessageAnimationType.SlideInLeft,
             3 => MessageAnimationType.FadeInUp,
             4 => MessageAnimationType.BounceIn,
+            5 => MessageAnimationType.FadeOut,
+            6 => MessageAnimationType.SlideOutLeft,
+            7 => MessageAnimationType.SlideOutRight,
+            8 => MessageAnimationType.ScaleDown,
+            9 => MessageAnimationType.ShrinkUp,
             _ => MessageAnimationType.SlideInRight,
         };
     }
@@ -288,6 +367,11 @@ public partial class ObsChatSettingsControl : UserControl
             MessageAnimationType.SlideInLeft => 2,
             MessageAnimationType.FadeInUp => 3,
             MessageAnimationType.BounceIn => 4,
+            MessageAnimationType.FadeOut => 5,
+            MessageAnimationType.SlideOutLeft => 6,
+            MessageAnimationType.SlideOutRight => 7,
+            MessageAnimationType.ScaleDown => 8,
+            MessageAnimationType.ShrinkUp => 9,
             _ => 1,
         };
 

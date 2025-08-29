@@ -75,6 +75,7 @@
             _animationsTabPage = new TabPage();
             _animationsTableLayout = new TableLayoutPanel();
             _enableAnimationsCheckBox = new CheckBox();
+            _enableAnimationsResetButton = new Button();
             _animationDurationLabel = new Label();
             _animationDurationNumeric = new NumericUpDown();
             _animationDurationResetButton = new Button();
@@ -94,21 +95,37 @@
             _scrollAnimationDurationLabel = new Label();
             _scrollAnimationDurationNumeric = new NumericUpDown();
             _scrollAnimationDurationResetButton = new Button();
-            _messageAnimationsTabPage = new TabPage();
-            _messageAnimationsTableLayout = new TableLayoutPanel();
+            _enableMessageFadeOutCheckBox = new CheckBox();
+            _enableMessageFadeOutResetButton = new Button();
+            _messageLifetimeLabel = new Label();
+            _messageLifetimeNumeric = new NumericUpDown();
+            _messageLifetimeResetButton = new Button();
+            _fadeOutAnimationLabel = new Label();
+            _fadeOutAnimationComboBox = new ComboBox();
+            _fadeOutAnimationResetButton = new Button();
+            _fadeOutAnimationDurationLabel = new Label();
+            _fadeOutAnimationDurationNumeric = new NumericUpDown();
+            _fadeOutAnimationDurationResetButton = new Button();
+
+
             _userMessageAnimationLabel = new Label();
             _userMessageAnimationComboBox = new ComboBox();
+            _userMessageAnimationResetButton = new Button();
             _botMessageAnimationLabel = new Label();
             _botMessageAnimationComboBox = new ComboBox();
+            _botMessageAnimationResetButton = new Button();
             _systemMessageAnimationLabel = new Label();
             _systemMessageAnimationComboBox = new ComboBox();
+            _systemMessageAnimationResetButton = new Button();
             _broadcasterMessageAnimationLabel = new Label();
             _broadcasterMessageAnimationComboBox = new ComboBox();
+            _broadcasterMessageAnimationResetButton = new Button();
             _firstTimeUserMessageAnimationLabel = new Label();
             _firstTimeUserMessageAnimationComboBox = new ComboBox();
+            _firstTimeUserMessageAnimationResetButton = new Button();
             _mainTabControl.SuspendLayout();
-            _messageAnimationsTabPage.SuspendLayout();
-            _messageAnimationsTableLayout.SuspendLayout();
+
+
             _colorsTabPage.SuspendLayout();
             _colorsTableLayout.SuspendLayout();
             _fontsTabPage.SuspendLayout();
@@ -136,7 +153,6 @@
             _mainTabControl.Controls.Add(_layoutTabPage);
             _mainTabControl.Controls.Add(_animationsTabPage);
             _mainTabControl.Controls.Add(_limitsTabPage);
-            _mainTabControl.Controls.Add(_messageAnimationsTabPage);
             _mainTabControl.Dock = DockStyle.Fill;
             _mainTabControl.Location = new Point(0, 0);
             _mainTabControl.Name = "_mainTabControl";
@@ -725,14 +741,52 @@
             _animationsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             _animationsTableLayout.ColumnStyles.Add(new ColumnStyle());
             _animationsTableLayout.Controls.Add(_enableAnimationsCheckBox, 0, 0);
+            _animationsTableLayout.Controls.Add(_enableAnimationsResetButton, 2, 0);
             _animationsTableLayout.Controls.Add(_animationDurationLabel, 0, 1);
             _animationsTableLayout.Controls.Add(_animationDurationNumeric, 1, 1);
             _animationsTableLayout.Controls.Add(_animationDurationResetButton, 2, 1);
+            _animationsTableLayout.Controls.Add(_enableMessageFadeOutCheckBox, 0, 2);
+            _animationsTableLayout.Controls.Add(_enableMessageFadeOutResetButton, 2, 2);
+            _animationsTableLayout.Controls.Add(_messageLifetimeLabel, 0, 3);
+            _animationsTableLayout.Controls.Add(_messageLifetimeNumeric, 1, 3);
+            _animationsTableLayout.Controls.Add(_messageLifetimeResetButton, 2, 3);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationLabel, 0, 4);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationComboBox, 1, 4);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationResetButton, 2, 4);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationDurationLabel, 0, 5);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationDurationNumeric, 1, 5);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationDurationResetButton, 2, 5);
+            _animationsTableLayout.Controls.Add(_userMessageAnimationLabel, 0, 6);
+            _animationsTableLayout.Controls.Add(_userMessageAnimationComboBox, 1, 6);
+            _animationsTableLayout.Controls.Add(_userMessageAnimationResetButton, 2, 6);
+            _animationsTableLayout.Controls.Add(_botMessageAnimationLabel, 0, 7);
+            _animationsTableLayout.Controls.Add(_botMessageAnimationComboBox, 1, 7);
+            _animationsTableLayout.Controls.Add(_botMessageAnimationResetButton, 2, 7);
+            _animationsTableLayout.Controls.Add(_systemMessageAnimationLabel, 0, 8);
+            _animationsTableLayout.Controls.Add(_systemMessageAnimationComboBox, 1, 8);
+            _animationsTableLayout.Controls.Add(_systemMessageAnimationResetButton, 2, 8);
+            _animationsTableLayout.Controls.Add(_broadcasterMessageAnimationLabel, 0, 9);
+            _animationsTableLayout.Controls.Add(_broadcasterMessageAnimationComboBox, 1, 9);
+            _animationsTableLayout.Controls.Add(_broadcasterMessageAnimationResetButton, 2, 9);
+            _animationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationLabel, 0, 10);
+            _animationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationComboBox, 1, 10);
+            _animationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationResetButton, 2, 10);
             _animationsTableLayout.Dock = DockStyle.Fill;
             _animationsTableLayout.Location = new Point(3, 3);
             _animationsTableLayout.Name = "_animationsTableLayout";
             _animationsTableLayout.Padding = new Padding(10);
-            _animationsTableLayout.RowCount = 3;
+            _animationsTableLayout.RowCount = 15;
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
             _animationsTableLayout.RowStyles.Add(new RowStyle());
             _animationsTableLayout.RowStyles.Add(new RowStyle());
             _animationsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -749,8 +803,20 @@
             _enableAnimationsCheckBox.TabIndex = 0;
             _enableAnimationsCheckBox.Text = "Включить анимации";
             _enableAnimationsCheckBox.UseVisualStyleBackColor = true;
-            _enableAnimationsCheckBox.CheckedChanged += OnSettingChanged;
-            // 
+                        _enableAnimationsCheckBox.CheckedChanged += OnSettingChanged;
+            //
+            // _enableAnimationsResetButton
+            //
+            _enableAnimationsResetButton.AutoSize = true;
+            _enableAnimationsResetButton.Location = new Point(482, 13);
+            _enableAnimationsResetButton.MinimumSize = new Size(40, 23);
+            _enableAnimationsResetButton.Name = "_enableAnimationsResetButton";
+            _enableAnimationsResetButton.Size = new Size(40, 25);
+            _enableAnimationsResetButton.TabIndex = 1;
+            _enableAnimationsResetButton.Text = "↻";
+            _enableAnimationsResetButton.UseVisualStyleBackColor = true;
+            _enableAnimationsResetButton.Click += OnEnableAnimationsResetButtonClicked;
+            //
             // _animationDurationLabel
             // 
             _animationDurationLabel.AutoSize = true;
@@ -787,8 +853,140 @@
             _animationDurationResetButton.Text = "↻";
             _animationDurationResetButton.UseVisualStyleBackColor = true;
             _animationDurationResetButton.Click += OnAnimationDurationResetButtonClicked;
-            // 
-            // _limitsTabPage
+            //
+            // _enableMessageFadeOutCheckBox
+            //
+            _enableMessageFadeOutCheckBox.AutoSize = true;
+            _enableMessageFadeOutCheckBox.Dock = DockStyle.Fill;
+            _enableMessageFadeOutCheckBox.Location = new Point(13, 75);
+            _enableMessageFadeOutCheckBox.Name = "_enableMessageFadeOutCheckBox";
+            _enableMessageFadeOutCheckBox.Size = new Size(140, 19);
+            _enableMessageFadeOutCheckBox.TabIndex = 3;
+            _enableMessageFadeOutCheckBox.Text = "Включить исчезание сообщений";
+            _enableMessageFadeOutCheckBox.UseVisualStyleBackColor = true;
+            _enableMessageFadeOutCheckBox.CheckedChanged += OnSettingChanged;
+            //
+            // _enableMessageFadeOutResetButton
+            //
+            _enableMessageFadeOutResetButton.AutoSize = true;
+            _enableMessageFadeOutResetButton.Location = new Point(482, 75);
+            _enableMessageFadeOutResetButton.MinimumSize = new Size(40, 23);
+            _enableMessageFadeOutResetButton.Name = "_enableMessageFadeOutResetButton";
+            _enableMessageFadeOutResetButton.Size = new Size(40, 25);
+            _enableMessageFadeOutResetButton.TabIndex = 4;
+            _enableMessageFadeOutResetButton.Text = "↻";
+            _enableMessageFadeOutResetButton.UseVisualStyleBackColor = true;
+            _enableMessageFadeOutResetButton.Click += OnEnableMessageFadeOutResetButtonClicked;
+            //
+            // _messageLifetimeLabel
+            //
+            _messageLifetimeLabel.AutoSize = true;
+            _messageLifetimeLabel.Dock = DockStyle.Fill;
+            _messageLifetimeLabel.Location = new Point(13, 100);
+            _messageLifetimeLabel.Margin = new Padding(3);
+            _messageLifetimeLabel.Name = "_messageLifetimeLabel";
+            _messageLifetimeLabel.Size = new Size(140, 25);
+            _messageLifetimeLabel.TabIndex = 4;
+            _messageLifetimeLabel.Text = "Время жизни сообщения (сек):";
+            _messageLifetimeLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _messageLifetimeNumeric
+            //
+            _messageLifetimeNumeric.Dock = DockStyle.Fill;
+            _messageLifetimeNumeric.Location = new Point(159, 100);
+            _messageLifetimeNumeric.Maximum = new decimal(new int[] { 300, 0, 0, 0 });
+            _messageLifetimeNumeric.Minimum = new decimal(new int[] { 5, 0, 0, 0 });
+            _messageLifetimeNumeric.MinimumSize = new Size(80, 0);
+            _messageLifetimeNumeric.Name = "_messageLifetimeNumeric";
+            _messageLifetimeNumeric.Size = new Size(317, 23);
+            _messageLifetimeNumeric.TabIndex = 5;
+            _messageLifetimeNumeric.Value = new decimal(new int[] { 30, 0, 0, 0 });
+            _messageLifetimeNumeric.ValueChanged += OnSettingChanged;
+            //
+            // _messageLifetimeResetButton
+            //
+            _messageLifetimeResetButton.AutoSize = true;
+            _messageLifetimeResetButton.Location = new Point(482, 100);
+            _messageLifetimeResetButton.MinimumSize = new Size(40, 23);
+            _messageLifetimeResetButton.Name = "_messageLifetimeResetButton";
+            _messageLifetimeResetButton.Size = new Size(40, 25);
+            _messageLifetimeResetButton.TabIndex = 6;
+            _messageLifetimeResetButton.Text = "↻";
+            _messageLifetimeResetButton.UseVisualStyleBackColor = true;
+            _messageLifetimeResetButton.Click += OnMessageLifetimeResetButtonClicked;
+            //
+            // _fadeOutAnimationLabel
+            //
+            _fadeOutAnimationLabel.AutoSize = true;
+            _fadeOutAnimationLabel.Dock = DockStyle.Fill;
+            _fadeOutAnimationLabel.Location = new Point(13, 125);
+            _fadeOutAnimationLabel.Margin = new Padding(3);
+            _fadeOutAnimationLabel.Name = "_fadeOutAnimationLabel";
+            _fadeOutAnimationLabel.Size = new Size(140, 25);
+            _fadeOutAnimationLabel.TabIndex = 7;
+            _fadeOutAnimationLabel.Text = "Анимация исчезания:";
+            _fadeOutAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _fadeOutAnimationComboBox
+            //
+            _fadeOutAnimationComboBox.Dock = DockStyle.Fill;
+            _fadeOutAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _fadeOutAnimationComboBox.FormattingEnabled = true;
+            _fadeOutAnimationComboBox.Location = new Point(159, 125);
+            _fadeOutAnimationComboBox.Name = "_fadeOutAnimationComboBox";
+            _fadeOutAnimationComboBox.Size = new Size(317, 23);
+            _fadeOutAnimationComboBox.TabIndex = 8;
+            //
+            // _fadeOutAnimationResetButton
+            //
+            _fadeOutAnimationResetButton.AutoSize = true;
+            _fadeOutAnimationResetButton.Location = new Point(482, 125);
+            _fadeOutAnimationResetButton.MinimumSize = new Size(40, 23);
+            _fadeOutAnimationResetButton.Name = "_fadeOutAnimationResetButton";
+            _fadeOutAnimationResetButton.Size = new Size(40, 25);
+            _fadeOutAnimationResetButton.TabIndex = 9;
+            _fadeOutAnimationResetButton.Text = "↻";
+            _fadeOutAnimationResetButton.UseVisualStyleBackColor = true;
+            _fadeOutAnimationResetButton.Click += OnFadeOutAnimationResetButtonClicked;
+            //
+            // _fadeOutAnimationDurationLabel
+            //
+            _fadeOutAnimationDurationLabel.AutoSize = true;
+            _fadeOutAnimationDurationLabel.Dock = DockStyle.Fill;
+            _fadeOutAnimationDurationLabel.Location = new Point(13, 125);
+            _fadeOutAnimationDurationLabel.Margin = new Padding(3);
+            _fadeOutAnimationDurationLabel.Name = "_fadeOutAnimationDurationLabel";
+            _fadeOutAnimationDurationLabel.Size = new Size(140, 25);
+            _fadeOutAnimationDurationLabel.TabIndex = 10;
+            _fadeOutAnimationDurationLabel.Text = "Длительность исчезания (мс):";
+            _fadeOutAnimationDurationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _fadeOutAnimationDurationNumeric
+            //
+            _fadeOutAnimationDurationNumeric.Dock = DockStyle.Fill;
+            _fadeOutAnimationDurationNumeric.Location = new Point(159, 125);
+            _fadeOutAnimationDurationNumeric.Maximum = new decimal(new int[] { 5000, 0, 0, 0 });
+            _fadeOutAnimationDurationNumeric.Minimum = new decimal(new int[] { 100, 0, 0, 0 });
+            _fadeOutAnimationDurationNumeric.MinimumSize = new Size(80, 0);
+            _fadeOutAnimationDurationNumeric.Name = "_fadeOutAnimationDurationNumeric";
+            _fadeOutAnimationDurationNumeric.Size = new Size(317, 23);
+            _fadeOutAnimationDurationNumeric.TabIndex = 11;
+            _fadeOutAnimationDurationNumeric.Value = new decimal(new int[] { 1000, 0, 0, 0 });
+            _fadeOutAnimationDurationNumeric.ValueChanged += OnSettingChanged;
+            //
+            // _fadeOutAnimationDurationResetButton
+            //
+            _fadeOutAnimationDurationResetButton.AutoSize = true;
+            _fadeOutAnimationDurationResetButton.Location = new Point(482, 125);
+            _fadeOutAnimationDurationResetButton.MinimumSize = new Size(40, 23);
+            _fadeOutAnimationDurationResetButton.Name = "_fadeOutAnimationDurationResetButton";
+            _fadeOutAnimationDurationResetButton.Size = new Size(40, 25);
+            _fadeOutAnimationDurationResetButton.TabIndex = 12;
+            _fadeOutAnimationDurationResetButton.Text = "↻";
+            _fadeOutAnimationDurationResetButton.UseVisualStyleBackColor = true;
+            _fadeOutAnimationDurationResetButton.Click += OnFadeOutAnimationDurationResetButtonClicked;
+            //
+            // _userMessageAnimationLabel
             // 
             _limitsTabPage.Controls.Add(_limitsTableLayout);
             _limitsTabPage.Location = new Point(4, 24);
@@ -819,6 +1017,7 @@
             _limitsTableLayout.Controls.Add(_scrollAnimationDurationLabel, 0, 9);
             _limitsTableLayout.Controls.Add(_scrollAnimationDurationNumeric, 1, 9);
             _limitsTableLayout.Controls.Add(_scrollAnimationDurationResetButton, 2, 9);
+
             _limitsTableLayout.Dock = DockStyle.Fill;
             _limitsTableLayout.Location = new Point(3, 3);
             _limitsTableLayout.Name = "_limitsTableLayout";
@@ -1007,46 +1206,8 @@
             _scrollAnimationDurationResetButton.Text = "↻";
             _scrollAnimationDurationResetButton.UseVisualStyleBackColor = true;
             _scrollAnimationDurationResetButton.Click += OnScrollAnimationDurationResetButtonClicked;
-            //
-            // _messageAnimationsTabPage
-            //
-            _messageAnimationsTabPage.Controls.Add(_messageAnimationsTableLayout);
-            _messageAnimationsTabPage.Location = new Point(4, 24);
-            _messageAnimationsTabPage.Name = "_messageAnimationsTabPage";
-            _messageAnimationsTabPage.Padding = new Padding(3);
-            _messageAnimationsTabPage.Size = new Size(541, 533);
-            _messageAnimationsTabPage.TabIndex = 5;
-            _messageAnimationsTabPage.Text = "Анимации сообщений";
-            _messageAnimationsTabPage.UseVisualStyleBackColor = true;
-            //
-            // _messageAnimationsTableLayout
-            //
-            _messageAnimationsTableLayout.ColumnCount = 2;
-            _messageAnimationsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F));
-            _messageAnimationsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
-            _messageAnimationsTableLayout.Controls.Add(_userMessageAnimationLabel, 0, 0);
-            _messageAnimationsTableLayout.Controls.Add(_userMessageAnimationComboBox, 1, 0);
-            _messageAnimationsTableLayout.Controls.Add(_botMessageAnimationLabel, 0, 1);
-            _messageAnimationsTableLayout.Controls.Add(_botMessageAnimationComboBox, 1, 1);
-            _messageAnimationsTableLayout.Controls.Add(_systemMessageAnimationLabel, 0, 2);
-            _messageAnimationsTableLayout.Controls.Add(_systemMessageAnimationComboBox, 1, 2);
-            _messageAnimationsTableLayout.Controls.Add(_broadcasterMessageAnimationLabel, 0, 3);
-            _messageAnimationsTableLayout.Controls.Add(_broadcasterMessageAnimationComboBox, 1, 3);
-            _messageAnimationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationLabel, 0, 4);
-            _messageAnimationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationComboBox, 1, 4);
-            _messageAnimationsTableLayout.Dock = DockStyle.Fill;
-            _messageAnimationsTableLayout.Location = new Point(3, 3);
-            _messageAnimationsTableLayout.Name = "_messageAnimationsTableLayout";
-            _messageAnimationsTableLayout.Padding = new Padding(10);
-            _messageAnimationsTableLayout.RowCount = 6;
-            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
-            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
-            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
-            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
-            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
-            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            _messageAnimationsTableLayout.Size = new Size(535, 527);
-            _messageAnimationsTableLayout.TabIndex = 0;
+
+
             //
             // _userMessageAnimationLabel
             //
@@ -1153,6 +1314,66 @@
             _firstTimeUserMessageAnimationComboBox.Size = new Size(257, 23);
             _firstTimeUserMessageAnimationComboBox.TabIndex = 9;
             //
+            // _userMessageAnimationResetButton
+            //
+            _userMessageAnimationResetButton.AutoSize = true;
+            _userMessageAnimationResetButton.Location = new Point(482, 150);
+            _userMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _userMessageAnimationResetButton.Name = "_userMessageAnimationResetButton";
+            _userMessageAnimationResetButton.Size = new Size(40, 25);
+            _userMessageAnimationResetButton.TabIndex = 10;
+            _userMessageAnimationResetButton.Text = "↻";
+            _userMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _userMessageAnimationResetButton.Click += OnUserMessageAnimationResetButtonClicked;
+            //
+            // _botMessageAnimationResetButton
+            //
+            _botMessageAnimationResetButton.AutoSize = true;
+            _botMessageAnimationResetButton.Location = new Point(482, 175);
+            _botMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _botMessageAnimationResetButton.Name = "_botMessageAnimationResetButton";
+            _botMessageAnimationResetButton.Size = new Size(40, 25);
+            _botMessageAnimationResetButton.TabIndex = 11;
+            _botMessageAnimationResetButton.Text = "↻";
+            _botMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _botMessageAnimationResetButton.Click += OnBotMessageAnimationResetButtonClicked;
+            //
+            // _systemMessageAnimationResetButton
+            //
+            _systemMessageAnimationResetButton.AutoSize = true;
+            _systemMessageAnimationResetButton.Location = new Point(482, 200);
+            _systemMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _systemMessageAnimationResetButton.Name = "_systemMessageAnimationResetButton";
+            _systemMessageAnimationResetButton.Size = new Size(40, 25);
+            _systemMessageAnimationResetButton.TabIndex = 12;
+            _systemMessageAnimationResetButton.Text = "↻";
+            _systemMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _systemMessageAnimationResetButton.Click += OnSystemMessageAnimationResetButtonClicked;
+            //
+            // _broadcasterMessageAnimationResetButton
+            //
+            _broadcasterMessageAnimationResetButton.AutoSize = true;
+            _broadcasterMessageAnimationResetButton.Location = new Point(482, 225);
+            _broadcasterMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _broadcasterMessageAnimationResetButton.Name = "_broadcasterMessageAnimationResetButton";
+            _broadcasterMessageAnimationResetButton.Size = new Size(40, 25);
+            _broadcasterMessageAnimationResetButton.TabIndex = 13;
+            _broadcasterMessageAnimationResetButton.Text = "↻";
+            _broadcasterMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _broadcasterMessageAnimationResetButton.Click += OnBroadcasterMessageAnimationResetButtonClicked;
+            //
+            // _firstTimeUserMessageAnimationResetButton
+            //
+            _firstTimeUserMessageAnimationResetButton.AutoSize = true;
+            _firstTimeUserMessageAnimationResetButton.Location = new Point(482, 250);
+            _firstTimeUserMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _firstTimeUserMessageAnimationResetButton.Name = "_firstTimeUserMessageAnimationResetButton";
+            _firstTimeUserMessageAnimationResetButton.Size = new Size(40, 25);
+            _firstTimeUserMessageAnimationResetButton.TabIndex = 14;
+            _firstTimeUserMessageAnimationResetButton.Text = "↻";
+            _firstTimeUserMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _firstTimeUserMessageAnimationResetButton.Click += OnFirstTimeUserMessageAnimationResetButtonClicked;
+            //
             // ObsChatSettingsControl
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -1184,9 +1405,8 @@
             _limitsTableLayout.ResumeLayout(false);
             _limitsTableLayout.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)_maxMessagesNumeric).EndInit();
-            _messageAnimationsTabPage.ResumeLayout(false);
-            _messageAnimationsTableLayout.ResumeLayout(false);
-            _messageAnimationsTableLayout.PerformLayout();
+
+
             ResumeLayout(false);
         }
 
@@ -1239,6 +1459,7 @@
         private TabPage _animationsTabPage;
         private TableLayoutPanel _animationsTableLayout;
         private CheckBox _enableAnimationsCheckBox;
+        private Button _enableAnimationsResetButton;
         private Label _animationDurationLabel;
         private NumericUpDown _animationDurationNumeric;
         private Button _animationDurationResetButton;
@@ -1258,17 +1479,32 @@
         private Label _scrollAnimationDurationLabel;
         private NumericUpDown _scrollAnimationDurationNumeric;
         private Button _scrollAnimationDurationResetButton;
-        private TabPage _messageAnimationsTabPage;
-        private TableLayoutPanel _messageAnimationsTableLayout;
+        private CheckBox _enableMessageFadeOutCheckBox;
+        private Button _enableMessageFadeOutResetButton;
+        private Label _messageLifetimeLabel;
+        private NumericUpDown _messageLifetimeNumeric;
+        private Button _messageLifetimeResetButton;
+        private Label _fadeOutAnimationLabel;
+        private ComboBox _fadeOutAnimationComboBox;
+        private Button _fadeOutAnimationResetButton;
+        private Label _fadeOutAnimationDurationLabel;
+        private NumericUpDown _fadeOutAnimationDurationNumeric;
+        private Button _fadeOutAnimationDurationResetButton;
+
         private Label _userMessageAnimationLabel;
         private ComboBox _userMessageAnimationComboBox;
+        private Button _userMessageAnimationResetButton;
         private Label _botMessageAnimationLabel;
         private ComboBox _botMessageAnimationComboBox;
+        private Button _botMessageAnimationResetButton;
         private Label _systemMessageAnimationLabel;
         private ComboBox _systemMessageAnimationComboBox;
+        private Button _systemMessageAnimationResetButton;
         private Label _broadcasterMessageAnimationLabel;
         private ComboBox _broadcasterMessageAnimationComboBox;
+        private Button _broadcasterMessageAnimationResetButton;
         private Label _firstTimeUserMessageAnimationLabel;
         private ComboBox _firstTimeUserMessageAnimationComboBox;
+        private Button _firstTimeUserMessageAnimationResetButton;
     }
 }
