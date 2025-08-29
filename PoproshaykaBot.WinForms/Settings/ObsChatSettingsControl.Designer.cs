@@ -94,7 +94,21 @@
             _scrollAnimationDurationLabel = new Label();
             _scrollAnimationDurationNumeric = new NumericUpDown();
             _scrollAnimationDurationResetButton = new Button();
+            _messageAnimationsTabPage = new TabPage();
+            _messageAnimationsTableLayout = new TableLayoutPanel();
+            _userMessageAnimationLabel = new Label();
+            _userMessageAnimationComboBox = new ComboBox();
+            _botMessageAnimationLabel = new Label();
+            _botMessageAnimationComboBox = new ComboBox();
+            _systemMessageAnimationLabel = new Label();
+            _systemMessageAnimationComboBox = new ComboBox();
+            _broadcasterMessageAnimationLabel = new Label();
+            _broadcasterMessageAnimationComboBox = new ComboBox();
+            _firstTimeUserMessageAnimationLabel = new Label();
+            _firstTimeUserMessageAnimationComboBox = new ComboBox();
             _mainTabControl.SuspendLayout();
+            _messageAnimationsTabPage.SuspendLayout();
+            _messageAnimationsTableLayout.SuspendLayout();
             _colorsTabPage.SuspendLayout();
             _colorsTableLayout.SuspendLayout();
             _fontsTabPage.SuspendLayout();
@@ -122,6 +136,7 @@
             _mainTabControl.Controls.Add(_layoutTabPage);
             _mainTabControl.Controls.Add(_animationsTabPage);
             _mainTabControl.Controls.Add(_limitsTabPage);
+            _mainTabControl.Controls.Add(_messageAnimationsTabPage);
             _mainTabControl.Dock = DockStyle.Fill;
             _mainTabControl.Location = new Point(0, 0);
             _mainTabControl.Name = "_mainTabControl";
@@ -992,7 +1007,152 @@
             _scrollAnimationDurationResetButton.Text = "↻";
             _scrollAnimationDurationResetButton.UseVisualStyleBackColor = true;
             _scrollAnimationDurationResetButton.Click += OnScrollAnimationDurationResetButtonClicked;
-            // 
+            //
+            // _messageAnimationsTabPage
+            //
+            _messageAnimationsTabPage.Controls.Add(_messageAnimationsTableLayout);
+            _messageAnimationsTabPage.Location = new Point(4, 24);
+            _messageAnimationsTabPage.Name = "_messageAnimationsTabPage";
+            _messageAnimationsTabPage.Padding = new Padding(3);
+            _messageAnimationsTabPage.Size = new Size(541, 533);
+            _messageAnimationsTabPage.TabIndex = 5;
+            _messageAnimationsTabPage.Text = "Анимации сообщений";
+            _messageAnimationsTabPage.UseVisualStyleBackColor = true;
+            //
+            // _messageAnimationsTableLayout
+            //
+            _messageAnimationsTableLayout.ColumnCount = 2;
+            _messageAnimationsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F));
+            _messageAnimationsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
+            _messageAnimationsTableLayout.Controls.Add(_userMessageAnimationLabel, 0, 0);
+            _messageAnimationsTableLayout.Controls.Add(_userMessageAnimationComboBox, 1, 0);
+            _messageAnimationsTableLayout.Controls.Add(_botMessageAnimationLabel, 0, 1);
+            _messageAnimationsTableLayout.Controls.Add(_botMessageAnimationComboBox, 1, 1);
+            _messageAnimationsTableLayout.Controls.Add(_systemMessageAnimationLabel, 0, 2);
+            _messageAnimationsTableLayout.Controls.Add(_systemMessageAnimationComboBox, 1, 2);
+            _messageAnimationsTableLayout.Controls.Add(_broadcasterMessageAnimationLabel, 0, 3);
+            _messageAnimationsTableLayout.Controls.Add(_broadcasterMessageAnimationComboBox, 1, 3);
+            _messageAnimationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationLabel, 0, 4);
+            _messageAnimationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationComboBox, 1, 4);
+            _messageAnimationsTableLayout.Dock = DockStyle.Fill;
+            _messageAnimationsTableLayout.Location = new Point(3, 3);
+            _messageAnimationsTableLayout.Name = "_messageAnimationsTableLayout";
+            _messageAnimationsTableLayout.Padding = new Padding(10);
+            _messageAnimationsTableLayout.RowCount = 6;
+            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
+            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
+            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
+            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
+            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle());
+            _messageAnimationsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _messageAnimationsTableLayout.Size = new Size(535, 527);
+            _messageAnimationsTableLayout.TabIndex = 0;
+            //
+            // _userMessageAnimationLabel
+            //
+            _userMessageAnimationLabel.AutoSize = true;
+            _userMessageAnimationLabel.Dock = DockStyle.Fill;
+            _userMessageAnimationLabel.Location = new Point(13, 13);
+            _userMessageAnimationLabel.Name = "_userMessageAnimationLabel";
+            _userMessageAnimationLabel.Size = new Size(200, 25);
+            _userMessageAnimationLabel.TabIndex = 0;
+            _userMessageAnimationLabel.Text = "Сообщения пользователей:";
+            _userMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _userMessageAnimationComboBox
+            //
+            _userMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _userMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _userMessageAnimationComboBox.FormattingEnabled = true;
+            _userMessageAnimationComboBox.Location = new Point(219, 13);
+            _userMessageAnimationComboBox.Name = "_userMessageAnimationComboBox";
+            _userMessageAnimationComboBox.Size = new Size(257, 23);
+            _userMessageAnimationComboBox.TabIndex = 1;
+            //
+            // _botMessageAnimationLabel
+            //
+            _botMessageAnimationLabel.AutoSize = true;
+            _botMessageAnimationLabel.Dock = DockStyle.Fill;
+            _botMessageAnimationLabel.Location = new Point(13, 44);
+            _botMessageAnimationLabel.Name = "_botMessageAnimationLabel";
+            _botMessageAnimationLabel.Size = new Size(200, 25);
+            _botMessageAnimationLabel.TabIndex = 2;
+            _botMessageAnimationLabel.Text = "Сообщения бота:";
+            _botMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _botMessageAnimationComboBox
+            //
+            _botMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _botMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _botMessageAnimationComboBox.FormattingEnabled = true;
+            _botMessageAnimationComboBox.Location = new Point(219, 44);
+            _botMessageAnimationComboBox.Name = "_botMessageAnimationComboBox";
+            _botMessageAnimationComboBox.Size = new Size(257, 23);
+            _botMessageAnimationComboBox.TabIndex = 3;
+            //
+            // _systemMessageAnimationLabel
+            //
+            _systemMessageAnimationLabel.AutoSize = true;
+            _systemMessageAnimationLabel.Dock = DockStyle.Fill;
+            _systemMessageAnimationLabel.Location = new Point(13, 75);
+            _systemMessageAnimationLabel.Name = "_systemMessageAnimationLabel";
+            _systemMessageAnimationLabel.Size = new Size(200, 25);
+            _systemMessageAnimationLabel.TabIndex = 4;
+            _systemMessageAnimationLabel.Text = "Системные сообщения:";
+            _systemMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _systemMessageAnimationComboBox
+            //
+            _systemMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _systemMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _systemMessageAnimationComboBox.FormattingEnabled = true;
+            _systemMessageAnimationComboBox.Location = new Point(219, 75);
+            _systemMessageAnimationComboBox.Name = "_systemMessageAnimationComboBox";
+            _systemMessageAnimationComboBox.Size = new Size(257, 23);
+            _systemMessageAnimationComboBox.TabIndex = 5;
+            //
+            // _broadcasterMessageAnimationLabel
+            //
+            _broadcasterMessageAnimationLabel.AutoSize = true;
+            _broadcasterMessageAnimationLabel.Dock = DockStyle.Fill;
+            _broadcasterMessageAnimationLabel.Location = new Point(13, 106);
+            _broadcasterMessageAnimationLabel.Name = "_broadcasterMessageAnimationLabel";
+            _broadcasterMessageAnimationLabel.Size = new Size(200, 25);
+            _broadcasterMessageAnimationLabel.TabIndex = 6;
+            _broadcasterMessageAnimationLabel.Text = "Сообщения стримера:";
+            _broadcasterMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _broadcasterMessageAnimationComboBox
+            //
+            _broadcasterMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _broadcasterMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _broadcasterMessageAnimationComboBox.FormattingEnabled = true;
+            _broadcasterMessageAnimationComboBox.Location = new Point(219, 106);
+            _broadcasterMessageAnimationComboBox.Name = "_broadcasterMessageAnimationComboBox";
+            _broadcasterMessageAnimationComboBox.Size = new Size(257, 23);
+            _broadcasterMessageAnimationComboBox.TabIndex = 7;
+            //
+            // _firstTimeUserMessageAnimationLabel
+            //
+            _firstTimeUserMessageAnimationLabel.AutoSize = true;
+            _firstTimeUserMessageAnimationLabel.Dock = DockStyle.Fill;
+            _firstTimeUserMessageAnimationLabel.Location = new Point(13, 137);
+            _firstTimeUserMessageAnimationLabel.Name = "_firstTimeUserMessageAnimationLabel";
+            _firstTimeUserMessageAnimationLabel.Size = new Size(200, 25);
+            _firstTimeUserMessageAnimationLabel.TabIndex = 8;
+            _firstTimeUserMessageAnimationLabel.Text = "Сообщения новичков:";
+            _firstTimeUserMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _firstTimeUserMessageAnimationComboBox
+            //
+            _firstTimeUserMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _firstTimeUserMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _firstTimeUserMessageAnimationComboBox.FormattingEnabled = true;
+            _firstTimeUserMessageAnimationComboBox.Location = new Point(219, 137);
+            _firstTimeUserMessageAnimationComboBox.Name = "_firstTimeUserMessageAnimationComboBox";
+            _firstTimeUserMessageAnimationComboBox.Size = new Size(257, 23);
+            _firstTimeUserMessageAnimationComboBox.TabIndex = 9;
+            //
             // ObsChatSettingsControl
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -1024,6 +1184,9 @@
             _limitsTableLayout.ResumeLayout(false);
             _limitsTableLayout.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)_maxMessagesNumeric).EndInit();
+            _messageAnimationsTabPage.ResumeLayout(false);
+            _messageAnimationsTableLayout.ResumeLayout(false);
+            _messageAnimationsTableLayout.PerformLayout();
             ResumeLayout(false);
         }
 
@@ -1095,5 +1258,17 @@
         private Label _scrollAnimationDurationLabel;
         private NumericUpDown _scrollAnimationDurationNumeric;
         private Button _scrollAnimationDurationResetButton;
+        private TabPage _messageAnimationsTabPage;
+        private TableLayoutPanel _messageAnimationsTableLayout;
+        private Label _userMessageAnimationLabel;
+        private ComboBox _userMessageAnimationComboBox;
+        private Label _botMessageAnimationLabel;
+        private ComboBox _botMessageAnimationComboBox;
+        private Label _systemMessageAnimationLabel;
+        private ComboBox _systemMessageAnimationComboBox;
+        private Label _broadcasterMessageAnimationLabel;
+        private ComboBox _broadcasterMessageAnimationComboBox;
+        private Label _firstTimeUserMessageAnimationLabel;
+        private ComboBox _firstTimeUserMessageAnimationComboBox;
     }
 }

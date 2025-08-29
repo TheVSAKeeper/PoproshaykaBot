@@ -102,6 +102,30 @@ public class ObsChatSettings
     public int ScrollAnimationDuration { get; set; } = 300;
     public bool AutoScrollEnabled { get; set; } = true;
     public int ScrollToBottomThreshold { get; set; } = 100;
+
+    public string UserMessageAnimation { get; set; } = MessageAnimationType.SlideInRight;
+    public string BotMessageAnimation { get; set; } = MessageAnimationType.FadeInUp;
+    public string SystemMessageAnimation { get; set; } = MessageAnimationType.FadeInUp;
+    public string BroadcasterMessageAnimation { get; set; } = MessageAnimationType.SlideInLeft;
+    public string FirstTimeUserMessageAnimation { get; set; } = MessageAnimationType.BounceIn;
+}
+
+public static class MessageAnimationType
+{
+    public const string None = "no-animation";
+    public const string SlideInRight = "slide-in-right";
+    public const string SlideInLeft = "slide-in-left";
+    public const string FadeInUp = "fade-in-up";
+    public const string BounceIn = "bounce-in";
+
+    public static readonly string[] DisplayNames =
+    [
+        "Без анимации",
+        "Скольжение справа",
+        "Скольжение слева",
+        "Затухание сверху",
+        "Прыжок"
+    ];
 }
 
 // TODO: Костыль из-за того, что сериализатор не умеет работать с системным Color

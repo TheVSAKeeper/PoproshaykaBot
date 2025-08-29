@@ -17,12 +17,11 @@ let scrollToBottomThreshold = 100;
 let lastScrollTime = 0;
 let scrollAnimationId = null;
 
-const animationTypes = {
-    'slideInRight': 'slide-in-right',
-    'slideInLeft': 'slide-in-left',
-    'fadeInUp': 'fade-in-up',
-    'bounceIn': 'bounce-in'
-};
+let userMessageAnimation = 'slide-in-right';
+let botMessageAnimation = 'fade-in-up';
+let systemMessageAnimation = 'fade-in-up';
+let broadcasterMessageAnimation = 'slide-in-left';
+let firstTimeUserMessageAnimation = 'bounce-in';
 
 function smoothScrollToBottom() {
     if (!autoScrollEnabled || scrollPaused) return;
@@ -103,16 +102,24 @@ function getUserTypeClasses(userStatus) {
     return classes;
 }
 
-function getAnimationType(userStatus, messageType) {
-    if (messageType !== 'UserMessage') {
-        return 'fade-in-up';
+function getAnimationType(userStatus, messageType, isFirstTime = false) {
+    if (isFirstTime && firstTimeUserMessageAnimation !== 'slide-in-right') {
+        return firstTimeUserMessageAnimation;
     }
 
-    if (userStatus & 1) {
-        return 'slide-in-left';
+    switch (messageType) {
+        case 'BotResponse':
+            return botMessageAnimation;
+        case 'SystemNotification':
+            return systemMessageAnimation;
+        case 'UserMessage':
+            if (userStatus & 1) {
+                return broadcasterMessageAnimation;
+            }
+            return userMessageAnimation;
+        default:
+            return userMessageAnimation;
     }
-
-    return 'slide-in-right';
 }
 
 function initEventSource() {
@@ -145,7 +152,7 @@ function addMessage(message, isHistoryMessage = false) {
     if (isHistoryMessage || !enableAnimations) {
         messageDiv.classList.add('no-animation');
     } else {
-        const animationType = getAnimationType(message.status || 0, message.messageType);
+        const animationType = getAnimationType(message.status || 0, message.messageType, message.isFirstTime);
         messageDiv.classList.add(animationType);
     }
 
@@ -331,6 +338,12 @@ function updateChatSettings(settings) {
     if (settings.scrollAnimationDuration !== undefined) scrollAnimationDuration = settings.scrollAnimationDuration;
     if (settings.autoScrollEnabled !== undefined) autoScrollEnabled = settings.autoScrollEnabled;
     if (settings.scrollToBottomThreshold !== undefined) scrollToBottomThreshold = settings.scrollToBottomThreshold;
+
+    if (settings.userMessageAnimation) userMessageAnimation = settings.userMessageAnimation;
+    if (settings.botMessageAnimation) botMessageAnimation = settings.botMessageAnimation;
+    if (settings.systemMessageAnimation) systemMessageAnimation = settings.systemMessageAnimation;
+    if (settings.broadcasterMessageAnimation) broadcasterMessageAnimation = settings.broadcasterMessageAnimation;
+    if (settings.firstTimeUserMessageAnimation) firstTimeUserMessageAnimation = settings.firstTimeUserMessageAnimation;
 
     console.log('Настройки чата обновлены:', settings);
 }

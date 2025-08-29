@@ -10,6 +10,7 @@ public partial class ObsChatSettingsControl : UserControl
     {
         InitializeComponent();
         SetPlaceholders();
+        InitializeMessageAnimationControls();
     }
 
     public event EventHandler? SettingChanged;
@@ -50,6 +51,12 @@ public partial class ObsChatSettingsControl : UserControl
         _enableSmoothScrollCheckBox.Checked = settings.EnableSmoothScroll;
         _autoScrollEnabledCheckBox.Checked = settings.AutoScrollEnabled;
         _scrollAnimationDurationNumeric.Value = settings.ScrollAnimationDuration;
+
+        SetAnimationTypeInComboBox(_userMessageAnimationComboBox, settings.UserMessageAnimation);
+        SetAnimationTypeInComboBox(_botMessageAnimationComboBox, settings.BotMessageAnimation);
+        SetAnimationTypeInComboBox(_systemMessageAnimationComboBox, settings.SystemMessageAnimation);
+        SetAnimationTypeInComboBox(_broadcasterMessageAnimationComboBox, settings.BroadcasterMessageAnimation);
+        SetAnimationTypeInComboBox(_firstTimeUserMessageAnimationComboBox, settings.FirstTimeUserMessageAnimation);
     }
 
     public void SaveSettings(ObsChatSettings settings)
@@ -86,6 +93,12 @@ public partial class ObsChatSettingsControl : UserControl
         settings.EnableSmoothScroll = _enableSmoothScrollCheckBox.Checked;
         settings.AutoScrollEnabled = _autoScrollEnabledCheckBox.Checked;
         settings.ScrollAnimationDuration = (int)_scrollAnimationDurationNumeric.Value;
+
+        settings.UserMessageAnimation = GetAnimationTypeFromComboBox(_userMessageAnimationComboBox);
+        settings.BotMessageAnimation = GetAnimationTypeFromComboBox(_botMessageAnimationComboBox);
+        settings.SystemMessageAnimation = GetAnimationTypeFromComboBox(_systemMessageAnimationComboBox);
+        settings.BroadcasterMessageAnimation = GetAnimationTypeFromComboBox(_broadcasterMessageAnimationComboBox);
+        settings.FirstTimeUserMessageAnimation = GetAnimationTypeFromComboBox(_firstTimeUserMessageAnimationComboBox);
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -236,6 +249,49 @@ public partial class ObsChatSettingsControl : UserControl
     private void SetPlaceholders()
     {
         _fontFamilyTextBox.PlaceholderText = DefaultSettings.FontFamily;
+    }
+
+    private void InitializeMessageAnimationControls()
+    {
+        var comboBoxes = new[]
+        {
+            _userMessageAnimationComboBox, _botMessageAnimationComboBox,
+            _systemMessageAnimationComboBox, _broadcasterMessageAnimationComboBox, _firstTimeUserMessageAnimationComboBox,
+        };
+
+        foreach (var comboBox in comboBoxes)
+        {
+            comboBox.Items.AddRange(MessageAnimationType.DisplayNames);
+            comboBox.SelectedIndexChanged += OnSettingChanged;
+        }
+    }
+
+    private string GetAnimationTypeFromComboBox(ComboBox comboBox)
+    {
+        return comboBox.SelectedIndex switch
+        {
+            0 => MessageAnimationType.None,
+            1 => MessageAnimationType.SlideInRight,
+            2 => MessageAnimationType.SlideInLeft,
+            3 => MessageAnimationType.FadeInUp,
+            4 => MessageAnimationType.BounceIn,
+            _ => MessageAnimationType.SlideInRight,
+        };
+    }
+
+    private void SetAnimationTypeInComboBox(ComboBox comboBox, string animationType)
+    {
+        var index = animationType switch
+        {
+            MessageAnimationType.None => 0,
+            MessageAnimationType.SlideInRight => 1,
+            MessageAnimationType.SlideInLeft => 2,
+            MessageAnimationType.FadeInUp => 3,
+            MessageAnimationType.BounceIn => 4,
+            _ => 1,
+        };
+
+        comboBox.SelectedIndex = index;
     }
 
     private string? ValidateFontFamily(string fontFamily)

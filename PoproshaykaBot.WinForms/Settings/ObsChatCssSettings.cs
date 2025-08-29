@@ -32,6 +32,12 @@ public class ObsChatCssSettings
     public bool AutoScrollEnabled { get; set; } = true;
     public int ScrollToBottomThreshold { get; set; } = 100;
 
+    public string UserMessageAnimation { get; set; } = MessageAnimationType.SlideInRight;
+    public string BotMessageAnimation { get; set; } = MessageAnimationType.FadeInUp;
+    public string SystemMessageAnimation { get; set; } = MessageAnimationType.FadeInUp;
+    public string BroadcasterMessageAnimation { get; set; } = MessageAnimationType.SlideInLeft;
+    public string FirstTimeUserMessageAnimation { get; set; } = MessageAnimationType.BounceIn;
+
     public static ObsChatCssSettings FromObsChatSettings(ObsChatSettings? settings)
     {
         var safeSettings = settings ?? new ObsChatSettings();
@@ -67,6 +73,12 @@ public class ObsChatCssSettings
             ScrollAnimationDuration = safeSettings.ScrollAnimationDuration,
             AutoScrollEnabled = safeSettings.AutoScrollEnabled,
             ScrollToBottomThreshold = safeSettings.ScrollToBottomThreshold,
+
+            UserMessageAnimation = safeSettings.UserMessageAnimation,
+            BotMessageAnimation = safeSettings.BotMessageAnimation,
+            SystemMessageAnimation = safeSettings.SystemMessageAnimation,
+            BroadcasterMessageAnimation = safeSettings.BroadcasterMessageAnimation,
+            FirstTimeUserMessageAnimation = safeSettings.FirstTimeUserMessageAnimation,
         };
     }
 
