@@ -1,9 +1,9 @@
+using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Settings;
-using TwitchLib.Client;
 
 namespace PoproshaykaBot.WinForms.Broadcast;
 
-public sealed class BroadcastScheduler(TwitchClient client, SettingsManager settingsManager, Func<int, string> messageProvider)
+public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsManager settingsManager, Func<int, string> messageProvider)
     : IAsyncDisposable
 {
     private TimeSpan _interval = TimeSpan.FromMinutes(15);
@@ -78,7 +78,7 @@ public sealed class BroadcastScheduler(TwitchClient client, SettingsManager sett
 
                 if (string.IsNullOrWhiteSpace(message) == false)
                 {
-                    client.SendMessage(_channel, message);
+                    messenger.Send(_channel, message);
                 }
             }
         }

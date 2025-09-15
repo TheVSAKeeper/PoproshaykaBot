@@ -197,7 +197,6 @@ public partial class MainForm : Form
             _bot.Connected += OnBotConnected;
             _bot.LogMessage += OnBotLogMessage;
             _bot.ConnectionProgress += OnBotConnectionProgress;
-            _bot.ChatMessageReceived += OnChatMessageReceived;
             _bot.StreamStatusChanged += OnStreamStatusChanged;
 
             _isConnected = true;
@@ -235,11 +234,6 @@ public partial class MainForm : Form
     private void OnBotLogMessage(string message)
     {
         AddLogMessage($"[Бот] {message}");
-    }
-
-    private void OnChatMessageReceived(ChatMessageData chatMessage)
-    {
-        _chatHistoryManager.AddMessage(chatMessage);
     }
 
     private void OnToggleLogsButtonClicked(object sender, EventArgs e)
@@ -614,7 +608,6 @@ public partial class MainForm : Form
             _bot.Connected -= OnBotConnected;
             _bot.LogMessage -= OnBotLogMessage;
             _bot.ConnectionProgress -= OnBotConnectionProgress;
-            _bot.ChatMessageReceived -= OnChatMessageReceived;
             _bot.StreamStatusChanged -= OnStreamStatusChanged;
 
             try

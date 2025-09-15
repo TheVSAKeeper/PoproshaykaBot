@@ -13,9 +13,9 @@ namespace PoproshaykaBot.WinForms;
 
 public class Bot : IAsyncDisposable
 {
-    private const int CharsLimit = 500;
-
     private readonly TwitchClient _client;
+    private readonly ChatHistoryManager _chatHistoryManager;
+    private readonly TwitchChatMessenger _messenger;
     private readonly TwitchAPI _twitchApi;
     private readonly TwitchSettings _settings;
     private readonly StatisticsCollector _statisticsCollector;
@@ -33,9 +33,11 @@ public class Bot : IAsyncDisposable
         TwitchSettings settings,
         StatisticsCollector statisticsCollector,
         TwitchClient client,
+        TwitchChatMessenger messenger,
         TwitchAPI twitchApi,
         ChatDecorationsProvider chatDecorationsProvider,
         AudienceTracker audienceTracker,
+        ChatHistoryManager chatHistoryManager,
         BroadcastScheduler broadcastScheduler,
         ChatCommandProcessor commandProcessor,
         StreamStatusManager streamStatusManager)
@@ -45,6 +47,8 @@ public class Bot : IAsyncDisposable
         _audienceTracker = audienceTracker;
 
         _client = client;
+        _messenger = messenger;
+        _chatHistoryManager = chatHistoryManager;
 
         _client.OnLog += Client_OnLog;
         _client.OnMessageReceived += Client_OnMessageReceived;
@@ -58,8 +62,6 @@ public class Bot : IAsyncDisposable
         _streamStatusManager = streamStatusManager;
         AttachStreamStatusHandlers();
     }
-
-    public event Action<ChatMessageData>? ChatMessageReceived;
 
     public event Action<string>? Connected;
 
@@ -179,7 +181,7 @@ public class Bot : IAsyncDisposable
                 if (messages.Count > 0)
                 {
                     var combinedMessage = string.Join(" ", messages);
-                    SendMessageSmart(_channel, combinedMessage);
+                    _messenger.Send(_channel, combinedMessage);
                 }
 
                 _audienceTracker.ClearAll();
@@ -243,7 +245,7 @@ public class Bot : IAsyncDisposable
                 && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage) == false
                 && string.IsNullOrEmpty(_channel) == false)
             {
-                SendMessageSmart(_channel, _settings.AutoBroadcast.StreamStartMessage);
+                _messenger.Send(_channel, _settings.AutoBroadcast.StreamStartMessage);
             }
         }
 
@@ -261,7 +263,7 @@ public class Bot : IAsyncDisposable
                 && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage) == false
                 && string.IsNullOrEmpty(_channel) == false)
             {
-                SendMessageSmart(_channel, _settings.AutoBroadcast.StreamStopMessage);
+                _messenger.Send(_channel, _settings.AutoBroadcast.StreamStopMessage);
             }
         }
 
@@ -298,7 +300,7 @@ public class Bot : IAsyncDisposable
         if (_settings.Messages.ConnectionEnabled
             && string.IsNullOrWhiteSpace(_settings.Messages.Connection) == false)
         {
-            SendMessageSmart(e.Channel, _settings.Messages.Connection);
+            _messenger.Send(e.Channel, _settings.Messages.Connection);
         }
 
         _channel = e.Channel;
@@ -334,7 +336,7 @@ public class Bot : IAsyncDisposable
             BadgeUrls = _chatDecorations.ExtractBadgeUrls(e.ChatMessage.Badges, _settings.ObsChat.BadgeSizePixels),
         };
 
-        ChatMessageReceived?.Invoke(userMessage);
+        _chatHistoryManager.AddMessage(userMessage);
 
         if (_settings.Messages.WelcomeEnabled && isFirstSeen)
         {
@@ -342,18 +344,7 @@ public class Bot : IAsyncDisposable
 
             if (string.IsNullOrWhiteSpace(welcomeMessage) == false)
             {
-                SendReplySmart(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
-
-                var welcomeResponse = new ChatMessageData
-                {
-                    Timestamp = DateTime.UtcNow,
-                    DisplayName = _settings.BotUsername,
-                    Message = welcomeMessage,
-                    MessageType = ChatMessageType.BotResponse,
-                    Status = UserStatus.None,
-                };
-
-                ChatMessageReceived?.Invoke(welcomeResponse);
+                _messenger.Reply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
             }
         }
 
@@ -375,29 +366,13 @@ public class Bot : IAsyncDisposable
             switch (response.Delivery)
             {
                 case DeliveryType.Reply:
-                    SendReplySmart(context.Channel, response.ReplyToMessageId ?? context.MessageId, response.Text);
+                    _messenger.Reply(context.Channel, response.ReplyToMessageId ?? context.MessageId, response.Text);
                     break;
 
                 case DeliveryType.Normal:
                 default:
-                    SendMessageSmart(context.Channel, response.Text);
+                    _messenger.Send(context.Channel, response.Text);
                     break;
-            }
-
-            var botResponse = response.Text;
-
-            if (string.IsNullOrEmpty(botResponse) == false)
-            {
-                var responseMessage = new ChatMessageData
-                {
-                    Timestamp = DateTime.UtcNow,
-                    DisplayName = _settings.BotUsername,
-                    Message = botResponse,
-                    MessageType = ChatMessageType.BotResponse,
-                    Status = UserStatus.None,
-                };
-
-                ChatMessageReceived?.Invoke(responseMessage);
             }
         }
 
@@ -429,55 +404,6 @@ public class Bot : IAsyncDisposable
         }
 
         return status;
-    }
-
-    private static IEnumerable<string> SplitByLimit(string text, int maxLength)
-    {
-        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
-        {
-            yield return text;
-            yield break;
-        }
-
-        var parts = text.Split(" | ");
-        var builder = new StringBuilder();
-
-        foreach (var part in parts)
-        {
-            var isFirstInChunk = builder.Length == 0;
-            var candidate = isFirstInChunk ? part : " | " + part;
-
-            if (builder.Length + candidate.Length <= maxLength)
-            {
-                builder.Append(candidate);
-            }
-            else
-            {
-                if (builder.Length > 0)
-                {
-                    yield return builder.ToString();
-                    builder.Clear();
-                }
-
-                if (part.Length > maxLength)
-                {
-                    for (var i = 0; i < part.Length; i += maxLength)
-                    {
-                        var length = Math.Min(maxLength, part.Length - i);
-                        yield return part.Substring(i, length);
-                    }
-                }
-                else
-                {
-                    builder.Append(part);
-                }
-            }
-        }
-
-        if (builder.Length > 0)
-        {
-            yield return builder.ToString();
-        }
     }
 
     private void AttachStreamStatusHandlers()
@@ -538,22 +464,6 @@ public class Bot : IAsyncDisposable
         }
     }
 
-    private void SendMessageSmart(string channel, string text)
-    {
-        foreach (var chunk in SplitByLimit(text, CharsLimit))
-        {
-            _client.SendMessage(channel, chunk);
-        }
-    }
-
-    private void SendReplySmart(string channel, string replyToMessageId, string text)
-    {
-        foreach (var chunk in SplitByLimit(text, CharsLimit))
-        {
-            _client.SendReply(channel, replyToMessageId, chunk);
-        }
-    }
-
     // TODO: Вынести в настройки
     public void SendPunishmentMessage(string userName, ulong removedMessages)
     {
@@ -566,6 +476,6 @@ public class Bot : IAsyncDisposable
                                 + $"⚔️ Убрано {removedMessages} сообщений из статистики. "
                                 + $"💀 #пиратская_справедливость";
 
-        SendMessageSmart(_channel, punishmentMessage);
+        _messenger.Send(_channel, punishmentMessage);
     }
 }

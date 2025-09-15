@@ -40,6 +40,8 @@ public class TwitchSettings
     public ObsChatSettings ObsChat { get; set; } = new();
 
     public AutoBroadcastSettings AutoBroadcast { get; set; } = new();
+
+    public InfrastructureSettings Infrastructure { get; set; } = new();
 }
 
 public class MessageSettings
@@ -65,6 +67,12 @@ public class UiSettings
 {
     public bool ShowLogsPanel { get; set; } = true;
     public bool ShowChatPanel { get; set; } = true;
+}
+
+public class InfrastructureSettings
+{
+    public int ChatHistoryMaxItems { get; set; } = 1000;
+    public int SseKeepAliveSeconds { get; set; } = 30;
 }
 
 public class ObsChatSettings

@@ -21,7 +21,7 @@ public static class Program
         var settingsManager = new SettingsManager();
         var statistics = new StatisticsCollector();
         var oauthService = new TwitchOAuthService(settingsManager);
-        var chatHistoryManager = new ChatHistoryManager();
+        var chatHistoryManager = new ChatHistoryManager(settingsManager);
         var twitchSettings = settingsManager.Current.Twitch;
         var portValidator = new PortValidator(settingsManager);
         var httpServerEnabled = twitchSettings.HttpServerEnabled;
@@ -87,7 +87,10 @@ public static class Program
                     .Replace("{viewers}", info?.ViewerCount.ToString() ?? string.Empty);
             });
 
-            var broadcastScheduler = new BroadcastScheduler(twitchClient, settingsManager, messageProvider);
+            var messenger = new TwitchChatMessenger(twitchClient, settingsManager);
+            messenger.MessageSent += chatHistoryManager.AddMessage;
+
+            var broadcastScheduler = new BroadcastScheduler(messenger, settingsManager, messageProvider);
             var audienceTracker = new AudienceTracker(settingsManager);
 
             var commands = new List<IChatCommand>
@@ -110,9 +113,11 @@ public static class Program
             var bot = new Bot(settingsManager.Current.Twitch,
                 statistics,
                 twitchClient,
+                messenger,
                 twitchApi,
                 chatDecorationsProvider,
                 audienceTracker,
+                chatHistoryManager,
                 broadcastScheduler,
                 commandProcessor,
                 streamStatusManager);

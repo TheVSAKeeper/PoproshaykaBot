@@ -30,6 +30,7 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
     private HttpListener _httpListener;
     private TaskCompletionSource<string>? _oauthCodeTask;
     private Task? _serverTask;
+    private System.Threading.Timer? _ssePingTimer;
 
     public UnifiedHttpServer(ChatHistoryManager chatHistoryManager, SettingsManager settingsManager, int port = 8080)
     {
@@ -66,6 +67,19 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
             _chatHistoryManager.RegisterChatDisplay(this);
             _serverTask = HandleRequestsAsync();
 
+            var keepAliveSeconds = Math.Max(5, _settingsManager.Current.Twitch.Infrastructure.SseKeepAliveSeconds);
+
+            _ssePingTimer = new(_ =>
+            {
+                try
+                {
+                    SendSseToAllClients(": keep-alive");
+                }
+                catch
+                {
+                }
+            }, null, TimeSpan.FromSeconds(keepAliveSeconds), TimeSpan.FromSeconds(keepAliveSeconds));
+
             LogMessage?.Invoke($"HTTP сервер запущен на порту {_port}");
 
             return Task.CompletedTask;
@@ -92,6 +106,9 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
             _chatHistoryManager.UnregisterChatDisplay(this);
 
             _httpListener.Stop();
+
+            _ssePingTimer?.Dispose();
+            _ssePingTimer = null;
 
             if (_serverTask != null)
             {
@@ -216,6 +233,7 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         return new
         {
             username = chatMessage.DisplayName,
+            displayName = chatMessage.DisplayName,
             message = chatMessage.Message,
             timestamp = chatMessage.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             messageType = chatMessage.MessageType.ToString(),
@@ -564,8 +582,9 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
             {
                 try
                 {
-                    var message = $"data: {data}\n\n";
-                    var buffer = Encoding.UTF8.GetBytes(message);
+                    var isComment = data.StartsWith(":");
+                    var payload = isComment ? data + "\n\n" : $"data: {data}\n\n";
+                    var buffer = Encoding.UTF8.GetBytes(payload);
                     client.OutputStream.Write(buffer, 0, buffer.Length);
                     client.OutputStream.Flush();
                 }
