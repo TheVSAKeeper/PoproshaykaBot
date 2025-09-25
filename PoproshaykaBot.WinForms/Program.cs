@@ -1,6 +1,5 @@
-using PoproshaykaBot.WinForms.Broadcast;
-using PoproshaykaBot.WinForms.Chat;
-using PoproshaykaBot.WinForms.Chat.Commands;
+﻿using PoproshaykaBot.Core;
+using PoproshaykaBot.Core.Commands;
 using PoproshaykaBot.WinForms.Settings;
 using TwitchLib.Api;
 using TwitchLib.Client;

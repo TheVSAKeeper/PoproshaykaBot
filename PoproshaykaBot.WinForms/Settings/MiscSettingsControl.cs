@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using PoproshaykaBot.Core;
+using System.Diagnostics;
 using System.Reflection;
 
 namespace PoproshaykaBot.WinForms.Settings;

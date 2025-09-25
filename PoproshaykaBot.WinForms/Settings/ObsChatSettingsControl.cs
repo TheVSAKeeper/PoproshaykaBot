@@ -1,4 +1,5 @@
 ﻿using Cyotek.Windows.Forms;
+using PoproshaykaBot.Core;
 
 namespace PoproshaykaBot.WinForms.Settings;
 

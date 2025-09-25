@@ -1,4 +1,4 @@
-﻿using PoproshaykaBot.WinForms.Models;
+﻿using PoproshaykaBot.Core;
 
 namespace PoproshaykaBot.WinForms;
 

@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.WinForms.Settings;
+﻿using PoproshaykaBot.Core;
+
+namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class MessagesSettingsControl : UserControl
 {
