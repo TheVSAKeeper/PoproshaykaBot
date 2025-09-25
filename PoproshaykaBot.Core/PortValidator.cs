@@ -1,6 +1,6 @@
-namespace PoproshaykaBot.Core;
+﻿namespace PoproshaykaBot.Core;
 
-public class PortValidator(SettingsManager settingsManager)
+public sealed class PortValidator(SettingsManager settingsManager, IPortConflictDialogService dialogService)
 {
     public bool ValidateAndResolvePortConflict()
     {
@@ -10,11 +10,7 @@ public class PortValidator(SettingsManager settingsManager)
 
         if (Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri) == false)
         {
-            MessageBox.Show($"Некорректный RedirectUri: {redirectUri}\n\nПожалуйста, исправьте URI в настройках OAuth.",
-                "Ошибка конфигурации",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-
+            dialogService.ShowInvalidRedirectUri(redirectUri);
             return false;
         }
 
@@ -25,7 +21,7 @@ public class PortValidator(SettingsManager settingsManager)
             return true;
         }
 
-        var result = ShowPortConflictDialog(redirectPort, serverPort);
+        var result = dialogService.ShowPortConflictDialog(redirectPort, serverPort);
 
         switch (result)
         {
@@ -43,35 +39,5 @@ public class PortValidator(SettingsManager settingsManager)
 
         settingsManager.SaveSettings(settings);
         return true;
-    }
-
-    private static PortConflictResolution ShowPortConflictDialog(int redirectPort, int serverPort)
-    {
-        var message = $"""
-                       Обнаружен конфликт портов:
-
-                       • RedirectUri использует порт: {redirectPort}
-                       • HTTP сервер настроен на порт: {serverPort}
-
-                       Для корректной работы OAuth авторизации и HTTP сервера необходимо использовать один и тот же порт.
-
-                       Нажмите:
-                       • ДА - использовать порт {redirectPort} для HTTP сервера
-                       • НЕТ - обновить RedirectUri на порт {serverPort}
-                       • ОТМЕНА - открыть настройки для ручного исправления
-                       """;
-
-        var result = MessageBox.Show(message,
-            "Конфликт портов",
-            MessageBoxButtons.YesNoCancel,
-            MessageBoxIcon.Warning,
-            MessageBoxDefaultButton.Button1);
-
-        return result switch
-        {
-            DialogResult.Yes => PortConflictResolution.UseRedirectPort,
-            DialogResult.No => PortConflictResolution.UpdateRedirectUri,
-            _ => PortConflictResolution.OpenSettings,
-        };
     }
 }

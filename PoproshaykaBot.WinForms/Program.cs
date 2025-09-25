@@ -1,6 +1,5 @@
 ﻿using PoproshaykaBot.Core;
 using PoproshaykaBot.Core.Commands;
-using PoproshaykaBot.WinForms.Settings;
 using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Models;
@@ -22,7 +21,8 @@ public static class Program
         var oauthService = new TwitchOAuthService(settingsManager);
         var chatHistoryManager = new ChatHistoryManager(settingsManager);
         var twitchSettings = settingsManager.Current.Twitch;
-        var portValidator = new PortValidator(settingsManager);
+        var portConflictDialogService = new PortConflictDialogService();
+        var portValidator = new PortValidator(settingsManager, portConflictDialogService);
         var httpServerEnabled = twitchSettings.HttpServerEnabled;
         var portValidationPassed = false;
 
