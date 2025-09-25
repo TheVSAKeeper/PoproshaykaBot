@@ -1,7 +1,8 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using PoproshaykaBot.Assets;
 
 namespace PoproshaykaBot.Core;
 
@@ -15,10 +16,10 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
         WriteIndented = false,
     };
 
-    private static readonly string ObsOverlayHtmlContent = LoadResourceText($"{typeof(UnifiedHttpServer).Namespace}.Assets.ObsOverlay.html");
-    private static readonly string ObsOverlayCssContent = LoadResourceText($"{typeof(UnifiedHttpServer).Namespace}.Assets.obs.css");
-    private static readonly byte[] ObsOverlayJsContent = LoadResourceBytes($"{typeof(UnifiedHttpServer).Namespace}.Assets.obs.js");
-    private static readonly byte[] FaviconIcoContent = LoadResourceBytes($"{typeof(UnifiedHttpServer).Namespace}.icon.ico");
+    private static readonly string ObsOverlayHtmlContent = ObsOverlayResources.ObsOverlayHtml;
+    private static readonly string ObsOverlayCssContent = ObsOverlayResources.ObsOverlayCss;
+    private static readonly byte[] ObsOverlayJsContent = ObsOverlayResources.ObsOverlayJs;
+    private static readonly byte[] FaviconIcoContent = ObsOverlayResources.FaviconIco;
 
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly List<HttpListenerResponse> _sseClients = [];
@@ -254,35 +255,6 @@ public class UnifiedHttpServer : IChatDisplay, IAsyncDisposable
                 })
                 .ToArray(),
         };
-    }
-
-    private static string LoadResourceText(string resourceName)
-    {
-        var assembly = typeof(UnifiedHttpServer).Assembly;
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-
-        if (stream == null)
-        {
-            throw new InvalidOperationException($"Ресурс не найден: {resourceName}");
-        }
-
-        using var reader = new StreamReader(stream, Encoding.UTF8, true);
-        return reader.ReadToEnd();
-    }
-
-    private static byte[] LoadResourceBytes(string resourceName)
-    {
-        var assembly = typeof(UnifiedHttpServer).Assembly;
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-
-        if (stream == null)
-        {
-            throw new InvalidOperationException($"Ресурс не найден: {resourceName}");
-        }
-
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        return ms.ToArray();
     }
 
     private HttpListener CreateListener(int port)

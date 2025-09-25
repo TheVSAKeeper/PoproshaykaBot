@@ -631,9 +631,13 @@
         "resolved": "1.0.6",
         "contentHash": "RsGVzU2Q809nYopcivw+dA862ODxbF4dhsWrnvv6VkZKGlno1kVbupIve80j6Ru8QeOJA7dtZ4RpgAj6x6/R+g=="
       },
+      "poproshaykabot.assets": {
+        "type": "Project"
+      },
       "poproshaykabot.core": {
         "type": "Project",
         "dependencies": {
+          "PoproshaykaBot.Assets": "[1.0.0, )",
           "TwitchLib.Api": "[3.9.0, )",
           "TwitchLib.Client": "[3.4.0, )",
           "TwitchLib.EventSub.Websockets": "[0.6.0, )"
