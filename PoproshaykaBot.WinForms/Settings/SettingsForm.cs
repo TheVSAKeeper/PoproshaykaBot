@@ -1,4 +1,8 @@
 ﻿using PoproshaykaBot.Core;
+using PoproshaykaBot.Core.Domain.Models.Settings;
+using PoproshaykaBot.Core.Infrastructure.ExternalServices.Twitch;
+using PoproshaykaBot.Core.Infrastructure.Http;
+using PoproshaykaBot.Core.Infrastructure.Persistence;
 using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Settings;

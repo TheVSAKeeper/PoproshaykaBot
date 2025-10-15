@@ -1,4 +1,7 @@
 ﻿using PoproshaykaBot.Core;
+using PoproshaykaBot.Core.Application.Chat;
+using PoproshaykaBot.Core.Domain.Models.Chat;
+using PoproshaykaBot.Core.Infrastructure.Interfaces;
 
 namespace PoproshaykaBot.WinForms;
 

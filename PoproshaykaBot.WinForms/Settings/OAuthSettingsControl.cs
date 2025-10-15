@@ -1,4 +1,7 @@
 ﻿using PoproshaykaBot.Core;
+using PoproshaykaBot.Core.Domain.Models.Settings;
+using PoproshaykaBot.Core.Infrastructure.ExternalServices.Twitch;
+using PoproshaykaBot.Core.Infrastructure.Persistence;
 
 namespace PoproshaykaBot.WinForms.Settings;
 

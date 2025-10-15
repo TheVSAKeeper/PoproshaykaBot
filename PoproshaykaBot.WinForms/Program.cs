@@ -1,5 +1,14 @@
 ﻿using PoproshaykaBot.Core;
-using PoproshaykaBot.Core.Commands;
+using PoproshaykaBot.Core.Application.Bot;
+using PoproshaykaBot.Core.Application.Broadcasting;
+using PoproshaykaBot.Core.Application.Chat;
+using PoproshaykaBot.Core.Application.Chat.Commands;
+using PoproshaykaBot.Core.Application.Chat.Commands.Implementations;
+using PoproshaykaBot.Core.Application.Statistics;
+using PoproshaykaBot.Core.Application.Streaming;
+using PoproshaykaBot.Core.Infrastructure.ExternalServices.Twitch;
+using PoproshaykaBot.Core.Infrastructure.Http;
+using PoproshaykaBot.Core.Infrastructure.Persistence;
 using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Models;

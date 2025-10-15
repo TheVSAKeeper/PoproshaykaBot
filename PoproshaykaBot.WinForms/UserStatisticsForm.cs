@@ -1,4 +1,7 @@
 ﻿using PoproshaykaBot.Core;
+using PoproshaykaBot.Core.Application.Bot;
+using PoproshaykaBot.Core.Application.Statistics;
+using PoproshaykaBot.Core.Domain.Models.Statistics;
 
 namespace PoproshaykaBot.WinForms;
 

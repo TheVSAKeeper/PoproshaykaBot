@@ -1,5 +1,7 @@
 ﻿using Cyotek.Windows.Forms;
 using PoproshaykaBot.Core;
+using PoproshaykaBot.Core.Domain.Models.Chat;
+using PoproshaykaBot.Core.Domain.Models.Settings;
 
 namespace PoproshaykaBot.WinForms.Settings;
 

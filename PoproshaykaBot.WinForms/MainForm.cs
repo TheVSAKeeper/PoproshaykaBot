@@ -1,4 +1,12 @@
 ﻿using PoproshaykaBot.Core;
+using PoproshaykaBot.Core.Application.Bot;
+using PoproshaykaBot.Core.Application.Chat;
+using PoproshaykaBot.Core.Application.Statistics;
+using PoproshaykaBot.Core.Domain.Models.Connection;
+using PoproshaykaBot.Core.Domain.Models.Stream;
+using PoproshaykaBot.Core.Infrastructure.ExternalServices.Twitch;
+using PoproshaykaBot.Core.Infrastructure.Http;
+using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.WinForms.Settings;
 
 namespace PoproshaykaBot.WinForms;

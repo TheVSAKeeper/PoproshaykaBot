@@ -1,4 +1,6 @@
 ﻿using PoproshaykaBot.Core;
+using PoproshaykaBot.Core.Domain.Models.Settings;
+using PoproshaykaBot.Core.Infrastructure.Http;
 
 namespace PoproshaykaBot.WinForms.Settings;
 

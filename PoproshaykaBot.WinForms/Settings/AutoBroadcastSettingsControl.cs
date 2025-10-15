@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core;
+using PoproshaykaBot.Core.Domain.Models.Settings;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
