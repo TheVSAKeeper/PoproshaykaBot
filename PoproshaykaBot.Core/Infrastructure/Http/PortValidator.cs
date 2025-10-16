@@ -11,7 +11,7 @@ public sealed class PortValidator(SettingsManager settingsManager, IPortConflict
         var redirectUri = settings.Twitch.RedirectUri;
         var serverPort = settings.Twitch.HttpServerPort;
 
-        if (Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri) == false)
+        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri))
         {
             dialogService.ShowInvalidRedirectUri(redirectUri);
             return false;

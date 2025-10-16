@@ -39,7 +39,7 @@ public class ChatHistoryManager(SettingsManager settingsManager)
 
     public void RegisterChatDisplay(IChatDisplay chatDisplay)
     {
-        if (_chatDisplays.Contains(chatDisplay) == false)
+        if (!_chatDisplays.Contains(chatDisplay))
         {
             _chatDisplays.Add(chatDisplay);
         }

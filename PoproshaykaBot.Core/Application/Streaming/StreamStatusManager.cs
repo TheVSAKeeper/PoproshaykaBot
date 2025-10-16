@@ -70,7 +70,7 @@ public class StreamStatusManager : IAsyncDisposable
 
     public async Task StartMonitoringAsync(string channelName)
     {
-        if (_isInitialized == false)
+        if (!_isInitialized)
         {
             throw new InvalidOperationException("StreamStatusManager не инициализирован. Вызовите InitializeAsync сначала.");
         }
@@ -100,7 +100,7 @@ public class StreamStatusManager : IAsyncDisposable
 
             var connected = await _eventSubClient.ConnectAsync();
 
-            if (connected == false)
+            if (!connected)
             {
                 var errorMessage = "Не удалось подключиться к EventSub WebSocket";
                 ErrorOccurred?.Invoke(errorMessage);
@@ -172,7 +172,7 @@ public class StreamStatusManager : IAsyncDisposable
         _reconnectAttempts = 0;
         StatusChanged?.Invoke($"EventSub WebSocket подключен (Session: {_eventSubClient.SessionId})");
 
-        if (e.IsRequestedReconnect == false && string.IsNullOrEmpty(_broadcasterUserId) == false)
+        if (!e.IsRequestedReconnect && !string.IsNullOrEmpty(_broadcasterUserId))
         {
             await CreateEventSubSubscriptions();
         }
@@ -235,7 +235,7 @@ public class StreamStatusManager : IAsyncDisposable
 
     private Task OnWebsocketReconnected(object sender, EventArgs e)
     {
-        if (_stopRequested == false)
+        if (!_stopRequested)
         {
             StatusChanged?.Invoke($"EventSub WebSocket переподключен (Session: {_eventSubClient.SessionId})");
         }

@@ -28,7 +28,7 @@ public sealed class HelpCommand(Func<IReadOnlyCollection<IChatCommand>> getAllCo
             .Select(x =>
             {
                 var aliases = x.Aliases
-                    .Where(a => string.IsNullOrWhiteSpace(a) == false)
+                    .Where(a => !string.IsNullOrWhiteSpace(a))
                     .Select(a => $"!{a}")
                     .ToList();
 

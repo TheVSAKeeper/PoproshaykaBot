@@ -1,31 +1,29 @@
-﻿using PoproshaykaBot.Core.Application.Broadcasting;
+using PoproshaykaBot.Core.Application.Broadcasting;
 using PoproshaykaBot.Core.Application.Chat;
-using PoproshaykaBot.Core.Application.Statistics;
 using PoproshaykaBot.Core.Application.Streaming;
-using PoproshaykaBot.Core.Domain.Models.Chat;
 using PoproshaykaBot.Core.Domain.Models.Settings;
 using PoproshaykaBot.Core.Domain.Models.Stream;
 using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
-using TwitchLib.Client.Models;
 using TwitchLib.EventSub.Websockets.Core.EventArgs.Stream;
 
 namespace PoproshaykaBot.Core.Application.Bot;
 
+/// <summary>
+/// Главный оркестратор бота.
+/// Координирует работу всех компонентов и управляет событиями.
+/// </summary>
 public class Bot : IAsyncDisposable
 {
     private readonly TwitchClient _client;
-    private readonly ChatHistoryManager _chatHistoryManager;
     private readonly TwitchChatMessenger _messenger;
-    private readonly TwitchAPI _twitchApi;
     private readonly TwitchSettings _settings;
-    private readonly StatisticsCollector _statisticsCollector;
     private readonly AudienceTracker _audienceTracker;
-    private readonly ChatDecorationsProvider _chatDecorations;
-    private readonly ChatCommandProcessor _commandProcessor;
     private readonly StreamStatusManager _streamStatusManager;
     private readonly BroadcastScheduler _broadcastScheduler;
+    private readonly BotLifecycleManager _lifecycleManager;
+    private readonly BotMessageHandler _messageHandler;
 
     private bool _disposed;
     private string? _channel;
@@ -33,35 +31,32 @@ public class Bot : IAsyncDisposable
 
     public Bot(
         TwitchSettings settings,
-        StatisticsCollector statisticsCollector,
         TwitchClient client,
         TwitchChatMessenger messenger,
         TwitchAPI twitchApi,
-        ChatDecorationsProvider chatDecorationsProvider,
         AudienceTracker audienceTracker,
-        ChatHistoryManager chatHistoryManager,
         BroadcastScheduler broadcastScheduler,
-        ChatCommandProcessor commandProcessor,
-        StreamStatusManager streamStatusManager)
+        StreamStatusManager streamStatusManager,
+        BotLifecycleManager lifecycleManager,
+        BotMessageHandler messageHandler)
     {
-        _settings = settings;
-        _statisticsCollector = statisticsCollector;
-        _audienceTracker = audienceTracker;
-
-        _client = client;
-        _messenger = messenger;
-        _chatHistoryManager = chatHistoryManager;
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
+        _messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
+        _audienceTracker = audienceTracker ?? throw new ArgumentNullException(nameof(audienceTracker));
+        _broadcastScheduler = broadcastScheduler ?? throw new ArgumentNullException(nameof(broadcastScheduler));
+        _streamStatusManager = streamStatusManager ?? throw new ArgumentNullException(nameof(streamStatusManager));
+        _lifecycleManager = lifecycleManager ?? throw new ArgumentNullException(nameof(lifecycleManager));
+        _messageHandler = messageHandler ?? throw new ArgumentNullException(nameof(messageHandler));
 
         _client.OnLog += Client_OnLog;
         _client.OnMessageReceived += Client_OnMessageReceived;
         _client.OnConnected += Client_OnConnected;
         _client.OnJoinedChannel += Сlient_OnJoinedChannel;
 
-        _twitchApi = twitchApi;
-        _chatDecorations = chatDecorationsProvider;
-        _broadcastScheduler = broadcastScheduler;
-        _commandProcessor = commandProcessor;
-        _streamStatusManager = streamStatusManager;
+        _lifecycleManager.ConnectionProgress += msg => ConnectionProgress?.Invoke(msg);
+        _lifecycleManager.LogMessage += msg => LogMessage?.Invoke(msg);
+
         AttachStreamStatusHandlers();
     }
 
@@ -78,126 +73,23 @@ public class Bot : IAsyncDisposable
     public StreamStatus StreamStatus => _streamStatusManager.CurrentStatus;
     public StreamInfo? CurrentStream => _streamStatusManager.CurrentStream;
 
-    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    public Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (_client.IsConnected)
-        {
-            var message = "Бот уже подключен";
-            ConnectionProgress?.Invoke(message);
-            LogMessage?.Invoke(message);
-            return;
-        }
-
-        var initMessage = "Инициализация подключения...";
-        ConnectionProgress?.Invoke(initMessage);
-        LogMessage?.Invoke(initMessage);
-
-        try
-        {
-            var connectingMessage = "Подключение к серверу Twitch...";
-            ConnectionProgress?.Invoke(connectingMessage);
-            LogMessage?.Invoke(connectingMessage);
-
-            _client.Connect();
-
-            var timeout = TimeSpan.FromSeconds(30);
-            var startTime = DateTime.UtcNow;
-
-            while (_client.IsConnected == false && DateTime.UtcNow - startTime < timeout)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var waitingMessage = "Ожидание подтверждения подключения...";
-                ConnectionProgress?.Invoke(waitingMessage);
-                LogMessage?.Invoke(waitingMessage);
-                await Task.Delay(500, cancellationToken);
-            }
-
-            if (_client.IsConnected)
-            {
-                var successMessage = "Подключение установлено успешно";
-                ConnectionProgress?.Invoke(successMessage);
-                LogMessage?.Invoke(successMessage);
-            }
-            else
-            {
-                throw new TimeoutException("Превышено время ожидания подключения к Twitch");
-            }
-
-            var statsMessage = "Инициализация статистики...";
-            ConnectionProgress?.Invoke(statsMessage);
-            LogMessage?.Invoke(statsMessage);
-            await _statisticsCollector.StartAsync();
-            _statisticsCollector.ResetBotStartTime();
-
-            var emotesMessage = "Загрузка эмодзи и бэйджей...";
-            ConnectionProgress?.Invoke(emotesMessage);
-            LogMessage?.Invoke(emotesMessage);
-            await _chatDecorations.LoadAsync();
-            LogMessage?.Invoke($"Загружено {_chatDecorations.GlobalEmotesCount} глобальных эмодзи и {_chatDecorations.GlobalBadgeSetsCount} типов глобальных бэйджей");
-
-            if (_settings.AutoBroadcast.AutoBroadcastEnabled)
-            {
-                var streamMessage = "Инициализация мониторинга стрима...";
-                ConnectionProgress?.Invoke(streamMessage);
-                LogMessage?.Invoke(streamMessage);
-                await InitializeStreamMonitoringAsync();
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            var cancelMessage = "Подключение отменено пользователем";
-            ConnectionProgress?.Invoke(cancelMessage);
-            LogMessage?.Invoke(cancelMessage);
-            throw;
-        }
-        catch (Exception exception)
-        {
-            var errorMessage = $"Ошибка подключения: {exception.Message}";
-            ConnectionProgress?.Invoke(errorMessage);
-            LogMessage?.Invoke(errorMessage);
-            throw;
-        }
+        return _lifecycleManager.ConnectAsync(cancellationToken);
     }
 
     public async Task DisconnectAsync()
     {
         if (_client.IsConnected)
         {
-            if (string.IsNullOrWhiteSpace(_channel) == false)
+            if (!string.IsNullOrWhiteSpace(_channel))
             {
-                var messages = new List<string>();
-
-                var collectiveFarewell = _audienceTracker.CreateCollectiveFarewell();
-
-                if (string.IsNullOrWhiteSpace(collectiveFarewell) == false)
-                {
-                    messages.Add(collectiveFarewell);
-                }
-
-                if (_settings.Messages.DisconnectionEnabled
-                    && string.IsNullOrWhiteSpace(_settings.Messages.Disconnection) == false)
-                {
-                    messages.Add(_settings.Messages.Disconnection);
-                }
-
-                if (messages.Count > 0)
-                {
-                    var combinedMessage = string.Join(" ", messages);
-                    _messenger.Send(_channel, combinedMessage);
-                }
-
+                SendFarewellMessages();
                 _audienceTracker.ClearAll();
             }
-
-            _client.Disconnect();
         }
 
-        if (_settings.AutoBroadcast.AutoBroadcastEnabled)
-        {
-            await _streamStatusManager.StopMonitoringAsync();
-        }
-
-        await _statisticsCollector.StopAsync();
+        await _lifecycleManager.DisconnectAsync();
     }
 
     public void StartBroadcast()
@@ -221,6 +113,21 @@ public class Bot : IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 
+    // TODO: Вынести в настройки
+    public void SendPunishmentMessage(string userName, ulong removedMessages)
+    {
+        if (_channel == null || !_client.IsConnected)
+        {
+            return;
+        }
+
+        var punishmentMessage = $"🏴‍☠️ ВНИМАНИЕ! Пользователь @{userName} был лично наказан СЕРЁГОЙ ПИРАТОМ! "
+                                + $"⚔️ Убрано {removedMessages} сообщений из статистики. "
+                                + $"💀 #пиратская_справедливость";
+
+        _messenger.Send(_channel, punishmentMessage);
+    }
+
     protected virtual async ValueTask DisposeAsyncCore()
     {
         if (_disposed)
@@ -232,20 +139,19 @@ public class Bot : IAsyncDisposable
         DetachStreamStatusHandlers();
         await _streamStatusManager.DisposeAsync();
         await _broadcastScheduler.DisposeAsync();
-        await _statisticsCollector.StopAsync();
         _disposed = true;
     }
 
     private void OnStreamStarted(StreamOnlineArgs args)
     {
-        if (_settings.AutoBroadcast.AutoBroadcastEnabled && IsBroadcastActive == false)
+        if (_settings.AutoBroadcast.AutoBroadcastEnabled && !IsBroadcastActive)
         {
             StartBroadcast();
             LogMessage?.Invoke("🔴 Стрим запущен. Автоматически запускаю рассылку.");
 
             if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
-                && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage) == false
-                && string.IsNullOrEmpty(_channel) == false)
+                && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage)
+                && !string.IsNullOrEmpty(_channel))
             {
                 _messenger.Send(_channel, _settings.AutoBroadcast.StreamStartMessage);
             }
@@ -262,8 +168,8 @@ public class Bot : IAsyncDisposable
             LogMessage?.Invoke("⚫ Стрим завершен. Автоматически останавливаю рассылку.");
 
             if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
-                && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage) == false
-                && string.IsNullOrEmpty(_channel) == false)
+                && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage)
+                && !string.IsNullOrEmpty(_channel))
             {
                 _messenger.Send(_channel, _settings.AutoBroadcast.StreamStopMessage);
             }
@@ -300,14 +206,14 @@ public class Bot : IAsyncDisposable
     private void Сlient_OnJoinedChannel(object? sender, OnJoinedChannelArgs e)
     {
         if (_settings.Messages.ConnectionEnabled
-            && string.IsNullOrWhiteSpace(_settings.Messages.Connection) == false)
+            && !string.IsNullOrWhiteSpace(_settings.Messages.Connection))
         {
             _messenger.Send(e.Channel, _settings.Messages.Connection);
         }
 
         _channel = e.Channel;
 
-        if (_settings.AutoBroadcast.AutoBroadcastEnabled == false)
+        if (!_settings.AutoBroadcast.AutoBroadcastEnabled)
         {
             StartBroadcast();
         }
@@ -320,92 +226,8 @@ public class Bot : IAsyncDisposable
 
     private void Client_OnMessageReceived(object? sender, OnMessageReceivedArgs e)
     {
-        _statisticsCollector.TrackMessage(e.ChatMessage.UserId, e.ChatMessage.Username);
-
-        var isFirstSeen = _audienceTracker.OnUserMessage(e.ChatMessage.UserId, e.ChatMessage.DisplayName);
-
-        var userMessage = new ChatMessageData
-        {
-            Timestamp = DateTime.UtcNow,
-            DisplayName = e.ChatMessage.DisplayName,
-            Message = e.ChatMessage.Message,
-            MessageType = ChatMessageType.UserMessage,
-            Status = GetUserStatusFlags(e.ChatMessage),
-            IsFirstTime = isFirstSeen,
-
-            Emotes = _chatDecorations.ExtractEmotes(e.ChatMessage, _settings.ObsChat.EmoteSizePixels),
-            Badges = e.ChatMessage.Badges,
-            BadgeUrls = _chatDecorations.ExtractBadgeUrls(e.ChatMessage.Badges, _settings.ObsChat.BadgeSizePixels),
-        };
-
-        _chatHistoryManager.AddMessage(userMessage);
-
-        if (_settings.Messages.WelcomeEnabled && isFirstSeen)
-        {
-            var welcomeMessage = _audienceTracker.CreateWelcome(e.ChatMessage.DisplayName);
-
-            if (string.IsNullOrWhiteSpace(welcomeMessage) == false)
-            {
-                _messenger.Reply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
-            }
-        }
-
-        var context = new CommandContext
-        {
-            Channel = e.ChatMessage.Channel,
-            MessageId = e.ChatMessage.Id,
-            UserId = e.ChatMessage.UserId,
-            Username = e.ChatMessage.Username,
-            DisplayName = e.ChatMessage.DisplayName,
-        };
-
-        if (_commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response) == false)
-        {
-        }
-
-        if (response != null)
-        {
-            switch (response.Delivery)
-            {
-                case DeliveryType.Reply:
-                    _messenger.Reply(context.Channel, response.ReplyToMessageId ?? context.MessageId, response.Text);
-                    break;
-
-                case DeliveryType.Normal:
-                default:
-                    _messenger.Send(context.Channel, response.Text);
-                    break;
-            }
-        }
-
+        _messageHandler.HandleMessage(e);
         LogMessage?.Invoke(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);
-    }
-
-    private static UserStatus GetUserStatusFlags(ChatMessage chatMessage)
-    {
-        var status = UserStatus.None;
-
-        if (chatMessage.IsBroadcaster)
-        {
-            status |= UserStatus.Broadcaster;
-        }
-
-        if (chatMessage.IsModerator)
-        {
-            status |= UserStatus.Moderator;
-        }
-
-        if (chatMessage.IsVip)
-        {
-            status |= UserStatus.Vip;
-        }
-
-        if (chatMessage.IsSubscriber)
-        {
-            status |= UserStatus.Subscriber;
-        }
-
-        return status;
     }
 
     private void AttachStreamStatusHandlers()
@@ -424,7 +246,7 @@ public class Bot : IAsyncDisposable
 
     private void DetachStreamStatusHandlers()
     {
-        if (_streamHandlersAttached == false)
+        if (!_streamHandlersAttached)
         {
             return;
         }
@@ -436,48 +258,26 @@ public class Bot : IAsyncDisposable
         _streamHandlersAttached = false;
     }
 
-    private async Task InitializeStreamMonitoringAsync()
+    private void SendFarewellMessages()
     {
-        if (_streamStatusManager == null)
+        var messages = new List<string>();
+
+        var collectiveFarewell = _audienceTracker.CreateCollectiveFarewell();
+        if (!string.IsNullOrWhiteSpace(collectiveFarewell))
         {
-            return;
+            messages.Add(collectiveFarewell);
         }
 
-        try
+        if (_settings.Messages.DisconnectionEnabled
+            && !string.IsNullOrWhiteSpace(_settings.Messages.Disconnection))
         {
-            if (string.IsNullOrEmpty(_settings.ClientId))
-            {
-                LogMessage?.Invoke("Client ID не установлен. Мониторинг стрима недоступен.");
-                return;
-            }
-
-            if (string.IsNullOrEmpty(_twitchApi.Settings.AccessToken))
-            {
-                LogMessage?.Invoke("Access Token не установлен. Мониторинг стрима недоступен.");
-                return;
-            }
-
-            await _streamStatusManager.InitializeAsync(_settings.ClientId, _twitchApi.Settings.AccessToken);
-            await _streamStatusManager.StartMonitoringAsync(_settings.Channel);
-        }
-        catch (Exception ex)
-        {
-            LogMessage?.Invoke($"Ошибка инициализации мониторинга стрима: {ex.Message}");
-        }
-    }
-
-    // TODO: Вынести в настройки
-    public void SendPunishmentMessage(string userName, ulong removedMessages)
-    {
-        if (_channel == null || !_client.IsConnected)
-        {
-            return;
+            messages.Add(_settings.Messages.Disconnection);
         }
 
-        var punishmentMessage = $"🏴‍☠️ ВНИМАНИЕ! Пользователь @{userName} был лично наказан СЕРЁГОЙ ПИРАТОМ! "
-                                + $"⚔️ Убрано {removedMessages} сообщений из статистики. "
-                                + $"💀 #пиратская_справедливость";
-
-        _messenger.Send(_channel, punishmentMessage);
+        if (messages.Count > 0 && !string.IsNullOrWhiteSpace(_channel))
+        {
+            var combinedMessage = string.Join(" ", messages);
+            _messenger.Send(_channel, combinedMessage);
+        }
     }
 }

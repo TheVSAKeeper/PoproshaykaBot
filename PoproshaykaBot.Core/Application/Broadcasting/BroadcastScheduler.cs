@@ -76,7 +76,7 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
                 _counter++;
                 var message = messageProvider(_counter);
 
-                if (string.IsNullOrWhiteSpace(message) == false)
+                if (!string.IsNullOrWhiteSpace(message))
                 {
                     messenger.Send(_channel, message);
                 }

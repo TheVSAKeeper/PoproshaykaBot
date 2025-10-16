@@ -176,7 +176,7 @@ public class TwitchOAuthService(SettingsManager settingsManager)
         var response = await client.PostAsync(tokenUrl, content);
         var jsonResponse = await response.Content.ReadAsStringAsync();
 
-        if (response.IsSuccessStatusCode == false)
+        if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException($"Ошибка получения токена: {jsonResponse}");
         }
@@ -219,7 +219,7 @@ public class TwitchOAuthService(SettingsManager settingsManager)
             var code = request.QueryString["code"];
             var error = request.QueryString["error"];
 
-            if (string.IsNullOrEmpty(error) == false)
+            if (!string.IsNullOrEmpty(error))
             {
                 throw new InvalidOperationException($"Ошибка авторизации: {error}");
             }

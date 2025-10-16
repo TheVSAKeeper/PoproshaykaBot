@@ -1,4 +1,4 @@
-﻿using PoproshaykaBot.Core.Application.Bot;
+using PoproshaykaBot.Core.Application.Bot;
 
 namespace PoproshaykaBot.Core.Domain.Models.Connection;
 
@@ -14,6 +14,8 @@ public class BotConnectionResult
     public Bot? Bot { get; }
 
     public Exception? Exception { get; }
+
+    public string? ErrorMessage => Exception?.Message;
 
     public bool IsSuccess => Status == BotConnectionStatus.Success;
 

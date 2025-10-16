@@ -30,7 +30,7 @@ public sealed class ChatCommandProcessor
 
         foreach (var alias in command.Aliases)
         {
-            if (string.IsNullOrWhiteSpace(alias) == false)
+            if (!string.IsNullOrWhiteSpace(alias))
             {
                 _tokenToCommand[alias] = command;
             }
@@ -57,7 +57,7 @@ public sealed class ChatCommandProcessor
 
         var trimmed = messageText.Trim();
 
-        if (trimmed.StartsWith(_prefix) == false)
+        if (!trimmed.StartsWith(_prefix))
         {
             return false;
         }
@@ -73,7 +73,7 @@ public sealed class ChatCommandProcessor
         var token = spaceIdx >= 0 ? afterPrefix[..spaceIdx] : afterPrefix;
         var argsString = spaceIdx >= 0 ? afterPrefix[(spaceIdx + 1)..] : string.Empty;
 
-        if (_tokenToCommand.TryGetValue(token, out var command) == false)
+        if (!_tokenToCommand.TryGetValue(token, out var command))
         {
             response = HandleUnknown(messageText, context);
             return true;
@@ -93,7 +93,7 @@ public sealed class ChatCommandProcessor
             Arguments = args,
         };
 
-        if (command.CanExecute(enrichedContext) == false)
+        if (!command.CanExecute(enrichedContext))
         {
             return false;
         }

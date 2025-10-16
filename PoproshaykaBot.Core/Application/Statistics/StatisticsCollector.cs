@@ -1,24 +1,20 @@
 using PoproshaykaBot.Core.Domain.Models.Statistics;
-using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
+using PoproshaykaBot.Core.Infrastructure.Persistence;
 using System.Timers;
 using Timer = System.Timers.Timer;
 
 namespace PoproshaykaBot.Core.Application.Statistics;
 
+/// <summary>
+/// Сервис для сбора и хранения статистики бота и пользователей.
+/// Использует FileRepository для персистентности данных.
+/// </summary>
 public class StatisticsCollector : IAsyncDisposable
 {
     private static readonly TimeSpan DefaultAutoSaveInterval = TimeSpan.FromMinutes(1);
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
-    private readonly string _statisticsDirectory;
+    private readonly JsonFileService _jsonService;
+    private readonly FileBackupService _backupService;
     private readonly string _userStatisticsFilePath;
     private readonly string _botStatisticsFilePath;
     private readonly Timer _autoSaveTimer;
@@ -28,7 +24,15 @@ public class StatisticsCollector : IAsyncDisposable
     private bool _disposed;
 
     public StatisticsCollector(TimeSpan? autoSaveInterval = null)
+        : this(new(), new(), autoSaveInterval)
     {
+    }
+
+    public StatisticsCollector(JsonFileService jsonService, FileBackupService backupService, TimeSpan? autoSaveInterval = null)
+    {
+        _jsonService = jsonService ?? throw new ArgumentNullException(nameof(jsonService));
+        _backupService = backupService ?? throw new ArgumentNullException(nameof(backupService));
+
         var interval = autoSaveInterval ?? DefaultAutoSaveInterval;
 
         if (interval <= TimeSpan.Zero)
@@ -36,11 +40,11 @@ public class StatisticsCollector : IAsyncDisposable
             throw new ArgumentException("Интервал автосохранения должен быть больше нуля.", nameof(autoSaveInterval));
         }
 
-        _statisticsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        var statisticsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "PoproshaykaBot");
 
-        _userStatisticsFilePath = Path.Combine(_statisticsDirectory, "users_statistics.json");
-        _botStatisticsFilePath = Path.Combine(_statisticsDirectory, "bot_statistics.json");
+        _userStatisticsFilePath = Path.Combine(statisticsDirectory, "users_statistics.json");
+        _botStatisticsFilePath = Path.Combine(statisticsDirectory, "bot_statistics.json");
 
         _userStatistics = new();
         _botStatistics = BotStatistics.Create();
@@ -255,8 +259,9 @@ public class StatisticsCollector : IAsyncDisposable
 
         try
         {
-            await SaveUserStatisticsAsync(_userStatistics);
-            await SaveBotStatisticsAsync(_botStatistics);
+            var userStatisticsList = _userStatistics.Values.ToList();
+            await _jsonService.SaveAsync(_userStatisticsFilePath, userStatisticsList, createBackup: true);
+            await _jsonService.SaveAsync(_botStatisticsFilePath, _botStatistics, createBackup: true);
             _hasChanges = false;
         }
         catch (Exception exception)
@@ -269,13 +274,7 @@ public class StatisticsCollector : IAsyncDisposable
     {
         try
         {
-            if (!File.Exists(_userStatisticsFilePath))
-            {
-                return new();
-            }
-
-            var json = await File.ReadAllTextAsync(_userStatisticsFilePath, Encoding.UTF8);
-            var userStatisticsList = JsonSerializer.Deserialize<List<UserStatistics>>(json, JsonOptions);
+            var userStatisticsList = await _jsonService.LoadAsync<List<UserStatistics>>(_userStatisticsFilePath);
 
             if (userStatisticsList != null)
             {
@@ -287,67 +286,8 @@ public class StatisticsCollector : IAsyncDisposable
         catch (Exception exception)
         {
             Console.WriteLine($"Ошибка загрузки статистики пользователей: {exception.Message}");
-            CreateBackupFile(_userStatisticsFilePath, "invalid");
+            _backupService.CreateBackup(_userStatisticsFilePath, "invalid");
             return new();
-        }
-    }
-
-    private async Task SaveUserStatisticsAsync(Dictionary<string, UserStatistics> userStatistics)
-    {
-        try
-        {
-            Directory.CreateDirectory(_statisticsDirectory);
-
-            var userStatisticsList = userStatistics.Values.ToList();
-            var json = JsonSerializer.Serialize(userStatisticsList, JsonOptions);
-
-            var tempFilePath = _userStatisticsFilePath + ".tmp";
-            await File.WriteAllTextAsync(tempFilePath, json, Encoding.UTF8);
-
-            var backupCreated = false;
-
-            if (File.Exists(_userStatisticsFilePath) && !File.Exists(_userStatisticsFilePath + ".bak"))
-            {
-                File.Copy(_userStatisticsFilePath, _userStatisticsFilePath + ".bak", true);
-                backupCreated = true;
-            }
-
-            File.Replace(tempFilePath, _userStatisticsFilePath, _userStatisticsFilePath + ".old");
-
-            var oldFilePath = _userStatisticsFilePath + ".old";
-
-            if (File.Exists(oldFilePath))
-            {
-                try
-                {
-                    File.Delete(oldFilePath);
-                }
-                catch
-                {
-                }
-            }
-
-            if (backupCreated)
-            {
-                Console.WriteLine($"Создан бэкап статистики пользователей: {_userStatisticsFilePath}.bak");
-            }
-        }
-        catch (Exception exception)
-        {
-            if (File.Exists(_userStatisticsFilePath + ".bak"))
-            {
-                try
-                {
-                    File.Copy(_userStatisticsFilePath + ".bak", _userStatisticsFilePath, true);
-                    Console.WriteLine("Восстановлена статистика пользователей из бэкапа");
-                }
-                catch (Exception backupException)
-                {
-                    Console.WriteLine($"Ошибка восстановления статистики пользователей из бэкапа: {backupException.Message}");
-                }
-            }
-
-            throw new InvalidOperationException($"Ошибка сохранения статистики пользователей: {exception.Message}", exception);
         }
     }
 
@@ -355,110 +295,19 @@ public class StatisticsCollector : IAsyncDisposable
     {
         try
         {
-            if (!File.Exists(_botStatisticsFilePath))
-            {
-                return BotStatistics.Create();
-            }
-
-            var json = await File.ReadAllTextAsync(_botStatisticsFilePath, Encoding.UTF8);
-            var botStatistics = JsonSerializer.Deserialize<BotStatistics>(json, JsonOptions);
-
-            return botStatistics ?? throw new InvalidOperationException("Не удалось десериализовать статистику");
+            var botStatistics = await _jsonService.LoadAsync<BotStatistics>(_botStatisticsFilePath);
+            return botStatistics ?? BotStatistics.Create();
         }
         catch (Exception exception)
         {
             Console.WriteLine($"Ошибка загрузки статистики бота: {exception.Message}");
-            CreateBackupFile(_botStatisticsFilePath, "invalid");
+            _backupService.CreateBackup(_botStatisticsFilePath, "invalid");
             return BotStatistics.Create();
-        }
-    }
-
-    private async Task SaveBotStatisticsAsync(BotStatistics botStatistics)
-    {
-        try
-        {
-            Directory.CreateDirectory(_statisticsDirectory);
-
-            var json = JsonSerializer.Serialize(botStatistics, JsonOptions);
-
-            var tempFilePath = _botStatisticsFilePath + ".tmp";
-            await File.WriteAllTextAsync(tempFilePath, json, Encoding.UTF8);
-
-            var backupCreated = false;
-
-            if (File.Exists(_botStatisticsFilePath) && !File.Exists(_botStatisticsFilePath + ".bak"))
-            {
-                File.Copy(_botStatisticsFilePath, _botStatisticsFilePath + ".bak", true);
-                backupCreated = true;
-            }
-
-            File.Replace(tempFilePath, _botStatisticsFilePath, _botStatisticsFilePath + ".old");
-
-            var oldFilePath = _botStatisticsFilePath + ".old";
-
-            if (File.Exists(oldFilePath))
-            {
-                try
-                {
-                    File.Delete(oldFilePath);
-                }
-                catch
-                {
-                }
-            }
-
-            if (backupCreated)
-            {
-                Console.WriteLine($"Создан бэкап статистики бота: {_botStatisticsFilePath}.bak");
-            }
-        }
-        catch (Exception exception)
-        {
-            if (!File.Exists(_botStatisticsFilePath + ".bak"))
-            {
-                throw new InvalidOperationException($"Ошибка сохранения статистики бота: {exception.Message}", exception);
-            }
-
-            try
-            {
-                File.Copy(_botStatisticsFilePath + ".bak", _botStatisticsFilePath, true);
-                Console.WriteLine("Восстановлена статистика бота из бэкапа");
-            }
-            catch (Exception backupException)
-            {
-                Console.WriteLine($"Ошибка восстановления статистики бота из бэкапа: {backupException.Message}");
-            }
-
-            throw new InvalidOperationException($"Ошибка сохранения статистики бота: {exception.Message}", exception);
         }
     }
 
     private void MarkAsChanged()
     {
         _hasChanges = true;
-    }
-
-    private void CreateBackupFile(string originalPath, string suffix)
-    {
-        if (!File.Exists(originalPath))
-        {
-            return;
-        }
-
-        try
-        {
-            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            var fileName = Path.GetFileNameWithoutExtension(originalPath);
-            var extension = Path.GetExtension(originalPath);
-            var backupFileName = $"{fileName}.{suffix}-{timestamp}{extension}";
-            var backupPath = Path.Combine(Path.GetDirectoryName(originalPath)!, backupFileName);
-
-            File.Copy(originalPath, backupPath, true);
-            Console.WriteLine($"Создан бэкап поврежденного файла: {backupPath}");
-        }
-        catch (Exception exception)
-        {
-            Console.WriteLine($"Ошибка создания бэкапа файла: {exception.Message}");
-        }
     }
 }
