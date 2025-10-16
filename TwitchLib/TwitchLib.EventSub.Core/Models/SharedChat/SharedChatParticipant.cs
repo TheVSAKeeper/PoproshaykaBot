@@ -1,4 +1,4 @@
-namespace TwitchLib.EventSub.Core.Models.SharedChat;
+﻿namespace TwitchLib.EventSub.Core.Models.SharedChat;
 
 /// <summary>
 /// A participant in the shared chat session.

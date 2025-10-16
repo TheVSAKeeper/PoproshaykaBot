@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.WinForms.Settings
+﻿namespace PoproshaykaBot.WinForms.Settings
 {
     partial class AutoBroadcastSettingsControl
     {

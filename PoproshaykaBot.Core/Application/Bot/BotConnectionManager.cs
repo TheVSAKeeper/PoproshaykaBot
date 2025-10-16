@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Domain.Models.Connection;
+﻿using PoproshaykaBot.Core.Domain.Models.Connection;
 
 namespace PoproshaykaBot.Core.Application.Bot;
 

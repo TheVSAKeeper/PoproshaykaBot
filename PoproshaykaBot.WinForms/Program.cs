@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core;
+﻿using PoproshaykaBot.Core;
 using PoproshaykaBot.Core.Infrastructure.Http;
 
 namespace PoproshaykaBot.WinForms;

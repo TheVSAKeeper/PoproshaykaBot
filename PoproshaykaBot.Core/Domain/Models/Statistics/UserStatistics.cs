@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.Core.Domain.Models.Statistics;
+﻿namespace PoproshaykaBot.Core.Domain.Models.Statistics;
 
 public class UserStatistics
 {

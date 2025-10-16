@@ -1,4 +1,4 @@
-using Moq;
+﻿using Moq;
 using System;
 using TwitchLib.Api.Interfaces;
 using Xunit;

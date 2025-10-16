@@ -1,4 +1,4 @@
-namespace TwitchLib.EventSub.Core.Models.GuestStar;
+﻿namespace TwitchLib.EventSub.Core.Models.GuestStar;
 
 public abstract class ChannelGuestStarBase
 {

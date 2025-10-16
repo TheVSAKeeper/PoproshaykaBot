@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Domain.Models.Chat;
+﻿using PoproshaykaBot.Core.Domain.Models.Chat;
 
 namespace PoproshaykaBot.Core.Infrastructure.Interfaces;
 

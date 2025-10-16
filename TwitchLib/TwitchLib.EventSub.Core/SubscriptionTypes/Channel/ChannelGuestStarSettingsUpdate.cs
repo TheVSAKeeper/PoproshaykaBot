@@ -1,4 +1,4 @@
-namespace TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
+﻿namespace TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
 
 /// <summary>
 /// Channel GuestStar Settings Update subscription type model

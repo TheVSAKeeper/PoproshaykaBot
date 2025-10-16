@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Application.Chat;
+﻿using PoproshaykaBot.Core.Application.Chat;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 
 namespace PoproshaykaBot.Core.Application.Broadcasting;

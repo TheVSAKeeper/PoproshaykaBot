@@ -1,4 +1,4 @@
-const chatContainer = document.getElementById('chat');
+﻿const chatContainer = document.getElementById('chat');
 let maxMessages = 50;
 let showTimestamp = true;
 let enableAnimations = true;

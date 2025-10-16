@@ -1,4 +1,4 @@
-using TwitchLib.Api.Test.Helpers;
+﻿using TwitchLib.Api.Test.Helpers;
 using Xunit;
 
 namespace TwitchLib.Api.Test.Unit.Helix

@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Domain.Models.Statistics;
+﻿using PoproshaykaBot.Core.Domain.Models.Statistics;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using System.Timers;
 using Timer = System.Timers.Timer;

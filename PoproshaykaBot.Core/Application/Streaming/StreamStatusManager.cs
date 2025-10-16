@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Domain.Models.Stream;
+﻿using PoproshaykaBot.Core.Domain.Models.Stream;
 using TwitchLib.Api;
 using TwitchLib.Api.Core.Enums;
 using TwitchLib.EventSub.Websockets;

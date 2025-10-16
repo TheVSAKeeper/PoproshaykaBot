@@ -1,4 +1,4 @@
-using PoproshaykaBot.Assets;
+﻿using PoproshaykaBot.Assets;
 using System.Net;
 using System.Text;
 

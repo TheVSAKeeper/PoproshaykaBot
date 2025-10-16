@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using TwitchLib.EventSub.Websockets.Example;
 using TwitchLib.EventSub.Websockets.Extensions;

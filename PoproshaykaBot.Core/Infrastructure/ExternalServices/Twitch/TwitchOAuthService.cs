@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Domain.Models.Connection;
+﻿using PoproshaykaBot.Core.Domain.Models.Connection;
 using PoproshaykaBot.Core.Infrastructure.Http;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using System.Diagnostics;

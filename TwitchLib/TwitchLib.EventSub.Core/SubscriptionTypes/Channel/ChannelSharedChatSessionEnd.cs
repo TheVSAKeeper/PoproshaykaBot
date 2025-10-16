@@ -1,4 +1,4 @@
-using TwitchLib.EventSub.Core.Models.SharedChat;
+﻿using TwitchLib.EventSub.Core.Models.SharedChat;
 
 namespace TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
 

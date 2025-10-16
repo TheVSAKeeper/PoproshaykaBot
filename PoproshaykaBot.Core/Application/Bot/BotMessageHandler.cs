@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Application.Chat;
+﻿using PoproshaykaBot.Core.Application.Chat;
 using PoproshaykaBot.Core.Application.Statistics;
 using PoproshaykaBot.Core.Domain.Models.Chat;
 using PoproshaykaBot.Core.Domain.Models.Settings;

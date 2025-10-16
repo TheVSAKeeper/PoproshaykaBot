@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Domain.Models.Settings;
+﻿using PoproshaykaBot.Core.Domain.Models.Settings;
 
 namespace PoproshaykaBot.Core.Infrastructure.Persistence;
 

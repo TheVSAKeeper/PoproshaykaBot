@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.Core.Domain.Models.Stream;
+﻿namespace PoproshaykaBot.Core.Domain.Models.Stream;
 
 /// <summary>
 /// Статус стрима

@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Domain.Models.Chat;
+﻿using PoproshaykaBot.Core.Domain.Models.Chat;
 using TwitchLib.Api;
 using TwitchLib.Api.Helix.Models.Chat.Badges;
 using TwitchLib.Api.Helix.Models.Chat.Emotes;

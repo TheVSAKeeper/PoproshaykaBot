@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.Json;
 using TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
 using TwitchLib.EventSub.Websockets.Core.EventArgs;

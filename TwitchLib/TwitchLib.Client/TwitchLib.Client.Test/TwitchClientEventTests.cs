@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Xunit;
 using TwitchLib.Client.Events;
 using TwitchLib.Communication.Events;

@@ -1,4 +1,4 @@
-namespace TwitchLib.EventSub.Core.Models.SharedChat;
+﻿namespace TwitchLib.EventSub.Core.Models.SharedChat;
 
 public abstract class ChannelSharedChatSessionBase
 {

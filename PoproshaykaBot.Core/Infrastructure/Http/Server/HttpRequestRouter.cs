@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Infrastructure.Http.Handlers;
+﻿using PoproshaykaBot.Core.Infrastructure.Http.Handlers;
 using System.Net;
 
 namespace PoproshaykaBot.Core.Infrastructure.Http.Server;

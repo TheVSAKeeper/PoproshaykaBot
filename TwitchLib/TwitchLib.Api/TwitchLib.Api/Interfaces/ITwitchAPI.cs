@@ -1,4 +1,4 @@
-using TwitchLib.Api;
+﻿using TwitchLib.Api;
 using TwitchLib.Api.Core.Interfaces;
 using TwitchLib.Api.Core.Undocumented;
 

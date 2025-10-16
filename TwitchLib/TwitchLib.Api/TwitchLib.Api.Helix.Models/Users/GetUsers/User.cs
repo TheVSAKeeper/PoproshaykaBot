@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Newtonsoft.Json;
 
 namespace TwitchLib.Api.Helix.Models.Users.GetUsers

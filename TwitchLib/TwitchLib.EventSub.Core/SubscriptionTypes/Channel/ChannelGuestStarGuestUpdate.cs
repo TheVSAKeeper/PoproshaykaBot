@@ -1,4 +1,4 @@
-using TwitchLib.EventSub.Core.Models.GuestStar;
+﻿using TwitchLib.EventSub.Core.Models.GuestStar;
 
 namespace TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
 

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using TwitchLib.Api.Test.Helpers;
 using Xunit;
 

@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.Core.Infrastructure.Persistence;
+﻿namespace PoproshaykaBot.Core.Infrastructure.Persistence;
 
 /// <summary>
 /// Базовый репозиторий для работы с файловым хранилищем.
