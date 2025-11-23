@@ -57,6 +57,7 @@ public static class Program
         var eventSubClient = new EventSubWebsocketClient();
         var streamStatusManager = new StreamStatusManager(eventSubClient, twitchApi);
         var chatDecorationsProvider = new ChatDecorationsProvider(twitchApi);
+        var userRankService = new UserRankService();
 
         Bot BotFactory(string accessToken)
         {
@@ -92,6 +93,7 @@ public static class Program
 
             var broadcastScheduler = new BroadcastScheduler(messenger, settingsManager, messageProvider);
             var audienceTracker = new AudienceTracker(settingsManager);
+            var userMessagesManagementService = new UserMessagesManagementService(statistics, messenger, settingsManager);
 
             var commands = new List<IChatCommand>
             {
@@ -120,7 +122,8 @@ public static class Program
                 chatHistoryManager,
                 broadcastScheduler,
                 commandProcessor,
-                streamStatusManager);
+                streamStatusManager,
+                userMessagesManagementService);
 
             return bot;
         }
@@ -191,7 +194,8 @@ public static class Program
             connectionManager,
             settingsManager,
             oauthService,
-            statistics);
+            statistics,
+            userRankService);
 
         Application.Run(mainForm);
     }

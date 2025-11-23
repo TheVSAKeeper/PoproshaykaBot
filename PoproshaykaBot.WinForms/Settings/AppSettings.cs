@@ -61,6 +61,18 @@ public class MessageSettings
     public bool DisconnectionEnabled { get; set; } = true;
 
     public string Disconnection { get; set; } = "Пока-пока! ❤️";
+
+    public bool PunishmentEnabled { get; set; } = true;
+
+    public string PunishmentMessage { get; set; } = "🏴‍☠️ ВНИМАНИЕ! Пользователь @{username} был лично наказан СЕРЁГОЙ ПИРАТОМ! ⚔️ Убрано {count} сообщений из статистики. 💀 #пиратская_справедливость";
+
+    public string PunishmentNotification { get; set; } = "🏴‍☠️ Пользователя {username} лично наказал СЕРЁГА ПИРАТ! ⚔️ Убрано {count} сообщений. 💀";
+
+    public bool RewardEnabled { get; set; } = false;
+
+    public string RewardMessage { get; set; } = "🎉 ВНИМАНИЕ! Пользователь @{username} был поощрен СЕРЁГОЙ ПИРАТОМ! 🏆 Добавлено {count} сообщений в статистику. ⭐ #пиратская_щедрость";
+
+    public string RewardNotification { get; set; } = "🎉 Пользователя {username} поощрил СЕРЁГА ПИРАТ! 🏆 Добавлено {count} сообщений. ⭐";
 }
 
 public class UiSettings

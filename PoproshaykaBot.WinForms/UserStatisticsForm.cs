@@ -5,13 +5,18 @@ namespace PoproshaykaBot.WinForms;
 public partial class UserStatisticsForm : Form
 {
     private readonly StatisticsCollector? _statisticsCollector;
+    private readonly UserRankService _userRankService;
     private Bot? _bot;
     private List<UserStatistics> _allUsers = [];
     private List<UserStatistics> _filteredUsers = [];
 
-    public UserStatisticsForm(StatisticsCollector statisticsCollector, Bot? bot = null)
+    public UserStatisticsForm(
+        StatisticsCollector statisticsCollector,
+        UserRankService userRankService,
+        Bot? bot = null)
     {
         _statisticsCollector = statisticsCollector;
+        _userRankService = userRankService;
         _bot = bot;
         InitializeComponent();
         InitializeRuntime();
@@ -57,24 +62,45 @@ public partial class UserStatisticsForm : Form
             return;
         }
 
+        bool updated;
+
+        var managementService = _bot?.MessagesManagementService;
+        if (managementService == null)
+        {
+            MessageBox.Show("⚠️ Сервис управления сообщениями недоступен.", "⚠️ Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
         if (delta < 0)
         {
-            var pirateMessage = $"🏴‍☠️ Пользователя {user.Name} лично наказал СЕРЁГА ПИРАТ! ⚔️ Убрано {-delta} сообщений. 💀";
-            MessageBox.Show(pirateMessage, "🏴‍☠️ Наказание от СЕРЁГИ ПИРАТА! ⚔️", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            var notificationMessage = managementService.GetPunishmentNotification(user.Name, (ulong)-delta);
+            MessageBox.Show(notificationMessage, "🏴‍☠️ Наказание от СЕРЁГИ ПИРАТА! ⚔️", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
             try
             {
-                _bot?.SendPunishmentMessage(user.Name, (ulong)-delta);
+                updated = managementService.PunishUser(user.UserId, user.Name, (ulong)-delta, _bot?.Channel);
             }
             catch (Exception exception)
             {
-                MessageBox.Show($"Не удалось отправить сообщение в чат: {exception.Message}", "Ошибка отправки", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show($"Не удалось наказать пользователя: {exception.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
             }
         }
+        else
+        {
+            var notificationMessage = managementService.GetRewardNotification(user.Name, (ulong)delta);
+            MessageBox.Show(notificationMessage, "🎉 Поощрение от СЕРЁГИ ПИРАТА! 🏆", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-        var updated = delta > 0
-            ? _statisticsCollector.IncrementUserMessages(user.UserId, (ulong)delta)
-            : _statisticsCollector.DecrementUserMessages(user.UserId, (ulong)-delta);
+            try
+            {
+                updated = managementService.RewardUser(user.UserId, user.Name, (ulong)delta, _bot?.Channel);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show($"Не удалось поощрить пользователя: {exception.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+        }
 
         if (!updated)
         {
@@ -95,20 +121,6 @@ public partial class UserStatisticsForm : Form
         }
     }
 
-    // TODO: Вынести глобально
-    private static (string emoji, string level) GetChessPieceInfo(ulong messageCount)
-    {
-        return messageCount switch
-        {
-            >= 5000 => ("♔", "КОРОЛЬ"),
-            >= 2500 => ("♛", "ФЕРЗЬ"),
-            >= 1000 => ("♜", "ЛАДЬЯ"),
-            >= 500 => ("♝", "СЛОН"),
-            >= 250 => ("♞", "КОНЬ"),
-            _ => ("♟", "ПЕШКА"),
-        };
-    }
-
     private void InitializeRuntime()
     {
         listBoxUsers.Format += (_, e) =>
@@ -118,8 +130,8 @@ public partial class UserStatisticsForm : Form
                 return;
             }
 
-            var chessPiece = GetChessPieceInfo(user.MessageCount).emoji;
-            e.Value = $"{chessPiece} {user.Name} ({user.MessageCount} 💬)";
+            var rank = _userRankService.GetRank(user.MessageCount);
+            e.Value = $"{rank.Emoji} {user.Name} ({user.MessageCount} 💬)";
         };
 
         numericIncrement.ValueChanged += (_, _) => UpdateActionState();
@@ -216,8 +228,8 @@ public partial class UserStatisticsForm : Form
         labelUserName.Text = $"👤 Имя: {user.Name}";
         labelMessageCount.Text = $"💬 Сообщений: {user.MessageCount}";
 
-        var (emoji, level) = GetChessPieceInfo(user.MessageCount);
-        labelChessPiece.Text = $"{emoji} {level}";
+        var rank = _userRankService.GetRank(user.MessageCount);
+        labelChessPiece.Text = $"{rank.Emoji} {rank.Level}";
     }
 
     private void UpdateActionState()

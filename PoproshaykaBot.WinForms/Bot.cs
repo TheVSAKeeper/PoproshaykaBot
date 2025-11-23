@@ -26,8 +26,10 @@ public class Bot : IAsyncDisposable
     private readonly BroadcastScheduler _broadcastScheduler;
 
     private bool _disposed;
-    private string? _channel;
     private bool _streamHandlersAttached;
+
+    public UserMessagesManagementService MessagesManagementService { get; }
+    public string? Channel { get; private set; }
 
     public Bot(
         TwitchSettings settings,
@@ -40,7 +42,8 @@ public class Bot : IAsyncDisposable
         ChatHistoryManager chatHistoryManager,
         BroadcastScheduler broadcastScheduler,
         ChatCommandProcessor commandProcessor,
-        StreamStatusManager streamStatusManager)
+        StreamStatusManager streamStatusManager,
+        UserMessagesManagementService userMessagesManagementService)
     {
         _settings = settings;
         _statisticsCollector = statisticsCollector;
@@ -60,6 +63,7 @@ public class Bot : IAsyncDisposable
         _broadcastScheduler = broadcastScheduler;
         _commandProcessor = commandProcessor;
         _streamStatusManager = streamStatusManager;
+        MessagesManagementService = userMessagesManagementService;
         AttachStreamStatusHandlers();
     }
 
@@ -161,7 +165,7 @@ public class Bot : IAsyncDisposable
     {
         if (_client.IsConnected)
         {
-            if (string.IsNullOrWhiteSpace(_channel) == false)
+            if (string.IsNullOrWhiteSpace(Channel) == false)
             {
                 var messages = new List<string>();
 
@@ -181,7 +185,7 @@ public class Bot : IAsyncDisposable
                 if (messages.Count > 0)
                 {
                     var combinedMessage = string.Join(" ", messages);
-                    _messenger.Send(_channel, combinedMessage);
+                    _messenger.Send(Channel, combinedMessage);
                 }
 
                 _audienceTracker.ClearAll();
@@ -200,12 +204,12 @@ public class Bot : IAsyncDisposable
 
     public void StartBroadcast()
     {
-        if (string.IsNullOrWhiteSpace(_channel))
+        if (string.IsNullOrWhiteSpace(Channel))
         {
             return;
         }
 
-        _broadcastScheduler.Start(_channel);
+        _broadcastScheduler.Start(Channel);
     }
 
     public void StopBroadcast()
@@ -243,9 +247,9 @@ public class Bot : IAsyncDisposable
 
             if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
                 && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage) == false
-                && string.IsNullOrEmpty(_channel) == false)
+                && string.IsNullOrEmpty(Channel) == false)
             {
-                _messenger.Send(_channel, _settings.AutoBroadcast.StreamStartMessage);
+                _messenger.Send(Channel, _settings.AutoBroadcast.StreamStartMessage);
             }
         }
 
@@ -261,9 +265,9 @@ public class Bot : IAsyncDisposable
 
             if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
                 && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage) == false
-                && string.IsNullOrEmpty(_channel) == false)
+                && string.IsNullOrEmpty(Channel) == false)
             {
-                _messenger.Send(_channel, _settings.AutoBroadcast.StreamStopMessage);
+                _messenger.Send(Channel, _settings.AutoBroadcast.StreamStopMessage);
             }
         }
 
@@ -303,7 +307,7 @@ public class Bot : IAsyncDisposable
             _messenger.Send(e.Channel, _settings.Messages.Connection);
         }
 
-        _channel = e.Channel;
+        Channel = e.Channel;
 
         if (_settings.AutoBroadcast.AutoBroadcastEnabled == false)
         {
@@ -462,20 +466,5 @@ public class Bot : IAsyncDisposable
         {
             LogMessage?.Invoke($"Ошибка инициализации мониторинга стрима: {ex.Message}");
         }
-    }
-
-    // TODO: Вынести в настройки
-    public void SendPunishmentMessage(string userName, ulong removedMessages)
-    {
-        if (_channel == null || !_client.IsConnected)
-        {
-            return;
-        }
-
-        var punishmentMessage = $"🏴‍☠️ ВНИМАНИЕ! Пользователь @{userName} был лично наказан СЕРЁГОЙ ПИРАТОМ! "
-                                + $"⚔️ Убрано {removedMessages} сообщений из статистики. "
-                                + $"💀 #пиратская_справедливость";
-
-        _messenger.Send(_channel, punishmentMessage);
     }
 }

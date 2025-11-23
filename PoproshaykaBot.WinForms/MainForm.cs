@@ -11,6 +11,7 @@ public partial class MainForm : Form
     private readonly UnifiedHttpServer _httpServer;
     private readonly TwitchOAuthService _oauthService;
     private readonly StatisticsCollector _statisticsCollector;
+    private readonly UserRankService _userRankService;
 
     private Bot? _bot;
     private bool _isConnected;
@@ -23,7 +24,8 @@ public partial class MainForm : Form
         BotConnectionManager connectionManager,
         SettingsManager settingsManager,
         TwitchOAuthService oauthService,
-        StatisticsCollector statisticsCollector)
+        StatisticsCollector statisticsCollector,
+        UserRankService userRankService)
     {
         _chatHistoryManager = chatHistoryManager;
         _httpServer = httpServer;
@@ -31,6 +33,7 @@ public partial class MainForm : Form
         _settingsManager = settingsManager;
         _oauthService = oauthService;
         _statisticsCollector = statisticsCollector;
+        _userRankService = userRankService;
 
         InitializeComponent();
 
@@ -272,7 +275,7 @@ public partial class MainForm : Form
     {
         if (_юзерФорма == null || _юзерФорма.IsDisposed)
         {
-            _юзерФорма = new(_statisticsCollector, _bot);
+            _юзерФорма = new(_statisticsCollector, _userRankService, _bot);
             _юзерФорма.Show(this);
         }
         else
