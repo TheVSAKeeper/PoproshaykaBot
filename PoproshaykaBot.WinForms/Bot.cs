@@ -1,8 +1,8 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Models;
+using PoproshaykaBot.WinForms.Services;
 using PoproshaykaBot.WinForms.Settings;
-using System.Text;
 using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
@@ -28,42 +28,30 @@ public class Bot : IAsyncDisposable
     private bool _disposed;
     private bool _streamHandlersAttached;
 
-    public UserMessagesManagementService MessagesManagementService { get; }
-    public string? Channel { get; private set; }
-
     public Bot(
-        TwitchSettings settings,
-        StatisticsCollector statisticsCollector,
+        BotServices services,
         TwitchClient client,
-        TwitchChatMessenger messenger,
-        TwitchAPI twitchApi,
-        ChatDecorationsProvider chatDecorationsProvider,
-        AudienceTracker audienceTracker,
-        ChatHistoryManager chatHistoryManager,
-        BroadcastScheduler broadcastScheduler,
-        ChatCommandProcessor commandProcessor,
-        StreamStatusManager streamStatusManager,
-        UserMessagesManagementService userMessagesManagementService)
+        TwitchChatMessenger messenger)
     {
-        _settings = settings;
-        _statisticsCollector = statisticsCollector;
-        _audienceTracker = audienceTracker;
+        _settings = services.Settings;
+        _statisticsCollector = services.StatisticsCollector;
+        _audienceTracker = services.AudienceTracker;
+        _chatHistoryManager = services.ChatHistoryManager;
+        _twitchApi = services.TwitchApi;
+        _chatDecorations = services.ChatDecorationsProvider;
+        _broadcastScheduler = services.BroadcastScheduler;
+        _commandProcessor = services.CommandProcessor;
+        _streamStatusManager = services.StreamStatusManager;
+        MessagesManagementService = services.UserMessagesManagementService;
 
         _client = client;
         _messenger = messenger;
-        _chatHistoryManager = chatHistoryManager;
 
         _client.OnLog += Client_OnLog;
         _client.OnMessageReceived += Client_OnMessageReceived;
         _client.OnConnected += Client_OnConnected;
         _client.OnJoinedChannel += Сlient_OnJoinedChannel;
 
-        _twitchApi = twitchApi;
-        _chatDecorations = chatDecorationsProvider;
-        _broadcastScheduler = broadcastScheduler;
-        _commandProcessor = commandProcessor;
-        _streamStatusManager = streamStatusManager;
-        MessagesManagementService = userMessagesManagementService;
         AttachStreamStatusHandlers();
     }
 
@@ -74,6 +62,9 @@ public class Bot : IAsyncDisposable
     public event Action<string>? LogMessage;
 
     public event Action? StreamStatusChanged;
+
+    public UserMessagesManagementService MessagesManagementService { get; }
+    public string? Channel { get; private set; }
 
     public bool IsBroadcastActive => _broadcastScheduler.IsActive;
 
@@ -105,7 +96,7 @@ public class Bot : IAsyncDisposable
             var timeout = TimeSpan.FromSeconds(30);
             var startTime = DateTime.UtcNow;
 
-            while (_client.IsConnected == false && DateTime.UtcNow - startTime < timeout)
+            while (!_client.IsConnected && DateTime.UtcNow - startTime < timeout)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var waitingMessage = "Ожидание подтверждения подключения...";
@@ -165,19 +156,19 @@ public class Bot : IAsyncDisposable
     {
         if (_client.IsConnected)
         {
-            if (string.IsNullOrWhiteSpace(Channel) == false)
+            if (!string.IsNullOrWhiteSpace(Channel))
             {
                 var messages = new List<string>();
 
                 var collectiveFarewell = _audienceTracker.CreateCollectiveFarewell();
 
-                if (string.IsNullOrWhiteSpace(collectiveFarewell) == false)
+                if (!string.IsNullOrWhiteSpace(collectiveFarewell))
                 {
                     messages.Add(collectiveFarewell);
                 }
 
                 if (_settings.Messages.DisconnectionEnabled
-                    && string.IsNullOrWhiteSpace(_settings.Messages.Disconnection) == false)
+                    && !string.IsNullOrWhiteSpace(_settings.Messages.Disconnection))
                 {
                     messages.Add(_settings.Messages.Disconnection);
                 }
@@ -240,14 +231,14 @@ public class Bot : IAsyncDisposable
 
     private void OnStreamStarted(StreamOnlineArgs args)
     {
-        if (_settings.AutoBroadcast.AutoBroadcastEnabled && IsBroadcastActive == false)
+        if (_settings.AutoBroadcast.AutoBroadcastEnabled && !IsBroadcastActive)
         {
             StartBroadcast();
             LogMessage?.Invoke("🔴 Стрим запущен. Автоматически запускаю рассылку.");
 
             if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
-                && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage) == false
-                && string.IsNullOrEmpty(Channel) == false)
+                && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage)
+                && !string.IsNullOrEmpty(Channel))
             {
                 _messenger.Send(Channel, _settings.AutoBroadcast.StreamStartMessage);
             }
@@ -264,8 +255,8 @@ public class Bot : IAsyncDisposable
             LogMessage?.Invoke("⚫ Стрим завершен. Автоматически останавливаю рассылку.");
 
             if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
-                && string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage) == false
-                && string.IsNullOrEmpty(Channel) == false)
+                && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage)
+                && !string.IsNullOrEmpty(Channel))
             {
                 _messenger.Send(Channel, _settings.AutoBroadcast.StreamStopMessage);
             }
@@ -302,14 +293,14 @@ public class Bot : IAsyncDisposable
     private void Сlient_OnJoinedChannel(object? sender, OnJoinedChannelArgs e)
     {
         if (_settings.Messages.ConnectionEnabled
-            && string.IsNullOrWhiteSpace(_settings.Messages.Connection) == false)
+            && !string.IsNullOrWhiteSpace(_settings.Messages.Connection))
         {
             _messenger.Send(e.Channel, _settings.Messages.Connection);
         }
 
         Channel = e.Channel;
 
-        if (_settings.AutoBroadcast.AutoBroadcastEnabled == false)
+        if (!_settings.AutoBroadcast.AutoBroadcastEnabled)
         {
             StartBroadcast();
         }
@@ -346,7 +337,7 @@ public class Bot : IAsyncDisposable
         {
             var welcomeMessage = _audienceTracker.CreateWelcome(e.ChatMessage.DisplayName);
 
-            if (string.IsNullOrWhiteSpace(welcomeMessage) == false)
+            if (!string.IsNullOrWhiteSpace(welcomeMessage))
             {
                 _messenger.Reply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
             }
@@ -361,7 +352,7 @@ public class Bot : IAsyncDisposable
             DisplayName = e.ChatMessage.DisplayName,
         };
 
-        if (_commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response) == false)
+        if (!_commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response))
         {
         }
 
@@ -426,7 +417,7 @@ public class Bot : IAsyncDisposable
 
     private void DetachStreamStatusHandlers()
     {
-        if (_streamHandlersAttached == false)
+        if (!_streamHandlersAttached)
         {
             return;
         }

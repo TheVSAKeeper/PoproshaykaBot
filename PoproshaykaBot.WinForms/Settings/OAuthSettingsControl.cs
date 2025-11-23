@@ -68,7 +68,7 @@ public partial class OAuthSettingsControl : UserControl
         _redirectUriEditable = !_redirectUriEditable;
         UpdateRedirectUriEditState();
 
-        if (_redirectUriEditable == false)
+        if (!_redirectUriEditable)
         {
             SettingChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -126,9 +126,9 @@ public partial class OAuthSettingsControl : UserControl
                 redirectUri = DefaultSettings.RedirectUri;
             }
 
-            var accessToken = await _oauthService.StartOAuthFlowAsync(clientId, clientSecret, null, scopes, redirectUri);
+            var accessToken = await _oauthService.StartOAuthFlowAsync(clientId, clientSecret, scopes, redirectUri);
 
-            if (string.IsNullOrEmpty(accessToken) == false)
+            if (!string.IsNullOrEmpty(accessToken))
             {
                 _authStatusLabel.Text = "Авторизация успешна!";
                 _authStatusLabel.ForeColor = Color.Green;
@@ -343,11 +343,11 @@ public partial class OAuthSettingsControl : UserControl
         var accessToken = _settings.Twitch.AccessToken;
         var refreshToken = _settings.Twitch.RefreshToken;
 
-        _accessTokenTextBox.Text = string.IsNullOrWhiteSpace(accessToken) == false ? accessToken : "Не установлен";
-        _refreshTokenTextBox.Text = string.IsNullOrWhiteSpace(refreshToken) == false ? refreshToken : "Не установлен";
+        _accessTokenTextBox.Text = !string.IsNullOrWhiteSpace(accessToken) ? accessToken : "Не установлен";
+        _refreshTokenTextBox.Text = !string.IsNullOrWhiteSpace(refreshToken) ? refreshToken : "Не установлен";
 
-        _accessTokenTextBox.UseSystemPasswordChar = _tokensVisible == false && string.IsNullOrWhiteSpace(accessToken) == false;
-        _refreshTokenTextBox.UseSystemPasswordChar = _tokensVisible == false && string.IsNullOrWhiteSpace(refreshToken) == false;
+        _accessTokenTextBox.UseSystemPasswordChar = !_tokensVisible && !string.IsNullOrWhiteSpace(accessToken);
+        _refreshTokenTextBox.UseSystemPasswordChar = !_tokensVisible && !string.IsNullOrWhiteSpace(refreshToken);
     }
 
     private void SetPlaceholders()
@@ -377,9 +377,9 @@ public partial class OAuthSettingsControl : UserControl
             _tokenStatusValueLabel.ForeColor = Color.Gray;
         }
 
-        var hasTokens = string.IsNullOrWhiteSpace(accessToken) == false;
-        var hasRefreshToken = string.IsNullOrWhiteSpace(refreshToken) == false;
-        var hasCredentials = string.IsNullOrWhiteSpace(_settings.Twitch.ClientId) == false && string.IsNullOrWhiteSpace(_settings.Twitch.ClientSecret) == false;
+        var hasTokens = !string.IsNullOrWhiteSpace(accessToken);
+        var hasRefreshToken = !string.IsNullOrWhiteSpace(refreshToken);
+        var hasCredentials = !string.IsNullOrWhiteSpace(_settings.Twitch.ClientId) && !string.IsNullOrWhiteSpace(_settings.Twitch.ClientSecret);
 
         _validateTokenButton.Enabled = hasTokens;
         _refreshTokenButton.Enabled = hasRefreshToken && hasCredentials;

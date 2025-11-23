@@ -10,9 +10,15 @@
       },
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[8.0.16, )",
-        "resolved": "8.0.16",
-        "contentHash": "0H1QaKpVibe++Zx6EYJQGhrpfz2bBPGiQ7Rpsmx8I3+oKv+ZRRIfVfmcj50KuZlhhRE6V02y5bUjP+V2oPM2ng=="
+        "requested": "[8.0.22, )",
+        "resolved": "8.0.22",
+        "contentHash": "MhcMithKEiyyNkD2ZfbDZPmcOdi0GheGfg8saEIIEfD/fol3iHmcV8TsZkD4ZYz5gdUuoX4YtlVySUU7Sxl9SQ=="
+      },
+      "Pure.DI": {
+        "type": "Direct",
+        "requested": "[2.2.14, )",
+        "resolved": "2.2.14",
+        "contentHash": "RId18V1tt4/NmF7PBkybxdMn8J1385trrm40bcIBaqpoJPpDA/yUAAFvq1YFO9i//nzKwaQ2a2Sa4pZ78EtgBw=="
       },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Transitive",
