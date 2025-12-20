@@ -182,7 +182,7 @@ public class Bot : IAsyncDisposable
                 _audienceTracker.ClearAll();
             }
 
-            _client.Disconnect();
+            await Task.Run(() => _client.Disconnect());
         }
 
         if (_settings.AutoBroadcast.AutoBroadcastEnabled)
@@ -190,7 +190,7 @@ public class Bot : IAsyncDisposable
             await _streamStatusManager.StopMonitoringAsync();
         }
 
-        await _statisticsCollector.StopAsync();
+        await Task.Run(() => _statisticsCollector.StopAsync());
     }
 
     public void StartBroadcast()

@@ -27,6 +27,7 @@ public sealed class BotFactory(
         {
             MessagesAllowedInPeriod = settings.MessagesAllowedInPeriod,
             ThrottlingPeriod = TimeSpan.FromSeconds(settings.ThrottlingPeriodSeconds),
+            DisconnectWait = 0,
         };
 
         var wsClient = new WebSocketClient(clientOptions);
