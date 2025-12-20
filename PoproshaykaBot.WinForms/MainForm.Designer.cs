@@ -30,7 +30,7 @@ partial class MainForm
     private void InitializeComponent()
     {
         var resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
-		components = new System.ComponentModel.Container();
+        components = new System.ComponentModel.Container();
         _mainTableLayoutPanel = new TableLayoutPanel();
         _buttonTableLayoutPanel = new TableLayoutPanel();
         _connectButton = new Button();
@@ -39,7 +39,6 @@ partial class MainForm
         _broadcastButton = new Button();
         _toggleLogsButton = new Button();
         _toggleChatButton = new Button();
-        _openChatWindowButton = new Button();
         _switchChatViewButton = new Button();
         _connectionProgressBar = new ProgressBar();
         _connectionStatusLabel = new Label();
@@ -50,7 +49,7 @@ partial class MainForm
         _chatDisplay = new ChatDisplay();
         _overlayWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
         _logTextBox = new TextBox();
-		_streamInfoTimer = new System.Windows.Forms.Timer(components);
+        _streamInfoTimer = new System.Windows.Forms.Timer(components);
         _mainTableLayoutPanel.SuspendLayout();
         _buttonTableLayoutPanel.SuspendLayout();
         _contentTableLayoutPanel.SuspendLayout();
@@ -82,7 +81,7 @@ partial class MainForm
         //
         // _buttonTableLayoutPanel
         //
-        _buttonTableLayoutPanel.ColumnCount = 9;
+        _buttonTableLayoutPanel.ColumnCount = 8;
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80F));
         _buttonTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
@@ -95,11 +94,10 @@ partial class MainForm
         _buttonTableLayoutPanel.Controls.Add(_toggleLogsButton, 0, 0);
         _buttonTableLayoutPanel.Controls.Add(_toggleChatButton, 1, 0);
         _buttonTableLayoutPanel.Controls.Add(_switchChatViewButton, 2, 0);
-        _buttonTableLayoutPanel.Controls.Add(_openChatWindowButton, 3, 0);
-        _buttonTableLayoutPanel.Controls.Add(_connectButton, 5, 0);
-        _buttonTableLayoutPanel.Controls.Add(_settingsButton, 6, 0);
-        _buttonTableLayoutPanel.Controls.Add(_userStatisticsButton, 7, 0);
-        _buttonTableLayoutPanel.Controls.Add(_broadcastButton, 8, 0);
+        _buttonTableLayoutPanel.Controls.Add(_connectButton, 4, 0);
+        _buttonTableLayoutPanel.Controls.Add(_settingsButton, 5, 0);
+        _buttonTableLayoutPanel.Controls.Add(_userStatisticsButton, 6, 0);
+        _buttonTableLayoutPanel.Controls.Add(_broadcastButton, 7, 0);
         _buttonTableLayoutPanel.Dock = DockStyle.Fill;
         _buttonTableLayoutPanel.Location = new Point(15, 15);
         _buttonTableLayoutPanel.Name = "_buttonTableLayoutPanel";
@@ -129,19 +127,7 @@ partial class MainForm
         _toggleChatButton.Text = "Чат";
         _toggleChatButton.UseVisualStyleBackColor = true;
         _toggleChatButton.Click += OnToggleChatButtonClicked;
-        //
-        // _openChatWindowButton
-        //
-        _openChatWindowButton.Dock = DockStyle.Fill;
-        _openChatWindowButton.Location = new Point(163, 3);
-        _openChatWindowButton.Location = new Point(283, 3);
-        _openChatWindowButton.Name = "_openChatWindowButton";
-        _openChatWindowButton.Size = new Size(94, 38);
-        _openChatWindowButton.TabIndex = 6;
-        _openChatWindowButton.Text = "Чат в окне (Alt+W)";
-        _openChatWindowButton.UseVisualStyleBackColor = true;
-        _openChatWindowButton.Click += OnOpenChatWindowButtonClicked;
-        // 
+
         // _switchChatViewButton
         // 
         _switchChatViewButton.Dock = DockStyle.Fill;
@@ -156,7 +142,7 @@ partial class MainForm
         // _connectButton
         //
         _connectButton.Dock = DockStyle.Fill;
-        _connectButton.Location = new Point(408, 3);
+        _connectButton.Location = new Point(313, 3);
         _connectButton.Name = "_connectButton";
         _connectButton.Size = new Size(124, 38);
         _connectButton.TabIndex = 2;
@@ -167,7 +153,7 @@ partial class MainForm
         // _settingsButton
         //
         _settingsButton.Dock = DockStyle.Fill;
-        _settingsButton.Location = new Point(538, 3);
+        _settingsButton.Location = new Point(443, 3);
         _settingsButton.Name = "_settingsButton";
         _settingsButton.Size = new Size(84, 38);
         _settingsButton.TabIndex = 3;
@@ -178,7 +164,7 @@ partial class MainForm
         // _userStatisticsButton
         //
         _userStatisticsButton.Dock = DockStyle.Fill;
-        _userStatisticsButton.Location = new Point(628, 3);
+        _userStatisticsButton.Location = new Point(533, 3);
         _userStatisticsButton.Name = "_userStatisticsButton";
         _userStatisticsButton.Size = new Size(114, 38);
         _userStatisticsButton.TabIndex = 7;
@@ -190,7 +176,7 @@ partial class MainForm
         //
         _broadcastButton.Dock = DockStyle.Fill;
         _broadcastButton.Enabled = false;
-        _broadcastButton.Location = new Point(748, 3);
+        _broadcastButton.Location = new Point(653, 3);
         _broadcastButton.Name = "_broadcastButton";
         _broadcastButton.Size = new Size(124, 38);
         _broadcastButton.TabIndex = 4;
@@ -259,11 +245,11 @@ partial class MainForm
         _streamInfoLabel.TabIndex = 4;
         _streamInfoLabel.Text = "—";
         _streamInfoLabel.TextAlign = ContentAlignment.MiddleLeft;
-		// 
-		// _streamInfoTimer
-		// 
-		_streamInfoTimer.Interval = 60000;
-		_streamInfoTimer.Tick += OnStreamInfoTimerTick;
+        // 
+        // _streamInfoTimer
+        // 
+        _streamInfoTimer.Interval = 60000;
+        _streamInfoTimer.Tick += OnStreamInfoTimerTick;
         // 
         // _logLabel
         // 
@@ -333,7 +319,6 @@ partial class MainForm
     private TableLayoutPanel _contentTableLayoutPanel;
     private Button _toggleLogsButton;
     private Button _toggleChatButton;
-    private Button _openChatWindowButton;
     private Button _connectButton;
     private Button _settingsButton;
     private Button _userStatisticsButton;
@@ -347,7 +332,7 @@ partial class MainForm
     private ChatDisplay _chatDisplay;
     private Microsoft.Web.WebView2.WinForms.WebView2 _overlayWebView;
     private Button _switchChatViewButton;
-	private System.Windows.Forms.Timer _streamInfoTimer;
+    private System.Windows.Forms.Timer _streamInfoTimer;
 
     #endregion
 }

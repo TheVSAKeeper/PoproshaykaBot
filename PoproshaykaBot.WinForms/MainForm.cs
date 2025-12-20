@@ -15,7 +15,6 @@ public partial class MainForm : Form
 
     private Bot? _bot;
     private bool _isConnected;
-    private ChatWindow? _chatWindow;
     private UserStatisticsForm? _юзерФорма;
 
     public MainForm(
@@ -61,12 +60,7 @@ public partial class MainForm : Form
         _connectionManager.CancelConnection();
         _connectionManager.Dispose();
 
-        if (_chatWindow is { IsDisposed: false })
-        {
-            _chatWindow.FormClosed -= OnChatWindowClosed;
-            _chatWindow.Close();
-            _chatWindow = null;
-        }
+
 
         if (_юзерФорма is { IsDisposed: false })
         {
@@ -90,9 +84,7 @@ public partial class MainForm : Form
                 OnToggleChatButtonClicked(_toggleChatButton, EventArgs.Empty);
                 return true;
 
-            case Keys.Alt | Keys.W:
-                OnOpenChatWindowButtonClicked(_openChatWindowButton, EventArgs.Empty);
-                return true;
+
 
             case Keys.Alt | Keys.U:
                 OnOpenUserStatistics();
@@ -268,22 +260,6 @@ public partial class MainForm : Form
         UpdateChatViewMode();
     }
 
-    private void OnOpenChatWindowButtonClicked(object sender, EventArgs e)
-    {
-        if (_chatWindow == null || _chatWindow.IsDisposed)
-        {
-            _chatWindow = new(_chatHistoryManager);
-            _chatWindow.FormClosed += OnChatWindowClosed;
-            _chatWindow.Show(this);
-            _openChatWindowButton.Text = "Закрыть окно (Alt+W)";
-            _openChatWindowButton.BackColor = Color.LightGreen;
-        }
-        else
-        {
-            _chatWindow.Close();
-        }
-    }
-
     private void OnOpenUserStatistics()
     {
         if (_юзерФорма == null || _юзерФорма.IsDisposed)
@@ -298,19 +274,7 @@ public partial class MainForm : Form
         }
     }
 
-    private void OnChatWindowClosed(object? sender, FormClosedEventArgs e)
-    {
-        _openChatWindowButton.Text = "Чат в окне (Alt+W)";
-        _openChatWindowButton.BackColor = SystemColors.Control;
 
-        if (_chatWindow == null)
-        {
-            return;
-        }
-
-        _chatWindow.FormClosed -= OnChatWindowClosed;
-        _chatWindow = null;
-    }
 
     private void OnSettingsButtonClicked(object sender, EventArgs e)
     {
