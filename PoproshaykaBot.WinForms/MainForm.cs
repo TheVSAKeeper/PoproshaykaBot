@@ -77,11 +77,11 @@ public partial class MainForm : Form
         switch (keyData)
         {
             case Keys.Alt | Keys.L:
-                OnToggleLogsButtonClicked(_toggleLogsButton, EventArgs.Empty);
+                OnToggleLogsButtonClicked(_logsToolStripButton, EventArgs.Empty);
                 return true;
 
             case Keys.Alt | Keys.C:
-                OnToggleChatButtonClicked(_toggleChatButton, EventArgs.Empty);
+                OnToggleChatButtonClicked(_chatToolStripButton, EventArgs.Empty);
                 return true;
 
 
@@ -117,7 +117,7 @@ public partial class MainForm : Form
         base.OnFormClosing(e);
     }
 
-    private async void OnConnectButtonClicked(object sender, EventArgs e)
+    private async void OnConnectButtonClicked(object? sender, EventArgs e)
     {
         if (_isConnected == false)
         {
@@ -142,7 +142,7 @@ public partial class MainForm : Form
         }
     }
 
-    private void OnBroadcastButtonClicked(object sender, EventArgs e)
+    private void OnBroadcastButtonClicked(object? sender, EventArgs e)
     {
         if (_bot == null)
         {
@@ -175,8 +175,8 @@ public partial class MainForm : Form
         if (result.IsCancelled)
         {
             AddLogMessage("Подключение отменено пользователем.");
-            _connectButton.Text = "Подключить бота";
-            _connectButton.BackColor = SystemColors.Control;
+            _connectToolStripButton.Text = "🔌 Подключить";
+            _connectToolStripButton.BackColor = SystemColors.Control;
         }
         else if (result.IsFailed)
         {
@@ -185,8 +185,8 @@ public partial class MainForm : Form
             MessageBox.Show($"Ошибка подключения бота: {result.Exception?.Message}", "Ошибка",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-            _connectButton.Text = "Подключить бота";
-            _connectButton.BackColor = SystemColors.Control;
+            _connectToolStripButton.Text = "🔌 Подключить";
+            _connectToolStripButton.BackColor = SystemColors.Control;
         }
         else if (result is { IsSuccess: true, Bot: not null })
         {
@@ -197,8 +197,8 @@ public partial class MainForm : Form
             _bot.StreamStatusChanged += OnStreamStatusChanged;
 
             _isConnected = true;
-            _connectButton.Text = "Отключить бота";
-            _connectButton.BackColor = Color.LightGreen;
+            _connectToolStripButton.Text = "🔌 Отключить";
+            _connectToolStripButton.BackColor = Color.LightGreen;
             UpdateBroadcastButtonState();
             UpdateStreamStatus();
             AddLogMessage("Бот успешно подключен!");
@@ -233,23 +233,23 @@ public partial class MainForm : Form
         AddLogMessage($"[Бот] {message}");
     }
 
-    private void OnToggleLogsButtonClicked(object sender, EventArgs e)
+    private void OnToggleLogsButtonClicked(object? sender, EventArgs e)
     {
         var settings = _settingsManager.Current;
-        settings.Ui.ShowLogsPanel = settings.Ui.ShowLogsPanel == false;
+        settings.Ui.ShowLogsPanel = !settings.Ui.ShowLogsPanel;
         _settingsManager.SaveSettings(settings);
         UpdatePanelVisibility();
     }
 
-    private void OnToggleChatButtonClicked(object sender, EventArgs e)
+    private void OnToggleChatButtonClicked(object? sender, EventArgs e)
     {
         var settings = _settingsManager.Current;
-        settings.Ui.ShowChatPanel = settings.Ui.ShowChatPanel == false;
+        settings.Ui.ShowChatPanel = !settings.Ui.ShowChatPanel;
         _settingsManager.SaveSettings(settings);
         UpdatePanelVisibility();
     }
 
-    private void OnSwitchChatViewButtonClicked(object sender, EventArgs e)
+    private void OnSwitchChatViewButtonClicked(object? sender, EventArgs e)
     {
         var settings = _settingsManager.Current;
         settings.Ui.CurrentChatViewMode = settings.Ui.CurrentChatViewMode == ChatViewMode.Legacy
@@ -274,9 +274,7 @@ public partial class MainForm : Form
         }
     }
 
-
-
-    private void OnSettingsButtonClicked(object sender, EventArgs e)
+    private void OnSettingsButtonClicked(object? sender, EventArgs e)
     {
         using var settingsForm = new SettingsForm(_settingsManager, _oauthService, _httpServer);
 
@@ -289,7 +287,7 @@ public partial class MainForm : Form
         AddLogMessage("Настройки обновлены.");
     }
 
-    private void OnUserStatisticsButtonClicked(object sender, EventArgs e)
+    private void OnUserStatisticsButtonClicked(object? sender, EventArgs e)
     {
         OnOpenUserStatistics();
     }
@@ -454,11 +452,13 @@ public partial class MainForm : Form
         var showLogs = settings.ShowLogsPanel;
         var showChat = settings.ShowChatPanel;
 
-        _toggleLogsButton.Text = showLogs ? "Скрыть логи" : "Показать логи";
-        _toggleLogsButton.BackColor = showLogs ? Color.LightGreen : SystemColors.Control;
+        _logsToolStripButton.Checked = showLogs;
+        _logsToolStripButton.BackColor = showLogs ? Color.LightGreen : SystemColors.Control;
+        _logsToolStripButton.Text = showLogs ? "📜 Логи" : "📜 Логи"; // Keep icon consistent
 
-        _toggleChatButton.Text = showChat ? "Скрыть чат" : "Показать чат";
-        _toggleChatButton.BackColor = showChat ? Color.LightGreen : SystemColors.Control;
+        _chatToolStripButton.Checked = showChat;
+        _chatToolStripButton.BackColor = showChat ? Color.LightGreen : SystemColors.Control;
+        _chatToolStripButton.Text = showChat ? "💬 Чат" : "💬 Чат";
 
         _contentTableLayoutPanel.ColumnStyles.Clear();
 
@@ -507,24 +507,26 @@ public partial class MainForm : Form
         {
             _chatDisplay.Visible = false;
             _overlayWebView.Visible = false;
-            _switchChatViewButton.Enabled = false;
+            _chatViewToolStripButton.Enabled = false;
         }
         else
         {
-            _switchChatViewButton.Enabled = true;
+            _chatViewToolStripButton.Enabled = true;
             if (mode == ChatViewMode.Legacy)
             {
                 _chatDisplay.Visible = true;
                 _overlayWebView.Visible = false;
-                _switchChatViewButton.Text = "Вид: Чат";
-                _switchChatViewButton.BackColor = SystemColors.Control;
+                _chatViewToolStripButton.Text = "👁️ Чат";
+                _chatViewToolStripButton.Checked = false;
+                _chatViewToolStripButton.BackColor = SystemColors.Control;
             }
             else
             {
                 _chatDisplay.Visible = false;
                 _overlayWebView.Visible = true;
-                _switchChatViewButton.Text = "Вид: Overlay";
-                _switchChatViewButton.BackColor = Color.LightBlue;
+                _chatViewToolStripButton.Text = "👁️ Overlay";
+                _chatViewToolStripButton.Checked = true;
+                _chatViewToolStripButton.BackColor = Color.LightBlue;
 
                 if (_overlayWebView.CoreWebView2 == null)
                 {
@@ -574,8 +576,8 @@ public partial class MainForm : Form
             return;
         }
 
-        _connectButton.Text = "Отменить";
-        _connectButton.BackColor = Color.Orange;
+        _connectToolStripButton.Text = "⏹️ Отменить";
+        _connectToolStripButton.BackColor = Color.Orange;
         ShowConnectionProgress(true);
 
         try
@@ -586,8 +588,8 @@ public partial class MainForm : Form
         {
             AddLogMessage($"Ошибка запуска подключения: {exception.Message}");
             ShowConnectionProgress(false);
-            _connectButton.Text = "Подключить бота";
-            _connectButton.BackColor = SystemColors.Control;
+            _connectToolStripButton.Text = "🔌 Подключить";
+            _connectToolStripButton.BackColor = SystemColors.Control;
         }
     }
 
@@ -617,21 +619,24 @@ public partial class MainForm : Form
 
         if (isConnected == false)
         {
-            _broadcastButton.Enabled = false;
-            _broadcastButton.Text = "Рассылка недоступна";
-            _broadcastButton.BackColor = SystemColors.Control;
+            _broadcastToolStripButton.Enabled = false;
+            _broadcastToolStripButton.Text = "📡 Рассылка";
+            _broadcastToolStripButton.ToolTipText = "Рассылка недоступна (бот не подключен)";
+            _broadcastToolStripButton.BackColor = SystemColors.Control;
         }
         else if (isBroadcastActive)
         {
-            _broadcastButton.Enabled = true;
-            _broadcastButton.Text = "Остановить рассылку";
-            _broadcastButton.BackColor = Color.LightGreen;
+            _broadcastToolStripButton.Enabled = true;
+            _broadcastToolStripButton.Text = "📡 Стоп";
+            _broadcastToolStripButton.ToolTipText = "Остановить рассылку";
+            _broadcastToolStripButton.BackColor = Color.LightGreen;
         }
         else
         {
-            _broadcastButton.Enabled = true;
-            _broadcastButton.Text = "Запустить рассылку";
-            _broadcastButton.BackColor = SystemColors.Control;
+            _broadcastToolStripButton.Enabled = true;
+            _broadcastToolStripButton.Text = "📡 Старт";
+            _broadcastToolStripButton.ToolTipText = "Запустить рассылку";
+            _broadcastToolStripButton.BackColor = SystemColors.Control;
         }
     }
 
@@ -682,8 +687,8 @@ public partial class MainForm : Form
         }
 
         _isConnected = false;
-        _connectButton.Text = "Подключить бота";
-        _connectButton.BackColor = SystemColors.Control;
+        _connectToolStripButton.Text = "🔌 Подключить";
+        _connectToolStripButton.BackColor = SystemColors.Control;
         UpdateBroadcastButtonState();
         UpdateStreamStatus();
 
