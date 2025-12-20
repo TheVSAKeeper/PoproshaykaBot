@@ -7,6 +7,12 @@ public class AppSettings
     public SpecialCommandsSettings SpecialCommands { get; set; } = new();
 }
 
+public enum ChatViewMode
+{
+    Legacy = 0,
+    Overlay = 1,
+}
+
 public class TwitchSettings
 {
     public string BotUsername { get; set; } = "thevsakeeper";
@@ -79,6 +85,7 @@ public class UiSettings
 {
     public bool ShowLogsPanel { get; set; } = true;
     public bool ShowChatPanel { get; set; } = true;
+    public ChatViewMode CurrentChatViewMode { get; set; } = ChatViewMode.Legacy;
 }
 
 public class InfrastructureSettings

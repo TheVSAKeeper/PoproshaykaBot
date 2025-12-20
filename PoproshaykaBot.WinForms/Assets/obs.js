@@ -3,6 +3,9 @@ let maxMessages = 50;
 let showTimestamp = true;
 let enableAnimations = true;
 
+const urlParams = new URLSearchParams(window.location.search);
+const isPreview = urlParams.get('preview') === 'true';
+
 let showUserTypeBorders = true;
 let highlightFirstTimeUsers = true;
 let isHighlightMentions = true;
@@ -23,7 +26,7 @@ let systemMessageAnimation = 'fade-in-up';
 let broadcasterMessageAnimation = 'slide-in-left';
 let firstTimeUserMessageAnimation = 'bounce-in';
 
-let enableMessageFadeOut = true;
+let enableMessageFadeOut = !isPreview; // Отключаем затухание сразу, если это превью
 let messageLifetime = 30000;
 let fadeOutAnimationType = 'fade-out';
 let fadeOutDuration = 1000;
@@ -446,7 +449,9 @@ function updateChatSettings(settings) {
     if (settings.broadcasterMessageAnimation) broadcasterMessageAnimation = settings.broadcasterMessageAnimation;
     if (settings.firstTimeUserMessageAnimation) firstTimeUserMessageAnimation = settings.firstTimeUserMessageAnimation;
 
-    if (settings.enableMessageFadeOut !== undefined) enableMessageFadeOut = settings.enableMessageFadeOut;
+    if (settings.enableMessageFadeOut !== undefined) {
+        enableMessageFadeOut = isPreview ? false : settings.enableMessageFadeOut;
+    }
     if (settings.messageLifetimeSeconds !== undefined) messageLifetime = settings.messageLifetimeSeconds * 1000;
     if (settings.fadeOutAnimationType !== undefined) fadeOutAnimationType = settings.fadeOutAnimationType;
     if (settings.fadeOutAnimationDurationMs !== undefined) fadeOutDuration = settings.fadeOutAnimationDurationMs;

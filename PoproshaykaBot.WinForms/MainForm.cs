@@ -52,6 +52,8 @@ public partial class MainForm : Form
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
+
+        InitializeWebViewAsync();
     }
 
     protected override async void OnFormClosed(FormClosedEventArgs e)
@@ -253,6 +255,17 @@ public partial class MainForm : Form
         settings.Ui.ShowChatPanel = settings.Ui.ShowChatPanel == false;
         _settingsManager.SaveSettings(settings);
         UpdatePanelVisibility();
+    }
+
+    private void OnSwitchChatViewButtonClicked(object sender, EventArgs e)
+    {
+        var settings = _settingsManager.Current;
+        settings.Ui.CurrentChatViewMode = settings.Ui.CurrentChatViewMode == ChatViewMode.Legacy
+            ? ChatViewMode.Overlay
+            : ChatViewMode.Legacy;
+
+        _settingsManager.SaveSettings(settings);
+        UpdateChatViewMode();
     }
 
     private void OnOpenChatWindowButtonClicked(object sender, EventArgs e)
@@ -508,9 +521,86 @@ public partial class MainForm : Form
 
         _logLabel.Visible = showLogs;
         _logTextBox.Visible = showLogs;
-        _chatDisplay.Visible = showChat;
+
+        UpdateChatViewMode();
 
         _contentTableLayoutPanel.PerformLayout();
+    }
+
+    private void UpdateChatViewMode()
+    {
+        if (InvokeRequired)
+        {
+            Invoke(UpdateChatViewMode);
+            return;
+        }
+
+        var settings = _settingsManager.Current.Ui;
+        var showChat = settings.ShowChatPanel;
+        var mode = settings.CurrentChatViewMode;
+
+        if (!showChat)
+        {
+            _chatDisplay.Visible = false;
+            _overlayWebView.Visible = false;
+            _switchChatViewButton.Enabled = false;
+        }
+        else
+        {
+            _switchChatViewButton.Enabled = true;
+            if (mode == ChatViewMode.Legacy)
+            {
+                _chatDisplay.Visible = true;
+                _overlayWebView.Visible = false;
+                _switchChatViewButton.Text = "Вид: Чат";
+                _switchChatViewButton.BackColor = SystemColors.Control;
+            }
+            else
+            {
+                _chatDisplay.Visible = false;
+                _overlayWebView.Visible = true;
+                _switchChatViewButton.Text = "Вид: Overlay";
+                _switchChatViewButton.BackColor = Color.LightBlue;
+
+                if (_overlayWebView.CoreWebView2 == null)
+                {
+                    InitializeWebViewAsync();
+                }
+                else
+                {
+                    UpdateOverlayUrl();
+                }
+            }
+        }
+    }
+
+    private async void InitializeWebViewAsync()
+    {
+        try
+        {
+            await _overlayWebView.EnsureCoreWebView2Async(null);
+            UpdateOverlayUrl();
+        }
+        catch (Exception ex)
+        {
+            AddLogMessage($"Ошибка инициализации WebView2: {ex.Message}");
+        }
+    }
+
+    private void UpdateOverlayUrl()
+    {
+        if (_overlayWebView.CoreWebView2 == null)
+        {
+            return;
+        }
+
+        var port = _settingsManager.Current.Twitch.HttpServerPort;
+        var url = $"http://localhost:{port}/chat?preview=true";
+
+        if (_overlayWebView.Source?.ToString() != url)
+        {
+            _overlayWebView.CoreWebView2.Navigate(url);
+        }
     }
 
     private void StartBotConnection()
@@ -642,6 +732,7 @@ public partial class MainForm : Form
         {
             var settings = _settingsManager.Current;
             AddLogMessage("Настройки Twitch загружены.");
+            UpdatePanelVisibility();
         }
         catch (Exception exception)
         {

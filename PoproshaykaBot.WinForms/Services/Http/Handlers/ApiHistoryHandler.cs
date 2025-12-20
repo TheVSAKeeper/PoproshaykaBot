@@ -1,3 +1,4 @@
+using PoproshaykaBot.WinForms.Settings;
 using System.Net;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -5,7 +6,7 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Services.Http.Handlers;
 
-public sealed class ApiHistoryHandler(ChatHistoryManager historyManager) : IHttpHandler
+public sealed class ApiHistoryHandler(ChatHistoryManager historyManager, SettingsManager settingsManager) : IHttpHandler
 {
     private static readonly JsonSerializerOptions JsonSerializerOptions = new()
     {
@@ -20,8 +21,9 @@ public sealed class ApiHistoryHandler(ChatHistoryManager historyManager) : IHttp
 
         try
         {
+            var maxMessages = settingsManager.Current.Twitch.ObsChat.MaxMessages;
             var history = historyManager.GetHistory()
-                .TakeLast(10)
+                .TakeLast(maxMessages)
                 .Select(DtoMapper.ToServerMessage);
 
             var json = JsonSerializer.Serialize(history, JsonSerializerOptions);
