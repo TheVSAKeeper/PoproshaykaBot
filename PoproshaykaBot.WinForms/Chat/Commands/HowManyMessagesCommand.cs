@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
 public sealed class HowManyMessagesCommand(StatisticsCollector statistics) : IChatCommand
@@ -13,14 +15,32 @@ public sealed class HowManyMessagesCommand(StatisticsCollector statistics) : ICh
 
     public OutgoingMessage Execute(CommandContext context)
     {
-        var userStats = statistics.GetUserStatistics(context.UserId);
+        var targetUserId = context.UserId;
+        var targetDisplayName = "У тебя";
+
+        if (context.Arguments.Count > 0)
+        {
+            var username = context.Arguments[0];
+            var otherUserStats = statistics.GetUserStatisticsByName(username);
+            if (otherUserStats != null)
+            {
+                targetUserId = otherUserStats.UserId;
+                targetDisplayName = $"У {otherUserStats.Name}";
+            }
+            else
+            {
+                return OutgoingMessage.Reply($"Пользователь {username} не найден", context.MessageId);
+            }
+        }
+
+        var userStats = statistics.GetUserStatistics(targetUserId);
         var messageCount = userStats?.MessageCount ?? 0;
-        var text = $"У тебя {FormatNumber(messageCount)} сообщений";
+        var text = $"{targetDisplayName} {FormatNumber(messageCount)} сообщений";
         return OutgoingMessage.Reply(text, context.MessageId);
     }
 
     private static string FormatNumber(ulong number)
     {
-        return number.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
+        return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
     }
 }

@@ -116,6 +116,19 @@ public class StatisticsCollector : IAsyncDisposable
         return userStats;
     }
 
+    public UserStatistics? GetUserStatisticsByName(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return null;
+        }
+
+        var target = username.TrimStart('@');
+
+        return _userStatistics.Values
+            .FirstOrDefault(x => string.Equals(x.Name, target, StringComparison.OrdinalIgnoreCase));
+    }
+
     public BotStatistics GetBotStatistics()
     {
         _botStatistics.UpdateUptime();

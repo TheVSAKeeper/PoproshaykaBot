@@ -60,7 +60,7 @@ public sealed class BotFactory(
         var commands = new List<IChatCommand>
         {
             new HelloCommand(),
-            new DonateCommand(),
+            new DonateCommand(settingsManager),
             new HowManyMessagesCommand(statistics),
             new BotStatsCommand(statistics),
             new TopUsersCommand(statistics),

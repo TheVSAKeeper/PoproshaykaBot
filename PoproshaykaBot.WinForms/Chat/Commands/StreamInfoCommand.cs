@@ -33,7 +33,7 @@ public sealed class StreamInfoCommand(StreamStatusManager streamStatusManager) :
         var title = string.IsNullOrWhiteSpace(info.Title) ? "Без названия" : info.Title;
         var game = string.IsNullOrWhiteSpace(info.GameName) ? "Без категории" : info.GameName;
 
-        var textFull = $"🔴 {title} | Игра: {game} | Зрителей: {info.ViewerCount} | В эфире: {hours:0}ч {minutes:00}м";
+        var textFull = $"🔴 Стрим: {title} | {game} | 👥 {info.ViewerCount} | ⏱ {hours:0}ч {minutes:00}м";
         return OutgoingMessage.Reply(textFull, context.MessageId);
     }
 }

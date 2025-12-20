@@ -22,6 +22,7 @@ public partial class MessagesSettingsControl : UserControl
         _connectionMessageTextBox.Text = settings.Connection;
         _disconnectionMessageEnabledCheckBox.Checked = settings.DisconnectionEnabled;
         _disconnectionMessageTextBox.Text = settings.Disconnection;
+        _donateMessageTextBox.Text = settings.DonateCommandMessage;
     }
 
     public void SaveSettings(MessageSettings settings)
@@ -34,6 +35,7 @@ public partial class MessagesSettingsControl : UserControl
         settings.Connection = _connectionMessageTextBox.Text.Trim();
         settings.DisconnectionEnabled = _disconnectionMessageEnabledCheckBox.Checked;
         settings.Disconnection = _disconnectionMessageTextBox.Text.Trim();
+        settings.DonateCommandMessage = _donateMessageTextBox.Text.Trim();
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -65,6 +67,12 @@ public partial class MessagesSettingsControl : UserControl
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnDonateMessageResetButtonClicked(object sender, EventArgs e)
+    {
+        ResetDonateMessage();
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     private void ResetWelcomeMessage()
     {
         _welcomeMessageEnabledCheckBox.Checked = DefaultMessageSettings.WelcomeEnabled;
@@ -89,11 +97,17 @@ public partial class MessagesSettingsControl : UserControl
         _disconnectionMessageTextBox.Text = DefaultMessageSettings.Disconnection;
     }
 
+    private void ResetDonateMessage()
+    {
+        _donateMessageTextBox.Text = DefaultMessageSettings.DonateCommandMessage;
+    }
+
     private void SetPlaceholders()
     {
         _welcomeMessageTextBox.PlaceholderText = DefaultMessageSettings.Welcome;
         _farewellMessageTextBox.PlaceholderText = DefaultMessageSettings.Farewell;
         _connectionMessageTextBox.PlaceholderText = DefaultMessageSettings.Connection;
         _disconnectionMessageTextBox.PlaceholderText = DefaultMessageSettings.Disconnection;
+        _donateMessageTextBox.PlaceholderText = DefaultMessageSettings.DonateCommandMessage;
     }
 }

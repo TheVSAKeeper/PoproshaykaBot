@@ -23,7 +23,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
 
         var added = _userIdToDisplayName.TryAdd(userId, displayName);
 
-        if (added == false)
+        if (!added)
         {
             _userIdToDisplayName[userId] = displayName;
         }
@@ -35,7 +35,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
     {
         var settings = settingsManager.Current.Twitch.Messages;
 
-        if (settings.WelcomeEnabled == false)
+        if (!settings.WelcomeEnabled)
         {
             return null;
         }
@@ -54,7 +54,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
 
         _userIdToDisplayName.TryRemove(userId, out _);
 
-        if (settings.FarewellEnabled == false)
+        if (!settings.FarewellEnabled)
         {
             return null;
         }
@@ -71,7 +71,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
     {
         var settings = settingsManager.Current.Twitch.Messages;
 
-        if (settings.FarewellEnabled == false)
+        if (!settings.FarewellEnabled)
         {
             return null;
         }
@@ -117,12 +117,12 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
         if (count <= inlineLimit)
         {
             var list = string.Join(", ", names);
-            return $"👥 Активные пользователи чата ({count}): {list}";
+            return $"👥 В чате ({count}): {list}";
         }
         else
         {
             var list = string.Join(", ", names.Take(listPreviewCount));
-            return $"👥 Активные пользователи чата ({count}): {list} и ещё {count - listPreviewCount}";
+            return $"👥 В чате ({count}): {list} +{count - listPreviewCount}";
         }
     }
 

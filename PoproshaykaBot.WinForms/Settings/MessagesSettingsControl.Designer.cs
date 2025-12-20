@@ -53,6 +53,11 @@
             _disconnectionMessageResetButton = new Button();
             _disconnectionMessageTextPanel = new Panel();
             _disconnectionMessageTextBox = new TextBox();
+            _donateMessageSection = new TableLayoutPanel();
+            _donateMessageLabel = new Label();
+            _donateMessageResetButton = new Button();
+            _donateMessageTextPanel = new Panel();
+            _donateMessageTextBox = new TextBox();
             _messagesTableLayout.SuspendLayout();
             _welcomeMessageSection.SuspendLayout();
             _welcomeMessageTextPanel.SuspendLayout();
@@ -72,11 +77,13 @@
             _messagesTableLayout.Controls.Add(_farewellMessageSection, 0, 1);
             _messagesTableLayout.Controls.Add(_connectionMessageSection, 0, 2);
             _messagesTableLayout.Controls.Add(_disconnectionMessageSection, 0, 3);
+            _messagesTableLayout.Controls.Add(_donateMessageSection, 0, 4);
             _messagesTableLayout.Dock = DockStyle.Fill;
             _messagesTableLayout.Location = new Point(0, 0);
             _messagesTableLayout.Name = "_messagesTableLayout";
             _messagesTableLayout.Padding = new Padding(5);
-            _messagesTableLayout.RowCount = 5;
+            _messagesTableLayout.RowCount = 6;
+            _messagesTableLayout.RowStyles.Add(new RowStyle());
             _messagesTableLayout.RowStyles.Add(new RowStyle());
             _messagesTableLayout.RowStyles.Add(new RowStyle());
             _messagesTableLayout.RowStyles.Add(new RowStyle());
@@ -378,6 +385,65 @@
             _disconnectionMessageTextBox.TabIndex = 14;
             _disconnectionMessageTextBox.TextChanged += OnSettingChanged;
             // 
+            // _donateMessageSection
+            // 
+            _donateMessageSection.ColumnCount = 2;
+            _donateMessageSection.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _donateMessageSection.ColumnStyles.Add(new ColumnStyle());
+            _donateMessageSection.Controls.Add(_donateMessageLabel, 0, 0);
+            _donateMessageSection.Controls.Add(_donateMessageResetButton, 1, 0);
+            _donateMessageSection.Controls.Add(_donateMessageTextPanel, 0, 1);
+            _donateMessageSection.Dock = DockStyle.Fill;
+            _donateMessageSection.Location = new Point(5, 438);
+            _donateMessageSection.Margin = new Padding(0, 0, 0, 10);
+            _donateMessageSection.Name = "_donateMessageSection";
+            _donateMessageSection.RowCount = 2;
+            _donateMessageSection.RowStyles.Add(new RowStyle());
+            _donateMessageSection.RowStyles.Add(new RowStyle());
+            _donateMessageSection.Size = new Size(538, 100);
+            _donateMessageSection.TabIndex = 4;
+            // 
+            // _donateMessageLabel
+            // 
+            _donateMessageLabel.AutoSize = true;
+            _donateMessageLabel.Dock = DockStyle.Fill;
+            _donateMessageLabel.Location = new Point(3, 0);
+            _donateMessageLabel.Name = "_donateMessageLabel";
+            _donateMessageLabel.Size = new Size(501, 29);
+            _donateMessageLabel.TabIndex = 0;
+            _donateMessageLabel.Text = "Текст команды !донат:";
+            _donateMessageLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _donateMessageResetButton
+            // 
+            _donateMessageResetButton.Location = new Point(510, 3);
+            _donateMessageResetButton.Name = "_donateMessageResetButton";
+            _donateMessageResetButton.Size = new Size(25, 23);
+            _donateMessageResetButton.TabIndex = 1;
+            _donateMessageResetButton.Text = "↺";
+            _donateMessageResetButton.UseVisualStyleBackColor = true;
+            _donateMessageResetButton.Click += OnDonateMessageResetButtonClicked;
+            // 
+            // _donateMessageTextPanel
+            // 
+            _donateMessageSection.SetColumnSpan(_donateMessageTextPanel, 2);
+            _donateMessageTextPanel.Controls.Add(_donateMessageTextBox);
+            _donateMessageTextPanel.Dock = DockStyle.Fill;
+            _donateMessageTextPanel.Location = new Point(3, 32);
+            _donateMessageTextPanel.Name = "_donateMessageTextPanel";
+            _donateMessageTextPanel.Size = new Size(532, 66);
+            _donateMessageTextPanel.TabIndex = 2;
+            // 
+            // _donateMessageTextBox
+            // 
+            _donateMessageTextBox.Dock = DockStyle.Fill;
+            _donateMessageTextBox.Location = new Point(0, 0);
+            _donateMessageTextBox.Multiline = true;
+            _donateMessageTextBox.Name = "_donateMessageTextBox";
+            _donateMessageTextBox.Size = new Size(532, 66);
+            _donateMessageTextBox.TabIndex = 0;
+            _donateMessageTextBox.TextChanged += OnSettingChanged;
+            // 
             // MessagesSettingsControl
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -432,5 +498,10 @@
         private Label _disconnectionMessageLabel;
         private TextBox _disconnectionMessageTextBox;
         private Button _disconnectionMessageResetButton;
+        private TableLayoutPanel _donateMessageSection;
+        private Label _donateMessageLabel;
+        private TextBox _donateMessageTextBox;
+        private Button _donateMessageResetButton;
+        private Panel _donateMessageTextPanel;
     }
 }

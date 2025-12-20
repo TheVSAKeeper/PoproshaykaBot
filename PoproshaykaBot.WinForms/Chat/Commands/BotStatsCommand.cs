@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
 public sealed class BotStatsCommand(StatisticsCollector statistics) : IChatCommand
@@ -17,7 +19,7 @@ public sealed class BotStatsCommand(StatisticsCollector statistics) : IChatComma
         var uptime = FormatTimeSpan(botStats.TotalUptime);
         var totalMessages = FormatNumber(botStats.TotalMessagesProcessed);
         var startTime = FormatDateTime(botStats.BotStartTime);
-        var text = $"📊 Статистика бота: Обработано {totalMessages} сообщений | Время работы: {uptime} | Запущен: {startTime}";
+        var text = $"📊 Бот: {totalMessages} сообщений | Аптайм: {uptime} | Старт: {startTime}";
         return OutgoingMessage.Normal(text);
     }
 
@@ -25,26 +27,26 @@ public sealed class BotStatsCommand(StatisticsCollector statistics) : IChatComma
     {
         if (timeSpan.TotalDays >= 1)
         {
-            return $"{(int)timeSpan.TotalDays} дн. {timeSpan.Hours} ч. {timeSpan.Minutes} мин.";
+            return $"{(int)timeSpan.TotalDays}д {timeSpan.Hours}ч {timeSpan.Minutes}м";
         }
 
         if (timeSpan.TotalHours >= 1)
         {
-            return $"{timeSpan.Hours} ч. {timeSpan.Minutes} мин.";
+            return $"{timeSpan.Hours}ч {timeSpan.Minutes}м";
         }
 
-        return $"{timeSpan.Minutes} мин. {timeSpan.Seconds} сек.";
+        return $"{timeSpan.Minutes}м {timeSpan.Seconds}с";
     }
 
     private static string FormatNumber(ulong number)
     {
-        return number.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
+        return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
     }
 
     private static string FormatDateTime(DateTime dateTime)
     {
         var moscowTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
         var moscowTime = TimeZoneInfo.ConvertTimeFromUtc(dateTime, moscowTimeZone);
-        return moscowTime.ToString("dd.MM.yyyy HH:mm", System.Globalization.CultureInfo.GetCultureInfo("ru-RU")) + " по МСК";
+        return moscowTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.GetCultureInfo("ru-RU")) + " МСК";
     }
 }

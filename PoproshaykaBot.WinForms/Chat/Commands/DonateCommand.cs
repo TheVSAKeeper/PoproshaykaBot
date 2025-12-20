@@ -1,9 +1,11 @@
+using PoproshaykaBot.WinForms.Settings;
+
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
-public sealed class DonateCommand : IChatCommand
+public sealed class DonateCommand(SettingsManager settingsManager) : IChatCommand
 {
-    public string Canonical => "деньги";
-    public IReadOnlyCollection<string> Aliases => ["donate", "донат"];
+    public string Canonical => "донат";
+    public IReadOnlyCollection<string> Aliases => ["donate", "деньги"];
     public string Description => "информация о донате";
 
     public bool CanExecute(CommandContext context)
@@ -13,7 +15,7 @@ public sealed class DonateCommand : IChatCommand
 
     public OutgoingMessage Execute(CommandContext context)
     {
-        var text = "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217";
+        var text = settingsManager.Current.Twitch.Messages.DonateCommandMessage;
         return OutgoingMessage.Normal(text);
     }
 }

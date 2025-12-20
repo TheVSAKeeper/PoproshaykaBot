@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
 public sealed class TopUsersCommand(StatisticsCollector statistics) : IChatCommand
@@ -13,7 +15,14 @@ public sealed class TopUsersCommand(StatisticsCollector statistics) : IChatComma
 
     public OutgoingMessage Execute(CommandContext context)
     {
-        var topUsers = statistics.GetTopUsers(5);
+        var count = 5;
+
+        if (context.Arguments.Count > 0 && int.TryParse(context.Arguments[0], out var requestedCount))
+        {
+            count = Math.Clamp(requestedCount, 1, 20);
+        }
+
+        var topUsers = statistics.GetTopUsers(count);
 
         if (topUsers.Count == 0)
         {
@@ -24,12 +33,12 @@ public sealed class TopUsersCommand(StatisticsCollector statistics) : IChatComma
             .Select((x, i) => $"{i + 1}. {x.Name} ({FormatNumber(x.MessageCount)})")
             .ToList();
 
-        var text = "🏆 Топ-5 активных пользователей: " + string.Join(" | ", parts);
+        var text = $"🏆 Топ-{topUsers.Count}: " + string.Join(", ", parts);
         return OutgoingMessage.Normal(text);
     }
 
     private static string FormatNumber(ulong number)
     {
-        return number.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
+        return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
     }
 }
