@@ -334,7 +334,7 @@ public partial class MainForm : Form
         UpdateStreamInfo();
     }
 
-    private void OnStreamInfoTimerTick(object? sender, EventArgs e)
+    private async void OnStreamInfoTimerTick(object? sender, EventArgs e)
     {
         if (_bot == null)
         {
@@ -343,6 +343,7 @@ public partial class MainForm : Form
 
         if (_bot.StreamStatus == StreamStatus.Online)
         {
+            await _bot.RefreshStreamInfoAsync();
             UpdateStreamInfo();
         }
     }

@@ -152,6 +152,11 @@ public class Bot : IAsyncDisposable
         }
     }
 
+    public async Task RefreshStreamInfoAsync()
+    {
+        await _streamStatusManager.RefreshCurrentStatusAsync();
+    }
+
     public async Task DisconnectAsync()
     {
         if (_client.IsConnected)
@@ -231,43 +236,51 @@ public class Bot : IAsyncDisposable
 
     private void OnStreamStarted(StreamOnlineArgs args)
     {
-        if (_settings.AutoBroadcast.AutoBroadcastEnabled && !IsBroadcastActive)
-        {
-            StartBroadcast();
-            LogMessage?.Invoke("🔴 Стрим запущен. Автоматически запускаю рассылку.");
-
-            if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
-                && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage)
-                && !string.IsNullOrEmpty(Channel))
-            {
-                _messenger.Send(Channel, _settings.AutoBroadcast.StreamStartMessage);
-            }
-        }
-
-        StreamStatusChanged?.Invoke();
     }
 
     private void OnStreamStopped(StreamOfflineArgs args)
     {
-        if (_settings.AutoBroadcast.AutoBroadcastEnabled && IsBroadcastActive)
-        {
-            StopBroadcast();
-            LogMessage?.Invoke("⚫ Стрим завершен. Автоматически останавливаю рассылку.");
+    }
 
-            if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
-                && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage)
-                && !string.IsNullOrEmpty(Channel))
+    private void UpdateStreamState(StreamStatus status)
+    {
+        if (status == StreamStatus.Online)
+        {
+            if (_settings.AutoBroadcast.AutoBroadcastEnabled && !IsBroadcastActive)
             {
-                _messenger.Send(Channel, _settings.AutoBroadcast.StreamStopMessage);
+                StartBroadcast();
+                LogMessage?.Invoke("🔴 Стрим онлайн. Автоматически запускаю рассылку.");
+
+                if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
+                    && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage)
+                    && !string.IsNullOrEmpty(Channel))
+                {
+                    _messenger.Send(Channel, _settings.AutoBroadcast.StreamStartMessage);
+                }
+            }
+        }
+        else if (status == StreamStatus.Offline)
+        {
+            if (_settings.AutoBroadcast.AutoBroadcastEnabled && IsBroadcastActive)
+            {
+                StopBroadcast();
+                LogMessage?.Invoke("⚫ Стрим офлайн. Автоматически останавливаю рассылку.");
+
+                if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
+                    && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage)
+                    && !string.IsNullOrEmpty(Channel))
+                {
+                    _messenger.Send(Channel, _settings.AutoBroadcast.StreamStopMessage);
+                }
             }
         }
 
         StreamStatusChanged?.Invoke();
     }
 
-    private void OnStreamStatusChanged(string status)
+    private void OnMonitoringLogMessage(string message)
     {
-        LogMessage?.Invoke($"EventSub: {status}");
+        LogMessage?.Invoke($"[Monitoring] {message}");
     }
 
     private void OnStreamErrorOccurred(string error)
@@ -410,7 +423,8 @@ public class Bot : IAsyncDisposable
 
         _streamStatusManager.StreamStarted += OnStreamStarted;
         _streamStatusManager.StreamStopped += OnStreamStopped;
-        _streamStatusManager.StatusChanged += OnStreamStatusChanged;
+        _streamStatusManager.StreamStatusChanged += UpdateStreamState;
+        _streamStatusManager.MonitoringLogMessage += OnMonitoringLogMessage;
         _streamStatusManager.ErrorOccurred += OnStreamErrorOccurred;
         _streamHandlersAttached = true;
     }
@@ -424,7 +438,8 @@ public class Bot : IAsyncDisposable
 
         _streamStatusManager.StreamStarted -= OnStreamStarted;
         _streamStatusManager.StreamStopped -= OnStreamStopped;
-        _streamStatusManager.StatusChanged -= OnStreamStatusChanged;
+        _streamStatusManager.StreamStatusChanged -= UpdateStreamState;
+        _streamStatusManager.MonitoringLogMessage -= OnMonitoringLogMessage;
         _streamStatusManager.ErrorOccurred -= OnStreamErrorOccurred;
         _streamHandlersAttached = false;
     }
