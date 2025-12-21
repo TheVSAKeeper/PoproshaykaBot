@@ -2,11 +2,11 @@ using System.Globalization;
 
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
-public sealed class HowManyMessagesCommand(StatisticsCollector statistics, UserRankService rankService) : IChatCommand
+public sealed class RankCommand(StatisticsCollector statistics, UserRankService rankService) : IChatCommand
 {
-    public string Canonical => "сколькосообщений";
-    public IReadOnlyCollection<string> Aliases => ["messages", "cc"];
-    public string Description => "твой счётчик сообщений";
+    public string Canonical => "ранг";
+    public IReadOnlyCollection<string> Aliases => ["rank"];
+    public string Description => "посмотреть ранг";
 
     public bool CanExecute(CommandContext context)
     {
@@ -16,7 +16,7 @@ public sealed class HowManyMessagesCommand(StatisticsCollector statistics, UserR
     public OutgoingMessage Execute(CommandContext context)
     {
         var targetUserId = context.UserId;
-        var targetDisplayName = "У тебя";
+        var targetDisplayName = "Твой";
 
         if (context.Arguments.Count > 0)
         {
@@ -25,7 +25,7 @@ public sealed class HowManyMessagesCommand(StatisticsCollector statistics, UserR
             if (otherUserStats != null)
             {
                 targetUserId = otherUserStats.UserId;
-                targetDisplayName = $"У {otherUserStats.Name}";
+                targetDisplayName = $"Ранг {otherUserStats.Name}";
             }
             else
             {
@@ -37,7 +37,7 @@ public sealed class HowManyMessagesCommand(StatisticsCollector statistics, UserR
         var messageCount = userStats?.MessageCount ?? 0;
         var rankDisplay = rankService.GetRankDisplay(messageCount);
 
-        var text = $"{rankDisplay} | {targetDisplayName} {FormatNumber(messageCount)} сообщений";
+        var text = $"{targetDisplayName}: {rankDisplay} ({FormatNumber(messageCount)} сообщений)";
         return OutgoingMessage.Reply(text, context.MessageId);
     }
 

@@ -16,7 +16,8 @@ public sealed class BotFactory(
     TwitchAPI twitchApi,
     ChatDecorationsProvider chatDecorationsProvider,
     ChatHistoryManager chatHistoryManager,
-    StreamStatusManager streamStatusManager)
+    StreamStatusManager streamStatusManager,
+    UserRankService userRankService)
 {
     public Bot Create(string accessToken)
     {
@@ -61,14 +62,16 @@ public sealed class BotFactory(
         {
             new HelloCommand(),
             new DonateCommand(settingsManager),
-            new HowManyMessagesCommand(statistics),
+            new HowManyMessagesCommand(statistics, userRankService),
             new BotStatsCommand(statistics),
-            new TopUsersCommand(statistics),
-            new MyProfileCommand(statistics),
+            new TopUsersCommand(statistics, userRankService),
+            new MyProfileCommand(statistics, userRankService),
             new ActiveUsersCommand(audienceTracker),
             new ByeCommand(audienceTracker),
             new StreamInfoCommand(streamStatusManager),
             new TrumpCommand(settingsManager),
+            new RanksCommand(settingsManager),
+            new RankCommand(statistics, userRankService),
         };
 
         var commandProcessor = new ChatCommandProcessor(commands);

@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
-public sealed class TopUsersCommand(StatisticsCollector statistics) : IChatCommand
+public sealed class TopUsersCommand(StatisticsCollector statistics, UserRankService rankService) : IChatCommand
 {
     public string Canonical => "топпользователи";
     public IReadOnlyCollection<string> Aliases => ["top"];
@@ -30,7 +30,11 @@ public sealed class TopUsersCommand(StatisticsCollector statistics) : IChatComma
         }
 
         var parts = topUsers
-            .Select((x, i) => $"{i + 1}. {x.Name} ({FormatNumber(x.MessageCount)})")
+            .Select((x, i) =>
+            {
+                var rank = rankService.GetRank(x.MessageCount);
+                return $"{i + 1}. {rank.Emoji} {x.Name} ({FormatNumber(x.MessageCount)})";
+            })
             .ToList();
 
         var text = $"🏆 Топ-{topUsers.Count}: " + string.Join(", ", parts);

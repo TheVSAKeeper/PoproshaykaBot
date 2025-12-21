@@ -1,25 +1,25 @@
-﻿namespace PoproshaykaBot.WinForms;
+﻿using PoproshaykaBot.WinForms.Settings;
 
-public sealed class UserRankService
+namespace PoproshaykaBot.WinForms;
+
+public sealed class UserRankService(SettingsManager settingsManager)
 {
-    // TODO: В конфиги вынести
-    private static readonly UserRank[] Ranks =
-    [
-        new("♔", "КОРОЛЬ", 5000),
-        new("♛", "ФЕРЗЬ", 2500),
-        new("♜", "ЛАДЬЯ", 1000),
-        new("♝", "СЛОН", 500),
-        new("♞", "КОНЬ", 250),
-        new("♟", "ПЕШКА", 0),
-    ];
+    private UserRank[] Ranks => [.. settingsManager.Current.Ranks.Ranks.OrderByDescending(x => x.MinMessages)];
 
     public UserRank GetRank(ulong messageCount)
     {
-        foreach (var rank in Ranks.Where(rank => messageCount >= rank.MinMessages))
+        var ranks = Ranks;
+        foreach (var rank in ranks.Where(rank => messageCount >= rank.MinMessages))
         {
             return rank;
         }
 
-        return Ranks[^1];
+        return ranks.Length > 0 ? ranks[^1] : new("♟", "ПЕШКА", 0, 3);
+    }
+
+    public string GetRankDisplay(ulong messageCount)
+    {
+        var rank = GetRank(messageCount);
+        return $"{rank.Emoji} {rank.DisplayName}";
     }
 }

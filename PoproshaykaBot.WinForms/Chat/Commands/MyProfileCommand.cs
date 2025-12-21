@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
-public sealed class MyProfileCommand(StatisticsCollector statistics) : IChatCommand
+public sealed class MyProfileCommand(StatisticsCollector statistics, UserRankService rankService) : IChatCommand
 {
     public string Canonical => "мойпрофиль";
     public IReadOnlyCollection<string> Aliases => ["profile"];
@@ -44,7 +44,9 @@ public sealed class MyProfileCommand(StatisticsCollector statistics) : IChatComm
         var messageCount = FormatNumber(userStats.MessageCount);
         var firstSeen = FormatDateTime(userStats.FirstSeen);
         var lastSeen = FormatDateTime(userStats.LastSeen);
-        var text = $"👤 Профиль: {messageCount} мсг | {targetDisplayName} | С нами с: {firstSeen} | В чате: {lastSeen} МСК";
+        var rankDisplay = rankService.GetRankDisplay(userStats.MessageCount);
+
+        var text = $"👤 {targetDisplayName} {rankDisplay} | {messageCount} мсг | С нами с: {firstSeen} | В чате: {lastSeen} МСК";
         return OutgoingMessage.Reply(text, context.MessageId);
     }
 

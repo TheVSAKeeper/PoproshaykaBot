@@ -5,6 +5,7 @@ public class AppSettings
     public TwitchSettings Twitch { get; set; } = new();
     public UiSettings Ui { get; set; } = new();
     public SpecialCommandsSettings SpecialCommands { get; set; } = new();
+    public RanksSettings Ranks { get; set; } = new();
 }
 
 public enum ChatViewMode
@@ -231,4 +232,32 @@ public class SpecialCommandsSettings
     public string SuccessMessage { get; set; } = "Держи бро! 👋";
 
     public string UnauthorizedMessage { get; set; } = "Ты новенький? 🤔 Подрасти сначала для таких вещей.";
+}
+
+public sealed class RanksSettings
+{
+    public List<UserRank> Ranks { get; set; } =
+    [
+        new("♔", "КОРОЛЬ", 5000),
+
+        new("♛", "ФЕРЗЬ", 4000, 1),
+        new("♛", "ФЕРЗЬ", 3500, 2),
+        new("♛", "ФЕРЗЬ", 3000, 3),
+
+        new("♜", "ЛАДЬЯ", 2500, 1),
+        new("♜", "ЛАДЬЯ", 2000, 2),
+        new("♜", "ЛАДЬЯ", 1500, 3),
+
+        new("♝", "СЛОН", 1200, 1),
+        new("♝", "СЛОН", 1000, 2),
+        new("♝", "СЛОН", 800, 3),
+
+        new("♞", "КОНЬ", 600, 1),
+        new("♞", "КОНЬ", 450, 2),
+        new("♞", "КОНЬ", 300, 3),
+
+        new("♟", "ПЕШКА", 200, 1),
+        new("♟", "ПЕШКА", 100, 2),
+        new("♟", "ПЕШКА", 0, 3),
+    ];
 }

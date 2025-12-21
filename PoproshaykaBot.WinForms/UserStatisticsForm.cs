@@ -131,7 +131,7 @@ public partial class UserStatisticsForm : Form
             }
 
             var rank = _userRankService.GetRank(user.MessageCount);
-            e.Value = $"{rank.Emoji} {user.Name} ({user.MessageCount} 💬)";
+            e.Value = $"{rank.Emoji} {user.Name} [{rank.DisplayName}] ({user.MessageCount} 💬)";
         };
 
         numericIncrement.ValueChanged += (_, _) => UpdateActionState();
@@ -229,7 +229,7 @@ public partial class UserStatisticsForm : Form
         labelMessageCount.Text = $"💬 Сообщений: {user.MessageCount}";
 
         var rank = _userRankService.GetRank(user.MessageCount);
-        labelChessPiece.Text = $"{rank.Emoji} {rank.Level}";
+        labelChessPiece.Text = $"{rank.Emoji} {rank.DisplayName}";
     }
 
     private void UpdateActionState()
