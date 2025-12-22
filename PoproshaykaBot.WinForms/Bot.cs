@@ -386,16 +386,6 @@ public class Bot : IAsyncDisposable
 
         _chatHistoryManager.AddMessage(userMessage);
 
-        if (_settings.Messages.WelcomeEnabled && isFirstSeen)
-        {
-            var welcomeMessage = _audienceTracker.CreateWelcome(e.ChatMessage.DisplayName);
-
-            if (!string.IsNullOrWhiteSpace(welcomeMessage))
-            {
-                _messenger.Reply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
-            }
-        }
-
         var context = new CommandContext
         {
             Channel = e.ChatMessage.Channel,
@@ -405,8 +395,23 @@ public class Bot : IAsyncDisposable
             DisplayName = e.ChatMessage.DisplayName,
         };
 
-        if (!_commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response))
+        var isCommand = _commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response);
+
+        if (_settings.Messages.WelcomeEnabled && isFirstSeen)
         {
+            var welcomeMessage = _audienceTracker.CreateWelcome(e.ChatMessage.DisplayName);
+
+            if (!string.IsNullOrWhiteSpace(welcomeMessage))
+            {
+                if (isCommand && response != null)
+                {
+                    response = response with { Text = $"{welcomeMessage} {response.Text}" };
+                }
+                else if (!isCommand)
+                {
+                    _messenger.Reply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
+                }
+            }
         }
 
         if (response != null)

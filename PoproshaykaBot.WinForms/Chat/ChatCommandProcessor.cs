@@ -134,7 +134,7 @@ public sealed class CommandContext
     public IReadOnlyList<string> Arguments { get; init; } = [];
 }
 
-public sealed class OutgoingMessage
+public sealed record OutgoingMessage
 {
     public string Text { get; init; } = string.Empty;
     public DeliveryType Delivery { get; init; }
