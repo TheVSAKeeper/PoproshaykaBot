@@ -263,8 +263,16 @@ function addMessage(message, isHistoryMessage = false) {
 
     chatContainer.appendChild(messageDiv);
 
-    if (!isHistoryMessage && enableMessageFadeOut) {
-        setTimeout(() => fadeOutMessage(messageDiv), messageLifetime);
+    if (enableMessageFadeOut) {
+        let remainingLifetime = messageLifetime;
+        if (isHistoryMessage) {
+            const messageTime = new Date(message.timestamp).getTime();
+            const now = Date.now();
+            const age = now - messageTime;
+            remainingLifetime = Math.max(0, messageLifetime - age);
+        }
+
+        setTimeout(() => fadeOutMessage(messageDiv), remainingLifetime);
     }
 
     while (chatContainer.children.length > maxMessages) {

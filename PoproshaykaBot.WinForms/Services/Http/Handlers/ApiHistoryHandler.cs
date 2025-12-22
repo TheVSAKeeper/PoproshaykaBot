@@ -21,12 +21,21 @@ public sealed class ApiHistoryHandler(ChatHistoryManager historyManager, Setting
 
         try
         {
-            var maxMessages = settingsManager.Current.Twitch.ObsChat.MaxMessages;
-            var history = historyManager.GetHistory()
+            var obsSettings = settingsManager.Current.Twitch.ObsChat;
+            var maxMessages = obsSettings.MaxMessages;
+            var history = historyManager.GetHistory();
+
+            if (obsSettings.EnableMessageFadeOut)
+            {
+                var cutoff = DateTime.UtcNow.AddSeconds(-obsSettings.MessageLifetimeSeconds);
+                history = history.Where(x => x.Timestamp >= cutoff).ToList();
+            }
+
+            var finalHistory = history
                 .TakeLast(maxMessages)
                 .Select(DtoMapper.ToServerMessage);
 
-            var json = JsonSerializer.Serialize(history, JsonSerializerOptions);
+            var json = JsonSerializer.Serialize(finalHistory, JsonSerializerOptions);
             var buffer = Encoding.UTF8.GetBytes(json);
 
             response.ContentType = "application/json; charset=utf-8";
