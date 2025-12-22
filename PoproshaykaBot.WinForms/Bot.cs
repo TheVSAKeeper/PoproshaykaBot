@@ -1,53 +1,63 @@
-﻿using PoproshaykaBot.WinForms.Models;
-using System.Globalization;
-using System.Timers;
+﻿using PoproshaykaBot.WinForms.Broadcast;
+using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.WinForms.Models;
+using PoproshaykaBot.WinForms.Services;
+using PoproshaykaBot.WinForms.Settings;
+using TwitchLib.Api;
 using TwitchLib.Client;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
-using TwitchLib.Communication.Clients;
-using TwitchLib.Communication.Models;
-using Timer = System.Timers.Timer;
+using TwitchLib.EventSub.Websockets.Core.EventArgs.Stream;
 
 namespace PoproshaykaBot.WinForms;
 
 public class Bot : IAsyncDisposable
 {
     private readonly TwitchClient _client;
+    private readonly ChatHistoryManager _chatHistoryManager;
+    private readonly TwitchChatMessenger _messenger;
+    private readonly TwitchAPI _twitchApi;
     private readonly TwitchSettings _settings;
     private readonly StatisticsCollector _statisticsCollector;
-    private readonly Dictionary<string, UserInfo> _seenUsers;
+    private readonly AudienceTracker _audienceTracker;
+    private readonly ChatDecorationsProvider _chatDecorations;
+    private readonly ChatCommandProcessor _commandProcessor;
+    private readonly StreamStatusManager _streamStatusManager;
+    private readonly BroadcastScheduler _broadcastScheduler;
+
     private bool _disposed;
+    private bool _streamHandlersAttached;
 
-    private string? _channel;
-    private Timer? _timer;
-
-    private int X1;
-
-    public Bot(string accessToken, TwitchSettings settings, StatisticsCollector statisticsCollector)
+    public Bot(
+        BotServices services,
+        TwitchClient client,
+        TwitchChatMessenger messenger)
     {
-        _settings = settings;
-        _statisticsCollector = statisticsCollector;
-        _seenUsers = [];
+        _settings = services.Settings;
+        _statisticsCollector = services.StatisticsCollector;
+        _audienceTracker = services.AudienceTracker;
+        _chatHistoryManager = services.ChatHistoryManager;
+        _twitchApi = services.TwitchApi;
+        _chatDecorations = services.ChatDecorationsProvider;
+        _broadcastScheduler = services.BroadcastScheduler;
+        _commandProcessor = services.CommandProcessor;
+        _streamStatusManager = services.StreamStatusManager;
+        MessagesManagementService = services.UserMessagesManagementService;
 
-        ConnectionCredentials credentials = new(_settings.BotUsername, accessToken);
-
-        ClientOptions clientOptions = new()
-        {
-            MessagesAllowedInPeriod = _settings.MessagesAllowedInPeriod,
-            ThrottlingPeriod = TimeSpan.FromSeconds(_settings.ThrottlingPeriodSeconds),
-        };
-
-        WebSocketClient customClient = new(clientOptions);
-        _client = new(customClient);
-        _client.Initialize(credentials, _settings.Channel);
+        _client = client;
+        _messenger = messenger;
 
         _client.OnLog += Client_OnLog;
         _client.OnMessageReceived += Client_OnMessageReceived;
         _client.OnConnected += Client_OnConnected;
         _client.OnJoinedChannel += Сlient_OnJoinedChannel;
+
+        _broadcastScheduler.StateChanged += () => BroadcastStateChanged?.Invoke();
+
+        AttachStreamStatusHandlers();
     }
 
-    public event Action<ChatMessageData>? ChatMessageReceived;
+    public event Action? BroadcastStateChanged;
 
     public event Action<string>? Connected;
 
@@ -55,109 +65,172 @@ public class Bot : IAsyncDisposable
 
     public event Action<string>? LogMessage;
 
-    public bool IsBroadcastActive => _timer is { Enabled: true };
+    public event Action? StreamStatusChanged;
+
+    public bool IsAutoBroadcastEnabled
+    {
+        get => _settings.AutoBroadcast.AutoBroadcastEnabled;
+        set
+        {
+            if (_settings.AutoBroadcast.AutoBroadcastEnabled == value)
+            {
+                return;
+            }
+
+            _settings.AutoBroadcast.AutoBroadcastEnabled = value;
+            BroadcastStateChanged?.Invoke();
+        }
+    }
+
+    public UserMessagesManagementService MessagesManagementService { get; }
+    public string? Channel { get; private set; }
+
+    public bool IsBroadcastActive => _broadcastScheduler.IsActive;
+
+    public StreamStatus StreamStatus => _streamStatusManager.CurrentStatus;
+    public StreamInfo? CurrentStream => _streamStatusManager.CurrentStream;
+    public int BroadcastSentMessagesCount => _broadcastScheduler.SentMessagesCount;
+    public DateTime? NextBroadcastTime => _broadcastScheduler.NextBroadcastTime;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         if (_client.IsConnected)
         {
-            ConnectionProgress?.Invoke("Бот уже подключен");
+            var message = "Бот уже подключен";
+            ConnectionProgress?.Invoke(message);
+            LogMessage?.Invoke(message);
             return;
         }
 
-        ConnectionProgress?.Invoke("Инициализация подключения...");
+        var initMessage = "Инициализация подключения...";
+        ConnectionProgress?.Invoke(initMessage);
+        LogMessage?.Invoke(initMessage);
 
         try
         {
-            ConnectionProgress?.Invoke("Подключение к серверу Twitch...");
+            var connectingMessage = "Подключение к серверу Twitch...";
+            ConnectionProgress?.Invoke(connectingMessage);
+            LogMessage?.Invoke(connectingMessage);
 
             _client.Connect();
 
             var timeout = TimeSpan.FromSeconds(30);
             var startTime = DateTime.UtcNow;
 
-            while (_client.IsConnected == false && DateTime.UtcNow - startTime < timeout)
+            while (!_client.IsConnected && DateTime.UtcNow - startTime < timeout)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ConnectionProgress?.Invoke("Ожидание подтверждения подключения...");
+                var waitingMessage = "Ожидание подтверждения подключения...";
+                ConnectionProgress?.Invoke(waitingMessage);
+                LogMessage?.Invoke(waitingMessage);
                 await Task.Delay(500, cancellationToken);
             }
 
             if (_client.IsConnected)
             {
-                ConnectionProgress?.Invoke("Подключение установлено успешно");
+                var successMessage = "Подключение установлено успешно";
+                ConnectionProgress?.Invoke(successMessage);
+                LogMessage?.Invoke(successMessage);
             }
             else
             {
                 throw new TimeoutException("Превышено время ожидания подключения к Twitch");
             }
 
-            ConnectionProgress?.Invoke("Инициализация статистики...");
+            var statsMessage = "Инициализация статистики...";
+            ConnectionProgress?.Invoke(statsMessage);
+            LogMessage?.Invoke(statsMessage);
             await _statisticsCollector.StartAsync();
             _statisticsCollector.ResetBotStartTime();
+
+            var emotesMessage = "Загрузка эмодзи и бэйджей...";
+            ConnectionProgress?.Invoke(emotesMessage);
+            LogMessage?.Invoke(emotesMessage);
+            await _chatDecorations.LoadAsync();
+            LogMessage?.Invoke($"Загружено {_chatDecorations.GlobalEmotesCount} глобальных эмодзи и {_chatDecorations.GlobalBadgeSetsCount} типов глобальных бэйджей");
+
+            var streamMessage = "Инициализация мониторинга стрима...";
+            ConnectionProgress?.Invoke(streamMessage);
+            LogMessage?.Invoke(streamMessage);
+            await InitializeStreamMonitoringAsync();
         }
         catch (OperationCanceledException)
         {
-            ConnectionProgress?.Invoke("Подключение отменено пользователем");
+            var cancelMessage = "Подключение отменено пользователем";
+            ConnectionProgress?.Invoke(cancelMessage);
+            LogMessage?.Invoke(cancelMessage);
             throw;
         }
         catch (Exception exception)
         {
-            ConnectionProgress?.Invoke($"Ошибка подключения: {exception.Message}");
+            var errorMessage = $"Ошибка подключения: {exception.Message}";
+            ConnectionProgress?.Invoke(errorMessage);
+            LogMessage?.Invoke(errorMessage);
             throw;
         }
     }
 
+    public async Task RefreshStreamInfoAsync()
+    {
+        await _streamStatusManager.RefreshCurrentStatusAsync();
+    }
+
     public async Task DisconnectAsync()
     {
-        _timer?.Dispose();
-
         if (_client.IsConnected)
         {
-            if (string.IsNullOrWhiteSpace(_channel) == false)
+            if (!string.IsNullOrWhiteSpace(Channel))
             {
-                if (_settings.Messages.FarewellEnabled
-                    && string.IsNullOrWhiteSpace(_settings.Messages.Farewell) == false)
+                var messages = new List<string>();
+
+                var collectiveFarewell = _audienceTracker.CreateCollectiveFarewell();
+
+                if (!string.IsNullOrWhiteSpace(collectiveFarewell))
                 {
-                    await SendPersonalFarewellMessages(_channel, _settings.Messages.Farewell);
+                    messages.Add(collectiveFarewell);
                 }
 
                 if (_settings.Messages.DisconnectionEnabled
-                    && string.IsNullOrWhiteSpace(_settings.Messages.Disconnection) == false)
+                    && !string.IsNullOrWhiteSpace(_settings.Messages.Disconnection))
                 {
-                    _client.SendMessage(_channel, _settings.Messages.Disconnection);
+                    messages.Add(_settings.Messages.Disconnection);
                 }
+
+                if (messages.Count > 0)
+                {
+                    var combinedMessage = string.Join(" ", messages);
+                    _messenger.Send(Channel, combinedMessage);
+                }
+
+                _audienceTracker.ClearAll();
             }
 
-            _client.Disconnect();
+            await Task.Run(() => _client.Disconnect());
         }
 
-        await _statisticsCollector.StopAsync();
+        await _streamStatusManager.StopMonitoringAsync();
+
+        await Task.Run(() => _statisticsCollector.StopAsync());
     }
 
     public void StartBroadcast()
     {
-        if (string.IsNullOrWhiteSpace(_channel))
+        if (string.IsNullOrWhiteSpace(Channel))
         {
             return;
         }
 
-        if (_timer == null)
-        {
-            _timer = new();
-            _timer.Interval = 900_000;
-            _timer.Elapsed += _timer_Elapsed;
-        }
-
-        if (_timer.Enabled == false)
-        {
-            _timer.Start();
-        }
+        _broadcastScheduler.Start(Channel);
     }
 
     public void StopBroadcast()
     {
-        _timer?.Stop();
+        _broadcastScheduler.Stop();
+    }
+
+    public Task ManualBroadcastSendAsync()
+    {
+        return _broadcastScheduler.ManualSendAsync();
     }
 
     public async ValueTask DisposeAsync()
@@ -174,8 +247,65 @@ public class Bot : IAsyncDisposable
         }
 
         await DisconnectAsync();
-        await _statisticsCollector.DisposeAsync();
+        DetachStreamStatusHandlers();
+        await _streamStatusManager.DisposeAsync();
+        await _broadcastScheduler.DisposeAsync();
+        await _statisticsCollector.StopAsync();
         _disposed = true;
+    }
+
+    private void OnStreamStarted(StreamOnlineArgs args)
+    {
+    }
+
+    private void OnStreamStopped(StreamOfflineArgs args)
+    {
+    }
+
+    private void UpdateStreamState(StreamStatus status)
+    {
+        if (status == StreamStatus.Online)
+        {
+            if (_settings.AutoBroadcast.AutoBroadcastEnabled && !IsBroadcastActive)
+            {
+                StartBroadcast();
+                LogMessage?.Invoke("🔴 Стрим онлайн. Автоматически запускаю рассылку.");
+
+                if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
+                    && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStartMessage)
+                    && !string.IsNullOrEmpty(Channel))
+                {
+                    _messenger.Send(Channel, _settings.AutoBroadcast.StreamStartMessage);
+                }
+            }
+        }
+        else if (status == StreamStatus.Offline)
+        {
+            if (_settings.AutoBroadcast.AutoBroadcastEnabled && IsBroadcastActive)
+            {
+                StopBroadcast();
+                LogMessage?.Invoke("⚫ Стрим офлайн. Автоматически останавливаю рассылку.");
+
+                if (_settings.AutoBroadcast.StreamStatusNotificationsEnabled
+                    && !string.IsNullOrEmpty(_settings.AutoBroadcast.StreamStopMessage)
+                    && !string.IsNullOrEmpty(Channel))
+                {
+                    _messenger.Send(Channel, _settings.AutoBroadcast.StreamStopMessage);
+                }
+            }
+        }
+
+        StreamStatusChanged?.Invoke();
+    }
+
+    private void OnMonitoringLogMessage(string message)
+    {
+        LogMessage?.Invoke($"[Monitoring] {message}");
+    }
+
+    private void OnStreamErrorOccurred(string error)
+    {
+        LogMessage?.Invoke($"Ошибка EventSub: {error}");
     }
 
     private void Client_OnLog(object? sender, OnLogArgs e)
@@ -190,39 +320,30 @@ public class Bot : IAsyncDisposable
         var connectionMessage = "Подключен!";
         Console.WriteLine(connectionMessage);
         Connected?.Invoke(connectionMessage);
+        LogMessage?.Invoke(connectionMessage);
     }
 
     private void Сlient_OnJoinedChannel(object? sender, OnJoinedChannelArgs e)
     {
         if (_settings.Messages.ConnectionEnabled
-            && string.IsNullOrWhiteSpace(_settings.Messages.Connection) == false)
+            && !string.IsNullOrWhiteSpace(_settings.Messages.Connection))
         {
-            _client.SendMessage(e.Channel, _settings.Messages.Connection);
+            _messenger.Send(e.Channel, _settings.Messages.Connection);
         }
 
-        _channel = e.Channel;
-        X1 = 0;
-        StartBroadcast();
+        Channel = e.Channel;
 
         var connectionMessage = $"Подключен к каналу {e.Channel}";
         Console.WriteLine(connectionMessage);
         Connected?.Invoke(connectionMessage);
-    }
-
-    private void _timer_Elapsed(object? sender, ElapsedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(_channel))
-        {
-            return;
-        }
-
-        X1++;
-        _client.SendMessage(_channel, "Присылайте деняк, пожалуйста, " + X1 + " раз прошу. https://bob217.ru/donate/");
+        LogMessage?.Invoke(connectionMessage);
     }
 
     private void Client_OnMessageReceived(object? sender, OnMessageReceivedArgs e)
     {
         _statisticsCollector.TrackMessage(e.ChatMessage.UserId, e.ChatMessage.Username);
+
+        var isFirstSeen = _audienceTracker.OnUserMessage(e.ChatMessage.UserId, e.ChatMessage.DisplayName);
 
         var userMessage = new ChatMessageData
         {
@@ -231,134 +352,51 @@ public class Bot : IAsyncDisposable
             Message = e.ChatMessage.Message,
             MessageType = ChatMessageType.UserMessage,
             Status = GetUserStatusFlags(e.ChatMessage),
+            IsFirstTime = isFirstSeen,
+
+            Emotes = _chatDecorations.ExtractEmotes(e.ChatMessage, _settings.ObsChat.EmoteSizePixels),
+            Badges = e.ChatMessage.Badges,
+            BadgeUrls = _chatDecorations.ExtractBadgeUrls(e.ChatMessage.Badges, _settings.ObsChat.BadgeSizePixels),
         };
 
-        ChatMessageReceived?.Invoke(userMessage);
+        _chatHistoryManager.AddMessage(userMessage);
 
-        string? botResponse = null;
-
-        var userInfo = new UserInfo(e.ChatMessage.UserId, e.ChatMessage.DisplayName);
-
-        if (_settings.Messages.WelcomeEnabled && _seenUsers.TryAdd(e.ChatMessage.UserId, userInfo))
+        if (_settings.Messages.WelcomeEnabled && isFirstSeen)
         {
-            var welcomeMessage = _settings.Messages.Welcome.Replace("{username}", e.ChatMessage.DisplayName);
-            _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
+            var welcomeMessage = _audienceTracker.CreateWelcome(e.ChatMessage.DisplayName);
 
-            var welcomeResponse = new ChatMessageData
+            if (!string.IsNullOrWhiteSpace(welcomeMessage))
             {
-                Timestamp = DateTime.UtcNow,
-                DisplayName = _settings.BotUsername,
-                Message = welcomeMessage,
-                MessageType = ChatMessageType.BotResponse,
-                Status = UserStatus.None,
-            };
-
-            ChatMessageReceived?.Invoke(welcomeResponse);
+                _messenger.Reply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
+            }
         }
 
-        switch (e.ChatMessage.Message.ToLower())
+        var context = new CommandContext
         {
-            case "!привет":
-                // TODO: Обработать дублирование привета
-                botResponse = $"Привет, {e.ChatMessage.Username}!";
-                _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                break;
+            Channel = e.ChatMessage.Channel,
+            MessageId = e.ChatMessage.Id,
+            UserId = e.ChatMessage.UserId,
+            Username = e.ChatMessage.Username,
+            DisplayName = e.ChatMessage.DisplayName,
+        };
 
-            case "!деньги":
-                botResponse = "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217";
-                _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                break;
-
-            case "!сколькосообщений":
-                {
-                    var userStats = _statisticsCollector.GetUserStatistics(e.ChatMessage.UserId);
-                    var messageCount = userStats?.MessageCount ?? 0;
-                    botResponse = $"У тебя {FormatNumber(messageCount)} сообщений";
-                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
-                    break;
-                }
-
-            case "!статистикабота":
-                {
-                    var botStats = _statisticsCollector.GetBotStatistics();
-                    var uptime = FormatTimeSpan(botStats.TotalUptime);
-                    var totalMessages = FormatNumber(botStats.TotalMessagesProcessed);
-                    var startTime = FormatDateTime(botStats.BotStartTime);
-
-                    botResponse = $"📊 Статистика бота: Обработано {totalMessages} сообщений | Время работы: {uptime} | Запущен: {startTime}";
-
-                    _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                    break;
-                }
-
-            case "!топпользователи":
-                {
-                    var topUsers = _statisticsCollector.GetTopUsers(5);
-
-                    if (topUsers.Count == 0)
-                    {
-                        botResponse = "Пока нет данных о пользователях";
-                        _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                        break;
-                    }
-
-                    var response = "🏆 Топ-5 активных пользователей: ";
-
-                    for (var i = 0; i < topUsers.Count; i++)
-                    {
-                        var user = topUsers[i];
-                        response += $"{i + 1}. {user.Name} ({FormatNumber(user.MessageCount)})";
-
-                        if (i < topUsers.Count - 1)
-                        {
-                            response += " | ";
-                        }
-                    }
-
-                    botResponse = response;
-                    _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                    break;
-                }
-
-            case "!мойпрофиль":
-                {
-                    var userStats = _statisticsCollector.GetUserStatistics(e.ChatMessage.UserId);
-
-                    if (userStats == null)
-                    {
-                        botResponse = "У тебя пока нет статистики";
-                        _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
-                        break;
-                    }
-
-                    var messageCount = FormatNumber(userStats.MessageCount);
-                    var firstSeen = FormatDateTime(userStats.FirstSeen);
-                    var lastSeen = FormatDateTime(userStats.LastSeen);
-
-                    botResponse = $"👤 Твой профиль: {messageCount} сообщений | Впервые: {firstSeen} | Последний раз: {lastSeen}";
-                    _client.SendReply(e.ChatMessage.Channel, e.ChatMessage.Id, botResponse);
-                    break;
-                }
-
-            case "!пока":
-                botResponse = _settings.Messages.Farewell.Replace("{username}", e.ChatMessage.DisplayName);
-                _client.SendMessage(e.ChatMessage.Channel, botResponse);
-                _seenUsers.Remove(e.ChatMessage.UserId);
-                break;
+        if (!_commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response))
+        {
         }
 
-        if (string.IsNullOrEmpty(botResponse) == false)
+        if (response != null)
         {
-            var responseMessage = new ChatMessageData
+            switch (response.Delivery)
             {
-                Timestamp = DateTime.UtcNow,
-                DisplayName = _settings.BotUsername,
-                Message = botResponse,
-                MessageType = ChatMessageType.BotResponse,
-                Status = UserStatus.None,
-            };
+                case DeliveryType.Reply:
+                    _messenger.Reply(context.Channel, response.ReplyToMessageId ?? context.MessageId, response.Text);
+                    break;
 
-            ChatMessageReceived?.Invoke(responseMessage);
+                case DeliveryType.Normal:
+                default:
+                    _messenger.Send(context.Channel, response.Text);
+                    break;
+            }
         }
 
         LogMessage?.Invoke(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);
@@ -391,45 +429,63 @@ public class Bot : IAsyncDisposable
         return status;
     }
 
-    private static string FormatTimeSpan(TimeSpan timeSpan)
+    private void AttachStreamStatusHandlers()
     {
-        if (timeSpan.TotalDays >= 1)
+        if (_streamHandlersAttached)
         {
-            return $"{(int)timeSpan.TotalDays} дн. {timeSpan.Hours} ч. {timeSpan.Minutes} мин.";
+            return;
         }
 
-        if (timeSpan.TotalHours >= 1)
+        _streamStatusManager.StreamStarted += OnStreamStarted;
+        _streamStatusManager.StreamStopped += OnStreamStopped;
+        _streamStatusManager.StreamStatusChanged += UpdateStreamState;
+        _streamStatusManager.MonitoringLogMessage += OnMonitoringLogMessage;
+        _streamStatusManager.ErrorOccurred += OnStreamErrorOccurred;
+        _streamHandlersAttached = true;
+    }
+
+    private void DetachStreamStatusHandlers()
+    {
+        if (!_streamHandlersAttached)
         {
-            return $"{timeSpan.Hours} ч. {timeSpan.Minutes} мин.";
+            return;
         }
 
-        return $"{timeSpan.Minutes} мин. {timeSpan.Seconds} сек.";
+        _streamStatusManager.StreamStarted -= OnStreamStarted;
+        _streamStatusManager.StreamStopped -= OnStreamStopped;
+        _streamStatusManager.StreamStatusChanged -= UpdateStreamState;
+        _streamStatusManager.MonitoringLogMessage -= OnMonitoringLogMessage;
+        _streamStatusManager.ErrorOccurred -= OnStreamErrorOccurred;
+        _streamHandlersAttached = false;
     }
 
-    private static string FormatNumber(ulong number)
+    private async Task InitializeStreamMonitoringAsync()
     {
-        return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
-    }
-
-    private static string FormatDateTime(DateTime dateTime)
-    {
-        var moscowTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
-        var moscowTime = TimeZoneInfo.ConvertTimeFromUtc(dateTime, moscowTimeZone);
-
-        return moscowTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.GetCultureInfo("ru-RU")) + " по МСК";
-    }
-
-    private async Task SendPersonalFarewellMessages(string channel, string farewellMessage)
-    {
-        foreach (var user in _seenUsers.Values)
+        if (_streamStatusManager == null)
         {
-            var personalMessage = farewellMessage.Replace("{username}", user.DisplayName);
-            _client.SendMessage(channel, personalMessage);
+            return;
+        }
 
-            // TODO: Подумать
-            await Task.Delay(100);
+        try
+        {
+            if (string.IsNullOrEmpty(_settings.ClientId))
+            {
+                LogMessage?.Invoke("Client ID не установлен. Мониторинг стрима недоступен.");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_twitchApi.Settings.AccessToken))
+            {
+                LogMessage?.Invoke("Access Token не установлен. Мониторинг стрима недоступен.");
+                return;
+            }
+
+            await _streamStatusManager.InitializeAsync(_settings.ClientId, _twitchApi.Settings.AccessToken);
+            await _streamStatusManager.StartMonitoringAsync(_settings.Channel);
+        }
+        catch (Exception ex)
+        {
+            LogMessage?.Invoke($"Ошибка инициализации мониторинга стрима: {ex.Message}");
         }
     }
 }
-
-public record UserInfo(string UserId, string DisplayName);

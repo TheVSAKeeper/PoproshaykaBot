@@ -1,0 +1,1510 @@
+﻿namespace PoproshaykaBot.WinForms.Settings
+{
+    partial class ObsChatSettingsControl
+    {
+        /// <summary> 
+        /// Required designer variable.
+        /// </summary>
+        private System.ComponentModel.IContainer components = null;
+
+        /// <summary> 
+        /// Clean up any resources being used.
+        /// </summary>
+        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && (components != null))
+            {
+                components.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+        #region Component Designer generated code
+
+        /// <summary> 
+        /// Required method for Designer support - do not modify 
+        /// the contents of this method with the code editor.
+        /// </summary>
+        private void InitializeComponent()
+        {
+            _mainTabControl = new TabControl();
+            _colorsTabPage = new TabPage();
+            _colorsTableLayout = new TableLayoutPanel();
+            _backgroundColorLabel = new Label();
+            _backgroundColorButton = new Button();
+            _backgroundColorResetButton = new Button();
+            _textColorLabel = new Label();
+            _textColorButton = new Button();
+            _textColorResetButton = new Button();
+            _usernameColorLabel = new Label();
+            _usernameColorButton = new Button();
+            _usernameColorResetButton = new Button();
+            _systemMessageColorLabel = new Label();
+            _systemMessageColorButton = new Button();
+            _systemMessageColorResetButton = new Button();
+            _timestampColorLabel = new Label();
+            _timestampColorButton = new Button();
+            _timestampColorResetButton = new Button();
+            _fontsTabPage = new TabPage();
+            _fontsTableLayout = new TableLayoutPanel();
+            _fontFamilyLabel = new Label();
+            _fontFamilyTextBox = new TextBox();
+            _fontFamilyResetButton = new Button();
+            _fontSizeLabel = new Label();
+            _fontSizeNumeric = new NumericUpDown();
+            _fontSizeResetButton = new Button();
+            _fontBoldCheckBox = new CheckBox();
+            _layoutTabPage = new TabPage();
+            _layoutTableLayout = new TableLayoutPanel();
+            _paddingLabel = new Label();
+            _paddingNumeric = new NumericUpDown();
+            _paddingResetButton = new Button();
+            _marginLabel = new Label();
+            _marginNumeric = new NumericUpDown();
+            _marginResetButton = new Button();
+            _borderRadiusLabel = new Label();
+            _borderRadiusNumeric = new NumericUpDown();
+            _borderRadiusResetButton = new Button();
+            _emoteSizeLabel = new Label();
+            _emoteSizeNumeric = new NumericUpDown();
+            _emoteSizeResetButton = new Button();
+            _badgeSizeLabel = new Label();
+            _badgeSizeNumeric = new NumericUpDown();
+            _badgeSizeResetButton = new Button();
+            _animationsTabPage = new TabPage();
+            _animationsTableLayout = new TableLayoutPanel();
+            _enableAnimationsCheckBox = new CheckBox();
+            _enableAnimationsResetButton = new Button();
+            _animationDurationLabel = new Label();
+            _animationDurationNumeric = new NumericUpDown();
+            _animationDurationResetButton = new Button();
+            _limitsTabPage = new TabPage();
+            _limitsTableLayout = new TableLayoutPanel();
+            _maxMessagesLabel = new Label();
+            _maxMessagesNumeric = new NumericUpDown();
+            _maxMessagesResetButton = new Button();
+            _showTimestampCheckBox = new CheckBox();
+            _showUserTypeBordersCheckBox = new CheckBox();
+            _highlightFirstTimeUsersCheckBox = new CheckBox();
+            _highlightMentionsCheckBox = new CheckBox();
+            _enableMessageShadowsCheckBox = new CheckBox();
+            _enableSpecialEffectsCheckBox = new CheckBox();
+            _enableSmoothScrollCheckBox = new CheckBox();
+            _autoScrollEnabledCheckBox = new CheckBox();
+            _scrollAnimationDurationLabel = new Label();
+            _scrollAnimationDurationNumeric = new NumericUpDown();
+            _scrollAnimationDurationResetButton = new Button();
+            _enableMessageFadeOutCheckBox = new CheckBox();
+            _enableMessageFadeOutResetButton = new Button();
+            _messageLifetimeLabel = new Label();
+            _messageLifetimeNumeric = new NumericUpDown();
+            _messageLifetimeResetButton = new Button();
+            _fadeOutAnimationLabel = new Label();
+            _fadeOutAnimationComboBox = new ComboBox();
+            _fadeOutAnimationResetButton = new Button();
+            _fadeOutAnimationDurationLabel = new Label();
+            _fadeOutAnimationDurationNumeric = new NumericUpDown();
+            _fadeOutAnimationDurationResetButton = new Button();
+
+
+            _userMessageAnimationLabel = new Label();
+            _userMessageAnimationComboBox = new ComboBox();
+            _userMessageAnimationResetButton = new Button();
+            _botMessageAnimationLabel = new Label();
+            _botMessageAnimationComboBox = new ComboBox();
+            _botMessageAnimationResetButton = new Button();
+            _systemMessageAnimationLabel = new Label();
+            _systemMessageAnimationComboBox = new ComboBox();
+            _systemMessageAnimationResetButton = new Button();
+            _broadcasterMessageAnimationLabel = new Label();
+            _broadcasterMessageAnimationComboBox = new ComboBox();
+            _broadcasterMessageAnimationResetButton = new Button();
+            _firstTimeUserMessageAnimationLabel = new Label();
+            _firstTimeUserMessageAnimationComboBox = new ComboBox();
+            _firstTimeUserMessageAnimationResetButton = new Button();
+            _mainTabControl.SuspendLayout();
+
+
+            _colorsTabPage.SuspendLayout();
+            _colorsTableLayout.SuspendLayout();
+            _fontsTabPage.SuspendLayout();
+            _fontsTableLayout.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)_fontSizeNumeric).BeginInit();
+            _layoutTabPage.SuspendLayout();
+            _layoutTableLayout.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)_paddingNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)_marginNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)_borderRadiusNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)_emoteSizeNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)_badgeSizeNumeric).BeginInit();
+            _animationsTabPage.SuspendLayout();
+            _animationsTableLayout.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)_animationDurationNumeric).BeginInit();
+            _limitsTabPage.SuspendLayout();
+            _limitsTableLayout.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)_maxMessagesNumeric).BeginInit();
+            SuspendLayout();
+            // 
+            // _mainTabControl
+            // 
+            _mainTabControl.Controls.Add(_colorsTabPage);
+            _mainTabControl.Controls.Add(_fontsTabPage);
+            _mainTabControl.Controls.Add(_layoutTabPage);
+            _mainTabControl.Controls.Add(_animationsTabPage);
+            _mainTabControl.Controls.Add(_limitsTabPage);
+            _mainTabControl.Dock = DockStyle.Fill;
+            _mainTabControl.Location = new Point(0, 0);
+            _mainTabControl.Name = "_mainTabControl";
+            _mainTabControl.SelectedIndex = 0;
+            _mainTabControl.Size = new Size(549, 561);
+            _mainTabControl.TabIndex = 0;
+            // 
+            // _colorsTabPage
+            // 
+            _colorsTabPage.Controls.Add(_colorsTableLayout);
+            _colorsTabPage.Location = new Point(4, 24);
+            _colorsTabPage.Name = "_colorsTabPage";
+            _colorsTabPage.Padding = new Padding(3);
+            _colorsTabPage.Size = new Size(541, 533);
+            _colorsTabPage.TabIndex = 0;
+            _colorsTabPage.Text = "Цвета";
+            _colorsTabPage.UseVisualStyleBackColor = true;
+            // 
+            // _colorsTableLayout
+            // 
+            _colorsTableLayout.ColumnCount = 3;
+            _colorsTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _colorsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _colorsTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _colorsTableLayout.Controls.Add(_backgroundColorLabel, 0, 0);
+            _colorsTableLayout.Controls.Add(_backgroundColorButton, 1, 0);
+            _colorsTableLayout.Controls.Add(_backgroundColorResetButton, 2, 0);
+            _colorsTableLayout.Controls.Add(_textColorLabel, 0, 1);
+            _colorsTableLayout.Controls.Add(_textColorButton, 1, 1);
+            _colorsTableLayout.Controls.Add(_textColorResetButton, 2, 1);
+            _colorsTableLayout.Controls.Add(_usernameColorLabel, 0, 2);
+            _colorsTableLayout.Controls.Add(_usernameColorButton, 1, 2);
+            _colorsTableLayout.Controls.Add(_usernameColorResetButton, 2, 2);
+            _colorsTableLayout.Controls.Add(_systemMessageColorLabel, 0, 3);
+            _colorsTableLayout.Controls.Add(_systemMessageColorButton, 1, 3);
+            _colorsTableLayout.Controls.Add(_systemMessageColorResetButton, 2, 3);
+            _colorsTableLayout.Controls.Add(_timestampColorLabel, 0, 4);
+            _colorsTableLayout.Controls.Add(_timestampColorButton, 1, 4);
+            _colorsTableLayout.Controls.Add(_timestampColorResetButton, 2, 4);
+            _colorsTableLayout.Dock = DockStyle.Fill;
+            _colorsTableLayout.Location = new Point(3, 3);
+            _colorsTableLayout.Name = "_colorsTableLayout";
+            _colorsTableLayout.Padding = new Padding(10);
+            _colorsTableLayout.RowCount = 6;
+            _colorsTableLayout.RowStyles.Add(new RowStyle());
+            _colorsTableLayout.RowStyles.Add(new RowStyle());
+            _colorsTableLayout.RowStyles.Add(new RowStyle());
+            _colorsTableLayout.RowStyles.Add(new RowStyle());
+            _colorsTableLayout.RowStyles.Add(new RowStyle());
+            _colorsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _colorsTableLayout.Size = new Size(535, 527);
+            _colorsTableLayout.TabIndex = 0;
+            // 
+            // _backgroundColorLabel
+            // 
+            _backgroundColorLabel.AutoSize = true;
+            _backgroundColorLabel.Dock = DockStyle.Fill;
+            _backgroundColorLabel.Location = new Point(13, 13);
+            _backgroundColorLabel.Margin = new Padding(3);
+            _backgroundColorLabel.Name = "_backgroundColorLabel";
+            _backgroundColorLabel.Size = new Size(100, 25);
+            _backgroundColorLabel.TabIndex = 0;
+            _backgroundColorLabel.Text = "Цвет фона:";
+            _backgroundColorLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _backgroundColorButton
+            // 
+            _backgroundColorButton.Dock = DockStyle.Fill;
+            _backgroundColorButton.Location = new Point(119, 13);
+            _backgroundColorButton.Name = "_backgroundColorButton";
+            _backgroundColorButton.Size = new Size(357, 25);
+            _backgroundColorButton.TabIndex = 1;
+            _backgroundColorButton.UseVisualStyleBackColor = false;
+            _backgroundColorButton.Click += OnBackgroundColorButtonClicked;
+            // 
+            // _backgroundColorResetButton
+            // 
+            _backgroundColorResetButton.AutoSize = true;
+            _backgroundColorResetButton.Location = new Point(482, 13);
+            _backgroundColorResetButton.MinimumSize = new Size(40, 23);
+            _backgroundColorResetButton.Name = "_backgroundColorResetButton";
+            _backgroundColorResetButton.Size = new Size(40, 25);
+            _backgroundColorResetButton.TabIndex = 2;
+            _backgroundColorResetButton.Text = "↻";
+            _backgroundColorResetButton.UseVisualStyleBackColor = true;
+            _backgroundColorResetButton.Click += OnBackgroundColorResetButtonClicked;
+            // 
+            // _textColorLabel
+            // 
+            _textColorLabel.AutoSize = true;
+            _textColorLabel.Dock = DockStyle.Fill;
+            _textColorLabel.Location = new Point(13, 44);
+            _textColorLabel.Margin = new Padding(3);
+            _textColorLabel.Name = "_textColorLabel";
+            _textColorLabel.Size = new Size(100, 25);
+            _textColorLabel.TabIndex = 3;
+            _textColorLabel.Text = "Цвет текста:";
+            _textColorLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _textColorButton
+            // 
+            _textColorButton.Dock = DockStyle.Fill;
+            _textColorButton.Location = new Point(119, 44);
+            _textColorButton.Name = "_textColorButton";
+            _textColorButton.Size = new Size(357, 25);
+            _textColorButton.TabIndex = 4;
+            _textColorButton.UseVisualStyleBackColor = false;
+            _textColorButton.Click += OnTextColorButtonClicked;
+            // 
+            // _textColorResetButton
+            // 
+            _textColorResetButton.AutoSize = true;
+            _textColorResetButton.Location = new Point(482, 44);
+            _textColorResetButton.MinimumSize = new Size(40, 23);
+            _textColorResetButton.Name = "_textColorResetButton";
+            _textColorResetButton.Size = new Size(40, 25);
+            _textColorResetButton.TabIndex = 5;
+            _textColorResetButton.Text = "↻";
+            _textColorResetButton.UseVisualStyleBackColor = true;
+            _textColorResetButton.Click += OnTextColorResetButtonClicked;
+            // 
+            // _usernameColorLabel
+            // 
+            _usernameColorLabel.AutoSize = true;
+            _usernameColorLabel.Dock = DockStyle.Fill;
+            _usernameColorLabel.Location = new Point(13, 75);
+            _usernameColorLabel.Margin = new Padding(3);
+            _usernameColorLabel.Name = "_usernameColorLabel";
+            _usernameColorLabel.Size = new Size(100, 25);
+            _usernameColorLabel.TabIndex = 6;
+            _usernameColorLabel.Text = "Цвет имени:";
+            _usernameColorLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _usernameColorButton
+            // 
+            _usernameColorButton.Dock = DockStyle.Fill;
+            _usernameColorButton.Location = new Point(119, 75);
+            _usernameColorButton.Name = "_usernameColorButton";
+            _usernameColorButton.Size = new Size(357, 25);
+            _usernameColorButton.TabIndex = 7;
+            _usernameColorButton.UseVisualStyleBackColor = false;
+            _usernameColorButton.Click += OnUsernameColorButtonClicked;
+            // 
+            // _usernameColorResetButton
+            // 
+            _usernameColorResetButton.AutoSize = true;
+            _usernameColorResetButton.Location = new Point(482, 75);
+            _usernameColorResetButton.MinimumSize = new Size(40, 23);
+            _usernameColorResetButton.Name = "_usernameColorResetButton";
+            _usernameColorResetButton.Size = new Size(40, 25);
+            _usernameColorResetButton.TabIndex = 8;
+            _usernameColorResetButton.Text = "↻";
+            _usernameColorResetButton.UseVisualStyleBackColor = true;
+            _usernameColorResetButton.Click += OnUsernameColorResetButtonClicked;
+            // 
+            // _systemMessageColorLabel
+            // 
+            _systemMessageColorLabel.AutoSize = true;
+            _systemMessageColorLabel.Dock = DockStyle.Fill;
+            _systemMessageColorLabel.Location = new Point(13, 106);
+            _systemMessageColorLabel.Margin = new Padding(3);
+            _systemMessageColorLabel.Name = "_systemMessageColorLabel";
+            _systemMessageColorLabel.Size = new Size(100, 25);
+            _systemMessageColorLabel.TabIndex = 9;
+            _systemMessageColorLabel.Text = "Цвет системных:";
+            _systemMessageColorLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _systemMessageColorButton
+            // 
+            _systemMessageColorButton.Dock = DockStyle.Fill;
+            _systemMessageColorButton.Location = new Point(119, 106);
+            _systemMessageColorButton.Name = "_systemMessageColorButton";
+            _systemMessageColorButton.Size = new Size(357, 25);
+            _systemMessageColorButton.TabIndex = 10;
+            _systemMessageColorButton.UseVisualStyleBackColor = false;
+            _systemMessageColorButton.Click += OnSystemMessageColorButtonClicked;
+            // 
+            // _systemMessageColorResetButton
+            // 
+            _systemMessageColorResetButton.AutoSize = true;
+            _systemMessageColorResetButton.Location = new Point(482, 106);
+            _systemMessageColorResetButton.MinimumSize = new Size(40, 23);
+            _systemMessageColorResetButton.Name = "_systemMessageColorResetButton";
+            _systemMessageColorResetButton.Size = new Size(40, 25);
+            _systemMessageColorResetButton.TabIndex = 11;
+            _systemMessageColorResetButton.Text = "↻";
+            _systemMessageColorResetButton.UseVisualStyleBackColor = true;
+            _systemMessageColorResetButton.Click += OnSystemMessageColorResetButtonClicked;
+            // 
+            // _timestampColorLabel
+            // 
+            _timestampColorLabel.AutoSize = true;
+            _timestampColorLabel.Dock = DockStyle.Fill;
+            _timestampColorLabel.Location = new Point(13, 137);
+            _timestampColorLabel.Margin = new Padding(3);
+            _timestampColorLabel.Name = "_timestampColorLabel";
+            _timestampColorLabel.Size = new Size(100, 25);
+            _timestampColorLabel.TabIndex = 12;
+            _timestampColorLabel.Text = "Цвет времени:";
+            _timestampColorLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _timestampColorButton
+            // 
+            _timestampColorButton.Dock = DockStyle.Fill;
+            _timestampColorButton.Location = new Point(119, 137);
+            _timestampColorButton.Name = "_timestampColorButton";
+            _timestampColorButton.Size = new Size(357, 25);
+            _timestampColorButton.TabIndex = 13;
+            _timestampColorButton.UseVisualStyleBackColor = false;
+            _timestampColorButton.Click += OnTimestampColorButtonClicked;
+            // 
+            // _timestampColorResetButton
+            // 
+            _timestampColorResetButton.AutoSize = true;
+            _timestampColorResetButton.Location = new Point(482, 137);
+            _timestampColorResetButton.MinimumSize = new Size(40, 23);
+            _timestampColorResetButton.Name = "_timestampColorResetButton";
+            _timestampColorResetButton.Size = new Size(40, 25);
+            _timestampColorResetButton.TabIndex = 14;
+            _timestampColorResetButton.Text = "↻";
+            _timestampColorResetButton.UseVisualStyleBackColor = true;
+            _timestampColorResetButton.Click += OnTimestampColorResetButtonClicked;
+            // 
+            // _fontsTabPage
+            // 
+            _fontsTabPage.Controls.Add(_fontsTableLayout);
+            _fontsTabPage.Location = new Point(4, 24);
+            _fontsTabPage.Name = "_fontsTabPage";
+            _fontsTabPage.Padding = new Padding(3);
+            _fontsTabPage.Size = new Size(541, 533);
+            _fontsTabPage.TabIndex = 1;
+            _fontsTabPage.Text = "Шрифт";
+            _fontsTabPage.UseVisualStyleBackColor = true;
+            // 
+            // _fontsTableLayout
+            // 
+            _fontsTableLayout.ColumnCount = 3;
+            _fontsTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _fontsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _fontsTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _fontsTableLayout.Controls.Add(_fontFamilyLabel, 0, 0);
+            _fontsTableLayout.Controls.Add(_fontFamilyTextBox, 1, 0);
+            _fontsTableLayout.Controls.Add(_fontFamilyResetButton, 2, 0);
+            _fontsTableLayout.Controls.Add(_fontSizeLabel, 0, 1);
+            _fontsTableLayout.Controls.Add(_fontSizeNumeric, 1, 1);
+            _fontsTableLayout.Controls.Add(_fontSizeResetButton, 2, 1);
+            _fontsTableLayout.Controls.Add(_fontBoldCheckBox, 0, 2);
+            _fontsTableLayout.Dock = DockStyle.Fill;
+            _fontsTableLayout.Location = new Point(3, 3);
+            _fontsTableLayout.Name = "_fontsTableLayout";
+            _fontsTableLayout.Padding = new Padding(10);
+            _fontsTableLayout.RowCount = 4;
+            _fontsTableLayout.RowStyles.Add(new RowStyle());
+            _fontsTableLayout.RowStyles.Add(new RowStyle());
+            _fontsTableLayout.RowStyles.Add(new RowStyle());
+            _fontsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _fontsTableLayout.Size = new Size(535, 527);
+            _fontsTableLayout.TabIndex = 0;
+            // 
+            // _fontFamilyLabel
+            // 
+            _fontFamilyLabel.AutoSize = true;
+            _fontFamilyLabel.Dock = DockStyle.Fill;
+            _fontFamilyLabel.Location = new Point(13, 13);
+            _fontFamilyLabel.Margin = new Padding(3);
+            _fontFamilyLabel.Name = "_fontFamilyLabel";
+            _fontFamilyLabel.Size = new Size(118, 25);
+            _fontFamilyLabel.TabIndex = 0;
+            _fontFamilyLabel.Text = "Семейство шрифта:";
+            _fontFamilyLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _fontFamilyTextBox
+            // 
+            _fontFamilyTextBox.Dock = DockStyle.Fill;
+            _fontFamilyTextBox.Location = new Point(137, 13);
+            _fontFamilyTextBox.Name = "_fontFamilyTextBox";
+            _fontFamilyTextBox.Size = new Size(339, 23);
+            _fontFamilyTextBox.TabIndex = 1;
+            _fontFamilyTextBox.TextChanged += OnSettingChanged;
+            // 
+            // _fontFamilyResetButton
+            // 
+            _fontFamilyResetButton.AutoSize = true;
+            _fontFamilyResetButton.Location = new Point(482, 13);
+            _fontFamilyResetButton.MinimumSize = new Size(40, 23);
+            _fontFamilyResetButton.Name = "_fontFamilyResetButton";
+            _fontFamilyResetButton.Size = new Size(40, 25);
+            _fontFamilyResetButton.TabIndex = 2;
+            _fontFamilyResetButton.Text = "↻";
+            _fontFamilyResetButton.UseVisualStyleBackColor = true;
+            _fontFamilyResetButton.Click += OnFontFamilyResetButtonClicked;
+            // 
+            // _fontSizeLabel
+            // 
+            _fontSizeLabel.AutoSize = true;
+            _fontSizeLabel.Dock = DockStyle.Fill;
+            _fontSizeLabel.Location = new Point(13, 44);
+            _fontSizeLabel.Margin = new Padding(3);
+            _fontSizeLabel.Name = "_fontSizeLabel";
+            _fontSizeLabel.Size = new Size(118, 25);
+            _fontSizeLabel.TabIndex = 3;
+            _fontSizeLabel.Text = "Размер шрифта:";
+            _fontSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _fontSizeNumeric
+            // 
+            _fontSizeNumeric.Dock = DockStyle.Fill;
+            _fontSizeNumeric.Location = new Point(137, 44);
+            _fontSizeNumeric.Maximum = new decimal(new int[] { 72, 0, 0, 0 });
+            _fontSizeNumeric.Minimum = new decimal(new int[] { 8, 0, 0, 0 });
+            _fontSizeNumeric.MinimumSize = new Size(80, 0);
+            _fontSizeNumeric.Name = "_fontSizeNumeric";
+            _fontSizeNumeric.Size = new Size(339, 23);
+            _fontSizeNumeric.TabIndex = 4;
+            _fontSizeNumeric.Value = new decimal(new int[] { 14, 0, 0, 0 });
+            _fontSizeNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _fontSizeResetButton
+            // 
+            _fontSizeResetButton.AutoSize = true;
+            _fontSizeResetButton.Location = new Point(482, 44);
+            _fontSizeResetButton.MinimumSize = new Size(40, 23);
+            _fontSizeResetButton.Name = "_fontSizeResetButton";
+            _fontSizeResetButton.Size = new Size(40, 25);
+            _fontSizeResetButton.TabIndex = 5;
+            _fontSizeResetButton.Text = "↻";
+            _fontSizeResetButton.UseVisualStyleBackColor = true;
+            _fontSizeResetButton.Click += OnFontSizeResetButtonClicked;
+            // 
+            // _fontBoldCheckBox
+            // 
+            _fontBoldCheckBox.AutoSize = true;
+            _fontBoldCheckBox.Dock = DockStyle.Fill;
+            _fontBoldCheckBox.Location = new Point(13, 75);
+            _fontBoldCheckBox.Name = "_fontBoldCheckBox";
+            _fontBoldCheckBox.Size = new Size(118, 19);
+            _fontBoldCheckBox.TabIndex = 6;
+            _fontBoldCheckBox.Text = "Жирный шрифт";
+            _fontBoldCheckBox.UseVisualStyleBackColor = true;
+            _fontBoldCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _layoutTabPage
+            // 
+            _layoutTabPage.Controls.Add(_layoutTableLayout);
+            _layoutTabPage.Location = new Point(4, 24);
+            _layoutTabPage.Name = "_layoutTabPage";
+            _layoutTabPage.Padding = new Padding(3);
+            _layoutTabPage.Size = new Size(541, 533);
+            _layoutTabPage.TabIndex = 2;
+            _layoutTabPage.Text = "Размеры и отступы";
+            _layoutTabPage.UseVisualStyleBackColor = true;
+            // 
+            // _layoutTableLayout
+            // 
+            _layoutTableLayout.ColumnCount = 3;
+            _layoutTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _layoutTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _layoutTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _layoutTableLayout.Controls.Add(_paddingLabel, 0, 0);
+            _layoutTableLayout.Controls.Add(_paddingNumeric, 1, 0);
+            _layoutTableLayout.Controls.Add(_paddingResetButton, 2, 0);
+            _layoutTableLayout.Controls.Add(_marginLabel, 0, 1);
+            _layoutTableLayout.Controls.Add(_marginNumeric, 1, 1);
+            _layoutTableLayout.Controls.Add(_marginResetButton, 2, 1);
+            _layoutTableLayout.Controls.Add(_borderRadiusLabel, 0, 2);
+            _layoutTableLayout.Controls.Add(_borderRadiusNumeric, 1, 2);
+            _layoutTableLayout.Controls.Add(_borderRadiusResetButton, 2, 2);
+            _layoutTableLayout.Controls.Add(_emoteSizeLabel, 0, 3);
+            _layoutTableLayout.Controls.Add(_emoteSizeNumeric, 1, 3);
+            _layoutTableLayout.Controls.Add(_emoteSizeResetButton, 2, 3);
+            _layoutTableLayout.Controls.Add(_badgeSizeLabel, 0, 4);
+            _layoutTableLayout.Controls.Add(_badgeSizeNumeric, 1, 4);
+            _layoutTableLayout.Controls.Add(_badgeSizeResetButton, 2, 4);
+            _layoutTableLayout.Dock = DockStyle.Fill;
+            _layoutTableLayout.Location = new Point(3, 3);
+            _layoutTableLayout.Name = "_layoutTableLayout";
+            _layoutTableLayout.Padding = new Padding(10);
+            _layoutTableLayout.RowCount = 7;
+            _layoutTableLayout.RowStyles.Add(new RowStyle());
+            _layoutTableLayout.RowStyles.Add(new RowStyle());
+            _layoutTableLayout.RowStyles.Add(new RowStyle());
+            _layoutTableLayout.RowStyles.Add(new RowStyle());
+            _layoutTableLayout.RowStyles.Add(new RowStyle());
+            _layoutTableLayout.RowStyles.Add(new RowStyle());
+            _layoutTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _layoutTableLayout.Size = new Size(535, 527);
+            _layoutTableLayout.TabIndex = 0;
+            // 
+            // _paddingLabel
+            // 
+            _paddingLabel.AutoSize = true;
+            _paddingLabel.Dock = DockStyle.Fill;
+            _paddingLabel.Location = new Point(13, 13);
+            _paddingLabel.Margin = new Padding(3);
+            _paddingLabel.Name = "_paddingLabel";
+            _paddingLabel.Size = new Size(125, 25);
+            _paddingLabel.TabIndex = 0;
+            _paddingLabel.Text = "Внутренний отступ:";
+            _paddingLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _paddingNumeric
+            // 
+            _paddingNumeric.Dock = DockStyle.Fill;
+            _paddingNumeric.Location = new Point(144, 13);
+            _paddingNumeric.Maximum = new decimal(new int[] { 50, 0, 0, 0 });
+            _paddingNumeric.MinimumSize = new Size(80, 0);
+            _paddingNumeric.Name = "_paddingNumeric";
+            _paddingNumeric.Size = new Size(332, 23);
+            _paddingNumeric.TabIndex = 1;
+            _paddingNumeric.Value = new decimal(new int[] { 5, 0, 0, 0 });
+            _paddingNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _paddingResetButton
+            // 
+            _paddingResetButton.AutoSize = true;
+            _paddingResetButton.Location = new Point(482, 13);
+            _paddingResetButton.MinimumSize = new Size(40, 23);
+            _paddingResetButton.Name = "_paddingResetButton";
+            _paddingResetButton.Size = new Size(40, 25);
+            _paddingResetButton.TabIndex = 2;
+            _paddingResetButton.Text = "↻";
+            _paddingResetButton.UseVisualStyleBackColor = true;
+            _paddingResetButton.Click += OnPaddingResetButtonClicked;
+            // 
+            // _marginLabel
+            // 
+            _marginLabel.AutoSize = true;
+            _marginLabel.Dock = DockStyle.Fill;
+            _marginLabel.Location = new Point(13, 44);
+            _marginLabel.Margin = new Padding(3);
+            _marginLabel.Name = "_marginLabel";
+            _marginLabel.Size = new Size(125, 25);
+            _marginLabel.TabIndex = 3;
+            _marginLabel.Text = "Внешний отступ:";
+            _marginLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _marginNumeric
+            // 
+            _marginNumeric.Dock = DockStyle.Fill;
+            _marginNumeric.Location = new Point(144, 44);
+            _marginNumeric.Maximum = new decimal(new int[] { 50, 0, 0, 0 });
+            _marginNumeric.MinimumSize = new Size(80, 0);
+            _marginNumeric.Name = "_marginNumeric";
+            _marginNumeric.Size = new Size(332, 23);
+            _marginNumeric.TabIndex = 4;
+            _marginNumeric.Value = new decimal(new int[] { 5, 0, 0, 0 });
+            _marginNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _marginResetButton
+            // 
+            _marginResetButton.AutoSize = true;
+            _marginResetButton.Location = new Point(482, 44);
+            _marginResetButton.MinimumSize = new Size(40, 23);
+            _marginResetButton.Name = "_marginResetButton";
+            _marginResetButton.Size = new Size(40, 25);
+            _marginResetButton.TabIndex = 5;
+            _marginResetButton.Text = "↻";
+            _marginResetButton.UseVisualStyleBackColor = true;
+            _marginResetButton.Click += OnMarginResetButtonClicked;
+            // 
+            // _borderRadiusLabel
+            // 
+            _borderRadiusLabel.AutoSize = true;
+            _borderRadiusLabel.Dock = DockStyle.Fill;
+            _borderRadiusLabel.Location = new Point(13, 75);
+            _borderRadiusLabel.Margin = new Padding(3);
+            _borderRadiusLabel.Name = "_borderRadiusLabel";
+            _borderRadiusLabel.Size = new Size(125, 25);
+            _borderRadiusLabel.TabIndex = 6;
+            _borderRadiusLabel.Text = "Скругление углов:";
+            _borderRadiusLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _borderRadiusNumeric
+            // 
+            _borderRadiusNumeric.Dock = DockStyle.Fill;
+            _borderRadiusNumeric.Location = new Point(144, 75);
+            _borderRadiusNumeric.Maximum = new decimal(new int[] { 50, 0, 0, 0 });
+            _borderRadiusNumeric.MinimumSize = new Size(80, 0);
+            _borderRadiusNumeric.Name = "_borderRadiusNumeric";
+            _borderRadiusNumeric.Size = new Size(332, 23);
+            _borderRadiusNumeric.TabIndex = 7;
+            _borderRadiusNumeric.Value = new decimal(new int[] { 5, 0, 0, 0 });
+            _borderRadiusNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _borderRadiusResetButton
+            // 
+            _borderRadiusResetButton.AutoSize = true;
+            _borderRadiusResetButton.Location = new Point(482, 75);
+            _borderRadiusResetButton.MinimumSize = new Size(40, 23);
+            _borderRadiusResetButton.Name = "_borderRadiusResetButton";
+            _borderRadiusResetButton.Size = new Size(40, 25);
+            _borderRadiusResetButton.TabIndex = 8;
+            _borderRadiusResetButton.Text = "↻";
+            _borderRadiusResetButton.UseVisualStyleBackColor = true;
+            _borderRadiusResetButton.Click += OnBorderRadiusResetButtonClicked;
+            // 
+            // _emoteSizeLabel
+            // 
+            _emoteSizeLabel.AutoSize = true;
+            _emoteSizeLabel.Dock = DockStyle.Fill;
+            _emoteSizeLabel.Location = new Point(13, 106);
+            _emoteSizeLabel.Margin = new Padding(3);
+            _emoteSizeLabel.Name = "_emoteSizeLabel";
+            _emoteSizeLabel.Size = new Size(125, 25);
+            _emoteSizeLabel.TabIndex = 9;
+            _emoteSizeLabel.Text = "Размер эмодзи (px):";
+            _emoteSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _emoteSizeNumeric
+            // 
+            _emoteSizeNumeric.Dock = DockStyle.Fill;
+            _emoteSizeNumeric.Location = new Point(144, 106);
+            _emoteSizeNumeric.Maximum = new decimal(new int[] { 128, 0, 0, 0 });
+            _emoteSizeNumeric.Minimum = new decimal(new int[] { 16, 0, 0, 0 });
+            _emoteSizeNumeric.MinimumSize = new Size(80, 0);
+            _emoteSizeNumeric.Name = "_emoteSizeNumeric";
+            _emoteSizeNumeric.Size = new Size(332, 23);
+            _emoteSizeNumeric.TabIndex = 10;
+            _emoteSizeNumeric.Value = new decimal(new int[] { 28, 0, 0, 0 });
+            _emoteSizeNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _emoteSizeResetButton
+            // 
+            _emoteSizeResetButton.AutoSize = true;
+            _emoteSizeResetButton.Location = new Point(482, 106);
+            _emoteSizeResetButton.MinimumSize = new Size(40, 23);
+            _emoteSizeResetButton.Name = "_emoteSizeResetButton";
+            _emoteSizeResetButton.Size = new Size(40, 25);
+            _emoteSizeResetButton.TabIndex = 11;
+            _emoteSizeResetButton.Text = "↻";
+            _emoteSizeResetButton.UseVisualStyleBackColor = true;
+            _emoteSizeResetButton.Click += OnEmoteSizeResetButtonClicked;
+            // 
+            // _badgeSizeLabel
+            // 
+            _badgeSizeLabel.AutoSize = true;
+            _badgeSizeLabel.Dock = DockStyle.Fill;
+            _badgeSizeLabel.Location = new Point(13, 137);
+            _badgeSizeLabel.Margin = new Padding(3);
+            _badgeSizeLabel.Name = "_badgeSizeLabel";
+            _badgeSizeLabel.Size = new Size(125, 25);
+            _badgeSizeLabel.TabIndex = 12;
+            _badgeSizeLabel.Text = "Размер бэйджей (px):";
+            _badgeSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _badgeSizeNumeric
+            // 
+            _badgeSizeNumeric.Dock = DockStyle.Fill;
+            _badgeSizeNumeric.Location = new Point(144, 137);
+            _badgeSizeNumeric.Maximum = new decimal(new int[] { 72, 0, 0, 0 });
+            _badgeSizeNumeric.Minimum = new decimal(new int[] { 12, 0, 0, 0 });
+            _badgeSizeNumeric.MinimumSize = new Size(80, 0);
+            _badgeSizeNumeric.Name = "_badgeSizeNumeric";
+            _badgeSizeNumeric.Size = new Size(332, 23);
+            _badgeSizeNumeric.TabIndex = 13;
+            _badgeSizeNumeric.Value = new decimal(new int[] { 18, 0, 0, 0 });
+            _badgeSizeNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _badgeSizeResetButton
+            // 
+            _badgeSizeResetButton.AutoSize = true;
+            _badgeSizeResetButton.Location = new Point(482, 137);
+            _badgeSizeResetButton.MinimumSize = new Size(40, 23);
+            _badgeSizeResetButton.Name = "_badgeSizeResetButton";
+            _badgeSizeResetButton.Size = new Size(40, 25);
+            _badgeSizeResetButton.TabIndex = 14;
+            _badgeSizeResetButton.Text = "↻";
+            _badgeSizeResetButton.UseVisualStyleBackColor = true;
+            _badgeSizeResetButton.Click += OnBadgeSizeResetButtonClicked;
+            // 
+            // _animationsTabPage
+            // 
+            _animationsTabPage.Controls.Add(_animationsTableLayout);
+            _animationsTabPage.Location = new Point(4, 24);
+            _animationsTabPage.Name = "_animationsTabPage";
+            _animationsTabPage.Padding = new Padding(3);
+            _animationsTabPage.Size = new Size(541, 533);
+            _animationsTabPage.TabIndex = 3;
+            _animationsTabPage.Text = "Анимации";
+            _animationsTabPage.UseVisualStyleBackColor = true;
+            // 
+            // _animationsTableLayout
+            // 
+            _animationsTableLayout.ColumnCount = 3;
+            _animationsTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _animationsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _animationsTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _animationsTableLayout.Controls.Add(_enableAnimationsCheckBox, 0, 0);
+            _animationsTableLayout.Controls.Add(_enableAnimationsResetButton, 2, 0);
+            _animationsTableLayout.Controls.Add(_animationDurationLabel, 0, 1);
+            _animationsTableLayout.Controls.Add(_animationDurationNumeric, 1, 1);
+            _animationsTableLayout.Controls.Add(_animationDurationResetButton, 2, 1);
+            _animationsTableLayout.Controls.Add(_enableMessageFadeOutCheckBox, 0, 2);
+            _animationsTableLayout.Controls.Add(_enableMessageFadeOutResetButton, 2, 2);
+            _animationsTableLayout.Controls.Add(_messageLifetimeLabel, 0, 3);
+            _animationsTableLayout.Controls.Add(_messageLifetimeNumeric, 1, 3);
+            _animationsTableLayout.Controls.Add(_messageLifetimeResetButton, 2, 3);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationLabel, 0, 4);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationComboBox, 1, 4);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationResetButton, 2, 4);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationDurationLabel, 0, 5);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationDurationNumeric, 1, 5);
+            _animationsTableLayout.Controls.Add(_fadeOutAnimationDurationResetButton, 2, 5);
+            _animationsTableLayout.Controls.Add(_userMessageAnimationLabel, 0, 6);
+            _animationsTableLayout.Controls.Add(_userMessageAnimationComboBox, 1, 6);
+            _animationsTableLayout.Controls.Add(_userMessageAnimationResetButton, 2, 6);
+            _animationsTableLayout.Controls.Add(_botMessageAnimationLabel, 0, 7);
+            _animationsTableLayout.Controls.Add(_botMessageAnimationComboBox, 1, 7);
+            _animationsTableLayout.Controls.Add(_botMessageAnimationResetButton, 2, 7);
+            _animationsTableLayout.Controls.Add(_systemMessageAnimationLabel, 0, 8);
+            _animationsTableLayout.Controls.Add(_systemMessageAnimationComboBox, 1, 8);
+            _animationsTableLayout.Controls.Add(_systemMessageAnimationResetButton, 2, 8);
+            _animationsTableLayout.Controls.Add(_broadcasterMessageAnimationLabel, 0, 9);
+            _animationsTableLayout.Controls.Add(_broadcasterMessageAnimationComboBox, 1, 9);
+            _animationsTableLayout.Controls.Add(_broadcasterMessageAnimationResetButton, 2, 9);
+            _animationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationLabel, 0, 10);
+            _animationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationComboBox, 1, 10);
+            _animationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationResetButton, 2, 10);
+            _animationsTableLayout.Dock = DockStyle.Fill;
+            _animationsTableLayout.Location = new Point(3, 3);
+            _animationsTableLayout.Name = "_animationsTableLayout";
+            _animationsTableLayout.Padding = new Padding(10);
+            _animationsTableLayout.RowCount = 15;
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle());
+            _animationsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _animationsTableLayout.Size = new Size(535, 527);
+            _animationsTableLayout.TabIndex = 0;
+            // 
+            // _enableAnimationsCheckBox
+            // 
+            _enableAnimationsCheckBox.AutoSize = true;
+            _enableAnimationsCheckBox.Dock = DockStyle.Fill;
+            _enableAnimationsCheckBox.Location = new Point(13, 13);
+            _enableAnimationsCheckBox.Name = "_enableAnimationsCheckBox";
+            _enableAnimationsCheckBox.Size = new Size(140, 19);
+            _enableAnimationsCheckBox.TabIndex = 0;
+            _enableAnimationsCheckBox.Text = "Включить анимации";
+            _enableAnimationsCheckBox.UseVisualStyleBackColor = true;
+                        _enableAnimationsCheckBox.CheckedChanged += OnSettingChanged;
+            //
+            // _enableAnimationsResetButton
+            //
+            _enableAnimationsResetButton.AutoSize = true;
+            _enableAnimationsResetButton.Location = new Point(482, 13);
+            _enableAnimationsResetButton.MinimumSize = new Size(40, 23);
+            _enableAnimationsResetButton.Name = "_enableAnimationsResetButton";
+            _enableAnimationsResetButton.Size = new Size(40, 25);
+            _enableAnimationsResetButton.TabIndex = 1;
+            _enableAnimationsResetButton.Text = "↻";
+            _enableAnimationsResetButton.UseVisualStyleBackColor = true;
+            _enableAnimationsResetButton.Click += OnEnableAnimationsResetButtonClicked;
+            //
+            // _animationDurationLabel
+            // 
+            _animationDurationLabel.AutoSize = true;
+            _animationDurationLabel.Dock = DockStyle.Fill;
+            _animationDurationLabel.Location = new Point(13, 38);
+            _animationDurationLabel.Margin = new Padding(3);
+            _animationDurationLabel.Name = "_animationDurationLabel";
+            _animationDurationLabel.Size = new Size(140, 25);
+            _animationDurationLabel.TabIndex = 1;
+            _animationDurationLabel.Text = "Длительность (мс):";
+            _animationDurationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _animationDurationNumeric
+            // 
+            _animationDurationNumeric.Dock = DockStyle.Fill;
+            _animationDurationNumeric.Location = new Point(159, 38);
+            _animationDurationNumeric.Maximum = new decimal(new int[] { 2000, 0, 0, 0 });
+            _animationDurationNumeric.Minimum = new decimal(new int[] { 100, 0, 0, 0 });
+            _animationDurationNumeric.MinimumSize = new Size(80, 0);
+            _animationDurationNumeric.Name = "_animationDurationNumeric";
+            _animationDurationNumeric.Size = new Size(317, 23);
+            _animationDurationNumeric.TabIndex = 2;
+            _animationDurationNumeric.Value = new decimal(new int[] { 300, 0, 0, 0 });
+            _animationDurationNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _animationDurationResetButton
+            // 
+            _animationDurationResetButton.AutoSize = true;
+            _animationDurationResetButton.Location = new Point(482, 38);
+            _animationDurationResetButton.MinimumSize = new Size(40, 23);
+            _animationDurationResetButton.Name = "_animationDurationResetButton";
+            _animationDurationResetButton.Size = new Size(40, 25);
+            _animationDurationResetButton.TabIndex = 3;
+            _animationDurationResetButton.Text = "↻";
+            _animationDurationResetButton.UseVisualStyleBackColor = true;
+            _animationDurationResetButton.Click += OnAnimationDurationResetButtonClicked;
+            //
+            // _enableMessageFadeOutCheckBox
+            //
+            _enableMessageFadeOutCheckBox.AutoSize = true;
+            _enableMessageFadeOutCheckBox.Dock = DockStyle.Fill;
+            _enableMessageFadeOutCheckBox.Location = new Point(13, 75);
+            _enableMessageFadeOutCheckBox.Name = "_enableMessageFadeOutCheckBox";
+            _enableMessageFadeOutCheckBox.Size = new Size(140, 19);
+            _enableMessageFadeOutCheckBox.TabIndex = 3;
+            _enableMessageFadeOutCheckBox.Text = "Включить исчезание сообщений";
+            _enableMessageFadeOutCheckBox.UseVisualStyleBackColor = true;
+            _enableMessageFadeOutCheckBox.CheckedChanged += OnSettingChanged;
+            //
+            // _enableMessageFadeOutResetButton
+            //
+            _enableMessageFadeOutResetButton.AutoSize = true;
+            _enableMessageFadeOutResetButton.Location = new Point(482, 75);
+            _enableMessageFadeOutResetButton.MinimumSize = new Size(40, 23);
+            _enableMessageFadeOutResetButton.Name = "_enableMessageFadeOutResetButton";
+            _enableMessageFadeOutResetButton.Size = new Size(40, 25);
+            _enableMessageFadeOutResetButton.TabIndex = 4;
+            _enableMessageFadeOutResetButton.Text = "↻";
+            _enableMessageFadeOutResetButton.UseVisualStyleBackColor = true;
+            _enableMessageFadeOutResetButton.Click += OnEnableMessageFadeOutResetButtonClicked;
+            //
+            // _messageLifetimeLabel
+            //
+            _messageLifetimeLabel.AutoSize = true;
+            _messageLifetimeLabel.Dock = DockStyle.Fill;
+            _messageLifetimeLabel.Location = new Point(13, 100);
+            _messageLifetimeLabel.Margin = new Padding(3);
+            _messageLifetimeLabel.Name = "_messageLifetimeLabel";
+            _messageLifetimeLabel.Size = new Size(140, 25);
+            _messageLifetimeLabel.TabIndex = 4;
+            _messageLifetimeLabel.Text = "Время жизни сообщения (сек):";
+            _messageLifetimeLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _messageLifetimeNumeric
+            //
+            _messageLifetimeNumeric.Dock = DockStyle.Fill;
+            _messageLifetimeNumeric.Location = new Point(159, 100);
+            _messageLifetimeNumeric.Maximum = new decimal(new int[] { 300, 0, 0, 0 });
+            _messageLifetimeNumeric.Minimum = new decimal(new int[] { 5, 0, 0, 0 });
+            _messageLifetimeNumeric.MinimumSize = new Size(80, 0);
+            _messageLifetimeNumeric.Name = "_messageLifetimeNumeric";
+            _messageLifetimeNumeric.Size = new Size(317, 23);
+            _messageLifetimeNumeric.TabIndex = 5;
+            _messageLifetimeNumeric.Value = new decimal(new int[] { 30, 0, 0, 0 });
+            _messageLifetimeNumeric.ValueChanged += OnSettingChanged;
+            //
+            // _messageLifetimeResetButton
+            //
+            _messageLifetimeResetButton.AutoSize = true;
+            _messageLifetimeResetButton.Location = new Point(482, 100);
+            _messageLifetimeResetButton.MinimumSize = new Size(40, 23);
+            _messageLifetimeResetButton.Name = "_messageLifetimeResetButton";
+            _messageLifetimeResetButton.Size = new Size(40, 25);
+            _messageLifetimeResetButton.TabIndex = 6;
+            _messageLifetimeResetButton.Text = "↻";
+            _messageLifetimeResetButton.UseVisualStyleBackColor = true;
+            _messageLifetimeResetButton.Click += OnMessageLifetimeResetButtonClicked;
+            //
+            // _fadeOutAnimationLabel
+            //
+            _fadeOutAnimationLabel.AutoSize = true;
+            _fadeOutAnimationLabel.Dock = DockStyle.Fill;
+            _fadeOutAnimationLabel.Location = new Point(13, 125);
+            _fadeOutAnimationLabel.Margin = new Padding(3);
+            _fadeOutAnimationLabel.Name = "_fadeOutAnimationLabel";
+            _fadeOutAnimationLabel.Size = new Size(140, 25);
+            _fadeOutAnimationLabel.TabIndex = 7;
+            _fadeOutAnimationLabel.Text = "Анимация исчезания:";
+            _fadeOutAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _fadeOutAnimationComboBox
+            //
+            _fadeOutAnimationComboBox.Dock = DockStyle.Fill;
+            _fadeOutAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _fadeOutAnimationComboBox.FormattingEnabled = true;
+            _fadeOutAnimationComboBox.Location = new Point(159, 125);
+            _fadeOutAnimationComboBox.Name = "_fadeOutAnimationComboBox";
+            _fadeOutAnimationComboBox.Size = new Size(317, 23);
+            _fadeOutAnimationComboBox.TabIndex = 8;
+            //
+            // _fadeOutAnimationResetButton
+            //
+            _fadeOutAnimationResetButton.AutoSize = true;
+            _fadeOutAnimationResetButton.Location = new Point(482, 125);
+            _fadeOutAnimationResetButton.MinimumSize = new Size(40, 23);
+            _fadeOutAnimationResetButton.Name = "_fadeOutAnimationResetButton";
+            _fadeOutAnimationResetButton.Size = new Size(40, 25);
+            _fadeOutAnimationResetButton.TabIndex = 9;
+            _fadeOutAnimationResetButton.Text = "↻";
+            _fadeOutAnimationResetButton.UseVisualStyleBackColor = true;
+            _fadeOutAnimationResetButton.Click += OnFadeOutAnimationResetButtonClicked;
+            //
+            // _fadeOutAnimationDurationLabel
+            //
+            _fadeOutAnimationDurationLabel.AutoSize = true;
+            _fadeOutAnimationDurationLabel.Dock = DockStyle.Fill;
+            _fadeOutAnimationDurationLabel.Location = new Point(13, 125);
+            _fadeOutAnimationDurationLabel.Margin = new Padding(3);
+            _fadeOutAnimationDurationLabel.Name = "_fadeOutAnimationDurationLabel";
+            _fadeOutAnimationDurationLabel.Size = new Size(140, 25);
+            _fadeOutAnimationDurationLabel.TabIndex = 10;
+            _fadeOutAnimationDurationLabel.Text = "Длительность исчезания (мс):";
+            _fadeOutAnimationDurationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _fadeOutAnimationDurationNumeric
+            //
+            _fadeOutAnimationDurationNumeric.Dock = DockStyle.Fill;
+            _fadeOutAnimationDurationNumeric.Location = new Point(159, 125);
+            _fadeOutAnimationDurationNumeric.Maximum = new decimal(new int[] { 5000, 0, 0, 0 });
+            _fadeOutAnimationDurationNumeric.Minimum = new decimal(new int[] { 100, 0, 0, 0 });
+            _fadeOutAnimationDurationNumeric.MinimumSize = new Size(80, 0);
+            _fadeOutAnimationDurationNumeric.Name = "_fadeOutAnimationDurationNumeric";
+            _fadeOutAnimationDurationNumeric.Size = new Size(317, 23);
+            _fadeOutAnimationDurationNumeric.TabIndex = 11;
+            _fadeOutAnimationDurationNumeric.Value = new decimal(new int[] { 1000, 0, 0, 0 });
+            _fadeOutAnimationDurationNumeric.ValueChanged += OnSettingChanged;
+            //
+            // _fadeOutAnimationDurationResetButton
+            //
+            _fadeOutAnimationDurationResetButton.AutoSize = true;
+            _fadeOutAnimationDurationResetButton.Location = new Point(482, 125);
+            _fadeOutAnimationDurationResetButton.MinimumSize = new Size(40, 23);
+            _fadeOutAnimationDurationResetButton.Name = "_fadeOutAnimationDurationResetButton";
+            _fadeOutAnimationDurationResetButton.Size = new Size(40, 25);
+            _fadeOutAnimationDurationResetButton.TabIndex = 12;
+            _fadeOutAnimationDurationResetButton.Text = "↻";
+            _fadeOutAnimationDurationResetButton.UseVisualStyleBackColor = true;
+            _fadeOutAnimationDurationResetButton.Click += OnFadeOutAnimationDurationResetButtonClicked;
+            //
+            // _userMessageAnimationLabel
+            // 
+            _limitsTabPage.Controls.Add(_limitsTableLayout);
+            _limitsTabPage.Location = new Point(4, 24);
+            _limitsTabPage.Name = "_limitsTabPage";
+            _limitsTabPage.Padding = new Padding(3);
+            _limitsTabPage.Size = new Size(541, 533);
+            _limitsTabPage.TabIndex = 4;
+            _limitsTabPage.Text = "Прочее";
+            _limitsTabPage.UseVisualStyleBackColor = true;
+            // 
+            // _limitsTableLayout
+            // 
+            _limitsTableLayout.ColumnCount = 3;
+            _limitsTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _limitsTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _limitsTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _limitsTableLayout.Controls.Add(_maxMessagesLabel, 0, 0);
+            _limitsTableLayout.Controls.Add(_maxMessagesNumeric, 1, 0);
+            _limitsTableLayout.Controls.Add(_maxMessagesResetButton, 2, 0);
+            _limitsTableLayout.Controls.Add(_showTimestampCheckBox, 0, 1);
+            _limitsTableLayout.Controls.Add(_showUserTypeBordersCheckBox, 0, 2);
+            _limitsTableLayout.Controls.Add(_highlightFirstTimeUsersCheckBox, 0, 3);
+            _limitsTableLayout.Controls.Add(_highlightMentionsCheckBox, 0, 4);
+            _limitsTableLayout.Controls.Add(_enableMessageShadowsCheckBox, 0, 5);
+            _limitsTableLayout.Controls.Add(_enableSpecialEffectsCheckBox, 0, 6);
+            _limitsTableLayout.Controls.Add(_enableSmoothScrollCheckBox, 0, 7);
+            _limitsTableLayout.Controls.Add(_autoScrollEnabledCheckBox, 0, 8);
+            _limitsTableLayout.Controls.Add(_scrollAnimationDurationLabel, 0, 9);
+            _limitsTableLayout.Controls.Add(_scrollAnimationDurationNumeric, 1, 9);
+            _limitsTableLayout.Controls.Add(_scrollAnimationDurationResetButton, 2, 9);
+
+            _limitsTableLayout.Dock = DockStyle.Fill;
+            _limitsTableLayout.Location = new Point(3, 3);
+            _limitsTableLayout.Name = "_limitsTableLayout";
+            _limitsTableLayout.Padding = new Padding(10);
+            _limitsTableLayout.RowCount = 11;
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
+            _limitsTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _limitsTableLayout.Size = new Size(535, 527);
+            _limitsTableLayout.TabIndex = 0;
+            // 
+            // _maxMessagesLabel
+            // 
+            _maxMessagesLabel.AutoSize = true;
+            _maxMessagesLabel.Dock = DockStyle.Fill;
+            _maxMessagesLabel.Location = new Point(13, 13);
+            _maxMessagesLabel.Margin = new Padding(3);
+            _maxMessagesLabel.Name = "_maxMessagesLabel";
+            _maxMessagesLabel.Size = new Size(128, 25);
+            _maxMessagesLabel.TabIndex = 0;
+            _maxMessagesLabel.Text = "Макс. сообщений:";
+            _maxMessagesLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _maxMessagesNumeric
+            // 
+            _maxMessagesNumeric.Dock = DockStyle.Fill;
+            _maxMessagesNumeric.Location = new Point(147, 13);
+            _maxMessagesNumeric.Maximum = new decimal(new int[] { 200, 0, 0, 0 });
+            _maxMessagesNumeric.Minimum = new decimal(new int[] { 10, 0, 0, 0 });
+            _maxMessagesNumeric.MinimumSize = new Size(80, 0);
+            _maxMessagesNumeric.Name = "_maxMessagesNumeric";
+            _maxMessagesNumeric.Size = new Size(329, 23);
+            _maxMessagesNumeric.TabIndex = 1;
+            _maxMessagesNumeric.Value = new decimal(new int[] { 50, 0, 0, 0 });
+            _maxMessagesNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _maxMessagesResetButton
+            // 
+            _maxMessagesResetButton.AutoSize = true;
+            _maxMessagesResetButton.Location = new Point(482, 13);
+            _maxMessagesResetButton.MinimumSize = new Size(40, 23);
+            _maxMessagesResetButton.Name = "_maxMessagesResetButton";
+            _maxMessagesResetButton.Size = new Size(40, 25);
+            _maxMessagesResetButton.TabIndex = 2;
+            _maxMessagesResetButton.Text = "↻";
+            _maxMessagesResetButton.UseVisualStyleBackColor = true;
+            _maxMessagesResetButton.Click += OnMaxMessagesResetButtonClicked;
+            // 
+            // _showTimestampCheckBox
+            // 
+            _showTimestampCheckBox.AutoSize = true;
+            _showTimestampCheckBox.Dock = DockStyle.Fill;
+            _showTimestampCheckBox.Location = new Point(13, 44);
+            _showTimestampCheckBox.Name = "_showTimestampCheckBox";
+            _showTimestampCheckBox.Size = new Size(128, 19);
+            _showTimestampCheckBox.TabIndex = 3;
+            _showTimestampCheckBox.Text = "Показывать время";
+            _showTimestampCheckBox.UseVisualStyleBackColor = true;
+            _showTimestampCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _showUserTypeBordersCheckBox
+            // 
+            _showUserTypeBordersCheckBox.AutoSize = true;
+            _showUserTypeBordersCheckBox.Dock = DockStyle.Fill;
+            _showUserTypeBordersCheckBox.Location = new Point(13, 69);
+            _showUserTypeBordersCheckBox.Name = "_showUserTypeBordersCheckBox";
+            _showUserTypeBordersCheckBox.Size = new Size(200, 19);
+            _showUserTypeBordersCheckBox.TabIndex = 4;
+            _showUserTypeBordersCheckBox.Text = "Показывать рамки типов пользователей";
+            _showUserTypeBordersCheckBox.UseVisualStyleBackColor = true;
+            _showUserTypeBordersCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _highlightFirstTimeUsersCheckBox
+            // 
+            _highlightFirstTimeUsersCheckBox.AutoSize = true;
+            _highlightFirstTimeUsersCheckBox.Dock = DockStyle.Fill;
+            _highlightFirstTimeUsersCheckBox.Location = new Point(13, 94);
+            _highlightFirstTimeUsersCheckBox.Name = "_highlightFirstTimeUsersCheckBox";
+            _highlightFirstTimeUsersCheckBox.Size = new Size(200, 19);
+            _highlightFirstTimeUsersCheckBox.TabIndex = 5;
+            _highlightFirstTimeUsersCheckBox.Text = "Выделять новых пользователей";
+            _highlightFirstTimeUsersCheckBox.UseVisualStyleBackColor = true;
+            _highlightFirstTimeUsersCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _highlightMentionsCheckBox
+            // 
+            _highlightMentionsCheckBox.AutoSize = true;
+            _highlightMentionsCheckBox.Dock = DockStyle.Fill;
+            _highlightMentionsCheckBox.Location = new Point(13, 119);
+            _highlightMentionsCheckBox.Name = "_highlightMentionsCheckBox";
+            _highlightMentionsCheckBox.Size = new Size(200, 19);
+            _highlightMentionsCheckBox.TabIndex = 6;
+            _highlightMentionsCheckBox.Text = "Выделять упоминания (@имя)";
+            _highlightMentionsCheckBox.UseVisualStyleBackColor = true;
+            _highlightMentionsCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _enableMessageShadowsCheckBox
+            // 
+            _enableMessageShadowsCheckBox.AutoSize = true;
+            _enableMessageShadowsCheckBox.Dock = DockStyle.Fill;
+            _enableMessageShadowsCheckBox.Location = new Point(13, 144);
+            _enableMessageShadowsCheckBox.Name = "_enableMessageShadowsCheckBox";
+            _enableMessageShadowsCheckBox.Size = new Size(200, 19);
+            _enableMessageShadowsCheckBox.TabIndex = 7;
+            _enableMessageShadowsCheckBox.Text = "Включить тени сообщений";
+            _enableMessageShadowsCheckBox.UseVisualStyleBackColor = true;
+            _enableMessageShadowsCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _enableSpecialEffectsCheckBox
+            // 
+            _enableSpecialEffectsCheckBox.AutoSize = true;
+            _enableSpecialEffectsCheckBox.Dock = DockStyle.Fill;
+            _enableSpecialEffectsCheckBox.Location = new Point(13, 169);
+            _enableSpecialEffectsCheckBox.Name = "_enableSpecialEffectsCheckBox";
+            _enableSpecialEffectsCheckBox.Size = new Size(200, 19);
+            _enableSpecialEffectsCheckBox.TabIndex = 8;
+            _enableSpecialEffectsCheckBox.Text = "Включить спецэффекты";
+            _enableSpecialEffectsCheckBox.UseVisualStyleBackColor = true;
+            _enableSpecialEffectsCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _enableSmoothScrollCheckBox
+            // 
+            _enableSmoothScrollCheckBox.AutoSize = true;
+            _enableSmoothScrollCheckBox.Dock = DockStyle.Fill;
+            _enableSmoothScrollCheckBox.Location = new Point(13, 194);
+            _enableSmoothScrollCheckBox.Name = "_enableSmoothScrollCheckBox";
+            _enableSmoothScrollCheckBox.Size = new Size(200, 19);
+            _enableSmoothScrollCheckBox.TabIndex = 9;
+            _enableSmoothScrollCheckBox.Text = "Включить плавную прокрутку";
+            _enableSmoothScrollCheckBox.UseVisualStyleBackColor = true;
+            _enableSmoothScrollCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _autoScrollEnabledCheckBox
+            // 
+            _autoScrollEnabledCheckBox.AutoSize = true;
+            _autoScrollEnabledCheckBox.Dock = DockStyle.Fill;
+            _autoScrollEnabledCheckBox.Location = new Point(13, 219);
+            _autoScrollEnabledCheckBox.Name = "_autoScrollEnabledCheckBox";
+            _autoScrollEnabledCheckBox.Size = new Size(200, 19);
+            _autoScrollEnabledCheckBox.TabIndex = 10;
+            _autoScrollEnabledCheckBox.Text = "Автоматическая прокрутка";
+            _autoScrollEnabledCheckBox.UseVisualStyleBackColor = true;
+            _autoScrollEnabledCheckBox.CheckedChanged += OnSettingChanged;
+            // 
+            // _scrollAnimationDurationLabel
+            // 
+            _scrollAnimationDurationLabel.AutoSize = true;
+            _scrollAnimationDurationLabel.Dock = DockStyle.Fill;
+            _scrollAnimationDurationLabel.Location = new Point(13, 244);
+            _scrollAnimationDurationLabel.Margin = new Padding(3);
+            _scrollAnimationDurationLabel.Name = "_scrollAnimationDurationLabel";
+            _scrollAnimationDurationLabel.Size = new Size(200, 25);
+            _scrollAnimationDurationLabel.TabIndex = 11;
+            _scrollAnimationDurationLabel.Text = "Длительность анимации прокрутки (мс):";
+            _scrollAnimationDurationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // _scrollAnimationDurationNumeric
+            // 
+            _scrollAnimationDurationNumeric.Dock = DockStyle.Fill;
+            _scrollAnimationDurationNumeric.Location = new Point(219, 244);
+            _scrollAnimationDurationNumeric.Maximum = new decimal(new int[] { 2000, 0, 0, 0 });
+            _scrollAnimationDurationNumeric.Minimum = new decimal(new int[] { 100, 0, 0, 0 });
+            _scrollAnimationDurationNumeric.MinimumSize = new Size(80, 0);
+            _scrollAnimationDurationNumeric.Name = "_scrollAnimationDurationNumeric";
+            _scrollAnimationDurationNumeric.Size = new Size(257, 23);
+            _scrollAnimationDurationNumeric.TabIndex = 12;
+            _scrollAnimationDurationNumeric.Value = new decimal(new int[] { 300, 0, 0, 0 });
+            _scrollAnimationDurationNumeric.ValueChanged += OnSettingChanged;
+            // 
+            // _scrollAnimationDurationResetButton
+            // 
+            _scrollAnimationDurationResetButton.AutoSize = true;
+            _scrollAnimationDurationResetButton.Location = new Point(482, 244);
+            _scrollAnimationDurationResetButton.MinimumSize = new Size(40, 23);
+            _scrollAnimationDurationResetButton.Name = "_scrollAnimationDurationResetButton";
+            _scrollAnimationDurationResetButton.Size = new Size(40, 25);
+            _scrollAnimationDurationResetButton.TabIndex = 13;
+            _scrollAnimationDurationResetButton.Text = "↻";
+            _scrollAnimationDurationResetButton.UseVisualStyleBackColor = true;
+            _scrollAnimationDurationResetButton.Click += OnScrollAnimationDurationResetButtonClicked;
+
+
+            //
+            // _userMessageAnimationLabel
+            //
+            _userMessageAnimationLabel.AutoSize = true;
+            _userMessageAnimationLabel.Dock = DockStyle.Fill;
+            _userMessageAnimationLabel.Location = new Point(13, 13);
+            _userMessageAnimationLabel.Name = "_userMessageAnimationLabel";
+            _userMessageAnimationLabel.Size = new Size(200, 25);
+            _userMessageAnimationLabel.TabIndex = 0;
+            _userMessageAnimationLabel.Text = "Сообщения пользователей:";
+            _userMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _userMessageAnimationComboBox
+            //
+            _userMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _userMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _userMessageAnimationComboBox.FormattingEnabled = true;
+            _userMessageAnimationComboBox.Location = new Point(219, 13);
+            _userMessageAnimationComboBox.Name = "_userMessageAnimationComboBox";
+            _userMessageAnimationComboBox.Size = new Size(257, 23);
+            _userMessageAnimationComboBox.TabIndex = 1;
+            //
+            // _botMessageAnimationLabel
+            //
+            _botMessageAnimationLabel.AutoSize = true;
+            _botMessageAnimationLabel.Dock = DockStyle.Fill;
+            _botMessageAnimationLabel.Location = new Point(13, 44);
+            _botMessageAnimationLabel.Name = "_botMessageAnimationLabel";
+            _botMessageAnimationLabel.Size = new Size(200, 25);
+            _botMessageAnimationLabel.TabIndex = 2;
+            _botMessageAnimationLabel.Text = "Сообщения бота:";
+            _botMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _botMessageAnimationComboBox
+            //
+            _botMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _botMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _botMessageAnimationComboBox.FormattingEnabled = true;
+            _botMessageAnimationComboBox.Location = new Point(219, 44);
+            _botMessageAnimationComboBox.Name = "_botMessageAnimationComboBox";
+            _botMessageAnimationComboBox.Size = new Size(257, 23);
+            _botMessageAnimationComboBox.TabIndex = 3;
+            //
+            // _systemMessageAnimationLabel
+            //
+            _systemMessageAnimationLabel.AutoSize = true;
+            _systemMessageAnimationLabel.Dock = DockStyle.Fill;
+            _systemMessageAnimationLabel.Location = new Point(13, 75);
+            _systemMessageAnimationLabel.Name = "_systemMessageAnimationLabel";
+            _systemMessageAnimationLabel.Size = new Size(200, 25);
+            _systemMessageAnimationLabel.TabIndex = 4;
+            _systemMessageAnimationLabel.Text = "Системные сообщения:";
+            _systemMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _systemMessageAnimationComboBox
+            //
+            _systemMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _systemMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _systemMessageAnimationComboBox.FormattingEnabled = true;
+            _systemMessageAnimationComboBox.Location = new Point(219, 75);
+            _systemMessageAnimationComboBox.Name = "_systemMessageAnimationComboBox";
+            _systemMessageAnimationComboBox.Size = new Size(257, 23);
+            _systemMessageAnimationComboBox.TabIndex = 5;
+            //
+            // _broadcasterMessageAnimationLabel
+            //
+            _broadcasterMessageAnimationLabel.AutoSize = true;
+            _broadcasterMessageAnimationLabel.Dock = DockStyle.Fill;
+            _broadcasterMessageAnimationLabel.Location = new Point(13, 106);
+            _broadcasterMessageAnimationLabel.Name = "_broadcasterMessageAnimationLabel";
+            _broadcasterMessageAnimationLabel.Size = new Size(200, 25);
+            _broadcasterMessageAnimationLabel.TabIndex = 6;
+            _broadcasterMessageAnimationLabel.Text = "Сообщения стримера:";
+            _broadcasterMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _broadcasterMessageAnimationComboBox
+            //
+            _broadcasterMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _broadcasterMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _broadcasterMessageAnimationComboBox.FormattingEnabled = true;
+            _broadcasterMessageAnimationComboBox.Location = new Point(219, 106);
+            _broadcasterMessageAnimationComboBox.Name = "_broadcasterMessageAnimationComboBox";
+            _broadcasterMessageAnimationComboBox.Size = new Size(257, 23);
+            _broadcasterMessageAnimationComboBox.TabIndex = 7;
+            //
+            // _firstTimeUserMessageAnimationLabel
+            //
+            _firstTimeUserMessageAnimationLabel.AutoSize = true;
+            _firstTimeUserMessageAnimationLabel.Dock = DockStyle.Fill;
+            _firstTimeUserMessageAnimationLabel.Location = new Point(13, 137);
+            _firstTimeUserMessageAnimationLabel.Name = "_firstTimeUserMessageAnimationLabel";
+            _firstTimeUserMessageAnimationLabel.Size = new Size(200, 25);
+            _firstTimeUserMessageAnimationLabel.TabIndex = 8;
+            _firstTimeUserMessageAnimationLabel.Text = "Сообщения новичков:";
+            _firstTimeUserMessageAnimationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _firstTimeUserMessageAnimationComboBox
+            //
+            _firstTimeUserMessageAnimationComboBox.Dock = DockStyle.Fill;
+            _firstTimeUserMessageAnimationComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _firstTimeUserMessageAnimationComboBox.FormattingEnabled = true;
+            _firstTimeUserMessageAnimationComboBox.Location = new Point(219, 137);
+            _firstTimeUserMessageAnimationComboBox.Name = "_firstTimeUserMessageAnimationComboBox";
+            _firstTimeUserMessageAnimationComboBox.Size = new Size(257, 23);
+            _firstTimeUserMessageAnimationComboBox.TabIndex = 9;
+            //
+            // _userMessageAnimationResetButton
+            //
+            _userMessageAnimationResetButton.AutoSize = true;
+            _userMessageAnimationResetButton.Location = new Point(482, 150);
+            _userMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _userMessageAnimationResetButton.Name = "_userMessageAnimationResetButton";
+            _userMessageAnimationResetButton.Size = new Size(40, 25);
+            _userMessageAnimationResetButton.TabIndex = 10;
+            _userMessageAnimationResetButton.Text = "↻";
+            _userMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _userMessageAnimationResetButton.Click += OnUserMessageAnimationResetButtonClicked;
+            //
+            // _botMessageAnimationResetButton
+            //
+            _botMessageAnimationResetButton.AutoSize = true;
+            _botMessageAnimationResetButton.Location = new Point(482, 175);
+            _botMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _botMessageAnimationResetButton.Name = "_botMessageAnimationResetButton";
+            _botMessageAnimationResetButton.Size = new Size(40, 25);
+            _botMessageAnimationResetButton.TabIndex = 11;
+            _botMessageAnimationResetButton.Text = "↻";
+            _botMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _botMessageAnimationResetButton.Click += OnBotMessageAnimationResetButtonClicked;
+            //
+            // _systemMessageAnimationResetButton
+            //
+            _systemMessageAnimationResetButton.AutoSize = true;
+            _systemMessageAnimationResetButton.Location = new Point(482, 200);
+            _systemMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _systemMessageAnimationResetButton.Name = "_systemMessageAnimationResetButton";
+            _systemMessageAnimationResetButton.Size = new Size(40, 25);
+            _systemMessageAnimationResetButton.TabIndex = 12;
+            _systemMessageAnimationResetButton.Text = "↻";
+            _systemMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _systemMessageAnimationResetButton.Click += OnSystemMessageAnimationResetButtonClicked;
+            //
+            // _broadcasterMessageAnimationResetButton
+            //
+            _broadcasterMessageAnimationResetButton.AutoSize = true;
+            _broadcasterMessageAnimationResetButton.Location = new Point(482, 225);
+            _broadcasterMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _broadcasterMessageAnimationResetButton.Name = "_broadcasterMessageAnimationResetButton";
+            _broadcasterMessageAnimationResetButton.Size = new Size(40, 25);
+            _broadcasterMessageAnimationResetButton.TabIndex = 13;
+            _broadcasterMessageAnimationResetButton.Text = "↻";
+            _broadcasterMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _broadcasterMessageAnimationResetButton.Click += OnBroadcasterMessageAnimationResetButtonClicked;
+            //
+            // _firstTimeUserMessageAnimationResetButton
+            //
+            _firstTimeUserMessageAnimationResetButton.AutoSize = true;
+            _firstTimeUserMessageAnimationResetButton.Location = new Point(482, 250);
+            _firstTimeUserMessageAnimationResetButton.MinimumSize = new Size(40, 23);
+            _firstTimeUserMessageAnimationResetButton.Name = "_firstTimeUserMessageAnimationResetButton";
+            _firstTimeUserMessageAnimationResetButton.Size = new Size(40, 25);
+            _firstTimeUserMessageAnimationResetButton.TabIndex = 14;
+            _firstTimeUserMessageAnimationResetButton.Text = "↻";
+            _firstTimeUserMessageAnimationResetButton.UseVisualStyleBackColor = true;
+            _firstTimeUserMessageAnimationResetButton.Click += OnFirstTimeUserMessageAnimationResetButtonClicked;
+            //
+            // ObsChatSettingsControl
+            // 
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            Controls.Add(_mainTabControl);
+            Name = "ObsChatSettingsControl";
+            Size = new Size(549, 561);
+            _mainTabControl.ResumeLayout(false);
+            _colorsTabPage.ResumeLayout(false);
+            _colorsTableLayout.ResumeLayout(false);
+            _colorsTableLayout.PerformLayout();
+            _fontsTabPage.ResumeLayout(false);
+            _fontsTableLayout.ResumeLayout(false);
+            _fontsTableLayout.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)_fontSizeNumeric).EndInit();
+            _layoutTabPage.ResumeLayout(false);
+            _layoutTableLayout.ResumeLayout(false);
+            _layoutTableLayout.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)_paddingNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)_marginNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)_borderRadiusNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)_emoteSizeNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)_badgeSizeNumeric).EndInit();
+            _animationsTabPage.ResumeLayout(false);
+            _animationsTableLayout.ResumeLayout(false);
+            _animationsTableLayout.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)_animationDurationNumeric).EndInit();
+            _limitsTabPage.ResumeLayout(false);
+            _limitsTableLayout.ResumeLayout(false);
+            _limitsTableLayout.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)_maxMessagesNumeric).EndInit();
+
+
+            ResumeLayout(false);
+        }
+
+        #endregion
+
+        private TabControl _mainTabControl;
+        private TabPage _colorsTabPage;
+        private TableLayoutPanel _colorsTableLayout;
+        private Label _backgroundColorLabel;
+        private Button _backgroundColorButton;
+        private Button _backgroundColorResetButton;
+        private Label _textColorLabel;
+        private Button _textColorButton;
+        private Button _textColorResetButton;
+        private Label _usernameColorLabel;
+        private Button _usernameColorButton;
+        private Button _usernameColorResetButton;
+        private Label _systemMessageColorLabel;
+        private Button _systemMessageColorButton;
+        private Button _systemMessageColorResetButton;
+        private Label _timestampColorLabel;
+        private Button _timestampColorButton;
+        private Button _timestampColorResetButton;
+        private TabPage _fontsTabPage;
+        private TableLayoutPanel _fontsTableLayout;
+        private Label _fontFamilyLabel;
+        private TextBox _fontFamilyTextBox;
+        private Button _fontFamilyResetButton;
+        private Label _fontSizeLabel;
+        private NumericUpDown _fontSizeNumeric;
+        private Button _fontSizeResetButton;
+        private CheckBox _fontBoldCheckBox;
+        private TabPage _layoutTabPage;
+        private TableLayoutPanel _layoutTableLayout;
+        private Label _paddingLabel;
+        private NumericUpDown _paddingNumeric;
+        private Button _paddingResetButton;
+        private Label _marginLabel;
+        private NumericUpDown _marginNumeric;
+        private Button _marginResetButton;
+        private Label _borderRadiusLabel;
+        private NumericUpDown _borderRadiusNumeric;
+        private Button _borderRadiusResetButton;
+        private Label _emoteSizeLabel;
+        private NumericUpDown _emoteSizeNumeric;
+        private Button _emoteSizeResetButton;
+        private Label _badgeSizeLabel;
+        private NumericUpDown _badgeSizeNumeric;
+        private Button _badgeSizeResetButton;
+        private TabPage _animationsTabPage;
+        private TableLayoutPanel _animationsTableLayout;
+        private CheckBox _enableAnimationsCheckBox;
+        private Button _enableAnimationsResetButton;
+        private Label _animationDurationLabel;
+        private NumericUpDown _animationDurationNumeric;
+        private Button _animationDurationResetButton;
+        private TabPage _limitsTabPage;
+        private TableLayoutPanel _limitsTableLayout;
+        private Label _maxMessagesLabel;
+        private NumericUpDown _maxMessagesNumeric;
+        private Button _maxMessagesResetButton;
+        private CheckBox _showTimestampCheckBox;
+        private CheckBox _showUserTypeBordersCheckBox;
+        private CheckBox _highlightFirstTimeUsersCheckBox;
+        private CheckBox _highlightMentionsCheckBox;
+        private CheckBox _enableMessageShadowsCheckBox;
+        private CheckBox _enableSpecialEffectsCheckBox;
+        private CheckBox _enableSmoothScrollCheckBox;
+        private CheckBox _autoScrollEnabledCheckBox;
+        private Label _scrollAnimationDurationLabel;
+        private NumericUpDown _scrollAnimationDurationNumeric;
+        private Button _scrollAnimationDurationResetButton;
+        private CheckBox _enableMessageFadeOutCheckBox;
+        private Button _enableMessageFadeOutResetButton;
+        private Label _messageLifetimeLabel;
+        private NumericUpDown _messageLifetimeNumeric;
+        private Button _messageLifetimeResetButton;
+        private Label _fadeOutAnimationLabel;
+        private ComboBox _fadeOutAnimationComboBox;
+        private Button _fadeOutAnimationResetButton;
+        private Label _fadeOutAnimationDurationLabel;
+        private NumericUpDown _fadeOutAnimationDurationNumeric;
+        private Button _fadeOutAnimationDurationResetButton;
+
+        private Label _userMessageAnimationLabel;
+        private ComboBox _userMessageAnimationComboBox;
+        private Button _userMessageAnimationResetButton;
+        private Label _botMessageAnimationLabel;
+        private ComboBox _botMessageAnimationComboBox;
+        private Button _botMessageAnimationResetButton;
+        private Label _systemMessageAnimationLabel;
+        private ComboBox _systemMessageAnimationComboBox;
+        private Button _systemMessageAnimationResetButton;
+        private Label _broadcasterMessageAnimationLabel;
+        private ComboBox _broadcasterMessageAnimationComboBox;
+        private Button _broadcasterMessageAnimationResetButton;
+        private Label _firstTimeUserMessageAnimationLabel;
+        private ComboBox _firstTimeUserMessageAnimationComboBox;
+        private Button _firstTimeUserMessageAnimationResetButton;
+    }
+}

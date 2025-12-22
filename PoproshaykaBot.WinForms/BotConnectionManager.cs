@@ -1,52 +1,33 @@
-using System.ComponentModel;
+using PoproshaykaBot.WinForms.Services;
 
 namespace PoproshaykaBot.WinForms;
 
-public class BotConnectionManager : IDisposable
+public sealed class BotConnectionManager(Func<string, Bot> botFactory, TokenService tokenService) : IDisposable
 {
-    private readonly BackgroundWorker _backgroundWorker;
-    private readonly Func<string, Bot> _botFactory;
-    private readonly Func<Task<string?>> _tokenProvider;
+    private CancellationTokenSource? _cts;
+    private Task? _connectionTask;
     private bool _disposed;
-
-    public BotConnectionManager(Func<string, Bot> botFactory, Func<Task<string?>> tokenProvider)
-    {
-        _botFactory = botFactory;
-        _tokenProvider = tokenProvider;
-
-        _backgroundWorker = new()
-        {
-            WorkerReportsProgress = true,
-            WorkerSupportsCancellation = true,
-        };
-
-        _backgroundWorker.DoWork += BackgroundWorker_DoWork;
-        _backgroundWorker.ProgressChanged += BackgroundWorker_ProgressChanged;
-        _backgroundWorker.RunWorkerCompleted += BackgroundWorker_RunWorkerCompleted;
-    }
 
     public event EventHandler<BotConnectionResult>? ConnectionCompleted;
 
     public event EventHandler<string>? ProgressChanged;
 
-    public bool IsBusy => _backgroundWorker.IsBusy;
+    public bool IsBusy => _connectionTask is { IsCompleted: false };
 
     public void StartConnection()
     {
-        if (_backgroundWorker.IsBusy)
+        if (IsBusy)
         {
             throw new InvalidOperationException("Connection is already in progress");
         }
 
-        _backgroundWorker.RunWorkerAsync();
+        _cts = new();
+        _connectionTask = ConnectAsync(_cts.Token);
     }
 
     public void CancelConnection()
     {
-        if (_backgroundWorker.IsBusy)
-        {
-            _backgroundWorker.CancelAsync();
-        }
+        _cts?.Cancel();
     }
 
     public void Dispose()
@@ -56,124 +37,49 @@ public class BotConnectionManager : IDisposable
             return;
         }
 
-        _backgroundWorker.CancelAsync();
-        _backgroundWorker.Dispose();
+        CancelConnection();
+        _cts?.Dispose();
         _disposed = true;
     }
 
-    private void BackgroundWorker_DoWork(object? sender, DoWorkEventArgs args)
+    private async Task ConnectAsync(CancellationToken ct)
     {
-        if (sender is not BackgroundWorker worker)
-        {
-            return;
-        }
-
         try
         {
-            worker.ReportProgress(0, "Получение токена доступа...");
+            ReportProgress("Получение токена доступа...");
 
-            var accessTokenTask = _tokenProvider();
+            // TODO: Добавить CT в TokenService
+            var accessToken = await tokenService.GetAccessTokenAsync();
 
-            while (accessTokenTask.IsCompleted == false)
-            {
-                if (worker.CancellationPending)
-                {
-                    args.Cancel = true;
-                    return;
-                }
-
-                Thread.Sleep(100);
-            }
-
-            if (accessTokenTask.IsFaulted)
-            {
-                throw accessTokenTask.Exception?.InnerException ?? new Exception("Ошибка получения токена доступа");
-            }
-
-            var accessToken = accessTokenTask.Result;
+            ct.ThrowIfCancellationRequested();
 
             if (string.IsNullOrWhiteSpace(accessToken))
             {
                 throw new InvalidOperationException("Не удалось получить токен доступа. Проверьте настройки OAuth.");
             }
 
-            worker.ReportProgress(10, "Создание экземпляра бота...");
-            var bot = _botFactory(accessToken);
+            ReportProgress("Создание экземпляра бота...");
+            var bot = botFactory(accessToken);
 
-            worker.ReportProgress(20, "Инициализация подключения...");
-            args.Result = bot;
+            ReportProgress("Подключение к серверу Twitch...");
+            await bot.ConnectAsync(ct);
 
-            worker.ReportProgress(30, "Подключение к серверу Twitch...");
-
-            var cancellationTokenSource = new CancellationTokenSource();
-
-            var connectionTask = Task.Run(async () =>
-            {
-                await bot.ConnectAsync(cancellationTokenSource.Token);
-            }, cancellationTokenSource.Token);
-
-            while (connectionTask.IsCompleted == false)
-            {
-                if (worker.CancellationPending)
-                {
-                    cancellationTokenSource.Cancel();
-                    args.Cancel = true;
-                    return;
-                }
-
-                worker.ReportProgress(50, "Ожидание подтверждения подключения...");
-                Thread.Sleep(500);
-            }
-
-            if (connectionTask.IsFaulted)
-            {
-                throw connectionTask.Exception?.InnerException ?? new Exception("Неизвестная ошибка подключения");
-            }
-
-            worker.ReportProgress(90, "Подключение установлено успешно");
-            worker.ReportProgress(100, "Инициализация завершена");
+            ReportProgress("Подключение установлено успешно");
+            ConnectionCompleted?.Invoke(this, BotConnectionResult.Success(bot));
         }
         catch (OperationCanceledException)
         {
-            args.Cancel = true;
+            ConnectionCompleted?.Invoke(this, BotConnectionResult.Cancelled());
         }
         catch (Exception exception)
         {
-            args.Result = exception;
+            ConnectionCompleted?.Invoke(this, BotConnectionResult.Failed(exception));
         }
     }
 
-    private void BackgroundWorker_ProgressChanged(object? sender, ProgressChangedEventArgs args)
+    private void ReportProgress(string message)
     {
-        if (args.UserState is string message)
-        {
-            ProgressChanged?.Invoke(this, message);
-        }
-    }
-
-    private void BackgroundWorker_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs args)
-    {
-        BotConnectionResult result;
-
-        if (args.Cancelled)
-        {
-            result = BotConnectionResult.Cancelled();
-        }
-        else if (args.Error != null || args.Result is Exception)
-        {
-            var exception = args.Error ?? (Exception)args.Result!;
-            result = BotConnectionResult.Failed(exception);
-        }
-        else if (args.Result is Bot bot)
-        {
-            result = BotConnectionResult.Success(bot);
-        }
-        else
-        {
-            result = BotConnectionResult.Failed(new InvalidOperationException("Неожиданный результат операции подключения"));
-        }
-
-        ConnectionCompleted?.Invoke(this, result);
+        ProgressChanged?.Invoke(this, message);
     }
 }
 

@@ -1,16 +1,17 @@
+using PoproshaykaBot.WinForms.Settings;
 using System.Diagnostics;
-using System.Net;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace PoproshaykaBot.WinForms;
 
-public static class TwitchOAuthService
+public class TwitchOAuthService(SettingsManager settingsManager)
 {
-    public static event Action<string>? StatusChanged;
+    private TaskCompletionSource<string>? _authTcs;
 
-    public static async Task<string> StartOAuthFlowAsync(string clientId, string clientSecret, string[]? scopes = null, string? redirectUri = null)
+    public event Action<string>? StatusChanged;
+
+    public async Task<string> StartOAuthFlowAsync(string clientId, string clientSecret, string[]? scopes = null, string? redirectUri = null)
     {
         if (string.IsNullOrWhiteSpace(clientId))
         {
@@ -22,7 +23,7 @@ public static class TwitchOAuthService
             throw new ArgumentException("Секрет клиента не может быть пустым", nameof(clientSecret));
         }
 
-        var settings = SettingsManager.Current.Twitch;
+        var settings = settingsManager.Current.Twitch;
         scopes ??= settings.Scopes;
         redirectUri ??= settings.RedirectUri;
 
@@ -36,7 +37,7 @@ public static class TwitchOAuthService
                       + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
                       + $"&scope={Uri.EscapeDataString(scopeString)}";
 
-        var codeTask = StartLocalHttpServerAsync(redirectUri);
+        _authTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         try
         {
@@ -52,7 +53,8 @@ public static class TwitchOAuthService
         }
 
         StatusChanged?.Invoke("Ожидание авторизации пользователя...");
-        var authorizationCode = await codeTask;
+
+        var authorizationCode = await _authTcs.Task;
 
         if (string.IsNullOrEmpty(authorizationCode))
         {
@@ -66,7 +68,17 @@ public static class TwitchOAuthService
         return accessToken;
     }
 
-    public static async Task<bool> IsTokenValidAsync(string token)
+    public void SetAuthResult(string code)
+    {
+        _authTcs?.TrySetResult(code);
+    }
+
+    public void SetAuthError(Exception exception)
+    {
+        _authTcs?.TrySetException(exception);
+    }
+
+    public async Task<bool> IsTokenValidAsync(string token)
     {
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -87,7 +99,7 @@ public static class TwitchOAuthService
         }
     }
 
-    public static async Task<TokenResponse> RefreshTokenAsync(string clientId, string clientSecret, string refreshToken)
+    public async Task<TokenResponse> RefreshTokenAsync(string clientId, string clientSecret, string refreshToken)
     {
         if (string.IsNullOrWhiteSpace(refreshToken))
         {
@@ -127,7 +139,7 @@ public static class TwitchOAuthService
         return tokenResponse;
     }
 
-    public static async Task<string> GetValidTokenAsync(string clientId, string clientSecret, string currentToken, string refreshToken)
+    public async Task<string> GetValidTokenAsync(string clientId, string clientSecret, string currentToken, string refreshToken)
     {
         StatusChanged?.Invoke("Проверка действительности токена...");
 
@@ -146,7 +158,7 @@ public static class TwitchOAuthService
         return tokenResponse.AccessToken;
     }
 
-    private static async Task<string> ExchangeCodeForTokenAsync(string clientId, string clientSecret, string authorizationCode, string redirectUri)
+    private async Task<string> ExchangeCodeForTokenAsync(string clientId, string clientSecret, string authorizationCode, string redirectUri)
     {
         using var client = new HttpClient();
         var tokenUrl = "https://id.twitch.tv/oauth2/token";
@@ -164,7 +176,7 @@ public static class TwitchOAuthService
         var response = await client.PostAsync(tokenUrl, content);
         var jsonResponse = await response.Content.ReadAsStringAsync();
 
-        if (response.IsSuccessStatusCode == false)
+        if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException($"Ошибка получения токена: {jsonResponse}");
         }
@@ -176,81 +188,12 @@ public static class TwitchOAuthService
             throw new InvalidOperationException("Не удалось десериализовать ответ сервера");
         }
 
-        var settings = SettingsManager.Current;
+        var settings = settingsManager.Current;
         settings.Twitch.AccessToken = tokenResponse.AccessToken;
         settings.Twitch.RefreshToken = tokenResponse.RefreshToken;
-        SettingsManager.SaveSettings(settings);
+        settingsManager.SaveSettings(settings);
 
         return tokenResponse.AccessToken;
-    }
-
-    private static async Task<string> StartLocalHttpServerAsync(string redirectUri)
-    {
-        using var listener = new HttpListener();
-        listener.Prefixes.Add($"{redirectUri}/");
-
-        try
-        {
-            listener.Start();
-        }
-        catch (Exception exception)
-        {
-            throw new InvalidOperationException($"Не удалось запустить локальный сервер на {redirectUri}: {exception.Message}", exception);
-        }
-
-        try
-        {
-            var context = await listener.GetContextAsync();
-            var request = context.Request;
-            var response = context.Response;
-
-            var code = request.QueryString["code"];
-            var error = request.QueryString["error"];
-
-            if (string.IsNullOrEmpty(error) == false)
-            {
-                throw new InvalidOperationException($"Ошибка авторизации: {error}");
-            }
-
-            if (string.IsNullOrEmpty(code))
-            {
-                throw new InvalidOperationException("Не удалось получить код авторизации");
-            }
-
-            var responseString =
-                """
-                <!DOCTYPE html>
-                <html lang="ru">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Авторизация завершена</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
-                        .success { color: green; font-size: 18px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="success">
-                        <h2>✅ Авторизация завершена успешно!</h2>
-                        <p>Вы можете закрыть это окно и вернуться к приложению.</p>
-                    </div>
-                </body>
-                </html>
-                """;
-
-            var buffer = Encoding.UTF8.GetBytes(responseString);
-            response.ContentLength64 = buffer.Length;
-            response.ContentType = "text/html; charset=utf-8";
-            await response.OutputStream.WriteAsync(buffer.AsMemory());
-            response.Close();
-
-            return code;
-        }
-        finally
-        {
-            listener.Stop();
-        }
     }
 }
 

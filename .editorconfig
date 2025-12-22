@@ -331,3 +331,6 @@ dotnet_diagnostic.ca2000.severity = suggestion
 
 #CA1724: Имена типов не должны совпадать с пространствами имен
 dotnet_diagnostic.ca1724.severity = none
+
+# CS1591: Отсутствует комментарий XML для открытого видимого типа или члена
+dotnet_diagnostic.CS1591.severity = none

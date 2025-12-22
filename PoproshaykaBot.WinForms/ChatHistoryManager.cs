@@ -1,15 +1,27 @@
 using PoproshaykaBot.WinForms.Models;
+using PoproshaykaBot.WinForms.Settings;
 
 namespace PoproshaykaBot.WinForms;
 
-public class ChatHistoryManager
+public class ChatHistoryManager(SettingsManager settingsManager)
 {
-    private readonly List<ChatMessageData> _chatHistory = [];
+    private readonly object _sync = new();
+    private readonly LinkedList<ChatMessageData> _chatHistory = [];
     private readonly List<IChatDisplay> _chatDisplays = [];
 
     public void AddMessage(ChatMessageData chatMessage)
     {
-        _chatHistory.Add(chatMessage);
+        lock (_sync)
+        {
+            _chatHistory.AddLast(chatMessage);
+
+            var max = Math.Max(1, settingsManager.Current.Twitch.Infrastructure.ChatHistoryMaxItems);
+
+            if (_chatHistory.Count > max)
+            {
+                _chatHistory.RemoveFirst();
+            }
+        }
 
         foreach (var display in _chatDisplays.ToList())
         {
@@ -39,12 +51,18 @@ public class ChatHistoryManager
 
     public IEnumerable<ChatMessageData> GetHistory()
     {
-        return _chatHistory;
+        lock (_sync)
+        {
+            return _chatHistory.ToList();
+        }
     }
 
     public void ClearHistory()
     {
-        _chatHistory.Clear();
+        lock (_sync)
+        {
+            _chatHistory.Clear();
+        }
 
         foreach (var display in _chatDisplays.ToList())
         {
