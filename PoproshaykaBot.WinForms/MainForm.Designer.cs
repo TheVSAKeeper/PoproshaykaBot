@@ -32,7 +32,7 @@ partial class MainForm
         var resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
         components = new System.ComponentModel.Container();
         _mainTableLayoutPanel = new TableLayoutPanel();
-        _mainToolStrip = new ToolStrip();
+        _mainToolStrip = new ClickThroughToolStrip();
         _logsToolStripButton = new ToolStripButton();
         _chatToolStripButton = new ToolStripButton();
         _chatViewToolStripButton = new ToolStripButton();
@@ -298,7 +298,7 @@ partial class MainForm
     }
 
     private TableLayoutPanel _mainTableLayoutPanel;
-    private ToolStrip _mainToolStrip;
+    private ClickThroughToolStrip _mainToolStrip;
     private ToolStripButton _logsToolStripButton;
     private ToolStripButton _chatToolStripButton;
     private ToolStripButton _chatViewToolStripButton;
