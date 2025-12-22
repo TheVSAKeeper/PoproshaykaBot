@@ -114,7 +114,7 @@ public class StreamStatusManager : IAsyncDisposable
         }
     }
 
-    public async Task StopMonitoringAsync()
+    public async Task StopMonitoringAsync(CancellationToken cancellationToken = default)
     {
         if (_disposed)
         {
@@ -128,7 +128,17 @@ public class StreamStatusManager : IAsyncDisposable
             _reconnectCts?.Dispose();
             _reconnectCts = null;
             MonitoringLogMessage?.Invoke("Отключение от EventSub WebSocket...");
-            await _eventSubClient.DisconnectAsync();
+
+            if (cancellationToken == CancellationToken.None)
+            {
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await _eventSubClient.DisconnectAsync(timeoutCts.Token);
+            }
+            else
+            {
+                await _eventSubClient.DisconnectAsync(cancellationToken);
+            }
+
             CurrentStatus = StreamStatus.Unknown;
             MonitoringLogMessage?.Invoke("Мониторинг стрима остановлен");
         }

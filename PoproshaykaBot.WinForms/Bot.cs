@@ -204,13 +204,38 @@ public class Bot : IAsyncDisposable
 
                 _audienceTracker.ClearAll();
             }
-
-            await Task.Run(() => _client.Disconnect());
         }
 
-        await _streamStatusManager.StopMonitoringAsync();
+        using var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(3));
 
-        await Task.Run(() => _statisticsCollector.StopAsync());
+        try
+        {
+            var platformDisconnectTask = _client.IsConnected
+                ? Task.Run(() => _client.Disconnect(), cancellationTokenSource.Token)
+                : Task.CompletedTask;
+
+            var eventSubDisconnectTask = _streamStatusManager.StopMonitoringAsync(cancellationTokenSource.Token);
+
+            await Task.WhenAll(platformDisconnectTask, eventSubDisconnectTask)
+                .WaitAsync(cancellationTokenSource.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            LogMessage?.Invoke("Превышено время ожидания отключения. Принудительное завершение.");
+        }
+        catch (Exception exception)
+        {
+            LogMessage?.Invoke($"Ошибка при отключении: {exception.Message}");
+        }
+
+        try
+        {
+            await Task.Run(() => _statisticsCollector.StopAsync(), cancellationTokenSource.Token);
+        }
+        catch (Exception exception)
+        {
+            LogMessage?.Invoke($"Ошибка сохранения статистики: {exception.Message}");
+        }
     }
 
     public void StartBroadcast()

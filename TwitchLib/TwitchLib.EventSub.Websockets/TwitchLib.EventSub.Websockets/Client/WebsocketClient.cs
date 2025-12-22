@@ -77,13 +77,14 @@ namespace TwitchLib.EventSub.Websockets.Client
         /// <summary>
         /// Disconnect the Websocket client from its currently connected server
         /// </summary>
+        /// <param name="cancellationToken">Token to cancel the disconnect operation</param>
         /// <returns>true: if the disconnect was successful without errors false: if the client encountered an issue during the disconnect</returns>
-        public async Task<bool> DisconnectAsync()
+        public async Task<bool> DisconnectAsync(CancellationToken cancellationToken = default)
         {
             try
             {
                 if (_webSocket.State is WebSocketState.Open or WebSocketState.Connecting)
-                    await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+                    await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, cancellationToken);
 
                 return true;
             }
