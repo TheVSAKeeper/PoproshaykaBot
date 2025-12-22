@@ -40,7 +40,9 @@ public partial class MainForm : Form
         _connectionManager.ConnectionCompleted += OnConnectionCompleted;
 
         LoadSettings();
+        _broadcastInfoWidget.Setup(_settingsManager);
         UpdateBroadcastButtonState();
+        UpdateStreamStatus();
         InitializePanelVisibility();
 
         _chatHistoryManager.RegisterChatDisplay(_chatDisplay);
@@ -59,8 +61,6 @@ public partial class MainForm : Form
     {
         _connectionManager.CancelConnection();
         _connectionManager.Dispose();
-
-
 
         if (_юзерФорма is { IsDisposed: false })
         {
@@ -83,8 +83,6 @@ public partial class MainForm : Form
             case Keys.Alt | Keys.C:
                 OnToggleChatButtonClicked(_chatToolStripButton, EventArgs.Empty);
                 return true;
-
-
 
             case Keys.Alt | Keys.U:
                 OnOpenUserStatistics();
@@ -119,7 +117,7 @@ public partial class MainForm : Form
 
     private async void OnConnectButtonClicked(object? sender, EventArgs e)
     {
-        if (_isConnected == false)
+        if (!_isConnected)
         {
             if (_connectionManager.IsBusy)
             {
@@ -139,27 +137,6 @@ public partial class MainForm : Form
             {
                 await DisconnectBotAsync();
             }
-        }
-    }
-
-    private void OnBroadcastButtonClicked(object? sender, EventArgs e)
-    {
-        if (_bot == null)
-        {
-            return;
-        }
-
-        if (_bot.IsBroadcastActive)
-        {
-            _bot.StopBroadcast();
-            UpdateBroadcastButtonState();
-            AddLogMessage("Рассылка остановлена.");
-        }
-        else
-        {
-            _bot.StartBroadcast();
-            UpdateBroadcastButtonState();
-            AddLogMessage("Рассылка запущена.");
         }
     }
 
@@ -195,10 +172,12 @@ public partial class MainForm : Form
             _bot.LogMessage += OnBotLogMessage;
             _bot.ConnectionProgress += OnBotConnectionProgress;
             _bot.StreamStatusChanged += OnStreamStatusChanged;
+            _bot.BroadcastStateChanged += OnBroadcastStateChanged;
 
             _isConnected = true;
             _connectToolStripButton.Text = "🔌 Отключить";
             _connectToolStripButton.BackColor = Color.LightGreen;
+            _broadcastInfoWidget.Setup(_settingsManager, _bot);
             UpdateBroadcastButtonState();
             UpdateStreamStatus();
             AddLogMessage("Бот успешно подключен!");
@@ -260,20 +239,6 @@ public partial class MainForm : Form
         UpdateChatViewMode();
     }
 
-    private void OnOpenUserStatistics()
-    {
-        if (_юзерФорма == null || _юзерФорма.IsDisposed)
-        {
-            _юзерФорма = new(_statisticsCollector, _userRankService, _bot);
-            _юзерФорма.Show(this);
-        }
-        else
-        {
-            _юзерФорма.UpdateBotReference(_bot);
-            _юзерФорма.Focus();
-        }
-    }
-
     private void OnSettingsButtonClicked(object? sender, EventArgs e)
     {
         using var settingsForm = new SettingsForm(_settingsManager, _oauthService, _httpServer);
@@ -306,7 +271,13 @@ public partial class MainForm : Form
     private void OnStreamStatusChanged()
     {
         UpdateStreamStatus();
-        UpdateStreamInfo();
+    }
+
+    private void OnBroadcastStateChanged()
+    {
+        _broadcastInfoWidget.UpdateState();
+        UpdateBroadcastButtonState();
+        _settingsManager.SaveSettings(_settingsManager.Current);
     }
 
     private async void OnStreamInfoTimerTick(object? sender, EventArgs e)
@@ -320,6 +291,20 @@ public partial class MainForm : Form
         {
             await _bot.RefreshStreamInfoAsync();
             UpdateStreamInfo();
+        }
+    }
+
+    private void OnOpenUserStatistics()
+    {
+        if (_юзерФорма == null || _юзерФорма.IsDisposed)
+        {
+            _юзерФорма = new(_statisticsCollector, _userRankService, _bot);
+            _юзерФорма.Show(this);
+        }
+        else
+        {
+            _юзерФорма.UpdateBotReference(_bot);
+            _юзерФорма.Focus();
         }
     }
 
@@ -345,77 +330,31 @@ public partial class MainForm : Form
 
         if (_bot == null)
         {
-            _streamStatusLabel.Text = "Статус стрима: Неизвестен";
-            _streamStatusLabel.ForeColor = SystemColors.ControlText;
-            _streamInfoLabel.Text = "—";
+            _streamInfoWidget.UpdateStatus(StreamStatus.Unknown, null);
             return;
         }
 
-        var status = _bot.StreamStatus;
+        _streamInfoWidget.UpdateStatus(_bot.StreamStatus, _bot.CurrentStream);
 
-        switch (status)
+        if (_bot.StreamStatus == StreamStatus.Online)
         {
-            case StreamStatus.Online:
-                _streamStatusLabel.Text = "🔴 Стрим онлайн";
-                _streamStatusLabel.ForeColor = Color.Green;
-                UpdateStreamInfo();
-
-                if (_streamInfoTimer.Enabled == false)
-                {
-                    _streamInfoTimer.Start();
-                }
-
-                break;
-
-            case StreamStatus.Offline:
-                _streamStatusLabel.Text = "⚫ Стрим офлайн";
-                _streamStatusLabel.ForeColor = Color.Gray;
-                _streamInfoLabel.Text = "—";
-
-                if (_streamInfoTimer.Enabled)
-                {
-                    _streamInfoTimer.Stop();
-                }
-
-                break;
-
-            case StreamStatus.Unknown:
-            default:
-                _streamStatusLabel.Text = "Статус стрима: Неизвестен";
-                _streamStatusLabel.ForeColor = SystemColors.ControlText;
-                _streamInfoLabel.Text = "—";
-
-                if (_streamInfoTimer.Enabled)
-                {
-                    _streamInfoTimer.Stop();
-                }
-
-                break;
+            if (!_streamInfoTimer.Enabled)
+            {
+                _streamInfoTimer.Start();
+            }
+        }
+        else
+        {
+            if (_streamInfoTimer.Enabled)
+            {
+                _streamInfoTimer.Stop();
+            }
         }
     }
 
     private void UpdateStreamInfo()
     {
-        if (InvokeRequired)
-        {
-            Invoke(UpdateStreamInfo);
-            return;
-        }
-
-        if (_bot?.CurrentStream == null)
-        {
-            _streamInfoLabel.Text = "—";
-            return;
-        }
-
-        var info = _bot.CurrentStream;
-        var duration = DateTime.UtcNow - info.StartedAt;
-        var hours = (int)duration.TotalHours;
-        var minutes = duration.Minutes;
-
-        var title = string.IsNullOrWhiteSpace(info.Title) ? "Без названия" : info.Title;
-        var game = string.IsNullOrWhiteSpace(info.GameName) ? "Без категории" : info.GameName;
-        _streamInfoLabel.Text = $"Название: {title} | Игра: {game} | Зрителей: {info.ViewerCount} | В эфире: {hours:0}ч {minutes:00}м";
+        UpdateStreamStatus();
     }
 
     private void ClearChatHistory()
@@ -467,12 +406,12 @@ public partial class MainForm : Form
             _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
             _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
         }
-        else if (showLogs && showChat == false)
+        else if (showLogs && !showChat)
         {
             _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
             _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
         }
-        else if (showLogs == false && showChat)
+        else if (!showLogs && showChat)
         {
             _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
             _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
@@ -614,30 +553,7 @@ public partial class MainForm : Form
             return;
         }
 
-        var isBroadcastActive = _bot is { IsBroadcastActive: true };
-        var isConnected = _isConnected;
-
-        if (isConnected == false)
-        {
-            _broadcastToolStripButton.Enabled = false;
-            _broadcastToolStripButton.Text = "📡 Рассылка";
-            _broadcastToolStripButton.ToolTipText = "Рассылка недоступна (бот не подключен)";
-            _broadcastToolStripButton.BackColor = SystemColors.Control;
-        }
-        else if (isBroadcastActive)
-        {
-            _broadcastToolStripButton.Enabled = true;
-            _broadcastToolStripButton.Text = "📡 Стоп";
-            _broadcastToolStripButton.ToolTipText = "Остановить рассылку";
-            _broadcastToolStripButton.BackColor = Color.LightGreen;
-        }
-        else
-        {
-            _broadcastToolStripButton.Enabled = true;
-            _broadcastToolStripButton.Text = "📡 Старт";
-            _broadcastToolStripButton.ToolTipText = "Запустить рассылку";
-            _broadcastToolStripButton.BackColor = SystemColors.Control;
-        }
+        _broadcastInfoWidget.UpdateState();
     }
 
     private void ShowConnectionProgress(bool show)
@@ -672,6 +588,7 @@ public partial class MainForm : Form
             _bot.LogMessage -= OnBotLogMessage;
             _bot.ConnectionProgress -= OnBotConnectionProgress;
             _bot.StreamStatusChanged -= OnStreamStatusChanged;
+            _bot.BroadcastStateChanged -= OnBroadcastStateChanged;
 
             try
             {

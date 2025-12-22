@@ -40,12 +40,12 @@ partial class MainForm
         _toolStripSeparator1 = new ToolStripSeparator();
         _settingsToolStripButton = new ToolStripButton();
         _statsToolStripButton = new ToolStripButton();
-        _broadcastToolStripButton = new ToolStripButton();
         _connectionProgressBar = new ToolStripProgressBar();
         _connectionStatusLabel = new ToolStripStatusLabel();
         _statusStrip = new StatusStrip();
-        _streamStatusLabel = new Label();
-        _streamInfoLabel = new Label();
+        _widgetsTableLayoutPanel = new TableLayoutPanel();
+        _streamInfoWidget = new StreamInfoWidget();
+        _broadcastInfoWidget = new BroadcastInfoWidget();
         _contentTableLayoutPanel = new TableLayoutPanel();
         _logLabel = new Label();
         _chatDisplay = new ChatDisplay();
@@ -54,7 +54,7 @@ partial class MainForm
         _streamInfoTimer = new System.Windows.Forms.Timer(components);
         _mainTableLayoutPanel.SuspendLayout();
         _mainToolStrip.SuspendLayout();
-        _statusStrip.SuspendLayout();
+        _widgetsTableLayoutPanel.SuspendLayout();
         _contentTableLayoutPanel.SuspendLayout();
         SuspendLayout();
         // 
@@ -63,19 +63,17 @@ partial class MainForm
         _mainTableLayoutPanel.ColumnCount = 1;
         _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _mainTableLayoutPanel.Controls.Add(_mainToolStrip, 0, 0);
-        _mainTableLayoutPanel.Controls.Add(_streamStatusLabel, 0, 1);
-        _mainTableLayoutPanel.Controls.Add(_streamInfoLabel, 0, 2);
-        _mainTableLayoutPanel.Controls.Add(_contentTableLayoutPanel, 0, 3);
+        _mainTableLayoutPanel.Controls.Add(_widgetsTableLayoutPanel, 0, 1);
+        _mainTableLayoutPanel.Controls.Add(_contentTableLayoutPanel, 0, 2);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
         _mainTableLayoutPanel.Padding = new Padding(12);
-        _mainTableLayoutPanel.RowCount = 4;
+        _mainTableLayoutPanel.RowCount = 3;
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 140F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Size = new Size(785, 384);
+        _mainTableLayoutPanel.Size = new Size(785, 394);
         _mainTableLayoutPanel.TabIndex = 0;
         // 
         // _mainToolStrip
@@ -86,7 +84,7 @@ partial class MainForm
         _mainToolStrip.Dock = DockStyle.Fill;
         _mainToolStrip.GripStyle = ToolStripGripStyle.Hidden;
         _mainToolStrip.ImageScalingSize = new Size(24, 24);
-        _mainToolStrip.Items.AddRange(new ToolStripItem[] { _logsToolStripButton, _chatToolStripButton, _chatViewToolStripButton, _toolStripSeparator1, _connectToolStripButton, _settingsToolStripButton, _statsToolStripButton, _broadcastToolStripButton });
+        _mainToolStrip.Items.AddRange(new ToolStripItem[] { _logsToolStripButton, _chatToolStripButton, _chatViewToolStripButton, _toolStripSeparator1, _connectToolStripButton, _settingsToolStripButton, _statsToolStripButton });
         _mainToolStrip.Location = new Point(15, 12);
         _mainToolStrip.Name = "_mainToolStrip";
         _mainToolStrip.Padding = new Padding(5, 0, 5, 0);
@@ -155,14 +153,6 @@ partial class MainForm
         _statsToolStripButton.ToolTipText = "Открыть окно статистики (Alt+U)";
         _statsToolStripButton.Click += OnUserStatisticsButtonClicked;
         // 
-        // _broadcastToolStripButton
-        // 
-        _broadcastToolStripButton.DisplayStyle = ToolStripItemDisplayStyle.Text;
-        _broadcastToolStripButton.Enabled = false;
-        _broadcastToolStripButton.Name = "_broadcastToolStripButton";
-        _broadcastToolStripButton.Size = new Size(84, 37);
-        _broadcastToolStripButton.Text = "📡 Рассылка";
-        _broadcastToolStripButton.Click += OnBroadcastButtonClicked;
         // 
         // _connectionProgressBar
         // 
@@ -187,28 +177,33 @@ partial class MainForm
         _statusStrip.TabIndex = 1;
         _statusStrip.Text = "statusStrip1";
         // 
-        // _streamStatusLabel
         // 
-        _streamStatusLabel.AutoSize = true;
-        _streamStatusLabel.Dock = DockStyle.Fill;
-        _streamStatusLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        _streamStatusLabel.Location = new Point(15, 52);
-        _streamStatusLabel.Name = "_streamStatusLabel";
-        _streamStatusLabel.Size = new Size(755, 25);
-        _streamStatusLabel.TabIndex = 3;
-        _streamStatusLabel.Text = "Статус стрима: Неизвестен";
-        _streamStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // _widgetsTableLayoutPanel
         // 
-        // _streamInfoLabel
+        _widgetsTableLayoutPanel.ColumnCount = 2;
+        _widgetsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        _widgetsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        _widgetsTableLayoutPanel.Controls.Add(_streamInfoWidget, 0, 0);
+        _widgetsTableLayoutPanel.Controls.Add(_broadcastInfoWidget, 1, 0);
+        _widgetsTableLayoutPanel.Dock = DockStyle.Fill;
+        _widgetsTableLayoutPanel.Location = new Point(15, 52);
+        _widgetsTableLayoutPanel.Name = "_widgetsTableLayoutPanel";
+        _widgetsTableLayoutPanel.RowCount = 1;
+        _widgetsTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        _widgetsTableLayoutPanel.Size = new Size(755, 140);
+        _widgetsTableLayoutPanel.TabIndex = 3;
         // 
-        _streamInfoLabel.AutoSize = true;
-        _streamInfoLabel.Dock = DockStyle.Fill;
-        _streamInfoLabel.Location = new Point(15, 77);
-        _streamInfoLabel.Name = "_streamInfoLabel";
-        _streamInfoLabel.Size = new Size(755, 25);
-        _streamInfoLabel.TabIndex = 4;
-        _streamInfoLabel.Text = "—";
-        _streamInfoLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // _streamInfoWidget
+        // 
+        _streamInfoWidget.Dock = DockStyle.Fill;
+        _streamInfoWidget.Name = "_streamInfoWidget";
+        _streamInfoWidget.Size = new Size(371, 124);
+        // 
+        // _broadcastInfoWidget
+        // 
+        _broadcastInfoWidget.Dock = DockStyle.Fill;
+        _broadcastInfoWidget.Name = "_broadcastInfoWidget";
+        _broadcastInfoWidget.Size = new Size(372, 124);
         // 
         // _contentTableLayoutPanel
         // 
@@ -220,12 +215,12 @@ partial class MainForm
         _contentTableLayoutPanel.Controls.Add(_overlayWebView, 1, 0);
         _contentTableLayoutPanel.Controls.Add(_logTextBox, 0, 1);
         _contentTableLayoutPanel.Dock = DockStyle.Fill;
-        _contentTableLayoutPanel.Location = new Point(15, 102);
+        _contentTableLayoutPanel.Location = new Point(15, 172);
         _contentTableLayoutPanel.Name = "_contentTableLayoutPanel";
         _contentTableLayoutPanel.RowCount = 2;
         _contentTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
         _contentTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _contentTableLayoutPanel.Size = new Size(755, 270);
+        _contentTableLayoutPanel.Size = new Size(755, 200);
         _contentTableLayoutPanel.TabIndex = 5;
         // 
         // _logLabel
@@ -282,7 +277,7 @@ partial class MainForm
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(785, 406);
+        ClientSize = new Size(785, 536);
         Controls.Add(_mainTableLayoutPanel);
         Controls.Add(_statusStrip);
         Icon = (Icon)resources.GetObject("$this.Icon");
@@ -291,6 +286,7 @@ partial class MainForm
         Text = "Попрощайка Бот - Управление";
         _mainTableLayoutPanel.ResumeLayout(false);
         _mainTableLayoutPanel.PerformLayout();
+        _widgetsTableLayoutPanel.ResumeLayout(false);
         _mainToolStrip.ResumeLayout(false);
         _mainToolStrip.PerformLayout();
         _statusStrip.ResumeLayout(false);
@@ -310,13 +306,13 @@ partial class MainForm
     private ToolStripSeparator _toolStripSeparator1;
     private ToolStripButton _settingsToolStripButton;
     private ToolStripButton _statsToolStripButton;
-    private ToolStripButton _broadcastToolStripButton;
+    private TableLayoutPanel _widgetsTableLayoutPanel;
+    private StreamInfoWidget _streamInfoWidget;
+    private BroadcastInfoWidget _broadcastInfoWidget;
     private TableLayoutPanel _contentTableLayoutPanel;
     private ToolStripProgressBar _connectionProgressBar;
     private ToolStripStatusLabel _connectionStatusLabel;
     private StatusStrip _statusStrip;
-    private Label _streamStatusLabel;
-    private Label _streamInfoLabel;
     private Label _logLabel;
     private TextBox _logTextBox;
     private ChatDisplay _chatDisplay;

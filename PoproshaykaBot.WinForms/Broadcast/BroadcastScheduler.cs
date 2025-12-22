@@ -9,11 +9,15 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
     private TimeSpan _interval = TimeSpan.FromMinutes(15);
     private PeriodicTimer? _timer;
     private string? _channel;
-    private int _counter;
     private bool _disposed;
     private Task? _runnerTask;
 
+    public event Action? StateChanged;
+
     public bool IsActive => _runnerTask is { IsCompleted: false };
+    public int SentMessagesCount { get; private set; }
+
+    public DateTime? NextBroadcastTime { get; private set; }
 
     public void Start(string channel)
     {
@@ -23,18 +27,44 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
         }
 
         _channel = channel;
-        _counter = 0;
+        SentMessagesCount = 0;
 
         var minutes = Math.Max(1, settingsManager.Current.Twitch.AutoBroadcast.BroadcastIntervalMinutes);
         _interval = TimeSpan.FromMinutes(minutes);
         _timer ??= new(_interval);
+        NextBroadcastTime = DateTime.Now + _interval;
         _runnerTask ??= RunLoopAsync();
+
+        StateChanged?.Invoke();
     }
 
     public void Stop()
     {
         _channel = null;
-        _counter = 0;
+        SentMessagesCount = 0;
+        NextBroadcastTime = null;
+        StateChanged?.Invoke();
+    }
+
+    public Task ManualSendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_channel))
+        {
+            return Task.CompletedTask;
+        }
+
+        SentMessagesCount++;
+        var message = messageProvider(SentMessagesCount);
+
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return Task.CompletedTask;
+        }
+
+        messenger.Send(_channel, message);
+        StateChanged?.Invoke();
+
+        return Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
@@ -73,13 +103,17 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
                     continue;
                 }
 
-                _counter++;
-                var message = messageProvider(_counter);
+                SentMessagesCount++;
+                var message = messageProvider(SentMessagesCount);
 
-                if (string.IsNullOrWhiteSpace(message) == false)
+                if (string.IsNullOrWhiteSpace(message))
                 {
-                    messenger.Send(_channel, message);
+                    continue;
                 }
+
+                messenger.Send(_channel, message);
+                NextBroadcastTime = DateTime.Now + _interval;
+                StateChanged?.Invoke();
             }
         }
         catch (ObjectDisposedException)

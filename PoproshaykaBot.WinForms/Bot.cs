@@ -52,8 +52,12 @@ public class Bot : IAsyncDisposable
         _client.OnConnected += Client_OnConnected;
         _client.OnJoinedChannel += Сlient_OnJoinedChannel;
 
+        _broadcastScheduler.StateChanged += () => BroadcastStateChanged?.Invoke();
+
         AttachStreamStatusHandlers();
     }
+
+    public event Action? BroadcastStateChanged;
 
     public event Action<string>? Connected;
 
@@ -63,6 +67,21 @@ public class Bot : IAsyncDisposable
 
     public event Action? StreamStatusChanged;
 
+    public bool IsAutoBroadcastEnabled
+    {
+        get => _settings.AutoBroadcast.AutoBroadcastEnabled;
+        set
+        {
+            if (_settings.AutoBroadcast.AutoBroadcastEnabled == value)
+            {
+                return;
+            }
+
+            _settings.AutoBroadcast.AutoBroadcastEnabled = value;
+            BroadcastStateChanged?.Invoke();
+        }
+    }
+
     public UserMessagesManagementService MessagesManagementService { get; }
     public string? Channel { get; private set; }
 
@@ -70,6 +89,8 @@ public class Bot : IAsyncDisposable
 
     public StreamStatus StreamStatus => _streamStatusManager.CurrentStatus;
     public StreamInfo? CurrentStream => _streamStatusManager.CurrentStream;
+    public int BroadcastSentMessagesCount => _broadcastScheduler.SentMessagesCount;
+    public DateTime? NextBroadcastTime => _broadcastScheduler.NextBroadcastTime;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -128,13 +149,10 @@ public class Bot : IAsyncDisposable
             await _chatDecorations.LoadAsync();
             LogMessage?.Invoke($"Загружено {_chatDecorations.GlobalEmotesCount} глобальных эмодзи и {_chatDecorations.GlobalBadgeSetsCount} типов глобальных бэйджей");
 
-            if (_settings.AutoBroadcast.AutoBroadcastEnabled)
-            {
-                var streamMessage = "Инициализация мониторинга стрима...";
-                ConnectionProgress?.Invoke(streamMessage);
-                LogMessage?.Invoke(streamMessage);
-                await InitializeStreamMonitoringAsync();
-            }
+            var streamMessage = "Инициализация мониторинга стрима...";
+            ConnectionProgress?.Invoke(streamMessage);
+            LogMessage?.Invoke(streamMessage);
+            await InitializeStreamMonitoringAsync();
         }
         catch (OperationCanceledException)
         {
@@ -190,10 +208,7 @@ public class Bot : IAsyncDisposable
             await Task.Run(() => _client.Disconnect());
         }
 
-        if (_settings.AutoBroadcast.AutoBroadcastEnabled)
-        {
-            await _streamStatusManager.StopMonitoringAsync();
-        }
+        await _streamStatusManager.StopMonitoringAsync();
 
         await Task.Run(() => _statisticsCollector.StopAsync());
     }
@@ -211,6 +226,11 @@ public class Bot : IAsyncDisposable
     public void StopBroadcast()
     {
         _broadcastScheduler.Stop();
+    }
+
+    public Task ManualBroadcastSendAsync()
+    {
+        return _broadcastScheduler.ManualSendAsync();
     }
 
     public async ValueTask DisposeAsync()
@@ -312,11 +332,6 @@ public class Bot : IAsyncDisposable
         }
 
         Channel = e.Channel;
-
-        if (!_settings.AutoBroadcast.AutoBroadcastEnabled)
-        {
-            StartBroadcast();
-        }
 
         var connectionMessage = $"Подключен к каналу {e.Channel}";
         Console.WriteLine(connectionMessage);
