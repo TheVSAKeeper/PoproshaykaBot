@@ -138,7 +138,7 @@ public class StatisticsCollector : IAsyncDisposable
     public List<UserStatistics> GetTopUsers(int count = 10)
     {
         var topUsers = _userStatistics.Values
-            .OrderByDescending(x => x.MessageCount)
+            .OrderByDescending(x => x.TotalMessageCount)
             .Take(count)
             .ToList();
 
@@ -152,21 +152,17 @@ public class StatisticsCollector : IAsyncDisposable
 
     public bool IncrementUserMessages(string userId, ulong delta)
     {
-        return UpdateUserMessages(userId, delta, (stats, d) => stats.MessageCount += d);
+        return UpdateUserMessages(userId, delta, (stats, d) =>
+        {
+            stats.BonusMessageCount += d;
+        });
     }
 
     public bool DecrementUserMessages(string userId, ulong delta)
     {
         return UpdateUserMessages(userId, delta, (stats, d) =>
         {
-            if (stats.MessageCount >= d)
-            {
-                stats.MessageCount -= d;
-            }
-            else
-            {
-                stats.MessageCount = 0;
-            }
+            stats.ShtrafMessageCount += d;
         });
     }
 

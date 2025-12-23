@@ -34,14 +34,14 @@ public sealed class RankCommand(StatisticsCollector statistics, UserRankService 
         }
 
         var userStats = statistics.GetUserStatistics(targetUserId);
-        var messageCount = userStats?.MessageCount ?? 0;
+        var messageCount = userStats?.TotalMessageCount ?? 0;
         var rankDisplay = rankService.GetRankDisplay(messageCount);
 
         var text = $"{targetDisplayName}: {rankDisplay} ({FormatNumber(messageCount)} сообщений)";
         return OutgoingMessage.Reply(text, context.MessageId);
     }
 
-    private static string FormatNumber(ulong number)
+    private static string FormatNumber(long number)
     {
         return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
     }

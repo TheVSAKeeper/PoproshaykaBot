@@ -130,8 +130,8 @@ public partial class UserStatisticsForm : Form
                 return;
             }
 
-            var rank = _userRankService.GetRank(user.MessageCount);
-            e.Value = $"{rank.Emoji} {user.Name} [{rank.DisplayName}] ({user.MessageCount} 💬)";
+            var rank = _userRankService.GetRank(user.TotalMessageCount);
+            e.Value = $"{rank.Emoji} {user.Name} [{rank.DisplayName}] ({user.TotalMessageCount} 💬)";
         };
 
         numericIncrement.ValueChanged += (_, _) => UpdateActionState();
@@ -226,9 +226,9 @@ public partial class UserStatisticsForm : Form
 
         labelUserId.Text = $"🆔 ID: {user.UserId}";
         labelUserName.Text = $"👤 Имя: {user.Name}";
-        labelMessageCount.Text = $"💬 Сообщений: {user.MessageCount}";
+        labelMessageCount.Text = $"💬 Всего: {user.TotalMessageCount} (Написано: {user.MessageCount}, Бонус: {user.BonusMessageCount}, Штраф: {user.ShtrafMessageCount})";
 
-        var rank = _userRankService.GetRank(user.MessageCount);
+        var rank = _userRankService.GetRank(user.TotalMessageCount);
         labelChessPiece.Text = $"{rank.Emoji} {rank.DisplayName}";
     }
 
