@@ -71,7 +71,7 @@ partial class MainForm
         _mainTableLayoutPanel.Padding = new Padding(12);
         _mainTableLayoutPanel.RowCount = 3;
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 140F));
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         _mainTableLayoutPanel.Size = new Size(785, 394);
         _mainTableLayoutPanel.TabIndex = 0;
@@ -190,7 +190,7 @@ partial class MainForm
         _widgetsTableLayoutPanel.Name = "_widgetsTableLayoutPanel";
         _widgetsTableLayoutPanel.RowCount = 1;
         _widgetsTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _widgetsTableLayoutPanel.Size = new Size(755, 140);
+        _widgetsTableLayoutPanel.Size = new Size(755, 160);
         _widgetsTableLayoutPanel.TabIndex = 3;
         // 
         // _streamInfoWidget

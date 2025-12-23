@@ -78,6 +78,8 @@ public class Bot : IAsyncDisposable
             }
 
             _settings.AutoBroadcast.AutoBroadcastEnabled = value;
+            LogMessage?.Invoke($"Режим рассылки изменен на: {(value ? "Авто" : "Ручной")}");
+            UpdateStreamState(StreamStatus);
             BroadcastStateChanged?.Invoke();
         }
     }
