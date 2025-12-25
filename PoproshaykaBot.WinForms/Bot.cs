@@ -78,6 +78,8 @@ public class Bot : IAsyncDisposable
             }
 
             _settings.AutoBroadcast.AutoBroadcastEnabled = value;
+            LogMessage?.Invoke($"Режим рассылки изменен на: {(value ? "Авто" : "Ручной")}");
+            UpdateStreamState(StreamStatus);
             BroadcastStateChanged?.Invoke();
         }
     }
@@ -204,13 +206,38 @@ public class Bot : IAsyncDisposable
 
                 _audienceTracker.ClearAll();
             }
-
-            await Task.Run(() => _client.Disconnect());
         }
 
-        await _streamStatusManager.StopMonitoringAsync();
+        using var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(3));
 
-        await Task.Run(() => _statisticsCollector.StopAsync());
+        try
+        {
+            var platformDisconnectTask = _client.IsConnected
+                ? Task.Run(() => _client.Disconnect(), cancellationTokenSource.Token)
+                : Task.CompletedTask;
+
+            var eventSubDisconnectTask = _streamStatusManager.StopMonitoringAsync(cancellationTokenSource.Token);
+
+            await Task.WhenAll(platformDisconnectTask, eventSubDisconnectTask)
+                .WaitAsync(cancellationTokenSource.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            LogMessage?.Invoke("Превышено время ожидания отключения. Принудительное завершение.");
+        }
+        catch (Exception exception)
+        {
+            LogMessage?.Invoke($"Ошибка при отключении: {exception.Message}");
+        }
+
+        try
+        {
+            await Task.Run(() => _statisticsCollector.StopAsync(), cancellationTokenSource.Token);
+        }
+        catch (Exception exception)
+        {
+            LogMessage?.Invoke($"Ошибка сохранения статистики: {exception.Message}");
+        }
     }
 
     public void StartBroadcast()
@@ -361,16 +388,6 @@ public class Bot : IAsyncDisposable
 
         _chatHistoryManager.AddMessage(userMessage);
 
-        if (_settings.Messages.WelcomeEnabled && isFirstSeen)
-        {
-            var welcomeMessage = _audienceTracker.CreateWelcome(e.ChatMessage.DisplayName);
-
-            if (!string.IsNullOrWhiteSpace(welcomeMessage))
-            {
-                _messenger.Reply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
-            }
-        }
-
         var context = new CommandContext
         {
             Channel = e.ChatMessage.Channel,
@@ -380,8 +397,23 @@ public class Bot : IAsyncDisposable
             DisplayName = e.ChatMessage.DisplayName,
         };
 
-        if (!_commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response))
+        var isCommand = _commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response);
+
+        if (_settings.Messages.WelcomeEnabled && isFirstSeen)
         {
+            var welcomeMessage = _audienceTracker.CreateWelcome(e.ChatMessage.DisplayName);
+
+            if (!string.IsNullOrWhiteSpace(welcomeMessage))
+            {
+                if (isCommand && response != null)
+                {
+                    response = response with { Text = $"{welcomeMessage} {response.Text}" };
+                }
+                else if (!isCommand)
+                {
+                    _messenger.Reply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
+                }
+            }
         }
 
         if (response != null)

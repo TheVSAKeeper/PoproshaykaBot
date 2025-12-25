@@ -32,8 +32,8 @@ public sealed class TopUsersCommand(StatisticsCollector statistics, UserRankServ
         var parts = topUsers
             .Select((x, i) =>
             {
-                var rank = rankService.GetRank(x.MessageCount);
-                return $"{i + 1}. {rank.Emoji} {x.Name} ({FormatNumber(x.MessageCount)})";
+                var rank = rankService.GetRank(x.TotalMessageCount);
+                return $"{i + 1}. {rank.Emoji} {x.Name} ({FormatNumber(x.TotalMessageCount)})";
             })
             .ToList();
 
@@ -41,7 +41,7 @@ public sealed class TopUsersCommand(StatisticsCollector statistics, UserRankServ
         return OutgoingMessage.Normal(text);
     }
 
-    private static string FormatNumber(ulong number)
+    private static string FormatNumber(long number)
     {
         return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
     }

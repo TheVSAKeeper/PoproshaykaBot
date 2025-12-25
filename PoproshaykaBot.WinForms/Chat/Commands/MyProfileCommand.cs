@@ -41,16 +41,16 @@ public sealed class MyProfileCommand(StatisticsCollector statistics, UserRankSer
             return OutgoingMessage.Reply(msg, context.MessageId);
         }
 
-        var messageCount = FormatNumber(userStats.MessageCount);
+        var messageCount = FormatNumber(userStats.TotalMessageCount);
         var firstSeen = FormatDateTime(userStats.FirstSeen);
         var lastSeen = FormatDateTime(userStats.LastSeen);
-        var rankDisplay = rankService.GetRankDisplay(userStats.MessageCount);
+        var rankDisplay = rankService.GetRankDisplay(userStats.TotalMessageCount);
 
         var text = $"👤 {targetDisplayName} {rankDisplay} | {messageCount} мсг | С нами с: {firstSeen} | В чате: {lastSeen} МСК";
         return OutgoingMessage.Reply(text, context.MessageId);
     }
 
-    private static string FormatNumber(ulong number)
+    private static string FormatNumber(long number)
     {
         return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
     }

@@ -114,7 +114,7 @@ public class StreamStatusManager : IAsyncDisposable
         }
     }
 
-    public async Task StopMonitoringAsync()
+    public async Task StopMonitoringAsync(CancellationToken cancellationToken = default)
     {
         if (_disposed)
         {
@@ -128,7 +128,17 @@ public class StreamStatusManager : IAsyncDisposable
             _reconnectCts?.Dispose();
             _reconnectCts = null;
             MonitoringLogMessage?.Invoke("Отключение от EventSub WebSocket...");
-            await _eventSubClient.DisconnectAsync();
+
+            if (cancellationToken == CancellationToken.None)
+            {
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await _eventSubClient.DisconnectAsync(timeoutCts.Token);
+            }
+            else
+            {
+                await _eventSubClient.DisconnectAsync(cancellationToken);
+            }
+
             CurrentStatus = StreamStatus.Unknown;
             MonitoringLogMessage?.Invoke("Мониторинг стрима остановлен");
         }
@@ -249,7 +259,37 @@ public class StreamStatusManager : IAsyncDisposable
     private async Task OnStreamOnline(object sender, StreamOnlineArgs e)
     {
         MonitoringLogMessage?.Invoke($"🔴 Стрим запущен (EventSub): {e.Notification.Payload.Event.Type}");
-        await RefreshCurrentStatusAsync();
+
+        if (CurrentStatus != StreamStatus.Online)
+        {
+            CurrentStatus = StreamStatus.Online;
+            StreamStatusChanged?.Invoke(CurrentStatus);
+        }
+
+        _ = Task.Run(async () =>
+        {
+            for (var i = 0; i < 6; i++)
+            {
+                await RefreshCurrentStatusAsync();
+
+                if (CurrentStream != null)
+                {
+                    MonitoringLogMessage?.Invoke("Метаданные стрима успешно получены из API");
+                    StreamStatusChanged?.Invoke(CurrentStatus);
+                    break;
+                }
+
+                if (CurrentStatus != StreamStatus.Online)
+                {
+                    break;
+                }
+
+                var delaySeconds = 5 * (i + 1);
+                MonitoringLogMessage?.Invoke($"Метаданные еще не доступны в API. Повтор через {delaySeconds} сек (попытка {i + 1}/6)...");
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+            }
+        });
+
         StreamStarted?.Invoke(e);
     }
 
@@ -319,7 +359,11 @@ public class StreamStatusManager : IAsyncDisposable
             var isOnline = response?.Streams != null && response.Streams.Length > 0;
             var newStatus = isOnline ? StreamStatus.Online : StreamStatus.Offline;
 
-            if (CurrentStatus != newStatus)
+            if (CurrentStatus == StreamStatus.Online && newStatus == StreamStatus.Offline)
+            {
+                // API тормозит
+            }
+            else if (CurrentStatus != newStatus)
             {
                 CurrentStatus = newStatus;
                 StreamStatusChanged?.Invoke(CurrentStatus);

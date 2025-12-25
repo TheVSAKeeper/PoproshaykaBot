@@ -1,4 +1,4 @@
-﻿namespace PoproshaykaBot.WinForms;
+namespace PoproshaykaBot.WinForms;
 
 sealed partial class BroadcastInfoWidget
 {
@@ -24,6 +24,7 @@ sealed partial class BroadcastInfoWidget
         _toggleButton = new Button();
         _modeToggleButton = new Button();
         _sendNowButton = new Button();
+        _toolTip = new ToolTip();
         _mainTableLayoutPanel.SuspendLayout();
         SuspendLayout();
         // 
@@ -49,8 +50,7 @@ sealed partial class BroadcastInfoWidget
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Size = new Size(254, 128);
+        _mainTableLayoutPanel.Size = new Size(254, 150);
         _mainTableLayoutPanel.TabIndex = 0;
         // 
         // _headerLabel
@@ -105,7 +105,7 @@ sealed partial class BroadcastInfoWidget
         _nextTimeLabel.Dock = DockStyle.Fill;
         _nextTimeLabel.Location = new Point(8, 120);
         _nextTimeLabel.Name = "_nextTimeLabel";
-        _nextTimeLabel.Size = new Size(148, 3);
+        _nextTimeLabel.Size = new Size(148, 25);
         _nextTimeLabel.TabIndex = 4;
         _nextTimeLabel.Text = "Следующая: —";
         _nextTimeLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -150,7 +150,7 @@ sealed partial class BroadcastInfoWidget
         BorderStyle = BorderStyle.FixedSingle;
         Controls.Add(_mainTableLayoutPanel);
         Name = "BroadcastInfoWidget";
-        Size = new Size(254, 128);
+        Size = new Size(254, 150);
         _mainTableLayoutPanel.ResumeLayout(false);
         _mainTableLayoutPanel.PerformLayout();
         ResumeLayout(false);
@@ -164,5 +164,6 @@ sealed partial class BroadcastInfoWidget
     private Button _toggleButton;
     private Button _modeToggleButton;
     private Button _sendNowButton;
+    private ToolTip _toolTip;
     private TableLayoutPanel _mainTableLayoutPanel;
 }

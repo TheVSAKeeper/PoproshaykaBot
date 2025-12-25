@@ -313,17 +313,17 @@ namespace TwitchLib.EventSub.Websockets
         /// Event that triggers on "user.whisper.message" notifications
         /// </summary>
         public event AsyncEventHandler<UserWhisperMessageArgs>? UserWhisperMessage;
-        
+
         /// <summary>
         /// Event that triggers on "channel.shared_chat.begin" notifications
         /// </summary>
         public event AsyncEventHandler<ChannelSharedChatSessionBeginArgs>? ChannelSharedChatSessionBegin;
-        
+
         /// <summary>
         /// Event that triggers on "channel.shared_chat.update" notifications
         /// </summary>
         public event AsyncEventHandler<ChannelSharedChatSessionUpdateArgs>? ChannelSharedChatSessionUpdate;
-        
+
         /// <summary>
         /// Event that triggers on "channel.shared_chat.end" notifications
         /// </summary>
@@ -451,11 +451,12 @@ namespace TwitchLib.EventSub.Websockets
         /// <summary>
         /// Disconnect from Twitch EventSub Websockets
         /// </summary>
+        /// <param name="cancellationToken">Token to cancel the disconnect operation</param>
         /// <returns>true: Disconnect successful false: Disconnect failed</returns>
-        public async Task<bool> DisconnectAsync()
+        public async Task<bool> DisconnectAsync(CancellationToken cancellationToken = default)
         {
             _cts?.Cancel();
-            return await _websocketClient.DisconnectAsync();
+            return await _websocketClient.DisconnectAsync(cancellationToken);
         }
 
         /// <summary>

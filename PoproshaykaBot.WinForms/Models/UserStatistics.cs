@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PoproshaykaBot.WinForms.Models;
 
 public class UserStatistics
@@ -7,6 +9,13 @@ public class UserStatistics
     public string Name { get; set; } = string.Empty;
 
     public ulong MessageCount { get; set; }
+
+    public ulong ShtrafMessageCount { get; set; }
+
+    public ulong BonusMessageCount { get; set; }
+
+    [JsonIgnore]
+    public long TotalMessageCount => (long)MessageCount + (long)BonusMessageCount - (long)ShtrafMessageCount;
 
     public DateTime FirstSeen { get; set; } = DateTime.UtcNow;
 

@@ -11,10 +11,11 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
     private string? _channel;
     private bool _disposed;
     private Task? _runnerTask;
+    private CancellationTokenSource? _stopCts;
 
     public event Action? StateChanged;
 
-    public bool IsActive => _runnerTask is { IsCompleted: false };
+    public bool IsActive => _runnerTask is { IsCompleted: false } && _stopCts is { IsCancellationRequested: false };
     public int SentMessagesCount { get; private set; }
 
     public DateTime? NextBroadcastTime { get; private set; }
@@ -31,9 +32,16 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
 
         var minutes = Math.Max(1, settingsManager.Current.Twitch.AutoBroadcast.BroadcastIntervalMinutes);
         _interval = TimeSpan.FromMinutes(minutes);
-        _timer ??= new(_interval);
+
+        _stopCts?.Cancel();
+        _stopCts?.Dispose();
+        _stopCts = new();
+
+        _timer?.Dispose();
+        _timer = new(_interval);
+
         NextBroadcastTime = DateTime.Now + _interval;
-        _runnerTask ??= RunLoopAsync();
+        _runnerTask = RunLoopAsync(_stopCts.Token);
 
         StateChanged?.Invoke();
     }
@@ -43,6 +51,7 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
         _channel = null;
         SentMessagesCount = 0;
         NextBroadcastTime = null;
+        _stopCts?.Cancel();
         StateChanged?.Invoke();
     }
 
@@ -77,6 +86,8 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
         Stop();
         _timer?.Dispose();
         _timer = null;
+        _stopCts?.Dispose();
+        _stopCts = null;
 
         if (_runnerTask != null)
         {
@@ -92,15 +103,18 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
         _disposed = true;
     }
 
-    private async Task RunLoopAsync()
+    private async Task RunLoopAsync(CancellationToken cancellationToken)
     {
         try
         {
-            while (_channel != null && _timer != null && await _timer.WaitForNextTickAsync())
+            while (!cancellationToken.IsCancellationRequested && _channel != null && _timer != null)
             {
-                if (string.IsNullOrWhiteSpace(_channel))
+                await _timer.WaitForNextTickAsync(cancellationToken);
+
+                var channel = _channel;
+                if (string.IsNullOrWhiteSpace(channel))
                 {
-                    continue;
+                    break;
                 }
 
                 SentMessagesCount++;
@@ -111,10 +125,13 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
                     continue;
                 }
 
-                messenger.Send(_channel, message);
+                messenger.Send(channel, message);
                 NextBroadcastTime = DateTime.Now + _interval;
                 StateChanged?.Invoke();
             }
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (ObjectDisposedException)
         {
@@ -122,6 +139,10 @@ public sealed class BroadcastScheduler(TwitchChatMessenger messenger, SettingsMa
         catch (Exception)
         {
             // TODO: логирование ошибок рассылки
+        }
+        finally
+        {
+            _ = Interlocked.CompareExchange(ref _runnerTask, null, _runnerTask);
         }
     }
 }
