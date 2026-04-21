@@ -1,3 +1,6 @@
+using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Users;
+
 namespace PoproshaykaBot.WinForms.Settings;
 
 public class AppSettings
@@ -34,7 +37,7 @@ public class TwitchSettings
 
     public string RedirectUri { get; set; } = "http://localhost:8080";
 
-    public string[] Scopes { get; set; } = ["chat:read", "chat:edit"];
+    public string[] Scopes { get; set; } = ["chat:read", "chat:edit", "channel:manage:broadcast"];
 
     public int HttpServerPort { get; set; } = 8080;
 
@@ -49,6 +52,8 @@ public class TwitchSettings
     public AutoBroadcastSettings AutoBroadcast { get; set; } = new();
 
     public InfrastructureSettings Infrastructure { get; set; } = new();
+
+    public BroadcastProfilesSettings BroadcastProfiles { get; set; } = new();
 }
 
 public class MessageSettings
@@ -94,6 +99,7 @@ public class InfrastructureSettings
 {
     public int ChatHistoryMaxItems { get; set; } = 1000;
     public int SseKeepAliveSeconds { get; set; } = 30;
+    public List<GameCategoryCacheEntry> RecentCategories { get; set; } = [];
 }
 
 public class ObsChatSettings

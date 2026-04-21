@@ -366,6 +366,7 @@ partial class SettingsForm
     private ObsChatSettingsControl _obsChatSettingsControl;
     private AutoBroadcastSettingsControl _autoBroadcastSettingsControl;
     private MiscSettingsControl _miscSettingsControl;
+    private BroadcastProfilesSettingsControl _broadcastProfilesSettingsControl;
     private FlowLayoutPanel _buttonPanel;
     private Button _resetButton;
     private Button _okButton;

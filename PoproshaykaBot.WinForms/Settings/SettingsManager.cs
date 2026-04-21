@@ -1,3 +1,7 @@
+using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Events;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Settings;
+using PoproshaykaBot.WinForms.Infrastructure.Persistence;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -6,82 +10,56 @@ namespace PoproshaykaBot.WinForms.Settings;
 
 public class SettingsManager
 {
-    private readonly string _settingsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "PoproshaykaBot");
-
+    private readonly ILogger<SettingsManager> _logger;
+    private readonly IEventBus _eventBus;
     private readonly string _settingsFilePath;
+
+    private readonly object _syncLock = new();
 
     private AppSettings? _currentSettings;
 
-    public SettingsManager()
+    public SettingsManager(ILogger<SettingsManager> logger, IEventBus eventBus)
     {
-        _settingsFilePath = Path.Combine(_settingsDirectory, "settings.json");
-        _currentSettings = LoadSettings();
+        _logger = logger;
+        _eventBus = eventBus;
+        var settingsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "PoproshaykaBot");
+
+        _settingsFilePath = Path.Combine(settingsDirectory, "settings.json");
     }
 
-    public event Action<ObsChatSettings>? ChatSettingsChanged;
-
-    public AppSettings Current => _currentSettings ?? throw new InvalidOperationException("Settings not loaded");
-
-    public void SaveSettings(AppSettings settings)
+    public virtual AppSettings Current
     {
-        try
+        get
         {
-            Directory.CreateDirectory(_settingsDirectory);
-
-            var json = JsonSerializer.Serialize(settings, GetJsonOptions());
-
-            var tempFilePath = _settingsFilePath + ".tmp";
-            File.WriteAllText(tempFilePath, json, Encoding.UTF8);
-
-            var backupCreated = false;
-
-            if (File.Exists(_settingsFilePath) && !File.Exists(_settingsFilePath + ".bak"))
+            lock (_syncLock)
             {
-                File.Copy(_settingsFilePath, _settingsFilePath + ".bak", true);
-                backupCreated = true;
-            }
-
-            File.Replace(tempFilePath, _settingsFilePath, _settingsFilePath + ".old");
-
-            var oldFilePath = _settingsFilePath + ".old";
-
-            if (File.Exists(oldFilePath))
-            {
-                try
-                {
-                    File.Delete(oldFilePath);
-                }
-                catch
-                {
-                }
-            }
-
-            _currentSettings = settings;
-
-            ChatSettingsChanged?.Invoke(settings.Twitch.ObsChat);
-
-            if (backupCreated)
-            {
-                Console.WriteLine($"Создан бэкап настроек: {_settingsFilePath}.bak");
+                return _currentSettings ??= LoadSettingsInternal();
             }
         }
-        catch (Exception exception)
-        {
-            if (File.Exists(_settingsFilePath + ".bak"))
-            {
-                try
-                {
-                    File.Copy(_settingsFilePath + ".bak", _settingsFilePath, true);
-                    Console.WriteLine("Восстановлены настройки из бэкапа");
-                }
-                catch (Exception backupException)
-                {
-                    Console.WriteLine($"Ошибка восстановления из бэкапа: {backupException.Message}");
-                }
-            }
+    }
 
-            throw new InvalidOperationException($"Ошибка сохранения настроек: {exception.Message}", exception);
+    public virtual void SaveSettings(AppSettings settings)
+    {
+        _logger.LogDebug("Начало сохранения настроек в {SettingsFilePath}", _settingsFilePath);
+
+        lock (_syncLock)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(settings, GetJsonOptions());
+                AtomicFile.Save(_settingsFilePath, json, _logger);
+
+                _currentSettings = settings;
+                _logger.LogInformation("Настройки приложения успешно сохранены");
+
+                InvokeChatSettingsChanged(settings.Twitch.ObsChat);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Критическая ошибка при сохранении настроек в {SettingsFilePath}", _settingsFilePath);
+                throw new InvalidOperationException($"Ошибка сохранения настроек: {exception.Message}", exception);
+            }
         }
     }
 
@@ -100,31 +78,42 @@ public class SettingsManager
         };
     }
 
-    private AppSettings LoadSettings()
+    private void InvokeChatSettingsChanged(ObsChatSettings obsChatSettings)
     {
+        _ = _eventBus.PublishAsync(new ChatSettingsChangedEvent(obsChatSettings));
+    }
+
+    private AppSettings LoadSettingsInternal()
+    {
+        _logger.LogDebug("Начало загрузки настроек из {SettingsFilePath}", _settingsFilePath);
+
         try
         {
             if (!File.Exists(_settingsFilePath))
             {
-                var defaultSettings = CreateDefaultSettings();
-                SaveSettings(defaultSettings);
-                return defaultSettings;
+                _logger.LogInformation("Файл настроек {SettingsFilePath} не найден. Применяются настройки по умолчанию", _settingsFilePath);
+                return CreateDefaultSettings();
             }
 
             var json = File.ReadAllText(_settingsFilePath, Encoding.UTF8);
             var settings = JsonSerializer.Deserialize<AppSettings>(json, GetJsonOptions());
 
-            _currentSettings = settings ?? throw new InvalidOperationException("Не удалось десериализовать настройки");
+            if (settings == null)
+            {
+                throw new InvalidOperationException("Не удалось десериализовать настройки (null)");
+            }
+
+            _logger.LogInformation("Настройки приложения успешно загружены");
             return settings;
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"Неожиданная ошибка загрузки настроек: {exception.Message}");
+            _logger.LogError(exception, "Ошибка загрузки или десериализации настроек из файла {SettingsFilePath}", _settingsFilePath);
+
             CreateBackupFile(_settingsFilePath, "invalid");
 
-            var defaultSettings = CreateDefaultSettings();
-            _currentSettings = defaultSettings;
-            return defaultSettings;
+            _logger.LogWarning("Из-за ошибки загрузки применяются настройки по умолчанию");
+            return CreateDefaultSettings();
         }
     }
 
@@ -144,11 +133,11 @@ public class SettingsManager
             var backupPath = Path.Combine(Path.GetDirectoryName(originalPath)!, backupFileName);
 
             File.Copy(originalPath, backupPath, true);
-            Console.WriteLine($"Создан бэкап поврежденного файла: {backupPath}");
+            _logger.LogInformation("Создан бэкап поврежденного файла настроек: {BackupPath}", backupPath);
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"Ошибка создания бэкапа файла: {exception.Message}");
+            _logger.LogError(exception, "Ошибка при создании бэкапа для файла {OriginalPath}", originalPath);
         }
     }
 }

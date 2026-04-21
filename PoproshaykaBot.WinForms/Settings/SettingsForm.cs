@@ -1,4 +1,7 @@
-﻿using System.Text.Json;
+﻿using PoproshaykaBot.WinForms.Auth;
+using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Server;
+using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
@@ -8,7 +11,12 @@ public partial class SettingsForm : Form
     private AppSettings _settings;
     private bool _hasChanges;
 
-    public SettingsForm(SettingsManager settingsManager, TwitchOAuthService oauthService, UnifiedHttpServer httpServer)
+    public SettingsForm(
+        SettingsManager settingsManager,
+        TwitchOAuthService oauthService,
+        KestrelHttpServer httpServer,
+        BroadcastProfilesManager broadcastProfilesManager,
+        IGameCategoryResolver gameCategoryResolver)
     {
         _settingsManager = settingsManager;
         _settings = new();
@@ -20,6 +28,17 @@ public partial class SettingsForm : Form
         _httpServerSettingsControl = new(httpServer);
 
         InitializeComponent();
+
+        _broadcastProfilesSettingsControl = new();
+        _broadcastProfilesSettingsControl.SettingChanged += OnSettingChanged;
+        _broadcastProfilesSettingsControl.Setup(broadcastProfilesManager, gameCategoryResolver);
+        _broadcastProfilesSettingsControl.Dock = DockStyle.Fill;
+
+        var broadcastProfilesTabPage = new TabPage("Профили трансляции");
+        broadcastProfilesTabPage.Padding = new(10);
+        broadcastProfilesTabPage.Controls.Add(_broadcastProfilesSettingsControl);
+        _tabControl.TabPages.Add(broadcastProfilesTabPage);
+
         LoadSettingsToControls();
     }
 
@@ -85,6 +104,7 @@ public partial class SettingsForm : Form
         _obsChatSettingsControl.LoadSettings(_settings.Twitch.ObsChat);
         _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.LoadSettings(_settings);
+        _broadcastProfilesSettingsControl.LoadSettings(_settings.Twitch);
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -100,6 +120,7 @@ public partial class SettingsForm : Form
         _obsChatSettingsControl.SaveSettings(_settings.Twitch.ObsChat);
         _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.SaveSettings(_settings);
+        _broadcastProfilesSettingsControl.SaveSettings(_settings.Twitch);
     }
 
     private void UpdateButtonStates()
@@ -112,6 +133,8 @@ public partial class SettingsForm : Form
         try
         {
             SaveSettingsFromControls();
+            _settings.Twitch.BroadcastProfiles = _settingsManager.Current.Twitch.BroadcastProfiles;
+            _settings.Twitch.Infrastructure.RecentCategories = _settingsManager.Current.Twitch.Infrastructure.RecentCategories;
             _settingsManager.SaveSettings(_settings);
             _hasChanges = false;
             UpdateButtonStates();

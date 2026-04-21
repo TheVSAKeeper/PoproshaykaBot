@@ -117,16 +117,18 @@
             _oauthCredentialsSection.Controls.Add(_redirectUriPanel, 1, 2);
             _oauthCredentialsSection.Controls.Add(_scopesLabel, 0, 3);
             _oauthCredentialsSection.Controls.Add(_scopesPanel, 1, 3);
+            _oauthCredentialsSection.AutoSize = true;
+            _oauthCredentialsSection.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             _oauthCredentialsSection.Dock = DockStyle.Fill;
             _oauthCredentialsSection.Location = new Point(5, 5);
             _oauthCredentialsSection.Margin = new Padding(0, 0, 0, 15);
             _oauthCredentialsSection.Name = "_oauthCredentialsSection";
             _oauthCredentialsSection.RowCount = 4;
-            _oauthCredentialsSection.RowStyles.Add(new RowStyle());
-            _oauthCredentialsSection.RowStyles.Add(new RowStyle());
-            _oauthCredentialsSection.RowStyles.Add(new RowStyle());
-            _oauthCredentialsSection.RowStyles.Add(new RowStyle());
-            _oauthCredentialsSection.Size = new Size(538, 100);
+            _oauthCredentialsSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
+            _oauthCredentialsSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
+            _oauthCredentialsSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
+            _oauthCredentialsSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
+            _oauthCredentialsSection.Size = new Size(538, 140);
             _oauthCredentialsSection.TabIndex = 0;
             // 
             // _clientIdLabel

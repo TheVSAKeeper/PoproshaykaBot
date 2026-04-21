@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.WinForms.Settings;
+﻿using PoproshaykaBot.WinForms.Auth;
+
+namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class OAuthSettingsControl : UserControl
 {

@@ -96,7 +96,7 @@ if (chatContainer) {
     chatContainer.addEventListener('scroll', () => {
         clearTimeout(scrollTimeout);
         scrollTimeout = setTimeout(handleUserScroll, 50);
-    }, { passive: true });
+    }, {passive: true});
 }
 
 function getUserTypeClasses(userStatus) {
@@ -244,7 +244,7 @@ function addMessage(message, isHistoryMessage = false) {
     if (isSystemMessage) {
         messageDiv.innerHTML = `
             ${timestampHtml}
-            <span class='system-message'>${message.message}</span>
+            <span class='system-message'>${escapeHtml(message.message)}</span>
         `;
     } else {
         const badgesHtml = renderBadges(message.badges || []);

@@ -1,11 +1,13 @@
-﻿namespace PoproshaykaBot.WinForms.Settings;
+﻿using PoproshaykaBot.WinForms.Server;
+
+namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class HttpServerSettingsControl : UserControl
 {
     private static readonly TwitchSettings DefaultSettings = new();
-    private readonly UnifiedHttpServer _server;
+    private readonly KestrelHttpServer _server;
 
-    public HttpServerSettingsControl(UnifiedHttpServer server)
+    public HttpServerSettingsControl(KestrelHttpServer server)
     {
         InitializeComponent();
         SetPlaceholders();
@@ -74,14 +76,15 @@ public partial class HttpServerSettingsControl : UserControl
     {
         try
         {
-            if (_httpServerEnabledCheckBox.Checked == false)
+            if (!_httpServerEnabledCheckBox.Checked)
             {
                 MessageBox.Show("HTTP сервер отключен настройкой. Включите сервер, чтобы запустить.", "Информация",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
+
                 return;
             }
 
-            if (_server.IsRunning == false)
+            if (!_server.IsRunning)
             {
                 await _server.StartAsync();
                 UpdateServerStatus();
@@ -113,10 +116,11 @@ public partial class HttpServerSettingsControl : UserControl
 
     private async void OnRestartServerButtonClicked(object sender, EventArgs e)
     {
-        if (_httpServerEnabledCheckBox.Checked == false)
+        if (!_httpServerEnabledCheckBox.Checked)
         {
             MessageBox.Show("HTTP сервер отключен настройкой. Включите сервер, чтобы выполнить перезапуск.", "Информация",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
+
             return;
         }
 
@@ -153,7 +157,7 @@ public partial class HttpServerSettingsControl : UserControl
         _portResetButton.Enabled = enabled;
         _obsOverlayEnabledCheckBox.Enabled = enabled;
         _copyUrlButton.Enabled = enabled;
-        _startServerButton.Enabled = enabled && _server.IsRunning == false;
+        _startServerButton.Enabled = enabled && !_server.IsRunning;
         _stopServerButton.Enabled = enabled && _server.IsRunning;
         _restartServerButton.Enabled = enabled;
     }
@@ -162,7 +166,7 @@ public partial class HttpServerSettingsControl : UserControl
     {
         var enabled = _httpServerEnabledCheckBox.Checked;
 
-        if (enabled == false)
+        if (!enabled)
         {
             _serverStatusLabel.Text = "Статус сервера: ○ Отключен";
             _serverStatusLabel.ForeColor = Color.Gray;

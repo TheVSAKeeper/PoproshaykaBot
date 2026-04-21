@@ -29,7 +29,7 @@ public partial class MiscSettingsControl : UserControl
         {
             var settingsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PoproshaykaBot");
 
-            if (Directory.Exists(settingsDirectory) == false)
+            if (!Directory.Exists(settingsDirectory))
             {
                 Directory.CreateDirectory(settingsDirectory);
             }
