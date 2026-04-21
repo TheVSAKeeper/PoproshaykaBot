@@ -28,8 +28,10 @@ namespace PoproshaykaBot.WinForms;
 public static class Program
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
+        var isUiSmoke = args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
+
         const string OutputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
         Log.Logger = new LoggerConfiguration()
@@ -91,7 +93,10 @@ public static class Program
                 Environment.FailFast("Пользователь подтвердил закрытие при утечке памяти.");
             };
 
-            memoryCheckTimer.Start();
+            if (!isUiSmoke)
+            {
+                memoryCheckTimer.Start();
+            }
 
             var services = new ServiceCollection();
             ConfigureServices(services);
@@ -105,7 +110,12 @@ public static class Program
                 var statistics = serviceProvider.GetRequiredService<StatisticsCollector>();
 
                 var twitchSettings = settingsManager.Current.Twitch;
-                var httpServerEnabled = twitchSettings.HttpServerEnabled;
+                var httpServerEnabled = twitchSettings.HttpServerEnabled && !isUiSmoke;
+
+                if (isUiSmoke)
+                {
+                    Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
+                }
 
                 if (httpServerEnabled)
                 {

@@ -1,0 +1,91 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  unit-tests:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore
+        run: dotnet restore PoproshaykaBot.WinForms.Tests/PoproshaykaBot.WinForms.Tests.csproj
+
+      - name: Test (unit)
+        run: >
+          dotnet test PoproshaykaBot.WinForms.Tests/PoproshaykaBot.WinForms.Tests.csproj
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=unit-tests.trx"
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: TestResults/*.trx
+          if-no-files-found: warn
+          retention-days: 7
+
+  ui-tests:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Build app (Release, x64)
+        run: >
+          dotnet build PoproshaykaBot.WinForms/PoproshaykaBot.WinForms.csproj
+          --configuration Release
+          -p:PublishSingleFile=false
+          -p:PublishReadyToRun=false
+
+      - name: Build UI tests
+        run: >
+          dotnet build PoproshaykaBot.WinForms.UiTests/PoproshaykaBot.WinForms.UiTests.csproj
+          --configuration Release
+
+      - name: Run UI tests
+        run: >
+          dotnet test PoproshaykaBot.WinForms.UiTests/PoproshaykaBot.WinForms.UiTests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=ui-tests.trx"
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results
+          path: TestResults/*.trx
+          if-no-files-found: warn
+          retention-days: 7
