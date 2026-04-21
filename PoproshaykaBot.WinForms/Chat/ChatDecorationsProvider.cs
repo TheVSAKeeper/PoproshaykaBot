@@ -1,4 +1,3 @@
-using PoproshaykaBot.WinForms.Models;
 using TwitchLib.Api;
 using TwitchLib.Api.Helix.Models.Chat.Badges;
 using TwitchLib.Api.Helix.Models.Chat.Emotes;
@@ -66,7 +65,7 @@ public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
     {
         ArgumentNullException.ThrowIfNull(chatMessage);
 
-        if (chatMessage.EmoteSet?.Emotes == null || _isLoaded == false)
+        if (chatMessage.EmoteSet?.Emotes == null || !_isLoaded)
         {
             return [];
         }
@@ -110,7 +109,7 @@ public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
     {
         var badgeUrls = new Dictionary<string, string>();
 
-        if (_isLoaded == false)
+        if (!_isLoaded)
         {
             return badgeUrls;
         }

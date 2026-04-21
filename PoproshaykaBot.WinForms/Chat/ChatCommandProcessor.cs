@@ -29,7 +29,7 @@ public sealed class ChatCommandProcessor
 
         foreach (var alias in command.Aliases)
         {
-            if (string.IsNullOrWhiteSpace(alias) == false)
+            if (!string.IsNullOrWhiteSpace(alias))
             {
                 _tokenToCommand[alias] = command;
             }
@@ -56,7 +56,7 @@ public sealed class ChatCommandProcessor
 
         var trimmed = messageText.Trim();
 
-        if (trimmed.StartsWith(_prefix) == false)
+        if (!trimmed.StartsWith(_prefix))
         {
             return false;
         }
@@ -72,10 +72,10 @@ public sealed class ChatCommandProcessor
         var token = spaceIdx >= 0 ? afterPrefix[..spaceIdx] : afterPrefix;
         var argsString = spaceIdx >= 0 ? afterPrefix[(spaceIdx + 1)..] : string.Empty;
 
-        if (_tokenToCommand.TryGetValue(token, out var command) == false)
+        if (!_tokenToCommand.TryGetValue(token, out var command))
         {
-            response = HandleUnknown(messageText, context);
-            return true;
+            LogUnknown(messageText, context);
+            return false;
         }
 
         var args = string.IsNullOrWhiteSpace(argsString)
@@ -90,9 +90,11 @@ public sealed class ChatCommandProcessor
             Username = context.Username,
             DisplayName = context.DisplayName,
             Arguments = args,
+            IsBroadcaster = context.IsBroadcaster,
+            IsModerator = context.IsModerator,
         };
 
-        if (command.CanExecute(enrichedContext) == false)
+        if (!command.CanExecute(enrichedContext))
         {
             return false;
         }
@@ -101,7 +103,7 @@ public sealed class ChatCommandProcessor
         return true;
     }
 
-    private OutgoingMessage HandleUnknown(string originalText, CommandContext context)
+    private void LogUnknown(string originalText, CommandContext context)
     {
         try
         {
@@ -112,9 +114,6 @@ public sealed class ChatCommandProcessor
         {
             // TODO: Логирование
         }
-
-        var text = $"Команда не распознана. Введите {_prefix}помощь";
-        return OutgoingMessage.Reply(text, context.MessageId);
     }
 }
 
@@ -132,6 +131,8 @@ public sealed class CommandContext
     public string Username { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
     public IReadOnlyList<string> Arguments { get; init; } = [];
+    public bool IsBroadcaster { get; init; }
+    public bool IsModerator { get; init; }
 }
 
 public sealed record OutgoingMessage

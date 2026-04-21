@@ -1,5 +1,5 @@
-using PoproshaykaBot.WinForms.Models;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Users;
 using System.Text;
 using TwitchLib.Client;
 

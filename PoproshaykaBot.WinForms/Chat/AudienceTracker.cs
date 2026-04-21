@@ -21,12 +21,14 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
             displayName = userId;
         }
 
-        var added = _userIdToDisplayName.TryAdd(userId, displayName);
-
-        if (!added)
-        {
-            _userIdToDisplayName[userId] = displayName;
-        }
+        var added = true;
+        _userIdToDisplayName.AddOrUpdate(userId,
+            displayName,
+            (_, _) =>
+            {
+                added = false;
+                return displayName;
+            });
 
         return added;
     }
@@ -45,7 +47,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
             return null;
         }
 
-        return settings.Welcome.Replace("{username}", displayName);
+        return MessageTemplate.For(settings.Welcome).With("username", displayName).Render();
     }
 
     public string? CreateFarewell(string userId, string displayName)
@@ -64,7 +66,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
             return null;
         }
 
-        return settings.Farewell.Replace("{username}", displayName);
+        return MessageTemplate.For(settings.Farewell).With("username", displayName).Render();
     }
 
     public string? CreateCollectiveFarewell()
@@ -84,19 +86,19 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
         }
 
         var list = string.Join(", ", names);
-        var template = settings.Farewell;
+        var template = MessageTemplate.For(settings.Farewell);
 
-        if (template.Contains("{usernames}"))
+        if (template.Contains("usernames"))
         {
-            return template.Replace("{usernames}", list);
+            return template.With("usernames", list).Render();
         }
 
-        if (template.Contains("{username}"))
+        if (template.Contains("username"))
         {
-            return template.Replace("{username}", list);
+            return template.With("username", list).Render();
         }
 
-        return template;
+        return template.Render();
     }
 
     public void ClearAll()

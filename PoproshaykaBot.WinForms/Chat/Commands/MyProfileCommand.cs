@@ -1,4 +1,5 @@
-using System.Globalization;
+using PoproshaykaBot.WinForms.Statistics;
+using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
@@ -41,24 +42,12 @@ public sealed class MyProfileCommand(StatisticsCollector statistics, UserRankSer
             return OutgoingMessage.Reply(msg, context.MessageId);
         }
 
-        var messageCount = FormatNumber(userStats.TotalMessageCount);
-        var firstSeen = FormatDateTime(userStats.FirstSeen);
-        var lastSeen = FormatDateTime(userStats.LastSeen);
+        var messageCount = FormattingUtils.FormatNumber(userStats.TotalMessageCount);
+        var firstSeen = FormattingUtils.FormatDateTime(userStats.FirstSeen);
+        var lastSeen = FormattingUtils.FormatDateTime(userStats.LastSeen);
         var rankDisplay = rankService.GetRankDisplay(userStats.TotalMessageCount);
 
-        var text = $"👤 {targetDisplayName} {rankDisplay} | {messageCount} мсг | С нами с: {firstSeen} | В чате: {lastSeen} МСК";
+        var text = $"👤 {targetDisplayName} {rankDisplay} | {messageCount} мсг | С нами с: {firstSeen} | В чате: {lastSeen}";
         return OutgoingMessage.Reply(text, context.MessageId);
-    }
-
-    private static string FormatNumber(long number)
-    {
-        return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
-    }
-
-    private static string FormatDateTime(DateTime dateTime)
-    {
-        var moscowTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
-        var moscowTime = TimeZoneInfo.ConvertTimeFromUtc(dateTime, moscowTimeZone);
-        return moscowTime.ToString("dd.MM.yyyy HH:mm", CultureInfo.GetCultureInfo("ru-RU")) + " МСК";
     }
 }

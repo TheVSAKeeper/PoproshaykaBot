@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Models;
+using PoproshaykaBot.WinForms.Streaming;
 
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
