@@ -1,4 +1,4 @@
-﻿namespace PoproshaykaBot.WinForms;
+﻿namespace PoproshaykaBot.WinForms.Chat;
 
 partial class ChatDisplay
 {

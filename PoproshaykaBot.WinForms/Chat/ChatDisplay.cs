@@ -1,14 +1,28 @@
-﻿using PoproshaykaBot.WinForms.Models;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Events;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
+using PoproshaykaBot.WinForms.Users;
 
-namespace PoproshaykaBot.WinForms;
+namespace PoproshaykaBot.WinForms.Chat;
 
-public partial class ChatDisplay : UserControl, IChatDisplay
+// TODO: Удалить и заменить на Twitch-чат
+public partial class ChatDisplay : UserControl
 {
     private const int MaxChatLines = 200;
+    private readonly List<IDisposable> _busSubscriptions = new();
 
     public ChatDisplay()
     {
         InitializeComponent();
+    }
+
+    public void Setup(IEventBus eventBus)
+    {
+        ArgumentNullException.ThrowIfNull(eventBus);
+
+        _busSubscriptions.Add(eventBus.Subscribe<ChatMessageReceived>(@event => AddChatMessage(@event.HistoryEntry)));
+        _busSubscriptions.Add(eventBus.Subscribe<ChatHistoryCleared>(_ => ClearChat()));
+
+        Disposed += OnControlDisposed;
     }
 
     public void AddChatMessage(ChatMessageData chatMessage)
@@ -19,17 +33,17 @@ public partial class ChatDisplay : UserControl, IChatDisplay
             return;
         }
 
+        var shouldAutoScroll = _chatRichTextBox.SelectionStart >= _chatRichTextBox.Text.Length - 1;
+
         if (_chatRichTextBox.Lines.Length > MaxChatLines)
         {
-            int charIndex = _chatRichTextBox.GetFirstCharIndexFromLine(_chatRichTextBox.Lines.Length - MaxChatLines);
+            var charIndex = _chatRichTextBox.GetFirstCharIndexFromLine(_chatRichTextBox.Lines.Length - MaxChatLines);
             if (charIndex > 0)
             {
                 _chatRichTextBox.Select(0, charIndex);
                 _chatRichTextBox.SelectedText = "";
             }
         }
-
-        var shouldAutoScroll = _chatRichTextBox.SelectionStart >= _chatRichTextBox.Text.Length - 1;
 
         var localTime = TimeZoneInfo.ConvertTimeFromUtc(chatMessage.Timestamp, TimeZoneInfo.Local);
         var timeString = localTime.ToString("HH:mm:ss");
@@ -103,6 +117,16 @@ public partial class ChatDisplay : UserControl, IChatDisplay
         }
 
         _chatRichTextBox.Clear();
+    }
+
+    private void OnControlDisposed(object? sender, EventArgs e)
+    {
+        foreach (var subscription in _busSubscriptions)
+        {
+            subscription.Dispose();
+        }
+
+        _busSubscriptions.Clear();
     }
 
     private void OnLoad(object sender, EventArgs e)

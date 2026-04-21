@@ -1,6 +1,6 @@
 ﻿
 
-namespace PoproshaykaBot.WinForms;
+namespace PoproshaykaBot.WinForms.Users;
 
 sealed partial class UserStatisticsForm
 {

@@ -1,4 +1,4 @@
-﻿namespace PoproshaykaBot.WinForms.Models;
+﻿namespace PoproshaykaBot.WinForms.Users;
 
 [Flags]
 public enum UserStatus

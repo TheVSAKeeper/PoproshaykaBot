@@ -1,4 +1,4 @@
-﻿namespace PoproshaykaBot.WinForms.Models;
+﻿namespace PoproshaykaBot.WinForms.Chat;
 
 public enum ChatMessageType
 {

@@ -1,4 +1,4 @@
-﻿namespace PoproshaykaBot.WinForms;
+﻿namespace PoproshaykaBot.WinForms.Streaming;
 
 sealed partial class StreamInfoWidget
 {
@@ -8,6 +8,7 @@ sealed partial class StreamInfoWidget
     {
         if (disposing && (components != null))
         {
+            ClearThumbnail();
             components.Dispose();
         }
         base.Dispose(disposing);
@@ -195,6 +196,7 @@ sealed partial class StreamInfoWidget
         _openChannelButton.Text = "🔗 Открыть Twitch";
         _openChannelButton.UseVisualStyleBackColor = true;
         _openChannelButton.Visible = false;
+        _openChannelButton.Click += OnOpenChannelClick;
         // 
         // StreamInfoWidget
         // 

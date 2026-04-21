@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.WinForms.Models;
+namespace PoproshaykaBot.WinForms.Streaming;
 
 /// <summary>
 /// Статус стрима
@@ -8,15 +8,15 @@ public enum StreamStatus
     /// <summary>
     /// Статус неизвестен (не подключен к EventSub)
     /// </summary>
-    Unknown,
+    Unknown = 0,
 
     /// <summary>
     /// Стрим онлайн
     /// </summary>
-    Online,
+    Online = 1,
 
     /// <summary>
     /// Стрим офлайн
     /// </summary>
-    Offline,
+    Offline = 2,
 }

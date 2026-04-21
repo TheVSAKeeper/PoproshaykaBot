@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.WinForms.Models;
+namespace PoproshaykaBot.WinForms.Statistics;
 
 public class BotStatistics
 {
@@ -45,5 +45,16 @@ public class BotStatistics
         BotStartTime = DateTime.UtcNow;
         TotalUptime = TimeSpan.Zero;
         UpdateTimestamp();
+    }
+
+    public BotStatistics Clone()
+    {
+        return new()
+        {
+            TotalMessagesProcessed = TotalMessagesProcessed,
+            BotStartTime = BotStartTime,
+            LastUpdated = LastUpdated,
+            TotalUptime = TotalUptime,
+        };
     }
 }

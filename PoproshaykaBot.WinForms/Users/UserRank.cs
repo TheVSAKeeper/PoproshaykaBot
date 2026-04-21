@@ -1,4 +1,4 @@
-﻿namespace PoproshaykaBot.WinForms;
+﻿namespace PoproshaykaBot.WinForms.Users;
 
 public sealed record UserRank(string Emoji, string Name, ulong MinMessages, int Tier = 0)
 {

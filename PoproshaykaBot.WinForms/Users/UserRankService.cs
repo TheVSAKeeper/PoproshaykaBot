@@ -1,6 +1,6 @@
 ﻿using PoproshaykaBot.WinForms.Settings;
 
-namespace PoproshaykaBot.WinForms;
+namespace PoproshaykaBot.WinForms.Users;
 
 public sealed class UserRankService(SettingsManager settingsManager)
 {
