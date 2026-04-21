@@ -5,4 +5,8 @@
     <Nullable>enable</Nullable>
     <LangVersion>default</LangVersion>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>2.2.1.0</Version>
+  </PropertyGroup>
 </Project>
