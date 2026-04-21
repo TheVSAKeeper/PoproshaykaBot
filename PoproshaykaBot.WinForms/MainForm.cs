@@ -72,6 +72,8 @@ public partial class MainForm : Form
 
         InitializeComponent();
 
+        Text = $"Попрощайка Бот v{GetDisplayVersion()}";
+
         _broadcastProfileQuickPanel.Setup(_broadcastProfilesManager, _eventBus);
 
         _busSubscriptions.Add(_eventBus.Subscribe<BroadcastSchedulerStateChanged>(_ => OnBroadcastStateChanged()));
@@ -244,6 +246,19 @@ public partial class MainForm : Form
             await _streamStatusManager.RefreshCurrentStatusAsync();
             UpdateStreamInfo();
         }
+    }
+
+    private static string GetDisplayVersion()
+    {
+        var version = Application.ProductVersion;
+        var plusIndex = version.IndexOf('+', StringComparison.Ordinal);
+
+        if (plusIndex > 0)
+        {
+            version = version[..plusIndex];
+        }
+
+        return version;
     }
 
     private void OnBotLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)
