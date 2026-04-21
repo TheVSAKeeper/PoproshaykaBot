@@ -54,6 +54,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TwitchLib.EventSub.Websocke
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TwitchLib.EventSub.Core", "TwitchLib\TwitchLib.EventSub.Core\TwitchLib.EventSub.Core.csproj", "{2AADD469-4F4C-4716-8CCF-38BF6A955DEA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PoproshaykaBot.WinForms.Tests", "PoproshaykaBot.WinForms.Tests\PoproshaykaBot.WinForms.Tests.csproj", "{291C7693-F0A3-498D-B6EF-70056EE127CF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -280,6 +282,18 @@ Global
 		{2AADD469-4F4C-4716-8CCF-38BF6A955DEA}.Release|x64.Build.0 = Release|Any CPU
 		{2AADD469-4F4C-4716-8CCF-38BF6A955DEA}.Release|x86.ActiveCfg = Release|Any CPU
 		{2AADD469-4F4C-4716-8CCF-38BF6A955DEA}.Release|x86.Build.0 = Release|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Debug|x64.Build.0 = Debug|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Debug|x86.Build.0 = Debug|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Release|x64.ActiveCfg = Release|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Release|x64.Build.0 = Release|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Release|x86.ActiveCfg = Release|Any CPU
+		{291C7693-F0A3-498D-B6EF-70056EE127CF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

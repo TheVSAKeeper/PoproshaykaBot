@@ -1,4 +1,9 @@
-﻿namespace PoproshaykaBot.WinForms;
+﻿using PoproshaykaBot.WinForms.Broadcast;
+using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.WinForms.Controls;
+using PoproshaykaBot.WinForms.Streaming;
+
+namespace PoproshaykaBot.WinForms;
 
 partial class MainForm
 {
@@ -46,6 +51,7 @@ partial class MainForm
         _widgetsTableLayoutPanel = new TableLayoutPanel();
         _streamInfoWidget = new StreamInfoWidget();
         _broadcastInfoWidget = new BroadcastInfoWidget();
+        _broadcastProfileQuickPanel = new BroadcastProfileQuickPanel();
         _contentTableLayoutPanel = new TableLayoutPanel();
         _logLabel = new Label();
         _chatDisplay = new ChatDisplay();
@@ -64,16 +70,18 @@ partial class MainForm
         _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _mainTableLayoutPanel.Controls.Add(_mainToolStrip, 0, 0);
         _mainTableLayoutPanel.Controls.Add(_widgetsTableLayoutPanel, 0, 1);
-        _mainTableLayoutPanel.Controls.Add(_contentTableLayoutPanel, 0, 2);
+        _mainTableLayoutPanel.Controls.Add(_broadcastProfileQuickPanel, 0, 2);
+        _mainTableLayoutPanel.Controls.Add(_contentTableLayoutPanel, 0, 3);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
         _mainTableLayoutPanel.Padding = new Padding(12);
-        _mainTableLayoutPanel.RowCount = 3;
+        _mainTableLayoutPanel.RowCount = 4;
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F));
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Size = new Size(785, 394);
+        _mainTableLayoutPanel.Size = new Size(785, 430);
         _mainTableLayoutPanel.TabIndex = 0;
         // 
         // _mainToolStrip
@@ -198,13 +206,19 @@ partial class MainForm
         _streamInfoWidget.Dock = DockStyle.Fill;
         _streamInfoWidget.Name = "_streamInfoWidget";
         _streamInfoWidget.Size = new Size(371, 124);
-        // 
+        //
         // _broadcastInfoWidget
-        // 
+        //
         _broadcastInfoWidget.Dock = DockStyle.Fill;
         _broadcastInfoWidget.Name = "_broadcastInfoWidget";
         _broadcastInfoWidget.Size = new Size(372, 124);
-        // 
+        //
+        // _broadcastProfileQuickPanel
+        //
+        _broadcastProfileQuickPanel.Dock = DockStyle.Fill;
+        _broadcastProfileQuickPanel.Name = "_broadcastProfileQuickPanel";
+        _broadcastProfileQuickPanel.Size = new Size(755, 36);
+        //
         // _contentTableLayoutPanel
         // 
         _contentTableLayoutPanel.ColumnCount = 2;
@@ -309,6 +323,7 @@ partial class MainForm
     private TableLayoutPanel _widgetsTableLayoutPanel;
     private StreamInfoWidget _streamInfoWidget;
     private BroadcastInfoWidget _broadcastInfoWidget;
+    private BroadcastProfileQuickPanel _broadcastProfileQuickPanel;
     private TableLayoutPanel _contentTableLayoutPanel;
     private ToolStripProgressBar _connectionProgressBar;
     private ToolStripStatusLabel _connectionStatusLabel;

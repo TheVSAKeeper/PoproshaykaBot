@@ -1,11 +1,20 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Broadcast;
+using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Chat;
-using PoproshaykaBot.WinForms.Services;
-using PoproshaykaBot.WinForms.Services.Http;
-using PoproshaykaBot.WinForms.Services.Http.Handlers;
+using PoproshaykaBot.WinForms.Chat.Commands;
+using PoproshaykaBot.WinForms.Infrastructure;
+using PoproshaykaBot.WinForms.Infrastructure.Events;
+using PoproshaykaBot.WinForms.Infrastructure.Hosting;
+using PoproshaykaBot.WinForms.Infrastructure.Hosting.Components;
+using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Statistics;
+using PoproshaykaBot.WinForms.Streaming;
+using PoproshaykaBot.WinForms.Users;
+using Serilog;
 using System.Diagnostics;
 using TwitchLib.Api;
 using TwitchLib.Client;
@@ -21,93 +30,126 @@ public static class Program
     [STAThread]
     private static void Main()
     {
-        ApplicationConfiguration.Initialize();
+        const string OutputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
-        var memoryCheckTimer = new Timer();
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.Console(outputTemplate: OutputTemplate)
+            .WriteTo.Debug(outputTemplate: OutputTemplate)
+            .WriteTo.File("logs/bot_log_.txt", rollingInterval: RollingInterval.Day, outputTemplate: OutputTemplate)
+            .CreateLogger();
 
-        const long ThresholdMb = 1024;
-        const long MemoryThreshold = 1024 * 1024 * ThresholdMb;
-        const int Interval = 1000;
-
-        memoryCheckTimer.Interval = Interval;
-        memoryCheckTimer.Tick += (_, _) =>
-        {
-            var currentProcess = Process.GetCurrentProcess();
-            var memoryBytes = currentProcess.PrivateMemorySize64;
-
-            if (memoryBytes <= MemoryThreshold)
-            {
-                return;
-            }
-
-            memoryCheckTimer.Stop();
-
-            Task.Run(async () =>
-            {
-                await Task.Delay(Interval);
-                currentProcess.Kill();
-            });
-
-            var memoryMb = memoryBytes / (1024.0 * 1024.0);
-            var message =
-                $"""
-                 Внимание! Обнаружено аномальное потребление ресурсов.
-
-                 Текущее использование: {memoryMb:F2} MB
-                 Установленный лимит: {ThresholdMb:F2} MB
-
-                 У вас есть {Interval / 1000} секунд, чтобы прочитать это сообщение, затем процесс будет убит принудительно.
-                 """;
-
-            MessageBox.Show(message, "Критическая нагрузка на память", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            Environment.FailFast("Пользователь подтвердил закрытие при утечке памяти.");
-        };
-
-        memoryCheckTimer.Start();
-
-        var services = new ServiceCollection();
-        ConfigureServices(services);
-
-        var serviceProvider = services.BuildServiceProvider();
         try
         {
-            var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
-            var statistics = serviceProvider.GetRequiredService<StatisticsCollector>();
+            Log.Information("Запуск приложения...");
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            ApplicationConfiguration.Initialize();
 
-            var twitchSettings = settingsManager.Current.Twitch;
-            var httpServerEnabled = twitchSettings.HttpServerEnabled;
+            var memoryCheckTimer = new Timer();
 
-            if (httpServerEnabled)
+            const long ThresholdMb = 1024;
+            const long MemoryThreshold = 1024 * 1024 * ThresholdMb;
+            const int CheckIntervalMs = 1000;
+            const int KillDelayMs = 1000;
+
+            memoryCheckTimer.Interval = CheckIntervalMs;
+            memoryCheckTimer.Tick += (_, _) =>
             {
-                var portValidator = serviceProvider.GetRequiredService<PortValidator>();
-                var portValidationPassed = portValidator.ValidateAndResolvePortConflict();
+                var currentProcess = Process.GetCurrentProcess();
+                var memoryBytes = currentProcess.PrivateMemorySize64;
 
-                if (portValidationPassed)
+                if (memoryBytes <= MemoryThreshold)
                 {
-                    try
+                    return;
+                }
+
+                Log.Warning("Обнаружено аномальное потребление памяти: {MemoryBytes} байт", memoryBytes);
+                memoryCheckTimer.Stop();
+
+                Task.Run(async () =>
+                {
+                    await Task.Delay(KillDelayMs);
+                    Log.Fatal("Принудительное завершение процесса из-за утечки памяти");
+                    await Log.CloseAndFlushAsync();
+                    currentProcess.Kill();
+                });
+
+                var memoryMb = memoryBytes / (1024.0 * 1024.0);
+                var killDelaySeconds = KillDelayMs / 1000;
+                var secondsWord = GetRussianSecondsWord(killDelaySeconds);
+                var message =
+                    $"""
+                     Внимание! Обнаружено аномальное потребление ресурсов.
+
+                     Текущее использование: {memoryMb:F2} MB
+                     Установленный лимит: {ThresholdMb:F2} MB
+
+                     У вас есть {killDelaySeconds} {secondsWord}, чтобы прочитать это сообщение, затем процесс будет убит принудительно.
+                     """;
+
+                MessageBox.Show(message, "Критическая нагрузка на память", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Environment.FailFast("Пользователь подтвердил закрытие при утечке памяти.");
+            };
+
+            memoryCheckTimer.Start();
+
+            var services = new ServiceCollection();
+            ConfigureServices(services);
+
+            var serviceProvider = services.BuildServiceProvider();
+            try
+            {
+                serviceProvider.ActivateEventSubscribers(typeof(Program).Assembly);
+
+                var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
+                var statistics = serviceProvider.GetRequiredService<StatisticsCollector>();
+
+                var twitchSettings = settingsManager.Current.Twitch;
+                var httpServerEnabled = twitchSettings.HttpServerEnabled;
+
+                if (httpServerEnabled)
+                {
+                    var portValidationPassed = ValidateAndResolvePortConflict(settingsManager);
+
+                    if (portValidationPassed)
                     {
-                        var httpServer = serviceProvider.GetRequiredService<UnifiedHttpServer>();
-                        httpServer.StartAsync().GetAwaiter().GetResult();
+                        try
+                        {
+                            var httpServer = serviceProvider.GetRequiredService<KestrelHttpServer>();
+                            Task.Run(httpServer.StartAsync).GetAwaiter().GetResult();
+                            Log.Information("HTTP сервер успешно запущен");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error(ex, "Ошибка запуска HTTP сервера");
+                            MessageBox.Show($"Ошибка запуска HTTP сервера: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        MessageBox.Show($"Ошибка запуска HTTP сервера: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        Log.Warning("Не удалось разрешить конфликт портов. HTTP сервер не запущен");
+                        MessageBox.Show("Не удалось разрешить конфликт портов. HTTP сервер не запущен.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
-                else
-                {
-                    MessageBox.Show("Не удалось разрешить конфликт портов. HTTP сервер не запущен.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+
+                statistics.LoadStatisticsAsync().GetAwaiter().GetResult();
+
+                var mainForm = serviceProvider.GetRequiredService<MainForm>();
+                Application.Run(mainForm);
             }
-
-            statistics.LoadStatisticsAsync().GetAwaiter().GetResult();
-
-            var mainForm = serviceProvider.GetRequiredService<MainForm>();
-            Application.Run(mainForm);
+            finally
+            {
+                serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Приложение завершило работу из-за непредвиденной ошибки");
         }
         finally
         {
-            serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            Log.Information("Завершение работы приложения");
+            Log.CloseAndFlush();
         }
     }
 
@@ -115,11 +157,23 @@ public static class Program
     {
         services.AddLogging(builder =>
         {
-            builder.AddConsole();
-            builder.AddDebug();
+            builder.ClearProviders();
+            builder.AddSerilog(dispose: true);
         });
 
         services.AddHttpClient();
+
+        services.AddSingleton<InMemoryEventBus>();
+        services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
+        services.AddSingleton<UiEventDispatcher>();
+        services.AddSingleton<AppHost>();
+
+        services.AddSingleton<IHostedComponent, StatisticsHostedComponent>();
+        services.AddSingleton<IHostedComponent, ChatDecorationsHostedComponent>();
+        services.AddSingleton<IHostedComponent, StreamMonitoringHostedComponent>();
+        services.AddSingleton<IHostedComponent, BroadcastSchedulerHostedComponent>();
+
+        services.AddEventSubscribers(typeof(Program).Assembly);
 
         services.AddSingleton<SettingsManager>();
 
@@ -148,45 +202,9 @@ public static class Program
         services.AddSingleton<StatisticsCollector>();
         services.AddSingleton<TwitchOAuthService>();
         services.AddSingleton<ChatHistoryManager>();
-        services.AddTransient<PortValidator>();
         services.AddSingleton<SseService>();
-        services.AddSingleton<OAuthHandler>();
-        services.AddSingleton<OverlayHandler>();
-        services.AddSingleton<SseHandler>();
-        services.AddSingleton<ApiHistoryHandler>();
-        services.AddSingleton<ApiChatSettingsHandler>();
 
-        services.AddSingleton<Router>(sp =>
-        {
-            var oauth = sp.GetRequiredService<OAuthHandler>();
-            var overlay = sp.GetRequiredService<OverlayHandler>();
-            var sse = sp.GetRequiredService<SseHandler>();
-            var apiHistory = sp.GetRequiredService<ApiHistoryHandler>();
-            var apiSettings = sp.GetRequiredService<ApiChatSettingsHandler>();
-
-            var router = new Router();
-            router.Register("/", oauth);
-            router.Register("/chat", overlay);
-            router.Register("/events", sse);
-            router.Register("/api/history", apiHistory);
-            router.Register("/api/chat-settings", apiSettings);
-
-            router.Register("/assets/obs.css", new StaticContentHandler("PoproshaykaBot.WinForms.Assets.obs.css", "text/css; charset=utf-8"));
-            router.Register("/assets/obs.js", new StaticContentHandler("PoproshaykaBot.WinForms.Assets.obs.js", "application/javascript; charset=utf-8"));
-            router.Register("/favicon.ico", new StaticContentHandler("PoproshaykaBot.WinForms.icon.ico", "image/x-icon"));
-
-            return router;
-        });
-
-        services.AddSingleton<UnifiedHttpServer>(sp =>
-        {
-            var settings = sp.GetRequiredService<SettingsManager>();
-            var history = sp.GetRequiredService<ChatHistoryManager>();
-            var router = sp.GetRequiredService<Router>();
-            var sseService = sp.GetRequiredService<SseService>();
-
-            return new(history, router, sseService, settings.Current.Twitch.HttpServerPort);
-        });
+        services.AddSingleton<KestrelHttpServer>();
 
         services.AddSingleton<EventSubWebsocketClient>();
         services.AddSingleton<StreamStatusManager>();
@@ -195,36 +213,118 @@ public static class Program
         services.AddSingleton<UserMessagesManagementService>();
 
         services.AddSingleton<TwitchChatMessenger>();
-        services.AddSingleton<BroadcastScheduler>(sp =>
+        services.AddSingleton<BroadcastScheduler>();
+
+        services.AddSingleton<ITwitchChannelsApi, TwitchChannelsApiAdapter>();
+        services.AddSingleton<ITwitchSearchApi, TwitchSearchApiAdapter>();
+        services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
+        services.AddSingleton<ChannelInformationApplier>();
+        services.AddSingleton<IChannelInformationApplier>(sp => sp.GetRequiredService<ChannelInformationApplier>());
+        services.AddSingleton<GameCategoryResolver>();
+        services.AddSingleton<IGameCategoryResolver>(sp => sp.GetRequiredService<GameCategoryResolver>());
+        services.AddSingleton<BroadcastProfilesManager>();
+
+        services.AddSingleton<AudienceTracker>();
+
+        services.AddSingleton<IChatCommand, HelloCommand>();
+        services.AddSingleton<IChatCommand, DonateCommand>();
+        services.AddSingleton<IChatCommand, HowManyMessagesCommand>();
+        services.AddSingleton<IChatCommand, BotStatsCommand>();
+        services.AddSingleton<IChatCommand, TopUsersCommand>();
+        services.AddSingleton<IChatCommand, MyProfileCommand>();
+        services.AddSingleton<IChatCommand, ActiveUsersCommand>();
+        services.AddSingleton<IChatCommand, ByeCommand>();
+        services.AddSingleton<IChatCommand, StreamInfoCommand>();
+        services.AddSingleton<IChatCommand, TrumpCommand>();
+        services.AddSingleton<IChatCommand, RanksCommand>();
+        services.AddSingleton<IChatCommand, RankCommand>();
+        services.AddSingleton<IChatCommand, ProfileCommand>();
+        services.AddSingleton<IChatCommand, TitleCommand>();
+        services.AddSingleton<IChatCommand, GameCommand>();
+
+        services.AddSingleton<ChatCommandProcessor>(sp =>
         {
-            var messenger = sp.GetRequiredService<TwitchChatMessenger>();
-            var settingsManager = sp.GetRequiredService<SettingsManager>();
-            var streamStatusManager = sp.GetRequiredService<StreamStatusManager>();
-
-            var messageProvider = new Func<int, string>(counter =>
-            {
-                var template = settingsManager.Current.Twitch.AutoBroadcast.BroadcastMessageTemplate;
-                var info = streamStatusManager.CurrentStream;
-
-                return template
-                    .Replace("{counter}", counter.ToString())
-                    .Replace("{title}", info?.Title ?? string.Empty)
-                    .Replace("{game}", info?.GameName ?? string.Empty)
-                    .Replace("{viewers}", info?.ViewerCount.ToString() ?? string.Empty);
-            });
-
-            return new(messenger, settingsManager, messageProvider);
+            var commands = sp.GetServices<IChatCommand>().ToList();
+            var processor = new ChatCommandProcessor(commands);
+            processor.Register(new HelpCommand(processor.GetAllCommands));
+            return processor;
         });
 
-        services.AddSingleton<BotFactory>();
+        services.AddSingleton<TwitchChatHandler>();
+        services.AddSingleton<IChannelProvider>(sp => sp.GetRequiredService<TwitchChatHandler>());
 
-        services.AddTransient<Func<Bot>>(sp =>
+        services.AddSingleton<BotConnectionManager>();
+        services.AddSingleton<MainForm>();
+    }
+
+    private static string GetRussianSecondsWord(int seconds)
+    {
+        var mod100 = seconds % 100;
+        if (mod100 is >= 11 and <= 14)
         {
-            var factory = sp.GetRequiredService<BotFactory>();
-            return factory.Create;
-        });
+            return "секунд";
+        }
 
-        services.AddTransient<BotConnectionManager>();
-        services.AddTransient<MainForm>();
+        return (seconds % 10) switch
+        {
+            1 => "секунда",
+            2 or 3 or 4 => "секунды",
+            _ => "секунд",
+        };
+    }
+
+    private static bool ValidateAndResolvePortConflict(SettingsManager settingsManager)
+    {
+        var settings = settingsManager.Current;
+        var redirectUri = settings.Twitch.RedirectUri;
+        var serverPort = settings.Twitch.HttpServerPort;
+
+        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri))
+        {
+            Log.Error("Некорректный RedirectUri: {RedirectUri}", redirectUri);
+            MessageBox.Show($"Некорректный RedirectUri: {redirectUri}\n\nПожалуйста, исправьте URI в настройках OAuth.",
+                "Ошибка конфигурации",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+
+            return false;
+        }
+
+        int redirectPort;
+        if (uri.Port == -1)
+        {
+            redirectPort = uri.Scheme == "https" ? 443 : 80;
+        }
+        else
+        {
+            redirectPort = uri.Port;
+        }
+
+        if (redirectPort == serverPort)
+        {
+            return true;
+        }
+
+        Log.Information("Конфликт портов. Обновление порта с {OldPort} на {NewPort}", serverPort, redirectPort);
+        settings.Twitch.HttpServerPort = redirectPort;
+        settingsManager.SaveSettings(settings);
+
+        var message = $"""
+                       Обнаружен конфликт портов:
+
+                       • RedirectUri использует порт: {redirectPort}
+                       • HTTP сервер был настроен на порт: {serverPort}
+
+                       Для корректной работы OAuth порт HTTP сервера был автоматически обновлен до {redirectPort}.
+
+                       Если вы хотите использовать другой порт, пожалуйста, измените его вручную в настройках HTTP сервера и RedirectUri.
+                       """;
+
+        MessageBox.Show(message,
+            "Порт обновлен",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+
+        return true;
     }
 }
