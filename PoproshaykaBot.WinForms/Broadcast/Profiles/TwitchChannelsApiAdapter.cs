@@ -1,16 +1,15 @@
-using TwitchLib.Api;
-using TwitchLib.Api.Helix.Models.Channels.ModifyChannelInformation;
+﻿using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
-public sealed class TwitchChannelsApiAdapter(TwitchAPI twitchApi) : ITwitchChannelsApi
+public sealed class TwitchChannelsApiAdapter(ITwitchHelixClient helix) : ITwitchChannelsApi
 {
     public Task ModifyChannelInformationAsync(
         string broadcasterId,
-        ModifyChannelInformationRequest request,
+        PatchChannelRequest request,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return twitchApi.Helix.Channels.ModifyChannelInformationAsync(broadcasterId, request);
+        return helix.PatchChannelAsync(broadcasterId, request, cancellationToken);
     }
 }

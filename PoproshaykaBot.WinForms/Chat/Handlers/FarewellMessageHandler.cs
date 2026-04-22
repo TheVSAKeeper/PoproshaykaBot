@@ -1,13 +1,11 @@
-using PoproshaykaBot.WinForms.Infrastructure.Events;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Settings;
-using TwitchLib.Client;
 
 namespace PoproshaykaBot.WinForms.Chat.Handlers;
 
 public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChanged>, IEventSubscriber, IDisposable
 {
-    private readonly TwitchClient _twitchClient;
     private readonly TwitchChatHandler _twitchChatHandler;
     private readonly AudienceTracker _audienceTracker;
     private readonly TwitchChatMessenger _messenger;
@@ -15,14 +13,12 @@ public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChan
     private readonly IDisposable _subscription;
 
     public FarewellMessageHandler(
-        TwitchClient twitchClient,
         TwitchChatHandler twitchChatHandler,
         AudienceTracker audienceTracker,
         TwitchChatMessenger messenger,
         SettingsManager settingsManager,
         IEventBus eventBus)
     {
-        _twitchClient = twitchClient;
         _twitchChatHandler = twitchChatHandler;
         _audienceTracker = audienceTracker;
         _messenger = messenger;
@@ -32,7 +28,7 @@ public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChan
 
     public Task HandleAsync(BotLifecyclePhaseChanged @event, CancellationToken cancellationToken)
     {
-        if (@event.Phase != BotLifecyclePhase.Disconnecting || !_twitchClient.IsConnected)
+        if (@event.Phase != BotLifecyclePhase.Disconnecting)
         {
             return Task.CompletedTask;
         }
@@ -62,7 +58,13 @@ public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChan
 
         if (messages.Count > 0)
         {
-            _messenger.Send(channel, string.Join(" ", messages));
+            try
+            {
+                _messenger.Send(string.Join(" ", messages));
+            }
+            catch (Exception)
+            {
+            }
         }
 
         return Task.CompletedTask;

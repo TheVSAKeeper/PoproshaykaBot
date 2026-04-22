@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Infrastructure.Events;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Settings;
 
@@ -27,7 +27,7 @@ public sealed class ConnectionGreetingHandler : IEventHandler<BotJoinedChannel>,
         if (settings.Messages.ConnectionEnabled
             && !string.IsNullOrWhiteSpace(settings.Messages.Connection))
         {
-            _messenger.Send(@event.Channel, settings.Messages.Connection);
+            _messenger.Send(settings.Messages.Connection);
         }
 
         return Task.CompletedTask;

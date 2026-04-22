@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
@@ -69,7 +69,7 @@ public sealed class StreamStatusBroadcastHandler :
             && !string.IsNullOrEmpty(settings.AutoBroadcast.StreamStartMessage))
         {
             _logger.LogDebug("Отправка уведомления о начале стрима в канал {Channel}", channel);
-            _messenger.Send(channel, settings.AutoBroadcast.StreamStartMessage);
+            _messenger.Send(settings.AutoBroadcast.StreamStartMessage);
         }
     }
 
@@ -97,7 +97,7 @@ public sealed class StreamStatusBroadcastHandler :
             && !string.IsNullOrEmpty(settings.AutoBroadcast.StreamStopMessage))
         {
             _logger.LogDebug("Отправка уведомления об окончании стрима в канал {Channel}", channel);
-            _messenger.Send(channel, settings.AutoBroadcast.StreamStopMessage);
+            _messenger.Send(settings.AutoBroadcast.StreamStopMessage);
         }
     }
 

@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Broadcast.Profiles;
+﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms.Settings;
@@ -37,7 +37,20 @@ public class TwitchSettings
 
     public string RedirectUri { get; set; } = "http://localhost:8080";
 
-    public string[] Scopes { get; set; } = ["chat:read", "chat:edit", "channel:manage:broadcast"];
+    public string[] Scopes { get; set; } =
+    [
+        "user:read:chat",
+        "user:write:chat",
+        "user:bot",
+        "channel:bot",
+        "channel:manage:broadcast",
+    ];
+
+    /// <summary>
+    /// Набор прав (scopes), с которыми был получен текущий токен.
+    /// Сохраняется при каждом успешном OAuth-обмене или рефреше.
+    /// </summary>
+    public string[] StoredScopes { get; set; } = [];
 
     public int HttpServerPort { get; set; } = 8080;
 

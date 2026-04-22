@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
@@ -107,7 +107,7 @@ public sealed class BroadcastScheduler(
             return Task.CompletedTask;
         }
 
-        messenger.Send(currentChannel, message);
+        messenger.Send(message);
         logger.LogInformation("Сообщение отправлено вручную в канал {Channel}. Всего отправлено: {SentMessagesCount}", currentChannel, newCount);
 
         PublishStateChanged();
@@ -215,7 +215,7 @@ public sealed class BroadcastScheduler(
                     continue;
                 }
 
-                messenger.Send(currentChannel, message);
+                messenger.Send(message);
                 logger.LogInformation("Запланированное сообщение отправлено в канал {Channel}. Всего отправлено: {SentMessagesCount}", currentChannel, newCount);
 
                 lock (_stateLock)

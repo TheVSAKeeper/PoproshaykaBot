@@ -1,4 +1,4 @@
-using TwitchLib.Api.Helix.Models.Channels.ModifyChannelInformation;
+﻿using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
@@ -6,6 +6,6 @@ public interface ITwitchChannelsApi
 {
     Task ModifyChannelInformationAsync(
         string broadcasterId,
-        ModifyChannelInformationRequest request,
+        PatchChannelRequest request,
         CancellationToken cancellationToken);
 }

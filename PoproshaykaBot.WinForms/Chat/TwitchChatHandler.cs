@@ -1,28 +1,23 @@
-using PoproshaykaBot.WinForms.Infrastructure;
+﻿using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Users;
-using TwitchLib.Client;
-using TwitchLib.Client.Events;
-using TwitchLib.Client.Models;
 
 namespace PoproshaykaBot.WinForms.Chat;
 
-public sealed class TwitchChatHandler : IChannelProvider
+public sealed class TwitchChatHandler : IChannelProvider, IEventHandler<RawChatMessageReceived>, IEventSubscriber, IDisposable
 {
-    private readonly TwitchClient _client;
     private readonly SettingsManager _settingsManager;
     private readonly AudienceTracker _audienceTracker;
     private readonly ChatDecorationsProvider _chatDecorations;
     private readonly ChatCommandProcessor _commandProcessor;
     private readonly TwitchChatMessenger _messenger;
     private readonly IEventBus _eventBus;
+    private readonly IDisposable _subscription;
 
     public TwitchChatHandler(
-        TwitchClient twitchClient,
         SettingsManager settingsManager,
         AudienceTracker audienceTracker,
         ChatDecorationsProvider chatDecorationsProvider,
@@ -30,7 +25,6 @@ public sealed class TwitchChatHandler : IChannelProvider
         TwitchChatMessenger messenger,
         IEventBus eventBus)
     {
-        _client = twitchClient;
         _settingsManager = settingsManager;
         _audienceTracker = audienceTracker;
         _chatDecorations = chatDecorationsProvider;
@@ -38,10 +32,7 @@ public sealed class TwitchChatHandler : IChannelProvider
         _messenger = messenger;
         _eventBus = eventBus;
 
-        _client.OnLog += Client_OnLog;
-        _client.OnConnected += Client_OnConnected;
-        _client.OnJoinedChannel += Client_OnJoinedChannel;
-        _client.OnMessageReceived += Client_OnMessageReceived;
+        _subscription = eventBus.Subscribe(this);
     }
 
     public string? Channel { get; private set; }
@@ -52,79 +43,67 @@ public sealed class TwitchChatHandler : IChannelProvider
         _audienceTracker.ClearAll();
     }
 
-    private void Client_OnLog(object? sender, OnLogArgs e)
+    public void Dispose()
     {
-        var logMessage = $"{e.DateTime}: {e.BotUsername} - {e.Data}";
-        Console.WriteLine(logMessage);
-        PublishBotLog(logMessage);
+        _subscription.Dispose();
     }
 
-    private void Client_OnConnected(object? sender, OnConnectedArgs e)
+    public Task HandleAsync(RawChatMessageReceived @event, CancellationToken cancellationToken)
     {
-        var connectionMessage = "Подключен!";
-        Console.WriteLine(connectionMessage);
-        PublishBotLog(connectionMessage);
-    }
+        var chatMessage = @event.Message;
 
-    private void Client_OnJoinedChannel(object? sender, OnJoinedChannelArgs e)
-    {
-        Channel = e.Channel;
+        Channel ??= chatMessage.Channel;
 
-        var connectionMessage = $"Подключен к каналу {e.Channel}";
-        Console.WriteLine(connectionMessage);
-        PublishBotLog(connectionMessage);
-
-        _ = _eventBus.PublishAsync(new BotJoinedChannel(e.Channel));
-    }
-
-    private void Client_OnMessageReceived(object? sender, OnMessageReceivedArgs e)
-    {
         var settings = _settingsManager.Current.Twitch;
 
-        var isFirstSeen = _audienceTracker.OnUserMessage(e.ChatMessage.UserId, e.ChatMessage.DisplayName);
+        var isFirstSeen = _audienceTracker.OnUserMessage(chatMessage.UserId, chatMessage.DisplayName);
 
-        var status = GetUserStatusFlags(e.ChatMessage);
+        var status = GetUserStatusFlags(chatMessage);
+
+        var badgesKvp = chatMessage.Badges
+            .Select(b => new KeyValuePair<string, string>(b.SetId, b.BadgeId))
+            .ToList();
 
         var historyEntry = new ChatMessageData
         {
-            Timestamp = DateTime.UtcNow,
-            DisplayName = e.ChatMessage.DisplayName,
-            Message = e.ChatMessage.Message,
+            Timestamp = @event.Timestamp.UtcDateTime,
+            DisplayName = chatMessage.DisplayName,
+            Message = chatMessage.Message,
             MessageType = ChatMessageType.UserMessage,
             Status = status,
             IsFirstTime = isFirstSeen,
 
-            Emotes = _chatDecorations.ExtractEmotes(e.ChatMessage, settings.ObsChat.EmoteSizePixels),
-            Badges = e.ChatMessage.Badges,
-            BadgeUrls = _chatDecorations.ExtractBadgeUrls(e.ChatMessage.Badges, settings.ObsChat.BadgeSizePixels),
+            Emotes = _chatDecorations.ExtractEmotes(chatMessage, settings.ObsChat.EmoteSizePixels),
+            Badges = badgesKvp,
+            BadgeUrls = _chatDecorations.ExtractBadgeUrls(chatMessage.Badges, settings.ObsChat.BadgeSizePixels),
         };
 
-        _ = _eventBus.PublishAsync(new ChatMessageReceived(e.ChatMessage.Channel,
-            e.ChatMessage.Id,
-            e.ChatMessage.UserId,
-            e.ChatMessage.Username,
-            e.ChatMessage.DisplayName,
-            e.ChatMessage.Message,
+        _ = _eventBus.PublishAsync(new ChatMessageReceived(chatMessage.Channel,
+            chatMessage.Id,
+            chatMessage.UserId,
+            chatMessage.Username,
+            chatMessage.DisplayName,
+            chatMessage.Message,
             status,
             isFirstSeen,
-            historyEntry));
+            historyEntry), cancellationToken);
 
         var context = new CommandContext
         {
-            Channel = e.ChatMessage.Channel,
-            MessageId = e.ChatMessage.Id,
-            UserId = e.ChatMessage.UserId,
-            Username = e.ChatMessage.Username,
-            DisplayName = e.ChatMessage.DisplayName,
-            IsBroadcaster = e.ChatMessage.IsBroadcaster,
-            IsModerator = e.ChatMessage.IsModerator,
+            Channel = chatMessage.Channel,
+            MessageId = chatMessage.Id,
+            UserId = chatMessage.UserId,
+            Username = chatMessage.Username,
+            DisplayName = chatMessage.DisplayName,
+            IsBroadcaster = chatMessage.IsBroadcaster,
+            IsModerator = chatMessage.IsModerator,
         };
 
-        var isCommand = _commandProcessor.TryProcess(e.ChatMessage.Message, context, out var response);
+        var isCommand = _commandProcessor.TryProcess(chatMessage.Message, context, out var response);
 
         if (settings.Messages.WelcomeEnabled && isFirstSeen)
         {
-            var welcomeMessage = _audienceTracker.CreateWelcome(e.ChatMessage.DisplayName);
+            var welcomeMessage = _audienceTracker.CreateWelcome(chatMessage.DisplayName);
 
             if (!string.IsNullOrWhiteSpace(welcomeMessage))
             {
@@ -134,7 +113,7 @@ public sealed class TwitchChatHandler : IChannelProvider
                 }
                 else if (!isCommand)
                 {
-                    _messenger.Reply(e.ChatMessage.Channel, e.ChatMessage.Id, welcomeMessage);
+                    _messenger.Reply(chatMessage.Id, welcomeMessage);
                 }
             }
         }
@@ -144,17 +123,19 @@ public sealed class TwitchChatHandler : IChannelProvider
             switch (response.Delivery)
             {
                 case DeliveryType.Reply:
-                    _messenger.Reply(context.Channel, response.ReplyToMessageId ?? context.MessageId, response.Text);
+                    _messenger.Reply(response.ReplyToMessageId ?? context.MessageId, response.Text);
                     break;
 
                 case DeliveryType.Normal:
                 default:
-                    _messenger.Send(context.Channel, response.Text);
+                    _messenger.Send(response.Text);
                     break;
             }
         }
 
-        PublishBotLog(e.ChatMessage.DisplayName + ": " + e.ChatMessage.Message);
+        PublishBotLog(chatMessage.DisplayName + ": " + chatMessage.Message);
+
+        return Task.CompletedTask;
     }
 
     private static UserStatus GetUserStatusFlags(ChatMessage chatMessage)

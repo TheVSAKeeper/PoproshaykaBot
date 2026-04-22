@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Broadcast;
@@ -13,14 +13,13 @@ using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Statistics;
 using PoproshaykaBot.WinForms.Streaming;
+using PoproshaykaBot.WinForms.Twitch;
+using PoproshaykaBot.WinForms.Twitch.Chat;
+using PoproshaykaBot.WinForms.Twitch.EventSub;
+using PoproshaykaBot.WinForms.Twitch.Helix;
 using PoproshaykaBot.WinForms.Users;
 using Serilog;
 using System.Diagnostics;
-using TwitchLib.Api;
-using TwitchLib.Client;
-using TwitchLib.Communication.Clients;
-using TwitchLib.Communication.Models;
-using TwitchLib.EventSub.Websockets;
 using Timer = System.Windows.Forms.Timer;
 
 namespace PoproshaykaBot.WinForms;
@@ -187,27 +186,20 @@ public static class Program
 
         services.AddSingleton<SettingsManager>();
 
-        services.AddSingleton<TwitchAPI>(sp =>
-        {
-            var settings = sp.GetRequiredService<SettingsManager>().Current.Twitch;
-            var api = new TwitchAPI();
-            api.Settings.ClientId = settings.ClientId;
-            return api;
-        });
-
-        services.AddSingleton<TwitchClient>(sp =>
-        {
-            var settings = sp.GetRequiredService<SettingsManager>().Current.Twitch;
-            var clientOptions = new ClientOptions
+        services.AddTransient<TwitchAuthHandler>();
+        services.AddHttpClient(TwitchEndpoints.HelixHttpClientName, client =>
             {
-                MessagesAllowedInPeriod = settings.MessagesAllowedInPeriod,
-                ThrottlingPeriod = TimeSpan.FromSeconds(settings.ThrottlingPeriodSeconds),
-                DisconnectWait = 0,
-            };
+                client.BaseAddress = new(TwitchEndpoints.HelixBaseUrl);
+            })
+            .AddHttpMessageHandler<TwitchAuthHandler>();
 
-            var wsClient = new WebSocketClient(clientOptions);
-            return new(wsClient);
-        });
+        services.AddSingleton<ITwitchHelixClient, TwitchHelixClient>();
+
+        services.AddSingleton<EventSubChatMessageMapper>();
+        services.AddSingleton<ChatIngestionService>();
+        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChatIngestionService>());
+        services.AddSingleton<ChatSender>();
+        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChatSender>());
 
         services.AddSingleton<StatisticsCollector>();
         services.AddSingleton<TwitchOAuthService>();
@@ -216,13 +208,14 @@ public static class Program
 
         services.AddSingleton<KestrelHttpServer>();
 
-        services.AddSingleton<EventSubWebsocketClient>();
+        services.AddSingleton<ITwitchEventSubClient, TwitchEventSubClient>();
         services.AddSingleton<StreamStatusManager>();
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
         services.AddSingleton<UserMessagesManagementService>();
 
         services.AddSingleton<TwitchChatMessenger>();
+        services.AddSingleton<IChatMessenger>(sp => sp.GetRequiredService<TwitchChatMessenger>());
         services.AddSingleton<BroadcastScheduler>();
 
         services.AddSingleton<ITwitchChannelsApi, TwitchChannelsApiAdapter>();

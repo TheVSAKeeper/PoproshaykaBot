@@ -1,11 +1,13 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Events;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Twitch.Chat;
 using System.Diagnostics;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using TwitchLib.Api;
 
 namespace PoproshaykaBot.WinForms.Auth;
 
@@ -13,7 +15,7 @@ public sealed class TwitchOAuthService(
     SettingsManager settingsManager,
     IHttpClientFactory httpClientFactory,
     ILogger<TwitchOAuthService> logger,
-    TwitchAPI twitchApi)
+    IEventBus eventBus)
     : IDisposable
 {
     private static readonly TimeSpan AuthTimeout = TimeSpan.FromMinutes(5);
@@ -59,7 +61,7 @@ public sealed class TwitchOAuthService(
 
             var authUrl = $"https://id.twitch.tv/oauth2/authorize"
                           + $"?response_type=code"
-                          + $"&client_id={clientId}"
+                          + $"&client_id={Uri.EscapeDataString(clientId)}"
                           + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
                           + $"&scope={Uri.EscapeDataString(scopeString)}"
                           + $"&state={Uri.EscapeDataString(_currentState)}";
@@ -128,17 +130,23 @@ public sealed class TwitchOAuthService(
     {
         logger.LogDebug("Получен callback авторизации (State: {State})", state);
 
-        if (_currentState != null && _currentState != state)
+        if (_currentState is null || _authTcs is null)
+        {
+            logger.LogWarning("Callback авторизации получен вне активного OAuth-потока. Игнорирован");
+            return;
+        }
+
+        if (_currentState != state)
         {
             logger.LogWarning("Несовпадение параметра state. Ожидался: {ExpectedState}, Получен: {ActualState}. Возможна CSRF атака", _currentState, state);
 
             var securityEx = new SecurityException("Неверный параметр state. Авторизация отклонена в целях безопасности.");
-            _authTcs?.TrySetException(securityEx);
+            _authTcs.TrySetException(securityEx);
             return;
         }
 
         logger.LogInformation("Callback авторизации успешно прошел проверку state");
-        _authTcs?.TrySetResult(code);
+        _authTcs.TrySetResult(code);
     }
 
     public void SetAuthError(Exception exception)
@@ -237,9 +245,28 @@ public sealed class TwitchOAuthService(
                 ReportStatus("Проверка действительности токена...");
                 logger.LogDebug("Проверка существующего Access-токена");
 
+                if (settings.StoredScopes.Length > 0
+                    && !TwitchScopes.SetEquals(settings.StoredScopes, settings.Scopes))
+                {
+                    logger.LogWarning("Scope set изменился — требуется повторная авторизация. Старые: {Old}. Новые: {New}",
+                        string.Join(" ", settings.StoredScopes),
+                        string.Join(" ", settings.Scopes));
+
+                    const string ScopeChangeMsg = "Требуется повторная авторизация Twitch: изменился набор прав бота.";
+                    ReportStatus(ScopeChangeMsg);
+                    _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(ScopeChangeMsg), ct);
+
+                    var currentSettings = settingsManager.Current;
+                    currentSettings.Twitch.AccessToken = string.Empty;
+                    currentSettings.Twitch.RefreshToken = string.Empty;
+                    currentSettings.Twitch.StoredScopes = [];
+                    settingsManager.SaveSettings(currentSettings);
+
+                    return null;
+                }
+
                 if (await IsTokenValidAsync(settings.AccessToken))
                 {
-                    SyncTwitchApi(settings.AccessToken);
                     logger.LogInformation("Существующий токен доступа валиден и будет использован");
                     return settings.AccessToken;
                 }
@@ -276,16 +303,21 @@ public sealed class TwitchOAuthService(
         }
     }
 
-    public void UpdateSettings(string accessToken, string refreshToken)
+    public void UpdateSettings(string accessToken, string refreshToken, IEnumerable<string>? newScopes = null)
     {
         logger.LogDebug("Обновление токенов в настройках приложения");
 
         var settings = settingsManager.Current;
         settings.Twitch.AccessToken = accessToken;
         settings.Twitch.RefreshToken = refreshToken;
+
+        if (newScopes != null)
+        {
+            settings.Twitch.StoredScopes = newScopes.ToArray();
+        }
+
         settingsManager.SaveSettings(settings);
 
-        SyncTwitchApi(accessToken);
         logger.LogInformation("Настройки приложения успешно обновлены новыми токенами");
     }
 
@@ -297,7 +329,6 @@ public sealed class TwitchOAuthService(
         settings.Twitch.AccessToken = string.Empty;
         settings.Twitch.RefreshToken = string.Empty;
         settingsManager.SaveSettings(settings);
-        twitchApi.Settings.AccessToken = string.Empty;
 
         ReportStatus("Токены очищены.");
         logger.LogInformation("Токены Twitch API успешно удалены из настроек");
@@ -334,20 +365,12 @@ public sealed class TwitchOAuthService(
 
         var tokenResponse = await PostTokenRequestAsync(formData, ct);
 
-        UpdateSettings(tokenResponse.AccessToken, tokenResponse.RefreshToken);
+        UpdateSettings(tokenResponse.AccessToken, tokenResponse.RefreshToken, tokenResponse.Scope);
 
         ReportStatus("Токен доступа обновлен успешно!");
         logger.LogInformation("Токен доступа успешно обновлен через RefreshToken (ClientId: {ClientId})", clientId);
 
         return tokenResponse.AccessToken;
-    }
-
-    private void SyncTwitchApi(string accessToken)
-    {
-        logger.LogDebug("Синхронизация ClientId и Access-токена с инстансом TwitchAPI");
-        var settings = settingsManager.Current.Twitch;
-        twitchApi.Settings.ClientId = settings.ClientId;
-        twitchApi.Settings.AccessToken = accessToken;
     }
 
     private void ReportStatus(string status)
@@ -369,7 +392,7 @@ public sealed class TwitchOAuthService(
 
         var tokenResponse = await PostTokenRequestAsync(formData, ct);
 
-        UpdateSettings(tokenResponse.AccessToken, tokenResponse.RefreshToken);
+        UpdateSettings(tokenResponse.AccessToken, tokenResponse.RefreshToken, tokenResponse.Scope);
 
         return tokenResponse.AccessToken;
     }
@@ -387,8 +410,25 @@ public sealed class TwitchOAuthService(
 
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogError("Ошибка HTTP-запроса при получении токена. StatusCode: {StatusCode}, ErrorPayload: {ErrorResponse}", response.StatusCode, jsonResponse);
-            throw new InvalidOperationException($"Ошибка запроса токена: {jsonResponse}");
+            logger.LogDebug("Raw OAuth error body: {Body}", jsonResponse);
+
+            var errorStatus = (int)response.StatusCode;
+            string? errorMessage = null;
+            try
+            {
+                var errorDto = JsonSerializer.Deserialize<OAuthErrorResponse>(jsonResponse);
+                if (errorDto != null)
+                {
+                    errorStatus = errorDto.Status != 0 ? errorDto.Status : errorStatus;
+                    errorMessage = errorDto.Message;
+                }
+            }
+            catch (JsonException)
+            {
+            }
+
+            logger.LogError("Ошибка HTTP-запроса при получении токена. StatusCode: {StatusCode}", response.StatusCode);
+            throw new InvalidOperationException($"OAuth error {errorStatus}: {errorMessage ?? "нет описания"}");
         }
 
         var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(jsonResponse);
@@ -416,3 +456,9 @@ public record TokenResponse(
     [property: JsonPropertyName("token_type")]
     string TokenType
 );
+
+internal sealed record OAuthErrorResponse(
+    [property: JsonPropertyName("status")]
+    int Status,
+    [property: JsonPropertyName("message")]
+    string? Message);

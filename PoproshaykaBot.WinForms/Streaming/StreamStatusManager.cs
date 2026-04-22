@@ -1,21 +1,22 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Reconnection;
-using TwitchLib.Api;
-using TwitchLib.Api.Core.Enums;
-using TwitchLib.EventSub.Websockets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.Stream;
+using PoproshaykaBot.WinForms.Twitch.EventSub;
+using PoproshaykaBot.WinForms.Twitch.Helix;
+using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Streaming;
 
 public class StreamStatusManager : IAsyncDisposable
 {
     private const int MaxReconnectAttempts = 5;
-    private readonly EventSubWebsocketClient _eventSubClient;
-    private readonly TwitchAPI _twitchApi;
+    private readonly ITwitchEventSubClient _eventSubClient;
+    private readonly ITwitchHelixClient _helix;
     private readonly IEventBus _eventBus;
     private readonly ILogger<StreamStatusManager> _logger;
     private readonly ExponentialBackoffPolicy _reconnectionPolicy = new(MaxReconnectAttempts);
@@ -31,23 +32,21 @@ public class StreamStatusManager : IAsyncDisposable
     private CancellationTokenSource? _reconnectCts;
 
     public StreamStatusManager(
-        EventSubWebsocketClient eventSubClient,
-        TwitchAPI twitchApi,
+        ITwitchEventSubClient eventSubClient,
+        ITwitchHelixClient helix,
         IEventBus eventBus,
         ILogger<StreamStatusManager> logger)
     {
         _eventSubClient = eventSubClient;
-        _twitchApi = twitchApi;
+        _helix = helix;
         _eventBus = eventBus;
         _logger = logger;
 
-        _eventSubClient.WebsocketConnected += OnWebsocketConnected;
-        _eventSubClient.WebsocketDisconnected += OnWebsocketDisconnected;
-        _eventSubClient.WebsocketReconnected += OnWebsocketReconnected;
-        _eventSubClient.ErrorOccurred += OnErrorOccurred;
-
-        _eventSubClient.StreamOnline += OnStreamOnline;
-        _eventSubClient.StreamOffline += OnStreamOffline;
+        _eventSubClient.OnSessionWelcome += OnSessionWelcomeAsync;
+        _eventSubClient.OnNotification += OnNotificationAsync;
+        _eventSubClient.OnSessionReconnect += OnSessionReconnectAsync;
+        _eventSubClient.OnRevocation += OnRevocationAsync;
+        _eventSubClient.OnDisconnected += OnDisconnectedAsync;
     }
 
     public StreamStatus CurrentStatus { get; private set; } = StreamStatus.Unknown;
@@ -97,15 +96,7 @@ public class StreamStatusManager : IAsyncDisposable
             PublishMonitoringLog("Подключение к EventSub WebSocket...");
             _logger.LogDebug("Подключение к EventSub WebSocket для BroadcasterId: {BroadcasterId}", _broadcasterUserId);
 
-            var connected = await _eventSubClient.ConnectAsync();
-
-            if (!connected)
-            {
-                var errorMessage = "Не удалось подключиться к EventSub WebSocket";
-                _logger.LogError("Ошибка подключения к EventSub WebSocket для BroadcasterId: {BroadcasterId}", _broadcasterUserId);
-                PublishMonitoringError(errorMessage);
-                throw new InvalidOperationException(errorMessage);
-            }
+            await _eventSubClient.StartAsync(_disposeCts.Token);
 
             _logger.LogInformation("Соединение EventSub инициировано для BroadcasterId: {BroadcasterId}. Ожидание подтверждения...", _broadcasterUserId);
             PublishMonitoringLog("Ожидание подтверждения подключения...");
@@ -113,7 +104,7 @@ public class StreamStatusManager : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Исключение при запуске мониторинга для канала {ChannelName}", channelName);
-            PublishMonitoringError($"Ошибка запуска мониторинга: {ex.Message}");
+            PublishMonitoringError($"Ошибка запуска мониторинга: {SafeMessage(ex)}");
             SetMonitoringStopped();
             throw;
         }
@@ -139,15 +130,7 @@ public class StreamStatusManager : IAsyncDisposable
 
             PublishMonitoringLog("Отключение от EventSub WebSocket...");
 
-            if (cancellationToken == CancellationToken.None)
-            {
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                await _eventSubClient.DisconnectAsync(timeoutCts.Token);
-            }
-            else
-            {
-                await _eventSubClient.DisconnectAsync(cancellationToken);
-            }
+            await _eventSubClient.StopAsync(cancellationToken);
 
             CurrentStatus = StreamStatus.Unknown;
             SetMonitoringStopped();
@@ -158,7 +141,7 @@ public class StreamStatusManager : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка при остановке мониторинга для BroadcasterId: {BroadcasterId}", _broadcasterUserId);
-            PublishMonitoringError($"Ошибка остановки мониторинга: {ex.Message}");
+            PublishMonitoringError($"Ошибка остановки мониторинга: {SafeMessage(ex)}");
         }
     }
 
@@ -183,13 +166,11 @@ public class StreamStatusManager : IAsyncDisposable
 
         await StopMonitoringAsync();
 
-        _eventSubClient.WebsocketConnected -= OnWebsocketConnected;
-        _eventSubClient.WebsocketDisconnected -= OnWebsocketDisconnected;
-        _eventSubClient.WebsocketReconnected -= OnWebsocketReconnected;
-        _eventSubClient.ErrorOccurred -= OnErrorOccurred;
-
-        _eventSubClient.StreamOnline -= OnStreamOnline;
-        _eventSubClient.StreamOffline -= OnStreamOffline;
+        _eventSubClient.OnSessionWelcome -= OnSessionWelcomeAsync;
+        _eventSubClient.OnNotification -= OnNotificationAsync;
+        _eventSubClient.OnSessionReconnect -= OnSessionReconnectAsync;
+        _eventSubClient.OnRevocation -= OnRevocationAsync;
+        _eventSubClient.OnDisconnected -= OnDisconnectedAsync;
 
         GC.SuppressFinalize(this);
     }
@@ -205,9 +186,9 @@ public class StreamStatusManager : IAsyncDisposable
             }
 
             _logger.LogDebug("Запрос текущего статуса стрима через API для BroadcasterId: {BroadcasterId}", _broadcasterUserId);
-            var response = await _twitchApi.Helix.Streams.GetStreamsAsync(userIds: [_broadcasterUserId]);
+            var stream = await _helix.GetStreamAsync(_broadcasterUserId);
 
-            var isOnline = response?.Streams is { Length: > 0 };
+            var isOnline = stream != null;
             var newStatus = isOnline ? StreamStatus.Online : StreamStatus.Offline;
 
             if (CurrentStatus == StreamStatus.Online && newStatus == StreamStatus.Offline)
@@ -221,10 +202,8 @@ public class StreamStatusManager : IAsyncDisposable
                 await PublishStatusTransitionAsync(newStatus).ConfigureAwait(false);
             }
 
-            if (isOnline)
+            if (isOnline && stream != null)
             {
-                var stream = response.Streams[0];
-
                 CurrentStream = new()
                 {
                     Id = stream.Id,
@@ -238,7 +217,7 @@ public class StreamStatusManager : IAsyncDisposable
                     ViewerCount = stream.ViewerCount,
                     StartedAt = stream.StartedAt,
                     ThumbnailUrl = stream.ThumbnailUrl,
-                    Tags = stream.Tags ?? [],
+                    Tags = stream.Tags,
                     IsMature = stream.IsMature,
                 };
 
@@ -256,25 +235,83 @@ public class StreamStatusManager : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Не удалось обновить текущий статус стрима для BroadcasterId: {BroadcasterId}", _broadcasterUserId);
-            PublishMonitoringError($"Ошибка получения текущего статуса стрима: {ex.Message}");
+            PublishMonitoringError($"Ошибка получения текущего статуса стрима: {SafeMessage(ex)}");
         }
     }
 
-    private async Task OnWebsocketConnected(object sender, WebsocketConnectedArgs e)
+    private async Task OnSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
         _reconnectionPolicy.Reset();
-        _logger.LogInformation("EventSub WebSocket подключен. SessionId: {SessionId}, IsRequestedReconnect: {IsRequestedReconnect}", _eventSubClient.SessionId, e.IsRequestedReconnect);
-        PublishMonitoringLog($"EventSub WebSocket подключен (Session: {_eventSubClient.SessionId})");
+        _logger.LogInformation("EventSub WebSocket подключен. SessionId: {SessionId}", args.SessionId);
+        PublishMonitoringLog($"EventSub WebSocket подключен (Session: {args.SessionId})");
 
-        if (!e.IsRequestedReconnect && !string.IsNullOrEmpty(_broadcasterUserId))
+        if (!string.IsNullOrEmpty(_broadcasterUserId))
         {
-            await CreateEventSubSubscriptions();
+            await CreateEventSubSubscriptionsAsync(args.SessionId, cancellationToken);
         }
     }
 
-    private async Task OnWebsocketDisconnected(object sender, EventArgs e)
+    private async Task OnNotificationAsync(EventSubNotificationArgs args, CancellationToken cancellationToken)
     {
-        _logger.LogWarning("EventSub WebSocket отключен. Disposed: {IsDisposed}, StopRequested: {IsStopRequested}", _disposed, _stopRequested);
+        switch (args.SubscriptionType)
+        {
+            case "stream.online":
+                await HandleStreamOnlineAsync(args.Payload, cancellationToken);
+                break;
+
+            case "stream.offline":
+                await HandleStreamOfflineAsync(cancellationToken);
+                break;
+
+            default:
+                _logger.LogDebug("EventSub уведомление неизвестного типа: {Type}", args.SubscriptionType);
+                break;
+        }
+    }
+
+    private Task OnSessionReconnectAsync(EventSubReconnectArgs args, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("EventSub session_reconnect → {Url} (старый session: {OldSession})", args.ReconnectUrl, args.OldSessionId);
+        PublishMonitoringLog($"EventSub переподключение (Session: {args.OldSessionId} → новый)...");
+        return Task.CompletedTask;
+    }
+
+    private async Task OnRevocationAsync(EventSubRevocationArgs args, CancellationToken cancellationToken)
+    {
+        _logger.LogWarning("EventSub revocation: id={Id}, type={Type}, status={Status}", args.SubscriptionId, args.SubscriptionType, args.Status);
+        PublishMonitoringLog($"EventSub подписка отозвана: {args.SubscriptionType} (status: {args.Status})");
+
+        if (string.IsNullOrEmpty(_broadcasterUserId) || string.IsNullOrEmpty(_eventSubClient.SessionId))
+        {
+            return;
+        }
+
+        try
+        {
+            var condition = new Dictionary<string, string>
+            {
+                { "broadcaster_user_id", _broadcasterUserId },
+            };
+
+            var newId = await _helix.CreateEventSubSubscriptionAsync(args.SubscriptionType,
+                "1",
+                condition,
+                _eventSubClient.SessionId,
+                cancellationToken);
+
+            _logger.LogInformation("Подписка {Type} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, newId);
+            PublishMonitoringLog($"Подписка {args.SubscriptionType} восстановлена");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Не удалось восстановить подписку {Type} после revocation", args.SubscriptionType);
+            PublishMonitoringError($"Ошибка восстановления подписки {args.SubscriptionType}: {SafeMessage(ex)}");
+        }
+    }
+
+    private async Task OnDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken cancellationToken)
+    {
+        _logger.LogWarning("EventSub WebSocket отключен. Причина: {Reason}. Disposed: {IsDisposed}, StopRequested: {IsStopRequested}", args.Reason, _disposed, _stopRequested);
         PublishMonitoringLog("EventSub WebSocket отключен");
         CurrentStatus = StreamStatus.Unknown;
 
@@ -323,49 +360,52 @@ public class StreamStatusManager : IAsyncDisposable
 
         try
         {
-            var success = await _eventSubClient.ReconnectAsync();
-
-            if (success)
-            {
-                _reconnectionPolicy.Reset();
-                _logger.LogInformation("Успешное переподключение EventSub WebSocket (попытка {Attempt})", attempt);
-                PublishMonitoringLog("Переподключение успешно");
-            }
-            else
-            {
-                _logger.LogWarning("Не удалось переподключиться к EventSub WebSocket (попытка {Attempt}/{MaxAttempts})", attempt, maxAttempts);
-                PublishMonitoringError($"Не удалось переподключиться (попытка {attempt}/{maxAttempts})");
-            }
+            await _eventSubClient.StartAsync(token);
+            _logger.LogInformation("Переподключение EventSub WebSocket инициировано (попытка {Attempt})", attempt);
+            PublishMonitoringLog("Переподключение инициировано...");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Исключение при попытке переподключения {Attempt}/{MaxAttempts}", attempt, maxAttempts);
-            PublishMonitoringError($"Ошибка переподключения (попытка {attempt}/{maxAttempts}): {ex.Message}");
+            PublishMonitoringError($"Ошибка переподключения (попытка {attempt}/{maxAttempts}): {SafeMessage(ex)}");
         }
     }
 
-    private Task OnWebsocketReconnected(object sender, EventArgs e)
+    private static string SafeMessage(Exception exception)
     {
-        if (!_stopRequested)
+        if (exception is HelixRequestException helixEx)
         {
-            _logger.LogInformation("EventSub WebSocket неявно переподключен. SessionId: {SessionId}", _eventSubClient.SessionId);
-            PublishMonitoringLog($"EventSub WebSocket переподключен (Session: {_eventSubClient.SessionId})");
+            return helixEx.StatusCode switch
+            {
+                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                    => "недостаточно прав Twitch, нужна повторная авторизация",
+                HttpStatusCode.NotFound
+                    => "ресурс Twitch не найден",
+                HttpStatusCode.TooManyRequests
+                    => "слишком много запросов, попробуем позже",
+                _ => "Twitch отклонил запрос",
+            };
         }
 
-        return Task.CompletedTask;
+        return exception switch
+        {
+            OperationCanceledException => "операция отменена",
+            TimeoutException => "превышено время ожидания ответа Twitch",
+            WebSocketException or SocketException => "соединение с EventSub прервано",
+            HttpRequestException => "сетевая ошибка при обращении к Twitch",
+            UnauthorizedAccessException => "ошибка авторизации в Twitch",
+            JsonException => "некорректный ответ Twitch",
+            _ => "внутренняя ошибка",
+        };
     }
 
-    private Task OnErrorOccurred(object sender, ErrorOccuredArgs e)
+    private async Task HandleStreamOnlineAsync(JsonElement payload, CancellationToken cancellationToken)
     {
-        _logger.LogError("Внутренняя ошибка EventSub WebSocket: {ErrorMessage}", e.Message);
-        PublishMonitoringError($"Ошибка EventSub WebSocket: {e.Message}");
-        return Task.CompletedTask;
-    }
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var data = payload.Deserialize<EventSubStreamOnlinePayloadDto>(options);
 
-    private async Task OnStreamOnline(object sender, StreamOnlineArgs e)
-    {
-        _logger.LogInformation("Событие стрима ONLINE получено через EventSub для BroadcasterId: {BroadcasterId}, Тип: {EventType}", _broadcasterUserId, e.Notification.Payload.Event.Type);
-        PublishMonitoringLog($"🔴 Стрим запущен (EventSub): {e.Notification.Payload.Event.Type}");
+        _logger.LogInformation("Событие стрима ONLINE получено через EventSub для BroadcasterId: {BroadcasterId}, Тип: {EventType}", _broadcasterUserId, data?.Event?.Type);
+        PublishMonitoringLog($"Стрим запущен (EventSub): {data?.Event?.Type ?? "live"}");
 
         if (CurrentStatus != StreamStatus.Online)
         {
@@ -417,13 +457,13 @@ public class StreamStatusManager : IAsyncDisposable
         }, _disposeCts.Token);
     }
 
-    private async Task OnStreamOffline(object sender, StreamOfflineArgs e)
+    private async Task HandleStreamOfflineAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Событие стрима OFFLINE получено через EventSub для BroadcasterId: {BroadcasterId}", _broadcasterUserId);
 
         var oldStatus = CurrentStatus;
         CurrentStatus = StreamStatus.Offline;
-        PublishMonitoringLog("⚫ Стрим завершен (EventSub)");
+        PublishMonitoringLog("Стрим завершен (EventSub)");
         CurrentStream = null;
 
         if (oldStatus != CurrentStatus)
@@ -465,16 +505,16 @@ public class StreamStatusManager : IAsyncDisposable
         {
             PublishMonitoringLog($"Получение ID пользователя для канала: {channelName}");
 
-            var users = await _twitchApi.Helix.Users.GetUsersAsync(logins: [channelName]);
+            var user = await _helix.GetUserByLoginAsync(channelName);
 
-            if (users?.Users == null || users.Users.Length == 0)
+            if (user == null)
             {
                 _logger.LogWarning("Пользователь не найден для канала: {ChannelName}", channelName);
                 PublishMonitoringError($"Пользователь с именем '{channelName}' не найден");
                 return null;
             }
 
-            var userId = users.Users.First().Id;
+            var userId = user.Id;
             _logger.LogInformation("Канал {ChannelName} успешно разрешен в User ID {UserId}", channelName, userId);
             PublishMonitoringLog($"ID пользователя получен: {userId}");
 
@@ -483,12 +523,12 @@ public class StreamStatusManager : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка при получении Broadcaster User ID для канала: {ChannelName}", channelName);
-            PublishMonitoringError($"Ошибка получения ID пользователя: {ex.Message}");
+            PublishMonitoringError($"Ошибка получения ID пользователя: {SafeMessage(ex)}");
             return null;
         }
     }
 
-    private async Task CreateEventSubSubscriptions()
+    private async Task CreateEventSubSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(_broadcasterUserId))
         {
@@ -500,59 +540,51 @@ public class StreamStatusManager : IAsyncDisposable
         PublishMonitoringLog("Создание подписок EventSub...");
 
         var subscriptionsCreated = 0;
+        var condition = new Dictionary<string, string>
+        {
+            { "broadcaster_user_id", _broadcasterUserId },
+        };
 
         try
         {
-            var onlineCondition = new Dictionary<string, string>
-            {
-                { "broadcaster_user_id", _broadcasterUserId },
-            };
-
             PublishMonitoringLog("Создание подписки stream.online...");
 
-            var response = await _twitchApi.Helix.EventSub.CreateEventSubSubscriptionAsync("stream.online",
+            var subscriptionId = await _helix.CreateEventSubSubscriptionAsync("stream.online",
                 "1",
-                onlineCondition,
-                EventSubTransportMethod.Websocket,
-                _eventSubClient.SessionId);
+                condition,
+                sessionId,
+                cancellationToken);
 
             subscriptionsCreated++;
-            var subscriptionId = response.Subscriptions?.FirstOrDefault()?.Id;
 
-            _logger.LogInformation("Успешно создана подписка 'stream.online'. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}", subscriptionId, _eventSubClient.SessionId);
+            _logger.LogInformation("Успешно создана подписка 'stream.online'. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}", subscriptionId, sessionId);
             PublishMonitoringLog($"Подписка на stream.online создана (ID: {subscriptionId})");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка при создании подписки 'stream.online' для BroadcasterId: {BroadcasterId}", _broadcasterUserId);
-            PublishMonitoringError($"Ошибка создания подписки stream.online: {ex.Message}");
+            PublishMonitoringError($"Ошибка создания подписки stream.online: {SafeMessage(ex)}");
         }
 
         try
         {
-            var offlineCondition = new Dictionary<string, string>
-            {
-                { "broadcaster_user_id", _broadcasterUserId },
-            };
-
             PublishMonitoringLog("Создание подписки stream.offline...");
 
-            var response = await _twitchApi.Helix.EventSub.CreateEventSubSubscriptionAsync("stream.offline",
+            var subscriptionId = await _helix.CreateEventSubSubscriptionAsync("stream.offline",
                 "1",
-                offlineCondition,
-                EventSubTransportMethod.Websocket,
-                _eventSubClient.SessionId);
+                condition,
+                sessionId,
+                cancellationToken);
 
             subscriptionsCreated++;
-            var subscriptionId = response.Subscriptions?.FirstOrDefault()?.Id;
 
-            _logger.LogInformation("Успешно создана подписка 'stream.offline'. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}", subscriptionId, _eventSubClient.SessionId);
+            _logger.LogInformation("Успешно создана подписка 'stream.offline'. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}", subscriptionId, sessionId);
             PublishMonitoringLog($"Подписка на stream.offline создана (ID: {subscriptionId})");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка при создании подписки 'stream.offline' для BroadcasterId: {BroadcasterId}", _broadcasterUserId);
-            PublishMonitoringError($"Ошибка создания подписки stream.offline: {ex.Message}");
+            PublishMonitoringError($"Ошибка создания подписки stream.offline: {SafeMessage(ex)}");
         }
 
         if (subscriptionsCreated == 2)

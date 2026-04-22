@@ -1,7 +1,4 @@
-using TwitchLib.Api;
-using TwitchLib.Api.Helix.Models.Chat.Badges;
-using TwitchLib.Api.Helix.Models.Chat.Emotes;
-using TwitchLib.Client.Models;
+﻿using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Chat;
 
@@ -9,11 +6,12 @@ namespace PoproshaykaBot.WinForms.Chat;
 /// Сервис оформления чата: загрузка и кеширование глобальных эмодзи/бэйджей,
 /// построение ссылок на изображения и извлечение данных из сообщений.
 /// </summary>
-public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
+public sealed class ChatDecorationsProvider(ITwitchHelixClient helix)
 {
-    private readonly TwitchAPI _twitchApi = twitchApi ?? throw new ArgumentNullException(nameof(twitchApi));
-    private Dictionary<string, GlobalEmote>? _globalEmotes;
-    private Dictionary<string, BadgeEmoteSet>? _globalBadges;
+    private readonly SemaphoreSlim _loadLock = new(1, 1);
+
+    private IReadOnlyDictionary<string, GlobalEmoteInfo>? _globalEmotes;
+    private IReadOnlyDictionary<string, GlobalBadgeInfo>? _globalBadges;
     private volatile bool _isLoaded;
 
     public int GlobalEmotesCount => _globalEmotes?.Count ?? 0;
@@ -29,31 +27,25 @@ public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
             return;
         }
 
-        var emotesResponse = await _twitchApi.Helix.Chat.GetGlobalEmotesAsync();
-        var badgesResponse = await _twitchApi.Helix.Chat.GetGlobalChatBadgesAsync();
-
-        var localEmotes = new Dictionary<string, GlobalEmote>();
-        var localBadges = new Dictionary<string, BadgeEmoteSet>();
-
-        if (emotesResponse?.GlobalEmotes != null)
+        await _loadLock.WaitAsync();
+        try
         {
-            foreach (var emote in emotesResponse.GlobalEmotes)
+            if (_isLoaded)
             {
-                localEmotes[emote.Id] = emote;
+                return;
             }
-        }
 
-        if (badgesResponse?.EmoteSet != null)
+            var emotes = await helix.GetGlobalChatEmotesAsync();
+            var badges = await helix.GetGlobalChatBadgesAsync();
+
+            _globalEmotes = emotes;
+            _globalBadges = badges;
+            _isLoaded = true;
+        }
+        finally
         {
-            foreach (var badgeSet in badgesResponse.EmoteSet)
-            {
-                localBadges[badgeSet.SetId] = badgeSet;
-            }
+            _loadLock.Release();
         }
-
-        _globalEmotes = localEmotes;
-        _globalBadges = localBadges;
-        _isLoaded = true;
     }
 
     /// <summary>
@@ -65,18 +57,18 @@ public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
     {
         ArgumentNullException.ThrowIfNull(chatMessage);
 
-        if (chatMessage.EmoteSet?.Emotes == null || !_isLoaded)
+        if (!_isLoaded || chatMessage.Emotes.Count == 0)
         {
             return [];
         }
 
         var emotes = new List<EmoteInfo>();
 
-        foreach (var emote in chatMessage.EmoteSet.Emotes)
+        foreach (var emoteOccurrence in chatMessage.Emotes)
         {
             string imageUrl;
 
-            var globalEmote = GetGlobalEmote(emote.Id);
+            var globalEmote = GetGlobalEmote(emoteOccurrence.EmoteId);
 
             if (globalEmote != null)
             {
@@ -84,16 +76,16 @@ public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
             }
             else
             {
-                imageUrl = emote.ImageUrl;
+                imageUrl = $"https://static-cdn.jtvnw.net/emoticons/v2/{emoteOccurrence.EmoteId}/default/light/1.0";
             }
 
             emotes.Add(new()
             {
-                Id = emote.Id,
-                Name = emote.Name,
+                Id = emoteOccurrence.EmoteId,
+                Name = emoteOccurrence.Name,
                 ImageUrl = imageUrl,
-                StartIndex = emote.StartIndex,
-                EndIndex = emote.EndIndex,
+                StartIndex = emoteOccurrence.StartIndex,
+                EndIndex = emoteOccurrence.EndIndex,
             });
         }
 
@@ -105,7 +97,7 @@ public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
     /// </summary>
     /// <param name="badges">Список пар (тип, версия) бэйджей из сообщения</param>
     /// <param name="badgeSizePixels">Желаемый размер бэйджа (в пикселях)</param>
-    public Dictionary<string, string> ExtractBadgeUrls(List<KeyValuePair<string, string>> badges, int badgeSizePixels)
+    public Dictionary<string, string> ExtractBadgeUrls(IReadOnlyList<(string SetId, string BadgeId)> badges, int badgeSizePixels)
     {
         var badgeUrls = new Dictionary<string, string>();
 
@@ -114,9 +106,9 @@ public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
             return badgeUrls;
         }
 
-        foreach (var badge in badges)
+        foreach (var (setId, badgeId) in badges)
         {
-            var badgeVersion = GetBadgeVersion(badge.Key, badge.Value);
+            var badgeVersion = GetBadgeVersion(setId, badgeId);
 
             if (badgeVersion == null)
             {
@@ -124,29 +116,29 @@ public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
             }
 
             var imageUrl = GetBadgeImageUrl(badgeVersion, badgeSizePixels);
-            var key = $"{badge.Key}/{badge.Value}";
+            var key = $"{setId}/{badgeId}";
             badgeUrls[key] = imageUrl;
         }
 
         return badgeUrls;
     }
 
-    private static string GetEmoteImageUrl(GlobalEmote emote, int sizePixels)
+    private static string GetEmoteImageUrl(GlobalEmoteInfo emote, int sizePixels)
     {
         if (sizePixels <= 32)
         {
-            return emote.Images.Url1X;
+            return emote.Images.Url1x;
         }
 
         if (sizePixels <= 64)
         {
-            return emote.Images.Url2X;
+            return emote.Images.Url2x;
         }
 
-        return emote.Images.Url4X;
+        return emote.Images.Url4x;
     }
 
-    private static string GetBadgeImageUrl(BadgeVersion badge, int sizePixels)
+    private static string GetBadgeImageUrl(GlobalBadgeVersion badge, int sizePixels)
     {
         if (sizePixels <= 24)
         {
@@ -161,13 +153,13 @@ public sealed class ChatDecorationsProvider(TwitchAPI twitchApi)
         return badge.ImageUrl4x;
     }
 
-    private GlobalEmote? GetGlobalEmote(string emoteId)
+    private GlobalEmoteInfo? GetGlobalEmote(string emoteId)
     {
         var emotesMap = _globalEmotes;
         return emotesMap != null && emotesMap.TryGetValue(emoteId, out var emote) ? emote : null;
     }
 
-    private BadgeVersion? GetBadgeVersion(string badgeType, string version)
+    private GlobalBadgeVersion? GetBadgeVersion(string badgeType, string version)
     {
         var badgesMap = _globalBadges;
 

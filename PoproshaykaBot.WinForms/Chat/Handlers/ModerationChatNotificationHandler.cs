@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Infrastructure.Events;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Moderation;
 using PoproshaykaBot.WinForms.Settings;
 
@@ -36,7 +36,7 @@ public sealed class ModerationChatNotificationHandler :
         }
 
         var message = FormatMessage(messageSettings.PunishmentMessage, @event.UserName, @event.RemovedMessagesCount);
-        _messenger.Send(@event.Channel, message);
+        _messenger.Send(message);
 
         return Task.CompletedTask;
     }
@@ -51,7 +51,7 @@ public sealed class ModerationChatNotificationHandler :
         }
 
         var message = FormatMessage(messageSettings.RewardMessage, @event.UserName, @event.AddedMessagesCount);
-        _messenger.Send(@event.Channel, message);
+        _messenger.Send(message);
 
         return Task.CompletedTask;
     }

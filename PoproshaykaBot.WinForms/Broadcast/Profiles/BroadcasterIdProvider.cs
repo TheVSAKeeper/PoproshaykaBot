@@ -1,11 +1,11 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Settings;
-using TwitchLib.Api;
+using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
 public sealed class BroadcasterIdProvider(
-    TwitchAPI twitchApi,
+    ITwitchHelixClient helix,
     SettingsManager settingsManager,
     ILogger<BroadcasterIdProvider> logger)
     : IBroadcasterIdProvider
@@ -33,16 +33,16 @@ public sealed class BroadcasterIdProvider(
                 return _cachedId;
             }
 
-            var users = await twitchApi.Helix.Users.GetUsersAsync(logins: [channel]);
+            var user = await helix.GetUserByLoginAsync(channel, cancellationToken);
 
-            if (users?.Users == null || users.Users.Length == 0)
+            if (user == null)
             {
                 logger.LogWarning("Broadcaster id не получен для канала {Channel}", channel);
                 return null;
             }
 
             _cachedChannel = channel;
-            _cachedId = users.Users[0].Id;
+            _cachedId = user.Id;
             return _cachedId;
         }
         finally

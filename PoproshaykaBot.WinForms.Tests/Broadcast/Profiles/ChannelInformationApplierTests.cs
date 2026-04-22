@@ -1,7 +1,7 @@
-using PoproshaykaBot.WinForms.Broadcast.Profiles;
+﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
-using TwitchLib.Api.Helix.Models.Channels.ModifyChannelInformation;
+using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Tests.Broadcast.Profiles;
 
@@ -41,7 +41,7 @@ public class ChannelInformationApplierTests
 
         await _channelsApi.Received(1)
             .ModifyChannelInformationAsync("12345",
-                Arg.Is<ModifyChannelInformationRequest>(r =>
+                Arg.Is<PatchChannelRequest>(r =>
                     r.Title == "Test stream" && r.GameId == "509658" && r.BroadcasterLanguage == "ru" && r.Tags!.SequenceEqual(new[] { "Russian", "Chatting" })),
                 Arg.Any<CancellationToken>());
 
@@ -64,7 +64,7 @@ public class ChannelInformationApplierTests
 
         await _channelsApi.Received(1)
             .ModifyChannelInformationAsync("12345",
-                Arg.Is<ModifyChannelInformationRequest>(r => r.GameId == null),
+                Arg.Is<PatchChannelRequest>(r => r.GameId == null),
                 Arg.Any<CancellationToken>());
     }
 
@@ -90,7 +90,7 @@ public class ChannelInformationApplierTests
     public async Task ApplyAsync_ApiThrows_PublishesFailed()
     {
         _channelsApi
-            .ModifyChannelInformationAsync(Arg.Any<string>(), Arg.Any<ModifyChannelInformationRequest>(), Arg.Any<CancellationToken>())
+            .ModifyChannelInformationAsync(Arg.Any<string>(), Arg.Any<PatchChannelRequest>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new InvalidOperationException("boom")));
 
         var profile = new BroadcastProfile
@@ -113,7 +113,7 @@ public class ChannelInformationApplierTests
 
         await _channelsApi.Received(1)
             .ModifyChannelInformationAsync("12345",
-                Arg.Is<ModifyChannelInformationRequest>(r =>
+                Arg.Is<PatchChannelRequest>(r =>
                     r.Title == "Hello" && r.GameId == null && r.BroadcasterLanguage == null && r.Tags == null),
                 Arg.Any<CancellationToken>());
     }

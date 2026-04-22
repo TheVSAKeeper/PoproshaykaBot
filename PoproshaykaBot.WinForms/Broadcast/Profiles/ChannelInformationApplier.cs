@@ -1,7 +1,8 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
-using TwitchLib.Api.Helix.Models.Channels.ModifyChannelInformation;
+using PoproshaykaBot.WinForms.Twitch.Helix;
+using System.Net;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
@@ -24,7 +25,7 @@ public sealed class ChannelInformationApplier(
             return;
         }
 
-        var request = new ModifyChannelInformationRequest
+        var request = new PatchChannelRequest
         {
             Title = string.IsNullOrEmpty(profile.Title) ? null : profile.Title,
             GameId = string.IsNullOrEmpty(profile.GameId) ? null : profile.GameId,
@@ -66,7 +67,7 @@ public sealed class ChannelInformationApplier(
             return;
         }
 
-        var request = new ModifyChannelInformationRequest
+        var request = new PatchChannelRequest
         {
             Title = title,
             GameId = gameId,
@@ -89,6 +90,20 @@ public sealed class ChannelInformationApplier(
 
     private static string SafeMessage(Exception exception)
     {
+        if (exception is HelixRequestException helixEx)
+        {
+            return helixEx.StatusCode switch
+            {
+                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                    => "Недостаточно прав Twitch для обновления канала. Проверь авторизацию.",
+                HttpStatusCode.NotFound
+                    => "Канал не найден.",
+                HttpStatusCode.TooManyRequests
+                    => "Слишком много запросов. Попробуй чуть позже.",
+                _ => "Не удалось обновить канал. Попробуй ещё раз.",
+            };
+        }
+
         return exception switch
         {
             OperationCanceledException => "Операция отменена",

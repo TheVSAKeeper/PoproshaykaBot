@@ -1,8 +1,8 @@
-using TwitchLib.Api;
+﻿using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
-public sealed class TwitchSearchApiAdapter(TwitchAPI twitchApi) : ITwitchSearchApi
+public sealed class TwitchSearchApiAdapter(ITwitchHelixClient helix) : ITwitchSearchApi
 {
     public async Task<IReadOnlyList<GameSuggestion>> SearchCategoriesAsync(
         string query,
@@ -15,15 +15,10 @@ public sealed class TwitchSearchApiAdapter(TwitchAPI twitchApi) : ITwitchSearchA
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var response = await twitchApi.Helix.Search.SearchCategoriesAsync(query, first: first);
+        var games = await helix.SearchCategoriesAsync(query, first, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (response?.Games == null)
-        {
-            return [];
-        }
-
-        return response.Games
+        return games
             .Select(g => new GameSuggestion(g.Id, g.Name, g.BoxArtUrl ?? string.Empty))
             .ToList();
     }
