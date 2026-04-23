@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
@@ -12,6 +13,8 @@ namespace PoproshaykaBot.WinForms.Twitch.Chat;
 public sealed class ChatIngestionService(
     ITwitchEventSubClient eventSubClient,
     ITwitchHelixClient helix,
+    IBroadcasterIdProvider broadcasterIdProvider,
+    IBotUserIdProvider botUserIdProvider,
     EventSubChatMessageMapper mapper,
     SettingsManager settingsManager,
     IEventBus eventBus,
@@ -62,17 +65,17 @@ public sealed class ChatIngestionService(
         {
             var settings = settingsManager.Current.Twitch;
 
-            var broadcaster = await helix.GetUserByLoginAsync(settings.Channel, ct);
-            if (broadcaster == null)
+            var broadcasterId = await broadcasterIdProvider.GetAsync(ct);
+            if (string.IsNullOrEmpty(broadcasterId))
             {
                 logger.LogError("ChatIngestionService: не удалось получить broadcaster id для канала '{Channel}'", settings.Channel);
                 return;
             }
 
-            var bot = await helix.GetUserByLoginAsync(settings.BotUsername, ct);
-            if (bot == null)
+            var botId = await botUserIdProvider.GetAsync(ct);
+            if (string.IsNullOrEmpty(botId))
             {
-                logger.LogError("ChatIngestionService: не удалось получить user id для бота '{BotUsername}'", settings.BotUsername);
+                logger.LogError("ChatIngestionService: не удалось получить user id бота через токен");
                 return;
             }
 
@@ -92,14 +95,14 @@ public sealed class ChatIngestionService(
                         "1",
                         new Dictionary<string, string>
                         {
-                            ["broadcaster_user_id"] = broadcaster.Id,
-                            ["user_id"] = bot.Id,
+                            ["broadcaster_user_id"] = broadcasterId,
+                            ["user_id"] = botId,
                         },
                         args.SessionId,
                         ct);
 
                     logger.LogInformation("ChatIngestionService: подписка channel.chat.message создана (broadcaster={BroadcasterId}, bot={BotId}, попытка {Attempt})",
-                        broadcaster.Id, bot.Id, attempt + 1);
+                        broadcasterId, botId, attempt + 1);
 
                     return;
                 }

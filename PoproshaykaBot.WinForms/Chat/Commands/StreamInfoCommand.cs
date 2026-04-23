@@ -1,8 +1,8 @@
-using PoproshaykaBot.WinForms.Streaming;
+﻿using PoproshaykaBot.WinForms.Streaming;
 
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
-public sealed class StreamInfoCommand(StreamStatusManager streamStatusManager) : IChatCommand
+public sealed class StreamInfoCommand(IStreamStatus streamStatusManager) : IChatCommand
 {
     public string Canonical => "стрим";
     public IReadOnlyCollection<string> Aliases => ["stream", "онлайн", "он"];

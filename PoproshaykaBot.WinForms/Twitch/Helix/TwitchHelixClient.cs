@@ -22,6 +22,12 @@ public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILog
         return dto is null ? null : MapUser(dto);
     }
 
+    public async Task<UserInfo?> GetAuthenticatedUserAsync(CancellationToken cancellationToken = default)
+    {
+        var dto = await GetSingleAsync<HelixUserDto>(TwitchEndpoints.HelixUsers, cancellationToken);
+        return dto is null ? null : MapUser(dto);
+    }
+
     public async Task<IReadOnlyList<UserInfo>> GetUsersByIdsAsync(IEnumerable<string> ids, CancellationToken cancellationToken = default)
     {
         var idList = ids.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().Take(100).ToArray();

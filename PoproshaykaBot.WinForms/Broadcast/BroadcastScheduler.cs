@@ -11,7 +11,7 @@ namespace PoproshaykaBot.WinForms.Broadcast;
 public sealed class BroadcastScheduler(
     TwitchChatMessenger messenger,
     SettingsManager settingsManager,
-    StreamStatusManager streamStatusManager,
+    IStreamStatus streamStatusManager,
     IEventBus eventBus,
     ILogger<BroadcastScheduler> logger)
     : IAsyncDisposable

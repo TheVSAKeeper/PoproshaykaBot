@@ -101,12 +101,13 @@ public static class Program
             ConfigureServices(services);
 
             var serviceProvider = services.BuildServiceProvider();
+            var appLifetime = serviceProvider.GetRequiredService<AppLifetime>();
+            var appLifetimeStarted = false;
             try
             {
                 serviceProvider.ActivateEventSubscribers(typeof(Program).Assembly);
 
                 var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
-                var statistics = serviceProvider.GetRequiredService<StatisticsCollector>();
 
                 var twitchSettings = settingsManager.Current.Twitch;
                 var httpServerEnabled = twitchSettings.HttpServerEnabled && !isUiSmoke;
@@ -124,8 +125,8 @@ public static class Program
                     {
                         try
                         {
-                            var httpServer = serviceProvider.GetRequiredService<KestrelHttpServer>();
-                            Task.Run(httpServer.StartAsync).GetAwaiter().GetResult();
+                            appLifetime.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+                            appLifetimeStarted = true;
                             Log.Information("HTTP сервер успешно запущен");
                         }
                         catch (Exception ex)
@@ -141,13 +142,23 @@ public static class Program
                     }
                 }
 
-                statistics.LoadStatisticsAsync().GetAwaiter().GetResult();
-
                 var mainForm = serviceProvider.GetRequiredService<MainForm>();
                 Application.Run(mainForm);
             }
             finally
             {
+                if (appLifetimeStarted)
+                {
+                    try
+                    {
+                        appLifetime.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Ошибка остановки AppLifetime");
+                    }
+                }
+
                 serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
         }
@@ -179,7 +190,6 @@ public static class Program
 
         services.AddSingleton<IHostedComponent, StatisticsHostedComponent>();
         services.AddSingleton<IHostedComponent, ChatDecorationsHostedComponent>();
-        services.AddSingleton<IHostedComponent, StreamMonitoringHostedComponent>();
         services.AddSingleton<IHostedComponent, BroadcastSchedulerHostedComponent>();
 
         services.AddEventSubscribers(typeof(Program).Assembly);
@@ -207,9 +217,14 @@ public static class Program
         services.AddSingleton<SseService>();
 
         services.AddSingleton<KestrelHttpServer>();
+        services.AddSingleton<AppLifetime>();
+        services.AddSingleton<IAppLifetimeComponent, KestrelHttpServerLifetimeAdapter>();
 
         services.AddSingleton<ITwitchEventSubClient, TwitchEventSubClient>();
+        services.AddSingleton<EventSubConnectionHost>();
+        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<EventSubConnectionHost>());
         services.AddSingleton<StreamStatusManager>();
+        services.AddSingleton<IStreamStatus>(sp => sp.GetRequiredService<StreamStatusManager>());
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
         services.AddSingleton<UserMessagesManagementService>();
@@ -221,6 +236,7 @@ public static class Program
         services.AddSingleton<ITwitchChannelsApi, TwitchChannelsApiAdapter>();
         services.AddSingleton<ITwitchSearchApi, TwitchSearchApiAdapter>();
         services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
+        services.AddSingleton<IBotUserIdProvider, BotUserIdProvider>();
         services.AddSingleton<ChannelInformationApplier>();
         services.AddSingleton<IChannelInformationApplier>(sp => sp.GetRequiredService<ChannelInformationApplier>());
         services.AddSingleton<GameCategoryResolver>();

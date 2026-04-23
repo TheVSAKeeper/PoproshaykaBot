@@ -13,7 +13,7 @@ public sealed partial class BroadcastInfoWidget : UserControl
     private readonly List<IDisposable> _busSubscriptions = [];
     private IChannelProvider? _channelProvider;
     private SettingsManager? _settingsManager;
-    private StreamStatusManager? _streamStatusManager;
+    private IStreamStatus? _streamStatusManager;
     private BroadcastScheduler? _broadcastScheduler;
 
     public BroadcastInfoWidget()
@@ -23,7 +23,7 @@ public sealed partial class BroadcastInfoWidget : UserControl
 
     public void Setup(
         SettingsManager settingsManager,
-        StreamStatusManager streamStatusManager,
+        IStreamStatus streamStatusManager,
         BroadcastScheduler broadcastScheduler,
         IChannelProvider channelProvider,
         IEventBus eventBus)

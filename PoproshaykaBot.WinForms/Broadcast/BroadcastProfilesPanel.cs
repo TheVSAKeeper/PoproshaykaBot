@@ -22,7 +22,7 @@ public partial class BroadcastProfilesPanel : UserControl
     private BroadcastProfilesManager? _manager;
     private IGameCategoryResolver? _resolver;
     private SettingsManager? _settingsManager;
-    private StreamStatusManager? _streamStatus;
+    private IStreamStatus? _streamStatus;
 
     public BroadcastProfilesPanel()
     {
@@ -61,7 +61,7 @@ public partial class BroadcastProfilesPanel : UserControl
         IGameCategoryResolver resolver,
         IEventBus bus,
         SettingsManager? settingsManager = null,
-        StreamStatusManager? streamStatus = null)
+        IStreamStatus? streamStatus = null)
     {
         _manager = manager;
         _resolver = resolver;

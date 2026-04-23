@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
-using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 using System.Net;
 using System.Threading.Channels;
@@ -10,8 +9,8 @@ namespace PoproshaykaBot.WinForms.Twitch.Chat;
 
 public sealed class ChatSender(
     ITwitchHelixClient helix,
-    SettingsManager settingsManager,
     IBroadcasterIdProvider broadcasterIdProvider,
+    IBotUserIdProvider botUserIdProvider,
     ILogger<ChatSender> logger)
     : IHostedComponent
 {
@@ -29,7 +28,6 @@ public sealed class ChatSender(
         SingleWriter = false,
     });
 
-    private string? _cachedSenderId;
     private Task? _backgroundTask;
     private CancellationTokenSource? _cts;
 
@@ -177,7 +175,7 @@ public sealed class ChatSender(
                     return;
                 }
 
-                var senderId = await GetSenderIdAsync(ct);
+                var senderId = await botUserIdProvider.GetAsync(ct);
 
                 if (string.IsNullOrEmpty(senderId))
                 {
@@ -230,26 +228,6 @@ public sealed class ChatSender(
                 return;
             }
         }
-    }
-
-    private async Task<string?> GetSenderIdAsync(CancellationToken ct)
-    {
-        if (!string.IsNullOrEmpty(_cachedSenderId))
-        {
-            return _cachedSenderId;
-        }
-
-        var botUsername = settingsManager.Current.Twitch.BotUsername;
-        var user = await helix.GetUserByLoginAsync(botUsername, ct);
-
-        if (user == null)
-        {
-            logger.LogWarning("ChatSender: не удалось получить user id для бота '{BotUsername}'", botUsername);
-            return null;
-        }
-
-        _cachedSenderId = user.Id;
-        return _cachedSenderId;
     }
 
     private sealed record ChatSendItem(string Message, string? ReplyParentMessageId);

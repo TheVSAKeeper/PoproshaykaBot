@@ -4,6 +4,8 @@ public interface ITwitchHelixClient
 {
     Task<UserInfo?> GetUserByLoginAsync(string login, CancellationToken cancellationToken = default);
 
+    Task<UserInfo?> GetAuthenticatedUserAsync(CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<UserInfo>> GetUsersByIdsAsync(IEnumerable<string> ids, CancellationToken cancellationToken = default);
 
     Task<HelixStreamInfo?> GetStreamAsync(string broadcasterId, CancellationToken cancellationToken = default);
