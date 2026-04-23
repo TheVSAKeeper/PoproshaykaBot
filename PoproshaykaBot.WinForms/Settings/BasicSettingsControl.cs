@@ -1,8 +1,14 @@
-﻿namespace PoproshaykaBot.WinForms.Settings;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Twitch.Chat;
+
+namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class BasicSettingsControl : UserControl
 {
     private static readonly TwitchSettings DefaultSettings = new();
+
+    private IBotUserIdProvider? _botUserIdProvider;
+    private ILogger<BasicSettingsControl>? _logger;
 
     public BasicSettingsControl()
     {
@@ -11,6 +17,14 @@ public partial class BasicSettingsControl : UserControl
     }
 
     public event EventHandler? SettingChanged;
+
+    public void Setup(IBotUserIdProvider botUserIdProvider, ILogger<BasicSettingsControl> logger)
+    {
+        _botUserIdProvider = botUserIdProvider;
+        _logger = logger;
+
+        _ = RefreshBotLoginFromTokenAsync();
+    }
 
     public void LoadSettings(TwitchSettings settings)
     {
@@ -29,21 +43,10 @@ public partial class BasicSettingsControl : UserControl
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void OnBotUsernameResetButtonClicked(object sender, EventArgs e)
-    {
-        ResetBotUsername();
-        SettingChanged?.Invoke(this, EventArgs.Empty);
-    }
-
     private void OnChannelResetButtonClicked(object sender, EventArgs e)
     {
         ResetChannel();
         SettingChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void ResetBotUsername()
-    {
-        _botUsernameTextBox.Text = DefaultSettings.BotUsername;
     }
 
     private void ResetChannel()
@@ -55,5 +58,37 @@ public partial class BasicSettingsControl : UserControl
     {
         _botUsernameTextBox.PlaceholderText = DefaultSettings.BotUsername;
         _channelTextBox.PlaceholderText = DefaultSettings.Channel;
+    }
+
+    private async Task RefreshBotLoginFromTokenAsync()
+    {
+        if (_botUserIdProvider == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var user = await _botUserIdProvider.GetUserAsync(CancellationToken.None);
+
+            if (user == null || string.IsNullOrEmpty(user.Login))
+            {
+                return;
+            }
+
+            if (IsDisposed || !IsHandleCreated)
+            {
+                return;
+            }
+
+            BeginInvoke(() =>
+            {
+                _botUsernameTextBox.Text = user.Login;
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "Не удалось получить имя бота из токена (возможно, бот ещё не авторизован)");
+        }
     }
 }

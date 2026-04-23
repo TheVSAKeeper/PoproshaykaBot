@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.WinForms.Auth;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Chat;
@@ -12,6 +13,7 @@ using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Statistics;
 using PoproshaykaBot.WinForms.Streaming;
+using PoproshaykaBot.WinForms.Twitch.Chat;
 using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms;
@@ -27,13 +29,13 @@ public partial class MainForm : Form
     private readonly TwitchOAuthService _oauthService;
     private readonly StatisticsCollector _statisticsCollector;
     private readonly UserRankService _userRankService;
-    private readonly StreamStatusManager _streamStatusManager;
-    private readonly BroadcastScheduler _broadcastScheduler;
+    private readonly IStreamStatus _streamStatusManager;
     private readonly UserMessagesManagementService _userMessagesManagementService;
     private readonly TwitchChatHandler _twitchChatHandler;
-    private readonly IEventBus _eventBus;
     private readonly BroadcastProfilesManager _broadcastProfilesManager;
     private readonly IGameCategoryResolver _gameCategoryResolver;
+    private readonly IBotUserIdProvider _botUserIdProvider;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly List<IDisposable> _busSubscriptions = [];
     private readonly Dictionary<PanelContent, Control?> _contentControls = new();
 
@@ -49,13 +51,15 @@ public partial class MainForm : Form
         TwitchOAuthService oauthService,
         StatisticsCollector statisticsCollector,
         UserRankService userRankService,
-        StreamStatusManager streamStatusManager,
+        IStreamStatus streamStatusManager,
         BroadcastScheduler broadcastScheduler,
         UserMessagesManagementService userMessagesManagementService,
         TwitchChatHandler twitchChatHandler,
         IEventBus eventBus,
         BroadcastProfilesManager broadcastProfilesManager,
-        IGameCategoryResolver gameCategoryResolver)
+        IGameCategoryResolver gameCategoryResolver,
+        IBotUserIdProvider botUserIdProvider,
+        ILoggerFactory loggerFactory)
     {
         _chatHistoryManager = chatHistoryManager;
         _httpServer = httpServer;
@@ -65,20 +69,19 @@ public partial class MainForm : Form
         _statisticsCollector = statisticsCollector;
         _userRankService = userRankService;
         _streamStatusManager = streamStatusManager;
-        _broadcastScheduler = broadcastScheduler;
         _userMessagesManagementService = userMessagesManagementService;
         _twitchChatHandler = twitchChatHandler;
-        _eventBus = eventBus;
         _broadcastProfilesManager = broadcastProfilesManager;
         _gameCategoryResolver = gameCategoryResolver;
+        _botUserIdProvider = botUserIdProvider;
+        _loggerFactory = loggerFactory;
 
         InitializeComponent();
 
         Text = $"Попрощайка Бот v{GetDisplayVersion()}";
 
-        _broadcastProfileQuickPanel.Setup(_broadcastProfilesManager, _eventBus);
-
-        _broadcastProfilesPanel.Setup(_broadcastProfilesManager, _gameCategoryResolver, _eventBus, _settingsManager, _streamStatusManager);
+        _broadcastProfileQuickPanel.Setup(_broadcastProfilesManager, eventBus);
+        _broadcastProfilesPanel.Setup(_broadcastProfilesManager, _gameCategoryResolver, eventBus, _settingsManager, _streamStatusManager);
 
         _contentControls[PanelContent.Logs] = _logTextBox;
         _contentControls[PanelContent.Chat] = _chatHost;
@@ -87,18 +90,18 @@ public partial class MainForm : Form
 
         InitializeSlots();
 
-        _busSubscriptions.Add(_eventBus.Subscribe<BroadcastSchedulerStateChanged>(_ => OnBroadcastStateChanged()));
-        _busSubscriptions.Add(_eventBus.Subscribe<BotLogEntry>(entry => AddLogMessage(entry.Message)));
-        _busSubscriptions.Add(_eventBus.Subscribe<BotConnectionStatusUpdated>(statusEvent => OnBotConnectionProgress(statusEvent.Message)));
-        _busSubscriptions.Add(_eventBus.Subscribe<BotLifecyclePhaseChanged>(OnBotLifecyclePhaseChanged));
-        _busSubscriptions.Add(_eventBus.Subscribe<StreamWentOnline>(_ => OnStreamStatusChanged()));
-        _busSubscriptions.Add(_eventBus.Subscribe<StreamWentOffline>(_ => OnStreamStatusChanged()));
+        _busSubscriptions.Add(eventBus.Subscribe<BroadcastSchedulerStateChanged>(_ => OnBroadcastStateChanged()));
+        _busSubscriptions.Add(eventBus.Subscribe<BotLogEntry>(entry => AddLogMessage(entry.Message)));
+        _busSubscriptions.Add(eventBus.Subscribe<BotConnectionStatusUpdated>(statusEvent => OnBotConnectionProgress(statusEvent.Message)));
+        _busSubscriptions.Add(eventBus.Subscribe<BotLifecyclePhaseChanged>(OnBotLifecyclePhaseChanged));
+        _busSubscriptions.Add(eventBus.Subscribe<StreamWentOnline>(_ => OnStreamStatusChanged()));
+        _busSubscriptions.Add(eventBus.Subscribe<StreamWentOffline>(_ => OnStreamStatusChanged()));
 
         LoadSettings();
-        _broadcastInfoWidget.Setup(_settingsManager, _streamStatusManager, _broadcastScheduler, _twitchChatHandler, _eventBus);
+        _broadcastInfoWidget.Setup(_settingsManager, _streamStatusManager, broadcastScheduler, _twitchChatHandler, eventBus);
         UpdateStreamStatus();
 
-        _chatDisplay.Setup(_eventBus);
+        _chatDisplay.Setup(eventBus);
 
         _httpServer.LogMessage += OnHttpServerLogMessage;
 
@@ -232,7 +235,8 @@ public partial class MainForm : Form
 
     private void OnSettingsButtonClicked(object? sender, EventArgs e)
     {
-        using var settingsForm = new SettingsForm(_settingsManager, _oauthService, _httpServer, _broadcastProfilesManager, _gameCategoryResolver);
+        var basicLogger = _loggerFactory.CreateLogger<BasicSettingsControl>();
+        using var settingsForm = new SettingsForm(_settingsManager, _oauthService, _httpServer, _broadcastProfilesManager, _gameCategoryResolver, _botUserIdProvider, basicLogger);
 
         if (settingsForm.ShowDialog(this) != DialogResult.OK)
         {

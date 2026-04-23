@@ -1,6 +1,8 @@
-﻿using PoproshaykaBot.WinForms.Auth;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Server;
+using PoproshaykaBot.WinForms.Twitch.Chat;
 using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Settings;
@@ -16,7 +18,9 @@ public partial class SettingsForm : Form
         TwitchOAuthService oauthService,
         KestrelHttpServer httpServer,
         BroadcastProfilesManager broadcastProfilesManager,
-        IGameCategoryResolver gameCategoryResolver)
+        IGameCategoryResolver gameCategoryResolver,
+        IBotUserIdProvider botUserIdProvider,
+        ILogger<BasicSettingsControl> basicLogger)
     {
         _settingsManager = settingsManager;
         _settings = new();
@@ -28,6 +32,8 @@ public partial class SettingsForm : Form
         _httpServerSettingsControl = new(httpServer);
 
         InitializeComponent();
+
+        _basicSettingsControl.Setup(botUserIdProvider, basicLogger);
 
         _broadcastProfilesSettingsControl = new();
         _broadcastProfilesSettingsControl.SettingChanged += OnSettingChanged;
