@@ -101,10 +101,18 @@ public class MessageSettings
     public string DonateCommandMessage { get; set; } = "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217";
 }
 
+public enum PanelContent
+{
+    None = 0,
+    Logs = 1,
+    Chat = 2,
+    BroadcastProfiles = 3,
+}
+
 public class UiSettings
 {
-    public bool ShowLogsPanel { get; set; } = true;
-    public bool ShowChatPanel { get; set; } = true;
+    public PanelContent LeftSlotContent { get; set; } = PanelContent.Logs;
+    public PanelContent RightSlotContent { get; set; } = PanelContent.BroadcastProfiles;
     public ChatViewMode CurrentChatViewMode { get; set; } = ChatViewMode.Legacy;
 }
 

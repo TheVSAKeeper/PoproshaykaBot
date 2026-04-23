@@ -2,7 +2,6 @@
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Twitch.Helix;
-using System.Net;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
@@ -41,7 +40,7 @@ public sealed class ChannelInformationApplier(
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Не удалось применить профиль {Profile}", profile.Name);
-            await eventBus.PublishAsync(new BroadcastProfileApplyFailed(profile, SafeMessage(exception)),
+            await eventBus.PublishAsync(new BroadcastProfileApplyFailed(profile, HelixErrorMessages.SafeMessage(exception)),
                 cancellationToken);
         }
     }
@@ -83,34 +82,8 @@ public sealed class ChannelInformationApplier(
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Не удалось применить патч канала");
-            await eventBus.PublishAsync(new BroadcastProfileApplyFailed(virtualProfile, SafeMessage(exception)),
+            await eventBus.PublishAsync(new BroadcastProfileApplyFailed(virtualProfile, HelixErrorMessages.SafeMessage(exception)),
                 cancellationToken);
         }
-    }
-
-    private static string SafeMessage(Exception exception)
-    {
-        if (exception is HelixRequestException helixEx)
-        {
-            return helixEx.StatusCode switch
-            {
-                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
-                    => "Недостаточно прав Twitch для обновления канала. Проверь авторизацию.",
-                HttpStatusCode.NotFound
-                    => "Канал не найден.",
-                HttpStatusCode.TooManyRequests
-                    => "Слишком много запросов. Попробуй чуть позже.",
-                _ => "Не удалось обновить канал. Попробуй ещё раз.",
-            };
-        }
-
-        return exception switch
-        {
-            OperationCanceledException => "Операция отменена",
-            TimeoutException => "Превышено время ожидания ответа Twitch",
-            HttpRequestException => "Ошибка сети при обращении к Twitch",
-            UnauthorizedAccessException => "Ошибка авторизации в Twitch",
-            _ => "Twitch отклонил запрос на изменение канала",
-        };
     }
 }

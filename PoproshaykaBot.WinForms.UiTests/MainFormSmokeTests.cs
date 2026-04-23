@@ -1,4 +1,4 @@
-using FlaUI.Core.AutomationElements;
+﻿using FlaUI.Core.AutomationElements;
 using FlaUI.UIA3;
 using FlaUIApplication = FlaUI.Core.Application;
 
@@ -87,6 +87,22 @@ public class MainFormSmokeTests
         {
             Assert.That(bounds.Width, Is.GreaterThan(0), "Ширина окна должна быть положительной");
             Assert.That(bounds.Height, Is.GreaterThan(0), "Высота окна должна быть положительной");
+        }
+    }
+
+    [Test]
+    public void MainWindow_ShouldShowBothSlots_WithDefaultSelection()
+    {
+        var leftSlot = _mainWindow!
+            .FindFirstDescendant(cf => cf.ByAutomationId("_leftSlot"));
+
+        var rightSlot = _mainWindow!
+            .FindFirstDescendant(cf => cf.ByAutomationId("_rightSlot"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(leftSlot, Is.Not.Null, "Левый слот должен быть в дереве UI");
+            Assert.That(rightSlot, Is.Not.Null, "Правый слот должен быть в дереве UI");
         }
     }
 

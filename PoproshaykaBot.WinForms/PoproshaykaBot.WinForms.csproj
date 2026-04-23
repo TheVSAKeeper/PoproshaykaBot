@@ -22,6 +22,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Assets\ObsOverlay.html" />
     <EmbeddedResource Include="Assets\obs.css" />
     <EmbeddedResource Include="Assets\obs.js" />

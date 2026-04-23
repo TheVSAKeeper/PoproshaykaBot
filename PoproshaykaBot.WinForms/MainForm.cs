@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Auth;
+﻿using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Chat;
@@ -35,8 +35,10 @@ public partial class MainForm : Form
     private readonly BroadcastProfilesManager _broadcastProfilesManager;
     private readonly IGameCategoryResolver _gameCategoryResolver;
     private readonly List<IDisposable> _busSubscriptions = [];
+    private readonly Dictionary<PanelContent, Control?> _contentControls = new();
 
     private bool _isConnected;
+    private bool _suppressSlotComboEvents;
     private UserStatisticsForm? _юзерФорма;
 
     public MainForm(
@@ -76,6 +78,15 @@ public partial class MainForm : Form
 
         _broadcastProfileQuickPanel.Setup(_broadcastProfilesManager, _eventBus);
 
+        _broadcastProfilesPanel.Setup(_broadcastProfilesManager, _gameCategoryResolver, _eventBus, _settingsManager, _streamStatusManager);
+
+        _contentControls[PanelContent.Logs] = _logTextBox;
+        _contentControls[PanelContent.Chat] = _chatHost;
+        _contentControls[PanelContent.BroadcastProfiles] = _broadcastProfilesPanel;
+        _contentControls[PanelContent.None] = null;
+
+        InitializeSlots();
+
         _busSubscriptions.Add(_eventBus.Subscribe<BroadcastSchedulerStateChanged>(_ => OnBroadcastStateChanged()));
         _busSubscriptions.Add(_eventBus.Subscribe<BotLogEntry>(entry => AddLogMessage(entry.Message)));
         _busSubscriptions.Add(_eventBus.Subscribe<BotConnectionStatusUpdated>(statusEvent => OnBotConnectionProgress(statusEvent.Message)));
@@ -86,7 +97,6 @@ public partial class MainForm : Form
         LoadSettings();
         _broadcastInfoWidget.Setup(_settingsManager, _streamStatusManager, _broadcastScheduler, _twitchChatHandler, _eventBus);
         UpdateStreamStatus();
-        InitializePanelVisibility();
 
         _chatDisplay.Setup(_eventBus);
 
@@ -111,20 +121,16 @@ public partial class MainForm : Form
 
         await DisconnectBotAsync();
         base.OnFormClosed(e);
+
+        DisposeIfOrphan(_logTextBox);
+        DisposeIfOrphan(_chatHost);
+        DisposeIfOrphan(_broadcastProfilesPanel);
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         switch (keyData)
         {
-            case Keys.Alt | Keys.L:
-                OnToggleLogsButtonClicked(_logsToolStripButton, EventArgs.Empty);
-                return true;
-
-            case Keys.Alt | Keys.C:
-                OnToggleChatButtonClicked(_chatToolStripButton, EventArgs.Empty);
-                return true;
-
             case Keys.Alt | Keys.U:
                 OnOpenUserStatistics();
                 return true;
@@ -183,22 +189,6 @@ public partial class MainForm : Form
         }
     }
 
-    private void OnToggleLogsButtonClicked(object? sender, EventArgs e)
-    {
-        var settings = _settingsManager.Current;
-        settings.Ui.ShowLogsPanel = !settings.Ui.ShowLogsPanel;
-        _settingsManager.SaveSettings(settings);
-        UpdatePanelVisibility();
-    }
-
-    private void OnToggleChatButtonClicked(object? sender, EventArgs e)
-    {
-        var settings = _settingsManager.Current;
-        settings.Ui.ShowChatPanel = !settings.Ui.ShowChatPanel;
-        _settingsManager.SaveSettings(settings);
-        UpdatePanelVisibility();
-    }
-
     private void OnSwitchChatViewButtonClicked(object? sender, EventArgs e)
     {
         var settings = _settingsManager.Current;
@@ -207,7 +197,37 @@ public partial class MainForm : Form
             : ChatViewMode.Legacy;
 
         _settingsManager.SaveSettings(settings);
-        UpdateChatViewMode();
+        ApplyChatViewMode();
+    }
+
+    private void OnLeftSlotComboChanged(object? sender, EventArgs e)
+    {
+        if (_suppressSlotComboEvents)
+        {
+            return;
+        }
+
+        if (_leftContentCombo.SelectedItem is not PanelContentItem item)
+        {
+            return;
+        }
+
+        ApplySlotChange(item.Value, null);
+    }
+
+    private void OnRightSlotComboChanged(object? sender, EventArgs e)
+    {
+        if (_suppressSlotComboEvents)
+        {
+            return;
+        }
+
+        if (_rightContentCombo.SelectedItem is not PanelContentItem item)
+        {
+            return;
+        }
+
+        ApplySlotChange(null, item.Value);
     }
 
     private void OnSettingsButtonClicked(object? sender, EventArgs e)
@@ -248,6 +268,14 @@ public partial class MainForm : Form
         }
     }
 
+    private static void DisposeIfOrphan(Control? control)
+    {
+        if (control is { IsDisposed: false, Parent: null })
+        {
+            control.Dispose();
+        }
+    }
+
     private static string GetDisplayVersion()
     {
         var version = Application.ProductVersion;
@@ -259,6 +287,75 @@ public partial class MainForm : Form
         }
 
         return version;
+    }
+
+    private static void RebuildSlotCombo(ToolStripComboBox combo, IEnumerable<PanelContent> all)
+    {
+        combo.Items.Clear();
+
+        foreach (var content in all)
+        {
+            combo.Items.Add(new PanelContentItem(content));
+        }
+    }
+
+    private static void SelectComboValue(ToolStripComboBox combo, PanelContent value)
+    {
+        for (var i = 0; i < combo.Items.Count; i++)
+        {
+            if (combo.Items[i] is not PanelContentItem item || item.Value != value)
+            {
+                continue;
+            }
+
+            combo.SelectedIndex = i;
+            return;
+        }
+
+        combo.SelectedIndex = -1;
+    }
+
+    private void ApplySlotChange(PanelContent? left, PanelContent? right)
+    {
+        var settings = _settingsManager.Current;
+
+        if (left.HasValue)
+        {
+            settings.Ui.LeftSlotContent = left.Value;
+        }
+
+        if (right.HasValue)
+        {
+            settings.Ui.RightSlotContent = right.Value;
+        }
+
+        if (settings.Ui.LeftSlotContent != PanelContent.None && settings.Ui.LeftSlotContent == settings.Ui.RightSlotContent)
+        {
+            if (left.HasValue)
+            {
+                settings.Ui.RightSlotContent = PanelContent.None;
+            }
+            else
+            {
+                settings.Ui.LeftSlotContent = PanelContent.None;
+            }
+        }
+
+        _settingsManager.SaveSettings(settings);
+
+        _suppressSlotComboEvents = true;
+
+        try
+        {
+            SelectComboValue(_leftContentCombo, settings.Ui.LeftSlotContent);
+            SelectComboValue(_rightContentCombo, settings.Ui.RightSlotContent);
+        }
+        finally
+        {
+            _suppressSlotComboEvents = false;
+        }
+
+        ApplySlotSelection();
     }
 
     private void OnBotLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)
@@ -394,107 +491,133 @@ public partial class MainForm : Form
         AddLogMessage("История сообщений чата очищена.");
     }
 
-    private void InitializePanelVisibility()
+    private void InitializeSlots()
     {
-        UpdatePanelVisibility();
+        var all = new[]
+        {
+            PanelContent.None,
+            PanelContent.Logs,
+            PanelContent.Chat,
+            PanelContent.BroadcastProfiles,
+        };
+
+        RebuildSlotCombo(_leftContentCombo, all);
+        RebuildSlotCombo(_rightContentCombo, all);
+
+        var ui = _settingsManager.Current.Ui;
+
+        _suppressSlotComboEvents = true;
+
+        try
+        {
+            SelectComboValue(_leftContentCombo, ui.LeftSlotContent);
+            SelectComboValue(_rightContentCombo, ui.RightSlotContent);
+        }
+        finally
+        {
+            _suppressSlotComboEvents = false;
+        }
+
+        _leftContentCombo.SelectedIndexChanged += OnLeftSlotComboChanged;
+        _rightContentCombo.SelectedIndexChanged += OnRightSlotComboChanged;
     }
 
-    private void UpdatePanelVisibility()
+    private void ApplySlotSelection()
     {
         if (InvokeRequired)
         {
-            Invoke(UpdatePanelVisibility);
+            Invoke(ApplySlotSelection);
             return;
         }
 
-        var settings = _settingsManager.Current.Ui;
-        var showLogs = settings.ShowLogsPanel;
-        var showChat = settings.ShowChatPanel;
+        var ui = _settingsManager.Current.Ui;
 
-        _logsToolStripButton.Checked = showLogs;
-        _logsToolStripButton.BackColor = showLogs ? Color.LightGreen : SystemColors.Control;
-        _logsToolStripButton.Text = showLogs ? "📜 Логи" : "📜 Логи"; // Keep icon consistent
+        _leftSlot.SetBody(ResolveBody(ui.LeftSlotContent));
+        _rightSlot.SetBody(ResolveBody(ui.RightSlotContent));
 
-        _chatToolStripButton.Checked = showChat;
-        _chatToolStripButton.BackColor = showChat ? Color.LightGreen : SystemColors.Control;
-        _chatToolStripButton.Text = showChat ? "💬 Чат" : "💬 Чат";
+        _slotsTableLayoutPanel.ColumnStyles.Clear();
 
-        _contentTableLayoutPanel.ColumnStyles.Clear();
+        var leftVisible = ui.LeftSlotContent != PanelContent.None;
+        var rightVisible = ui.RightSlotContent != PanelContent.None;
 
-        if (showLogs && showChat)
+        if (leftVisible && rightVisible)
         {
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
+            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
+            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
         }
-        else if (showLogs && !showChat)
+        else if (leftVisible)
         {
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
+            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
+            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
         }
-        else if (!showLogs && showChat)
+        else if (rightVisible)
         {
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
+            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
+            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
         }
         else
         {
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
+            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
+            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
         }
 
-        _logLabel.Visible = showLogs;
-        _logTextBox.Visible = showLogs;
+        _leftSlot.Visible = leftVisible;
+        _rightSlot.Visible = rightVisible;
 
-        UpdateChatViewMode();
+        var profilesShown =
+            ui.LeftSlotContent == PanelContent.BroadcastProfiles || ui.RightSlotContent == PanelContent.BroadcastProfiles;
 
-        _contentTableLayoutPanel.PerformLayout();
+        _broadcastProfileQuickPanel.Visible = !profilesShown;
+        _mainTableLayoutPanel.RowStyles[2].Height = profilesShown ? 0F : 36F;
+
+        ApplyChatViewMode();
+        _slotsTableLayoutPanel.PerformLayout();
     }
 
-    private void UpdateChatViewMode()
+    private Control? ResolveBody(PanelContent content)
     {
-        if (InvokeRequired)
-        {
-            Invoke(UpdateChatViewMode);
-            return;
-        }
+        return _contentControls[content];
+    }
 
-        var settings = _settingsManager.Current.Ui;
-        var showChat = settings.ShowChatPanel;
-        var mode = settings.CurrentChatViewMode;
+    private void ApplyChatViewMode()
+    {
+        var ui = _settingsManager.Current.Ui;
+        var chatShown =
+            ui.LeftSlotContent == PanelContent.Chat || ui.RightSlotContent == PanelContent.Chat;
 
-        if (!showChat)
+        _chatViewToolStripButton.Visible = chatShown;
+        _chatViewSeparator.Visible = chatShown;
+
+        if (!chatShown)
         {
             _chatDisplay.Visible = false;
             _overlayWebView.Visible = false;
-            _chatViewToolStripButton.Enabled = false;
+            return;
+        }
+
+        if (ui.CurrentChatViewMode == ChatViewMode.Legacy)
+        {
+            _chatDisplay.Visible = true;
+            _overlayWebView.Visible = false;
+            _chatDisplay.BringToFront();
+            _chatViewToolStripButton.Text = "👁️ Чат";
+            _chatViewToolStripButton.BackColor = SystemColors.Control;
         }
         else
         {
-            _chatViewToolStripButton.Enabled = true;
-            if (mode == ChatViewMode.Legacy)
+            _chatDisplay.Visible = false;
+            _overlayWebView.Visible = true;
+            _overlayWebView.BringToFront();
+            _chatViewToolStripButton.Text = "👁️ Overlay";
+            _chatViewToolStripButton.BackColor = Color.LightBlue;
+
+            if (_overlayWebView.CoreWebView2 == null)
             {
-                _chatDisplay.Visible = true;
-                _overlayWebView.Visible = false;
-                _chatViewToolStripButton.Text = "👁️ Чат";
-                _chatViewToolStripButton.Checked = false;
-                _chatViewToolStripButton.BackColor = SystemColors.Control;
+                InitializeWebViewAsync();
             }
             else
             {
-                _chatDisplay.Visible = false;
-                _overlayWebView.Visible = true;
-                _chatViewToolStripButton.Text = "👁️ Overlay";
-                _chatViewToolStripButton.Checked = true;
-                _chatViewToolStripButton.BackColor = Color.LightBlue;
-
-                if (_overlayWebView.CoreWebView2 == null)
-                {
-                    InitializeWebViewAsync();
-                }
-                else
-                {
-                    UpdateOverlayUrl();
-                }
+                UpdateOverlayUrl();
             }
         }
     }
@@ -627,11 +750,26 @@ public partial class MainForm : Form
         {
             var settings = _settingsManager.Current;
             AddLogMessage("Настройки Twitch загружены.");
-            UpdatePanelVisibility();
+            ApplySlotSelection();
         }
         catch (Exception exception)
         {
             AddLogMessage($"Ошибка загрузки настроек: {exception.Message}");
+        }
+    }
+
+    private sealed record PanelContentItem(PanelContent Value)
+    {
+        public override string ToString()
+        {
+            return Value switch
+            {
+                PanelContent.None => "— Нет —",
+                PanelContent.Logs => "📜 Логи",
+                PanelContent.Chat => "💬 Чат",
+                PanelContent.BroadcastProfiles => "🎛 Профили",
+                _ => Value.ToString(),
+            };
         }
     }
 }
