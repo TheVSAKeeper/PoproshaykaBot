@@ -6,6 +6,7 @@ using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Chat.Commands;
 using PoproshaykaBot.WinForms.Infrastructure;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting.Components;
@@ -187,6 +188,9 @@ public static class Program
         services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
         services.AddSingleton<UiEventDispatcher>();
         services.AddSingleton<AppHost>();
+
+        services.AddSingleton<IControlFactory, ControlFactory>();
+        services.AddSingleton<IFormFactory, FormFactory>();
 
         services.AddSingleton<IHostedComponent, StatisticsHostedComponent>();
         services.AddSingleton<IHostedComponent, ChatDecorationsHostedComponent>();
