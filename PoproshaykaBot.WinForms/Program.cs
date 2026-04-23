@@ -32,7 +32,7 @@ public static class Program
     {
         var isUiSmoke = args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
 
-        const string OutputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
+        const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
