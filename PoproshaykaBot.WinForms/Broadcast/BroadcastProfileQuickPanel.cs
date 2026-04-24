@@ -31,10 +31,10 @@ public partial class BroadcastProfileQuickPanel : UserControl
     }
 
     [Inject]
-    public BroadcastProfilesManager Manager { get; init; } = null!;
+    public BroadcastProfilesManager Manager { get; internal init; } = null!;
 
     [Inject]
-    public IEventBus Bus { get; init; } = null!;
+    public IEventBus Bus { get; internal init; } = null!;
 
     protected override void OnHandleCreated(EventArgs e)
     {

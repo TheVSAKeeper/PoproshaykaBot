@@ -18,7 +18,7 @@ public partial class ChatDisplay : UserControl
     }
 
     [Inject]
-    public IEventBus Bus { get; init; } = null!;
+    public IEventBus Bus { get; internal init; } = null!;
 
     public void AddChatMessage(ChatMessageData chatMessage)
     {

@@ -20,19 +20,19 @@ public sealed partial class BroadcastInfoWidget : UserControl
     }
 
     [Inject]
-    public SettingsManager Settings { get; init; } = null!;
+    public SettingsManager Settings { get; internal init; } = null!;
 
     [Inject]
-    public IStreamStatus Stream { get; init; } = null!;
+    public IStreamStatus Stream { get; internal init; } = null!;
 
     [Inject]
-    public BroadcastScheduler Scheduler { get; init; } = null!;
+    public BroadcastScheduler Scheduler { get; internal init; } = null!;
 
     [Inject]
-    public IChannelProvider ChannelProvider { get; init; } = null!;
+    public IChannelProvider ChannelProvider { get; internal init; } = null!;
 
     [Inject]
-    public IEventBus Bus { get; init; } = null!;
+    public IEventBus Bus { get; internal init; } = null!;
 
     protected override void OnHandleCreated(EventArgs e)
     {

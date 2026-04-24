@@ -9,6 +9,8 @@ public sealed class FormFactory(IServiceScopeFactory scopeFactory) : IFormFactor
         var scope = scopeFactory.CreateScope();
         var form = scope.ServiceProvider.GetRequiredService<T>();
 
+        scope.ServiceProvider.HydrateDescendants(form);
+
         form.FormClosed += (_, _) => scope.Dispose();
 
         return form;

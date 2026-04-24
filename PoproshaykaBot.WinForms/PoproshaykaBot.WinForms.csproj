@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+    <InternalsVisibleTo Include="PoproshaykaBot.WinForms.Tests" />
   </ItemGroup>
 
   <ItemGroup>

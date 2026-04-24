@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Diagnostics;
 
 namespace PoproshaykaBot.WinForms.Infrastructure.Di;
 
@@ -8,7 +9,21 @@ public static class DesignModeExtensions
     {
         ArgumentNullException.ThrowIfNull(control);
 
-        return control.Site?.DesignMode == true
-            || LicenseManager.UsageMode == LicenseUsageMode.Designtime;
+        for (var current = control; current is not null; current = current.Parent)
+        {
+            if (current.Site?.DesignMode == true)
+            {
+                return true;
+            }
+        }
+
+        if (LicenseManager.UsageMode == LicenseUsageMode.Designtime)
+        {
+            return true;
+        }
+
+        var processName = Process.GetCurrentProcess().ProcessName;
+
+        return string.Equals(processName, "devenv", StringComparison.OrdinalIgnoreCase);
     }
 }
