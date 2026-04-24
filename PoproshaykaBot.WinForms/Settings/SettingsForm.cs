@@ -1,8 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using PoproshaykaBot.WinForms.Auth;
-using PoproshaykaBot.WinForms.Broadcast.Profiles;
-using PoproshaykaBot.WinForms.Server;
-using PoproshaykaBot.WinForms.Twitch.Chat;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
 using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Settings;
@@ -11,39 +7,32 @@ public partial class SettingsForm : Form
 {
     private readonly SettingsManager _settingsManager;
     private AppSettings _settings;
+    private bool _initialized;
     private bool _hasChanges;
 
-    public SettingsForm(
-        SettingsManager settingsManager,
-        TwitchOAuthService oauthService,
-        KestrelHttpServer httpServer,
-        BroadcastProfilesManager broadcastProfilesManager,
-        IGameCategoryResolver gameCategoryResolver,
-        IBotUserIdProvider botUserIdProvider,
-        ILogger<BasicSettingsControl> basicLogger)
+    public SettingsForm(SettingsManager settingsManager)
     {
         _settingsManager = settingsManager;
-        _settings = new();
-
         _settings = CopySettings(settingsManager.Current);
 
-        _oauthSettingsControl = new(settingsManager, oauthService);
-        _miscSettingsControl = new(settingsManager);
-        _httpServerSettingsControl = new(httpServer);
-
         InitializeComponent();
+    }
 
-        _basicSettingsControl.Setup(botUserIdProvider, basicLogger);
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
 
-        _broadcastProfilesSettingsControl = new();
-        _broadcastProfilesSettingsControl.SettingChanged += OnSettingChanged;
-        _broadcastProfilesSettingsControl.Setup(broadcastProfilesManager, gameCategoryResolver);
-        _broadcastProfilesSettingsControl.Dock = DockStyle.Fill;
+        if (_initialized)
+        {
+            return;
+        }
 
-        var broadcastProfilesTabPage = new TabPage("Профили трансляции");
-        broadcastProfilesTabPage.Padding = new(10);
-        broadcastProfilesTabPage.Controls.Add(_broadcastProfilesSettingsControl);
-        _tabControl.TabPages.Add(broadcastProfilesTabPage);
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
+        _initialized = true;
 
         LoadSettingsToControls();
     }

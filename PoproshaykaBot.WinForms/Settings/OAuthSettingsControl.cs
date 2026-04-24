@@ -1,25 +1,28 @@
 ﻿using PoproshaykaBot.WinForms.Auth;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class OAuthSettingsControl : UserControl
 {
     private static readonly TwitchSettings DefaultSettings = new();
-    private readonly SettingsManager _settingsManager;
-    private readonly TwitchOAuthService _oauthService;
     private AppSettings _settings = new();
+    private bool _initialized;
     private bool _tokensVisible;
     private bool _redirectUriEditable;
 
-    public OAuthSettingsControl(SettingsManager settingsManager, TwitchOAuthService oauthService)
+    public OAuthSettingsControl()
     {
-        _settingsManager = settingsManager;
-        _oauthService = oauthService;
         InitializeComponent();
-        SetPlaceholders();
     }
 
     public event EventHandler? SettingChanged;
+
+    [Inject]
+    public SettingsManager SettingsManager { get; internal init; } = null!;
+
+    [Inject]
+    public TwitchOAuthService OAuthService { get; internal init; } = null!;
 
     public void LoadSettings(AppSettings settings)
     {
@@ -40,6 +43,25 @@ public partial class OAuthSettingsControl : UserControl
         settings.Twitch.ClientSecret = _clientSecretTextBox.Text.Trim();
         settings.Twitch.RedirectUri = _redirectUriTextBox.Text.Trim();
         settings.Twitch.Scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
+        _initialized = true;
+
+        SetPlaceholders();
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -105,13 +127,7 @@ public partial class OAuthSettingsControl : UserControl
         _authStatusLabel.Text = "Тестирование...";
         _authStatusLabel.ForeColor = Color.Blue;
 
-        if (_oauthService == null)
-        {
-            MessageBox.Show("OAuthService не инициализирован", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-
-        _oauthService.StatusChanged += OnOAuthStatusChanged;
+        OAuthService.StatusChanged += OnOAuthStatusChanged;
 
         try
         {
@@ -128,7 +144,7 @@ public partial class OAuthSettingsControl : UserControl
                 redirectUri = DefaultSettings.RedirectUri;
             }
 
-            var accessToken = await _oauthService.StartOAuthFlowAsync(clientId, clientSecret, scopes, redirectUri, CancellationToken.None);
+            var accessToken = await OAuthService.StartOAuthFlowAsync(clientId, clientSecret, scopes, redirectUri, CancellationToken.None);
 
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -146,21 +162,32 @@ public partial class OAuthSettingsControl : UserControl
         }
         finally
         {
-            _oauthService.StatusChanged -= OnOAuthStatusChanged;
+            OAuthService.StatusChanged -= OnOAuthStatusChanged;
             _testAuthButton.Enabled = true;
         }
     }
 
     private void OnOAuthStatusChanged(string message)
     {
-        if (InvokeRequired)
+        if (IsDisposed || Disposing || !IsHandleCreated)
         {
-            Invoke(new Action<string>(OnOAuthStatusChanged), message);
             return;
         }
 
-        _authStatusLabel.Text = message;
-        _authStatusLabel.ForeColor = Color.Blue;
+        try
+        {
+            BeginInvoke(() =>
+            {
+                _authStatusLabel.Text = message;
+                _authStatusLabel.ForeColor = Color.Blue;
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
     }
 
     private async void OnValidateTokenButtonClicked(object sender, EventArgs e)
@@ -180,7 +207,7 @@ public partial class OAuthSettingsControl : UserControl
 
         try
         {
-            var isValid = await _oauthService.IsTokenValidAsync(accessToken);
+            var isValid = await OAuthService.IsTokenValidAsync(accessToken);
 
             if (isValid)
             {
@@ -230,17 +257,11 @@ public partial class OAuthSettingsControl : UserControl
         _tokenStatusValueLabel.Text = "Обновление...";
         _tokenStatusValueLabel.ForeColor = Color.Blue;
 
-        if (_oauthService == null)
-        {
-            MessageBox.Show("OAuthService не инициализирован", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-
-        _oauthService.StatusChanged += OnTokenOperationStatusChanged;
+        OAuthService.StatusChanged += OnTokenOperationStatusChanged;
 
         try
         {
-            await _oauthService.RefreshTokenAsync(clientId, clientSecret, refreshToken);
+            await OAuthService.RefreshTokenAsync(clientId, clientSecret, refreshToken);
 
             LoadTokenInformation();
             _tokenStatusValueLabel.Text = "Обновлен успешно";
@@ -260,7 +281,7 @@ public partial class OAuthSettingsControl : UserControl
         }
         finally
         {
-            _oauthService.StatusChanged -= OnTokenOperationStatusChanged;
+            OAuthService.StatusChanged -= OnTokenOperationStatusChanged;
             _refreshTokenButton.Enabled = true;
         }
     }
@@ -277,8 +298,8 @@ public partial class OAuthSettingsControl : UserControl
             return;
         }
 
-        _oauthService.ClearTokens();
-        _settings = _settingsManager.Current;
+        OAuthService.ClearTokens();
+        _settings = SettingsManager.Current;
 
         LoadTokenInformation();
         _tokenStatusValueLabel.Text = "Токены очищены";
@@ -291,14 +312,25 @@ public partial class OAuthSettingsControl : UserControl
 
     private void OnTokenOperationStatusChanged(string message)
     {
-        if (InvokeRequired)
+        if (IsDisposed || Disposing || !IsHandleCreated)
         {
-            Invoke(new Action<string>(OnTokenOperationStatusChanged), message);
             return;
         }
 
-        _tokenStatusValueLabel.Text = message;
-        _tokenStatusValueLabel.ForeColor = Color.Blue;
+        try
+        {
+            BeginInvoke(() =>
+            {
+                _tokenStatusValueLabel.Text = message;
+                _tokenStatusValueLabel.ForeColor = Color.Blue;
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
     }
 
     private void OnShowTokenButtonClicked(object sender, EventArgs e)

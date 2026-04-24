@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Twitch.Chat;
 
 namespace PoproshaykaBot.WinForms.Settings;
@@ -6,25 +7,20 @@ namespace PoproshaykaBot.WinForms.Settings;
 public partial class BasicSettingsControl : UserControl
 {
     private static readonly TwitchSettings DefaultSettings = new();
-
-    private IBotUserIdProvider? _botUserIdProvider;
-    private ILogger<BasicSettingsControl>? _logger;
+    private bool _initialized;
 
     public BasicSettingsControl()
     {
         InitializeComponent();
-        SetPlaceholders();
     }
 
     public event EventHandler? SettingChanged;
 
-    public void Setup(IBotUserIdProvider botUserIdProvider, ILogger<BasicSettingsControl> logger)
-    {
-        _botUserIdProvider = botUserIdProvider;
-        _logger = logger;
+    [Inject]
+    public IBotUserIdProvider BotUserIdProvider { get; internal init; } = null!;
 
-        _ = RefreshBotLoginFromTokenAsync();
-    }
+    [Inject]
+    public ILogger<BasicSettingsControl> Logger { get; internal init; } = null!;
 
     public void LoadSettings(TwitchSettings settings)
     {
@@ -36,6 +32,26 @@ public partial class BasicSettingsControl : UserControl
     {
         settings.BotUsername = _botUsernameTextBox.Text.Trim();
         settings.Channel = _channelTextBox.Text.Trim();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
+        _initialized = true;
+
+        SetPlaceholders();
+        _ = RefreshBotLoginFromTokenAsync();
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -62,14 +78,9 @@ public partial class BasicSettingsControl : UserControl
 
     private async Task RefreshBotLoginFromTokenAsync()
     {
-        if (_botUserIdProvider == null)
-        {
-            return;
-        }
-
         try
         {
-            var user = await _botUserIdProvider.GetUserAsync(CancellationToken.None);
+            var user = await BotUserIdProvider.GetUserAsync(CancellationToken.None);
 
             if (user == null || string.IsNullOrEmpty(user.Login))
             {
@@ -88,7 +99,7 @@ public partial class BasicSettingsControl : UserControl
         }
         catch (Exception ex)
         {
-            _logger?.LogDebug(ex, "Не удалось получить имя бота из токена (возможно, бот ещё не авторизован)");
+            Logger.LogDebug(ex, "Не удалось получить имя бота из токена (возможно, бот ещё не авторизован)");
         }
     }
 }

@@ -1,19 +1,20 @@
-﻿using System.Diagnostics;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+using System.Diagnostics;
 using System.Reflection;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class MiscSettingsControl : UserControl
 {
-    private readonly SettingsManager _settingsManager;
-
-    public MiscSettingsControl(SettingsManager settingsManager)
+    public MiscSettingsControl()
     {
-        _settingsManager = settingsManager;
         InitializeComponent();
     }
 
     public event EventHandler? SettingChanged;
+
+    [Inject]
+    public SettingsManager SettingsManager { get; internal init; } = null!;
 
     public void LoadSettings(AppSettings settings)
     {
@@ -62,7 +63,7 @@ public partial class MiscSettingsControl : UserControl
         try
         {
             var defaultSettings = new AppSettings();
-            _settingsManager.SaveSettings(defaultSettings);
+            SettingsManager.SaveSettings(defaultSettings);
 
             MessageBox.Show("Настройки успешно сброшены к значениям по умолчанию.\n\nПерезапустите приложение для применения изменений.",
                 "Сброс настроек", MessageBoxButtons.OK, MessageBoxIcon.Information);

@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Settings;
@@ -10,7 +11,6 @@ public partial class BroadcastProfilesSettingsControl : UserControl
         PropertyNameCaseInsensitive = true,
     };
 
-    private BroadcastProfilesManager? _manager;
     private BroadcastProfile? _current;
 
     public BroadcastProfilesSettingsControl()
@@ -21,24 +21,15 @@ public partial class BroadcastProfilesSettingsControl : UserControl
 
     public event EventHandler? SettingChanged;
 
-    public void Setup(BroadcastProfilesManager manager, IGameCategoryResolver resolver)
-    {
-        _manager = manager;
-        _gameBox.Setup(resolver);
-        ReloadList();
-    }
+    [Inject]
+    public BroadcastProfilesManager Manager { get; internal init; } = null!;
 
     public void SaveSettings(TwitchSettings _)
     {
-        if (_manager == null)
-        {
-            return;
-        }
-
         FlushEditorToCurrent();
 
         var items = _profilesListBox.Items.Cast<BroadcastProfile>().ToList();
-        var persistedIds = _manager.GetAll().Select(p => p.Id).ToHashSet();
+        var persistedIds = Manager.GetAll().Select(p => p.Id).ToHashSet();
 
         try
         {
@@ -46,7 +37,7 @@ public partial class BroadcastProfilesSettingsControl : UserControl
             {
                 if (!persistedIds.Contains(item.Id) || ReferenceEquals(item, _current))
                 {
-                    _manager.Upsert(item);
+                    Manager.Upsert(item);
                 }
             }
 
@@ -95,12 +86,12 @@ public partial class BroadcastProfilesSettingsControl : UserControl
 
     private void OnRemoveClicked(object? sender, EventArgs e)
     {
-        if (_manager == null || _current == null)
+        if (_current == null)
         {
             return;
         }
 
-        _manager.Remove(_current.Id);
+        Manager.Remove(_current.Id);
         _current = null;
         ReloadList();
         LoadCurrentIntoEditor();
@@ -131,11 +122,6 @@ public partial class BroadcastProfilesSettingsControl : UserControl
 
     private void OnImportClicked(object? sender, EventArgs e)
     {
-        if (_manager == null)
-        {
-            return;
-        }
-
         using var dialog = new OpenFileDialog();
         dialog.Title = "Импорт профилей из JSON";
         dialog.Filter = "JSON файлы (*.json)|*.json|Все файлы (*.*)|*.*";
@@ -171,7 +157,7 @@ public partial class BroadcastProfilesSettingsControl : UserControl
 
         var imported = 0;
         var skipped = 0;
-        var existingNames = new HashSet<string>(_manager.GetAll().Select(p => p.Name),
+        var existingNames = new HashSet<string>(Manager.GetAll().Select(p => p.Name),
             StringComparer.OrdinalIgnoreCase);
 
         foreach (var external in incoming)
@@ -199,7 +185,7 @@ public partial class BroadcastProfilesSettingsControl : UserControl
 
             try
             {
-                _manager.Upsert(profile);
+                Manager.Upsert(profile);
                 existingNames.Add(name);
                 imported++;
             }
@@ -218,7 +204,7 @@ public partial class BroadcastProfilesSettingsControl : UserControl
 
     private async void OnApplyNowClicked(object? sender, EventArgs e)
     {
-        if (_manager == null || _current == null)
+        if (_current == null)
         {
             return;
         }
@@ -227,7 +213,7 @@ public partial class BroadcastProfilesSettingsControl : UserControl
 
         try
         {
-            _manager.Upsert(_current);
+            Manager.Upsert(_current);
         }
         catch (InvalidOperationException ex)
         {
@@ -239,7 +225,7 @@ public partial class BroadcastProfilesSettingsControl : UserControl
 
         try
         {
-            await _manager.ApplyAsync(_current.Id, CancellationToken.None);
+            await Manager.ApplyAsync(_current.Id, CancellationToken.None);
         }
         finally
         {
@@ -249,14 +235,9 @@ public partial class BroadcastProfilesSettingsControl : UserControl
 
     private void ReloadList()
     {
-        if (_manager == null)
-        {
-            return;
-        }
-
         _profilesListBox.Items.Clear();
 
-        foreach (var p in _manager.GetAll())
+        foreach (var p in Manager.GetAll())
         {
             _profilesListBox.Items.Add(p);
         }

@@ -10,7 +10,7 @@ public partial class ObsChatSettingsControl : UserControl
     {
         InitializeComponent();
         SetPlaceholders();
-        InitializeAnimationControls();
+        PopulateAnimationItems();
     }
 
     public event EventHandler? SettingChanged;
@@ -321,7 +321,7 @@ public partial class ObsChatSettingsControl : UserControl
         _fontFamilyTextBox.PlaceholderText = DefaultSettings.FontFamily;
     }
 
-    private void InitializeAnimationControls()
+    private void PopulateAnimationItems()
     {
         var messageComboBoxes = new[]
         {
@@ -336,7 +336,6 @@ public partial class ObsChatSettingsControl : UserControl
         foreach (var comboBox in messageComboBoxes)
         {
             comboBox.Items.AddRange(MessageAnimationType.DisplayNames);
-            comboBox.SelectedIndexChanged += OnSettingChanged;
         }
     }
 

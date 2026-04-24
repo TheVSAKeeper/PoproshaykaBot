@@ -1,34 +1,21 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
-using Timer = System.Windows.Forms.Timer;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
-public partial class GameAutocompleteBox : UserControl
+public sealed partial class GameAutocompleteBox : UserControl
 {
-    private readonly Timer _debounceTimer;
-    private IGameCategoryResolver? _resolver;
-
     public GameAutocompleteBox()
     {
         InitializeComponent();
-        _debounceTimer = new()
-        {
-            Interval = 250,
-        };
-
-        _debounceTimer.Tick += OnDebounceTick;
-        _queryTextBox.TextChanged += OnTextChanged;
-        _suggestionsListBox.Click += OnSuggestionClicked;
     }
 
     public event EventHandler? SelectionChanged;
 
-    public GameSuggestion? Selected { get; private set; }
+    [Inject]
+    public IGameCategoryResolver Resolver { get; internal init; } = null!;
 
-    public void Setup(IGameCategoryResolver resolver)
-    {
-        _resolver = resolver;
-    }
+    public GameSuggestion? Selected { get; private set; }
 
     public void SetSelected(string gameId, string gameName)
     {
@@ -48,7 +35,7 @@ public partial class GameAutocompleteBox : UserControl
         {
             _debounceTimer.Stop();
 
-            if (_resolver == null || IsDisposed)
+            if (IsDisposed)
             {
                 return;
             }
@@ -61,7 +48,7 @@ public partial class GameAutocompleteBox : UserControl
                 return;
             }
 
-            var suggestions = await _resolver.SearchAsync(query, CancellationToken.None);
+            var suggestions = await Resolver.SearchAsync(query, CancellationToken.None);
 
             if (IsDisposed)
             {

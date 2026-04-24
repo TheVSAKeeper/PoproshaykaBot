@@ -936,6 +936,7 @@
             _fadeOutAnimationComboBox.Name = "_fadeOutAnimationComboBox";
             _fadeOutAnimationComboBox.Size = new Size(317, 23);
             _fadeOutAnimationComboBox.TabIndex = 8;
+            _fadeOutAnimationComboBox.SelectedIndexChanged += OnSettingChanged;
             //
             // _fadeOutAnimationResetButton
             //
@@ -1229,6 +1230,7 @@
             _userMessageAnimationComboBox.Name = "_userMessageAnimationComboBox";
             _userMessageAnimationComboBox.Size = new Size(257, 23);
             _userMessageAnimationComboBox.TabIndex = 1;
+            _userMessageAnimationComboBox.SelectedIndexChanged += OnSettingChanged;
             //
             // _botMessageAnimationLabel
             //
@@ -1250,6 +1252,7 @@
             _botMessageAnimationComboBox.Name = "_botMessageAnimationComboBox";
             _botMessageAnimationComboBox.Size = new Size(257, 23);
             _botMessageAnimationComboBox.TabIndex = 3;
+            _botMessageAnimationComboBox.SelectedIndexChanged += OnSettingChanged;
             //
             // _systemMessageAnimationLabel
             //
@@ -1271,6 +1274,7 @@
             _systemMessageAnimationComboBox.Name = "_systemMessageAnimationComboBox";
             _systemMessageAnimationComboBox.Size = new Size(257, 23);
             _systemMessageAnimationComboBox.TabIndex = 5;
+            _systemMessageAnimationComboBox.SelectedIndexChanged += OnSettingChanged;
             //
             // _broadcasterMessageAnimationLabel
             //
@@ -1292,6 +1296,7 @@
             _broadcasterMessageAnimationComboBox.Name = "_broadcasterMessageAnimationComboBox";
             _broadcasterMessageAnimationComboBox.Size = new Size(257, 23);
             _broadcasterMessageAnimationComboBox.TabIndex = 7;
+            _broadcasterMessageAnimationComboBox.SelectedIndexChanged += OnSettingChanged;
             //
             // _firstTimeUserMessageAnimationLabel
             //
@@ -1313,6 +1318,7 @@
             _firstTimeUserMessageAnimationComboBox.Name = "_firstTimeUserMessageAnimationComboBox";
             _firstTimeUserMessageAnimationComboBox.Size = new Size(257, 23);
             _firstTimeUserMessageAnimationComboBox.TabIndex = 9;
+            _firstTimeUserMessageAnimationComboBox.SelectedIndexChanged += OnSettingChanged;
             //
             // _userMessageAnimationResetButton
             //
