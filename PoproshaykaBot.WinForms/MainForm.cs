@@ -680,7 +680,7 @@ public partial class MainForm : Form
             {
                 PanelContent.None => "— Нет —",
                 PanelContent.Logs => "📜 Логи",
-                PanelContent.Chat => "💬 Чат",
+                PanelContent.Chat => "💬 Чат Twitch",
                 PanelContent.ChatOverlay => "👁️ OBS Чат",
                 PanelContent.BroadcastProfiles => "🎛 Профили",
                 _ => Value.ToString(),

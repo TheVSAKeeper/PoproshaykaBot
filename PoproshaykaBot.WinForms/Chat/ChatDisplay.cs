@@ -1,16 +1,74 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
-using PoproshaykaBot.WinForms.Users;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Web.WebView2.Core;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Settings;
+using System.Diagnostics;
+using System.Globalization;
 
 namespace PoproshaykaBot.WinForms.Chat;
 
-// TODO: Удалить и заменить на Twitch-чат
-public partial class ChatDisplay : UserControl
+public sealed partial class ChatDisplay : UserControl
 {
-    private const int MaxChatLines = 200;
-    private readonly List<IDisposable> _subs = [];
+    private const string WebView2RuntimeDownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+    private const double DefaultZoom = 0.75;
+
+    private const string HideClutterScript = """
+                                             (function () {
+                                                 const selectors = [
+                                                     '[data-a-target="consent-banner"]',
+                                                     '.consent-banner',
+                                                     '.tw-callout-message',
+                                                     '[class*="channelLeaderboardHeader"]',
+                                                     '[class*="channelLeaderboardBottomIconContainer"]',
+                                                     '[class*="community-highlight"]',
+                                                 ];
+                                                 const wrapperClasses = ['tw-transition', 'tw-callout', 'consent-banner'];
+                                                 const findWrapper = (el) => {
+                                                     let node = el;
+                                                     for (let i = 0; i < 15 && node; i++) {
+                                                         if (node.classList && wrapperClasses.some((c) => node.classList.contains(c))) {
+                                                             return node;
+                                                         }
+                                                         node = node.parentElement;
+                                                     }
+                                                     return el;
+                                                 };
+                                                 const hideAll = () => {
+                                                     const consentAccept = document.querySelector('[data-a-target="consent-banner-accept"]');
+                                                     if (consentAccept) {
+                                                         consentAccept.click();
+                                                     }
+                                                     for (const selector of selectors) {
+                                                         document.querySelectorAll(selector).forEach((el) => {
+                                                             const wrapper = findWrapper(el);
+                                                             if (wrapper.dataset.poproshaykaHidden !== '1') {
+                                                                 wrapper.dataset.poproshaykaHidden = '1';
+                                                                 wrapper.style.setProperty('display', 'none', 'important');
+                                                             }
+                                                         });
+                                                     }
+                                                 };
+                                                 hideAll();
+                                                 if (document.readyState === 'loading') {
+                                                     document.addEventListener('DOMContentLoaded', hideAll, { once: true });
+                                                 }
+                                                 const startObserver = () => {
+                                                     if (document.documentElement) {
+                                                         new MutationObserver(hideAll).observe(document.documentElement, { childList: true, subtree: true });
+                                                     } else {
+                                                         setTimeout(startObserver, 0);
+                                                     }
+                                                 };
+                                                 startObserver();
+                                             })();
+                                             """;
+
+    private static readonly string ZoomFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "PoproshaykaBot",
+        "chat-zoom.txt");
+
     private bool _initialized;
+    private bool _reloadAttempted;
 
     public ChatDisplay()
     {
@@ -18,101 +76,10 @@ public partial class ChatDisplay : UserControl
     }
 
     [Inject]
-    public IEventBus Bus { get; internal init; } = null!;
+    public SettingsManager Settings { get; internal init; } = null!;
 
-    public void AddChatMessage(ChatMessageData chatMessage)
-    {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<ChatMessageData>(AddChatMessage), chatMessage);
-            return;
-        }
-
-        var shouldAutoScroll = _chatRichTextBox.SelectionStart >= _chatRichTextBox.Text.Length - 1;
-
-        if (_chatRichTextBox.Lines.Length > MaxChatLines)
-        {
-            var charIndex = _chatRichTextBox.GetFirstCharIndexFromLine(_chatRichTextBox.Lines.Length - MaxChatLines);
-            if (charIndex > 0)
-            {
-                _chatRichTextBox.Select(0, charIndex);
-                _chatRichTextBox.SelectedText = "";
-            }
-        }
-
-        var localTime = TimeZoneInfo.ConvertTimeFromUtc(chatMessage.Timestamp, TimeZoneInfo.Local);
-        var timeString = localTime.ToString("HH:mm:ss");
-
-        string messageText;
-        Color messageColor;
-
-        switch (chatMessage.MessageType)
-        {
-            case ChatMessageType.UserMessage:
-                var timestampPart = $"[{timeString}] ";
-                var usernamePart = $"{chatMessage.DisplayName}: ";
-                var messagePart = chatMessage.Message;
-
-                _chatRichTextBox.SelectionColor = Color.Gray;
-                _chatRichTextBox.AppendText(timestampPart);
-
-                var usernameColor = GetUsernameColor(chatMessage);
-                _chatRichTextBox.SelectionColor = usernameColor;
-                _chatRichTextBox.AppendText(usernamePart);
-
-                _chatRichTextBox.SelectionColor = Color.Black;
-                _chatRichTextBox.AppendText(messagePart + Environment.NewLine);
-
-                _chatRichTextBox.Select(_chatRichTextBox.Text.Length, 0);
-                _chatRichTextBox.SelectionColor = Color.Black;
-
-                if (shouldAutoScroll)
-                {
-                    _chatRichTextBox.SelectionStart = _chatRichTextBox.Text.Length;
-                    _chatRichTextBox.ScrollToCaret();
-                }
-
-                return;
-
-            case ChatMessageType.BotResponse:
-                messageText = $"[{timeString}] {chatMessage.DisplayName}: {chatMessage.Message}";
-                messageColor = Color.DarkGreen;
-                break;
-
-            case ChatMessageType.SystemNotification:
-                messageText = $"[{timeString}] *** {chatMessage.Message} ***";
-                messageColor = Color.DarkOrange;
-                break;
-
-            default:
-                messageText = $"[{timeString}] {chatMessage.DisplayName}: {chatMessage.Message}";
-                messageColor = Color.Black;
-                break;
-        }
-
-        _chatRichTextBox.SelectionColor = messageColor;
-        _chatRichTextBox.AppendText(messageText + Environment.NewLine);
-
-        _chatRichTextBox.Select(_chatRichTextBox.Text.Length, 0);
-        _chatRichTextBox.SelectionColor = Color.Black;
-
-        if (shouldAutoScroll)
-        {
-            _chatRichTextBox.SelectionStart = _chatRichTextBox.Text.Length;
-            _chatRichTextBox.ScrollToCaret();
-        }
-    }
-
-    public void ClearChat()
-    {
-        if (InvokeRequired)
-        {
-            Invoke(ClearChat);
-            return;
-        }
-
-        _chatRichTextBox.Clear();
-    }
+    [Inject]
+    public ILogger<ChatDisplay> Logger { get; internal init; } = null!;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -130,52 +97,261 @@ public partial class ChatDisplay : UserControl
 
         _initialized = true;
 
-        _subs.Add(Bus.SubscribeOnUi<ChatMessageReceived>(this, @event => AddChatMessage(@event.HistoryEntry)));
-        _subs.Add(Bus.SubscribeOnUi<ChatHistoryCleared>(this, _ => ClearChat()));
-        _subs.DisposeOnClose(this);
+        _ = InitializeWebViewAsync();
     }
 
-    private void OnLoad(object sender, EventArgs e)
+    private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
     {
-        var welcomeMessage = new ChatMessageData
-        {
-            Timestamp = DateTime.UtcNow,
-            DisplayName = "Система",
-            Message = "Чат готов к отображению сообщений. Подключите бота для начала работы.",
-            MessageType = ChatMessageType.SystemNotification,
-            Status = UserStatus.None,
-        };
+        Logger.LogError("WebView2 процесс упал: {Reason}", e.ProcessFailedKind);
 
-        AddChatMessage(welcomeMessage);
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            BeginInvoke(() =>
+            {
+                if (_reloadAttempted)
+                {
+                    return;
+                }
+
+                _reloadAttempted = true;
+                _webView.Reload();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
     }
 
-    private static Color GetUsernameColor(ChatMessageData chatMessage)
+    private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-        if (chatMessage.MessageType != ChatMessageType.UserMessage)
+        if (e.IsSuccess)
         {
-            return Color.DarkBlue;
+            _reloadAttempted = false;
+            return;
         }
 
-        if (chatMessage.Status.HasFlag(UserStatus.Broadcaster))
+        Logger.LogWarning("Twitch-чат не загрузился: status={HttpStatusCode}, error={WebErrorStatus}", e.HttpStatusCode, e.WebErrorStatus);
+    }
+
+    private void OnZoomFactorChanged(object? sender, EventArgs e)
+    {
+        var zoom = _webView.ZoomFactor;
+
+        try
         {
-            return Color.FromArgb(147, 39, 143);
+            Directory.CreateDirectory(Path.GetDirectoryName(ZoomFilePath)!);
+            File.WriteAllText(ZoomFilePath, zoom.ToString("F3", CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Не удалось сохранить масштаб чата");
+        }
+    }
+
+    private void OnReloadClicked(object? sender, EventArgs e)
+    {
+        if (_webView.CoreWebView2 == null)
+        {
+            return;
         }
 
-        if (chatMessage.Status.HasFlag(UserStatus.Moderator))
+        _webView.Reload();
+    }
+
+    private void OnResetZoomClicked(object? sender, EventArgs e)
+    {
+        _webView.ZoomFactor = DefaultZoom;
+    }
+
+    private void OnOpenInBrowserClicked(object? sender, EventArgs e)
+    {
+        var url = _webView.Source?.ToString();
+
+        if (string.IsNullOrEmpty(url))
         {
-            return Color.FromArgb(0, 128, 0);
+            var channel = Settings.Current.Twitch.Channel?.Trim();
+
+            if (string.IsNullOrEmpty(channel))
+            {
+                return;
+            }
+
+            url = $"https://www.twitch.tv/popout/{Uri.EscapeDataString(channel)}/chat?popout=";
         }
 
-        if (chatMessage.Status.HasFlag(UserStatus.Vip))
+        try
         {
-            return Color.FromArgb(255, 140, 0);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Не удалось открыть ссылку в браузере");
+        }
+    }
+
+    private async void OnResetSessionClicked(object? sender, EventArgs e)
+    {
+        if (_webView.CoreWebView2?.Profile == null)
+        {
+            return;
         }
 
-        if (chatMessage.Status.HasFlag(UserStatus.Subscriber))
+        var result = MessageBox.Show(this,
+            "Это разлогинит бота из Twitch-чата и очистит куки профиля. Продолжить?",
+            "Сброс сессии Twitch",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (result != DialogResult.Yes)
         {
-            return Color.FromArgb(30, 144, 255);
+            return;
         }
 
-        return Color.DarkBlue;
+        try
+        {
+            await _webView.CoreWebView2.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.AllSite);
+            _webView.Reload();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Не удалось очистить данные сессии WebView2");
+        }
+    }
+
+    private void OnFallbackLinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = WebView2RuntimeDownloadUrl,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Не удалось открыть ссылку на WebView2 Runtime");
+        }
+    }
+
+    private async Task InitializeWebViewAsync()
+    {
+        try
+        {
+            var userDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "PoproshaykaBot",
+                "WebView2");
+
+            Directory.CreateDirectory(userDataFolder);
+
+            var env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            await _webView.EnsureCoreWebView2Async(env);
+
+            if (IsDisposed || Disposing)
+            {
+                return;
+            }
+
+            _webView.CoreWebView2.ProcessFailed += OnProcessFailed;
+            _webView.NavigationCompleted += OnNavigationCompleted;
+            _webView.ZoomFactorChanged += OnZoomFactorChanged;
+
+            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(HideClutterScript);
+
+            _webView.ZoomFactor = LoadSavedZoom();
+
+            NavigateToChannel();
+        }
+        catch (WebView2RuntimeNotFoundException ex)
+        {
+            Logger.LogError(ex, "WebView2 Runtime не установлен");
+            ShowRuntimeMissingFallback();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Не удалось инициализировать WebView2 для Twitch-чата");
+            ShowGenericFallback();
+        }
+    }
+
+    private void NavigateToChannel()
+    {
+        if (_webView.CoreWebView2 == null)
+        {
+            return;
+        }
+
+        var channel = Settings.Current.Twitch.Channel?.Trim();
+
+        if (string.IsNullOrEmpty(channel))
+        {
+            _webView.Visible = false;
+            _fallbackPanel.Visible = true;
+            _fallbackLabel.Text = "Укажите канал в настройках Twitch, чтобы открыть чат.";
+            _fallbackLink.Visible = false;
+            return;
+        }
+
+        _webView.Visible = true;
+        _fallbackPanel.Visible = false;
+
+        var url = $"https://www.twitch.tv/popout/{Uri.EscapeDataString(channel)}/chat?popout=";
+        _webView.CoreWebView2.Navigate(url);
+    }
+
+    private void ShowRuntimeMissingFallback()
+    {
+        _webView.Visible = false;
+        _toolStrip.Visible = false;
+        _fallbackPanel.Visible = true;
+        _fallbackLabel.Text = "Требуется Microsoft Edge WebView2 Runtime.\nУстановите его, чтобы увидеть чат Twitch.";
+        _fallbackLink.Text = "Скачать WebView2 Runtime";
+        _fallbackLink.Visible = true;
+    }
+
+    private void ShowGenericFallback()
+    {
+        _webView.Visible = false;
+        _toolStrip.Visible = false;
+        _fallbackPanel.Visible = true;
+        _fallbackLabel.Text = "Не удалось открыть чат Twitch. Подробности — в логах.";
+        _fallbackLink.Visible = false;
+    }
+
+    private double LoadSavedZoom()
+    {
+        try
+        {
+            if (!File.Exists(ZoomFilePath))
+            {
+                return DefaultZoom;
+            }
+
+            var text = File.ReadAllText(ZoomFilePath).Trim();
+
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var zoom)
+                && zoom is >= 0.25 and <= 5.0)
+            {
+                return zoom;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Не удалось прочитать сохранённый масштаб чата");
+        }
+
+        return DefaultZoom;
     }
 }
