@@ -103,6 +103,7 @@ sealed partial class UserStatisticsForm
         textBoxFilter.Size = new Size(674, 23);
         textBoxFilter.TabIndex = 0;
         textBoxFilter.TextChanged += textBoxFilter_TextChanged;
+        textBoxFilter.KeyDown += textBoxFilter_KeyDown;
         // 
         // listViewUsers
         // 
@@ -118,7 +119,9 @@ sealed partial class UserStatisticsForm
         listViewUsers.TabIndex = 1;
         listViewUsers.UseCompatibleStateImageBehavior = false;
         listViewUsers.View = View.Details;
-        listViewUsers.SelectedIndexChanged += listBoxUsers_SelectedIndexChanged;
+        listViewUsers.ColumnClick += listViewUsers_ColumnClick;
+        listViewUsers.MouseDoubleClick += listViewUsers_MouseDoubleClick;
+        listViewUsers.SelectedIndexChanged += listViewUsers_SelectedIndexChanged;
         // 
         // columnHeaderName
         // 
@@ -238,6 +241,9 @@ sealed partial class UserStatisticsForm
         numericIncrement.Name = "numericIncrement";
         numericIncrement.Size = new Size(292, 23);
         numericIncrement.TabIndex = 0;
+        numericIncrement.ValueChanged += numericIncrement_ValueChanged;
+        numericIncrement.KeyDown += numericIncrement_KeyDown;
+        numericIncrement.KeyUp += numericIncrement_KeyUp;
         // 
         // tableLayoutPanelMain
         // 

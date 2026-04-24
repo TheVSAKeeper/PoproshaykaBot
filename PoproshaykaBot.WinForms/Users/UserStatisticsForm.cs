@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Statistics;
 using System.Collections;
 
@@ -13,7 +14,7 @@ public sealed partial class UserStatisticsForm : Form
     private readonly IChannelProvider _channelProvider;
 
     private List<UserStatistics> _allUsers = [];
-    private List<UserStatistics> _filteredUsers = [];
+    private bool _initialized;
 
     public UserStatisticsForm(
         StatisticsCollector statisticsCollector,
@@ -27,8 +28,6 @@ public sealed partial class UserStatisticsForm : Form
         _channelProvider = channelProvider;
 
         InitializeComponent();
-        InitializeRuntime();
-        LoadData();
     }
 
     private UserStatisticsForm()
@@ -36,21 +35,38 @@ public sealed partial class UserStatisticsForm : Form
         InitializeComponent();
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
+        _initialized = true;
+
+        UpdateDetails(null);
+        UpdateActionState();
+        LoadData();
+    }
+
     private void textBoxFilter_TextChanged(object sender, EventArgs e)
     {
         ApplyFilter();
     }
 
-    private void listBoxUsers_SelectedIndexChanged(object sender, EventArgs e)
+    private void listViewUsers_SelectedIndexChanged(object sender, EventArgs e)
     {
-        if (listViewUsers.SelectedItems.Count == 0)
-        {
-            UpdateDetails(null);
-            UpdateActionState();
-            return;
-        }
+        var user = listViewUsers.SelectedItems.Count > 0
+            ? listViewUsers.SelectedItems[0].Tag as UserStatistics
+            : null;
 
-        var user = listViewUsers.SelectedItems[0].Tag as UserStatistics;
         UpdateDetails(user);
         UpdateActionState();
     }
@@ -73,35 +89,15 @@ public sealed partial class UserStatisticsForm : Form
 
         bool updated;
 
-        if (delta < 0)
+        try
         {
-            var notificationMessage = _userMessagesManagementService.GetPunishmentNotification(user.Name, (ulong)-delta);
-            MessageBox.Show(notificationMessage, "🏴‍☠️ Наказание от СЕРЁГИ ПИРАТА! ⚔️", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-
-            try
-            {
-                updated = await _userMessagesManagementService.PunishUserAsync(user.UserId, user.Name, (ulong)-delta, _channelProvider.Channel);
-            }
-            catch (Exception exception)
-            {
-                MessageBox.Show($"Не удалось наказать пользователя: {exception.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+            updated = await ApplyAdjustmentAsync(user, delta);
         }
-        else
+        catch (Exception exception)
         {
-            var notificationMessage = _userMessagesManagementService.GetRewardNotification(user.Name, (ulong)delta);
-            MessageBox.Show(notificationMessage, "🎉 Поощрение от СЕРЁГИ ПИРАТА! 🏆", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-            try
-            {
-                updated = await _userMessagesManagementService.RewardUserAsync(user.UserId, user.Name, (ulong)delta, _channelProvider.Channel);
-            }
-            catch (Exception exception)
-            {
-                MessageBox.Show($"Не удалось поощрить пользователя: {exception.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+            var verb = delta < 0 ? "наказать" : "поощрить";
+            MessageBox.Show($"Не удалось {verb} пользователя: {exception.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
         }
 
         if (!updated)
@@ -128,72 +124,84 @@ public sealed partial class UserStatisticsForm : Form
         textBoxFilter.Text = string.Empty;
     }
 
-    private void InitializeRuntime()
+    private void listViewUsers_ColumnClick(object sender, ColumnClickEventArgs e)
     {
-        listViewUsers.ColumnClick += (s, e) =>
+        var nextOrder = SortOrder.Ascending;
+
+        if (listViewUsers.Tag is int currentSortCol
+            && currentSortCol == e.Column
+            && listViewUsers.ListViewItemSorter is ListViewItemComparer comparer
+            && comparer.Order == SortOrder.Ascending)
         {
-            if (s is not ListView lvw)
-            {
-                return;
-            }
+            nextOrder = SortOrder.Descending;
+        }
 
-            if (lvw.Tag is not int currentSortCol || currentSortCol != e.Column)
-            {
-                lvw.Tag = e.Column;
-                lvw.ListViewItemSorter = new ListViewItemComparer(e.Column, SortOrder.Ascending);
-            }
-            else
-            {
-                var comparer = lvw.ListViewItemSorter as ListViewItemComparer;
-                var currentOrder = comparer?.Order ?? SortOrder.Ascending;
-                lvw.ListViewItemSorter = new ListViewItemComparer(e.Column,
-                    currentOrder == SortOrder.Ascending
-                        ? SortOrder.Descending
-                        : SortOrder.Ascending);
-            }
-        };
+        listViewUsers.Tag = e.Column;
+        listViewUsers.ListViewItemSorter = new ListViewItemComparer(e.Column, nextOrder);
+    }
 
-        listViewUsers.MouseDoubleClick += (s, e) =>
+    private void listViewUsers_MouseDoubleClick(object sender, MouseEventArgs e)
+    {
+        if (listViewUsers.SelectedItems.Count == 0)
         {
-            if (listViewUsers.SelectedItems.Count <= 0)
-            {
-                return;
-            }
+            return;
+        }
 
-            numericIncrement.Focus();
-            numericIncrement.Select(0, numericIncrement.Text.Length);
-        };
+        numericIncrement.Focus();
+        numericIncrement.Select(0, numericIncrement.Text.Length);
+    }
 
-        textBoxFilter.KeyDown += (s, e) =>
+    private void textBoxFilter_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.KeyCode != Keys.Enter || listViewUsers.Items.Count == 0)
         {
-            if (e.KeyCode != Keys.Enter || listViewUsers.Items.Count <= 0)
-            {
-                return;
-            }
+            return;
+        }
 
-            listViewUsers.Items[0].Selected = true;
-            listViewUsers.Focus();
-            e.Handled = true;
-            e.SuppressKeyPress = true;
-        };
+        listViewUsers.Items[0].Selected = true;
+        listViewUsers.Focus();
+        e.Handled = true;
+        e.SuppressKeyPress = true;
+    }
 
-        numericIncrement.ValueChanged += (_, _) => UpdateActionState();
-        numericIncrement.KeyUp += (_, _) => UpdateActionState();
-        numericIncrement.KeyDown += (s, e) =>
-        {
-            if (e.KeyCode != Keys.Enter || !buttonAction.Enabled)
-            {
-                return;
-            }
-
-            buttonAction_Click(buttonAction, e);
-            e.Handled = true;
-            e.SuppressKeyPress = true;
-        };
-
-        UpdateDetails(null);
-        UpdateGlobalStats();
+    private void numericIncrement_ValueChanged(object sender, EventArgs e)
+    {
         UpdateActionState();
+    }
+
+    private void numericIncrement_KeyUp(object sender, KeyEventArgs e)
+    {
+        UpdateActionState();
+    }
+
+    private void numericIncrement_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.KeyCode != Keys.Enter || !buttonAction.Enabled)
+        {
+            return;
+        }
+
+        buttonAction.PerformClick();
+        e.Handled = true;
+        e.SuppressKeyPress = true;
+    }
+
+    private Task<bool> ApplyAdjustmentAsync(UserStatistics user, long delta)
+    {
+        if (delta < 0)
+        {
+            var amount = (ulong)-delta;
+            var notification = _userMessagesManagementService.GetPunishmentNotification(user.Name, amount);
+            MessageBox.Show(notification, "🏴‍☠️ Наказание от СЕРЁГИ ПИРАТА! ⚔️", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return _userMessagesManagementService.PunishUserAsync(user.UserId, user.Name, amount, _channelProvider.Channel);
+        }
+        else
+        {
+            var amount = (ulong)delta;
+            var notification = _userMessagesManagementService.GetRewardNotification(user.Name, amount);
+            MessageBox.Show(notification, "🎉 Поощрение от СЕРЁГИ ПИРАТА! 🏆", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return _userMessagesManagementService.RewardUserAsync(user.UserId, user.Name, amount, _channelProvider.Channel);
+        }
     }
 
     private void LoadData()
@@ -205,30 +213,13 @@ public sealed partial class UserStatisticsForm : Form
 
     private void RefreshUserList()
     {
-        var currentFilter = textBoxFilter.Text;
-        var selectedUserId = listViewUsers.SelectedItems.Count > 0 ? (listViewUsers.SelectedItems[0].Tag as UserStatistics)?.UserId : null;
-
         _allUsers = _statisticsCollector.GetAllUsers();
         UpdateGlobalStats();
-
-        textBoxFilter.Text = currentFilter;
         ApplyFilter();
 
-        if (selectedUserId == null)
+        if (listViewUsers.SelectedItems.Count > 0)
         {
-            return;
-        }
-
-        foreach (ListViewItem item in listViewUsers.Items)
-        {
-            if (item.Tag is not UserStatistics user || user.UserId != selectedUserId)
-            {
-                continue;
-            }
-
-            item.Selected = true;
-            item.EnsureVisible();
-            break;
+            listViewUsers.SelectedItems[0].EnsureVisible();
         }
     }
 
@@ -236,24 +227,20 @@ public sealed partial class UserStatisticsForm : Form
     {
         var term = textBoxFilter.Text?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(term))
-        {
-            _filteredUsers = _allUsers.ToList();
-        }
-        else
-        {
-            _filteredUsers = _allUsers
-                .Where(x => x.Name.Contains(term, StringComparison.InvariantCultureIgnoreCase)
-                            || x.UserId.Contains(term, StringComparison.InvariantCultureIgnoreCase))
-                .ToList();
-        }
+        var filtered = string.IsNullOrWhiteSpace(term)
+            ? _allUsers
+            : _allUsers.Where(x =>
+                x.Name.Contains(term, StringComparison.InvariantCultureIgnoreCase)
+                || x.UserId.Contains(term, StringComparison.InvariantCultureIgnoreCase));
 
-        var selectedUserId = listViewUsers.SelectedItems.Count > 0 ? (listViewUsers.SelectedItems[0].Tag as UserStatistics)?.UserId : null;
+        var selectedUserId = listViewUsers.SelectedItems.Count > 0
+            ? (listViewUsers.SelectedItems[0].Tag as UserStatistics)?.UserId
+            : null;
 
         listViewUsers.BeginUpdate();
         listViewUsers.Items.Clear();
 
-        foreach (var user in _filteredUsers)
+        foreach (var user in filtered)
         {
             var rank = _userRankService.GetRank(user.TotalMessageCount);
             var item = new ListViewItem(user.Name)
@@ -324,24 +311,20 @@ public sealed partial class UserStatisticsForm : Form
 
         public int Compare(object? x, object? y)
         {
-            int returnVal;
             var itemX = (ListViewItem)x!;
             var itemY = (ListViewItem)y!;
+            var textX = itemX.SubItems[column].Text;
+            var textY = itemY.SubItems[column].Text;
 
-            if (column == 1)
+            int returnVal;
+
+            if (column == 1 && long.TryParse(textX, out var valX) && long.TryParse(textY, out var valY))
             {
-                if (long.TryParse(itemX.SubItems[column].Text, out var valX) && long.TryParse(itemY.SubItems[column].Text, out var valY))
-                {
-                    returnVal = valX.CompareTo(valY);
-                }
-                else
-                {
-                    returnVal = string.Compare(itemX.SubItems[column].Text, itemY.SubItems[column].Text, StringComparison.Ordinal);
-                }
+                returnVal = valX.CompareTo(valY);
             }
             else
             {
-                returnVal = string.Compare(itemX.SubItems[column].Text, itemY.SubItems[column].Text, StringComparison.Ordinal);
+                returnVal = string.Compare(textX, textY, StringComparison.Ordinal);
             }
 
             return Order == SortOrder.Descending ? -returnVal : returnVal;
