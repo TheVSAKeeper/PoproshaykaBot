@@ -37,6 +37,8 @@ partial class BroadcastProfileQuickPanel
         Controls.Add(_applyButton);
         Controls.Add(_statusLabel);
 
+        AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+        AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
         Name = "BroadcastProfileQuickPanel";
         Size = new System.Drawing.Size(700, 32);
     }

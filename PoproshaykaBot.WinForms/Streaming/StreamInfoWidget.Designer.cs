@@ -197,9 +197,11 @@ sealed partial class StreamInfoWidget
         _openChannelButton.UseVisualStyleBackColor = true;
         _openChannelButton.Visible = false;
         _openChannelButton.Click += OnOpenChannelClick;
-        // 
+        //
         // StreamInfoWidget
-        // 
+        //
+        AutoScaleDimensions = new SizeF(7F, 15F);
+        AutoScaleMode = AutoScaleMode.Font;
         BackColor = Color.White;
         BorderStyle = BorderStyle.FixedSingle;
         Controls.Add(_openChannelButton);

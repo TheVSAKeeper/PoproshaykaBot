@@ -143,9 +143,11 @@ sealed partial class BroadcastInfoWidget
         _sendNowButton.Text = "Сейчас";
         _sendNowButton.UseVisualStyleBackColor = true;
         _sendNowButton.Click += OnSendNowButtonClick;
-        // 
+        //
         // BroadcastInfoWidget
-        // 
+        //
+        AutoScaleDimensions = new SizeF(7F, 15F);
+        AutoScaleMode = AutoScaleMode.Font;
         BackColor = Color.White;
         BorderStyle = BorderStyle.FixedSingle;
         Controls.Add(_mainTableLayoutPanel);

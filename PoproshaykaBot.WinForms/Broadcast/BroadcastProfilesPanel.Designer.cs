@@ -86,6 +86,8 @@
             Controls.Add(_emptyLabel);
             Controls.Add(_header);
 
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             Name = "BroadcastProfilesPanel";
             Size = new System.Drawing.Size(700, 440);
             MinimumSize = new System.Drawing.Size(360, 200);

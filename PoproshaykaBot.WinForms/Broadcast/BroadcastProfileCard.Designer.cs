@@ -198,9 +198,11 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _driftLabel.TabIndex = 1;
             _driftLabel.Text = "⚠ Стрим изменён вручную";
             _driftLabel.Visible = false;
-            // 
+            //
             // BroadcastProfileCard
-            // 
+            //
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
             AutoSize = true;
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
             BorderStyle = BorderStyle.FixedSingle;
