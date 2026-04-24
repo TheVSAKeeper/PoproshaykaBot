@@ -100,7 +100,7 @@ sealed partial class UserStatisticsForm
         textBoxFilter.Location = new Point(9, 9);
         textBoxFilter.Name = "textBoxFilter";
         textBoxFilter.PlaceholderText = "🔍 Поиск пользователя (Имя или ID)...";
-        textBoxFilter.Size = new Size(674, 23);
+        textBoxFilter.Size = new Size(707, 23);
         textBoxFilter.TabIndex = 0;
         textBoxFilter.TextChanged += textBoxFilter_TextChanged;
         textBoxFilter.KeyDown += textBoxFilter_KeyDown;
@@ -115,13 +115,13 @@ sealed partial class UserStatisticsForm
         listViewUsers.MultiSelect = false;
         listViewUsers.Name = "listViewUsers";
         tableLayoutPanelMain.SetRowSpan(listViewUsers, 3);
-        listViewUsers.Size = new Size(458, 410);
+        listViewUsers.Size = new Size(478, 448);
         listViewUsers.TabIndex = 1;
         listViewUsers.UseCompatibleStateImageBehavior = false;
         listViewUsers.View = View.Details;
         listViewUsers.ColumnClick += listViewUsers_ColumnClick;
-        listViewUsers.MouseDoubleClick += listViewUsers_MouseDoubleClick;
         listViewUsers.SelectedIndexChanged += listViewUsers_SelectedIndexChanged;
+        listViewUsers.MouseDoubleClick += listViewUsers_MouseDoubleClick;
         // 
         // columnHeaderName
         // 
@@ -144,7 +144,7 @@ sealed partial class UserStatisticsForm
         buttonAction.Enabled = false;
         buttonAction.Location = new Point(3, 38);
         buttonAction.Name = "buttonAction";
-        buttonAction.Size = new Size(292, 51);
+        buttonAction.Size = new Size(305, 51);
         buttonAction.TabIndex = 1;
         buttonAction.Text = "Добавить сообщения";
         buttonAction.UseVisualStyleBackColor = true;
@@ -156,7 +156,7 @@ sealed partial class UserStatisticsForm
         labelUserId.Dock = DockStyle.Fill;
         labelUserId.Location = new Point(3, 0);
         labelUserId.Name = "labelUserId";
-        labelUserId.Size = new Size(292, 25);
+        labelUserId.Size = new Size(305, 25);
         labelUserId.TabIndex = 0;
         labelUserId.Text = "🆔 ID: —";
         labelUserId.TextAlign = ContentAlignment.MiddleLeft;
@@ -167,7 +167,7 @@ sealed partial class UserStatisticsForm
         labelUserName.Dock = DockStyle.Fill;
         labelUserName.Location = new Point(3, 25);
         labelUserName.Name = "labelUserName";
-        labelUserName.Size = new Size(292, 25);
+        labelUserName.Size = new Size(305, 25);
         labelUserName.TabIndex = 1;
         labelUserName.Text = "👤 Имя: —";
         labelUserName.TextAlign = ContentAlignment.MiddleLeft;
@@ -179,7 +179,7 @@ sealed partial class UserStatisticsForm
         labelMessageTotal.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
         labelMessageTotal.Location = new Point(3, 90);
         labelMessageTotal.Name = "labelMessageTotal";
-        labelMessageTotal.Size = new Size(292, 30);
+        labelMessageTotal.Size = new Size(305, 30);
         labelMessageTotal.TabIndex = 2;
         labelMessageTotal.Text = "💬 Всего: 0";
         labelMessageTotal.TextAlign = ContentAlignment.MiddleLeft;
@@ -191,7 +191,7 @@ sealed partial class UserStatisticsForm
         labelMessageWritten.ForeColor = Color.DarkSlateGray;
         labelMessageWritten.Location = new Point(3, 120);
         labelMessageWritten.Name = "labelMessageWritten";
-        labelMessageWritten.Size = new Size(292, 22);
+        labelMessageWritten.Size = new Size(305, 22);
         labelMessageWritten.TabIndex = 4;
         labelMessageWritten.Text = "    ✍️ Написано: 0";
         labelMessageWritten.TextAlign = ContentAlignment.MiddleLeft;
@@ -203,7 +203,7 @@ sealed partial class UserStatisticsForm
         labelMessageBonus.ForeColor = Color.DarkGreen;
         labelMessageBonus.Location = new Point(3, 142);
         labelMessageBonus.Name = "labelMessageBonus";
-        labelMessageBonus.Size = new Size(292, 22);
+        labelMessageBonus.Size = new Size(305, 22);
         labelMessageBonus.TabIndex = 5;
         labelMessageBonus.Text = "    🎁 Бонус: 0";
         labelMessageBonus.TextAlign = ContentAlignment.MiddleLeft;
@@ -215,7 +215,7 @@ sealed partial class UserStatisticsForm
         labelMessagePenalty.ForeColor = Color.DarkRed;
         labelMessagePenalty.Location = new Point(3, 164);
         labelMessagePenalty.Name = "labelMessagePenalty";
-        labelMessagePenalty.Size = new Size(292, 22);
+        labelMessagePenalty.Size = new Size(305, 22);
         labelMessagePenalty.TabIndex = 6;
         labelMessagePenalty.Text = "    🚫 Штраф: 0";
         labelMessagePenalty.TextAlign = ContentAlignment.MiddleLeft;
@@ -227,7 +227,7 @@ sealed partial class UserStatisticsForm
         labelChessPiece.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
         labelChessPiece.Location = new Point(3, 50);
         labelChessPiece.Name = "labelChessPiece";
-        labelChessPiece.Size = new Size(292, 40);
+        labelChessPiece.Size = new Size(305, 40);
         labelChessPiece.TabIndex = 3;
         labelChessPiece.Text = "♟ ПЕШКА";
         labelChessPiece.TextAlign = ContentAlignment.MiddleLeft;
@@ -239,7 +239,7 @@ sealed partial class UserStatisticsForm
         numericIncrement.Maximum = new decimal(new int[] { 1000000, 0, 0, 0 });
         numericIncrement.Minimum = new decimal(new int[] { 1000000, 0, 0, int.MinValue });
         numericIncrement.Name = "numericIncrement";
-        numericIncrement.Size = new Size(292, 23);
+        numericIncrement.Size = new Size(305, 23);
         numericIncrement.TabIndex = 0;
         numericIncrement.ValueChanged += numericIncrement_ValueChanged;
         numericIncrement.KeyDown += numericIncrement_KeyDown;
@@ -263,7 +263,7 @@ sealed partial class UserStatisticsForm
         tableLayoutPanelMain.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
         tableLayoutPanelMain.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         tableLayoutPanelMain.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
-        tableLayoutPanelMain.Size = new Size(774, 461);
+        tableLayoutPanelMain.Size = new Size(807, 499);
         tableLayoutPanelMain.TabIndex = 0;
         // 
         // panelTop
@@ -274,13 +274,13 @@ sealed partial class UserStatisticsForm
         panelTop.Dock = DockStyle.Fill;
         panelTop.Location = new Point(3, 3);
         panelTop.Name = "panelTop";
-        panelTop.Size = new Size(768, 39);
+        panelTop.Size = new Size(801, 39);
         panelTop.TabIndex = 0;
         // 
         // buttonClearFilter
         // 
         buttonClearFilter.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        buttonClearFilter.Location = new Point(689, 8);
+        buttonClearFilter.Location = new Point(722, 8);
         buttonClearFilter.Name = "buttonClearFilter";
         buttonClearFilter.Size = new Size(70, 25);
         buttonClearFilter.TabIndex = 1;
@@ -293,9 +293,9 @@ sealed partial class UserStatisticsForm
         groupBoxGlobalStats.Controls.Add(tableLayoutPanelGlobal);
         groupBoxGlobalStats.Dock = DockStyle.Fill;
         groupBoxGlobalStats.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        groupBoxGlobalStats.Location = new Point(467, 48);
+        groupBoxGlobalStats.Location = new Point(487, 48);
         groupBoxGlobalStats.Name = "groupBoxGlobalStats";
-        groupBoxGlobalStats.Size = new Size(304, 114);
+        groupBoxGlobalStats.Size = new Size(317, 114);
         groupBoxGlobalStats.TabIndex = 4;
         groupBoxGlobalStats.TabStop = false;
         groupBoxGlobalStats.Text = "🌍 Общая статистика";
@@ -317,7 +317,7 @@ sealed partial class UserStatisticsForm
         tableLayoutPanelGlobal.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
         tableLayoutPanelGlobal.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
         tableLayoutPanelGlobal.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
-        tableLayoutPanelGlobal.Size = new Size(298, 92);
+        tableLayoutPanelGlobal.Size = new Size(311, 92);
         tableLayoutPanelGlobal.TabIndex = 0;
         // 
         // labelGlobalUsers
@@ -352,7 +352,7 @@ sealed partial class UserStatisticsForm
         labelGlobalBonus.AutoSize = true;
         labelGlobalBonus.Location = new Point(3, 66);
         labelGlobalBonus.Name = "labelGlobalBonus";
-        labelGlobalBonus.Size = new Size(110, 15);
+        labelGlobalBonus.Size = new Size(109, 15);
         labelGlobalBonus.TabIndex = 3;
         labelGlobalBonus.Text = "🎁 Бонус/Штраф: 0";
         // 
@@ -361,9 +361,9 @@ sealed partial class UserStatisticsForm
         groupBoxDetails.Controls.Add(tableLayoutPanelDetails);
         groupBoxDetails.Dock = DockStyle.Fill;
         groupBoxDetails.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        groupBoxDetails.Location = new Point(467, 168);
+        groupBoxDetails.Location = new Point(487, 168);
         groupBoxDetails.Name = "groupBoxDetails";
-        groupBoxDetails.Size = new Size(304, 170);
+        groupBoxDetails.Size = new Size(317, 208);
         groupBoxDetails.TabIndex = 2;
         groupBoxDetails.TabStop = false;
         groupBoxDetails.Text = "📋 Информация о пользователе";
@@ -392,7 +392,7 @@ sealed partial class UserStatisticsForm
         tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
         tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
         tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        tableLayoutPanelDetails.Size = new Size(298, 148);
+        tableLayoutPanelDetails.Size = new Size(311, 186);
         tableLayoutPanelDetails.TabIndex = 0;
         // 
         // groupBoxActions
@@ -400,9 +400,9 @@ sealed partial class UserStatisticsForm
         groupBoxActions.Controls.Add(tableLayoutPanelActions);
         groupBoxActions.Dock = DockStyle.Fill;
         groupBoxActions.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        groupBoxActions.Location = new Point(467, 344);
+        groupBoxActions.Location = new Point(487, 382);
         groupBoxActions.Name = "groupBoxActions";
-        groupBoxActions.Size = new Size(304, 114);
+        groupBoxActions.Size = new Size(317, 114);
         groupBoxActions.TabIndex = 3;
         groupBoxActions.TabStop = false;
         groupBoxActions.Text = "🛠 Управление сообщениями";
@@ -420,14 +420,14 @@ sealed partial class UserStatisticsForm
         tableLayoutPanelActions.RowCount = 2;
         tableLayoutPanelActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
         tableLayoutPanelActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 45F));
-        tableLayoutPanelActions.Size = new Size(298, 92);
+        tableLayoutPanelActions.Size = new Size(311, 92);
         tableLayoutPanelActions.TabIndex = 0;
         // 
         // UserStatisticsForm
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(774, 461);
+        ClientSize = new Size(807, 499);
         Controls.Add(tableLayoutPanelMain);
         Icon = (Icon)resources.GetObject("$this.Icon");
         MinimumSize = new Size(700, 500);

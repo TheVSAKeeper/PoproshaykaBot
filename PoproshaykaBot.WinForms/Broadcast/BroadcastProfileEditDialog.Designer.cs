@@ -74,7 +74,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _mainLayout.RowStyles.Add(new RowStyle());
             _mainLayout.RowStyles.Add(new RowStyle());
             _mainLayout.RowStyles.Add(new RowStyle());
-            _mainLayout.Size = new Size(509, 320);
+            _mainLayout.Size = new Size(661, 321);
             _mainLayout.TabIndex = 0;
             // 
             // _nameLbl
@@ -94,7 +94,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _nameTextBox.Location = new Point(88, 11);
             _nameTextBox.Margin = new Padding(0, 3, 0, 4);
             _nameTextBox.Name = "_nameTextBox";
-            _nameTextBox.Size = new Size(413, 23);
+            _nameTextBox.Size = new Size(565, 23);
             _nameTextBox.TabIndex = 1;
             // 
             // _titleLbl
@@ -117,7 +117,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _titleTextBox.Multiline = true;
             _titleTextBox.Name = "_titleTextBox";
             _titleTextBox.ScrollBars = ScrollBars.Vertical;
-            _titleTextBox.Size = new Size(413, 54);
+            _titleTextBox.Size = new Size(565, 54);
             _titleTextBox.TabIndex = 3;
             // 
             // _gameLbl
@@ -137,7 +137,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _gameBox.Location = new Point(88, 103);
             _gameBox.Margin = new Padding(0, 3, 0, 4);
             _gameBox.Name = "_gameBox";
-            _gameBox.Size = new Size(413, 113);
+            _gameBox.Size = new Size(565, 113);
             _gameBox.TabIndex = 5;
             // 
             // _tagsLbl
@@ -158,7 +158,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _tagsTextBox.Margin = new Padding(0, 3, 0, 4);
             _tagsTextBox.Name = "_tagsTextBox";
             _tagsTextBox.PlaceholderText = "через запятую";
-            _tagsTextBox.Size = new Size(413, 23);
+            _tagsTextBox.Size = new Size(565, 23);
             _tagsTextBox.TabIndex = 7;
             // 
             // _languageLbl
@@ -179,7 +179,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _languageComboBox.Location = new Point(88, 253);
             _languageComboBox.Margin = new Padding(0, 3, 0, 4);
             _languageComboBox.Name = "_languageComboBox";
-            _languageComboBox.Size = new Size(413, 23);
+            _languageComboBox.Size = new Size(565, 23);
             _languageComboBox.TabIndex = 9;
             // 
             // _buttonsFlow
@@ -189,7 +189,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _mainLayout.SetColumnSpan(_buttonsFlow, 2);
             _buttonsFlow.Controls.Add(_okButton);
             _buttonsFlow.Controls.Add(_cancelButton);
-            _buttonsFlow.Location = new Point(345, 288);
+            _buttonsFlow.Location = new Point(497, 288);
             _buttonsFlow.Margin = new Padding(0, 8, 0, 0);
             _buttonsFlow.Name = "_buttonsFlow";
             _buttonsFlow.Size = new Size(156, 25);
@@ -217,14 +217,14 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _cancelButton.Size = new Size(75, 25);
             _cancelButton.TabIndex = 1;
             _cancelButton.Text = "Отмена";
-            //
+            // 
             // BroadcastProfileEditDialog
-            //
+            // 
+            AcceptButton = _okButton;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            AcceptButton = _okButton;
             CancelButton = _cancelButton;
-            ClientSize = new Size(509, 320);
+            ClientSize = new Size(661, 321);
             Controls.Add(_mainLayout);
             MinimizeBox = false;
             MinimumSize = new Size(420, 320);
