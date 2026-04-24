@@ -45,8 +45,6 @@ partial class SettingsForm
         _obsChatSettingsControl = new ObsChatSettingsControl();
         _autoBroadcastTabPage = new TabPage();
         _autoBroadcastSettingsControl = new AutoBroadcastSettingsControl();
-        _broadcastProfilesTabPage = new TabPage();
-        _broadcastProfilesSettingsControl = new BroadcastProfilesSettingsControl();
         _miscTabPage = new TabPage();
         _miscSettingsControl = new MiscSettingsControl();
         _buttonPanel = new FlowLayoutPanel();
@@ -63,7 +61,6 @@ partial class SettingsForm
         _oauthTabPage.SuspendLayout();
         _obsChatTabPage.SuspendLayout();
         _autoBroadcastTabPage.SuspendLayout();
-        _broadcastProfilesTabPage.SuspendLayout();
         _miscTabPage.SuspendLayout();
         _buttonPanel.SuspendLayout();
         SuspendLayout();
@@ -93,7 +90,6 @@ partial class SettingsForm
         _tabControl.Controls.Add(_oauthTabPage);
         _tabControl.Controls.Add(_obsChatTabPage);
         _tabControl.Controls.Add(_autoBroadcastTabPage);
-        _tabControl.Controls.Add(_broadcastProfilesTabPage);
         _tabControl.Controls.Add(_miscTabPage);
         _tabControl.Dock = DockStyle.Fill;
         _tabControl.Location = new Point(15, 15);
@@ -248,29 +244,7 @@ partial class SettingsForm
         _autoBroadcastSettingsControl.Size = new Size(593, 529);
         _autoBroadcastSettingsControl.TabIndex = 0;
         _autoBroadcastSettingsControl.SettingChanged += OnSettingChanged;
-        // 
-        // _broadcastProfilesTabPage
-        // 
-        _broadcastProfilesTabPage.Controls.Add(_broadcastProfilesSettingsControl);
-        _broadcastProfilesTabPage.Location = new Point(4, 24);
-        _broadcastProfilesTabPage.Name = "_broadcastProfilesTabPage";
-        _broadcastProfilesTabPage.Padding = new Padding(10, 10, 10, 10);
-        _broadcastProfilesTabPage.Size = new Size(613, 549);
-        _broadcastProfilesTabPage.TabIndex = 7;
-        _broadcastProfilesTabPage.Text = "Профили трансляции";
-        _broadcastProfilesTabPage.UseVisualStyleBackColor = true;
-        // 
-        // _broadcastProfilesSettingsControl
-        // 
-        _broadcastProfilesSettingsControl.Dock = DockStyle.Fill;
-        _broadcastProfilesSettingsControl.Location = new Point(10, 10);
-        _broadcastProfilesSettingsControl.Margin = new Padding(6, 7, 6, 7);
-        _broadcastProfilesSettingsControl.MinimumSize = new Size(1200, 888);
-        _broadcastProfilesSettingsControl.Name = "_broadcastProfilesSettingsControl";
-        _broadcastProfilesSettingsControl.Size = new Size(1200, 888);
-        _broadcastProfilesSettingsControl.TabIndex = 0;
-        _broadcastProfilesSettingsControl.SettingChanged += OnSettingChanged;
-        // 
+        //
         // _miscTabPage
         // 
         _miscTabPage.Controls.Add(_miscSettingsControl);
@@ -278,7 +252,7 @@ partial class SettingsForm
         _miscTabPage.Name = "_miscTabPage";
         _miscTabPage.Padding = new Padding(10, 10, 10, 10);
         _miscTabPage.Size = new Size(613, 549);
-        _miscTabPage.TabIndex = 8;
+        _miscTabPage.TabIndex = 7;
         _miscTabPage.Text = "Прочее";
         _miscTabPage.UseVisualStyleBackColor = true;
         // 
@@ -378,7 +352,6 @@ partial class SettingsForm
         _oauthTabPage.ResumeLayout(false);
         _obsChatTabPage.ResumeLayout(false);
         _autoBroadcastTabPage.ResumeLayout(false);
-        _broadcastProfilesTabPage.ResumeLayout(false);
         _miscTabPage.ResumeLayout(false);
         _buttonPanel.ResumeLayout(false);
         ResumeLayout(false);
@@ -396,7 +369,6 @@ partial class SettingsForm
     private TabPage _obsChatTabPage;
     private TabPage _autoBroadcastTabPage;
     private TabPage _miscTabPage;
-    private TabPage _broadcastProfilesTabPage;
     private BasicSettingsControl _basicSettingsControl;
     private RateLimitingSettingsControl _rateLimitingSettingsControl;
     private MessagesSettingsControl _messagesSettingsControl;
@@ -405,7 +377,6 @@ partial class SettingsForm
     private ObsChatSettingsControl _obsChatSettingsControl;
     private AutoBroadcastSettingsControl _autoBroadcastSettingsControl;
     private MiscSettingsControl _miscSettingsControl;
-    private BroadcastProfilesSettingsControl _broadcastProfilesSettingsControl;
     private FlowLayoutPanel _buttonPanel;
     private Button _resetButton;
     private Button _okButton;

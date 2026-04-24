@@ -99,7 +99,6 @@ public partial class SettingsForm : Form
         _obsChatSettingsControl.LoadSettings(_settings.Twitch.ObsChat);
         _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.LoadSettings(_settings);
-        _broadcastProfilesSettingsControl.LoadSettings(_settings.Twitch);
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -115,7 +114,6 @@ public partial class SettingsForm : Form
         _obsChatSettingsControl.SaveSettings(_settings.Twitch.ObsChat);
         _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.SaveSettings(_settings);
-        _broadcastProfilesSettingsControl.SaveSettings(_settings.Twitch);
     }
 
     private void UpdateButtonStates()
