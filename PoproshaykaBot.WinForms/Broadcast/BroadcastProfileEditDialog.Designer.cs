@@ -217,9 +217,11 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _cancelButton.Size = new Size(75, 25);
             _cancelButton.TabIndex = 1;
             _cancelButton.Text = "Отмена";
-            // 
+            //
             // BroadcastProfileEditDialog
-            // 
+            //
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
             AcceptButton = _okButton;
             CancelButton = _cancelButton;
             ClientSize = new Size(509, 320);
