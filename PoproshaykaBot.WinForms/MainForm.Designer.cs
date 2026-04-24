@@ -34,8 +34,8 @@ partial class MainForm
     /// </summary>
     private void InitializeComponent()
     {
-        var resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
         components = new System.ComponentModel.Container();
+        var resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
         _mainTableLayoutPanel = new TableLayoutPanel();
         _mainToolStrip = new ClickThroughToolStrip();
         _leftSlotLabel = new ToolStripLabel();
@@ -43,31 +43,34 @@ partial class MainForm
         _rightSlotLabel = new ToolStripLabel();
         _rightContentCombo = new ToolStripComboBox();
         _slotsSeparator = new ToolStripSeparator();
-        _chatViewSeparator = new ToolStripSeparator();
-        _chatViewToolStripButton = new ToolStripButton();
         _connectToolStripButton = new ToolStripButton();
         _settingsToolStripButton = new ToolStripButton();
         _statsToolStripButton = new ToolStripButton();
-        _connectionProgressBar = new ToolStripProgressBar();
-        _connectionStatusLabel = new ToolStripStatusLabel();
-        _statusStrip = new StatusStrip();
+        _chatViewSeparator = new ToolStripSeparator();
+        _chatViewToolStripButton = new ToolStripButton();
         _widgetsTableLayoutPanel = new TableLayoutPanel();
         _streamInfoWidget = new StreamInfoWidget();
         _broadcastInfoWidget = new BroadcastInfoWidget();
         _broadcastProfileQuickPanel = new BroadcastProfileQuickPanel();
         _slotsTableLayoutPanel = new TableLayoutPanel();
-        _leftSlot = new PoproshaykaBot.WinForms.Controls.PanelSlot();
-        _rightSlot = new PoproshaykaBot.WinForms.Controls.PanelSlot();
+        _leftSlot = new PanelSlot();
+        _rightSlot = new PanelSlot();
+        _connectionProgressBar = new ToolStripProgressBar();
+        _connectionStatusLabel = new ToolStripStatusLabel();
+        _statusStrip = new StatusStrip();
         _chatHost = new Panel();
-        _broadcastProfilesPanel = new PoproshaykaBot.WinForms.Broadcast.BroadcastProfilesPanel();
         _chatDisplay = new ChatDisplay();
         _overlayWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
+        _broadcastProfilesPanel = new BroadcastProfilesPanel();
         _logTextBox = new TextBox();
         _streamInfoTimer = new System.Windows.Forms.Timer(components);
         _mainTableLayoutPanel.SuspendLayout();
         _mainToolStrip.SuspendLayout();
         _widgetsTableLayoutPanel.SuspendLayout();
         _slotsTableLayoutPanel.SuspendLayout();
+        _statusStrip.SuspendLayout();
+        _chatHost.SuspendLayout();
+        ((System.ComponentModel.ISupportInitialize)_overlayWebView).BeginInit();
         SuspendLayout();
         // 
         // _mainTableLayoutPanel
@@ -80,14 +83,15 @@ partial class MainForm
         _mainTableLayoutPanel.Controls.Add(_slotsTableLayoutPanel, 0, 3);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
+        _mainTableLayoutPanel.Margin = new Padding(6, 7, 6, 7);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
-        _mainTableLayoutPanel.Padding = new Padding(12);
+        _mainTableLayoutPanel.Padding = new Padding(26, 30, 26, 30);
         _mainTableLayoutPanel.RowCount = 4;
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 99F));
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 395F));
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 89F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Size = new Size(785, 430);
+        _mainTableLayoutPanel.Size = new Size(1713, 1300);
         _mainTableLayoutPanel.TabIndex = 0;
         // 
         // _mainToolStrip
@@ -98,58 +102,51 @@ partial class MainForm
         _mainToolStrip.Dock = DockStyle.Fill;
         _mainToolStrip.GripStyle = ToolStripGripStyle.Hidden;
         _mainToolStrip.ImageScalingSize = new Size(24, 24);
-        _mainToolStrip.Items.AddRange(new ToolStripItem[]
-        {
-            _leftSlotLabel, _leftContentCombo, _rightSlotLabel, _rightContentCombo, _slotsSeparator,
-            _connectToolStripButton, _settingsToolStripButton, _statsToolStripButton,
-            _chatViewSeparator, _chatViewToolStripButton,
-        });
-        _mainToolStrip.Location = new Point(15, 12);
+        _mainToolStrip.Items.AddRange(new ToolStripItem[] { _leftSlotLabel, _leftContentCombo, _rightSlotLabel, _rightContentCombo, _slotsSeparator, _connectToolStripButton, _settingsToolStripButton, _statsToolStripButton, _chatViewSeparator, _chatViewToolStripButton });
+        _mainToolStrip.Location = new Point(26, 30);
         _mainToolStrip.Name = "_mainToolStrip";
-        _mainToolStrip.Padding = new Padding(5, 0, 5, 0);
-        _mainToolStrip.Size = new Size(755, 40);
+        _mainToolStrip.Padding = new Padding(11, 0, 11, 0);
+        _mainToolStrip.Size = new Size(1661, 99);
         _mainToolStrip.TabIndex = 0;
         _mainToolStrip.Text = "Панель управления";
-        //
+        // 
         // _leftSlotLabel
-        //
+        // 
         _leftSlotLabel.Name = "_leftSlotLabel";
+        _leftSlotLabel.Size = new Size(96, 93);
         _leftSlotLabel.Text = "Слева:";
-        //
+        // 
         // _leftContentCombo
-        //
-        _leftContentCombo.Name = "_leftContentCombo";
+        // 
         _leftContentCombo.DropDownStyle = ComboBoxStyle.DropDownList;
-        _leftContentCombo.Size = new Size(130, 23);
+        _leftContentCombo.Name = "_leftContentCombo";
+        _leftContentCombo.Size = new Size(274, 99);
         _leftContentCombo.ToolTipText = "Контент левого слота";
-        //
+        // 
         // _rightSlotLabel
-        //
+        // 
         _rightSlotLabel.Name = "_rightSlotLabel";
+        _rightSlotLabel.Size = new Size(114, 93);
         _rightSlotLabel.Text = "Справа:";
-        //
+        // 
         // _rightContentCombo
-        //
-        _rightContentCombo.Name = "_rightContentCombo";
+        // 
         _rightContentCombo.DropDownStyle = ComboBoxStyle.DropDownList;
-        _rightContentCombo.Size = new Size(130, 23);
+        _rightContentCombo.Name = "_rightContentCombo";
+        _rightContentCombo.Size = new Size(274, 99);
         _rightContentCombo.ToolTipText = "Контент правого слота";
-        //
-        // _chatViewToolStripButton
-        //
-        _chatViewToolStripButton.DisplayStyle = ToolStripItemDisplayStyle.Text;
-        _chatViewToolStripButton.Name = "_chatViewToolStripButton";
-        _chatViewToolStripButton.Text = "👁️ Чат";
-        _chatViewToolStripButton.ToolTipText = "Переключить режим отображения чата (Legacy/Overlay)";
-        _chatViewToolStripButton.Visible = false;
-        _chatViewToolStripButton.Click += OnSwitchChatViewButtonClicked;
-        //
+        // 
+        // _slotsSeparator
+        // 
+        _slotsSeparator.Name = "_slotsSeparator";
+        _slotsSeparator.Size = new Size(6, 99);
+        // 
         // _connectToolStripButton
-        //
+        // 
         _connectToolStripButton.DisplayStyle = ToolStripItemDisplayStyle.Text;
         _connectToolStripButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
         _connectToolStripButton.Name = "_connectToolStripButton";
-        _connectToolStripButton.Size = new Size(116, 37);
+        _connectToolStripButton.Size = new Size(233, 93);
         _connectToolStripButton.Text = "🔌 Подключить";
         _connectToolStripButton.Click += OnConnectButtonClicked;
         // 
@@ -157,7 +154,7 @@ partial class MainForm
         // 
         _settingsToolStripButton.DisplayStyle = ToolStripItemDisplayStyle.Text;
         _settingsToolStripButton.Name = "_settingsToolStripButton";
-        _settingsToolStripButton.Size = new Size(95, 37);
+        _settingsToolStripButton.Size = new Size(198, 93);
         _settingsToolStripButton.Text = "⚙️ Настройки";
         _settingsToolStripButton.Click += OnSettingsButtonClicked;
         // 
@@ -165,35 +162,25 @@ partial class MainForm
         // 
         _statsToolStripButton.DisplayStyle = ToolStripItemDisplayStyle.Text;
         _statsToolStripButton.Name = "_statsToolStripButton";
-        _statsToolStripButton.Size = new Size(91, 37);
+        _statsToolStripButton.Size = new Size(198, 93);
         _statsToolStripButton.Text = "📊 Статистика";
         _statsToolStripButton.ToolTipText = "Открыть окно статистики (Alt+U)";
         _statsToolStripButton.Click += OnUserStatisticsButtonClicked;
         // 
+        // _chatViewSeparator
         // 
-        // _connectionProgressBar
+        _chatViewSeparator.Name = "_chatViewSeparator";
+        _chatViewSeparator.Size = new Size(6, 99);
         // 
-        _connectionProgressBar.MarqueeAnimationSpeed = 30;
-        _connectionProgressBar.Name = "_connectionProgressBar";
-        _connectionProgressBar.Size = new Size(100, 16);
-        _connectionProgressBar.Style = ProgressBarStyle.Marquee;
-        _connectionProgressBar.Visible = false;
+        // _chatViewToolStripButton
         // 
-        // _connectionStatusLabel
-        // 
-        _connectionStatusLabel.Name = "_connectionStatusLabel";
-        _connectionStatusLabel.Size = new Size(0, 17);
-        _connectionStatusLabel.Visible = false;
-        // 
-        // _statusStrip
-        // 
-        _statusStrip.Items.AddRange(new ToolStripItem[] { _connectionStatusLabel, _connectionProgressBar });
-        _statusStrip.Location = new Point(0, 384);
-        _statusStrip.Name = "_statusStrip";
-        _statusStrip.Size = new Size(785, 22);
-        _statusStrip.TabIndex = 1;
-        _statusStrip.Text = "statusStrip1";
-        // 
+        _chatViewToolStripButton.DisplayStyle = ToolStripItemDisplayStyle.Text;
+        _chatViewToolStripButton.Name = "_chatViewToolStripButton";
+        _chatViewToolStripButton.Size = new Size(108, 93);
+        _chatViewToolStripButton.Text = "👁️ Чат";
+        _chatViewToolStripButton.ToolTipText = "Переключить режим отображения чата (Legacy/Overlay)";
+        _chatViewToolStripButton.Visible = false;
+        _chatViewToolStripButton.Click += OnSwitchChatViewButtonClicked;
         // 
         // _widgetsTableLayoutPanel
         // 
@@ -203,124 +190,182 @@ partial class MainForm
         _widgetsTableLayoutPanel.Controls.Add(_streamInfoWidget, 0, 0);
         _widgetsTableLayoutPanel.Controls.Add(_broadcastInfoWidget, 1, 0);
         _widgetsTableLayoutPanel.Dock = DockStyle.Fill;
-        _widgetsTableLayoutPanel.Location = new Point(15, 52);
+        _widgetsTableLayoutPanel.Location = new Point(32, 136);
+        _widgetsTableLayoutPanel.Margin = new Padding(6, 7, 6, 7);
         _widgetsTableLayoutPanel.Name = "_widgetsTableLayoutPanel";
         _widgetsTableLayoutPanel.RowCount = 1;
         _widgetsTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _widgetsTableLayoutPanel.Size = new Size(755, 160);
+        _widgetsTableLayoutPanel.Size = new Size(1649, 381);
         _widgetsTableLayoutPanel.TabIndex = 3;
         // 
         // _streamInfoWidget
         // 
+        _streamInfoWidget.BackColor = Color.White;
+        _streamInfoWidget.BorderStyle = BorderStyle.FixedSingle;
         _streamInfoWidget.Dock = DockStyle.Fill;
+        _streamInfoWidget.Location = new Point(6, 7);
+        _streamInfoWidget.Margin = new Padding(6, 7, 6, 7);
         _streamInfoWidget.Name = "_streamInfoWidget";
-        _streamInfoWidget.Size = new Size(371, 124);
-        //
+        _streamInfoWidget.Size = new Size(812, 367);
+        _streamInfoWidget.TabIndex = 0;
+        // 
         // _broadcastInfoWidget
-        //
+        // 
+        _broadcastInfoWidget.BackColor = Color.White;
+        _broadcastInfoWidget.BorderStyle = BorderStyle.FixedSingle;
         _broadcastInfoWidget.Dock = DockStyle.Fill;
+        _broadcastInfoWidget.Location = new Point(830, 7);
+        _broadcastInfoWidget.Margin = new Padding(6, 7, 6, 7);
         _broadcastInfoWidget.Name = "_broadcastInfoWidget";
-        _broadcastInfoWidget.Size = new Size(372, 124);
-        //
+        _broadcastInfoWidget.Size = new Size(813, 367);
+        _broadcastInfoWidget.TabIndex = 1;
+        // 
         // _broadcastProfileQuickPanel
-        //
+        // 
         _broadcastProfileQuickPanel.Dock = DockStyle.Fill;
+        _broadcastProfileQuickPanel.Location = new Point(32, 531);
+        _broadcastProfileQuickPanel.Margin = new Padding(6, 7, 6, 7);
         _broadcastProfileQuickPanel.Name = "_broadcastProfileQuickPanel";
-        _broadcastProfileQuickPanel.Size = new Size(755, 36);
-        //
+        _broadcastProfileQuickPanel.Size = new Size(1649, 75);
+        _broadcastProfileQuickPanel.TabIndex = 4;
+        // 
         // _slotsTableLayoutPanel
-        //
+        // 
         _slotsTableLayoutPanel.ColumnCount = 2;
         _slotsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         _slotsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         _slotsTableLayoutPanel.Controls.Add(_leftSlot, 0, 0);
         _slotsTableLayoutPanel.Controls.Add(_rightSlot, 1, 0);
         _slotsTableLayoutPanel.Dock = DockStyle.Fill;
-        _slotsTableLayoutPanel.Location = new Point(15, 172);
+        _slotsTableLayoutPanel.Location = new Point(32, 620);
+        _slotsTableLayoutPanel.Margin = new Padding(6, 7, 6, 7);
         _slotsTableLayoutPanel.Name = "_slotsTableLayoutPanel";
         _slotsTableLayoutPanel.RowCount = 1;
         _slotsTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _slotsTableLayoutPanel.Size = new Size(755, 200);
+        _slotsTableLayoutPanel.Size = new Size(1649, 643);
         _slotsTableLayoutPanel.TabIndex = 5;
-        //
+        // 
+        // _leftSlot
+        // 
+        _leftSlot.Dock = DockStyle.Fill;
+        _leftSlot.Location = new Point(6, 7);
+        _leftSlot.Margin = new Padding(6, 7, 6, 7);
+        _leftSlot.Name = "_leftSlot";
+        _leftSlot.Size = new Size(812, 629);
+        _leftSlot.TabIndex = 0;
+        // 
+        // _rightSlot
+        // 
+        _rightSlot.Dock = DockStyle.Fill;
+        _rightSlot.Location = new Point(830, 7);
+        _rightSlot.Margin = new Padding(6, 7, 6, 7);
+        _rightSlot.Name = "_rightSlot";
+        _rightSlot.Size = new Size(813, 629);
+        _rightSlot.TabIndex = 1;
+        // 
+        // _connectionProgressBar
+        // 
+        _connectionProgressBar.MarqueeAnimationSpeed = 30;
+        _connectionProgressBar.Name = "_connectionProgressBar";
+        _connectionProgressBar.Size = new Size(214, 20);
+        _connectionProgressBar.Style = ProgressBarStyle.Marquee;
+        _connectionProgressBar.Visible = false;
+        // 
+        // _connectionStatusLabel
+        // 
+        _connectionStatusLabel.Name = "_connectionStatusLabel";
+        _connectionStatusLabel.Size = new Size(0, 23);
+        _connectionStatusLabel.Visible = false;
+        // 
+        // _statusStrip
+        // 
+        _statusStrip.ImageScalingSize = new Size(36, 36);
+        _statusStrip.Items.AddRange(new ToolStripItem[] { _connectionStatusLabel, _connectionProgressBar });
+        _statusStrip.Location = new Point(0, 1300);
+        _statusStrip.Name = "_statusStrip";
+        _statusStrip.Padding = new Padding(2, 0, 30, 0);
+        _statusStrip.Size = new Size(1713, 22);
+        _statusStrip.TabIndex = 1;
+        _statusStrip.Text = "statusStrip1";
+        // 
+        // _chatHost
+        // 
+        _chatHost.Controls.Add(_chatDisplay);
+        _chatHost.Controls.Add(_overlayWebView);
+        _chatHost.Dock = DockStyle.Fill;
+        _chatHost.Location = new Point(0, 0);
+        _chatHost.Name = "_chatHost";
+        _chatHost.Size = new Size(200, 100);
+        _chatHost.TabIndex = 0;
+        // 
         // _chatDisplay
-        //
+        // 
         _chatDisplay.Dock = DockStyle.Fill;
+        _chatDisplay.Location = new Point(0, 0);
+        _chatDisplay.Margin = new Padding(6, 7, 6, 7);
         _chatDisplay.Name = "_chatDisplay";
-        _chatDisplay.Size = new Size(372, 233);
+        _chatDisplay.Size = new Size(200, 100);
         _chatDisplay.TabIndex = 2;
-        //
+        // 
         // _overlayWebView
-        //
+        // 
         _overlayWebView.AllowExternalDrop = true;
         _overlayWebView.CreationProperties = null;
         _overlayWebView.DefaultBackgroundColor = Color.White;
         _overlayWebView.Dock = DockStyle.Fill;
+        _overlayWebView.Location = new Point(0, 0);
         _overlayWebView.Name = "_overlayWebView";
-        _overlayWebView.Size = new Size(372, 233);
+        _overlayWebView.Size = new Size(200, 100);
         _overlayWebView.TabIndex = 9;
-        _overlayWebView.ZoomFactor = 1D;
         _overlayWebView.Visible = false;
-        //
+        _overlayWebView.ZoomFactor = 1D;
+        // 
+        // _broadcastProfilesPanel
+        // 
+        _broadcastProfilesPanel.Dock = DockStyle.Fill;
+        _broadcastProfilesPanel.Location = new Point(0, 0);
+        _broadcastProfilesPanel.MinimumSize = new Size(360, 200);
+        _broadcastProfilesPanel.Name = "_broadcastProfilesPanel";
+        _broadcastProfilesPanel.Size = new Size(700, 440);
+        _broadcastProfilesPanel.TabIndex = 0;
+        // 
         // _logTextBox
-        //
+        // 
         _logTextBox.Dock = DockStyle.Fill;
-        _logTextBox.Name = "_logTextBox";
+        _logTextBox.Location = new Point(0, 0);
         _logTextBox.Multiline = true;
+        _logTextBox.Name = "_logTextBox";
         _logTextBox.ReadOnly = true;
         _logTextBox.ScrollBars = ScrollBars.Vertical;
         _logTextBox.Size = new Size(371, 239);
         _logTextBox.TabIndex = 1;
-        //
-        // _chatHost
-        //
-        _chatHost.Dock = DockStyle.Fill;
-        _chatHost.Name = "_chatHost";
-        _chatHost.Controls.Add(_chatDisplay);
-        _chatHost.Controls.Add(_overlayWebView);
-        //
-        // _leftSlot
-        //
-        _leftSlot.Dock = DockStyle.Fill;
-        _leftSlot.Name = "_leftSlot";
-        _leftSlot.TabIndex = 0;
-        //
-        // _rightSlot
-        //
-        _rightSlot.Dock = DockStyle.Fill;
-        _rightSlot.Name = "_rightSlot";
-        _rightSlot.TabIndex = 1;
-        //
-        // _broadcastProfilesPanel
-        //
-        _broadcastProfilesPanel.Dock = DockStyle.Fill;
-        _broadcastProfilesPanel.Name = "_broadcastProfilesPanel";
-        //
+        // 
         // _streamInfoTimer
-        //
+        // 
         _streamInfoTimer.Interval = 60000;
         _streamInfoTimer.Tick += OnStreamInfoTimerTick;
         // 
         // MainForm
         // 
-        AutoScaleDimensions = new SizeF(7F, 15F);
+        AutoScaleDimensions = new SizeF(15F, 37F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(785, 536);
+        ClientSize = new Size(1713, 1322);
         Controls.Add(_mainTableLayoutPanel);
         Controls.Add(_statusStrip);
         Icon = (Icon)resources.GetObject("$this.Icon");
-        MinimumSize = new Size(600, 400);
+        Margin = new Padding(6, 7, 6, 7);
+        MinimumSize = new Size(1254, 871);
         Name = "MainForm";
         Text = "Попрощайка Бот - Управление";
         _mainTableLayoutPanel.ResumeLayout(false);
-        _mainTableLayoutPanel.PerformLayout();
-        _widgetsTableLayoutPanel.ResumeLayout(false);
         _mainToolStrip.ResumeLayout(false);
         _mainToolStrip.PerformLayout();
+        _widgetsTableLayoutPanel.ResumeLayout(false);
+        _slotsTableLayoutPanel.ResumeLayout(false);
         _statusStrip.ResumeLayout(false);
         _statusStrip.PerformLayout();
-        _slotsTableLayoutPanel.ResumeLayout(false);
-        _slotsTableLayoutPanel.PerformLayout();
+        _chatHost.ResumeLayout(false);
+        ((System.ComponentModel.ISupportInitialize)_overlayWebView).EndInit();
         ResumeLayout(false);
         PerformLayout();
     }

@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -6,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.WinForms.Infrastructure.Events;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Settings;
 using System.Text.Encodings.Web;
 
@@ -16,9 +18,12 @@ public sealed class KestrelHttpServer(
     SseService sseService,
     SettingsManager settingsManager,
     TwitchOAuthService twitchOAuthService,
+    IEventBus eventBus,
     ILoggerFactory loggerFactory)
     : IAsyncDisposable
 {
+    private const string LogSource = "Http";
+
     private const string OAuthSuccessHtml =
         """
         <!DOCTYPE html>
@@ -62,8 +67,6 @@ public sealed class KestrelHttpServer(
     private static readonly byte[] FaviconBytes = ResourceLoader.LoadResourceBytes("PoproshaykaBot.WinForms.icon.ico");
 
     private WebApplication? _app;
-
-    public event Action<string>? LogMessage;
 
     public bool IsRunning { get; private set; }
 
@@ -109,7 +112,9 @@ public sealed class KestrelHttpServer(
 
             _app.Use(async (ctx, next) =>
             {
-                LogMessage?.Invoke($"HTTP запрос: {ctx.Request.Method} {ctx.Request.Path}{ctx.Request.QueryString}");
+                PublishLog(BotLogLevel.Information,
+                    $"HTTP запрос: {ctx.Request.Method} {ctx.Request.Path}{ctx.Request.QueryString}");
+
                 await next(ctx);
             });
 
@@ -121,11 +126,11 @@ public sealed class KestrelHttpServer(
 
             IsRunning = true;
 
-            LogMessage?.Invoke($"HTTP сервер запущен на порту {port}");
+            PublishLog(BotLogLevel.Information, $"HTTP сервер запущен на порту {port}");
         }
         catch (Exception ex)
         {
-            LogMessage?.Invoke($"Ошибка запуска HTTP сервера: {ex.Message}");
+            PublishLog(BotLogLevel.Error, $"Ошибка запуска HTTP сервера: {ex.Message}");
             throw;
         }
     }
@@ -149,17 +154,22 @@ public sealed class KestrelHttpServer(
                 _app = null;
             }
 
-            LogMessage?.Invoke("HTTP сервер остановлен");
+            PublishLog(BotLogLevel.Information, "HTTP сервер остановлен");
         }
         catch (Exception ex)
         {
-            LogMessage?.Invoke($"Ошибка остановки HTTP сервера: {ex.Message}");
+            PublishLog(BotLogLevel.Error, $"Ошибка остановки HTTP сервера: {ex.Message}");
         }
     }
 
     public async ValueTask DisposeAsync()
     {
         await StopAsync();
+    }
+
+    private void PublishLog(BotLogLevel level, string message)
+    {
+        _ = eventBus.PublishAsync(new BotLogEntry(level, LogSource, message));
     }
 
     private void MapEndpoints(WebApplication app)

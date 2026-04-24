@@ -1,12 +1,10 @@
 ﻿using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
-using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Streaming;
 using PoproshaykaBot.WinForms.Users;
@@ -17,31 +15,32 @@ public partial class MainForm : Form
 {
     private const int MaxLogLines = 500;
     private readonly IFormFactory _forms;
+    private readonly IEventBus _eventBus;
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly SettingsManager _settingsManager;
     private readonly BotConnectionManager _connectionManager;
-    private readonly KestrelHttpServer _httpServer;
     private readonly IStreamStatus _streamStatusManager;
-    private readonly List<IDisposable> _busSubscriptions = [];
+    private readonly List<IDisposable> _subs = [];
     private readonly Dictionary<PanelContent, Control?> _contentControls = new();
 
-    private bool _isConnected;
+    private BotLifecyclePhase _currentPhase = BotLifecyclePhase.Idle;
     private bool _suppressSlotComboEvents;
-    private UserStatisticsForm? _юзерФорма;
+    private bool _shutdownStarted;
+    private bool _initialized;
+    private UserStatisticsForm? _userStatisticsForm;
 
     public MainForm(
         IServiceProvider services,
         IFormFactory forms,
         IEventBus eventBus,
         ChatHistoryManager chatHistoryManager,
-        KestrelHttpServer httpServer,
         BotConnectionManager connectionManager,
         SettingsManager settingsManager,
         IStreamStatus streamStatusManager)
     {
         _forms = forms;
+        _eventBus = eventBus;
         _chatHistoryManager = chatHistoryManager;
-        _httpServer = httpServer;
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
         _streamStatusManager = streamStatusManager;
@@ -51,6 +50,18 @@ public partial class MainForm : Form
         services.HydrateDescendants(this);
         services.HydrateDescendants(_chatHost);
         services.HydrateDescendants(_broadcastProfilesPanel);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized || DesignMode)
+        {
+            return;
+        }
+
+        _initialized = true;
 
         Text = $"Попрощайка Бот v{GetDisplayVersion()}";
 
@@ -61,38 +72,39 @@ public partial class MainForm : Form
 
         InitializeSlots();
 
-        _busSubscriptions.Add(eventBus.Subscribe<BroadcastSchedulerStateChanged>(_ => OnBroadcastStateChanged()));
-        _busSubscriptions.Add(eventBus.Subscribe<BotLogEntry>(entry => AddLogMessage(entry.Message)));
-        _busSubscriptions.Add(eventBus.Subscribe<BotConnectionStatusUpdated>(statusEvent => OnBotConnectionProgress(statusEvent.Message)));
-        _busSubscriptions.Add(eventBus.Subscribe<BotLifecyclePhaseChanged>(OnBotLifecyclePhaseChanged));
-        _busSubscriptions.Add(eventBus.Subscribe<StreamWentOnline>(_ => OnStreamStatusChanged()));
-        _busSubscriptions.Add(eventBus.Subscribe<StreamWentOffline>(_ => OnStreamStatusChanged()));
+        _subs.Add(_eventBus.SubscribeOnUi<BotLogEntry>(this, OnBotLogEntry));
+        _subs.Add(_eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(this, statusEvent => OnBotConnectionProgress(statusEvent.Message)));
+        _subs.Add(_eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(this, OnBotLifecyclePhaseChanged));
+        _subs.Add(_eventBus.SubscribeOnUi<StreamWentOnline>(this, _ => UpdateStreamStatus()));
+        _subs.Add(_eventBus.SubscribeOnUi<StreamWentOffline>(this, _ => UpdateStreamStatus()));
+        _subs.DisposeOnClose(this);
 
         LoadSettings();
         UpdateStreamStatus();
-
-        _httpServer.LogMessage += OnHttpServerLogMessage;
 
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
 
-        Disposed += OnFormDisposed;
-
         InitializeWebViewAsync();
     }
 
-    protected override async void OnFormClosed(FormClosedEventArgs e)
+    protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        _connectionManager.CancelConnection();
+        base.OnFormClosing(e);
 
-        if (_юзерФорма is { IsDisposed: false })
+        if (_shutdownStarted || e.Cancel)
         {
-            _юзерФорма.Close();
-            _юзерФорма = null;
+            return;
         }
 
-        await DisconnectBotAsync();
+        _shutdownStarted = true;
+        e.Cancel = true;
+        _ = ShutdownAndCloseAsync();
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
         base.OnFormClosed(e);
 
         DisposeIfOrphan(_logTextBox);
@@ -116,47 +128,28 @@ public partial class MainForm : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    private void OnFormDisposed(object? sender, EventArgs e)
-    {
-        foreach (var subscription in _busSubscriptions)
-        {
-            subscription.Dispose();
-        }
-
-        _busSubscriptions.Clear();
-
-        try
-        {
-            _httpServer.LogMessage -= OnHttpServerLogMessage;
-        }
-        catch (Exception ex)
-        {
-            AddLogMessage($"Ошибка остановки HTTP сервера: {ex.Message}");
-        }
-    }
-
     private async void OnConnectButtonClicked(object? sender, EventArgs e)
     {
-        if (!_isConnected)
+        switch (_currentPhase)
         {
-            if (_connectionManager.IsBusy)
-            {
-                return;
-            }
+            case BotLifecyclePhase.Idle:
+            case BotLifecyclePhase.Cancelled:
+            case BotLifecyclePhase.Failed:
+            case BotLifecyclePhase.Disconnected:
+                StartBotConnection();
+                break;
 
-            StartBotConnection();
-        }
-        else
-        {
-            if (_connectionManager.IsBusy)
-            {
+            case BotLifecyclePhase.Connecting:
                 _connectionManager.CancelConnection();
                 AddLogMessage("Отмена подключения...");
-            }
-            else
-            {
+                break;
+
+            case BotLifecyclePhase.Connected:
                 await DisconnectBotAsync();
-            }
+                break;
+
+            case BotLifecyclePhase.Disconnecting:
+                break;
         }
     }
 
@@ -219,23 +212,21 @@ public partial class MainForm : Form
         OnOpenUserStatistics();
     }
 
-    private void OnHttpServerLogMessage(string message)
+    private async void OnStreamInfoTimerTick(object? sender, EventArgs e)
     {
-        if (InvokeRequired)
+        if (_streamStatusManager.CurrentStatus != StreamStatus.Online)
         {
-            Invoke(new Action<string>(OnHttpServerLogMessage), message);
             return;
         }
 
-        AddLogMessage($"HTTP: {message}");
-    }
-
-    private async void OnStreamInfoTimerTick(object? sender, EventArgs e)
-    {
-        if (_streamStatusManager.CurrentStatus == StreamStatus.Online)
+        try
         {
             await _streamStatusManager.RefreshCurrentStatusAsync();
             UpdateStreamInfo();
+        }
+        catch (Exception exception)
+        {
+            AddLogMessage($"Ошибка обновления информации о стриме: {exception.Message}");
         }
     }
 
@@ -286,6 +277,41 @@ public partial class MainForm : Form
         combo.SelectedIndex = -1;
     }
 
+    private void OnBotLogEntry(BotLogEntry entry)
+    {
+        var message = entry.Source switch
+        {
+            "Http" => $"HTTP: {entry.Message}",
+            _ => entry.Message,
+        };
+
+        AddLogMessage(message);
+    }
+
+    private async Task ShutdownAndCloseAsync()
+    {
+        try
+        {
+            _connectionManager.CancelConnection();
+
+            if (_userStatisticsForm is { IsDisposed: false })
+            {
+                _userStatisticsForm.Close();
+                _userStatisticsForm = null;
+            }
+
+            await DisconnectBotAsync();
+        }
+        catch (Exception ex)
+        {
+            AddLogMessage($"Ошибка завершения работы: {ex.Message}");
+        }
+        finally
+        {
+            Close();
+        }
+    }
+
     private void ApplySlotChange(PanelContent? left, PanelContent? right)
     {
         var settings = _settingsManager.Current;
@@ -331,97 +357,96 @@ public partial class MainForm : Form
 
     private void OnBotLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)
     {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<BotLifecyclePhaseChanged>(OnBotLifecyclePhaseChanged), phaseEvent);
-            return;
-        }
+        _currentPhase = phaseEvent.Phase;
+        ApplyPhaseVisuals(phaseEvent.Phase);
 
         switch (phaseEvent.Phase)
         {
+            case BotLifecyclePhase.Connecting:
+                AddLogMessage("Подключение бота...");
+                break;
+
             case BotLifecyclePhase.Connected:
-                ShowConnectionProgress(false);
-                _isConnected = true;
-                _connectToolStripButton.Text = "🔌 Отключить";
-                _connectToolStripButton.BackColor = Color.LightGreen;
-                UpdateStreamStatus();
                 AddLogMessage("Бот успешно подключен!");
+                UpdateStreamStatus();
                 break;
 
             case BotLifecyclePhase.Cancelled:
-                ShowConnectionProgress(false);
                 AddLogMessage("Подключение отменено пользователем.");
-                _connectToolStripButton.Text = "🔌 Подключить";
-                _connectToolStripButton.BackColor = SystemColors.Control;
                 break;
 
             case BotLifecyclePhase.Failed:
-                ShowConnectionProgress(false);
                 AddLogMessage($"Ошибка подключения бота: {phaseEvent.Exception?.Message}");
 
                 MessageBox.Show($"Ошибка подключения бота: {phaseEvent.Exception?.Message}", "Ошибка",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-                _connectToolStripButton.Text = "🔌 Подключить";
-                _connectToolStripButton.BackColor = SystemColors.Control;
+                break;
+
+            case BotLifecyclePhase.Disconnecting:
+                AddLogMessage("Отключение бота...");
+                break;
+
+            case BotLifecyclePhase.Disconnected:
+                AddLogMessage("Бот отключен.");
+                UpdateStreamStatus();
                 break;
         }
     }
 
-    private void OnBroadcastStateChanged()
+    private void ApplyPhaseVisuals(BotLifecyclePhase phase)
     {
-        _settingsManager.SaveSettings(_settingsManager.Current);
+        switch (phase)
+        {
+            case BotLifecyclePhase.Connecting:
+                _connectToolStripButton.Text = "⏹️ Отменить";
+                _connectToolStripButton.BackColor = Color.Orange;
+                ShowConnectionProgress(true);
+                break;
+
+            case BotLifecyclePhase.Connected:
+                _connectToolStripButton.Text = "🔌 Отключить";
+                _connectToolStripButton.BackColor = Color.LightGreen;
+                ShowConnectionProgress(false);
+                break;
+
+            case BotLifecyclePhase.Disconnecting:
+                _connectToolStripButton.Text = "⏳ Отключение...";
+                _connectToolStripButton.BackColor = Color.Orange;
+                ShowConnectionProgress(true);
+                break;
+
+            case BotLifecyclePhase.Idle:
+            case BotLifecyclePhase.Disconnected:
+            case BotLifecyclePhase.Cancelled:
+            case BotLifecyclePhase.Failed:
+                _connectToolStripButton.Text = "🔌 Подключить";
+                _connectToolStripButton.BackColor = SystemColors.Control;
+                ShowConnectionProgress(false);
+                break;
+        }
     }
 
     private void OnBotConnectionProgress(string message)
     {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<string>(OnBotConnectionProgress), message);
-            return;
-        }
-
         _connectionStatusLabel.Text = message;
-    }
-
-    private void OnStreamStatusChanged()
-    {
-        UpdateStreamStatus();
     }
 
     private void OnOpenUserStatistics()
     {
-        if (_юзерФорма == null || _юзерФорма.IsDisposed)
+        if (_userStatisticsForm == null || _userStatisticsForm.IsDisposed)
         {
-            _юзерФорма = _forms.Create<UserStatisticsForm>();
-            _юзерФорма.Show(this);
+            _userStatisticsForm = _forms.Create<UserStatisticsForm>();
+            _userStatisticsForm.Show(this);
         }
         else
         {
-            _юзерФорма.Focus();
+            _userStatisticsForm.Focus();
         }
-    }
-
-    private void OnOAuthStatusChanged(string message)
-    {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<string>(OnOAuthStatusChanged), message);
-            return;
-        }
-
-        _connectionStatusLabel.Text = message;
-        AddLogMessage($"[OAuth] {message}");
     }
 
     private void UpdateStreamStatus()
     {
-        if (InvokeRequired)
-        {
-            Invoke(UpdateStreamStatus);
-            return;
-        }
-
         _streamInfoWidget.UpdateStatus(_streamStatusManager.CurrentStatus, _streamStatusManager.CurrentStream);
 
         if (_streamStatusManager.CurrentStatus == StreamStatus.Online)
@@ -495,12 +520,6 @@ public partial class MainForm : Form
 
     private void ApplySlotSelection()
     {
-        if (InvokeRequired)
-        {
-            Invoke(ApplySlotSelection);
-            return;
-        }
-
         var ui = _settingsManager.Current.Ui;
 
         _leftSlot.SetBody(ResolveBody(ui.LeftSlotContent));
@@ -624,15 +643,6 @@ public partial class MainForm : Form
 
     private void StartBotConnection()
     {
-        if (_connectionManager.IsBusy)
-        {
-            return;
-        }
-
-        _connectToolStripButton.Text = "⏹️ Отменить";
-        _connectToolStripButton.BackColor = Color.Orange;
-        ShowConnectionProgress(true);
-
         try
         {
             _connectionManager.StartConnection();
@@ -640,20 +650,11 @@ public partial class MainForm : Form
         catch (InvalidOperationException exception)
         {
             AddLogMessage($"Ошибка запуска подключения: {exception.Message}");
-            ShowConnectionProgress(false);
-            _connectToolStripButton.Text = "🔌 Подключить";
-            _connectToolStripButton.BackColor = SystemColors.Control;
         }
     }
 
     private void AddLogMessage(string message)
     {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<string>(AddLogMessage), message);
-            return;
-        }
-
         if (_logTextBox.Lines.Length > MaxLogLines)
         {
             var charIndex = _logTextBox.GetFirstCharIndexFromLine(_logTextBox.Lines.Length - MaxLogLines);
@@ -671,12 +672,6 @@ public partial class MainForm : Form
 
     private void ShowConnectionProgress(bool show)
     {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<bool>(ShowConnectionProgress), show);
-            return;
-        }
-
         _connectionProgressBar.Visible = show;
         _connectionStatusLabel.Visible = show;
 
@@ -693,26 +688,19 @@ public partial class MainForm : Form
 
     private async Task DisconnectBotAsync()
     {
-        AddLogMessage("Отключение бота...");
-
-        if (_isConnected)
+        if (_currentPhase != BotLifecyclePhase.Connected)
         {
-            try
-            {
-                await _connectionManager.StopAsync();
-            }
-            catch (Exception exception)
-            {
-                AddLogMessage($"Ошибка при отключении бота: {exception.Message}");
-            }
+            return;
         }
 
-        _isConnected = false;
-        _connectToolStripButton.Text = "🔌 Подключить";
-        _connectToolStripButton.BackColor = SystemColors.Control;
-        UpdateStreamStatus();
-
-        AddLogMessage("Бот отключен.");
+        try
+        {
+            await _connectionManager.StopAsync();
+        }
+        catch (Exception exception)
+        {
+            AddLogMessage($"Ошибка при отключении бота: {exception.Message}");
+        }
     }
 
     private void LoadSettings()
