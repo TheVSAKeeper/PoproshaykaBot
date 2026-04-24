@@ -281,6 +281,7 @@ public static class Program
 
         services.AddTransient<SettingsForm>();
         services.AddTransient<UserStatisticsForm>();
+        services.AddTransient<BroadcastProfileEditDialog>();
     }
 
     private static string GetRussianSecondsWord(int seconds)

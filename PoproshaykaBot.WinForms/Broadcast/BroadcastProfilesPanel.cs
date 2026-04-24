@@ -44,19 +44,19 @@ public partial class BroadcastProfilesPanel : UserControl
     }
 
     [Inject]
-    public BroadcastProfilesManager Manager { get; init; } = null!;
+    public BroadcastProfilesManager Manager { get; internal init; } = null!;
 
     [Inject]
-    public IGameCategoryResolver Resolver { get; init; } = null!;
+    public IFormFactory Forms { get; internal init; } = null!;
 
     [Inject]
-    public IEventBus Bus { get; init; } = null!;
+    public IEventBus Bus { get; internal init; } = null!;
 
     [Inject]
-    public SettingsManager Settings { get; init; } = null!;
+    public SettingsManager Settings { get; internal init; } = null!;
 
     [Inject]
-    public IStreamStatus Stream { get; init; } = null!;
+    public IStreamStatus Stream { get; internal init; } = null!;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -100,7 +100,7 @@ public partial class BroadcastProfilesPanel : UserControl
             return;
         }
 
-        if (BroadcastProfileEditDialog.Edit(this, profile, Resolver) == DialogResult.OK)
+        if (EditProfile(profile))
         {
             PersistEdited(profile);
         }
@@ -254,6 +254,20 @@ public partial class BroadcastProfilesPanel : UserControl
         };
     }
 
+    private bool EditProfile(BroadcastProfile profile)
+    {
+        var dialog = Forms.Create<BroadcastProfileEditDialog>();
+        dialog.LoadFrom(profile);
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return false;
+        }
+
+        dialog.SaveTo(profile);
+        return true;
+    }
+
     private void OnProfileApplied(BroadcastProfileApplied @event)
     {
         ClearInFlightStates();
@@ -278,7 +292,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
         var copy = Clone(original);
 
-        if (BroadcastProfileEditDialog.Edit(this, copy, Resolver) == DialogResult.OK)
+        if (EditProfile(copy))
         {
             PersistEdited(copy);
         }

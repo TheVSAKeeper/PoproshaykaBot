@@ -13,22 +13,8 @@ public partial class BroadcastProfileEditDialog : Form
         _nameTextBox.TextChanged += (_, _) => _okButton.Enabled = _nameTextBox.Text.Trim().Length > 0;
     }
 
-    public static DialogResult Edit(IWin32Window owner, BroadcastProfile profile, IGameCategoryResolver resolver)
+    public void LoadFrom(BroadcastProfile profile)
     {
-        using var dialog = new BroadcastProfileEditDialog();
-        dialog.Setup(profile, resolver);
-        var result = dialog.ShowDialog(owner);
-        if (result == DialogResult.OK)
-        {
-            dialog.SaveTo(profile);
-        }
-
-        return result;
-    }
-
-    private void Setup(BroadcastProfile profile, IGameCategoryResolver resolver)
-    {
-        _gameBox.Setup(resolver);
         _nameTextBox.Text = profile.Name;
         _titleTextBox.Text = profile.Title;
         _gameBox.SetSelected(profile.GameId, profile.GameName);
@@ -37,10 +23,11 @@ public partial class BroadcastProfileEditDialog : Form
         _languageComboBox.SelectedItem = _languageComboBox.Items
             .Cast<string>()
             .FirstOrDefault(item => string.Equals(item, _originalLanguage, StringComparison.OrdinalIgnoreCase));
+
         _okButton.Enabled = !string.IsNullOrWhiteSpace(profile.Name);
     }
 
-    private void SaveTo(BroadcastProfile profile)
+    public void SaveTo(BroadcastProfile profile)
     {
         profile.Name = _nameTextBox.Text.Trim();
         profile.Title = _titleTextBox.Text.Trim();

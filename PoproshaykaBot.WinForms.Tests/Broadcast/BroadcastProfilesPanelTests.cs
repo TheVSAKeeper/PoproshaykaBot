@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Streaming;
@@ -15,7 +16,7 @@ public class BroadcastProfilesPanelTests
     public void Upsert_AfterPanelSetup_ShouldPersistThroughManager()
     {
         var manager = CreateManager();
-        var resolver = Substitute.For<IGameCategoryResolver>();
+        var forms = Substitute.For<IFormFactory>();
         var bus = Substitute.For<IEventBus>();
         var streamStatus = Substitute.For<IStreamStatus>();
         var settingsLogger = Substitute.For<ILogger<SettingsManager>>();
@@ -25,7 +26,7 @@ public class BroadcastProfilesPanelTests
         using var panel = new BroadcastProfilesPanel
         {
             Manager = manager,
-            Resolver = resolver,
+            Forms = forms,
             Bus = bus,
             Settings = settingsManager,
             Stream = streamStatus,
