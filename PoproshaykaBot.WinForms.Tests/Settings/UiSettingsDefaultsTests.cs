@@ -20,12 +20,4 @@ public class UiSettingsDefaultsTests
 
         Assert.That(settings.RightSlotContent, Is.EqualTo(PanelContent.BroadcastProfiles));
     }
-
-    [Test]
-    public void Defaults_CurrentChatViewMode_ShouldBeLegacy()
-    {
-        var settings = new UiSettings();
-
-        Assert.That(settings.CurrentChatViewMode, Is.EqualTo(ChatViewMode.Legacy));
-    }
 }

@@ -48,7 +48,7 @@ public partial class MainForm : Form
         InitializeComponent();
 
         services.HydrateDescendants(this);
-        services.HydrateDescendants(_chatHost);
+        services.HydrateDescendants(_chatDisplay);
         services.HydrateDescendants(_broadcastProfilesPanel);
     }
 
@@ -66,7 +66,8 @@ public partial class MainForm : Form
         Text = $"Попрощайка Бот v{GetDisplayVersion()}";
 
         _contentControls[PanelContent.Logs] = _logTextBox;
-        _contentControls[PanelContent.Chat] = _chatHost;
+        _contentControls[PanelContent.Chat] = _chatDisplay;
+        _contentControls[PanelContent.ChatOverlay] = _overlayWebView;
         _contentControls[PanelContent.BroadcastProfiles] = _broadcastProfilesPanel;
         _contentControls[PanelContent.None] = null;
 
@@ -85,8 +86,6 @@ public partial class MainForm : Form
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
-
-        InitializeWebViewAsync();
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -108,7 +107,8 @@ public partial class MainForm : Form
         base.OnFormClosed(e);
 
         DisposeIfOrphan(_logTextBox);
-        DisposeIfOrphan(_chatHost);
+        DisposeIfOrphan(_chatDisplay);
+        DisposeIfOrphan(_overlayWebView);
         DisposeIfOrphan(_broadcastProfilesPanel);
     }
 
@@ -151,17 +151,6 @@ public partial class MainForm : Form
             case BotLifecyclePhase.Disconnecting:
                 break;
         }
-    }
-
-    private void OnSwitchChatViewButtonClicked(object? sender, EventArgs e)
-    {
-        var settings = _settingsManager.Current;
-        settings.Ui.CurrentChatViewMode = settings.Ui.CurrentChatViewMode == ChatViewMode.Legacy
-            ? ChatViewMode.Overlay
-            : ChatViewMode.Legacy;
-
-        _settingsManager.SaveSettings(settings);
-        ApplyChatViewMode();
     }
 
     private void OnLeftSlotComboChanged(object? sender, EventArgs e)
@@ -494,6 +483,7 @@ public partial class MainForm : Form
             PanelContent.None,
             PanelContent.Logs,
             PanelContent.Chat,
+            PanelContent.ChatOverlay,
             PanelContent.BroadcastProfiles,
         };
 
@@ -554,53 +544,11 @@ public partial class MainForm : Form
         _leftSlot.Visible = leftVisible;
         _rightSlot.Visible = rightVisible;
 
-        var profilesShown =
-            ui.LeftSlotContent == PanelContent.BroadcastProfiles || ui.RightSlotContent == PanelContent.BroadcastProfiles;
+        var overlayShown =
+            ui.LeftSlotContent == PanelContent.ChatOverlay || ui.RightSlotContent == PanelContent.ChatOverlay;
 
-        _broadcastProfileQuickPanel.Visible = !profilesShown;
-        _mainTableLayoutPanel.RowStyles[2].Height = profilesShown ? 0F : 36F;
-
-        ApplyChatViewMode();
-        _slotsTableLayoutPanel.PerformLayout();
-    }
-
-    private Control? ResolveBody(PanelContent content)
-    {
-        return _contentControls[content];
-    }
-
-    private void ApplyChatViewMode()
-    {
-        var ui = _settingsManager.Current.Ui;
-        var chatShown =
-            ui.LeftSlotContent == PanelContent.Chat || ui.RightSlotContent == PanelContent.Chat;
-
-        _chatViewToolStripButton.Visible = chatShown;
-        _chatViewSeparator.Visible = chatShown;
-
-        if (!chatShown)
+        if (overlayShown)
         {
-            _chatDisplay.Visible = false;
-            _overlayWebView.Visible = false;
-            return;
-        }
-
-        if (ui.CurrentChatViewMode == ChatViewMode.Legacy)
-        {
-            _chatDisplay.Visible = true;
-            _overlayWebView.Visible = false;
-            _chatDisplay.BringToFront();
-            _chatViewToolStripButton.Text = "👁️ Чат";
-            _chatViewToolStripButton.BackColor = SystemColors.Control;
-        }
-        else
-        {
-            _chatDisplay.Visible = false;
-            _overlayWebView.Visible = true;
-            _overlayWebView.BringToFront();
-            _chatViewToolStripButton.Text = "👁️ Overlay";
-            _chatViewToolStripButton.BackColor = Color.LightBlue;
-
             if (_overlayWebView.CoreWebView2 == null)
             {
                 InitializeWebViewAsync();
@@ -610,6 +558,13 @@ public partial class MainForm : Form
                 UpdateOverlayUrl();
             }
         }
+
+        _slotsTableLayoutPanel.PerformLayout();
+    }
+
+    private Control? ResolveBody(PanelContent content)
+    {
+        return _contentControls[content];
     }
 
     private async void InitializeWebViewAsync()
@@ -726,6 +681,7 @@ public partial class MainForm : Form
                 PanelContent.None => "— Нет —",
                 PanelContent.Logs => "📜 Логи",
                 PanelContent.Chat => "💬 Чат",
+                PanelContent.ChatOverlay => "👁️ OBS Чат",
                 PanelContent.BroadcastProfiles => "🎛 Профили",
                 _ => Value.ToString(),
             };

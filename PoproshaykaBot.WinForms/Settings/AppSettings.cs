@@ -11,12 +11,6 @@ public class AppSettings
     public RanksSettings Ranks { get; set; } = new();
 }
 
-public enum ChatViewMode
-{
-    Legacy = 0,
-    Overlay = 1,
-}
-
 public class TwitchSettings
 {
     public string BotUsername { get; set; } = "thevsakeeper";
@@ -107,13 +101,13 @@ public enum PanelContent
     Logs = 1,
     Chat = 2,
     BroadcastProfiles = 3,
+    ChatOverlay = 4,
 }
 
 public class UiSettings
 {
     public PanelContent LeftSlotContent { get; set; } = PanelContent.Logs;
     public PanelContent RightSlotContent { get; set; } = PanelContent.BroadcastProfiles;
-    public ChatViewMode CurrentChatViewMode { get; set; } = ChatViewMode.Legacy;
 }
 
 public class InfrastructureSettings
