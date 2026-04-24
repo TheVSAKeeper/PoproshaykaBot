@@ -45,24 +45,13 @@ public sealed partial class BroadcastInfoWidget : UserControl
 
         _initialized = true;
 
-        _subs.Add(Bus.Subscribe<BroadcastSchedulerStateChanged>(OnBusEvent));
-        _subs.Add(Bus.Subscribe<StreamWentOnline>(OnBusEvent));
-        _subs.Add(Bus.Subscribe<StreamWentOffline>(OnBusEvent));
-        _subs.Add(Bus.Subscribe<BotLifecyclePhaseChanged>(OnBusEvent));
-
-        Disposed += OnControlDisposed;
+        _subs.Add(Bus.SubscribeOnUi<BroadcastSchedulerStateChanged>(this, _ => UpdateState()));
+        _subs.Add(Bus.SubscribeOnUi<StreamWentOnline>(this, _ => UpdateState()));
+        _subs.Add(Bus.SubscribeOnUi<StreamWentOffline>(this, _ => UpdateState()));
+        _subs.Add(Bus.SubscribeOnUi<BotLifecyclePhaseChanged>(this, _ => UpdateState()));
+        _subs.DisposeOnClose(this);
 
         UpdateState();
-    }
-
-    private void OnControlDisposed(object? sender, EventArgs e)
-    {
-        foreach (var subscription in _subs)
-        {
-            subscription.Dispose();
-        }
-
-        _subs.Clear();
     }
 
     private void OnModeToggleClick(object sender, EventArgs e)
@@ -146,39 +135,8 @@ public sealed partial class BroadcastInfoWidget : UserControl
         _sendNowButton.Enabled = true;
     }
 
-    private void OnBusEvent<T>(T @event) where T : class
-    {
-        if (IsDisposed || Disposing || !IsHandleCreated)
-        {
-            return;
-        }
-
-        try
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(() => OnBusEvent(@event));
-                return;
-            }
-
-            UpdateState();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        catch (InvalidOperationException) when (IsDisposed)
-        {
-        }
-    }
-
     private void UpdateState()
     {
-        if (InvokeRequired)
-        {
-            Invoke(UpdateState);
-            return;
-        }
-
         var isActive = Scheduler.IsActive;
         var isAuto = Settings.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled;
         var streamOnline = Stream.CurrentStatus == StreamStatus.Online;

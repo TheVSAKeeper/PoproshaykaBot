@@ -125,20 +125,9 @@ public partial class ChatDisplay : UserControl
 
         _initialized = true;
 
-        _subs.Add(Bus.Subscribe<ChatMessageReceived>(OnChatMessageReceived));
-        _subs.Add(Bus.Subscribe<ChatHistoryCleared>(OnChatHistoryCleared));
-
-        Disposed += OnControlDisposed;
-    }
-
-    private void OnControlDisposed(object? sender, EventArgs e)
-    {
-        foreach (var subscription in _subs)
-        {
-            subscription.Dispose();
-        }
-
-        _subs.Clear();
+        _subs.Add(Bus.SubscribeOnUi<ChatMessageReceived>(this, @event => AddChatMessage(@event.HistoryEntry)));
+        _subs.Add(Bus.SubscribeOnUi<ChatHistoryCleared>(this, _ => ClearChat()));
+        _subs.DisposeOnClose(this);
     }
 
     private void OnLoad(object sender, EventArgs e)
@@ -183,55 +172,5 @@ public partial class ChatDisplay : UserControl
         }
 
         return Color.DarkBlue;
-    }
-
-    private void OnChatMessageReceived(ChatMessageReceived @event)
-    {
-        if (IsDisposed || Disposing || !IsHandleCreated)
-        {
-            return;
-        }
-
-        try
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(() => OnChatMessageReceived(@event));
-                return;
-            }
-
-            AddChatMessage(@event.HistoryEntry);
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        catch (InvalidOperationException) when (IsDisposed)
-        {
-        }
-    }
-
-    private void OnChatHistoryCleared(ChatHistoryCleared @event)
-    {
-        if (IsDisposed || Disposing || !IsHandleCreated)
-        {
-            return;
-        }
-
-        try
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(() => OnChatHistoryCleared(@event));
-                return;
-            }
-
-            ClearChat();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        catch (InvalidOperationException) when (IsDisposed)
-        {
-        }
     }
 }

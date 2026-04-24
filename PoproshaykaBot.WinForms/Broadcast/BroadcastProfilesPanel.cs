@@ -69,26 +69,16 @@ public partial class BroadcastProfilesPanel : UserControl
 
         _initialized = true;
 
-        _subs.Add(Bus.Subscribe<BroadcastProfilesChanged>(OnBroadcastProfilesChanged));
-        _subs.Add(Bus.Subscribe<BroadcastProfileApplied>(OnBroadcastProfileApplied));
-        _subs.Add(Bus.Subscribe<BroadcastProfileApplyFailed>(OnBroadcastProfileApplyFailed));
-        _subs.Add(Bus.Subscribe<StreamWentOnline>(OnStreamWentOnline));
-        _subs.Add(Bus.Subscribe<StreamWentOffline>(OnStreamWentOffline));
+        _subs.Add(Bus.SubscribeOnUi<BroadcastProfilesChanged>(this, _ => ReloadCards()));
+        _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplied>(this, OnProfileApplied));
+        _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplyFailed>(this, OnProfileApplyFailed));
+        _subs.Add(Bus.SubscribeOnUi<StreamWentOnline>(this, _ => ReloadCards()));
+        _subs.Add(Bus.SubscribeOnUi<StreamWentOffline>(this, _ => ReloadCards()));
+        _subs.DisposeOnClose(this);
 
-        Disposed += OnControlDisposed;
+        Disposed += (_, _) => _statusResetTimer.Dispose();
 
         ReloadCards();
-    }
-
-    private void OnControlDisposed(object? sender, EventArgs e)
-    {
-        foreach (var sub in _subs)
-        {
-            sub.Dispose();
-        }
-
-        _subs.Clear();
-        _statusResetTimer.Dispose();
     }
 
     private void OnAddClicked(object? sender, EventArgs e)
@@ -259,132 +249,17 @@ public partial class BroadcastProfilesPanel : UserControl
         };
     }
 
-    private void OnBroadcastProfilesChanged(BroadcastProfilesChanged @event)
+    private void OnProfileApplied(BroadcastProfileApplied @event)
     {
-        if (IsDisposed || Disposing || !IsHandleCreated)
-        {
-            return;
-        }
-
-        try
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(() => OnBroadcastProfilesChanged(@event));
-                return;
-            }
-
-            ReloadCards();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        catch (InvalidOperationException) when (IsDisposed)
-        {
-        }
+        ClearInFlightStates();
+        ReloadCards();
+        SetStatus(string.Empty, false);
     }
 
-    private void OnBroadcastProfileApplied(BroadcastProfileApplied @event)
+    private void OnProfileApplyFailed(BroadcastProfileApplyFailed @event)
     {
-        if (IsDisposed || Disposing || !IsHandleCreated)
-        {
-            return;
-        }
-
-        try
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(() => OnBroadcastProfileApplied(@event));
-                return;
-            }
-
-            ClearInFlightStates();
-            ReloadCards();
-            SetStatus(string.Empty, false);
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        catch (InvalidOperationException) when (IsDisposed)
-        {
-        }
-    }
-
-    private void OnBroadcastProfileApplyFailed(BroadcastProfileApplyFailed @event)
-    {
-        if (IsDisposed || Disposing || !IsHandleCreated)
-        {
-            return;
-        }
-
-        try
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(() => OnBroadcastProfileApplyFailed(@event));
-                return;
-            }
-
-            ClearInFlightStates();
-            SetStatus($"✗ {@event.ErrorMessage}", true);
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        catch (InvalidOperationException) when (IsDisposed)
-        {
-        }
-    }
-
-    private void OnStreamWentOnline(StreamWentOnline @event)
-    {
-        if (IsDisposed || Disposing || !IsHandleCreated)
-        {
-            return;
-        }
-
-        try
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(() => OnStreamWentOnline(@event));
-                return;
-            }
-
-            ReloadCards();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        catch (InvalidOperationException) when (IsDisposed)
-        {
-        }
-    }
-
-    private void OnStreamWentOffline(StreamWentOffline @event)
-    {
-        if (IsDisposed || Disposing || !IsHandleCreated)
-        {
-            return;
-        }
-
-        try
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(() => OnStreamWentOffline(@event));
-                return;
-            }
-
-            ReloadCards();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        catch (InvalidOperationException) when (IsDisposed)
-        {
-        }
+        ClearInFlightStates();
+        SetStatus($"✗ {@event.ErrorMessage}", true);
     }
 
     private void OnEditRequested(BroadcastProfileCard card)
