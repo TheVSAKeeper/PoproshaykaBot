@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Events;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
 using PoproshaykaBot.WinForms.Users;
 
@@ -8,22 +9,16 @@ namespace PoproshaykaBot.WinForms.Chat;
 public partial class ChatDisplay : UserControl
 {
     private const int MaxChatLines = 200;
-    private readonly List<IDisposable> _busSubscriptions = new();
+    private readonly List<IDisposable> _subs = [];
+    private bool _initialized;
 
     public ChatDisplay()
     {
         InitializeComponent();
     }
 
-    public void Setup(IEventBus eventBus)
-    {
-        ArgumentNullException.ThrowIfNull(eventBus);
-
-        _busSubscriptions.Add(eventBus.Subscribe<ChatMessageReceived>(@event => AddChatMessage(@event.HistoryEntry)));
-        _busSubscriptions.Add(eventBus.Subscribe<ChatHistoryCleared>(_ => ClearChat()));
-
-        Disposed += OnControlDisposed;
-    }
+    [Inject]
+    public IEventBus Bus { get; init; } = null!;
 
     public void AddChatMessage(ChatMessageData chatMessage)
     {
@@ -119,14 +114,31 @@ public partial class ChatDisplay : UserControl
         _chatRichTextBox.Clear();
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        _initialized = true;
+
+        _subs.Add(Bus.Subscribe<ChatMessageReceived>(OnChatMessageReceived));
+        _subs.Add(Bus.Subscribe<ChatHistoryCleared>(OnChatHistoryCleared));
+
+        Disposed += OnControlDisposed;
+    }
+
     private void OnControlDisposed(object? sender, EventArgs e)
     {
-        foreach (var subscription in _busSubscriptions)
+        foreach (var subscription in _subs)
         {
             subscription.Dispose();
         }
 
-        _busSubscriptions.Clear();
+        _subs.Clear();
     }
 
     private void OnLoad(object sender, EventArgs e)
@@ -171,5 +183,55 @@ public partial class ChatDisplay : UserControl
         }
 
         return Color.DarkBlue;
+    }
+
+    private void OnChatMessageReceived(ChatMessageReceived @event)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnChatMessageReceived(@event));
+                return;
+            }
+
+            AddChatMessage(@event.HistoryEntry);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private void OnChatHistoryCleared(ChatHistoryCleared @event)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnChatHistoryCleared(@event));
+                return;
+            }
+
+            ClearChat();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
     }
 }

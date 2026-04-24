@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
@@ -19,10 +20,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private readonly List<IDisposable> _subs = [];
     private readonly Timer _statusResetTimer;
-    private BroadcastProfilesManager? _manager;
-    private IGameCategoryResolver? _resolver;
-    private SettingsManager? _settingsManager;
-    private IStreamStatus? _streamStatus;
+    private bool _initialized;
 
     public BroadcastProfilesPanel()
     {
@@ -43,63 +41,63 @@ public partial class BroadcastProfilesPanel : UserControl
         _addButton.Click += OnAddClicked;
         _importButton.Click += OnImportClicked;
         _cardsFlow.ClientSizeChanged += (_, _) => ResizeCardsToFlow();
-
-        Disposed += (_, _) =>
-        {
-            foreach (var sub in _subs)
-            {
-                sub.Dispose();
-            }
-
-            _subs.Clear();
-            _statusResetTimer.Dispose();
-        };
     }
 
-    public void Setup(
-        BroadcastProfilesManager manager,
-        IGameCategoryResolver resolver,
-        IEventBus bus,
-        SettingsManager? settingsManager = null,
-        IStreamStatus? streamStatus = null)
+    [Inject]
+    public BroadcastProfilesManager Manager { get; init; } = null!;
+
+    [Inject]
+    public IGameCategoryResolver Resolver { get; init; } = null!;
+
+    [Inject]
+    public IEventBus Bus { get; init; } = null!;
+
+    [Inject]
+    public SettingsManager Settings { get; init; } = null!;
+
+    [Inject]
+    public IStreamStatus Stream { get; init; } = null!;
+
+    protected override void OnHandleCreated(EventArgs e)
     {
-        _manager = manager;
-        _resolver = resolver;
-        _settingsManager = settingsManager;
-        _streamStatus = streamStatus;
+        base.OnHandleCreated(e);
 
-        _subs.Add(bus.Subscribe<BroadcastProfilesChanged>(_ => BeginInvoke(ReloadCards)));
-        _subs.Add(bus.Subscribe<BroadcastProfileApplied>(_ => BeginInvoke(() =>
-        {
-            ClearInFlightStates();
-            ReloadCards();
-            SetStatus(string.Empty, false);
-        })));
-
-        _subs.Add(bus.Subscribe<BroadcastProfileApplyFailed>(e => BeginInvoke(() =>
-        {
-            ClearInFlightStates();
-            SetStatus($"✗ {e.ErrorMessage}", true);
-        })));
-
-        _subs.Add(bus.Subscribe<StreamWentOnline>(_ => BeginInvoke(ReloadCards)));
-        _subs.Add(bus.Subscribe<StreamWentOffline>(_ => BeginInvoke(ReloadCards)));
-
-        ReloadCards();
-    }
-
-    private void OnAddClicked(object? sender, EventArgs e)
-    {
-        if (_manager == null || _resolver == null)
+        if (_initialized)
         {
             return;
         }
 
+        _initialized = true;
+
+        _subs.Add(Bus.Subscribe<BroadcastProfilesChanged>(OnBroadcastProfilesChanged));
+        _subs.Add(Bus.Subscribe<BroadcastProfileApplied>(OnBroadcastProfileApplied));
+        _subs.Add(Bus.Subscribe<BroadcastProfileApplyFailed>(OnBroadcastProfileApplyFailed));
+        _subs.Add(Bus.Subscribe<StreamWentOnline>(OnStreamWentOnline));
+        _subs.Add(Bus.Subscribe<StreamWentOffline>(OnStreamWentOffline));
+
+        Disposed += OnControlDisposed;
+
+        ReloadCards();
+    }
+
+    private void OnControlDisposed(object? sender, EventArgs e)
+    {
+        foreach (var sub in _subs)
+        {
+            sub.Dispose();
+        }
+
+        _subs.Clear();
+        _statusResetTimer.Dispose();
+    }
+
+    private void OnAddClicked(object? sender, EventArgs e)
+    {
         var profile = new BroadcastProfile { Name = $"Новый профиль {DateTime.Now:HH:mm:ss}" };
 
         try
         {
-            _manager.Upsert(profile);
+            Manager.Upsert(profile);
         }
         catch (InvalidOperationException ex)
         {
@@ -107,7 +105,7 @@ public partial class BroadcastProfilesPanel : UserControl
             return;
         }
 
-        if (BroadcastProfileEditDialog.Edit(this, profile, _resolver) == DialogResult.OK)
+        if (BroadcastProfileEditDialog.Edit(this, profile, Resolver) == DialogResult.OK)
         {
             PersistEdited(profile);
         }
@@ -115,11 +113,6 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private void OnImportClicked(object? sender, EventArgs e)
     {
-        if (_manager == null)
-        {
-            return;
-        }
-
         using var dialog = new OpenFileDialog
         {
             Title = "Импорт профилей из JSON",
@@ -157,7 +150,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
         var imported = 0;
         var skipped = 0;
-        var existingNames = new HashSet<string>(_manager.GetAll().Select(p => p.Name),
+        var existingNames = new HashSet<string>(Manager.GetAll().Select(p => p.Name),
             StringComparer.OrdinalIgnoreCase);
 
         foreach (var external in incoming)
@@ -185,7 +178,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
             try
             {
-                _manager.Upsert(profile);
+                Manager.Upsert(profile);
                 existingNames.Add(name);
                 imported++;
             }
@@ -266,13 +259,136 @@ public partial class BroadcastProfilesPanel : UserControl
         };
     }
 
-    private void OnEditRequested(BroadcastProfileCard card)
+    private void OnBroadcastProfilesChanged(BroadcastProfilesChanged @event)
     {
-        if (_manager == null || _resolver == null)
+        if (IsDisposed || Disposing || !IsHandleCreated)
         {
             return;
         }
 
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnBroadcastProfilesChanged(@event));
+                return;
+            }
+
+            ReloadCards();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private void OnBroadcastProfileApplied(BroadcastProfileApplied @event)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnBroadcastProfileApplied(@event));
+                return;
+            }
+
+            ClearInFlightStates();
+            ReloadCards();
+            SetStatus(string.Empty, false);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private void OnBroadcastProfileApplyFailed(BroadcastProfileApplyFailed @event)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnBroadcastProfileApplyFailed(@event));
+                return;
+            }
+
+            ClearInFlightStates();
+            SetStatus($"✗ {@event.ErrorMessage}", true);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private void OnStreamWentOnline(StreamWentOnline @event)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnStreamWentOnline(@event));
+                return;
+            }
+
+            ReloadCards();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private void OnStreamWentOffline(StreamWentOffline @event)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnStreamWentOffline(@event));
+                return;
+            }
+
+            ReloadCards();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private void OnEditRequested(BroadcastProfileCard card)
+    {
         var original = card.Profile;
 
         if (original == null)
@@ -282,7 +398,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
         var copy = Clone(original);
 
-        if (BroadcastProfileEditDialog.Edit(this, copy, _resolver) == DialogResult.OK)
+        if (BroadcastProfileEditDialog.Edit(this, copy, Resolver) == DialogResult.OK)
         {
             PersistEdited(copy);
         }
@@ -292,7 +408,7 @@ public partial class BroadcastProfilesPanel : UserControl
     {
         try
         {
-            _manager!.Upsert(edited);
+            Manager.Upsert(edited);
         }
         catch (InvalidOperationException ex)
         {
@@ -302,7 +418,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private void OnDuplicateRequested(BroadcastProfileCard card)
     {
-        if (_manager == null || card.Profile == null)
+        if (card.Profile == null)
         {
             return;
         }
@@ -320,7 +436,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
         try
         {
-            _manager.Upsert(copy);
+            Manager.Upsert(copy);
         }
         catch (InvalidOperationException ex)
         {
@@ -330,7 +446,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private void OnDeleteRequested(BroadcastProfileCard card)
     {
-        if (_manager == null || card.Profile == null)
+        if (card.Profile == null)
         {
             return;
         }
@@ -347,12 +463,12 @@ public partial class BroadcastProfilesPanel : UserControl
             return;
         }
 
-        _manager.Remove(card.Profile.Id);
+        Manager.Remove(card.Profile.Id);
     }
 
     private async void OnApplyRequested(BroadcastProfileCard card)
     {
-        if (_manager == null || card.Profile == null)
+        if (card.Profile == null)
         {
             return;
         }
@@ -362,7 +478,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
         try
         {
-            await _manager.ApplyAsync(card.Profile.Id, CancellationToken.None);
+            await Manager.ApplyAsync(card.Profile.Id, CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -373,11 +489,6 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private void ReloadCards()
     {
-        if (_manager == null)
-        {
-            return;
-        }
-
         _cardsFlow.SuspendLayout();
 
         try
@@ -395,10 +506,10 @@ public partial class BroadcastProfilesPanel : UserControl
 
             _cardsFlow.Controls.Clear();
 
-            var activeId = _settingsManager?.Current.Twitch.BroadcastProfiles.LastAppliedProfileId;
-            var currentStream = _streamStatus?.CurrentStream;
+            var activeId = Settings.Current.Twitch.BroadcastProfiles.LastAppliedProfileId;
+            var currentStream = Stream.CurrentStream;
 
-            foreach (var profile in _manager.GetAll())
+            foreach (var profile in Manager.GetAll())
             {
                 var isActive = activeId.HasValue && activeId.Value == profile.Id;
                 var hasDrift = isActive && ProfileDivergesFromStream(profile, currentStream);

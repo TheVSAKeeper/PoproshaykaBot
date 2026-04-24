@@ -1,4 +1,5 @@
-using PoproshaykaBot.WinForms.Broadcast.Profiles;
+﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using Timer = System.Windows.Forms.Timer;
@@ -9,11 +10,12 @@ public partial class BroadcastProfileQuickPanel : UserControl
 {
     private readonly List<IDisposable> _subs = [];
     private readonly Timer _statusResetTimer;
-    private BroadcastProfilesManager? _manager;
+    private bool _initialized;
 
     public BroadcastProfileQuickPanel()
     {
         InitializeComponent();
+
         _statusResetTimer = new()
         {
             Interval = 5000,
@@ -28,12 +30,28 @@ public partial class BroadcastProfileQuickPanel : UserControl
         _applyButton.Click += OnApplyClicked;
     }
 
-    public void Setup(BroadcastProfilesManager manager, IEventBus eventBus)
+    [Inject]
+    public BroadcastProfilesManager Manager { get; init; } = null!;
+
+    [Inject]
+    public IEventBus Bus { get; init; } = null!;
+
+    protected override void OnHandleCreated(EventArgs e)
     {
-        _manager = manager;
-        _subs.Add(eventBus.Subscribe<BroadcastProfilesChanged>(_ => BeginInvoke(ReloadProfiles)));
-        _subs.Add(eventBus.Subscribe<BroadcastProfileApplied>(e => BeginInvoke(() => SetStatus($"✓ {e.Profile.Name}"))));
-        _subs.Add(eventBus.Subscribe<BroadcastProfileApplyFailed>(e => BeginInvoke(() => SetStatus($"✗ {e.ErrorMessage}"))));
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        _initialized = true;
+
+        _subs.Add(Bus.Subscribe<BroadcastProfilesChanged>(OnBroadcastProfilesChanged));
+        _subs.Add(Bus.Subscribe<BroadcastProfileApplied>(OnBroadcastProfileApplied));
+        _subs.Add(Bus.Subscribe<BroadcastProfileApplyFailed>(OnBroadcastProfileApplyFailed));
+
+        Disposed += OnControlDisposed;
 
         ReloadProfiles();
     }
@@ -42,12 +60,6 @@ public partial class BroadcastProfileQuickPanel : UserControl
     {
         if (disposing)
         {
-            foreach (var s in _subs)
-            {
-                s.Dispose();
-            }
-
-            _subs.Clear();
             _statusResetTimer.Dispose();
             components?.Dispose();
         }
@@ -55,9 +67,19 @@ public partial class BroadcastProfileQuickPanel : UserControl
         base.Dispose(disposing);
     }
 
+    private void OnControlDisposed(object? sender, EventArgs e)
+    {
+        foreach (var sub in _subs)
+        {
+            sub.Dispose();
+        }
+
+        _subs.Clear();
+    }
+
     private async void OnApplyClicked(object? sender, EventArgs e)
     {
-        if (_manager == null || _profilesComboBox.SelectedItem is not BroadcastProfile p)
+        if (_profilesComboBox.SelectedItem is not BroadcastProfile p)
         {
             return;
         }
@@ -66,7 +88,7 @@ public partial class BroadcastProfileQuickPanel : UserControl
 
         try
         {
-            await _manager.ApplyAsync(p.Id, CancellationToken.None);
+            await Manager.ApplyAsync(p.Id, CancellationToken.None);
         }
         finally
         {
@@ -74,17 +96,87 @@ public partial class BroadcastProfileQuickPanel : UserControl
         }
     }
 
-    private void ReloadProfiles()
+    private void OnBroadcastProfilesChanged(BroadcastProfilesChanged @event)
     {
-        if (_manager == null)
+        if (IsDisposed || Disposing || !IsHandleCreated)
         {
             return;
         }
 
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnBroadcastProfilesChanged(@event));
+                return;
+            }
+
+            ReloadProfiles();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private void OnBroadcastProfileApplied(BroadcastProfileApplied @event)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnBroadcastProfileApplied(@event));
+                return;
+            }
+
+            SetStatus($"✓ {@event.Profile.Name}");
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private void OnBroadcastProfileApplyFailed(BroadcastProfileApplyFailed @event)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnBroadcastProfileApplyFailed(@event));
+                return;
+            }
+
+            SetStatus($"✗ {@event.ErrorMessage}");
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private void ReloadProfiles()
+    {
         var selected = _profilesComboBox.SelectedItem as BroadcastProfile;
         _profilesComboBox.Items.Clear();
 
-        foreach (var p in _manager.GetAll())
+        foreach (var p in Manager.GetAll())
         {
             _profilesComboBox.Items.Add(p);
         }
@@ -93,7 +185,7 @@ public partial class BroadcastProfileQuickPanel : UserControl
 
         if (selected != null)
         {
-            var match = _manager.GetAll().FirstOrDefault(p => p.Id == selected.Id);
+            var match = Manager.GetAll().FirstOrDefault(p => p.Id == selected.Id);
             if (match != null)
             {
                 _profilesComboBox.SelectedItem = match;

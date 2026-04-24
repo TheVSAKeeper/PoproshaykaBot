@@ -3,6 +3,7 @@ using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Streaming;
 
 namespace PoproshaykaBot.WinForms.Tests.Broadcast;
 
@@ -16,11 +17,21 @@ public class BroadcastProfilesPanelTests
         var manager = CreateManager();
         var resolver = Substitute.For<IGameCategoryResolver>();
         var bus = Substitute.For<IEventBus>();
+        var streamStatus = Substitute.For<IStreamStatus>();
+        var settingsLogger = Substitute.For<ILogger<SettingsManager>>();
+        var settingsManager = Substitute.For<SettingsManager>(settingsLogger, bus);
+        settingsManager.Current.Returns(new AppSettings());
 
-        using var panel = new BroadcastProfilesPanel();
-        panel.Setup(manager, resolver, bus);
+        using var panel = new BroadcastProfilesPanel
+        {
+            Manager = manager,
+            Resolver = resolver,
+            Bus = bus,
+            Settings = settingsManager,
+            Stream = streamStatus,
+        };
 
-        manager.Upsert(new BroadcastProfile { Name = "Профиль 1" });
+        manager.Upsert(new() { Name = "Профиль 1" });
 
         Assert.That(manager.GetAll().Select(p => p.Name), Is.EquivalentTo(new[] { "Профиль 1" }));
     }

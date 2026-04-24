@@ -278,6 +278,9 @@ public static class Program
 
         services.AddSingleton<BotConnectionManager>();
         services.AddSingleton<MainForm>();
+
+        services.AddTransient<SettingsForm>();
+        services.AddTransient<UserStatisticsForm>();
     }
 
     private static string GetRussianSecondsWord(int seconds)

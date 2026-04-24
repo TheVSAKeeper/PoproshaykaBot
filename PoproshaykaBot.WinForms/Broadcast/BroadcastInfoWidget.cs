@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.WinForms.Infrastructure;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
@@ -10,33 +11,44 @@ namespace PoproshaykaBot.WinForms.Broadcast;
 
 public sealed partial class BroadcastInfoWidget : UserControl
 {
-    private readonly List<IDisposable> _busSubscriptions = [];
-    private IChannelProvider? _channelProvider;
-    private SettingsManager? _settingsManager;
-    private IStreamStatus? _streamStatusManager;
-    private BroadcastScheduler? _broadcastScheduler;
+    private readonly List<IDisposable> _subs = [];
+    private bool _initialized;
 
     public BroadcastInfoWidget()
     {
         InitializeComponent();
     }
 
-    public void Setup(
-        SettingsManager settingsManager,
-        IStreamStatus streamStatusManager,
-        BroadcastScheduler broadcastScheduler,
-        IChannelProvider channelProvider,
-        IEventBus eventBus)
-    {
-        _settingsManager = settingsManager;
-        _streamStatusManager = streamStatusManager;
-        _broadcastScheduler = broadcastScheduler;
-        _channelProvider = channelProvider;
+    [Inject]
+    public SettingsManager Settings { get; init; } = null!;
 
-        _busSubscriptions.Add(eventBus.Subscribe<BroadcastSchedulerStateChanged>(_ => UpdateState()));
-        _busSubscriptions.Add(eventBus.Subscribe<StreamWentOnline>(_ => UpdateState()));
-        _busSubscriptions.Add(eventBus.Subscribe<StreamWentOffline>(_ => UpdateState()));
-        _busSubscriptions.Add(eventBus.Subscribe<BotLifecyclePhaseChanged>(_ => UpdateState()));
+    [Inject]
+    public IStreamStatus Stream { get; init; } = null!;
+
+    [Inject]
+    public BroadcastScheduler Scheduler { get; init; } = null!;
+
+    [Inject]
+    public IChannelProvider ChannelProvider { get; init; } = null!;
+
+    [Inject]
+    public IEventBus Bus { get; init; } = null!;
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        _initialized = true;
+
+        _subs.Add(Bus.Subscribe<BroadcastSchedulerStateChanged>(OnBusEvent));
+        _subs.Add(Bus.Subscribe<StreamWentOnline>(OnBusEvent));
+        _subs.Add(Bus.Subscribe<StreamWentOffline>(OnBusEvent));
+        _subs.Add(Bus.Subscribe<BotLifecyclePhaseChanged>(OnBusEvent));
 
         Disposed += OnControlDisposed;
 
@@ -45,25 +57,20 @@ public sealed partial class BroadcastInfoWidget : UserControl
 
     private void OnControlDisposed(object? sender, EventArgs e)
     {
-        foreach (var subscription in _busSubscriptions)
+        foreach (var subscription in _subs)
         {
             subscription.Dispose();
         }
 
-        _busSubscriptions.Clear();
+        _subs.Clear();
     }
 
     private void OnModeToggleClick(object sender, EventArgs e)
     {
-        if (_settingsManager == null || _broadcastScheduler == null || _streamStatusManager == null)
-        {
-            return;
-        }
-
-        var settings = _settingsManager.Current;
+        var settings = Settings.Current;
         var willEnableAuto = !settings.Twitch.AutoBroadcast.AutoBroadcastEnabled;
 
-        if (willEnableAuto && _broadcastScheduler.IsActive && _streamStatusManager.CurrentStatus != StreamStatus.Online)
+        if (willEnableAuto && Scheduler.IsActive && Stream.CurrentStatus != StreamStatus.Online)
         {
             var result = MessageBox.Show("""
                                          При переключении в автоматический режим активная рассылка будет остановлена, так как стрим сейчас оффлайн.
@@ -81,20 +88,20 @@ public sealed partial class BroadcastInfoWidget : UserControl
         }
 
         settings.Twitch.AutoBroadcast.AutoBroadcastEnabled = willEnableAuto;
-        _settingsManager.SaveSettings(settings);
+        Settings.SaveSettings(settings);
 
         if (willEnableAuto)
         {
-            if (_streamStatusManager.CurrentStatus == StreamStatus.Online)
+            if (Stream.CurrentStatus == StreamStatus.Online)
             {
-                if (!_broadcastScheduler.IsActive && !string.IsNullOrEmpty(_channelProvider?.Channel))
+                if (!Scheduler.IsActive && !string.IsNullOrEmpty(ChannelProvider.Channel))
                 {
-                    _broadcastScheduler.Start(_channelProvider.Channel);
+                    Scheduler.Start(ChannelProvider.Channel);
                 }
             }
             else
             {
-                _broadcastScheduler.Stop();
+                Scheduler.Stop();
             }
         }
 
@@ -103,18 +110,13 @@ public sealed partial class BroadcastInfoWidget : UserControl
 
     private void OnToggleButtonClick(object sender, EventArgs e)
     {
-        if (_channelProvider == null || _broadcastScheduler == null || _settingsManager == null)
+        if (Scheduler.IsActive)
         {
-            return;
-        }
-
-        if (_broadcastScheduler.IsActive)
-        {
-            _broadcastScheduler.Stop();
+            Scheduler.Stop();
         }
         else
         {
-            if (_settingsManager.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled)
+            if (Settings.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled)
             {
                 MessageBox.Show("""
                                 В автоматическом режиме рассылка запускается сама при начале стрима.
@@ -128,9 +130,9 @@ public sealed partial class BroadcastInfoWidget : UserControl
                 return;
             }
 
-            if (!string.IsNullOrEmpty(_channelProvider.Channel))
+            if (!string.IsNullOrEmpty(ChannelProvider.Channel))
             {
-                _broadcastScheduler.Start(_channelProvider.Channel);
+                Scheduler.Start(ChannelProvider.Channel);
             }
         }
 
@@ -139,14 +141,34 @@ public sealed partial class BroadcastInfoWidget : UserControl
 
     private async void OnSendNowButtonClick(object sender, EventArgs e)
     {
-        if (_broadcastScheduler == null)
+        _sendNowButton.Enabled = false;
+        await Scheduler.ManualSendAsync();
+        _sendNowButton.Enabled = true;
+    }
+
+    private void OnBusEvent<T>(T @event) where T : class
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
         {
             return;
         }
 
-        _sendNowButton.Enabled = false;
-        await _broadcastScheduler.ManualSendAsync();
-        _sendNowButton.Enabled = true;
+        try
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(() => OnBusEvent(@event));
+                return;
+            }
+
+            UpdateState();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
     }
 
     private void UpdateState()
@@ -157,33 +179,9 @@ public sealed partial class BroadcastInfoWidget : UserControl
             return;
         }
 
-        if (_channelProvider == null || _broadcastScheduler == null || _streamStatusManager == null)
-        {
-            _statusLabel.Text = "Бот не подключен";
-            _statusLabel.ForeColor = Color.Gray;
-            _sentCountLabel.Text = "Отправлено: 0";
-            _nextTimeLabel.Text = "Следующая: —";
-            _toggleButton.Enabled = false;
-            _sendNowButton.Enabled = false;
-
-            if (_settingsManager is not null)
-            {
-                var initialIsAuto = _settingsManager.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled;
-                _modeLabel.Text = $"Режим: {(initialIsAuto ? "Авто" : "Ручной")}";
-                _modeToggleButton.Text = initialIsAuto ? "В ручной" : "В авто";
-                _modeToggleButton.Enabled = true;
-            }
-            else
-            {
-                _modeToggleButton.Enabled = false;
-            }
-
-            return;
-        }
-
-        var isActive = _broadcastScheduler.IsActive;
-        var isAuto = _settingsManager?.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled ?? false;
-        var streamOnline = _streamStatusManager.CurrentStatus == StreamStatus.Online;
+        var isActive = Scheduler.IsActive;
+        var isAuto = Settings.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled;
+        var streamOnline = Stream.CurrentStatus == StreamStatus.Online;
 
         _statusLabel.Text = isActive ? "✅ Активна" : "❌ Неактивна";
         _statusLabel.ForeColor = isActive ? Color.Green : Color.Red;
@@ -197,9 +195,9 @@ public sealed partial class BroadcastInfoWidget : UserControl
         _modeLabel.Text = $"Режим: {(isAuto ? "Авто" : "Ручной")}";
         _modeToggleButton.Text = isAuto ? "В ручной" : "В авто";
 
-        _sentCountLabel.Text = $"Отправлено: {_broadcastScheduler.SentMessagesCount}";
+        _sentCountLabel.Text = $"Отправлено: {Scheduler.SentMessagesCount}";
 
-        var nextTime = _broadcastScheduler.NextBroadcastTime;
+        var nextTime = Scheduler.NextBroadcastTime;
         _nextTimeLabel.Text = nextTime.HasValue
             ? $"Следующая: {nextTime.Value:HH:mm:ss}"
             : "Следующая: —";

@@ -1,8 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
-using PoproshaykaBot.WinForms.Auth;
-using PoproshaykaBot.WinForms.Broadcast;
-using PoproshaykaBot.WinForms.Broadcast.Profiles;
-using PoproshaykaBot.WinForms.Chat;
+﻿using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
@@ -11,31 +8,20 @@ using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
-using PoproshaykaBot.WinForms.Statistics;
 using PoproshaykaBot.WinForms.Streaming;
-using PoproshaykaBot.WinForms.Twitch.Chat;
 using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms;
 
-// TODO: Исправить ужас с зависимостями и DI
 public partial class MainForm : Form
 {
     private const int MaxLogLines = 500;
+    private readonly IFormFactory _forms;
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly SettingsManager _settingsManager;
     private readonly BotConnectionManager _connectionManager;
     private readonly KestrelHttpServer _httpServer;
-    private readonly TwitchOAuthService _oauthService;
-    private readonly StatisticsCollector _statisticsCollector;
-    private readonly UserRankService _userRankService;
     private readonly IStreamStatus _streamStatusManager;
-    private readonly UserMessagesManagementService _userMessagesManagementService;
-    private readonly TwitchChatHandler _twitchChatHandler;
-    private readonly BroadcastProfilesManager _broadcastProfilesManager;
-    private readonly IGameCategoryResolver _gameCategoryResolver;
-    private readonly IBotUserIdProvider _botUserIdProvider;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly List<IDisposable> _busSubscriptions = [];
     private readonly Dictionary<PanelContent, Control?> _contentControls = new();
 
@@ -44,44 +30,29 @@ public partial class MainForm : Form
     private UserStatisticsForm? _юзерФорма;
 
     public MainForm(
+        IServiceProvider services,
+        IFormFactory forms,
+        IEventBus eventBus,
         ChatHistoryManager chatHistoryManager,
         KestrelHttpServer httpServer,
         BotConnectionManager connectionManager,
         SettingsManager settingsManager,
-        TwitchOAuthService oauthService,
-        StatisticsCollector statisticsCollector,
-        UserRankService userRankService,
-        IStreamStatus streamStatusManager,
-        BroadcastScheduler broadcastScheduler,
-        UserMessagesManagementService userMessagesManagementService,
-        TwitchChatHandler twitchChatHandler,
-        IEventBus eventBus,
-        BroadcastProfilesManager broadcastProfilesManager,
-        IGameCategoryResolver gameCategoryResolver,
-        IBotUserIdProvider botUserIdProvider,
-        ILoggerFactory loggerFactory)
+        IStreamStatus streamStatusManager)
     {
+        _forms = forms;
         _chatHistoryManager = chatHistoryManager;
         _httpServer = httpServer;
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
-        _oauthService = oauthService;
-        _statisticsCollector = statisticsCollector;
-        _userRankService = userRankService;
         _streamStatusManager = streamStatusManager;
-        _userMessagesManagementService = userMessagesManagementService;
-        _twitchChatHandler = twitchChatHandler;
-        _broadcastProfilesManager = broadcastProfilesManager;
-        _gameCategoryResolver = gameCategoryResolver;
-        _botUserIdProvider = botUserIdProvider;
-        _loggerFactory = loggerFactory;
 
         InitializeComponent();
 
-        Text = $"Попрощайка Бот v{GetDisplayVersion()}";
+        services.HydrateDescendants(this);
+        services.HydrateDescendants(_chatHost);
+        services.HydrateDescendants(_broadcastProfilesPanel);
 
-        _broadcastProfileQuickPanel.Setup(_broadcastProfilesManager, eventBus);
-        _broadcastProfilesPanel.Setup(_broadcastProfilesManager, _gameCategoryResolver, eventBus, _settingsManager, _streamStatusManager);
+        Text = $"Попрощайка Бот v{GetDisplayVersion()}";
 
         _contentControls[PanelContent.Logs] = _logTextBox;
         _contentControls[PanelContent.Chat] = _chatHost;
@@ -98,16 +69,15 @@ public partial class MainForm : Form
         _busSubscriptions.Add(eventBus.Subscribe<StreamWentOffline>(_ => OnStreamStatusChanged()));
 
         LoadSettings();
-        _broadcastInfoWidget.Setup(_settingsManager, _streamStatusManager, broadcastScheduler, _twitchChatHandler, eventBus);
         UpdateStreamStatus();
-
-        _chatDisplay.Setup(eventBus);
 
         _httpServer.LogMessage += OnHttpServerLogMessage;
 
         AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
+
+        Disposed += OnFormDisposed;
 
         InitializeWebViewAsync();
     }
@@ -146,7 +116,7 @@ public partial class MainForm : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    protected override void OnFormClosing(FormClosingEventArgs e)
+    private void OnFormDisposed(object? sender, EventArgs e)
     {
         foreach (var subscription in _busSubscriptions)
         {
@@ -163,8 +133,6 @@ public partial class MainForm : Form
         {
             AddLogMessage($"Ошибка остановки HTTP сервера: {ex.Message}");
         }
-
-        base.OnFormClosing(e);
     }
 
     private async void OnConnectButtonClicked(object? sender, EventArgs e)
@@ -235,8 +203,7 @@ public partial class MainForm : Form
 
     private void OnSettingsButtonClicked(object? sender, EventArgs e)
     {
-        var basicLogger = _loggerFactory.CreateLogger<BasicSettingsControl>();
-        using var settingsForm = new SettingsForm(_settingsManager, _oauthService, _httpServer, _broadcastProfilesManager, _gameCategoryResolver, _botUserIdProvider, basicLogger);
+        var settingsForm = _forms.Create<SettingsForm>();
 
         if (settingsForm.ShowDialog(this) != DialogResult.OK)
         {
@@ -426,7 +393,7 @@ public partial class MainForm : Form
     {
         if (_юзерФорма == null || _юзерФорма.IsDisposed)
         {
-            _юзерФорма = new(_statisticsCollector, _userRankService, _userMessagesManagementService, _twitchChatHandler);
+            _юзерФорма = _forms.Create<UserStatisticsForm>();
             _юзерФорма.Show(this);
         }
         else
