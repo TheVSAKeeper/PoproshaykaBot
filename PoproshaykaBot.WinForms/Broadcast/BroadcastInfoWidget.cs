@@ -43,6 +43,11 @@ public sealed partial class BroadcastInfoWidget : UserControl
             return;
         }
 
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
         _initialized = true;
 
         _subs.Add(Bus.SubscribeOnUi<BroadcastSchedulerStateChanged>(this, _ => UpdateState()));

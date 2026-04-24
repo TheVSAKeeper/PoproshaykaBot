@@ -123,6 +123,11 @@ public partial class ChatDisplay : UserControl
             return;
         }
 
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
         _initialized = true;
 
         _subs.Add(Bus.SubscribeOnUi<ChatMessageReceived>(this, @event => AddChatMessage(@event.HistoryEntry)));

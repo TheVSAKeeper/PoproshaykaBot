@@ -45,6 +45,11 @@ public partial class BroadcastProfileQuickPanel : UserControl
             return;
         }
 
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
         _initialized = true;
 
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfilesChanged>(this, _ => ReloadProfiles()));
