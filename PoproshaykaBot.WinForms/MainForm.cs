@@ -185,7 +185,7 @@ public partial class MainForm : Form
 
     private void OnSettingsButtonClicked(object? sender, EventArgs e)
     {
-        var settingsForm = _forms.Create<SettingsForm>();
+        using var settingsForm = _forms.Create<SettingsForm>();
 
         if (settingsForm.ShowDialog(this) != DialogResult.OK)
         {

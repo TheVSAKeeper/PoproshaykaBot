@@ -11,7 +11,7 @@ public sealed class FormFactory(IServiceScopeFactory scopeFactory) : IFormFactor
 
         scope.ServiceProvider.HydrateDescendants(form);
 
-        form.FormClosed += (_, _) => scope.Dispose();
+        form.Disposed += (_, _) => scope.Dispose();
 
         return form;
     }

@@ -256,7 +256,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private bool EditProfile(BroadcastProfile profile)
     {
-        var dialog = Forms.Create<BroadcastProfileEditDialog>();
+        using var dialog = Forms.Create<BroadcastProfileEditDialog>();
         dialog.LoadFrom(profile);
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
