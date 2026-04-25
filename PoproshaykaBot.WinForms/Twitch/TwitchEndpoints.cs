@@ -18,6 +18,7 @@ public static class TwitchEndpoints
     public const string HelixChatBadgesGlobal = "helix/chat/badges/global";
     public const string HelixChatEmotesGlobal = "helix/chat/emotes/global";
     public const string HelixEventSubSubscriptions = "helix/eventsub/subscriptions";
+    public const string HelixPolls = "helix/polls";
     public const string HelixHttpClientName = "twitch-helix";
     public const string IdHttpClientName = "twitch-id";
 }

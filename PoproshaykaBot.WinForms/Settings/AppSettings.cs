@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Polls;
 using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms.Settings;
@@ -38,6 +39,8 @@ public class TwitchSettings
         "user:bot",
         "channel:bot",
         "channel:manage:broadcast",
+        "channel:manage:polls",
+        "channel:read:polls",
     ];
 
     /// <summary>
@@ -61,6 +64,8 @@ public class TwitchSettings
     public InfrastructureSettings Infrastructure { get; set; } = new();
 
     public BroadcastProfilesSettings BroadcastProfiles { get; set; } = new();
+
+    public PollsSettings Polls { get; set; } = new();
 }
 
 public class MessageSettings

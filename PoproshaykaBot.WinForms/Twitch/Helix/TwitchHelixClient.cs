@@ -196,6 +196,88 @@ public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILog
         return subscription.Id;
     }
 
+    public async Task<HelixPollInfo> CreatePollAsync(CreatePollRequest request, CancellationToken cancellationToken = default)
+    {
+        var body = new HelixCreatePollDto(request.BroadcasterId,
+            request.Title,
+            request.Choices.Select(c => new HelixCreatePollChoiceDto(c)).ToArray(),
+            request.DurationSeconds,
+            request.ChannelPointsVotingEnabled,
+            request.ChannelPointsVotingEnabled ? request.ChannelPointsPerVote : 0);
+
+        using var client = httpClientFactory.CreateClient(TwitchEndpoints.HelixHttpClientName);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, TwitchEndpoints.HelixPolls)
+        {
+            Content = JsonContent.Create(body, options: JsonOptions),
+        };
+
+        using var response = await client.SendAsync(httpRequest, cancellationToken);
+        await EnsureSuccessAsync(httpRequest, response, cancellationToken);
+
+        var envelope = await response.Content.ReadFromJsonAsync<HelixEnvelope<HelixPollDto>>(JsonOptions, cancellationToken);
+        var poll = envelope?.Data?.FirstOrDefault()
+                   ?? throw new InvalidOperationException("Helix вернул пустой ответ на создание голосования.");
+
+        return MapPoll(poll);
+    }
+
+    public async Task<HelixPollInfo> EndPollAsync(EndPollRequest request, CancellationToken cancellationToken = default)
+    {
+        var body = new HelixEndPollDto(request.BroadcasterId,
+            request.PollId,
+            request.ShowResult ? "TERMINATED" : "ARCHIVED");
+
+        using var client = httpClientFactory.CreateClient(TwitchEndpoints.HelixHttpClientName);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Patch, TwitchEndpoints.HelixPolls)
+        {
+            Content = JsonContent.Create(body, options: JsonOptions),
+        };
+
+        using var response = await client.SendAsync(httpRequest, cancellationToken);
+        await EnsureSuccessAsync(httpRequest, response, cancellationToken);
+
+        var envelope = await response.Content.ReadFromJsonAsync<HelixEnvelope<HelixPollDto>>(JsonOptions, cancellationToken);
+        var poll = envelope?.Data?.FirstOrDefault()
+                   ?? throw new InvalidOperationException("Helix вернул пустой ответ на завершение голосования.");
+
+        return MapPoll(poll);
+    }
+
+    public async Task<IReadOnlyList<HelixPollInfo>> GetPollsAsync(
+        string broadcasterId,
+        string? status = null,
+        int first = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var uri = $"{TwitchEndpoints.HelixPolls}?broadcaster_id={Uri.EscapeDataString(broadcasterId)}&first={first}";
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            uri += $"&status={Uri.EscapeDataString(status)}";
+        }
+
+        var data = await GetCollectionAsync<HelixPollDto>(uri, cancellationToken);
+        return data.Select(MapPoll).ToArray();
+    }
+
+    private static HelixPollInfo MapPoll(HelixPollDto dto)
+    {
+        var choices = (dto.Choices ?? [])
+            .Select(c => new HelixPollChoice(c.Id, c.Title, c.Votes, c.ChannelPointsVotes, c.BitsVotes))
+            .ToArray();
+
+        return new(dto.Id,
+            dto.BroadcasterId,
+            dto.Title,
+            choices,
+            dto.ChannelPointsVotingEnabled,
+            dto.ChannelPointsPerVote,
+            dto.Status,
+            dto.Duration,
+            dto.StartedAt,
+            dto.EndedAt);
+    }
+
     private static UserInfo MapUser(HelixUserDto dto)
     {
         return new(dto.Id, dto.Login, dto.DisplayName, dto.Type, dto.BroadcasterType,

@@ -45,6 +45,8 @@ partial class SettingsForm
         _obsChatSettingsControl = new ObsChatSettingsControl();
         _autoBroadcastTabPage = new TabPage();
         _autoBroadcastSettingsControl = new AutoBroadcastSettingsControl();
+        _pollsTabPage = new TabPage();
+        _pollsSettingsControl = new PollsSettingsControl();
         _miscTabPage = new TabPage();
         _miscSettingsControl = new MiscSettingsControl();
         _buttonPanel = new FlowLayoutPanel();
@@ -61,6 +63,7 @@ partial class SettingsForm
         _oauthTabPage.SuspendLayout();
         _obsChatTabPage.SuspendLayout();
         _autoBroadcastTabPage.SuspendLayout();
+        _pollsTabPage.SuspendLayout();
         _miscTabPage.SuspendLayout();
         _buttonPanel.SuspendLayout();
         SuspendLayout();
@@ -90,6 +93,7 @@ partial class SettingsForm
         _tabControl.Controls.Add(_oauthTabPage);
         _tabControl.Controls.Add(_obsChatTabPage);
         _tabControl.Controls.Add(_autoBroadcastTabPage);
+        _tabControl.Controls.Add(_pollsTabPage);
         _tabControl.Controls.Add(_miscTabPage);
         _tabControl.Dock = DockStyle.Fill;
         _tabControl.Location = new Point(15, 15);
@@ -244,6 +248,28 @@ partial class SettingsForm
         _autoBroadcastSettingsControl.Size = new Size(593, 529);
         _autoBroadcastSettingsControl.TabIndex = 0;
         _autoBroadcastSettingsControl.SettingChanged += OnSettingChanged;
+//
+        // _pollsTabPage
+        //
+        _pollsTabPage.Controls.Add(_pollsSettingsControl);
+        _pollsTabPage.Location = new Point(4, 24);
+        _pollsTabPage.Name = "_pollsTabPage";
+        _pollsTabPage.Padding = new Padding(10, 10, 10, 10);
+        _pollsTabPage.Size = new Size(613, 549);
+        _pollsTabPage.TabIndex = 8;
+        _pollsTabPage.Text = "Голосования";
+        _pollsTabPage.UseVisualStyleBackColor = true;
+        //
+        // _pollsSettingsControl
+        //
+        _pollsSettingsControl.Dock = DockStyle.Fill;
+        _pollsSettingsControl.Location = new Point(10, 10);
+        _pollsSettingsControl.Margin = new Padding(6, 7, 6, 7);
+        _pollsSettingsControl.Name = "_pollsSettingsControl";
+        _pollsSettingsControl.Size = new Size(593, 529);
+        _pollsSettingsControl.TabIndex = 0;
+        _pollsSettingsControl.SettingChanged += OnSettingChanged;
+        //
         //
         // _miscTabPage
         // 
@@ -352,6 +378,7 @@ partial class SettingsForm
         _oauthTabPage.ResumeLayout(false);
         _obsChatTabPage.ResumeLayout(false);
         _autoBroadcastTabPage.ResumeLayout(false);
+        _pollsTabPage.ResumeLayout(false);
         _miscTabPage.ResumeLayout(false);
         _buttonPanel.ResumeLayout(false);
         ResumeLayout(false);
@@ -377,6 +404,8 @@ partial class SettingsForm
     private ObsChatSettingsControl _obsChatSettingsControl;
     private AutoBroadcastSettingsControl _autoBroadcastSettingsControl;
     private MiscSettingsControl _miscSettingsControl;
+    private TabPage _pollsTabPage;
+    private PollsSettingsControl _pollsSettingsControl;
     private FlowLayoutPanel _buttonPanel;
     private Button _resetButton;
     private Button _okButton;

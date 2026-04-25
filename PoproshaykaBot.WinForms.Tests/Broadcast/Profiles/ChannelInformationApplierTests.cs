@@ -80,7 +80,7 @@ public class ChannelInformationApplierTests
 
         await _applier.ApplyAsync(profile, CancellationToken.None);
 
-        await _channelsApi.DidNotReceiveWithAnyArgs().ModifyChannelInformationAsync(default!, default!, default);
+        await _channelsApi.DidNotReceiveWithAnyArgs().ModifyChannelInformationAsync(null!, null!, CancellationToken.None);
         await _eventBus.Received(1)
             .PublishAsync(Arg.Any<BroadcastProfileApplyFailed>(),
                 Arg.Any<CancellationToken>());

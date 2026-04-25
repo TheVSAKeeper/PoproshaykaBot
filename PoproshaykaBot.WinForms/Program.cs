@@ -10,6 +10,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting.Components;
+using PoproshaykaBot.WinForms.Polls;
 using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Statistics;
@@ -184,6 +185,7 @@ public static class Program
 
         services.AddHttpClient();
 
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton<InMemoryEventBus>();
         services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
         services.AddSingleton<UiEventDispatcher>();
@@ -246,6 +248,16 @@ public static class Program
         services.AddSingleton<GameCategoryResolver>();
         services.AddSingleton<IGameCategoryResolver>(sp => sp.GetRequiredService<GameCategoryResolver>());
         services.AddSingleton<BroadcastProfilesManager>();
+
+        services.AddSingleton<PollProfilesManager>();
+        services.AddSingleton<PollSnapshotStore>();
+        services.AddSingleton<PollsAvailabilityService>();
+        services.AddSingleton<PollController>();
+        services.AddSingleton<IPollController>(sp => sp.GetRequiredService<PollController>());
+        services.AddSingleton<PollEventSubscriber>();
+        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<PollEventSubscriber>());
+        services.AddSingleton<PollHistoryStore>();
+        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<PollHistoryStore>());
 
         services.AddSingleton<AudienceTracker>();
 

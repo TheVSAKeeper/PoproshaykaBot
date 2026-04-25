@@ -99,6 +99,7 @@ public partial class SettingsForm : Form
         _obsChatSettingsControl.LoadSettings(_settings.Twitch.ObsChat);
         _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.LoadSettings(_settings);
+        _pollsSettingsControl.LoadSettings(_settings.Twitch.Polls);
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -114,6 +115,7 @@ public partial class SettingsForm : Form
         _obsChatSettingsControl.SaveSettings(_settings.Twitch.ObsChat);
         _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.SaveSettings(_settings);
+        _pollsSettingsControl.SaveSettings(_settings.Twitch.Polls);
     }
 
     private void UpdateButtonStates()
@@ -127,6 +129,7 @@ public partial class SettingsForm : Form
         {
             SaveSettingsFromControls();
             _settings.Twitch.BroadcastProfiles = _settingsManager.Current.Twitch.BroadcastProfiles;
+            _settings.Twitch.Polls.Profiles = _settingsManager.Current.Twitch.Polls.Profiles;
             _settings.Twitch.Infrastructure.RecentCategories = _settingsManager.Current.Twitch.Infrastructure.RecentCategories;
             _settingsManager.SaveSettings(_settings);
             _hasChanges = false;

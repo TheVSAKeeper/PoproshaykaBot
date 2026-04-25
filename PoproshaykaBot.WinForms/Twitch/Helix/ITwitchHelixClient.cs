@@ -35,4 +35,14 @@ public interface ITwitchHelixClient
         IReadOnlyDictionary<string, string> condition,
         string sessionId,
         CancellationToken cancellationToken = default);
+
+    Task<HelixPollInfo> CreatePollAsync(CreatePollRequest request, CancellationToken cancellationToken = default);
+
+    Task<HelixPollInfo> EndPollAsync(EndPollRequest request, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<HelixPollInfo>> GetPollsAsync(
+        string broadcasterId,
+        string? status = null,
+        int first = 20,
+        CancellationToken cancellationToken = default);
 }

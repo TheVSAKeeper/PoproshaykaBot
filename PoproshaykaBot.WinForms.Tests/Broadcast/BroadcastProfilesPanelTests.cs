@@ -34,7 +34,7 @@ public class BroadcastProfilesPanelTests
 
         manager.Upsert(new() { Name = "Профиль 1" });
 
-        Assert.That(manager.GetAll().Select(p => p.Name), Is.EquivalentTo(new[] { "Профиль 1" }));
+        Assert.That(manager.GetAll().Select(p => p.Name), Is.EquivalentTo(["Профиль 1"]));
     }
 
     private static BroadcastProfilesManager CreateManager()

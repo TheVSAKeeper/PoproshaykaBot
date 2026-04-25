@@ -8,6 +8,13 @@ public static class HelixErrorMessages
     {
         if (exception is HelixRequestException helixEx)
         {
+            var twitchMessage = helixEx.TwitchErrorMessage ?? string.Empty;
+
+            if (twitchMessage.Contains("not a partner or affiliate", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Эта функция Twitch доступна только каналам со статусом Partner или Affiliate.";
+            }
+
             return helixEx.StatusCode switch
             {
                 HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
