@@ -100,19 +100,25 @@ public class MessageSettings
     public string DonateCommandMessage { get; set; } = "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217";
 }
 
-public enum PanelContent
+public class DashboardTileSettings
 {
-    None = 0,
-    Logs = 1,
-    Chat = 2,
-    BroadcastProfiles = 3,
-    ChatOverlay = 4,
+    public string Id { get; set; } = string.Empty;
+    public string TypeId { get; set; } = string.Empty;
+    public int Order { get; set; }
+    public int ColumnSpan { get; set; } = 1;
+    public int RowSpan { get; set; } = 1;
+    public bool IsVisible { get; set; } = true;
+}
+
+public class DashboardLayoutSettings
+{
+    public int Version { get; set; } = 1;
+    public List<DashboardTileSettings> Tiles { get; set; } = [];
 }
 
 public class UiSettings
 {
-    public PanelContent LeftSlotContent { get; set; } = PanelContent.Logs;
-    public PanelContent RightSlotContent { get; set; } = PanelContent.BroadcastProfiles;
+    public DashboardLayoutSettings? Dashboard { get; set; }
 }
 
 public class InfrastructureSettings

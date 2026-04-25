@@ -16,6 +16,7 @@ sealed partial class StreamInfoWidget
 
     private void InitializeComponent()
     {
+        components = new System.ComponentModel.Container();
         _mainTableLayoutPanel = new TableLayoutPanel();
         _thumbnailPictureBox = new PictureBox();
         _infoTableLayoutPanel = new TableLayoutPanel();
@@ -28,12 +29,13 @@ sealed partial class StreamInfoWidget
         _uptimeLabel = new Label();
         _lastUpdateLabel = new Label();
         _openChannelButton = new Button();
+        _streamInfoTimer = new System.Windows.Forms.Timer(components);
         _mainTableLayoutPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)_thumbnailPictureBox).BeginInit();
         _infoTableLayoutPanel.SuspendLayout();
         _statsTableLayoutPanel.SuspendLayout();
         SuspendLayout();
-        // 
+        //
         // _mainTableLayoutPanel
         // 
         _mainTableLayoutPanel.ColumnCount = 2;
@@ -198,6 +200,11 @@ sealed partial class StreamInfoWidget
         _openChannelButton.Visible = false;
         _openChannelButton.Click += OnOpenChannelClick;
         //
+        // _streamInfoTimer
+        //
+        _streamInfoTimer.Interval = 60000;
+        _streamInfoTimer.Tick += OnStreamInfoTimerTick;
+        //
         // StreamInfoWidget
         //
         AutoScaleDimensions = new SizeF(7F, 15F);
@@ -227,5 +234,6 @@ sealed partial class StreamInfoWidget
     private Label _viewersLabel;
     private Label _uptimeLabel;
     private TableLayoutPanel _mainTableLayoutPanel;
+    private System.Windows.Forms.Timer _streamInfoTimer;
 
 }

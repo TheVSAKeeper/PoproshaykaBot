@@ -91,18 +91,22 @@ public class MainFormSmokeTests
     }
 
     [Test]
-    public void MainWindow_ShouldShowBothSlots_WithDefaultSelection()
+    public void MainWindow_ShouldShowDashboard_WithDefaultTiles()
     {
-        var leftSlot = _mainWindow!
-            .FindFirstDescendant(cf => cf.ByAutomationId("_leftSlot"));
+        var dashboard = _mainWindow!
+            .FindFirstDescendant(cf => cf.ByAutomationId("_dashboardControl"));
 
-        var rightSlot = _mainWindow!
-            .FindFirstDescendant(cf => cf.ByAutomationId("_rightSlot"));
+        var streamTile = _mainWindow!
+            .FindFirstDescendant(cf => cf.ByAutomationId("_stream-infoTile"));
+
+        var broadcastTile = _mainWindow!
+            .FindFirstDescendant(cf => cf.ByAutomationId("_broadcast-statusTile"));
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(leftSlot, Is.Not.Null, "Левый слот должен быть в дереве UI");
-            Assert.That(rightSlot, Is.Not.Null, "Правый слот должен быть в дереве UI");
+            Assert.That(dashboard, Is.Not.Null, "Dashboard должен быть в дереве UI");
+            Assert.That(streamTile, Is.Not.Null, "Тайл стрима должен быть в дереве UI");
+            Assert.That(broadcastTile, Is.Not.Null, "Тайл рассылки должен быть в дереве UI");
         }
     }
 

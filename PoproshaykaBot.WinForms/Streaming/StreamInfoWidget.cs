@@ -1,15 +1,27 @@
-﻿using System.Diagnostics;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Infrastructure.Events;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
+using System.Diagnostics;
 
 namespace PoproshaykaBot.WinForms.Streaming;
 
 public sealed partial class StreamInfoWidget : UserControl
 {
+    private readonly List<IDisposable> _subs = [];
     private string? _lastThumbnailUrl;
+    private bool _initialized;
 
     public StreamInfoWidget()
     {
         InitializeComponent();
     }
+
+    [Inject]
+    public IStreamStatus Stream { get; internal init; } = null!;
+
+    [Inject]
+    public IEventBus Bus { get; internal init; } = null!;
 
     public void UpdateStatus(StreamStatus status, StreamInfo? info)
     {
@@ -74,6 +86,51 @@ public sealed partial class StreamInfoWidget : UserControl
                 ClearInfoLabels("Статус не определен");
                 break;
         }
+
+        UpdateRefreshTimer(status);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
+        _initialized = true;
+
+        _subs.Add(Bus.SubscribeOnUi<StreamWentOnline>(this, _ => UpdateCurrentStatus()));
+        _subs.Add(Bus.SubscribeOnUi<StreamWentOffline>(this, _ => UpdateCurrentStatus()));
+        _subs.DisposeOnClose(this);
+
+        UpdateCurrentStatus();
+    }
+
+    private async void OnStreamInfoTimerTick(object? sender, EventArgs e)
+    {
+        if (Stream.CurrentStatus != StreamStatus.Online)
+        {
+            return;
+        }
+
+        try
+        {
+            await Stream.RefreshCurrentStatusAsync();
+            UpdateCurrentStatus();
+        }
+        catch (Exception exception)
+        {
+            _ = Bus.PublishAsync(new BotLogEntry(BotLogLevel.Error,
+                "Stream",
+                $"Ошибка обновления информации о стриме: {exception.Message}"));
+        }
     }
 
     private void OnOpenChannelClick(object? sender, EventArgs e)
@@ -101,6 +158,29 @@ public sealed partial class StreamInfoWidget : UserControl
                              Ошибка: {ex.Message}
                              """,
                 "Ошибка навигации", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void UpdateCurrentStatus()
+    {
+        UpdateStatus(Stream.CurrentStatus, Stream.CurrentStream);
+    }
+
+    private void UpdateRefreshTimer(StreamStatus status)
+    {
+        if (status == StreamStatus.Online)
+        {
+            if (!_streamInfoTimer.Enabled)
+            {
+                _streamInfoTimer.Start();
+            }
+        }
+        else
+        {
+            if (_streamInfoTimer.Enabled)
+            {
+                _streamInfoTimer.Stop();
+            }
         }
     }
 

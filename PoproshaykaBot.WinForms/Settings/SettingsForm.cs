@@ -100,6 +100,7 @@ public partial class SettingsForm : Form
         _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.LoadSettings(_settings);
         _pollsSettingsControl.LoadSettings(_settings.Twitch.Polls);
+        _dashboardSettingsControl.LoadSettings(_settings.Ui);
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -116,6 +117,7 @@ public partial class SettingsForm : Form
         _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.SaveSettings(_settings);
         _pollsSettingsControl.SaveSettings(_settings.Twitch.Polls);
+        _dashboardSettingsControl.SaveSettings(_settings.Ui);
     }
 
     private void UpdateButtonStates()

@@ -3,28 +3,22 @@ using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Settings;
-using PoproshaykaBot.WinForms.Streaming;
 using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms;
 
 public partial class MainForm : Form
 {
-    private const int MaxLogLines = 500;
     private readonly IFormFactory _forms;
     private readonly IEventBus _eventBus;
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly SettingsManager _settingsManager;
     private readonly BotConnectionManager _connectionManager;
-    private readonly IStreamStatus _streamStatusManager;
     private readonly List<IDisposable> _subs = [];
-    private readonly Dictionary<PanelContent, Control?> _contentControls = new();
 
     private BotLifecyclePhase _currentPhase = BotLifecyclePhase.Idle;
-    private bool _suppressSlotComboEvents;
     private bool _shutdownStarted;
     private bool _initialized;
     private UserStatisticsForm? _userStatisticsForm;
@@ -35,21 +29,17 @@ public partial class MainForm : Form
         IEventBus eventBus,
         ChatHistoryManager chatHistoryManager,
         BotConnectionManager connectionManager,
-        SettingsManager settingsManager,
-        IStreamStatus streamStatusManager)
+        SettingsManager settingsManager)
     {
         _forms = forms;
         _eventBus = eventBus;
         _chatHistoryManager = chatHistoryManager;
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
-        _streamStatusManager = streamStatusManager;
 
         InitializeComponent();
 
         services.HydrateDescendants(this);
-        services.HydrateDescendants(_chatDisplay);
-        services.HydrateDescendants(_broadcastProfilesPanel);
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -65,25 +55,12 @@ public partial class MainForm : Form
 
         Text = $"Попрощайка Бот v{GetDisplayVersion()}";
 
-        _contentControls[PanelContent.Logs] = _logTextBox;
-        _contentControls[PanelContent.Chat] = _chatDisplay;
-        _contentControls[PanelContent.ChatOverlay] = _overlayWebView;
-        _contentControls[PanelContent.BroadcastProfiles] = _broadcastProfilesPanel;
-        _contentControls[PanelContent.None] = null;
-
-        InitializeSlots();
-
-        _subs.Add(_eventBus.SubscribeOnUi<BotLogEntry>(this, OnBotLogEntry));
         _subs.Add(_eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(this, statusEvent => OnBotConnectionProgress(statusEvent.Message)));
         _subs.Add(_eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(this, OnBotLifecyclePhaseChanged));
-        _subs.Add(_eventBus.SubscribeOnUi<StreamWentOnline>(this, _ => UpdateStreamStatus()));
-        _subs.Add(_eventBus.SubscribeOnUi<StreamWentOffline>(this, _ => UpdateStreamStatus()));
         _subs.DisposeOnClose(this);
 
         LoadSettings();
-        UpdateStreamStatus();
-
-        AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
+        PublishLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
     }
@@ -100,16 +77,6 @@ public partial class MainForm : Form
         _shutdownStarted = true;
         e.Cancel = true;
         _ = ShutdownAndCloseAsync();
-    }
-
-    protected override void OnFormClosed(FormClosedEventArgs e)
-    {
-        base.OnFormClosed(e);
-
-        DisposeIfOrphan(_logTextBox);
-        DisposeIfOrphan(_chatDisplay);
-        DisposeIfOrphan(_overlayWebView);
-        DisposeIfOrphan(_broadcastProfilesPanel);
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -141,7 +108,7 @@ public partial class MainForm : Form
 
             case BotLifecyclePhase.Connecting:
                 _connectionManager.CancelConnection();
-                AddLogMessage("Отмена подключения...");
+                PublishLogMessage("Отмена подключения...");
                 break;
 
             case BotLifecyclePhase.Connected:
@@ -153,36 +120,6 @@ public partial class MainForm : Form
         }
     }
 
-    private void OnLeftSlotComboChanged(object? sender, EventArgs e)
-    {
-        if (_suppressSlotComboEvents)
-        {
-            return;
-        }
-
-        if (_leftContentCombo.SelectedItem is not PanelContentItem item)
-        {
-            return;
-        }
-
-        ApplySlotChange(item.Value, null);
-    }
-
-    private void OnRightSlotComboChanged(object? sender, EventArgs e)
-    {
-        if (_suppressSlotComboEvents)
-        {
-            return;
-        }
-
-        if (_rightContentCombo.SelectedItem is not PanelContentItem item)
-        {
-            return;
-        }
-
-        ApplySlotChange(null, item.Value);
-    }
-
     private void OnSettingsButtonClicked(object? sender, EventArgs e)
     {
         using var settingsForm = _forms.Create<SettingsForm>();
@@ -192,39 +129,13 @@ public partial class MainForm : Form
             return;
         }
 
-        LoadSettings();
-        AddLogMessage("Настройки обновлены.");
+        LoadSettings(reloadDashboard: true);
+        PublishLogMessage("Настройки обновлены.");
     }
 
     private void OnUserStatisticsButtonClicked(object? sender, EventArgs e)
     {
         OnOpenUserStatistics();
-    }
-
-    private async void OnStreamInfoTimerTick(object? sender, EventArgs e)
-    {
-        if (_streamStatusManager.CurrentStatus != StreamStatus.Online)
-        {
-            return;
-        }
-
-        try
-        {
-            await _streamStatusManager.RefreshCurrentStatusAsync();
-            UpdateStreamInfo();
-        }
-        catch (Exception exception)
-        {
-            AddLogMessage($"Ошибка обновления информации о стриме: {exception.Message}");
-        }
-    }
-
-    private static void DisposeIfOrphan(Control? control)
-    {
-        if (control is { IsDisposed: false, Parent: null })
-        {
-            control.Dispose();
-        }
     }
 
     private static string GetDisplayVersion()
@@ -238,43 +149,6 @@ public partial class MainForm : Form
         }
 
         return version;
-    }
-
-    private static void RebuildSlotCombo(ToolStripComboBox combo, IEnumerable<PanelContent> all)
-    {
-        combo.Items.Clear();
-
-        foreach (var content in all)
-        {
-            combo.Items.Add(new PanelContentItem(content));
-        }
-    }
-
-    private static void SelectComboValue(ToolStripComboBox combo, PanelContent value)
-    {
-        for (var i = 0; i < combo.Items.Count; i++)
-        {
-            if (combo.Items[i] is not PanelContentItem item || item.Value != value)
-            {
-                continue;
-            }
-
-            combo.SelectedIndex = i;
-            return;
-        }
-
-        combo.SelectedIndex = -1;
-    }
-
-    private void OnBotLogEntry(BotLogEntry entry)
-    {
-        var message = entry.Source switch
-        {
-            "Http" => $"HTTP: {entry.Message}",
-            _ => entry.Message,
-        };
-
-        AddLogMessage(message);
     }
 
     private async Task ShutdownAndCloseAsync()
@@ -293,55 +167,12 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            AddLogMessage($"Ошибка завершения работы: {ex.Message}");
+            PublishLogMessage($"Ошибка завершения работы: {ex.Message}", BotLogLevel.Error);
         }
         finally
         {
             Close();
         }
-    }
-
-    private void ApplySlotChange(PanelContent? left, PanelContent? right)
-    {
-        var settings = _settingsManager.Current;
-
-        if (left.HasValue)
-        {
-            settings.Ui.LeftSlotContent = left.Value;
-        }
-
-        if (right.HasValue)
-        {
-            settings.Ui.RightSlotContent = right.Value;
-        }
-
-        if (settings.Ui.LeftSlotContent != PanelContent.None && settings.Ui.LeftSlotContent == settings.Ui.RightSlotContent)
-        {
-            if (left.HasValue)
-            {
-                settings.Ui.RightSlotContent = PanelContent.None;
-            }
-            else
-            {
-                settings.Ui.LeftSlotContent = PanelContent.None;
-            }
-        }
-
-        _settingsManager.SaveSettings(settings);
-
-        _suppressSlotComboEvents = true;
-
-        try
-        {
-            SelectComboValue(_leftContentCombo, settings.Ui.LeftSlotContent);
-            SelectComboValue(_rightContentCombo, settings.Ui.RightSlotContent);
-        }
-        finally
-        {
-            _suppressSlotComboEvents = false;
-        }
-
-        ApplySlotSelection();
     }
 
     private void OnBotLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)
@@ -352,20 +183,19 @@ public partial class MainForm : Form
         switch (phaseEvent.Phase)
         {
             case BotLifecyclePhase.Connecting:
-                AddLogMessage("Подключение бота...");
+                PublishLogMessage("Подключение бота...");
                 break;
 
             case BotLifecyclePhase.Connected:
-                AddLogMessage("Бот успешно подключен!");
-                UpdateStreamStatus();
+                PublishLogMessage("Бот успешно подключен!");
                 break;
 
             case BotLifecyclePhase.Cancelled:
-                AddLogMessage("Подключение отменено пользователем.");
+                PublishLogMessage("Подключение отменено пользователем.");
                 break;
 
             case BotLifecyclePhase.Failed:
-                AddLogMessage($"Ошибка подключения бота: {phaseEvent.Exception?.Message}");
+                PublishLogMessage($"Ошибка подключения бота: {phaseEvent.Exception?.Message}", BotLogLevel.Error);
 
                 MessageBox.Show($"Ошибка подключения бота: {phaseEvent.Exception?.Message}", "Ошибка",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -373,12 +203,11 @@ public partial class MainForm : Form
                 break;
 
             case BotLifecyclePhase.Disconnecting:
-                AddLogMessage("Отключение бота...");
+                PublishLogMessage("Отключение бота...");
                 break;
 
             case BotLifecyclePhase.Disconnected:
-                AddLogMessage("Бот отключен.");
-                UpdateStreamStatus();
+                PublishLogMessage("Бот отключен.");
                 break;
         }
     }
@@ -434,31 +263,6 @@ public partial class MainForm : Form
         }
     }
 
-    private void UpdateStreamStatus()
-    {
-        _streamInfoWidget.UpdateStatus(_streamStatusManager.CurrentStatus, _streamStatusManager.CurrentStream);
-
-        if (_streamStatusManager.CurrentStatus == StreamStatus.Online)
-        {
-            if (!_streamInfoTimer.Enabled)
-            {
-                _streamInfoTimer.Start();
-            }
-        }
-        else
-        {
-            if (_streamInfoTimer.Enabled)
-            {
-                _streamInfoTimer.Stop();
-            }
-        }
-    }
-
-    private void UpdateStreamInfo()
-    {
-        UpdateStreamStatus();
-    }
-
     private void ClearChatHistory()
     {
         var result = MessageBox.Show("Вы уверены, что хотите очистить всю историю сообщений чата?\n\nЭто действие нельзя отменить.",
@@ -473,127 +277,7 @@ public partial class MainForm : Form
         }
 
         _chatHistoryManager.ClearHistory();
-        AddLogMessage("История сообщений чата очищена.");
-    }
-
-    private void InitializeSlots()
-    {
-        var all = new[]
-        {
-            PanelContent.None,
-            PanelContent.Logs,
-            PanelContent.Chat,
-            PanelContent.ChatOverlay,
-            PanelContent.BroadcastProfiles,
-        };
-
-        RebuildSlotCombo(_leftContentCombo, all);
-        RebuildSlotCombo(_rightContentCombo, all);
-
-        var ui = _settingsManager.Current.Ui;
-
-        _suppressSlotComboEvents = true;
-
-        try
-        {
-            SelectComboValue(_leftContentCombo, ui.LeftSlotContent);
-            SelectComboValue(_rightContentCombo, ui.RightSlotContent);
-        }
-        finally
-        {
-            _suppressSlotComboEvents = false;
-        }
-
-        _leftContentCombo.SelectedIndexChanged += OnLeftSlotComboChanged;
-        _rightContentCombo.SelectedIndexChanged += OnRightSlotComboChanged;
-    }
-
-    private void ApplySlotSelection()
-    {
-        var ui = _settingsManager.Current.Ui;
-
-        _leftSlot.SetBody(ResolveBody(ui.LeftSlotContent));
-        _rightSlot.SetBody(ResolveBody(ui.RightSlotContent));
-
-        _slotsTableLayoutPanel.ColumnStyles.Clear();
-
-        var leftVisible = ui.LeftSlotContent != PanelContent.None;
-        var rightVisible = ui.RightSlotContent != PanelContent.None;
-
-        if (leftVisible && rightVisible)
-        {
-            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
-            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
-        }
-        else if (leftVisible)
-        {
-            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
-            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
-        }
-        else if (rightVisible)
-        {
-            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
-            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
-        }
-        else
-        {
-            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
-            _slotsTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
-        }
-
-        _leftSlot.Visible = leftVisible;
-        _rightSlot.Visible = rightVisible;
-
-        var overlayShown =
-            ui.LeftSlotContent == PanelContent.ChatOverlay || ui.RightSlotContent == PanelContent.ChatOverlay;
-
-        if (overlayShown)
-        {
-            if (_overlayWebView.CoreWebView2 == null)
-            {
-                InitializeWebViewAsync();
-            }
-            else
-            {
-                UpdateOverlayUrl();
-            }
-        }
-
-        _slotsTableLayoutPanel.PerformLayout();
-    }
-
-    private Control? ResolveBody(PanelContent content)
-    {
-        return _contentControls[content];
-    }
-
-    private async void InitializeWebViewAsync()
-    {
-        try
-        {
-            await _overlayWebView.EnsureCoreWebView2Async(null);
-            UpdateOverlayUrl();
-        }
-        catch (Exception ex)
-        {
-            AddLogMessage($"Ошибка инициализации WebView2: {ex.Message}");
-        }
-    }
-
-    private void UpdateOverlayUrl()
-    {
-        if (_overlayWebView.CoreWebView2 == null)
-        {
-            return;
-        }
-
-        var port = _settingsManager.Current.Twitch.HttpServerPort;
-        var url = $"http://localhost:{port}/chat?preview=true";
-
-        if (_overlayWebView.Source?.ToString() != url)
-        {
-            _overlayWebView.CoreWebView2.Navigate(url);
-        }
+        PublishLogMessage("История сообщений чата очищена.");
     }
 
     private void StartBotConnection()
@@ -604,25 +288,13 @@ public partial class MainForm : Form
         }
         catch (InvalidOperationException exception)
         {
-            AddLogMessage($"Ошибка запуска подключения: {exception.Message}");
+            PublishLogMessage($"Ошибка запуска подключения: {exception.Message}", BotLogLevel.Error);
         }
     }
 
-    private void AddLogMessage(string message)
+    private void PublishLogMessage(string message, BotLogLevel level = BotLogLevel.Information, string source = "Ui")
     {
-        if (_logTextBox.Lines.Length > MaxLogLines)
-        {
-            var charIndex = _logTextBox.GetFirstCharIndexFromLine(_logTextBox.Lines.Length - MaxLogLines);
-            if (charIndex > 0)
-            {
-                _logTextBox.Select(0, charIndex);
-                _logTextBox.SelectedText = "";
-            }
-        }
-
-        _logTextBox.AppendText($"{DateTime.Now:HH:mm:ss} - {message}{Environment.NewLine}");
-        _logTextBox.SelectionStart = _logTextBox.Text.Length;
-        _logTextBox.ScrollToCaret();
+        _ = _eventBus.PublishAsync(new BotLogEntry(level, source, message));
     }
 
     private void ShowConnectionProgress(bool show)
@@ -654,37 +326,26 @@ public partial class MainForm : Form
         }
         catch (Exception exception)
         {
-            AddLogMessage($"Ошибка при отключении бота: {exception.Message}");
+            PublishLogMessage($"Ошибка при отключении бота: {exception.Message}", BotLogLevel.Error);
         }
     }
 
-    private void LoadSettings()
+    private void LoadSettings(bool reloadDashboard = false)
     {
         try
         {
-            var settings = _settingsManager.Current;
-            AddLogMessage("Настройки Twitch загружены.");
-            ApplySlotSelection();
+            _ = _settingsManager.Current;
+
+            if (reloadDashboard)
+            {
+                _dashboardControl.ReloadDashboard();
+            }
+
+            PublishLogMessage("Настройки Twitch загружены.");
         }
         catch (Exception exception)
         {
-            AddLogMessage($"Ошибка загрузки настроек: {exception.Message}");
-        }
-    }
-
-    private sealed record PanelContentItem(PanelContent Value)
-    {
-        public override string ToString()
-        {
-            return Value switch
-            {
-                PanelContent.None => "— Нет —",
-                PanelContent.Logs => "📜 Логи",
-                PanelContent.Chat => "💬 Чат Twitch",
-                PanelContent.ChatOverlay => "👁️ OBS Чат",
-                PanelContent.BroadcastProfiles => "🎛 Профили",
-                _ => Value.ToString(),
-            };
+            PublishLogMessage($"Ошибка загрузки настроек: {exception.Message}", BotLogLevel.Error);
         }
     }
 }

@@ -47,6 +47,8 @@ partial class SettingsForm
         _autoBroadcastSettingsControl = new AutoBroadcastSettingsControl();
         _pollsTabPage = new TabPage();
         _pollsSettingsControl = new PollsSettingsControl();
+        _dashboardTabPage = new TabPage();
+        _dashboardSettingsControl = new DashboardSettingsControl();
         _miscTabPage = new TabPage();
         _miscSettingsControl = new MiscSettingsControl();
         _buttonPanel = new FlowLayoutPanel();
@@ -64,6 +66,7 @@ partial class SettingsForm
         _obsChatTabPage.SuspendLayout();
         _autoBroadcastTabPage.SuspendLayout();
         _pollsTabPage.SuspendLayout();
+        _dashboardTabPage.SuspendLayout();
         _miscTabPage.SuspendLayout();
         _buttonPanel.SuspendLayout();
         SuspendLayout();
@@ -94,6 +97,7 @@ partial class SettingsForm
         _tabControl.Controls.Add(_obsChatTabPage);
         _tabControl.Controls.Add(_autoBroadcastTabPage);
         _tabControl.Controls.Add(_pollsTabPage);
+        _tabControl.Controls.Add(_dashboardTabPage);
         _tabControl.Controls.Add(_miscTabPage);
         _tabControl.Dock = DockStyle.Fill;
         _tabControl.Location = new Point(15, 15);
@@ -270,9 +274,29 @@ partial class SettingsForm
         _pollsSettingsControl.TabIndex = 0;
         _pollsSettingsControl.SettingChanged += OnSettingChanged;
         //
+        // _dashboardTabPage
+        //
+        _dashboardTabPage.Controls.Add(_dashboardSettingsControl);
+        _dashboardTabPage.Location = new Point(4, 24);
+        _dashboardTabPage.Name = "_dashboardTabPage";
+        _dashboardTabPage.Padding = new Padding(10, 10, 10, 10);
+        _dashboardTabPage.Size = new Size(613, 549);
+        _dashboardTabPage.TabIndex = 9;
+        _dashboardTabPage.Text = "Дашборд";
+        _dashboardTabPage.UseVisualStyleBackColor = true;
+        //
+        // _dashboardSettingsControl
+        //
+        _dashboardSettingsControl.Dock = DockStyle.Fill;
+        _dashboardSettingsControl.Location = new Point(10, 10);
+        _dashboardSettingsControl.Margin = new Padding(6, 7, 6, 7);
+        _dashboardSettingsControl.Name = "_dashboardSettingsControl";
+        _dashboardSettingsControl.Size = new Size(593, 529);
+        _dashboardSettingsControl.TabIndex = 0;
+        _dashboardSettingsControl.SettingChanged += OnSettingChanged;
         //
         // _miscTabPage
-        // 
+        //
         _miscTabPage.Controls.Add(_miscSettingsControl);
         _miscTabPage.Location = new Point(4, 24);
         _miscTabPage.Name = "_miscTabPage";
@@ -379,6 +403,7 @@ partial class SettingsForm
         _obsChatTabPage.ResumeLayout(false);
         _autoBroadcastTabPage.ResumeLayout(false);
         _pollsTabPage.ResumeLayout(false);
+        _dashboardTabPage.ResumeLayout(false);
         _miscTabPage.ResumeLayout(false);
         _buttonPanel.ResumeLayout(false);
         ResumeLayout(false);
@@ -406,6 +431,8 @@ partial class SettingsForm
     private MiscSettingsControl _miscSettingsControl;
     private TabPage _pollsTabPage;
     private PollsSettingsControl _pollsSettingsControl;
+    private TabPage _dashboardTabPage;
+    private DashboardSettingsControl _dashboardSettingsControl;
     private FlowLayoutPanel _buttonPanel;
     private Button _resetButton;
     private Button _okButton;
