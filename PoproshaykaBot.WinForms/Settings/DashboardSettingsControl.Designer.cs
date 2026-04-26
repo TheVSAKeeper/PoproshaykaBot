@@ -16,30 +16,40 @@ partial class DashboardSettingsControl
 
     private void InitializeComponent()
     {
+        components = new System.ComponentModel.Container();
         _mainTableLayoutPanel = new TableLayoutPanel();
-        _toolbarPanel = new FlowLayoutPanel();
+        _toolbarFlowLayoutPanel = new FlowLayoutPanel();
+        _gridColumnsLabel = new Label();
+        _gridColumnsNumeric = new NumericUpDown();
+        _gridRowsLabel = new Label();
+        _gridRowsNumeric = new NumericUpDown();
         _resetLayoutButton = new Button();
+        _clearGridButton = new Button();
         _infoLabel = new Label();
-        _rowsTableLayoutPanel = new TableLayoutPanel();
-        _headerTableLayoutPanel = new TableLayoutPanel();
-        _visibleHeaderLabel = new Label();
-        _titleHeaderLabel = new Label();
-        _columnSpanHeaderLabel = new Label();
-        _rowSpanHeaderLabel = new Label();
-        _orderHeaderLabel = new Label();
+        _editorTableLayoutPanel = new TableLayoutPanel();
+        _paletteGroupBox = new GroupBox();
+        _paletteFlowLayoutPanel = new FlowLayoutPanel();
+        _gridGroupBox = new GroupBox();
+        _gridContainerPanel = new Panel();
+        _gridLayoutPanel = new TableLayoutPanel();
+        _tileContextMenu = new ContextMenuStrip(components);
         _mainTableLayoutPanel.SuspendLayout();
-        _toolbarPanel.SuspendLayout();
-        _rowsTableLayoutPanel.SuspendLayout();
-        _headerTableLayoutPanel.SuspendLayout();
+        _toolbarFlowLayoutPanel.SuspendLayout();
+        ((System.ComponentModel.ISupportInitialize)_gridColumnsNumeric).BeginInit();
+        ((System.ComponentModel.ISupportInitialize)_gridRowsNumeric).BeginInit();
+        _editorTableLayoutPanel.SuspendLayout();
+        _paletteGroupBox.SuspendLayout();
+        _gridGroupBox.SuspendLayout();
+        _gridContainerPanel.SuspendLayout();
         SuspendLayout();
         //
         // _mainTableLayoutPanel
         //
         _mainTableLayoutPanel.ColumnCount = 1;
         _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Controls.Add(_toolbarPanel, 0, 0);
+        _mainTableLayoutPanel.Controls.Add(_toolbarFlowLayoutPanel, 0, 0);
         _mainTableLayoutPanel.Controls.Add(_infoLabel, 0, 1);
-        _mainTableLayoutPanel.Controls.Add(_rowsTableLayoutPanel, 0, 2);
+        _mainTableLayoutPanel.Controls.Add(_editorTableLayoutPanel, 0, 2);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
@@ -50,30 +60,88 @@ partial class DashboardSettingsControl
         _mainTableLayoutPanel.Size = new Size(593, 529);
         _mainTableLayoutPanel.TabIndex = 0;
         //
-        // _toolbarPanel
+        // _toolbarFlowLayoutPanel
         //
-        _toolbarPanel.AutoSize = true;
-        _toolbarPanel.Controls.Add(_resetLayoutButton);
-        _toolbarPanel.Dock = DockStyle.Fill;
-        _toolbarPanel.FlowDirection = FlowDirection.LeftToRight;
-        _toolbarPanel.Location = new Point(3, 3);
-        _toolbarPanel.Margin = new Padding(3, 3, 3, 6);
-        _toolbarPanel.Name = "_toolbarPanel";
-        _toolbarPanel.Size = new Size(587, 31);
-        _toolbarPanel.TabIndex = 0;
+        _toolbarFlowLayoutPanel.AutoSize = true;
+        _toolbarFlowLayoutPanel.Controls.Add(_gridColumnsLabel);
+        _toolbarFlowLayoutPanel.Controls.Add(_gridColumnsNumeric);
+        _toolbarFlowLayoutPanel.Controls.Add(_gridRowsLabel);
+        _toolbarFlowLayoutPanel.Controls.Add(_gridRowsNumeric);
+        _toolbarFlowLayoutPanel.Controls.Add(_resetLayoutButton);
+        _toolbarFlowLayoutPanel.Controls.Add(_clearGridButton);
+        _toolbarFlowLayoutPanel.Dock = DockStyle.Fill;
+        _toolbarFlowLayoutPanel.FlowDirection = FlowDirection.LeftToRight;
+        _toolbarFlowLayoutPanel.Location = new Point(3, 3);
+        _toolbarFlowLayoutPanel.Margin = new Padding(3, 3, 3, 6);
+        _toolbarFlowLayoutPanel.Name = "_toolbarFlowLayoutPanel";
+        _toolbarFlowLayoutPanel.Size = new Size(587, 31);
+        _toolbarFlowLayoutPanel.TabIndex = 0;
+        //
+        // _gridColumnsLabel
+        //
+        _gridColumnsLabel.Anchor = AnchorStyles.Left;
+        _gridColumnsLabel.AutoSize = true;
+        _gridColumnsLabel.Margin = new Padding(0, 6, 6, 0);
+        _gridColumnsLabel.Name = "_gridColumnsLabel";
+        _gridColumnsLabel.TabIndex = 0;
+        _gridColumnsLabel.Text = "Колонок сетки:";
+        //
+        // _gridColumnsNumeric
+        //
+        _gridColumnsNumeric.Anchor = AnchorStyles.Left;
+        _gridColumnsNumeric.Margin = new Padding(0, 3, 12, 4);
+        _gridColumnsNumeric.Maximum = new decimal(new int[] { 8, 0, 0, 0 });
+        _gridColumnsNumeric.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+        _gridColumnsNumeric.Name = "_gridColumnsNumeric";
+        _gridColumnsNumeric.Size = new Size(60, 23);
+        _gridColumnsNumeric.TabIndex = 1;
+        _gridColumnsNumeric.Value = new decimal(new int[] { 4, 0, 0, 0 });
+        _gridColumnsNumeric.ValueChanged += OnGridColumnsValueChanged;
+        //
+        // _gridRowsLabel
+        //
+        _gridRowsLabel.Anchor = AnchorStyles.Left;
+        _gridRowsLabel.AutoSize = true;
+        _gridRowsLabel.Margin = new Padding(0, 6, 6, 0);
+        _gridRowsLabel.Name = "_gridRowsLabel";
+        _gridRowsLabel.TabIndex = 2;
+        _gridRowsLabel.Text = "Строк:";
+        //
+        // _gridRowsNumeric
+        //
+        _gridRowsNumeric.Anchor = AnchorStyles.Left;
+        _gridRowsNumeric.Margin = new Padding(0, 3, 12, 4);
+        _gridRowsNumeric.Maximum = new decimal(new int[] { 8, 0, 0, 0 });
+        _gridRowsNumeric.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+        _gridRowsNumeric.Name = "_gridRowsNumeric";
+        _gridRowsNumeric.Size = new Size(60, 23);
+        _gridRowsNumeric.TabIndex = 3;
+        _gridRowsNumeric.Value = new decimal(new int[] { 3, 0, 0, 0 });
+        _gridRowsNumeric.ValueChanged += OnGridRowsValueChanged;
         //
         // _resetLayoutButton
         //
         _resetLayoutButton.AutoSize = true;
-        _resetLayoutButton.Location = new Point(0, 0);
-        _resetLayoutButton.Margin = new Padding(0, 0, 3, 0);
+        _resetLayoutButton.Margin = new Padding(0, 0, 6, 0);
+        _resetLayoutButton.MinimumSize = new Size(0, 28);
         _resetLayoutButton.Name = "_resetLayoutButton";
         _resetLayoutButton.Padding = new Padding(8, 4, 8, 4);
-        _resetLayoutButton.Size = new Size(180, 31);
-        _resetLayoutButton.TabIndex = 0;
+        _resetLayoutButton.TabIndex = 4;
         _resetLayoutButton.Text = "Восстановить раскладку";
         _resetLayoutButton.UseVisualStyleBackColor = true;
         _resetLayoutButton.Click += OnResetLayoutButtonClicked;
+        //
+        // _clearGridButton
+        //
+        _clearGridButton.AutoSize = true;
+        _clearGridButton.Margin = new Padding(0);
+        _clearGridButton.MinimumSize = new Size(0, 28);
+        _clearGridButton.Name = "_clearGridButton";
+        _clearGridButton.Padding = new Padding(8, 4, 8, 4);
+        _clearGridButton.TabIndex = 5;
+        _clearGridButton.Text = "Очистить сетку";
+        _clearGridButton.UseVisualStyleBackColor = true;
+        _clearGridButton.Click += OnClearGridButtonClicked;
         //
         // _infoLabel
         //
@@ -86,99 +154,86 @@ partial class DashboardSettingsControl
         _infoLabel.Name = "_infoLabel";
         _infoLabel.Size = new Size(580, 30);
         _infoLabel.TabIndex = 1;
-        _infoLabel.Text = "ℹ️ Включите нужные плитки, выставьте ширину/высоту в ячейках сетки и порядок размещения. Стрелки ↑ ↓ перемещают плитку выше или ниже в общей ленте.";
+        _infoLabel.Text = "ℹ️ Перетащите плитку из палитры в нужную ячейку. Перетащите плитку из сетки, чтобы переместить. Правый клик по плитке — меню (размер, удалить).";
         //
-        // _rowsTableLayoutPanel
+        // _editorTableLayoutPanel
         //
-        _rowsTableLayoutPanel.AutoScroll = true;
-        _rowsTableLayoutPanel.ColumnCount = 1;
-        _rowsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _rowsTableLayoutPanel.Controls.Add(_headerTableLayoutPanel, 0, 0);
-        _rowsTableLayoutPanel.Dock = DockStyle.Fill;
-        _rowsTableLayoutPanel.Location = new Point(3, 82);
-        _rowsTableLayoutPanel.Name = "_rowsTableLayoutPanel";
-        _rowsTableLayoutPanel.RowCount = 2;
-        _rowsTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
-        _rowsTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _rowsTableLayoutPanel.Size = new Size(587, 444);
-        _rowsTableLayoutPanel.TabIndex = 2;
+        _editorTableLayoutPanel.ColumnCount = 2;
+        _editorTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200F));
+        _editorTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        _editorTableLayoutPanel.Controls.Add(_paletteGroupBox, 0, 0);
+        _editorTableLayoutPanel.Controls.Add(_gridGroupBox, 1, 0);
+        _editorTableLayoutPanel.Dock = DockStyle.Fill;
+        _editorTableLayoutPanel.Location = new Point(0, 82);
+        _editorTableLayoutPanel.Margin = new Padding(0);
+        _editorTableLayoutPanel.Name = "_editorTableLayoutPanel";
+        _editorTableLayoutPanel.RowCount = 1;
+        _editorTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        _editorTableLayoutPanel.Size = new Size(593, 447);
+        _editorTableLayoutPanel.TabIndex = 2;
         //
-        // _headerTableLayoutPanel
+        // _paletteGroupBox
         //
-        _headerTableLayoutPanel.ColumnCount = 5;
-        _headerTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80F));
-        _headerTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _headerTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90F));
-        _headerTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90F));
-        _headerTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90F));
-        _headerTableLayoutPanel.Controls.Add(_visibleHeaderLabel, 0, 0);
-        _headerTableLayoutPanel.Controls.Add(_titleHeaderLabel, 1, 0);
-        _headerTableLayoutPanel.Controls.Add(_columnSpanHeaderLabel, 2, 0);
-        _headerTableLayoutPanel.Controls.Add(_rowSpanHeaderLabel, 3, 0);
-        _headerTableLayoutPanel.Controls.Add(_orderHeaderLabel, 4, 0);
-        _headerTableLayoutPanel.Dock = DockStyle.Fill;
-        _headerTableLayoutPanel.Location = new Point(0, 0);
-        _headerTableLayoutPanel.Margin = new Padding(0);
-        _headerTableLayoutPanel.Name = "_headerTableLayoutPanel";
-        _headerTableLayoutPanel.RowCount = 1;
-        _headerTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _headerTableLayoutPanel.Size = new Size(587, 30);
-        _headerTableLayoutPanel.TabIndex = 0;
+        _paletteGroupBox.Controls.Add(_paletteFlowLayoutPanel);
+        _paletteGroupBox.Dock = DockStyle.Fill;
+        _paletteGroupBox.Margin = new Padding(0, 0, 6, 0);
+        _paletteGroupBox.Name = "_paletteGroupBox";
+        _paletteGroupBox.Padding = new Padding(8);
+        _paletteGroupBox.TabIndex = 0;
+        _paletteGroupBox.TabStop = false;
+        _paletteGroupBox.Text = "Палитра";
         //
-        // _visibleHeaderLabel
+        // _paletteFlowLayoutPanel
         //
-        _visibleHeaderLabel.AutoSize = true;
-        _visibleHeaderLabel.Dock = DockStyle.Fill;
-        _visibleHeaderLabel.Location = new Point(3, 0);
-        _visibleHeaderLabel.Name = "_visibleHeaderLabel";
-        _visibleHeaderLabel.Size = new Size(74, 30);
-        _visibleHeaderLabel.TabIndex = 0;
-        _visibleHeaderLabel.Text = "Включена";
-        _visibleHeaderLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _paletteFlowLayoutPanel.AutoScroll = true;
+        _paletteFlowLayoutPanel.Dock = DockStyle.Fill;
+        _paletteFlowLayoutPanel.FlowDirection = FlowDirection.TopDown;
+        _paletteFlowLayoutPanel.Margin = new Padding(0);
+        _paletteFlowLayoutPanel.Name = "_paletteFlowLayoutPanel";
+        _paletteFlowLayoutPanel.TabIndex = 0;
+        _paletteFlowLayoutPanel.WrapContents = false;
         //
-        // _titleHeaderLabel
+        // _gridGroupBox
         //
-        _titleHeaderLabel.AutoSize = true;
-        _titleHeaderLabel.Dock = DockStyle.Fill;
-        _titleHeaderLabel.Location = new Point(83, 0);
-        _titleHeaderLabel.Name = "_titleHeaderLabel";
-        _titleHeaderLabel.Size = new Size(231, 30);
-        _titleHeaderLabel.TabIndex = 1;
-        _titleHeaderLabel.Text = "Плитка";
-        _titleHeaderLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _gridGroupBox.Controls.Add(_gridContainerPanel);
+        _gridGroupBox.Dock = DockStyle.Fill;
+        _gridGroupBox.Margin = new Padding(0);
+        _gridGroupBox.Name = "_gridGroupBox";
+        _gridGroupBox.Padding = new Padding(8);
+        _gridGroupBox.TabIndex = 1;
+        _gridGroupBox.TabStop = false;
+        _gridGroupBox.Text = "Сетка";
         //
-        // _columnSpanHeaderLabel
+        // _gridContainerPanel
         //
-        _columnSpanHeaderLabel.AutoSize = true;
-        _columnSpanHeaderLabel.Dock = DockStyle.Fill;
-        _columnSpanHeaderLabel.Location = new Point(320, 0);
-        _columnSpanHeaderLabel.Name = "_columnSpanHeaderLabel";
-        _columnSpanHeaderLabel.Size = new Size(84, 30);
-        _columnSpanHeaderLabel.TabIndex = 2;
-        _columnSpanHeaderLabel.Text = "Колонок";
-        _columnSpanHeaderLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _gridContainerPanel.AutoScroll = true;
+        _gridContainerPanel.Controls.Add(_gridLayoutPanel);
+        _gridContainerPanel.Dock = DockStyle.Fill;
+        _gridContainerPanel.Margin = new Padding(0);
+        _gridContainerPanel.Name = "_gridContainerPanel";
+        _gridContainerPanel.TabIndex = 0;
         //
-        // _rowSpanHeaderLabel
+        // _gridLayoutPanel
         //
-        _rowSpanHeaderLabel.AutoSize = true;
-        _rowSpanHeaderLabel.Dock = DockStyle.Fill;
-        _rowSpanHeaderLabel.Location = new Point(410, 0);
-        _rowSpanHeaderLabel.Name = "_rowSpanHeaderLabel";
-        _rowSpanHeaderLabel.Size = new Size(84, 30);
-        _rowSpanHeaderLabel.TabIndex = 3;
-        _rowSpanHeaderLabel.Text = "Строк";
-        _rowSpanHeaderLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _gridLayoutPanel.ColumnCount = 4;
+        _gridLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        _gridLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        _gridLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        _gridLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        _gridLayoutPanel.Dock = DockStyle.Fill;
+        _gridLayoutPanel.GrowStyle = TableLayoutPanelGrowStyle.FixedSize;
+        _gridLayoutPanel.Margin = new Padding(0);
+        _gridLayoutPanel.Name = "_gridLayoutPanel";
+        _gridLayoutPanel.RowCount = 3;
+        _gridLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
+        _gridLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
+        _gridLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
+        _gridLayoutPanel.TabIndex = 0;
         //
-        // _orderHeaderLabel
+        // _tileContextMenu
         //
-        _orderHeaderLabel.AutoSize = true;
-        _orderHeaderLabel.Dock = DockStyle.Fill;
-        _orderHeaderLabel.Location = new Point(500, 0);
-        _orderHeaderLabel.Name = "_orderHeaderLabel";
-        _orderHeaderLabel.Size = new Size(84, 30);
-        _orderHeaderLabel.TabIndex = 4;
-        _orderHeaderLabel.Text = "Порядок";
-        _orderHeaderLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _tileContextMenu.Name = "_tileContextMenu";
+        _tileContextMenu.Opening += OnTileContextMenuOpening;
         //
         // DashboardSettingsControl
         //
@@ -189,24 +244,31 @@ partial class DashboardSettingsControl
         Size = new Size(593, 529);
         _mainTableLayoutPanel.ResumeLayout(false);
         _mainTableLayoutPanel.PerformLayout();
-        _toolbarPanel.ResumeLayout(false);
-        _toolbarPanel.PerformLayout();
-        _rowsTableLayoutPanel.ResumeLayout(false);
-        _rowsTableLayoutPanel.PerformLayout();
-        _headerTableLayoutPanel.ResumeLayout(false);
-        _headerTableLayoutPanel.PerformLayout();
+        _toolbarFlowLayoutPanel.ResumeLayout(false);
+        _toolbarFlowLayoutPanel.PerformLayout();
+        ((System.ComponentModel.ISupportInitialize)_gridColumnsNumeric).EndInit();
+        ((System.ComponentModel.ISupportInitialize)_gridRowsNumeric).EndInit();
+        _editorTableLayoutPanel.ResumeLayout(false);
+        _paletteGroupBox.ResumeLayout(false);
+        _gridGroupBox.ResumeLayout(false);
+        _gridContainerPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
 
     private TableLayoutPanel _mainTableLayoutPanel;
-    private FlowLayoutPanel _toolbarPanel;
+    private FlowLayoutPanel _toolbarFlowLayoutPanel;
+    private Label _gridColumnsLabel;
+    private NumericUpDown _gridColumnsNumeric;
+    private Label _gridRowsLabel;
+    private NumericUpDown _gridRowsNumeric;
     private Button _resetLayoutButton;
+    private Button _clearGridButton;
     private Label _infoLabel;
-    private TableLayoutPanel _rowsTableLayoutPanel;
-    private TableLayoutPanel _headerTableLayoutPanel;
-    private Label _visibleHeaderLabel;
-    private Label _titleHeaderLabel;
-    private Label _columnSpanHeaderLabel;
-    private Label _rowSpanHeaderLabel;
-    private Label _orderHeaderLabel;
+    private TableLayoutPanel _editorTableLayoutPanel;
+    private GroupBox _paletteGroupBox;
+    private FlowLayoutPanel _paletteFlowLayoutPanel;
+    private GroupBox _gridGroupBox;
+    private Panel _gridContainerPanel;
+    private TableLayoutPanel _gridLayoutPanel;
+    private ContextMenuStrip _tileContextMenu;
 }

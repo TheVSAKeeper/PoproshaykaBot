@@ -119,6 +119,8 @@ public class DashboardTileSettings
     public string Id { get; set; } = string.Empty;
     public string TypeId { get; set; } = string.Empty;
     public int Order { get; set; }
+    public int Row { get; set; }
+    public int Column { get; set; }
     public int ColumnSpan { get; set; } = 1;
     public int RowSpan { get; set; } = 1;
     public bool IsVisible { get; set; } = true;
@@ -126,7 +128,8 @@ public class DashboardTileSettings
 
 public class DashboardLayoutSettings
 {
-    public int Version { get; set; } = 1;
+    public int ColumnCount { get; set; } = 4;
+    public int RowCount { get; set; } = 3;
     public List<DashboardTileSettings> Tiles { get; set; } = [];
 }
 

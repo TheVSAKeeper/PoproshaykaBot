@@ -58,39 +58,6 @@ public sealed partial class DashboardControl : UserControl
         ReloadDashboard();
     }
 
-    private static List<TilePlacement> PlaceTiles(IReadOnlyList<DashboardTileSettings> tiles, out int rowCount)
-    {
-        var placements = new List<TilePlacement>();
-        var row = 0;
-        var column = 0;
-        rowCount = 0;
-
-        foreach (var tile in tiles)
-        {
-            var columnSpan = Math.Clamp(tile.ColumnSpan, 1, DashboardLayoutDefaults.ColumnCount);
-            var rowSpan = Math.Clamp(tile.RowSpan, 1, DashboardLayoutDefaults.MaxRowSpan);
-
-            if (column + columnSpan > DashboardLayoutDefaults.ColumnCount)
-            {
-                row++;
-                column = 0;
-            }
-
-            placements.Add(new(tile, row, column));
-            rowCount = Math.Max(rowCount, row + rowSpan);
-
-            column += columnSpan;
-
-            if (column >= DashboardLayoutDefaults.ColumnCount)
-            {
-                row++;
-                column = 0;
-            }
-        }
-
-        return placements;
-    }
-
     private void InitializeHosts()
     {
         var hostMargin = new Padding(LogicalToDeviceUnits(4));
@@ -126,12 +93,8 @@ public sealed partial class DashboardControl : UserControl
 
     private void ApplyLayout(DashboardLayoutSettings layout)
     {
-        var visibleTiles = layout.Tiles
-            .Where(tile => tile.IsVisible)
-            .OrderBy(tile => tile.Order)
-            .ToList();
-
-        var placements = PlaceTiles(visibleTiles, out var rowCount);
+        var columnCount = Math.Clamp(layout.ColumnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
+        var rowCount = Math.Clamp(layout.RowCount, DashboardLayoutDefaults.MinRowCount, DashboardLayoutDefaults.MaxRowCount);
 
         _tilesTableLayoutPanel.SuspendLayout();
 
@@ -139,17 +102,17 @@ public sealed partial class DashboardControl : UserControl
         {
             _tilesTableLayoutPanel.ColumnStyles.Clear();
             _tilesTableLayoutPanel.RowStyles.Clear();
-            _tilesTableLayoutPanel.ColumnCount = DashboardLayoutDefaults.ColumnCount;
-            _tilesTableLayoutPanel.RowCount = Math.Max(1, rowCount);
+            _tilesTableLayoutPanel.ColumnCount = columnCount;
+            _tilesTableLayoutPanel.RowCount = rowCount;
 
-            for (var column = 0; column < DashboardLayoutDefaults.ColumnCount; column++)
+            for (var column = 0; column < columnCount; column++)
             {
-                _tilesTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F / DashboardLayoutDefaults.ColumnCount));
+                _tilesTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F / columnCount));
             }
 
-            for (var row = 0; row < _tilesTableLayoutPanel.RowCount; row++)
+            for (var row = 0; row < rowCount; row++)
             {
-                _tilesTableLayoutPanel.RowStyles.Add(new(SizeType.Percent, 100F / _tilesTableLayoutPanel.RowCount));
+                _tilesTableLayoutPanel.RowStyles.Add(new(SizeType.Percent, 100F / rowCount));
             }
 
             foreach (var host in _hosts.Values)
@@ -157,18 +120,25 @@ public sealed partial class DashboardControl : UserControl
                 host.Visible = false;
             }
 
-            foreach (var placement in placements)
-            {
-                var type = DashboardTileCatalog.Find(placement.Tile.TypeId);
+            var seenTypes = new HashSet<DashboardTileType>();
 
-                if (type == null || !_hosts.TryGetValue(type, out var host))
+            foreach (var tile in layout.Tiles.Where(tile => tile.IsVisible))
+            {
+                var type = DashboardTileCatalog.Find(tile.TypeId);
+
+                if (type == null || !seenTypes.Add(type) || !_hosts.TryGetValue(type, out var host))
                 {
                     continue;
                 }
 
-                _tilesTableLayoutPanel.SetCellPosition(host, new(placement.Column, placement.Row));
-                _tilesTableLayoutPanel.SetColumnSpan(host, Math.Clamp(placement.Tile.ColumnSpan, 1, DashboardLayoutDefaults.ColumnCount));
-                _tilesTableLayoutPanel.SetRowSpan(host, Math.Clamp(placement.Tile.RowSpan, 1, DashboardLayoutDefaults.MaxRowSpan));
+                var row = Math.Clamp(tile.Row, 0, rowCount - 1);
+                var column = Math.Clamp(tile.Column, 0, columnCount - 1);
+                var columnSpan = Math.Clamp(tile.ColumnSpan, 1, columnCount - column);
+                var rowSpan = Math.Clamp(tile.RowSpan, 1, rowCount - row);
+
+                _tilesTableLayoutPanel.SetCellPosition(host, new(column, row));
+                _tilesTableLayoutPanel.SetColumnSpan(host, columnSpan);
+                _tilesTableLayoutPanel.SetRowSpan(host, rowSpan);
                 host.Visible = true;
             }
         }
@@ -177,6 +147,4 @@ public sealed partial class DashboardControl : UserControl
             _tilesTableLayoutPanel.ResumeLayout();
         }
     }
-
-    private sealed record TilePlacement(DashboardTileSettings Tile, int Row, int Column);
 }
