@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.WinForms.Twitch.Helix;
+﻿using Microsoft.Extensions.DependencyInjection;
+using PoproshaykaBot.WinForms.Twitch;
+using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Chat;
 
@@ -6,7 +8,9 @@ namespace PoproshaykaBot.WinForms.Chat;
 /// Сервис оформления чата: загрузка и кеширование глобальных эмодзи/бэйджей,
 /// построение ссылок на изображения и извлечение данных из сообщений.
 /// </summary>
-public sealed class ChatDecorationsProvider(ITwitchHelixClient helix)
+public sealed class ChatDecorationsProvider(
+    [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
+    ITwitchHelixClient helix)
 {
     private readonly SemaphoreSlim _loadLock = new(1, 1);
 

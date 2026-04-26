@@ -1,8 +1,13 @@
-﻿using PoproshaykaBot.WinForms.Twitch.Helix;
+﻿using Microsoft.Extensions.DependencyInjection;
+using PoproshaykaBot.WinForms.Twitch;
+using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
-public sealed class TwitchChannelsApiAdapter(ITwitchHelixClient helix) : ITwitchChannelsApi
+public sealed class TwitchChannelsApiAdapter(
+    [FromKeyedServices(TwitchEndpoints.HelixBroadcasterClient)]
+    ITwitchHelixClient helix)
+    : ITwitchChannelsApi
 {
     public Task ModifyChannelInformationAsync(
         string broadcasterId,

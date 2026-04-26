@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Polls;
+using PoproshaykaBot.WinForms.Twitch.Chat;
 using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms.Settings;
@@ -14,8 +15,6 @@ public class AppSettings
 
 public class TwitchSettings
 {
-    public string BotUsername { get; set; } = "thevsakeeper";
-
     public string Channel { get; set; } = "bobito217";
 
     public int MessagesAllowedInPeriod { get; set; } = 750;
@@ -26,28 +25,28 @@ public class TwitchSettings
 
     public string ClientSecret { get; set; } = string.Empty;
 
-    public string AccessToken { get; set; } = string.Empty;
-
-    public string RefreshToken { get; set; } = string.Empty;
-
     public string RedirectUri { get; set; } = "http://localhost:8080";
 
-    public string[] Scopes { get; set; } =
-    [
-        "user:read:chat",
-        "user:write:chat",
-        "user:bot",
-        "channel:bot",
-        "channel:manage:broadcast",
-        "channel:manage:polls",
-        "channel:read:polls",
-    ];
+    public TwitchAccountSettings BotAccount { get; set; } = new()
+    {
+        Scopes =
+        [
+            TwitchScopes.UserReadChat,
+            TwitchScopes.UserWriteChat,
+            TwitchScopes.UserBot,
+        ],
+    };
 
-    /// <summary>
-    /// Набор прав (scopes), с которыми был получен текущий токен.
-    /// Сохраняется при каждом успешном OAuth-обмене или рефреше.
-    /// </summary>
-    public string[] StoredScopes { get; set; } = [];
+    public TwitchAccountSettings BroadcasterAccount { get; set; } = new()
+    {
+        Scopes =
+        [
+            TwitchScopes.ChannelBot,
+            TwitchScopes.ChannelManageBroadcast,
+            TwitchScopes.ChannelManagePolls,
+            TwitchScopes.ChannelReadPolls,
+        ],
+    };
 
     public int HttpServerPort { get; set; } = 8080;
 
@@ -66,6 +65,21 @@ public class TwitchSettings
     public BroadcastProfilesSettings BroadcastProfiles { get; set; } = new();
 
     public PollsSettings Polls { get; set; } = new();
+}
+
+public class TwitchAccountSettings
+{
+    public string AccessToken { get; set; } = string.Empty;
+
+    public string RefreshToken { get; set; } = string.Empty;
+
+    public string Login { get; set; } = string.Empty;
+
+    public string UserId { get; set; } = string.Empty;
+
+    public string[] Scopes { get; set; } = [];
+
+    public string[] StoredScopes { get; set; } = [];
 }
 
 public class MessageSettings

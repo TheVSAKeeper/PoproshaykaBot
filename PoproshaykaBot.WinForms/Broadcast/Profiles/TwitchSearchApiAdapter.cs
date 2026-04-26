@@ -1,8 +1,13 @@
-﻿using PoproshaykaBot.WinForms.Twitch.Helix;
+﻿using Microsoft.Extensions.DependencyInjection;
+using PoproshaykaBot.WinForms.Twitch;
+using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
-public sealed class TwitchSearchApiAdapter(ITwitchHelixClient helix) : ITwitchSearchApi
+public sealed class TwitchSearchApiAdapter(
+    [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
+    ITwitchHelixClient helix)
+    : ITwitchSearchApi
 {
     public async Task<IReadOnlyList<GameSuggestion>> SearchCategoriesAsync(
         string query,

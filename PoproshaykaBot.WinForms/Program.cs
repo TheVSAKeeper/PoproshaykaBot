@@ -202,14 +202,23 @@ public static class Program
 
         services.AddSingleton<SettingsManager>();
 
-        services.AddTransient<TwitchAuthHandler>();
-        services.AddHttpClient(TwitchEndpoints.HelixHttpClientName, client =>
+        services.AddTransient<BotTwitchAuthHandler>();
+        services.AddTransient<BroadcasterTwitchAuthHandler>();
+
+        services.AddHttpClient(TwitchEndpoints.HelixBotClient, client =>
             {
                 client.BaseAddress = new(TwitchEndpoints.HelixBaseUrl);
             })
-            .AddHttpMessageHandler<TwitchAuthHandler>();
+            .AddHttpMessageHandler<BotTwitchAuthHandler>();
 
-        services.AddSingleton<ITwitchHelixClient, TwitchHelixClient>();
+        services.AddHttpClient(TwitchEndpoints.HelixBroadcasterClient, client =>
+            {
+                client.BaseAddress = new(TwitchEndpoints.HelixBaseUrl);
+            })
+            .AddHttpMessageHandler<BroadcasterTwitchAuthHandler>();
+
+        services.AddKeyedSingleton<ITwitchHelixClient, BotHelixClient>(TwitchEndpoints.HelixBotClient);
+        services.AddKeyedSingleton<ITwitchHelixClient, BroadcasterHelixClient>(TwitchEndpoints.HelixBroadcasterClient);
 
         services.AddSingleton<EventSubChatMessageMapper>();
         services.AddSingleton<ChatIngestionService>();

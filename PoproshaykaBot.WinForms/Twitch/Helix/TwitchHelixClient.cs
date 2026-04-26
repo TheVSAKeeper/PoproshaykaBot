@@ -5,9 +5,11 @@ using System.Text.Json.Serialization;
 
 namespace PoproshaykaBot.WinForms.Twitch.Helix;
 
-public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILogger<TwitchHelixClient> logger) : ITwitchHelixClient
+public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILogger<TwitchHelixClient> logger) : ITwitchHelixClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    protected abstract string HttpClientName { get; }
 
     public async Task<UserInfo?> GetUserByLoginAsync(string login, CancellationToken cancellationToken = default)
     {
@@ -70,7 +72,7 @@ public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILog
             ccl,
             request.IsBrandedContent);
 
-        using var client = httpClientFactory.CreateClient(TwitchEndpoints.HelixHttpClientName);
+        using var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Patch,
             $"{TwitchEndpoints.HelixChannels}?broadcaster_id={Uri.EscapeDataString(broadcasterId)}")
         {
@@ -116,7 +118,7 @@ public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILog
     {
         var dto = new HelixSendChatMessageDto(broadcasterId, senderId, message, replyParentMessageId);
 
-        using var client = httpClientFactory.CreateClient(TwitchEndpoints.HelixHttpClientName);
+        using var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, TwitchEndpoints.HelixChatMessages)
         {
             Content = JsonContent.Create(dto, options: JsonOptions),
@@ -174,7 +176,7 @@ public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILog
             condition,
             new("websocket", sessionId));
 
-        using var client = httpClientFactory.CreateClient(TwitchEndpoints.HelixHttpClientName);
+        using var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, TwitchEndpoints.HelixEventSubSubscriptions)
         {
             Content = JsonContent.Create(body, options: JsonOptions),
@@ -205,7 +207,7 @@ public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILog
             request.ChannelPointsVotingEnabled,
             request.ChannelPointsVotingEnabled ? request.ChannelPointsPerVote : 0);
 
-        using var client = httpClientFactory.CreateClient(TwitchEndpoints.HelixHttpClientName);
+        using var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, TwitchEndpoints.HelixPolls)
         {
             Content = JsonContent.Create(body, options: JsonOptions),
@@ -227,7 +229,7 @@ public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILog
             request.PollId,
             request.ShowResult ? "TERMINATED" : "ARCHIVED");
 
-        using var client = httpClientFactory.CreateClient(TwitchEndpoints.HelixHttpClientName);
+        using var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Patch, TwitchEndpoints.HelixPolls)
         {
             Content = JsonContent.Create(body, options: JsonOptions),
@@ -334,7 +336,7 @@ public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILog
 
     private async Task<T?> GetRawAsync<T>(string requestUri, CancellationToken cancellationToken)
     {
-        using var client = httpClientFactory.CreateClient(TwitchEndpoints.HelixHttpClientName);
+        using var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Get, requestUri);
         using var response = await client.SendAsync(httpRequest, cancellationToken);
         await EnsureSuccessAsync(httpRequest, response, cancellationToken);
@@ -349,7 +351,7 @@ public sealed class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILog
 
     private async Task<IReadOnlyList<T>> GetCollectionAsync<T>(string requestUri, CancellationToken cancellationToken)
     {
-        using var client = httpClientFactory.CreateClient(TwitchEndpoints.HelixHttpClientName);
+        using var client = httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Get, requestUri);
         using var response = await client.SendAsync(httpRequest, cancellationToken);
         await EnsureSuccessAsync(httpRequest, response, cancellationToken);

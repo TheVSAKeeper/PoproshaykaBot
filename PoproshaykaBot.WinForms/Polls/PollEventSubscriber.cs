@@ -1,8 +1,10 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Polling;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
+using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.EventSub;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 
@@ -10,6 +12,7 @@ namespace PoproshaykaBot.WinForms.Polls;
 
 public sealed class PollEventSubscriber(
     ITwitchEventSubClient eventSubClient,
+    [FromKeyedServices(TwitchEndpoints.HelixBroadcasterClient)]
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
     PollsAvailabilityService availability,

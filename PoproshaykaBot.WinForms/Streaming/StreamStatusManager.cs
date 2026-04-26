@@ -1,9 +1,11 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.EventSub;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 using System.Net;
@@ -27,6 +29,7 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
 
     public StreamStatusManager(
         ITwitchEventSubClient eventSubClient,
+        [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
         ITwitchHelixClient helix,
         IBroadcasterIdProvider broadcasterIdProvider,
         SettingsManager settingsManager,

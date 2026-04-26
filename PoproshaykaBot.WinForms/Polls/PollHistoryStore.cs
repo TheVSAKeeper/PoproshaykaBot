@@ -1,8 +1,10 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Infrastructure.Persistence;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -11,6 +13,7 @@ namespace PoproshaykaBot.WinForms.Polls;
 
 public sealed class PollHistoryStore(
     SettingsManager settingsManager,
+    [FromKeyedServices(TwitchEndpoints.HelixBroadcasterClient)]
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
     ILogger<PollHistoryStore> logger,
@@ -28,6 +31,7 @@ public sealed class PollHistoryStore(
                                         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                                             "PoproshaykaBot",
                                             "polls-history.json");
+
     private readonly List<PollHistoryEntry> _entries = [];
     private readonly object _sync = new();
     private CancellationTokenSource? _backgroundCts;

@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Twitch.Helix;
@@ -15,6 +16,7 @@ public sealed class BotUserIdProvider : IBotUserIdProvider, IDisposable
     private UserInfo? _cachedUser;
 
     public BotUserIdProvider(
+        [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
         ITwitchHelixClient helix,
         IEventBus eventBus,
         ILogger<BotUserIdProvider> logger)

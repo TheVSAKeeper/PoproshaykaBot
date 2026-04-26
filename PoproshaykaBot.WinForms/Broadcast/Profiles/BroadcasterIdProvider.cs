@@ -1,10 +1,13 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
 public sealed class BroadcasterIdProvider(
+    [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
     ITwitchHelixClient helix,
     SettingsManager settingsManager,
     ILogger<BroadcasterIdProvider> logger)

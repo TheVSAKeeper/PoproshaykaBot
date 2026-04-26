@@ -33,6 +33,7 @@ public static class HelixErrorMessages
             TimeoutException => "Превышено время ожидания ответа Twitch",
             HttpRequestException => "Ошибка сети при обращении к Twitch",
             UnauthorizedAccessException => "Ошибка авторизации в Twitch",
+            TwitchAuthorizationMissingException authMissing => authMissing.Message,
             _ => "Twitch отклонил запрос",
         };
     }

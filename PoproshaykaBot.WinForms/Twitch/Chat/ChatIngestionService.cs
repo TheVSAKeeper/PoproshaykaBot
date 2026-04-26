@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
@@ -12,6 +13,7 @@ namespace PoproshaykaBot.WinForms.Twitch.Chat;
 
 public sealed class ChatIngestionService(
     ITwitchEventSubClient eventSubClient,
+    [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
     IBotUserIdProvider botUserIdProvider,

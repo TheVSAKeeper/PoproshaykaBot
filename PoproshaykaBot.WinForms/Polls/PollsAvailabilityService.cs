@@ -1,5 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Polls;
@@ -10,8 +13,10 @@ namespace PoproshaykaBot.WinForms.Polls;
 /// нет статуса Affiliate или Partner. Проверяем один раз на сессию.
 /// </summary>
 public class PollsAvailabilityService(
+    [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
+    SettingsManager settingsManager,
     ILogger<PollsAvailabilityService>? logger = null)
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -51,6 +56,12 @@ public class PollsAvailabilityService(
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(settingsManager.Current.Twitch.BroadcasterAccount.AccessToken))
+            {
+                logger?.LogInformation("PollsAvailability: токен стримера отсутствует — голосования недоступны");
+                return PollsAvailability.NoBroadcasterToken;
+            }
+
             var broadcasterId = await broadcasterIdProvider.GetAsync(cancellationToken);
 
             if (string.IsNullOrEmpty(broadcasterId))

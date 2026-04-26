@@ -4,7 +4,6 @@ using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Twitch.Chat;
 using System.Diagnostics;
-using System.Security;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -20,53 +19,63 @@ public sealed class TwitchOAuthService(
 {
     private static readonly TimeSpan AuthTimeout = TimeSpan.FromMinutes(5);
 
-    private readonly SemaphoreSlim _authSemaphore = new(1, 1);
-    private readonly SemaphoreSlim _refreshSemaphore = new(1, 1);
+    private readonly Dictionary<TwitchOAuthRole, SemaphoreSlim> _authSemaphores = CreatePerRoleSemaphores();
+    private readonly Dictionary<TwitchOAuthRole, SemaphoreSlim> _refreshSemaphores = CreatePerRoleSemaphores();
+    private readonly Dictionary<string, PendingAuth> _pendingAuths = new(StringComparer.Ordinal);
+    private readonly object _pendingAuthsLock = new();
 
-    private TaskCompletionSource<string>? _authTcs;
-    private string? _currentState;
     private bool _isDisposed;
 
-    public event Action<string>? StatusChanged;
+    public event Action<TwitchOAuthRole, string>? StatusChanged;
 
-    public async Task<string> StartOAuthFlowAsync(string clientId, string clientSecret, string[]? scopes = null, string? redirectUri = null, CancellationToken ct = default)
+    public async Task<string> StartOAuthFlowAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string[]? scopes = null,
+        string? redirectUri = null,
+        CancellationToken ct = default)
     {
-        logger.LogDebug("Начало процесса OAuth авторизации для ClientId: {ClientId}", clientId);
+        logger.LogDebug("Начало процесса OAuth авторизации для роли {Role} (ClientId: {ClientId})", role, clientId);
 
         if (string.IsNullOrWhiteSpace(clientId))
         {
-            logger.LogWarning("Попытка запуска OAuth с пустым ClientId");
             throw new ArgumentException("ID клиента не может быть пустым", nameof(clientId));
         }
 
         if (string.IsNullOrWhiteSpace(clientSecret))
         {
-            logger.LogWarning("Попытка запуска OAuth с пустым ClientSecret для ClientId: {ClientId}", clientId);
             throw new ArgumentException("Секрет клиента не может быть пустым", nameof(clientSecret));
         }
 
-        await _authSemaphore.WaitAsync(ct);
+        var semaphore = _authSemaphores[role];
+        await semaphore.WaitAsync(ct);
+
+        var state = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        lock (_pendingAuthsLock)
+        {
+            _pendingAuths[state] = new(role, tcs);
+        }
 
         try
         {
             var settings = settingsManager.Current.Twitch;
-            scopes ??= settings.Scopes;
+            scopes ??= GetAccount(settings, role).Scopes;
             redirectUri ??= settings.RedirectUri;
 
             var scopeString = string.Join(" ", scopes);
-            _currentState = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
 
-            logger.LogDebug("Сгенерирован state параметр и сформирован URL авторизации для ClientId: {ClientId}", clientId);
-            ReportStatus("Открытие браузера для авторизации...");
+            ReportStatus(role, "Открытие браузера для авторизации...");
 
-            var authUrl = $"https://id.twitch.tv/oauth2/authorize"
-                          + $"?response_type=code"
+            var authUrl = "https://id.twitch.tv/oauth2/authorize"
+                          + "?response_type=code"
                           + $"&client_id={Uri.EscapeDataString(clientId)}"
                           + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
                           + $"&scope={Uri.EscapeDataString(scopeString)}"
-                          + $"&state={Uri.EscapeDataString(_currentState)}";
-
-            _authTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                          + $"&state={Uri.EscapeDataString(state)}"
+                          + "&force_verify=true";
 
             try
             {
@@ -76,53 +85,50 @@ public sealed class TwitchOAuthService(
                     UseShellExecute = true,
                 });
 
-                logger.LogInformation("Браузер для авторизации успешно открыт (ClientId: {ClientId})", clientId);
+                logger.LogInformation("Браузер открыт для авторизации роли {Role} (ClientId: {ClientId})", role, clientId);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Сбой при открытии браузера для авторизации (ClientId: {ClientId})", clientId);
+                logger.LogError(ex, "Не удалось открыть браузер для авторизации (роль {Role})", role);
                 throw new InvalidOperationException($"Не удалось открыть браузер: {ex.Message}", ex);
             }
 
-            ReportStatus($"Ожидание авторизации пользователя ({AuthTimeout.TotalMinutes} мин)...");
-
-            logger.LogDebug("Ожидание callback-ответа от пользователя (таймаут {TimeoutMinutes} минут)", AuthTimeout.TotalMinutes);
+            ReportStatus(role, $"Ожидание авторизации пользователя ({AuthTimeout.TotalMinutes} мин)...");
 
             string authorizationCode;
             try
             {
-                authorizationCode = await _authTcs.Task.WaitAsync(AuthTimeout, ct);
+                authorizationCode = await tcs.Task.WaitAsync(AuthTimeout, ct);
             }
             catch (TimeoutException ex)
             {
-                logger.LogWarning(ex, "Истекло время ожидания авторизации пользователя ({TimeoutMinutes} минут) (ClientId: {ClientId})", AuthTimeout.TotalMinutes, clientId);
+                logger.LogWarning(ex, "Истекло время ожидания авторизации для роли {Role}", role);
                 throw new OperationCanceledException($"Время ожидания авторизации истекло ({AuthTimeout.TotalMinutes} мин)", ex);
             }
 
             if (string.IsNullOrEmpty(authorizationCode))
             {
-                logger.LogError("Получен пустой код авторизации (ClientId: {ClientId})", clientId);
                 throw new InvalidOperationException("Не удалось получить код авторизации");
             }
 
-            ReportStatus("Обмен кода на токен доступа...");
-            logger.LogDebug("Выполнение обмена authorization_code на токены");
+            ReportStatus(role, "Обмен кода на токен доступа...");
 
-            var accessToken = await ExchangeCodeForTokenAsync(clientId, clientSecret, authorizationCode, redirectUri, ct);
+            var accessToken = await ExchangeCodeForTokenAsync(role, clientId, clientSecret, authorizationCode, redirectUri, ct);
 
-            ReportStatus("Авторизация завершена успешно!");
-            logger.LogInformation("Процесс OAuth авторизации успешно завершен (ClientId: {ClientId})", clientId);
+            ReportStatus(role, "Авторизация завершена успешно!");
+            logger.LogInformation("OAuth авторизация успешно завершена для роли {Role} (ClientId: {ClientId})", role, clientId);
 
             return accessToken;
         }
         finally
         {
-            _authTcs?.TrySetCanceled(ct);
-            _authTcs = null;
-            _currentState = null;
+            lock (_pendingAuthsLock)
+            {
+                _pendingAuths.Remove(state);
+            }
 
-            _authSemaphore.Release();
-            logger.LogDebug("Семафор авторизации освобожден и состояние TCS очищено");
+            tcs.TrySetCanceled(ct);
+            semaphore.Release();
         }
     }
 
@@ -130,208 +136,231 @@ public sealed class TwitchOAuthService(
     {
         logger.LogDebug("Получен callback авторизации (State: {State})", state);
 
-        if (_currentState is null || _authTcs is null)
+        if (string.IsNullOrEmpty(state))
         {
-            logger.LogWarning("Callback авторизации получен вне активного OAuth-потока. Игнорирован");
+            logger.LogWarning("Callback без state-параметра — игнорируется");
             return;
         }
 
-        if (_currentState != state)
+        PendingAuth? pending;
+        lock (_pendingAuthsLock)
         {
-            logger.LogWarning("Несовпадение параметра state. Ожидался: {ExpectedState}, Получен: {ActualState}. Возможна CSRF атака", _currentState, state);
+            _pendingAuths.TryGetValue(state, out pending);
+        }
 
-            var securityEx = new SecurityException("Неверный параметр state. Авторизация отклонена в целях безопасности.");
-            _authTcs.TrySetException(securityEx);
+        if (pending == null)
+        {
+            logger.LogWarning("Callback с неизвестным state '{State}' — возможна CSRF атака или просроченный flow", state);
             return;
         }
 
-        logger.LogInformation("Callback авторизации успешно прошел проверку state");
-        _authTcs.TrySetResult(code);
+        logger.LogInformation("Callback успешно сопоставлен с активным OAuth-потоком для роли {Role}", pending.Role);
+        pending.Tcs.TrySetResult(code);
     }
 
     public void SetAuthError(Exception exception)
     {
         logger.LogError(exception, "Получена ошибка в процессе обработки callback-ответа авторизации");
-        _authTcs?.TrySetException(exception);
+
+        lock (_pendingAuthsLock)
+        {
+            foreach (var pending in _pendingAuths.Values)
+            {
+                pending.Tcs.TrySetException(exception);
+            }
+        }
     }
 
-    public async Task<bool> IsTokenValidAsync(string token)
+    public async Task<bool> IsTokenValidAsync(string token, CancellationToken ct = default)
     {
-        logger.LogDebug("Запуск проверки валидности Access-токена");
+        var info = await ValidateAsync(token, ct);
+        return info != null;
+    }
 
+    public async Task<TokenValidationInfo?> ValidateAsync(string token, CancellationToken ct = default)
+    {
         if (string.IsNullOrWhiteSpace(token))
         {
-            logger.LogWarning("Передан пустой токен для проверки валидности");
-            return false;
+            return null;
         }
 
         try
         {
             var client = httpClientFactory.CreateClient();
-            var validateUrl = "https://id.twitch.tv/oauth2/validate";
-            client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+            using var request = new HttpRequestMessage(HttpMethod.Get, "https://id.twitch.tv/oauth2/validate");
+            request.Headers.Authorization = new("Bearer", token);
 
-            var response = await client.GetAsync(validateUrl);
-            var isValid = response.IsSuccessStatusCode;
+            using var response = await client.SendAsync(request, ct);
 
-            logger.LogInformation("Результат проверки токена: {IsValid} (StatusCode: {StatusCode})", isValid, response.StatusCode);
-            return isValid;
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogInformation("Validate-эндпойнт вернул {StatusCode}", response.StatusCode);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(ct);
+            var dto = JsonSerializer.Deserialize<ValidateResponse>(json);
+
+            if (dto == null)
+            {
+                return null;
+            }
+
+            return new(dto.Login ?? string.Empty,
+                dto.UserId ?? string.Empty,
+                dto.ClientId ?? string.Empty,
+                dto.Scopes ?? new(),
+                dto.ExpiresIn);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Сетевая или внутренняя ошибка при проверке токена Twitch API");
-            return false;
+            logger.LogWarning(ex, "Сетевая или внутренняя ошибка при проверке токена Twitch");
+            return null;
         }
     }
 
-    public async Task<string> RefreshTokenAsync(string clientId, string clientSecret, string refreshToken, CancellationToken ct = default)
+    public async Task<string> RefreshTokenAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
     {
-        logger.LogDebug("Запрос на обновление токена (refresh_token) для ClientId: {ClientId}", clientId);
-
         if (string.IsNullOrWhiteSpace(refreshToken))
         {
-            logger.LogError("Попытка обновления токена с пустым параметром refresh_token");
             throw new ArgumentException("Refresh token не может быть пустым", nameof(refreshToken));
         }
 
-        await _refreshSemaphore.WaitAsync(ct);
+        var semaphore = _refreshSemaphores[role];
+        await semaphore.WaitAsync(ct);
         try
         {
-            return await RefreshTokenInternalAsync(clientId, clientSecret, refreshToken, ct);
+            return await RefreshTokenInternalAsync(role, clientId, clientSecret, refreshToken, ct);
         }
         finally
         {
-            _refreshSemaphore.Release();
+            semaphore.Release();
         }
     }
 
-    public async Task<string?> GetAccessTokenAsync(CancellationToken ct = default)
+    public async Task<string?> GetAccessTokenAsync(TwitchOAuthRole role, CancellationToken ct = default)
     {
-        logger.LogDebug("Запрошен Access-токен приложения");
         var settings = settingsManager.Current.Twitch;
 
         if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret))
         {
-            logger.LogError("Не настроены базовые параметры OAuth: отсутствуют ClientId или ClientSecret");
             throw new InvalidOperationException("OAuth настройки не настроены (ClientId/ClientSecret).");
         }
 
-        var token = await GetValidTokenOrRefreshAsync(ct);
+        var token = await GetValidTokenOrRefreshAsync(role, ct);
         if (token != null)
         {
-            logger.LogDebug("Возвращен существующий или обновленный токен");
             return token;
         }
 
-        logger.LogInformation("Валидный токен не найден, инициируется новый OAuth-поток");
-        var accessToken = await StartOAuthFlowAsync(settings.ClientId,
-            settings.ClientSecret,
-            settings.Scopes,
-            settings.RedirectUri,
-            ct);
-
-        return accessToken;
+        logger.LogInformation("Валидный токен для роли {Role} не найден, инициируется новый OAuth-поток", role);
+        var account = GetAccount(settings, role);
+        return await StartOAuthFlowAsync(role, settings.ClientId, settings.ClientSecret, account.Scopes, settings.RedirectUri, ct);
     }
 
-    public async Task<string?> GetValidTokenOrRefreshAsync(CancellationToken ct = default)
+    public async Task<string?> GetValidTokenOrRefreshAsync(TwitchOAuthRole role, CancellationToken ct = default)
     {
-        await _refreshSemaphore.WaitAsync(ct);
+        var semaphore = _refreshSemaphores[role];
+        await semaphore.WaitAsync(ct);
         try
         {
             var settings = settingsManager.Current.Twitch;
+            var account = GetAccount(settings, role);
 
-            if (!string.IsNullOrWhiteSpace(settings.AccessToken))
+            if (string.IsNullOrWhiteSpace(account.AccessToken))
             {
-                ReportStatus("Проверка действительности токена...");
-                logger.LogDebug("Проверка существующего Access-токена");
-
-                if (settings.StoredScopes.Length > 0
-                    && !TwitchScopes.SetEquals(settings.StoredScopes, settings.Scopes))
-                {
-                    logger.LogWarning("Scope set изменился — требуется повторная авторизация. Старые: {Old}. Новые: {New}",
-                        string.Join(" ", settings.StoredScopes),
-                        string.Join(" ", settings.Scopes));
-
-                    const string ScopeChangeMsg = "Требуется повторная авторизация Twitch: изменился набор прав бота.";
-                    ReportStatus(ScopeChangeMsg);
-                    _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(ScopeChangeMsg), ct);
-
-                    var currentSettings = settingsManager.Current;
-                    currentSettings.Twitch.AccessToken = string.Empty;
-                    currentSettings.Twitch.RefreshToken = string.Empty;
-                    currentSettings.Twitch.StoredScopes = [];
-                    settingsManager.SaveSettings(currentSettings);
-
-                    return null;
-                }
-
-                if (await IsTokenValidAsync(settings.AccessToken))
-                {
-                    logger.LogInformation("Существующий токен доступа валиден и будет использован");
-                    return settings.AccessToken;
-                }
-
-                logger.LogInformation("Текущий токен недействителен, попытка использования Refresh-токена");
-
-                if (!string.IsNullOrWhiteSpace(settings.RefreshToken))
-                {
-                    try
-                    {
-                        var tokenResponse = await RefreshTokenInternalAsync(settings.ClientId, settings.ClientSecret, settings.RefreshToken, ct);
-                        return tokenResponse;
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Критический сбой при попытке обновить токен доступа (ClientId: {ClientId})", settings.ClientId);
-                    }
-                }
-                else
-                {
-                    logger.LogWarning("Refresh-токен отсутствует, обновление невозможно");
-                }
-            }
-            else
-            {
-                logger.LogDebug("Сохраненный Access-токен отсутствует");
+                return null;
             }
 
-            return null;
+            ReportStatus(role, "Проверка действительности токена...");
+
+            if (account.StoredScopes.Length > 0
+                && !TwitchScopes.SetEquals(account.StoredScopes, account.Scopes))
+            {
+                logger.LogWarning("Scope set роли {Role} изменился — требуется повторная авторизация. Старые: {Old}. Новые: {New}",
+                    role,
+                    string.Join(" ", account.StoredScopes),
+                    string.Join(" ", account.Scopes));
+
+                var changeMsg = $"Требуется повторная авторизация Twitch ({DescribeRole(role)}): изменился набор прав.";
+                ReportStatus(role, changeMsg);
+                _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(changeMsg), ct);
+
+                ClearAccountInPlace(account);
+                settingsManager.SaveSettings(settingsManager.Current);
+
+                return null;
+            }
+
+            if (await IsTokenValidAsync(account.AccessToken, ct))
+            {
+                return account.AccessToken;
+            }
+
+            logger.LogInformation("Токен роли {Role} недействителен, попытка использования refresh-токена", role);
+
+            if (string.IsNullOrWhiteSpace(account.RefreshToken))
+            {
+                logger.LogWarning("Refresh-токен для роли {Role} отсутствует, обновление невозможно", role);
+                return null;
+            }
+
+            try
+            {
+                return await RefreshTokenInternalAsync(role, settings.ClientId, settings.ClientSecret, account.RefreshToken, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Сбой при обновлении токена роли {Role}", role);
+                return null;
+            }
         }
         finally
         {
-            _refreshSemaphore.Release();
+            semaphore.Release();
         }
     }
 
-    public void UpdateSettings(string accessToken, string refreshToken, IEnumerable<string>? newScopes = null)
+    public void UpdateSettings(
+        TwitchOAuthRole role,
+        string accessToken,
+        string refreshToken,
+        IEnumerable<string>? newScopes,
+        string login,
+        string userId)
     {
-        logger.LogDebug("Обновление токенов в настройках приложения");
-
         var settings = settingsManager.Current;
-        settings.Twitch.AccessToken = accessToken;
-        settings.Twitch.RefreshToken = refreshToken;
+        var account = GetAccount(settings.Twitch, role);
+
+        account.AccessToken = accessToken;
+        account.RefreshToken = refreshToken;
+        account.Login = login;
+        account.UserId = userId;
 
         if (newScopes != null)
         {
-            settings.Twitch.StoredScopes = newScopes.ToArray();
+            account.StoredScopes = newScopes.ToArray();
         }
 
         settingsManager.SaveSettings(settings);
-
-        logger.LogInformation("Настройки приложения успешно обновлены новыми токенами");
+        logger.LogInformation("Токены роли {Role} обновлены в настройках (login={Login})", role, login);
     }
 
-    public void ClearTokens()
+    public void ClearTokens(TwitchOAuthRole role)
     {
-        logger.LogDebug("Запрос на очистку сохраненных токенов");
-
         var settings = settingsManager.Current;
-        settings.Twitch.AccessToken = string.Empty;
-        settings.Twitch.RefreshToken = string.Empty;
+        var account = GetAccount(settings.Twitch, role);
+
+        ClearAccountInPlace(account);
         settingsManager.SaveSettings(settings);
 
-        ReportStatus("Токены очищены.");
-        logger.LogInformation("Токены Twitch API успешно удалены из настроек");
+        ReportStatus(role, "Токены очищены.");
+        logger.LogInformation("Токены роли {Role} удалены из настроек", role);
     }
 
     public void Dispose()
@@ -341,19 +370,77 @@ public sealed class TwitchOAuthService(
             return;
         }
 
-        logger.LogDebug("Освобождение ресурсов TwitchOAuthService");
-
         StatusChanged = null;
 
-        _authSemaphore.Dispose();
-        _refreshSemaphore.Dispose();
+        foreach (var semaphore in _authSemaphores.Values)
+        {
+            semaphore.Dispose();
+        }
+
+        foreach (var semaphore in _refreshSemaphores.Values)
+        {
+            semaphore.Dispose();
+        }
 
         _isDisposed = true;
     }
 
-    private async Task<string> RefreshTokenInternalAsync(string clientId, string clientSecret, string refreshToken, CancellationToken ct)
+    private static Dictionary<TwitchOAuthRole, SemaphoreSlim> CreatePerRoleSemaphores()
     {
-        ReportStatus("Обновление токена доступа...");
+        return new()
+        {
+            [TwitchOAuthRole.Bot] = new(1, 1),
+            [TwitchOAuthRole.Broadcaster] = new(1, 1),
+        };
+    }
+
+    private static TwitchAccountSettings GetAccount(TwitchSettings twitch, TwitchOAuthRole role)
+    {
+        return role switch
+        {
+            TwitchOAuthRole.Bot => twitch.BotAccount,
+            TwitchOAuthRole.Broadcaster => twitch.BroadcasterAccount,
+            _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
+        };
+    }
+
+    private static string GetExpectedLogin(TwitchSettings twitch, TwitchOAuthRole role)
+    {
+        return role switch
+        {
+            TwitchOAuthRole.Bot => string.Empty,
+            TwitchOAuthRole.Broadcaster => twitch.Channel ?? string.Empty,
+            _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
+        };
+    }
+
+    private static string DescribeRole(TwitchOAuthRole role)
+    {
+        return role switch
+        {
+            TwitchOAuthRole.Bot => "бот",
+            TwitchOAuthRole.Broadcaster => "стример",
+            _ => role.ToString(),
+        };
+    }
+
+    private static void ClearAccountInPlace(TwitchAccountSettings account)
+    {
+        account.AccessToken = string.Empty;
+        account.RefreshToken = string.Empty;
+        account.Login = string.Empty;
+        account.UserId = string.Empty;
+        account.StoredScopes = [];
+    }
+
+    private async Task<string> RefreshTokenInternalAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct)
+    {
+        ReportStatus(role, "Обновление токена доступа...");
 
         var formData = new Dictionary<string, string>
         {
@@ -364,22 +451,39 @@ public sealed class TwitchOAuthService(
         };
 
         var tokenResponse = await PostTokenRequestAsync(formData, ct);
+        var validation = await ValidateAsync(tokenResponse.AccessToken, ct);
 
-        UpdateSettings(tokenResponse.AccessToken, tokenResponse.RefreshToken, tokenResponse.Scope);
+        if (validation == null)
+        {
+            throw new InvalidOperationException("Twitch вернул токен, но Validate-эндпойнт его не подтвердил.");
+        }
 
-        ReportStatus("Токен доступа обновлен успешно!");
-        logger.LogInformation("Токен доступа успешно обновлен через RefreshToken (ClientId: {ClientId})", clientId);
+        VerifyLoginMatchesRole(role, validation);
 
+        UpdateSettings(role,
+            tokenResponse.AccessToken,
+            tokenResponse.RefreshToken,
+            tokenResponse.Scope,
+            validation.Login,
+            validation.UserId);
+
+        ReportStatus(role, "Токен доступа обновлён успешно!");
         return tokenResponse.AccessToken;
     }
 
-    private void ReportStatus(string status)
+    private void ReportStatus(TwitchOAuthRole role, string status)
     {
-        logger.LogInformation("Изменение UI статуса OAuth: {Status}", status);
-        StatusChanged?.Invoke(status);
+        logger.LogInformation("OAuth статус ({Role}): {Status}", role, status);
+        StatusChanged?.Invoke(role, status);
     }
 
-    private async Task<string> ExchangeCodeForTokenAsync(string clientId, string clientSecret, string authorizationCode, string redirectUri, CancellationToken ct)
+    private async Task<string> ExchangeCodeForTokenAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string authorizationCode,
+        string redirectUri,
+        CancellationToken ct)
     {
         var formData = new Dictionary<string, string>
         {
@@ -391,21 +495,57 @@ public sealed class TwitchOAuthService(
         };
 
         var tokenResponse = await PostTokenRequestAsync(formData, ct);
+        var validation = await ValidateAsync(tokenResponse.AccessToken, ct);
 
-        UpdateSettings(tokenResponse.AccessToken, tokenResponse.RefreshToken, tokenResponse.Scope);
+        if (validation == null)
+        {
+            throw new InvalidOperationException("Twitch вернул токен, но Validate-эндпойнт его не подтвердил.");
+        }
+
+        VerifyLoginMatchesRole(role, validation);
+
+        UpdateSettings(role,
+            tokenResponse.AccessToken,
+            tokenResponse.RefreshToken,
+            tokenResponse.Scope,
+            validation.Login,
+            validation.UserId);
 
         return tokenResponse.AccessToken;
     }
 
+    private void VerifyLoginMatchesRole(TwitchOAuthRole role, TokenValidationInfo validation)
+    {
+        var twitch = settingsManager.Current.Twitch;
+        var expected = GetExpectedLogin(twitch, role);
+
+        if (string.IsNullOrWhiteSpace(expected))
+        {
+            return;
+        }
+
+        if (string.Equals(expected, validation.Login, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var description = DescribeRole(role);
+        var message =
+            $"Авторизация для роли {description} получила токен пользователя '{validation.Login}', " + $"но в настройках указан канал '{expected}'. " + "Авторизуйтесь под нужной учёткой или исправьте настройку канала. Токен не сохранён.";
+
+        logger.LogError("Логин в полученном токене ({Login}) не совпадает с ожидаемым ({Expected}) для роли {Role}",
+            validation.Login, expected, role);
+
+        throw new InvalidOperationException(message);
+    }
+
     private async Task<TokenResponse> PostTokenRequestAsync(Dictionary<string, string> formData, CancellationToken ct)
     {
-        logger.LogDebug("Отправка POST-запроса на получение токена в Twitch API (GrantType: {GrantType})", formData.GetValueOrDefault("grant_type", "unknown"));
-
         var client = httpClientFactory.CreateClient();
-        var tokenUrl = "https://id.twitch.tv/oauth2/token";
+        const string TokenUrl = "https://id.twitch.tv/oauth2/token";
 
         using var content = new FormUrlEncodedContent(formData);
-        var response = await client.PostAsync(tokenUrl, content, ct);
+        var response = await client.PostAsync(TokenUrl, content, ct);
         var jsonResponse = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
@@ -435,14 +575,21 @@ public sealed class TwitchOAuthService(
 
         if (tokenResponse == null)
         {
-            logger.LogError("Не удалось десериализовать успешный ответ от Twitch API. Payload: {JsonResponse}", jsonResponse);
             throw new InvalidOperationException("Не удалось десериализовать ответ сервера");
         }
 
-        logger.LogDebug("Ответ Twitch API успешно десериализован");
         return tokenResponse;
     }
+
+    private sealed record PendingAuth(TwitchOAuthRole Role, TaskCompletionSource<string> Tcs);
 }
+
+public record TokenValidationInfo(
+    string Login,
+    string UserId,
+    string ClientId,
+    IReadOnlyList<string> Scopes,
+    int ExpiresIn);
 
 public record TokenResponse(
     [property: JsonPropertyName("access_token")]
@@ -462,3 +609,15 @@ internal sealed record OAuthErrorResponse(
     int Status,
     [property: JsonPropertyName("message")]
     string? Message);
+
+internal sealed record ValidateResponse(
+    [property: JsonPropertyName("client_id")]
+    string? ClientId,
+    [property: JsonPropertyName("login")]
+    string? Login,
+    [property: JsonPropertyName("user_id")]
+    string? UserId,
+    [property: JsonPropertyName("scopes")]
+    List<string>? Scopes,
+    [property: JsonPropertyName("expires_in")]
+    int ExpiresIn);

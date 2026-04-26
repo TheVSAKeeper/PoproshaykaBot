@@ -11,4 +11,7 @@ public sealed record PollsAvailability(bool IsAvailable, string? UnavailableReas
 
     public static PollsAvailability NoBroadcaster { get; } =
         new(false, "Не удалось определить канал для голосования.");
+
+    public static PollsAvailability NoBroadcasterToken { get; } =
+        new(false, "Авторизуйте стримера в настройках Twitch — без токена стримера опросы недоступны.");
 }

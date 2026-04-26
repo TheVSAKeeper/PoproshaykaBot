@@ -24,13 +24,12 @@ public partial class BasicSettingsControl : UserControl
 
     public void LoadSettings(TwitchSettings settings)
     {
-        _botUsernameTextBox.Text = settings.BotUsername;
+        _botUsernameTextBox.Text = settings.BotAccount.Login;
         _channelTextBox.Text = settings.Channel;
     }
 
     public void SaveSettings(TwitchSettings settings)
     {
-        settings.BotUsername = _botUsernameTextBox.Text.Trim();
         settings.Channel = _channelTextBox.Text.Trim();
     }
 
@@ -72,7 +71,7 @@ public partial class BasicSettingsControl : UserControl
 
     private void SetPlaceholders()
     {
-        _botUsernameTextBox.PlaceholderText = DefaultSettings.BotUsername;
+        _botUsernameTextBox.PlaceholderText = "Авторизуйте бота на вкладке OAuth";
         _channelTextBox.PlaceholderText = DefaultSettings.Channel;
     }
 
