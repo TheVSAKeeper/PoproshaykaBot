@@ -89,6 +89,15 @@ public partial class SettingsForm : Form
         return JsonSerializer.Deserialize<AppSettings>(json)!;
     }
 
+    private static void CopyLiveTokens(TwitchAccountSettings source, TwitchAccountSettings target)
+    {
+        target.AccessToken = source.AccessToken;
+        target.RefreshToken = source.RefreshToken;
+        target.Login = source.Login;
+        target.UserId = source.UserId;
+        target.StoredScopes = source.StoredScopes;
+    }
+
     private void LoadSettingsToControls()
     {
         _basicSettingsControl.LoadSettings(_settings.Twitch);
@@ -130,9 +139,12 @@ public partial class SettingsForm : Form
         try
         {
             SaveSettingsFromControls();
-            _settings.Twitch.BroadcastProfiles = _settingsManager.Current.Twitch.BroadcastProfiles;
-            _settings.Twitch.Polls.Profiles = _settingsManager.Current.Twitch.Polls.Profiles;
-            _settings.Twitch.Infrastructure.RecentCategories = _settingsManager.Current.Twitch.Infrastructure.RecentCategories;
+            var live = _settingsManager.Current;
+            CopyLiveTokens(live.Twitch.BotAccount, _settings.Twitch.BotAccount);
+            CopyLiveTokens(live.Twitch.BroadcasterAccount, _settings.Twitch.BroadcasterAccount);
+            _settings.Twitch.BroadcastProfiles = live.Twitch.BroadcastProfiles;
+            _settings.Twitch.Polls.Profiles = live.Twitch.Polls.Profiles;
+            _settings.Twitch.Infrastructure.RecentCategories = live.Twitch.Infrastructure.RecentCategories;
             _settingsManager.SaveSettings(_settings);
             _hasChanges = false;
             UpdateButtonStates();

@@ -117,14 +117,14 @@ public sealed class BotConnectionManager : IDisposable
             ReportProgress("Получение токена доступа...");
             _logger.LogDebug("Запрос токена доступа");
 
-            var accessToken = await _tokenService.GetAccessTokenAsync(TwitchOAuthRole.Bot, ct);
+            var accessToken = await _tokenService.GetValidTokenOrRefreshAsync(TwitchOAuthRole.Bot, ct);
 
             ct.ThrowIfCancellationRequested();
 
             if (string.IsNullOrWhiteSpace(accessToken))
             {
                 _logger.LogError("Не удалось получить токен доступа (токен пуст или null)");
-                throw new InvalidOperationException("Не удалось получить токен доступа. Проверьте настройки OAuth.");
+                throw new InvalidOperationException("Токен бота отсутствует или недействителен. Авторизуйте бота в настройках Twitch (вкладка «Бот»).");
             }
 
             ReportProgress("Запуск компонентов бота...");

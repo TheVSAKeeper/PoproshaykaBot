@@ -243,26 +243,6 @@ public sealed class TwitchOAuthService(
         }
     }
 
-    public async Task<string?> GetAccessTokenAsync(TwitchOAuthRole role, CancellationToken ct = default)
-    {
-        var settings = settingsManager.Current.Twitch;
-
-        if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret))
-        {
-            throw new InvalidOperationException("OAuth настройки не настроены (ClientId/ClientSecret).");
-        }
-
-        var token = await GetValidTokenOrRefreshAsync(role, ct);
-        if (token != null)
-        {
-            return token;
-        }
-
-        logger.LogInformation("Валидный токен для роли {Role} не найден, инициируется новый OAuth-поток", role);
-        var account = GetAccount(settings, role);
-        return await StartOAuthFlowAsync(role, settings.ClientId, settings.ClientSecret, account.Scopes, settings.RedirectUri, ct);
-    }
-
     public async Task<string?> GetValidTokenOrRefreshAsync(TwitchOAuthRole role, CancellationToken ct = default)
     {
         var semaphore = _refreshSemaphores[role];
