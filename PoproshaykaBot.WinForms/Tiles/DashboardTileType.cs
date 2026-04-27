@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Polls;
 using PoproshaykaBot.WinForms.Streaming;
 
 namespace PoproshaykaBot.WinForms.Tiles;
@@ -95,5 +96,19 @@ public sealed class BroadcastProfilesTileType : DashboardTileType
     public override Control CreateBody(IControlFactory factory)
     {
         return factory.Create<BroadcastProfilesPanel>();
+    }
+}
+
+public sealed class PollsControlTileType : DashboardTileType
+{
+    public static readonly PollsControlTileType Instance = new();
+
+    private PollsControlTileType() : base("polls-control", "🗳 Голосования")
+    {
+    }
+
+    public override Control CreateBody(IControlFactory factory)
+    {
+        return factory.Create<PollsControlPanel>();
     }
 }

@@ -10,6 +10,7 @@ public static class DashboardTileCatalog
         TwitchChatTileType.Instance,
         ChatOverlayPreviewTileType.Instance,
         BroadcastProfilesTileType.Instance,
+        PollsControlTileType.Instance,
     ];
 
     private static readonly Dictionary<string, DashboardTileType> ById =

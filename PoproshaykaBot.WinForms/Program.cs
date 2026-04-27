@@ -303,6 +303,8 @@ public static class Program
         services.AddTransient<SettingsForm>();
         services.AddTransient<UserStatisticsForm>();
         services.AddTransient<BroadcastProfileEditDialog>();
+        services.AddTransient<PollFromProfileDialog>();
+        services.AddTransient<PollProfileEditDialog>();
     }
 
     private static string GetRussianSecondsWord(int seconds)
