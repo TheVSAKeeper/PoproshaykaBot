@@ -40,6 +40,7 @@ public partial class BroadcastProfilesPanel : UserControl
 
         _addButton.Click += OnAddClicked;
         _importButton.Click += OnImportClicked;
+        _editCurrentButton.Click += OnEditCurrentClicked;
         _cardsFlow.ClientSizeChanged += (_, _) => ResizeCardsToFlow();
     }
 
@@ -57,6 +58,15 @@ public partial class BroadcastProfilesPanel : UserControl
 
     [Inject]
     public IStreamStatus Stream { get; internal init; } = null!;
+
+    [Inject]
+    public IChannelInformationApplier Applier { get; internal init; } = null!;
+
+    [Inject]
+    public ITwitchChannelsApi ChannelsApi { get; internal init; } = null!;
+
+    [Inject]
+    public IBroadcasterIdProvider BroadcasterId { get; internal init; } = null!;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -104,6 +114,69 @@ public partial class BroadcastProfilesPanel : UserControl
         {
             PersistEdited(profile);
         }
+    }
+
+    private async void OnEditCurrentClicked(object? sender, EventArgs e)
+    {
+        _editCurrentButton.Enabled = false;
+        SetStatus("Загружаем текущие настройки…", false);
+
+        BroadcastProfile? draft;
+
+        try
+        {
+            var broadcasterId = await BroadcasterId.GetAsync(CancellationToken.None);
+
+            if (string.IsNullOrEmpty(broadcasterId))
+            {
+                SetStatus("✗ Не удалось определить канал", true);
+                return;
+            }
+
+            var info = await ChannelsApi.GetChannelInformationAsync(broadcasterId, CancellationToken.None);
+
+            if (info == null)
+            {
+                SetStatus("✗ Не удалось загрузить настройки канала", true);
+                return;
+            }
+
+            draft = new BroadcastProfile
+            {
+                Id = Guid.Empty,
+                Name = "(текущие настройки)",
+                Title = info.Title ?? string.Empty,
+                GameId = info.GameId ?? string.Empty,
+                GameName = info.GameName ?? string.Empty,
+                BroadcasterLanguage = string.IsNullOrEmpty(info.BroadcasterLanguage) ? "ru" : info.BroadcasterLanguage,
+                Tags = info.Tags?.ToList() ?? [],
+            };
+
+            SetStatus(string.Empty, false);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"✗ {HelixErrorMessages.SafeMessage(ex)}", true);
+            return;
+        }
+        finally
+        {
+            _editCurrentButton.Enabled = true;
+        }
+
+        using var dialog = Forms.Create<BroadcastProfileEditDialog>();
+        dialog.LoadFrom(draft);
+        dialog.ConfigureCurrentSettingsMode();
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        dialog.SaveTo(draft);
+
+        SetStatus("Применяем…", false);
+        await Applier.ApplyAsync(draft, CancellationToken.None);
     }
 
     private void OnImportClicked(object? sender, EventArgs e)

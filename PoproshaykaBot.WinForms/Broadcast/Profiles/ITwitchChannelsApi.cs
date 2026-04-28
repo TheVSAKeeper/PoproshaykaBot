@@ -8,4 +8,8 @@ public interface ITwitchChannelsApi
         string broadcasterId,
         PatchChannelRequest request,
         CancellationToken cancellationToken);
+
+    Task<ChannelInfo?> GetChannelInformationAsync(
+        string broadcasterId,
+        CancellationToken cancellationToken);
 }

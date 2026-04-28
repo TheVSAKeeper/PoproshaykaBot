@@ -5,12 +5,11 @@ namespace PoproshaykaBot.WinForms.Broadcast;
 public partial class BroadcastProfileEditDialog : Form
 {
     private string _originalLanguage = string.Empty;
+    private bool _nameRequired = true;
 
     public BroadcastProfileEditDialog()
     {
         InitializeComponent();
-        _languageComboBox.Items.AddRange(["ru", "en"]);
-        _nameTextBox.TextChanged += (_, _) => _okButton.Enabled = _nameTextBox.Text.Trim().Length > 0;
     }
 
     public void LoadFrom(BroadcastProfile profile)
@@ -24,12 +23,27 @@ public partial class BroadcastProfileEditDialog : Form
             .Cast<string>()
             .FirstOrDefault(item => string.Equals(item, _originalLanguage, StringComparison.OrdinalIgnoreCase));
 
-        _okButton.Enabled = !string.IsNullOrWhiteSpace(profile.Name);
+        UpdateOkButtonState();
+    }
+
+    public void ConfigureCurrentSettingsMode()
+    {
+        Text = "Текущие настройки эфира";
+        _nameRequired = false;
+        _nameLbl.Visible = false;
+        _nameTextBox.Visible = false;
+        _mainLayout.RowStyles[0].SizeType = SizeType.Absolute;
+        _mainLayout.RowStyles[0].Height = 0;
+        UpdateOkButtonState();
     }
 
     public void SaveTo(BroadcastProfile profile)
     {
-        profile.Name = _nameTextBox.Text.Trim();
+        if (_nameRequired)
+        {
+            profile.Name = _nameTextBox.Text.Trim();
+        }
+
         profile.Title = _titleTextBox.Text.Trim();
         if (_gameBox.Selected != null)
         {
@@ -42,5 +56,15 @@ public partial class BroadcastProfileEditDialog : Form
             .ToList();
 
         profile.BroadcasterLanguage = _languageComboBox.SelectedItem?.ToString() ?? _originalLanguage;
+    }
+
+    private void OnNameTextChanged(object? sender, EventArgs e)
+    {
+        UpdateOkButtonState();
+    }
+
+    private void UpdateOkButtonState()
+    {
+        _okButton.Enabled = !_nameRequired || _nameTextBox.Text.Trim().Length > 0;
     }
 }

@@ -7,6 +7,7 @@
         private System.Windows.Forms.FlowLayoutPanel _headerFlow;
         private System.Windows.Forms.Button _addButton;
         private System.Windows.Forms.Button _importButton;
+        private System.Windows.Forms.Button _editCurrentButton;
         private System.Windows.Forms.Label _statusLabel;
         private System.Windows.Forms.FlowLayoutPanel _cardsFlow;
         private System.Windows.Forms.Label _emptyLabel;
@@ -27,6 +28,7 @@
             _headerFlow = new System.Windows.Forms.FlowLayoutPanel();
             _addButton = new System.Windows.Forms.Button();
             _importButton = new System.Windows.Forms.Button();
+            _editCurrentButton = new System.Windows.Forms.Button();
             _statusLabel = new System.Windows.Forms.Label();
             _cardsFlow = new System.Windows.Forms.FlowLayoutPanel();
             _emptyLabel = new System.Windows.Forms.Label();
@@ -54,7 +56,12 @@
             _importButton.Name = "_importButton";
             _importButton.Text = "⇪ Импорт";
             _importButton.AutoSize = true;
-            _importButton.Margin = new System.Windows.Forms.Padding(0, 0, 8, 0);
+            _importButton.Margin = new System.Windows.Forms.Padding(0, 0, 4, 0);
+
+            _editCurrentButton.Name = "_editCurrentButton";
+            _editCurrentButton.Text = "✎ Текущие";
+            _editCurrentButton.AutoSize = true;
+            _editCurrentButton.Margin = new System.Windows.Forms.Padding(0, 0, 8, 0);
 
             _statusLabel.Name = "_statusLabel";
             _statusLabel.AutoSize = true;
@@ -64,6 +71,7 @@
 
             _headerFlow.Controls.Add(_addButton);
             _headerFlow.Controls.Add(_importButton);
+            _headerFlow.Controls.Add(_editCurrentButton);
             _headerFlow.Controls.Add(_statusLabel);
 
             _header.Controls.Add(_headerFlow);

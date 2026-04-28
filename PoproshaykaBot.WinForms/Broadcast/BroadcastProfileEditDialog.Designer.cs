@@ -96,6 +96,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _nameTextBox.Name = "_nameTextBox";
             _nameTextBox.Size = new Size(565, 23);
             _nameTextBox.TabIndex = 1;
+            _nameTextBox.TextChanged += OnNameTextChanged;
             // 
             // _titleLbl
             // 
@@ -176,6 +177,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             // 
             _languageComboBox.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             _languageComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _languageComboBox.Items.AddRange(new object[] { "ru", "en" });
             _languageComboBox.Location = new Point(88, 253);
             _languageComboBox.Margin = new Padding(0, 3, 0, 4);
             _languageComboBox.Name = "_languageComboBox";

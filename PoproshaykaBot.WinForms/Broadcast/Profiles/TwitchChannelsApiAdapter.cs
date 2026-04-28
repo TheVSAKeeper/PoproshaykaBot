@@ -17,4 +17,12 @@ public sealed class TwitchChannelsApiAdapter(
         cancellationToken.ThrowIfCancellationRequested();
         return helix.PatchChannelAsync(broadcasterId, request, cancellationToken);
     }
+
+    public Task<ChannelInfo?> GetChannelInformationAsync(
+        string broadcasterId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return helix.GetChannelInfoAsync(broadcasterId, cancellationToken);
+    }
 }
