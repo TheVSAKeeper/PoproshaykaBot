@@ -1,4 +1,4 @@
-name: Release
+﻿name: Release
 
 on:
   push:
@@ -98,6 +98,7 @@ jobs:
           -p:PublishSingleFile=true
           -p:PublishReadyToRun=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:PortableMode=true
           -p:Version=${{ needs.prepare.outputs.version }}
           --self-contained
 

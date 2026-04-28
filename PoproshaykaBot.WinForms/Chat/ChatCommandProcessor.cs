@@ -1,4 +1,5 @@
-using PoproshaykaBot.WinForms.Chat.Commands;
+﻿using PoproshaykaBot.WinForms.Chat.Commands;
+using PoproshaykaBot.WinForms.Infrastructure;
 
 namespace PoproshaykaBot.WinForms.Chat;
 
@@ -10,9 +11,8 @@ public sealed class ChatCommandProcessor
 
     public ChatCommandProcessor(IEnumerable<IChatCommand> commands, string prefix = "!")
     {
-        var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PoproshaykaBot");
-        Directory.CreateDirectory(appDataDir);
-        _unknownCommandsFilePath = Path.Combine(appDataDir, "unknown_commands.txt");
+        Directory.CreateDirectory(AppPaths.BaseDirectory);
+        _unknownCommandsFilePath = AppPaths.Combine("unknown_commands.txt");
 
         _prefix = string.IsNullOrWhiteSpace(prefix) ? "!" : prefix;
         _tokenToCommand = new(StringComparer.OrdinalIgnoreCase);

@@ -1,4 +1,5 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Settings;
 using PoproshaykaBot.WinForms.Infrastructure.Persistence;
@@ -22,10 +23,7 @@ public class SettingsManager
     {
         _logger = logger;
         _eventBus = eventBus;
-        var settingsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "PoproshaykaBot");
-
-        _settingsFilePath = Path.Combine(settingsDirectory, "settings.json");
+        _settingsFilePath = AppPaths.Combine("settings.json");
     }
 
     public virtual AppSettings Current

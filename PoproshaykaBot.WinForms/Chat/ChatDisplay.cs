@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
+using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Settings;
 using System.Diagnostics;
@@ -63,9 +64,7 @@ public sealed partial class ChatDisplay : UserControl
                                              })();
                                              """;
 
-    private static readonly string ZoomFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "PoproshaykaBot",
-        "chat-zoom.txt");
+    private static readonly string ZoomFilePath = AppPaths.Combine("chat-zoom.txt");
 
     private bool _initialized;
     private bool _reloadAttempted;
@@ -250,9 +249,7 @@ public sealed partial class ChatDisplay : UserControl
     {
         try
         {
-            var userDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "PoproshaykaBot",
-                "WebView2");
+            var userDataFolder = AppPaths.Combine("WebView2");
 
             Directory.CreateDirectory(userDataFolder);
 

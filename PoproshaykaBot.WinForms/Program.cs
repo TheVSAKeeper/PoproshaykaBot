@@ -39,12 +39,16 @@ public static class Program
             .MinimumLevel.Debug()
             .WriteTo.Console(outputTemplate: OutputTemplate)
             .WriteTo.Debug(outputTemplate: OutputTemplate)
-            .WriteTo.File("logs/bot_log_.txt", rollingInterval: RollingInterval.Day, outputTemplate: OutputTemplate)
+            .WriteTo.File(AppPaths.Combine("logs", "bot_log_.txt"), rollingInterval: RollingInterval.Day, outputTemplate: OutputTemplate)
             .CreateLogger();
 
         try
         {
             Log.Information("Запуск приложения...");
+            Log.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}",
+                AppPaths.IsPortable ? "portable" : "AppData",
+                AppPaths.BaseDirectory);
+
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             ApplicationConfiguration.Initialize();
 

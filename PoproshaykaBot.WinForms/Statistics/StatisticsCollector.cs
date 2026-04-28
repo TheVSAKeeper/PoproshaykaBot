@@ -1,4 +1,5 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Persistence;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -40,7 +41,7 @@ public sealed class StatisticsCollector : IAsyncDisposable
     {
         _logger = logger;
 
-        var statisticsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PoproshaykaBot");
+        var statisticsDirectory = AppPaths.BaseDirectory;
         _userStatisticsFilePath = Path.Combine(statisticsDirectory, "users_statistics.json");
         _botStatisticsFilePath = Path.Combine(statisticsDirectory, "bot_statistics.json");
 

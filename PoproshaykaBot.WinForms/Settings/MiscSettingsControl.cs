@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+﻿using PoproshaykaBot.WinForms.Infrastructure;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using System.Diagnostics;
 using System.Reflection;
 
@@ -28,7 +29,7 @@ public partial class MiscSettingsControl : UserControl
     {
         try
         {
-            var settingsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PoproshaykaBot");
+            var settingsDirectory = AppPaths.BaseDirectory;
 
             if (!Directory.Exists(settingsDirectory))
             {
