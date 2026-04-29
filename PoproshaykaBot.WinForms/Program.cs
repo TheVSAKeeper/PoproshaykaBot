@@ -244,6 +244,7 @@ public static class Program
         services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<EventSubConnectionHost>());
         services.AddSingleton<StreamStatusManager>();
         services.AddSingleton<IStreamStatus>(sp => sp.GetRequiredService<StreamStatusManager>());
+        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<StreamStatusManager>());
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
         services.AddSingleton<UserMessagesManagementService>();

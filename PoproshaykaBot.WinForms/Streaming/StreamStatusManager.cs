@@ -4,6 +4,7 @@ using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
+using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.EventSub;
@@ -15,7 +16,7 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Streaming;
 
-public class StreamStatusManager : IStreamStatus, IAsyncDisposable
+public class StreamStatusManager : IStreamStatus, IHostedComponent, IAsyncDisposable
 {
     private readonly ITwitchEventSubClient _eventSubClient;
     private readonly ITwitchHelixClient _helix;
@@ -23,9 +24,10 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
     private readonly SettingsManager _settingsManager;
     private readonly IEventBus _eventBus;
     private readonly ILogger<StreamStatusManager> _logger;
-    private readonly IDisposable _channelUpdatedSubscription;
 
     private readonly CancellationTokenSource _disposeCts = new();
+    private IDisposable? _channelUpdatedSubscription;
+    private bool _subscribed;
     private bool _disposed;
 
     public StreamStatusManager(
@@ -43,6 +45,21 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
         _settingsManager = settingsManager;
         _eventBus = eventBus;
         _logger = logger;
+    }
+
+    public StreamStatus CurrentStatus { get; private set; } = StreamStatus.Unknown;
+    public StreamInfo? CurrentStream { get; private set; }
+
+    public string Name => "Отслеживание статуса стрима";
+
+    public int StartOrder => 256;
+
+    public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        if (_subscribed)
+        {
+            return Task.CompletedTask;
+        }
 
         _eventSubClient.OnSessionWelcome += OnSessionWelcomeAsync;
         _eventSubClient.OnNotification += OnNotificationAsync;
@@ -51,10 +68,35 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
         _eventSubClient.OnDisconnected += OnDisconnectedAsync;
 
         _channelUpdatedSubscription = _eventBus.Subscribe<ChannelUpdated>(OnChannelUpdated);
+        _subscribed = true;
+
+        _logger.LogInformation("StreamStatusManager: подписки на EventSub установлены");
+        return Task.CompletedTask;
     }
 
-    public StreamStatus CurrentStatus { get; private set; } = StreamStatus.Unknown;
-    public StreamInfo? CurrentStream { get; private set; }
+    public Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        if (!_subscribed)
+        {
+            return Task.CompletedTask;
+        }
+
+        _eventSubClient.OnSessionWelcome -= OnSessionWelcomeAsync;
+        _eventSubClient.OnNotification -= OnNotificationAsync;
+        _eventSubClient.OnSessionReconnect -= OnSessionReconnectAsync;
+        _eventSubClient.OnRevocation -= OnRevocationAsync;
+        _eventSubClient.OnDisconnected -= OnDisconnectedAsync;
+
+        _channelUpdatedSubscription?.Dispose();
+        _channelUpdatedSubscription = null;
+        _subscribed = false;
+
+        CurrentStatus = StreamStatus.Unknown;
+        CurrentStream = null;
+
+        _logger.LogInformation("StreamStatusManager: подписки на EventSub сняты");
+        return Task.CompletedTask;
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -69,13 +111,18 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
         await _disposeCts.CancelAsync();
         _disposeCts.Dispose();
 
-        _eventSubClient.OnSessionWelcome -= OnSessionWelcomeAsync;
-        _eventSubClient.OnNotification -= OnNotificationAsync;
-        _eventSubClient.OnSessionReconnect -= OnSessionReconnectAsync;
-        _eventSubClient.OnRevocation -= OnRevocationAsync;
-        _eventSubClient.OnDisconnected -= OnDisconnectedAsync;
+        if (_subscribed)
+        {
+            _eventSubClient.OnSessionWelcome -= OnSessionWelcomeAsync;
+            _eventSubClient.OnNotification -= OnNotificationAsync;
+            _eventSubClient.OnSessionReconnect -= OnSessionReconnectAsync;
+            _eventSubClient.OnRevocation -= OnRevocationAsync;
+            _eventSubClient.OnDisconnected -= OnDisconnectedAsync;
 
-        _channelUpdatedSubscription.Dispose();
+            _channelUpdatedSubscription?.Dispose();
+            _channelUpdatedSubscription = null;
+            _subscribed = false;
+        }
 
         GC.SuppressFinalize(this);
     }
