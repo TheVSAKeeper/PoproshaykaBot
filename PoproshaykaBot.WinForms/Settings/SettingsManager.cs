@@ -3,9 +3,11 @@ using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Settings;
 using PoproshaykaBot.WinForms.Infrastructure.Persistence;
+using PoproshaykaBot.WinForms.Settings.Migrations;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
@@ -94,7 +96,23 @@ public class SettingsManager
             }
 
             var json = File.ReadAllText(_settingsFilePath, Encoding.UTF8);
-            var settings = JsonSerializer.Deserialize<AppSettings>(json, GetJsonOptions());
+            var options = GetJsonOptions();
+            var node = JsonNode.Parse(json);
+
+            if (node is not JsonObject root)
+            {
+                throw new InvalidOperationException("Корневой элемент settings.json не является JSON-объектом");
+            }
+
+            if (SettingsMigrator.TryMigrate(root, _logger))
+            {
+                CreateBackupFile(_settingsFilePath, "pre-migration");
+                var migratedJson = root.ToJsonString(options);
+                AtomicFile.Save(_settingsFilePath, migratedJson, _logger);
+                _logger.LogInformation("Настройки мигрированы в актуальный формат и сохранены");
+            }
+
+            var settings = root.Deserialize<AppSettings>(options);
 
             if (settings == null)
             {
