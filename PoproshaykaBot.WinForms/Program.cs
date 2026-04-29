@@ -256,6 +256,9 @@ public static class Program
         services.AddSingleton<ITwitchSearchApi, TwitchSearchApiAdapter>();
         services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
         services.AddSingleton<IBotUserIdProvider, BotUserIdProvider>();
+        services.AddSingleton<ChannelUpdateSubscriber>();
+        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChannelUpdateSubscriber>());
+        services.AddSingleton<IChannelUpdateConfirmation>(sp => sp.GetRequiredService<ChannelUpdateConfirmationService>());
         services.AddSingleton<ChannelInformationApplier>();
         services.AddSingleton<IChannelInformationApplier>(sp => sp.GetRequiredService<ChannelInformationApplier>());
         services.AddSingleton<GameCategoryResolver>();

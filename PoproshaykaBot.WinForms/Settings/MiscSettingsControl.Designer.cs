@@ -33,6 +33,10 @@
             _settingsFolderTableLayout = new TableLayoutPanel();
             _settingsFolderLabel = new Label();
             _openSettingsFolderButton = new Button();
+            _broadcastProfilesGroupBox = new GroupBox();
+            _broadcastProfilesTableLayout = new TableLayoutPanel();
+            _importBroadcastProfilesLabel = new Label();
+            _importBroadcastProfilesButton = new Button();
             _actionsGroupBox = new GroupBox();
             _actionsTableLayout = new TableLayoutPanel();
             _resetAllSettingsLabel = new Label();
@@ -44,6 +48,8 @@
             _mainTableLayout.SuspendLayout();
             _settingsFolderGroupBox.SuspendLayout();
             _settingsFolderTableLayout.SuspendLayout();
+            _broadcastProfilesGroupBox.SuspendLayout();
+            _broadcastProfilesTableLayout.SuspendLayout();
             _actionsGroupBox.SuspendLayout();
             _actionsTableLayout.SuspendLayout();
             _aboutGroupBox.SuspendLayout();
@@ -55,12 +61,14 @@
             _mainTableLayout.ColumnCount = 1;
             _mainTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             _mainTableLayout.Controls.Add(_settingsFolderGroupBox, 0, 0);
-            _mainTableLayout.Controls.Add(_actionsGroupBox, 0, 1);
-            _mainTableLayout.Controls.Add(_aboutGroupBox, 0, 2);
+            _mainTableLayout.Controls.Add(_broadcastProfilesGroupBox, 0, 1);
+            _mainTableLayout.Controls.Add(_actionsGroupBox, 0, 2);
+            _mainTableLayout.Controls.Add(_aboutGroupBox, 0, 3);
             _mainTableLayout.Dock = DockStyle.Fill;
             _mainTableLayout.Location = new Point(0, 0);
             _mainTableLayout.Name = "_mainTableLayout";
-            _mainTableLayout.RowCount = 4;
+            _mainTableLayout.RowCount = 5;
+            _mainTableLayout.RowStyles.Add(new RowStyle());
             _mainTableLayout.RowStyles.Add(new RowStyle());
             _mainTableLayout.RowStyles.Add(new RowStyle());
             _mainTableLayout.RowStyles.Add(new RowStyle());
@@ -118,7 +126,46 @@
             _openSettingsFolderButton.Text = "Открыть папку";
             _openSettingsFolderButton.UseVisualStyleBackColor = true;
             _openSettingsFolderButton.Click += OnOpenSettingsFolderButtonClicked;
-            // 
+            //
+            // _broadcastProfilesGroupBox
+            //
+            _broadcastProfilesGroupBox.AutoSize = true;
+            _broadcastProfilesGroupBox.Controls.Add(_broadcastProfilesTableLayout);
+            _broadcastProfilesGroupBox.Dock = DockStyle.Fill;
+            _broadcastProfilesGroupBox.Name = "_broadcastProfilesGroupBox";
+            _broadcastProfilesGroupBox.Padding = new Padding(10);
+            _broadcastProfilesGroupBox.TabStop = false;
+            _broadcastProfilesGroupBox.Text = "Профили трансляций";
+            //
+            // _broadcastProfilesTableLayout
+            //
+            _broadcastProfilesTableLayout.AutoSize = true;
+            _broadcastProfilesTableLayout.ColumnCount = 2;
+            _broadcastProfilesTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _broadcastProfilesTableLayout.ColumnStyles.Add(new ColumnStyle());
+            _broadcastProfilesTableLayout.Controls.Add(_importBroadcastProfilesLabel, 0, 0);
+            _broadcastProfilesTableLayout.Controls.Add(_importBroadcastProfilesButton, 1, 0);
+            _broadcastProfilesTableLayout.Dock = DockStyle.Fill;
+            _broadcastProfilesTableLayout.Name = "_broadcastProfilesTableLayout";
+            _broadcastProfilesTableLayout.RowCount = 1;
+            _broadcastProfilesTableLayout.RowStyles.Add(new RowStyle());
+            //
+            // _importBroadcastProfilesLabel
+            //
+            _importBroadcastProfilesLabel.Anchor = AnchorStyles.Left;
+            _importBroadcastProfilesLabel.AutoSize = true;
+            _importBroadcastProfilesLabel.Name = "_importBroadcastProfilesLabel";
+            _importBroadcastProfilesLabel.Text = "Импорт профилей трансляций из JSON-файла";
+            //
+            // _importBroadcastProfilesButton
+            //
+            _importBroadcastProfilesButton.AutoSize = true;
+            _importBroadcastProfilesButton.MinimumSize = new Size(92, 0);
+            _importBroadcastProfilesButton.Name = "_importBroadcastProfilesButton";
+            _importBroadcastProfilesButton.Text = "Импорт…";
+            _importBroadcastProfilesButton.UseVisualStyleBackColor = true;
+            _importBroadcastProfilesButton.Click += OnImportBroadcastProfilesButtonClicked;
+            //
             // _actionsGroupBox
             // 
             _actionsGroupBox.AutoSize = true;
@@ -234,6 +281,10 @@
             _settingsFolderGroupBox.PerformLayout();
             _settingsFolderTableLayout.ResumeLayout(false);
             _settingsFolderTableLayout.PerformLayout();
+            _broadcastProfilesGroupBox.ResumeLayout(false);
+            _broadcastProfilesGroupBox.PerformLayout();
+            _broadcastProfilesTableLayout.ResumeLayout(false);
+            _broadcastProfilesTableLayout.PerformLayout();
             _actionsGroupBox.ResumeLayout(false);
             _actionsGroupBox.PerformLayout();
             _actionsTableLayout.ResumeLayout(false);
@@ -252,6 +303,10 @@
         private TableLayoutPanel _settingsFolderTableLayout;
         private Label _settingsFolderLabel;
         private Button _openSettingsFolderButton;
+        private GroupBox _broadcastProfilesGroupBox;
+        private TableLayoutPanel _broadcastProfilesTableLayout;
+        private Label _importBroadcastProfilesLabel;
+        private Button _importBroadcastProfilesButton;
         private GroupBox _actionsGroupBox;
         private TableLayoutPanel _actionsTableLayout;
         private Label _resetAllSettingsLabel;

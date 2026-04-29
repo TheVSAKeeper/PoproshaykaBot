@@ -4,6 +4,9 @@ namespace PoproshaykaBot.WinForms.Broadcast;
 
 public partial class BroadcastProfileCard : UserControl
 {
+    private const int LabelHeight = 18;
+    private const int NameRowHeight = 22;
+
     public BroadcastProfileCard()
     {
         InitializeComponent();
@@ -12,16 +15,21 @@ public partial class BroadcastProfileCard : UserControl
         _activeBadge.Font = new(Font, FontStyle.Bold);
         _titleLabel.Font = new(Font, FontStyle.Italic);
 
-        _applyButton.Click += (_, e) => ApplyRequested?.Invoke(this, e);
-        _editButton.Click += (_, e) => EditRequested?.Invoke(this, e);
-        _menuButton.Click += OnMenuButtonClick;
+        _nameLabel.Height = NameRowHeight;
+        _titleLabel.Height = LabelHeight;
+        _metaLabel.Height = LabelHeight;
+        _driftLabel.Height = LabelHeight;
+        _applyingLabel.Height = LabelHeight;
 
+        _applyMenuItem.Click += (_, e) => ApplyRequested?.Invoke(this, e);
+        _editMenuItem.Click += (_, e) => EditRequested?.Invoke(this, e);
         _duplicateMenuItem.Click += (_, e) => DuplicateRequested?.Invoke(this, e);
         _deleteMenuItem.Click += (_, e) => DeleteRequested?.Invoke(this, e);
 
-        _toolTip.SetToolTip(_applyButton, "Применить");
-        _toolTip.SetToolTip(_editButton, "Редактировать");
-        _toolTip.SetToolTip(_menuButton, "Действия");
+        DoubleClick += OnCardDoubleClick;
+        SubscribeDoubleClickRecursively(this);
+
+        _toolTip.SetToolTip(this, "Двойной клик — применить, ПКМ — действия");
     }
 
     public event EventHandler? ApplyRequested;
@@ -79,11 +87,21 @@ public partial class BroadcastProfileCard : UserControl
 
     public void SetApplyInFlight(bool inFlight)
     {
-        _applyButton.Enabled = !inFlight;
+        _applyingLabel.Visible = inFlight;
+        _applyMenuItem.Enabled = !inFlight;
     }
 
-    private void OnMenuButtonClick(object? sender, EventArgs e)
+    private void OnCardDoubleClick(object? sender, EventArgs e)
     {
-        _menu.Show(_menuButton, new(0, _menuButton.Height));
+        ApplyRequested?.Invoke(this, e);
+    }
+
+    private void SubscribeDoubleClickRecursively(Control parent)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            child.DoubleClick += OnCardDoubleClick;
+            SubscribeDoubleClickRecursively(child);
+        }
     }
 }

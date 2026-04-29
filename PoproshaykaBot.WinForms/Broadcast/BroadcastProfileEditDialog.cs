@@ -12,6 +12,8 @@ public partial class BroadcastProfileEditDialog : Form
         InitializeComponent();
     }
 
+    public string NewProfileName => _nameTextBox.Text.Trim();
+
     public void LoadFrom(BroadcastProfile profile)
     {
         _nameTextBox.Text = profile.Name;
@@ -30,10 +32,10 @@ public partial class BroadcastProfileEditDialog : Form
     {
         Text = "Текущие настройки эфира";
         _nameRequired = false;
-        _nameLbl.Visible = false;
-        _nameTextBox.Visible = false;
-        _mainLayout.RowStyles[0].SizeType = SizeType.Absolute;
-        _mainLayout.RowStyles[0].Height = 0;
+        _nameLbl.Text = "Сохранить как:";
+        _nameTextBox.Text = string.Empty;
+        _nameTextBox.PlaceholderText = "имя нового профиля (необязательно)";
+        _okButton.Text = "Применить";
         UpdateOkButtonState();
     }
 

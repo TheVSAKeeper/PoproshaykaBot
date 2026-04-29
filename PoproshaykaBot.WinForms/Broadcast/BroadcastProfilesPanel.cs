@@ -6,21 +6,18 @@ using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Streaming;
 using PoproshaykaBot.WinForms.Twitch.Helix;
-using System.Text.Json;
 using Timer = System.Windows.Forms.Timer;
 
 namespace PoproshaykaBot.WinForms.Broadcast;
 
 public partial class BroadcastProfilesPanel : UserControl
 {
-    private static readonly JsonSerializerOptions ImportJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
-
+    private const int MinCardWidth = 220;
+    private const int CardMargin = 6;
     private readonly List<IDisposable> _subs = [];
     private readonly Timer _statusResetTimer;
     private bool _initialized;
+    private Guid? _activeProfileId;
 
     public BroadcastProfilesPanel()
     {
@@ -39,9 +36,8 @@ public partial class BroadcastProfilesPanel : UserControl
         };
 
         _addButton.Click += OnAddClicked;
-        _importButton.Click += OnImportClicked;
         _editCurrentButton.Click += OnEditCurrentClicked;
-        _cardsFlow.ClientSizeChanged += (_, _) => ResizeCardsToFlow();
+        _cardsFlow.ClientSizeChanged += (_, _) => RecomputeCardWidths();
     }
 
     [Inject]
@@ -84,11 +80,14 @@ public partial class BroadcastProfilesPanel : UserControl
 
         _initialized = true;
 
+        _activeProfileId = Settings.Current.Twitch.BroadcastProfiles.LastAppliedProfileId;
+
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfilesChanged>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplied>(this, OnProfileApplied));
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplyFailed>(this, OnProfileApplyFailed));
         _subs.Add(Bus.SubscribeOnUi<StreamWentOnline>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<StreamWentOffline>(this, _ => ReloadCards()));
+        _subs.Add(Bus.SubscribeOnUi<ChannelUpdated>(this, _ => ReloadCards()));
         _subs.DisposeOnClose(this);
 
         Disposed += (_, _) => _statusResetTimer.Dispose();
@@ -100,20 +99,12 @@ public partial class BroadcastProfilesPanel : UserControl
     {
         var profile = new BroadcastProfile { Name = $"Новый профиль {DateTime.Now:HH:mm:ss}" };
 
-        try
+        if (!EditProfile(profile))
         {
-            Manager.Upsert(profile);
-        }
-        catch (InvalidOperationException ex)
-        {
-            SetStatus(ex.Message, true);
             return;
         }
 
-        if (EditProfile(profile))
-        {
-            PersistEdited(profile);
-        }
+        PersistEdited(profile);
     }
 
     private async void OnEditCurrentClicked(object? sender, EventArgs e)
@@ -141,7 +132,7 @@ public partial class BroadcastProfilesPanel : UserControl
                 return;
             }
 
-            draft = new BroadcastProfile
+            draft = new()
             {
                 Id = Guid.Empty,
                 Name = "(текущие настройки)",
@@ -175,90 +166,37 @@ public partial class BroadcastProfilesPanel : UserControl
 
         dialog.SaveTo(draft);
 
-        SetStatus("Применяем…", false);
-        await Applier.ApplyAsync(draft, CancellationToken.None);
-    }
+        var newProfileName = dialog.NewProfileName;
 
-    private void OnImportClicked(object? sender, EventArgs e)
-    {
-        using var dialog = new OpenFileDialog
+        if (string.IsNullOrEmpty(newProfileName))
         {
-            Title = "Импорт профилей из JSON",
-            Filter = "JSON файлы (*.json)|*.json|Все файлы (*.*)|*.*",
-            CheckFileExists = true,
-        };
-
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-        {
+            SetStatus("⏳ Применяется текущая конфигурация…", false);
+            await Applier.ApplyAsync(draft, CancellationToken.None);
             return;
         }
 
-        List<ExternalTwitchProfile>? incoming;
+        var saved = new BroadcastProfile
+        {
+            Name = newProfileName,
+            Title = draft.Title,
+            GameId = draft.GameId,
+            GameName = draft.GameName,
+            BroadcasterLanguage = draft.BroadcasterLanguage,
+            Tags = draft.Tags.ToList(),
+        };
 
         try
         {
-            var json = File.ReadAllText(dialog.FileName);
-            incoming = JsonSerializer.Deserialize<List<ExternalTwitchProfile>>(json, ImportJsonOptions);
+            Manager.Upsert(saved);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            MessageBox.Show(this, $"Не удалось прочитать файл: {ex.Message}",
-                "Ошибка импорта", MessageBoxButtons.OK, MessageBoxIcon.Error);
-
+            SetStatus(ex.Message, true);
             return;
         }
 
-        if (incoming == null || incoming.Count == 0)
-        {
-            MessageBox.Show(this, "В файле нет профилей.",
-                "Импорт", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-            return;
-        }
-
-        var imported = 0;
-        var skipped = 0;
-        var existingNames = new HashSet<string>(Manager.GetAll().Select(p => p.Name),
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var external in incoming)
-        {
-            if (string.IsNullOrWhiteSpace(external.Name))
-            {
-                skipped++;
-                continue;
-            }
-
-            var name = external.Name;
-            var suffix = 2;
-
-            while (existingNames.Contains(name))
-            {
-                name = $"{external.Name} ({suffix++})";
-            }
-
-            var profile = new BroadcastProfile
-            {
-                Name = name,
-                Title = external.Title ?? string.Empty,
-                GameId = external.CategoryId ?? string.Empty,
-            };
-
-            try
-            {
-                Manager.Upsert(profile);
-                existingNames.Add(name);
-                imported++;
-            }
-            catch (InvalidOperationException)
-            {
-                skipped++;
-            }
-        }
-
-        MessageBox.Show(this,
-            $"Импортировано: {imported}. Пропущено: {skipped}.",
-            "Импорт профилей", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        SetStatus($"⏳ Применяется «{saved.Name}»…", false);
+        await Manager.ApplyAsync(saved.Id, CancellationToken.None);
     }
 
     private void OnCardApplyRequested(object? sender, EventArgs e)
@@ -343,9 +281,11 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private void OnProfileApplied(BroadcastProfileApplied @event)
     {
+        var isSavedProfile = @event.Profile.Id != Guid.Empty;
+        _activeProfileId = isSavedProfile ? @event.Profile.Id : null;
         ClearInFlightStates();
         ReloadCards();
-        SetStatus(string.Empty, false);
+        SetStatus(isSavedProfile ? $"✓ Применён профиль «{@event.Profile.Name}»" : "✓ Применено", false);
     }
 
     private void OnProfileApplyFailed(BroadcastProfileApplyFailed @event)
@@ -441,7 +381,7 @@ public partial class BroadcastProfilesPanel : UserControl
         }
 
         card.SetApplyInFlight(true);
-        SetStatus("Применяем…", false);
+        SetStatus($"⏳ Применяется «{card.Profile.Name}»…", false);
 
         try
         {
@@ -473,15 +413,24 @@ public partial class BroadcastProfilesPanel : UserControl
 
             _cardsFlow.Controls.Clear();
 
-            var activeId = Settings.Current.Twitch.BroadcastProfiles.LastAppliedProfileId;
+            var activeId = _activeProfileId ?? Settings.Current.Twitch.BroadcastProfiles.LastAppliedProfileId;
             var currentStream = Stream.CurrentStream;
 
-            foreach (var profile in Manager.GetAll())
+            var profiles = Manager.GetAll();
+            if (activeId.HasValue && profiles.All(p => p.Id != activeId.Value))
+            {
+                _activeProfileId = null;
+                activeId = null;
+            }
+
+            var cardWidth = ComputeCardWidth();
+
+            foreach (var profile in profiles)
             {
                 var isActive = activeId.HasValue && activeId.Value == profile.Id;
                 var hasDrift = isActive && ProfileDivergesFromStream(profile, currentStream);
 
-                var card = new BroadcastProfileCard { Width = ComputeCardWidth() };
+                var card = new BroadcastProfileCard { Width = cardWidth };
                 card.UpdateFrom(profile, isActive, hasDrift);
                 AttachCard(card);
                 _cardsFlow.Controls.Add(card);
@@ -499,10 +448,17 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private int ComputeCardWidth()
     {
-        return Math.Max(200, _cardsFlow.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 8);
+        var available = _cardsFlow.ClientSize.Width - _cardsFlow.Padding.Horizontal;
+        if (available <= MinCardWidth)
+        {
+            return Math.Max(MinCardWidth, available);
+        }
+
+        var columns = Math.Max(1, (available + CardMargin) / (MinCardWidth + CardMargin));
+        return Math.Max(MinCardWidth, (available - columns * CardMargin) / columns);
     }
 
-    private void ResizeCardsToFlow()
+    private void RecomputeCardWidths()
     {
         var width = ComputeCardWidth();
 
@@ -557,6 +513,4 @@ public partial class BroadcastProfilesPanel : UserControl
             _statusResetTimer.Start();
         }
     }
-
-    private sealed record ExternalTwitchProfile(string? Name, string? Title, string? CategoryId);
 }

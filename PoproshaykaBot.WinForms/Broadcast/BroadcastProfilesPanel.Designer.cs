@@ -6,7 +6,6 @@
         private System.Windows.Forms.Panel _header;
         private System.Windows.Forms.FlowLayoutPanel _headerFlow;
         private System.Windows.Forms.Button _addButton;
-        private System.Windows.Forms.Button _importButton;
         private System.Windows.Forms.Button _editCurrentButton;
         private System.Windows.Forms.Label _statusLabel;
         private System.Windows.Forms.FlowLayoutPanel _cardsFlow;
@@ -27,7 +26,6 @@
             _header = new System.Windows.Forms.Panel();
             _headerFlow = new System.Windows.Forms.FlowLayoutPanel();
             _addButton = new System.Windows.Forms.Button();
-            _importButton = new System.Windows.Forms.Button();
             _editCurrentButton = new System.Windows.Forms.Button();
             _statusLabel = new System.Windows.Forms.Label();
             _cardsFlow = new System.Windows.Forms.FlowLayoutPanel();
@@ -53,11 +51,6 @@
             _addButton.AutoSize = true;
             _addButton.Margin = new System.Windows.Forms.Padding(0, 0, 4, 0);
 
-            _importButton.Name = "_importButton";
-            _importButton.Text = "⇪ Импорт";
-            _importButton.AutoSize = true;
-            _importButton.Margin = new System.Windows.Forms.Padding(0, 0, 4, 0);
-
             _editCurrentButton.Name = "_editCurrentButton";
             _editCurrentButton.Text = "✎ Текущие";
             _editCurrentButton.AutoSize = true;
@@ -70,7 +63,6 @@
             _statusLabel.Text = string.Empty;
 
             _headerFlow.Controls.Add(_addButton);
-            _headerFlow.Controls.Add(_importButton);
             _headerFlow.Controls.Add(_editCurrentButton);
             _headerFlow.Controls.Add(_statusLabel);
 
@@ -78,8 +70,8 @@
 
             _cardsFlow.Name = "_cardsFlow";
             _cardsFlow.Dock = System.Windows.Forms.DockStyle.Fill;
-            _cardsFlow.FlowDirection = System.Windows.Forms.FlowDirection.TopDown;
-            _cardsFlow.WrapContents = false;
+            _cardsFlow.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            _cardsFlow.WrapContents = true;
             _cardsFlow.AutoScroll = true;
             _cardsFlow.Padding = new System.Windows.Forms.Padding(4);
 

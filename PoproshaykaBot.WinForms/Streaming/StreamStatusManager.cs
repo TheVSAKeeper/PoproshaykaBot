@@ -23,6 +23,7 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
     private readonly SettingsManager _settingsManager;
     private readonly IEventBus _eventBus;
     private readonly ILogger<StreamStatusManager> _logger;
+    private readonly IDisposable _channelUpdatedSubscription;
 
     private readonly CancellationTokenSource _disposeCts = new();
     private bool _disposed;
@@ -48,6 +49,8 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
         _eventSubClient.OnSessionReconnect += OnSessionReconnectAsync;
         _eventSubClient.OnRevocation += OnRevocationAsync;
         _eventSubClient.OnDisconnected += OnDisconnectedAsync;
+
+        _channelUpdatedSubscription = _eventBus.Subscribe<ChannelUpdated>(OnChannelUpdated);
     }
 
     public StreamStatus CurrentStatus { get; private set; } = StreamStatus.Unknown;
@@ -71,6 +74,8 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
         _eventSubClient.OnSessionReconnect -= OnSessionReconnectAsync;
         _eventSubClient.OnRevocation -= OnRevocationAsync;
         _eventSubClient.OnDisconnected -= OnDisconnectedAsync;
+
+        _channelUpdatedSubscription.Dispose();
 
         GC.SuppressFinalize(this);
     }
@@ -250,6 +255,25 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
             JsonException => "некорректный ответ Twitch",
             _ => "внутренняя ошибка",
         };
+    }
+
+    private void OnChannelUpdated(ChannelUpdated @event)
+    {
+        var stream = CurrentStream;
+
+        if (stream == null)
+        {
+            _logger.LogDebug("ChannelUpdated проигнорирован: стрим не в состоянии online");
+            return;
+        }
+
+        stream.Title = @event.Title;
+        stream.Language = @event.Language;
+        stream.GameId = @event.GameId;
+        stream.GameName = @event.GameName;
+
+        _logger.LogInformation("Метаданные стрима обновлены через channel.update: title={Title}, game={GameName}",
+            @event.Title, @event.GameName);
     }
 
     private async Task HandleStreamOnlineAsync(JsonElement payload, CancellationToken cancellationToken)

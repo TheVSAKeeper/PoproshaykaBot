@@ -6,17 +6,18 @@ namespace PoproshaykaBot.WinForms.Broadcast
     {
         private System.ComponentModel.IContainer components = null;
 
+        private System.Windows.Forms.TableLayoutPanel _mainLayout;
         private System.Windows.Forms.TableLayoutPanel _headerRow;
         private System.Windows.Forms.Label _activeBadge;
         private System.Windows.Forms.Label _nameLabel;
-        private System.Windows.Forms.FlowLayoutPanel _actionsFlow;
-        private System.Windows.Forms.Button _applyButton;
-        private System.Windows.Forms.Button _editButton;
-        private System.Windows.Forms.Button _menuButton;
         private System.Windows.Forms.Label _titleLabel;
         private System.Windows.Forms.Label _metaLabel;
         private System.Windows.Forms.Label _driftLabel;
+        private System.Windows.Forms.Label _applyingLabel;
         private System.Windows.Forms.ContextMenuStrip _menu;
+        private System.Windows.Forms.ToolStripMenuItem _applyMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem _editMenuItem;
+        private System.Windows.Forms.ToolStripSeparator _menuSeparator;
         private System.Windows.Forms.ToolStripMenuItem _duplicateMenuItem;
         private System.Windows.Forms.ToolStripMenuItem _deleteMenuItem;
         private System.Windows.Forms.ToolTip _toolTip;
@@ -31,173 +32,154 @@ namespace PoproshaykaBot.WinForms.Broadcast
         {
             components = new System.ComponentModel.Container();
             _menu = new ContextMenuStrip(components);
+            _applyMenuItem = new ToolStripMenuItem();
+            _editMenuItem = new ToolStripMenuItem();
+            _menuSeparator = new ToolStripSeparator();
             _duplicateMenuItem = new ToolStripMenuItem();
             _deleteMenuItem = new ToolStripMenuItem();
             _toolTip = new ToolTip(components);
+            _mainLayout = new TableLayoutPanel();
             _headerRow = new TableLayoutPanel();
             _activeBadge = new Label();
             _nameLabel = new Label();
-            _actionsFlow = new FlowLayoutPanel();
-            _applyButton = new Button();
-            _editButton = new Button();
-            _menuButton = new Button();
             _titleLabel = new Label();
             _metaLabel = new Label();
             _driftLabel = new Label();
+            _applyingLabel = new Label();
             _menu.SuspendLayout();
+            _mainLayout.SuspendLayout();
             _headerRow.SuspendLayout();
-            _actionsFlow.SuspendLayout();
             SuspendLayout();
-            // 
+            //
             // _menu
-            // 
-            _menu.Items.AddRange(new ToolStripItem[] { _duplicateMenuItem, _deleteMenuItem });
+            //
+            _menu.Items.AddRange(new ToolStripItem[] { _applyMenuItem, _editMenuItem, _menuSeparator, _duplicateMenuItem, _deleteMenuItem });
             _menu.Name = "_menu";
-            _menu.Size = new Size(159, 48);
-            // 
+            //
+            // _applyMenuItem
+            //
+            _applyMenuItem.Name = "_applyMenuItem";
+            _applyMenuItem.Text = "↻ Применить";
+            //
+            // _editMenuItem
+            //
+            _editMenuItem.Name = "_editMenuItem";
+            _editMenuItem.Text = "✎ Редактировать";
+            //
+            // _menuSeparator
+            //
+            _menuSeparator.Name = "_menuSeparator";
+            //
             // _duplicateMenuItem
-            // 
+            //
             _duplicateMenuItem.Name = "_duplicateMenuItem";
-            _duplicateMenuItem.Size = new Size(158, 22);
             _duplicateMenuItem.Text = "⎘ Дублировать";
-            // 
+            //
             // _deleteMenuItem
-            // 
+            //
             _deleteMenuItem.Name = "_deleteMenuItem";
-            _deleteMenuItem.Size = new Size(158, 22);
             _deleteMenuItem.Text = "🗑 Удалить";
-            // 
+            //
+            // _mainLayout
+            //
+            _mainLayout.AutoSize = true;
+            _mainLayout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _mainLayout.ColumnCount = 1;
+            _mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _mainLayout.Controls.Add(_headerRow, 0, 0);
+            _mainLayout.Controls.Add(_titleLabel, 0, 1);
+            _mainLayout.Controls.Add(_metaLabel, 0, 2);
+            _mainLayout.Controls.Add(_driftLabel, 0, 3);
+            _mainLayout.Controls.Add(_applyingLabel, 0, 4);
+            _mainLayout.Dock = DockStyle.Fill;
+            _mainLayout.Name = "_mainLayout";
+            _mainLayout.RowCount = 5;
+            _mainLayout.RowStyles.Add(new RowStyle());
+            _mainLayout.RowStyles.Add(new RowStyle());
+            _mainLayout.RowStyles.Add(new RowStyle());
+            _mainLayout.RowStyles.Add(new RowStyle());
+            _mainLayout.RowStyles.Add(new RowStyle());
+            //
             // _headerRow
-            // 
+            //
             _headerRow.AutoSize = true;
             _headerRow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            _headerRow.ColumnCount = 3;
+            _headerRow.ColumnCount = 2;
             _headerRow.ColumnStyles.Add(new ColumnStyle());
             _headerRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            _headerRow.ColumnStyles.Add(new ColumnStyle());
             _headerRow.Controls.Add(_activeBadge, 0, 0);
             _headerRow.Controls.Add(_nameLabel, 1, 0);
-            _headerRow.Controls.Add(_actionsFlow, 2, 0);
             _headerRow.Dock = DockStyle.Top;
-            _headerRow.Location = new Point(8, 6);
             _headerRow.Margin = new Padding(0, 0, 0, 2);
-            _headerRow.MinimumSize = new Size(0, 28);
             _headerRow.Name = "_headerRow";
             _headerRow.RowCount = 1;
             _headerRow.RowStyles.Add(new RowStyle());
-            _headerRow.Size = new Size(302, 28);
-            _headerRow.TabIndex = 4;
-            // 
+            //
             // _activeBadge
-            // 
+            //
+            _activeBadge.Anchor = AnchorStyles.Left;
             _activeBadge.AutoSize = true;
             _activeBadge.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             _activeBadge.ForeColor = Color.SeaGreen;
-            _activeBadge.Location = new Point(0, 0);
             _activeBadge.Margin = new Padding(0, 0, 4, 0);
             _activeBadge.Name = "_activeBadge";
-            _activeBadge.Size = new Size(17, 15);
-            _activeBadge.TabIndex = 0;
             _activeBadge.Text = "✓";
             _activeBadge.Visible = false;
-            // 
+            //
             // _nameLabel
-            // 
-            _nameLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            //
             _nameLabel.AutoEllipsis = true;
-            _nameLabel.AutoSize = true;
-            _nameLabel.Location = new Point(21, 0);
+            _nameLabel.AutoSize = false;
+            _nameLabel.Dock = DockStyle.Fill;
             _nameLabel.Margin = new Padding(0);
             _nameLabel.Name = "_nameLabel";
-            _nameLabel.Size = new Size(193, 15);
-            _nameLabel.TabIndex = 1;
-            // 
-            // _actionsFlow
-            // 
-            _actionsFlow.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            _actionsFlow.AutoSize = true;
-            _actionsFlow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            _actionsFlow.Controls.Add(_applyButton);
-            _actionsFlow.Controls.Add(_editButton);
-            _actionsFlow.Controls.Add(_menuButton);
-            _actionsFlow.Location = new Point(214, 0);
-            _actionsFlow.Margin = new Padding(0);
-            _actionsFlow.Name = "_actionsFlow";
-            _actionsFlow.Size = new Size(88, 26);
-            _actionsFlow.TabIndex = 2;
-            _actionsFlow.WrapContents = false;
-            // 
-            // _applyButton
-            // 
-            _applyButton.FlatStyle = FlatStyle.Flat;
-            _applyButton.Location = new Point(0, 0);
-            _applyButton.Margin = new Padding(0, 0, 2, 0);
-            _applyButton.MinimumSize = new Size(28, 26);
-            _applyButton.Name = "_applyButton";
-            _applyButton.Size = new Size(28, 26);
-            _applyButton.TabIndex = 0;
-            _applyButton.Text = "↻";
-            // 
-            // _editButton
-            // 
-            _editButton.FlatStyle = FlatStyle.Flat;
-            _editButton.Location = new Point(30, 0);
-            _editButton.Margin = new Padding(0, 0, 2, 0);
-            _editButton.MinimumSize = new Size(28, 26);
-            _editButton.Name = "_editButton";
-            _editButton.Size = new Size(28, 26);
-            _editButton.TabIndex = 1;
-            _editButton.Text = "✎";
-            // 
-            // _menuButton
-            // 
-            _menuButton.FlatStyle = FlatStyle.Flat;
-            _menuButton.Location = new Point(60, 0);
-            _menuButton.Margin = new Padding(0);
-            _menuButton.MinimumSize = new Size(28, 26);
-            _menuButton.Name = "_menuButton";
-            _menuButton.Size = new Size(28, 26);
-            _menuButton.TabIndex = 2;
-            _menuButton.Text = "⋯";
-            // 
+            _nameLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
             // _titleLabel
-            // 
+            //
             _titleLabel.AutoEllipsis = true;
-            _titleLabel.AutoSize = true;
-            _titleLabel.Dock = DockStyle.Top;
+            _titleLabel.AutoSize = false;
+            _titleLabel.Dock = DockStyle.Fill;
             _titleLabel.ForeColor = Color.DimGray;
-            _titleLabel.Location = new Point(8, 34);
-            _titleLabel.Margin = new Padding(0, 0, 0, 2);
-            _titleLabel.MaximumSize = new Size(0, 40);
+            _titleLabel.Margin = new Padding(0, 0, 0, 1);
             _titleLabel.Name = "_titleLabel";
-            _titleLabel.Size = new Size(0, 15);
-            _titleLabel.TabIndex = 3;
+            _titleLabel.TextAlign = ContentAlignment.MiddleLeft;
             _titleLabel.Visible = false;
-            // 
+            //
             // _metaLabel
-            // 
-            _metaLabel.AutoSize = true;
-            _metaLabel.Dock = DockStyle.Top;
+            //
+            _metaLabel.AutoEllipsis = true;
+            _metaLabel.AutoSize = false;
+            _metaLabel.Dock = DockStyle.Fill;
             _metaLabel.ForeColor = Color.Gray;
-            _metaLabel.Location = new Point(8, 49);
-            _metaLabel.Margin = new Padding(0, 0, 0, 2);
+            _metaLabel.Margin = new Padding(0, 0, 0, 1);
             _metaLabel.Name = "_metaLabel";
-            _metaLabel.Size = new Size(0, 15);
-            _metaLabel.TabIndex = 2;
+            _metaLabel.TextAlign = ContentAlignment.MiddleLeft;
             _metaLabel.Visible = false;
-            // 
+            //
             // _driftLabel
-            // 
-            _driftLabel.AutoSize = true;
-            _driftLabel.Dock = DockStyle.Top;
+            //
+            _driftLabel.AutoEllipsis = true;
+            _driftLabel.AutoSize = false;
+            _driftLabel.Dock = DockStyle.Fill;
             _driftLabel.ForeColor = Color.DarkOrange;
-            _driftLabel.Location = new Point(8, 64);
             _driftLabel.Margin = new Padding(0);
             _driftLabel.Name = "_driftLabel";
-            _driftLabel.Size = new Size(160, 15);
-            _driftLabel.TabIndex = 1;
             _driftLabel.Text = "⚠ Стрим изменён вручную";
+            _driftLabel.TextAlign = ContentAlignment.MiddleLeft;
             _driftLabel.Visible = false;
+            //
+            // _applyingLabel
+            //
+            _applyingLabel.AutoEllipsis = true;
+            _applyingLabel.AutoSize = false;
+            _applyingLabel.Dock = DockStyle.Fill;
+            _applyingLabel.ForeColor = Color.SteelBlue;
+            _applyingLabel.Margin = new Padding(0);
+            _applyingLabel.Name = "_applyingLabel";
+            _applyingLabel.Text = "⏳ Применяется…";
+            _applyingLabel.TextAlign = ContentAlignment.MiddleLeft;
+            _applyingLabel.Visible = false;
             //
             // BroadcastProfileCard
             //
@@ -206,19 +188,17 @@ namespace PoproshaykaBot.WinForms.Broadcast
             AutoSize = true;
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
             BorderStyle = BorderStyle.FixedSingle;
-            Controls.Add(_driftLabel);
-            Controls.Add(_metaLabel);
-            Controls.Add(_titleLabel);
-            Controls.Add(_headerRow);
-            Margin = new Padding(4, 2, 4, 2);
-            MinimumSize = new Size(320, 0);
+            ContextMenuStrip = _menu;
+            Controls.Add(_mainLayout);
+            Margin = new Padding(3);
+            MinimumSize = new Size(220, 0);
             Name = "BroadcastProfileCard";
-            Padding = new Padding(8, 6, 8, 6);
-            Size = new Size(318, 85);
+            Padding = new Padding(6, 4, 6, 4);
             _menu.ResumeLayout(false);
+            _mainLayout.ResumeLayout(false);
+            _mainLayout.PerformLayout();
             _headerRow.ResumeLayout(false);
             _headerRow.PerformLayout();
-            _actionsFlow.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
         }

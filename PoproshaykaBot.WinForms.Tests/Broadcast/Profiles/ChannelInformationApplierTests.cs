@@ -14,14 +14,19 @@ public class ChannelInformationApplierTests
         _channelsApi = Substitute.For<ITwitchChannelsApi>();
         _idProvider = Substitute.For<IBroadcasterIdProvider>();
         _eventBus = Substitute.For<IEventBus>();
+        _confirmation = Substitute.For<IChannelUpdateConfirmation>();
         _idProvider.GetAsync(Arg.Any<CancellationToken>()).Returns("12345");
-        _applier = new(_channelsApi, _idProvider, _eventBus,
+        _confirmation.AwaitAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        _applier = new(_channelsApi, _idProvider, _confirmation, _eventBus,
             NullLogger<ChannelInformationApplier>.Instance);
     }
 
     private ITwitchChannelsApi _channelsApi = null!;
     private IBroadcasterIdProvider _idProvider = null!;
     private IEventBus _eventBus = null!;
+    private IChannelUpdateConfirmation _confirmation = null!;
     private ChannelInformationApplier _applier = null!;
 
     [Test]

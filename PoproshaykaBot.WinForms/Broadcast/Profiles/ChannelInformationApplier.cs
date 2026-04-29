@@ -8,10 +8,13 @@ namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 public sealed class ChannelInformationApplier(
     ITwitchChannelsApi channelsApi,
     IBroadcasterIdProvider idProvider,
+    IChannelUpdateConfirmation confirmation,
     IEventBus eventBus,
     ILogger<ChannelInformationApplier> logger)
     : IChannelInformationApplier
 {
+    private static readonly TimeSpan ConfirmationTimeout = TimeSpan.FromSeconds(8);
+
     public async Task ApplyAsync(BroadcastProfile profile, CancellationToken cancellationToken)
     {
         var broadcasterId = await idProvider.GetAsync(cancellationToken);
@@ -32,17 +35,30 @@ public sealed class ChannelInformationApplier(
             Tags = profile.Tags.ToArray(),
         };
 
+        var confirmationTask = confirmation.AwaitAsync(request.Title, request.GameId, ConfirmationTimeout, cancellationToken);
+
         try
         {
             await channelsApi.ModifyChannelInformationAsync(broadcasterId, request, cancellationToken);
-            await eventBus.PublishAsync(new BroadcastProfileApplied(profile), cancellationToken);
         }
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Не удалось применить профиль {Profile}", profile.Name);
             await eventBus.PublishAsync(new BroadcastProfileApplyFailed(profile, HelixErrorMessages.SafeMessage(exception)),
                 cancellationToken);
+
+            return;
         }
+
+        var confirmed = await confirmationTask;
+
+        if (!confirmed)
+        {
+            logger.LogInformation("Не получено подтверждение channel.update для профиля {Profile}, публикуем Applied по успешному Helix-ответу",
+                profile.Name);
+        }
+
+        await eventBus.PublishAsync(new BroadcastProfileApplied(profile), cancellationToken);
     }
 
     public async Task ApplyPatchAsync(string? title, string? gameId, string? gameName, CancellationToken cancellationToken)
@@ -74,16 +90,28 @@ public sealed class ChannelInformationApplier(
             Tags = null,
         };
 
+        var confirmationTask = confirmation.AwaitAsync(title, gameId, ConfirmationTimeout, cancellationToken);
+
         try
         {
             await channelsApi.ModifyChannelInformationAsync(broadcasterId, request, cancellationToken);
-            await eventBus.PublishAsync(new BroadcastProfileApplied(virtualProfile), cancellationToken);
         }
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Не удалось применить патч канала");
             await eventBus.PublishAsync(new BroadcastProfileApplyFailed(virtualProfile, HelixErrorMessages.SafeMessage(exception)),
                 cancellationToken);
+
+            return;
         }
+
+        var confirmed = await confirmationTask;
+
+        if (!confirmed)
+        {
+            logger.LogInformation("Не получено подтверждение channel.update для ad-hoc патча, публикуем Applied по успешному Helix-ответу");
+        }
+
+        await eventBus.PublishAsync(new BroadcastProfileApplied(virtualProfile), cancellationToken);
     }
 }
