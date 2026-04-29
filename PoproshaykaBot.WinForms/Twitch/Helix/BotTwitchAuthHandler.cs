@@ -17,7 +17,7 @@ public sealed class BotTwitchAuthHandler(
 
     protected override Task<string?> GetTokenAsync(TwitchOAuthService oauthService, CancellationToken cancellationToken)
     {
-        return oauthService.GetValidTokenOrRefreshAsync(Role, cancellationToken);
+        return oauthService.GetAccessTokenAsync(Role, cancellationToken);
     }
 
     protected override TwitchAccountSettings GetAccount(TwitchSettings twitch)

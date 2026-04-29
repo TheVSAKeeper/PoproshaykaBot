@@ -80,6 +80,8 @@ public class TwitchAccountSettings
     public string[] Scopes { get; set; } = [];
 
     public string[] StoredScopes { get; set; } = [];
+
+    public DateTimeOffset? AccessTokenExpiresAt { get; set; }
 }
 
 public class MessageSettings

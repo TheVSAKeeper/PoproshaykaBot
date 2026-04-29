@@ -18,6 +18,7 @@ public sealed class TwitchOAuthService(
     : IDisposable
 {
     private static readonly TimeSpan AuthTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan TokenRefreshSkew = TimeSpan.FromMinutes(5);
 
     private readonly Dictionary<TwitchOAuthRole, SemaphoreSlim> _authSemaphores = CreatePerRoleSemaphores();
     private readonly Dictionary<TwitchOAuthRole, SemaphoreSlim> _refreshSemaphores = CreatePerRoleSemaphores();
@@ -243,67 +244,29 @@ public sealed class TwitchOAuthService(
         }
     }
 
-    public async Task<string?> GetValidTokenOrRefreshAsync(TwitchOAuthRole role, CancellationToken ct = default)
+    public async Task<string?> GetAccessTokenAsync(TwitchOAuthRole role, CancellationToken ct = default)
     {
-        var semaphore = _refreshSemaphores[role];
-        await semaphore.WaitAsync(ct);
-        try
+        var account = GetAccount(settingsManager.Current.Twitch, role);
+
+        if (string.IsNullOrWhiteSpace(account.AccessToken))
         {
-            var settings = settingsManager.Current.Twitch;
-            var account = GetAccount(settings, role);
-
-            if (string.IsNullOrWhiteSpace(account.AccessToken))
-            {
-                return null;
-            }
-
-            ReportStatus(role, "Проверка действительности токена...");
-
-            if (account.StoredScopes.Length > 0
-                && !TwitchScopes.SetEquals(account.StoredScopes, account.Scopes))
-            {
-                logger.LogWarning("Scope set роли {Role} изменился — требуется повторная авторизация. Старые: {Old}. Новые: {New}",
-                    role,
-                    string.Join(" ", account.StoredScopes),
-                    string.Join(" ", account.Scopes));
-
-                var changeMsg = $"Требуется повторная авторизация Twitch ({DescribeRole(role)}): изменился набор прав.";
-                ReportStatus(role, changeMsg);
-                _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(changeMsg), ct);
-
-                ClearAccountInPlace(account);
-                settingsManager.SaveSettings(settingsManager.Current);
-
-                return null;
-            }
-
-            if (await IsTokenValidAsync(account.AccessToken, ct))
-            {
-                return account.AccessToken;
-            }
-
-            logger.LogInformation("Токен роли {Role} недействителен, попытка использования refresh-токена", role);
-
-            if (string.IsNullOrWhiteSpace(account.RefreshToken))
-            {
-                logger.LogWarning("Refresh-токен для роли {Role} отсутствует, обновление невозможно", role);
-                return null;
-            }
-
-            try
-            {
-                return await RefreshTokenInternalAsync(role, settings.ClientId, settings.ClientSecret, account.RefreshToken, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Сбой при обновлении токена роли {Role}", role);
-                return null;
-            }
+            return null;
         }
-        finally
+
+        if (account.StoredScopes.Length > 0
+            && !TwitchScopes.SetEquals(account.StoredScopes, account.Scopes))
         {
-            semaphore.Release();
+            HandleScopeMismatch(role, account, ct);
+            return null;
         }
+
+        if (account.AccessTokenExpiresAt is { } expiresAt
+            && expiresAt - DateTimeOffset.UtcNow > TokenRefreshSkew)
+        {
+            return account.AccessToken;
+        }
+
+        return await RefreshAccessTokenAsync(role, account.AccessToken, ct);
     }
 
     public void UpdateSettings(
@@ -312,7 +275,8 @@ public sealed class TwitchOAuthService(
         string refreshToken,
         IEnumerable<string>? newScopes,
         string login,
-        string userId)
+        string userId,
+        int expiresInSeconds = 0)
     {
         var settings = settingsManager.Current;
         var account = GetAccount(settings.Twitch, role);
@@ -326,6 +290,10 @@ public sealed class TwitchOAuthService(
         {
             account.StoredScopes = newScopes.ToArray();
         }
+
+        account.AccessTokenExpiresAt = expiresInSeconds > 0
+            ? DateTimeOffset.UtcNow.AddSeconds(expiresInSeconds)
+            : null;
 
         settingsManager.SaveSettings(settings);
         logger.LogInformation("Токены роли {Role} обновлены в настройках (login={Login})", role, login);
@@ -411,6 +379,62 @@ public sealed class TwitchOAuthService(
         account.Login = string.Empty;
         account.UserId = string.Empty;
         account.StoredScopes = [];
+        account.AccessTokenExpiresAt = null;
+    }
+
+    private async Task<string?> RefreshAccessTokenAsync(
+        TwitchOAuthRole role,
+        string staleToken,
+        CancellationToken ct = default)
+    {
+        var semaphore = _refreshSemaphores[role];
+        await semaphore.WaitAsync(ct);
+        try
+        {
+            var settings = settingsManager.Current.Twitch;
+            var account = GetAccount(settings, role);
+
+            if (!string.IsNullOrWhiteSpace(account.AccessToken)
+                && !string.Equals(account.AccessToken, staleToken, StringComparison.Ordinal))
+            {
+                return account.AccessToken;
+            }
+
+            if (string.IsNullOrWhiteSpace(account.RefreshToken))
+            {
+                logger.LogWarning("Refresh-токен для роли {Role} отсутствует, обновление невозможно", role);
+                return null;
+            }
+
+            try
+            {
+                return await RefreshTokenInternalAsync(role, settings.ClientId, settings.ClientSecret, account.RefreshToken, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Сбой при обновлении токена роли {Role}", role);
+                return null;
+            }
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    private void HandleScopeMismatch(TwitchOAuthRole role, TwitchAccountSettings account, CancellationToken ct)
+    {
+        logger.LogWarning("Scope set роли {Role} изменился — требуется повторная авторизация. Старые: {Old}. Новые: {New}",
+            role,
+            string.Join(" ", account.StoredScopes),
+            string.Join(" ", account.Scopes));
+
+        var changeMsg = $"Требуется повторная авторизация Twitch ({DescribeRole(role)}): изменился набор прав.";
+        ReportStatus(role, changeMsg);
+        _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(changeMsg), ct);
+
+        ClearAccountInPlace(account);
+        settingsManager.SaveSettings(settingsManager.Current);
     }
 
     private async Task<string> RefreshTokenInternalAsync(
@@ -445,7 +469,8 @@ public sealed class TwitchOAuthService(
             tokenResponse.RefreshToken,
             tokenResponse.Scope,
             validation.Login,
-            validation.UserId);
+            validation.UserId,
+            tokenResponse.ExpiresIn);
 
         ReportStatus(role, "Токен доступа обновлён успешно!");
         return tokenResponse.AccessToken;
@@ -489,7 +514,8 @@ public sealed class TwitchOAuthService(
             tokenResponse.RefreshToken,
             tokenResponse.Scope,
             validation.Login,
-            validation.UserId);
+            validation.UserId,
+            tokenResponse.ExpiresIn);
 
         return tokenResponse.AccessToken;
     }

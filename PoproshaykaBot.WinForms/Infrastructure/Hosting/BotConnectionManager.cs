@@ -117,7 +117,7 @@ public sealed class BotConnectionManager : IDisposable
             ReportProgress("Получение токена доступа...");
             _logger.LogDebug("Запрос токена доступа");
 
-            var accessToken = await _tokenService.GetValidTokenOrRefreshAsync(TwitchOAuthRole.Bot, ct);
+            var accessToken = await _tokenService.GetAccessTokenAsync(TwitchOAuthRole.Bot, ct);
 
             ct.ThrowIfCancellationRequested();
 
