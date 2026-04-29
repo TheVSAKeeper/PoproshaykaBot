@@ -40,6 +40,8 @@ public partial class MainForm : Form
         InitializeComponent();
 
         services.HydrateDescendants(this);
+
+        RestoreWindowBounds();
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -73,6 +75,8 @@ public partial class MainForm : Form
         {
             return;
         }
+
+        SaveWindowBounds();
 
         _shutdownStarted = true;
         e.Cancel = true;
@@ -328,6 +332,76 @@ public partial class MainForm : Form
         {
             PublishLogMessage($"Ошибка при отключении бота: {exception.Message}", BotLogLevel.Error);
         }
+    }
+
+    private void RestoreWindowBounds()
+    {
+        var saved = _settingsManager.Current.Ui.MainWindow;
+
+        if (saved is null || saved.Width <= 0 || saved.Height <= 0)
+        {
+            return;
+        }
+
+        var bounds = new Rectangle(saved.X, saved.Y, saved.Width, saved.Height);
+
+        if (!IsBoundsVisibleOnAnyScreen(bounds))
+        {
+            return;
+        }
+
+        StartPosition = FormStartPosition.Manual;
+        Bounds = bounds;
+
+        if (saved.Maximized)
+        {
+            WindowState = FormWindowState.Maximized;
+        }
+    }
+
+    private void SaveWindowBounds()
+    {
+        var settings = _settingsManager.Current;
+        var isMaximized = WindowState == FormWindowState.Maximized;
+        var bounds = isMaximized || WindowState == FormWindowState.Minimized
+            ? RestoreBounds
+            : Bounds;
+
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        settings.Ui.MainWindow = new MainWindowSettings
+        {
+            X = bounds.X,
+            Y = bounds.Y,
+            Width = bounds.Width,
+            Height = bounds.Height,
+            Maximized = isMaximized,
+        };
+
+        try
+        {
+            _settingsManager.SaveSettings(settings);
+        }
+        catch (Exception exception)
+        {
+            PublishLogMessage($"Не удалось сохранить размер окна: {exception.Message}", BotLogLevel.Error);
+        }
+    }
+
+    private static bool IsBoundsVisibleOnAnyScreen(Rectangle bounds)
+    {
+        foreach (var screen in Screen.AllScreens)
+        {
+            if (screen.WorkingArea.IntersectsWith(bounds))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void LoadSettings(bool reloadDashboard = false)
