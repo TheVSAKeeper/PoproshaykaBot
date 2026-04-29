@@ -159,15 +159,13 @@ public partial class MainForm : Form
     {
         try
         {
-            _connectionManager.CancelConnection();
-
             if (_userStatisticsForm is { IsDisposed: false })
             {
                 _userStatisticsForm.Close();
                 _userStatisticsForm = null;
             }
 
-            await DisconnectBotAsync();
+            await _connectionManager.ShutdownAsync();
         }
         catch (Exception ex)
         {

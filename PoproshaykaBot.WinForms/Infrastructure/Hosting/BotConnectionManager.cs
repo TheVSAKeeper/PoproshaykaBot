@@ -93,6 +93,29 @@ public sealed class BotConnectionManager : IDisposable
         PublishPhase(BotLifecyclePhase.Disconnected);
     }
 
+    public async Task ShutdownAsync()
+    {
+        _logger.LogDebug("Инициализация полной остановки бота (ShutdownAsync)");
+
+        CancelConnection();
+
+        var pendingConnect = _connectionTask;
+
+        if (pendingConnect != null)
+        {
+            try
+            {
+                await pendingConnect;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogDebug(exception, "Незавершённое подключение завершилось с ошибкой при остановке");
+            }
+        }
+
+        await StopAsync();
+    }
+
     public void Dispose()
     {
         if (_disposed)
