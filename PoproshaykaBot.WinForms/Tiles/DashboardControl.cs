@@ -58,6 +58,78 @@ public sealed partial class DashboardControl : UserControl
         ReloadDashboard();
     }
 
+    private static int? ResolveMaxSize(int? overrideValue, int? typeDefault)
+    {
+        return overrideValue switch
+        {
+            null => typeDefault,
+            <= 0 => null,
+            _ => overrideValue,
+        };
+    }
+
+    private static int?[] ComputeRowFixedHeights(IReadOnlyList<TilePlacement> placements, int rowCount)
+    {
+        var heights = new int?[rowCount];
+
+        for (var row = 0; row < rowCount; row++)
+        {
+            var rowIndex = row;
+            var singleRowTiles = placements
+                .Where(p => p.RowSpan == 1 && p.Row == rowIndex)
+                .ToList();
+
+            var hasFlexSingleRow = singleRowTiles.Any(p => p.MaxHeight == null);
+
+            if (hasFlexSingleRow)
+            {
+                heights[row] = null;
+                continue;
+            }
+
+            var compactSingleRow = singleRowTiles
+                .Where(p => p.MaxHeight.HasValue)
+                .ToList();
+
+            heights[row] = compactSingleRow.Count > 0
+                ? compactSingleRow.Max(p => p.MaxHeight!.Value)
+                : null;
+        }
+
+        return heights;
+    }
+
+    private static int?[] ComputeColumnFixedWidths(IReadOnlyList<TilePlacement> placements, int columnCount)
+    {
+        var widths = new int?[columnCount];
+
+        for (var column = 0; column < columnCount; column++)
+        {
+            var columnIndex = column;
+            var singleColumnTiles = placements
+                .Where(p => p.ColumnSpan == 1 && p.Column == columnIndex)
+                .ToList();
+
+            var hasFlexSingleColumn = singleColumnTiles.Any(p => p.MaxWidth == null);
+
+            if (hasFlexSingleColumn)
+            {
+                widths[column] = null;
+                continue;
+            }
+
+            var compactSingleColumn = singleColumnTiles
+                .Where(p => p.MaxWidth.HasValue)
+                .ToList();
+
+            widths[column] = compactSingleColumn.Count > 0
+                ? compactSingleColumn.Max(p => p.MaxWidth!.Value)
+                : null;
+        }
+
+        return widths;
+    }
+
     private void InitializeHosts()
     {
         var hostMargin = new Padding(LogicalToDeviceUnits(4));
@@ -96,6 +168,36 @@ public sealed partial class DashboardControl : UserControl
         var columnCount = Math.Clamp(layout.ColumnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
         var rowCount = Math.Clamp(layout.RowCount, DashboardLayoutDefaults.MinRowCount, DashboardLayoutDefaults.MaxRowCount);
 
+        var placements = new List<TilePlacement>();
+        var seenTypes = new HashSet<DashboardTileType>();
+
+        foreach (var tile in layout.Tiles.Where(tile => tile.IsVisible))
+        {
+            var type = DashboardTileCatalog.Find(tile.TypeId);
+
+            if (type == null || !seenTypes.Add(type) || !_hosts.TryGetValue(type, out var host))
+            {
+                continue;
+            }
+
+            var row = Math.Clamp(tile.Row, 0, rowCount - 1);
+            var column = Math.Clamp(tile.Column, 0, columnCount - 1);
+            var columnSpan = Math.Clamp(tile.ColumnSpan, 1, columnCount - column);
+            var rowSpan = Math.Clamp(tile.RowSpan, 1, rowCount - row);
+
+            placements.Add(new(host, type, row, column, columnSpan, rowSpan,
+                ResolveMaxSize(tile.MaxHeight, type.MaxHeight),
+                ResolveMaxSize(tile.MaxWidth, type.MaxWidth)));
+        }
+
+        var rowFixedHeights = ComputeRowFixedHeights(placements, rowCount);
+        var flexRowCount = rowFixedHeights.Count(height => height == null);
+        var percentPerFlexRow = flexRowCount > 0 ? 100F / flexRowCount : 100F / rowCount;
+
+        var columnFixedWidths = ComputeColumnFixedWidths(placements, columnCount);
+        var flexColumnCount = columnFixedWidths.Count(width => width == null);
+        var percentPerFlexColumn = flexColumnCount > 0 ? 100F / flexColumnCount : 100F / columnCount;
+
         _tilesTableLayoutPanel.SuspendLayout();
 
         try
@@ -107,12 +209,16 @@ public sealed partial class DashboardControl : UserControl
 
             for (var column = 0; column < columnCount; column++)
             {
-                _tilesTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F / columnCount));
+                _tilesTableLayoutPanel.ColumnStyles.Add(columnFixedWidths[column] is { } fixedWidth
+                    ? new(SizeType.Absolute, LogicalToDeviceUnits(fixedWidth))
+                    : new ColumnStyle(SizeType.Percent, percentPerFlexColumn));
             }
 
             for (var row = 0; row < rowCount; row++)
             {
-                _tilesTableLayoutPanel.RowStyles.Add(new(SizeType.Percent, 100F / rowCount));
+                _tilesTableLayoutPanel.RowStyles.Add(rowFixedHeights[row] is { } fixedHeight
+                    ? new(SizeType.Absolute, LogicalToDeviceUnits(fixedHeight))
+                    : new RowStyle(SizeType.Percent, percentPerFlexRow));
             }
 
             foreach (var host in _hosts.Values)
@@ -120,26 +226,12 @@ public sealed partial class DashboardControl : UserControl
                 host.Visible = false;
             }
 
-            var seenTypes = new HashSet<DashboardTileType>();
-
-            foreach (var tile in layout.Tiles.Where(tile => tile.IsVisible))
+            foreach (var placement in placements)
             {
-                var type = DashboardTileCatalog.Find(tile.TypeId);
-
-                if (type == null || !seenTypes.Add(type) || !_hosts.TryGetValue(type, out var host))
-                {
-                    continue;
-                }
-
-                var row = Math.Clamp(tile.Row, 0, rowCount - 1);
-                var column = Math.Clamp(tile.Column, 0, columnCount - 1);
-                var columnSpan = Math.Clamp(tile.ColumnSpan, 1, columnCount - column);
-                var rowSpan = Math.Clamp(tile.RowSpan, 1, rowCount - row);
-
-                _tilesTableLayoutPanel.SetCellPosition(host, new(column, row));
-                _tilesTableLayoutPanel.SetColumnSpan(host, columnSpan);
-                _tilesTableLayoutPanel.SetRowSpan(host, rowSpan);
-                host.Visible = true;
+                _tilesTableLayoutPanel.SetCellPosition(placement.Host, new(placement.Column, placement.Row));
+                _tilesTableLayoutPanel.SetColumnSpan(placement.Host, placement.ColumnSpan);
+                _tilesTableLayoutPanel.SetRowSpan(placement.Host, placement.RowSpan);
+                placement.Host.Visible = true;
             }
         }
         finally
@@ -147,4 +239,14 @@ public sealed partial class DashboardControl : UserControl
             _tilesTableLayoutPanel.ResumeLayout();
         }
     }
+
+    private sealed record TilePlacement(
+        DashboardTileHost Host,
+        DashboardTileType Type,
+        int Row,
+        int Column,
+        int ColumnSpan,
+        int RowSpan,
+        int? MaxHeight,
+        int? MaxWidth);
 }

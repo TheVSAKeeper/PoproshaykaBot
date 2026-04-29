@@ -6,11 +6,15 @@ using PoproshaykaBot.WinForms.Streaming;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 
-public abstract class DashboardTileType(string id, string title)
+public abstract class DashboardTileType(string id, string title, int? maxHeight = null, int? maxWidth = null)
 {
     public string Id { get; } = id;
 
     public string Title { get; } = title;
+
+    public int? MaxHeight { get; } = maxHeight;
+
+    public int? MaxWidth { get; } = maxWidth;
 
     public abstract Control CreateBody(IControlFactory factory);
 }
@@ -19,7 +23,7 @@ public sealed class StreamInfoTileType : DashboardTileType
 {
     public static readonly StreamInfoTileType Instance = new();
 
-    private StreamInfoTileType() : base("stream-info", "🔴 Стрим")
+    private StreamInfoTileType() : base("stream-info", "🔴 Стрим", 200, 420)
     {
     }
 
@@ -33,7 +37,7 @@ public sealed class BroadcastStatusTileType : DashboardTileType
 {
     public static readonly BroadcastStatusTileType Instance = new();
 
-    private BroadcastStatusTileType() : base("broadcast-status", "📢 Рассылка")
+    private BroadcastStatusTileType() : base("broadcast-status", "📢 Рассылка", 170, 360)
     {
     }
 
@@ -89,7 +93,7 @@ public sealed class BroadcastProfilesTileType : DashboardTileType
 {
     public static readonly BroadcastProfilesTileType Instance = new();
 
-    private BroadcastProfilesTileType() : base("broadcast-profiles", "🎛 Профили")
+    private BroadcastProfilesTileType() : base("broadcast-profiles", "🎛 Профили", maxWidth: 500)
     {
     }
 
@@ -103,7 +107,7 @@ public sealed class PollsControlTileType : DashboardTileType
 {
     public static readonly PollsControlTileType Instance = new();
 
-    private PollsControlTileType() : base("polls-control", "🗳 Голосования")
+    private PollsControlTileType() : base("polls-control", "🗳 Голосования", maxWidth: 500)
     {
     }
 

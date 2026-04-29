@@ -124,6 +124,8 @@ public class DashboardTileSettings
     public int ColumnSpan { get; set; } = 1;
     public int RowSpan { get; set; } = 1;
     public bool IsVisible { get; set; } = true;
+    public int? MaxHeight { get; set; }
+    public int? MaxWidth { get; set; }
 }
 
 public class DashboardLayoutSettings

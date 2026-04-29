@@ -6,6 +6,8 @@ namespace PoproshaykaBot.WinForms.Settings;
 
 public sealed partial class DashboardSettingsControl : UserControl
 {
+    private static readonly int[] MaxHeightPresets = [100, 150, 200, 250, 300, 400, 500];
+    private static readonly int[] MaxWidthPresets = [200, 300, 400, 500, 600, 800];
     private readonly Dictionary<DashboardTileType, Button> _paletteCards = [];
     private readonly Dictionary<DashboardTileType, PlacedTile> _placedTiles = [];
     private readonly Dictionary<DashboardTileType, Panel> _tilePanels = [];
@@ -60,6 +62,8 @@ public sealed partial class DashboardSettingsControl : UserControl
                 ColumnSpan = placed.ColumnSpan,
                 RowSpan = placed.RowSpan,
                 IsVisible = true,
+                MaxHeight = placed.MaxHeight,
+                MaxWidth = placed.MaxWidth,
             });
         }
 
@@ -222,11 +226,26 @@ public sealed partial class DashboardSettingsControl : UserControl
             heightMenu.DropDownItems.Add(item);
         }
 
+        var maxWidthMenu = BuildMaxSizeMenu("Макс. ширина",
+            MaxWidthPresets,
+            placed.MaxWidth,
+            type.MaxWidth,
+            value => SetTileMaxWidth(type, value));
+
+        var maxHeightMenu = BuildMaxSizeMenu("Макс. высота",
+            MaxHeightPresets,
+            placed.MaxHeight,
+            type.MaxHeight,
+            value => SetTileMaxHeight(type, value));
+
         var removeItem = new ToolStripMenuItem("Удалить плитку");
         removeItem.Click += (_, _) => RemoveTile(type);
 
         _tileContextMenu.Items.Add(widthMenu);
         _tileContextMenu.Items.Add(heightMenu);
+        _tileContextMenu.Items.Add(new ToolStripSeparator());
+        _tileContextMenu.Items.Add(maxWidthMenu);
+        _tileContextMenu.Items.Add(maxHeightMenu);
         _tileContextMenu.Items.Add(new ToolStripSeparator());
         _tileContextMenu.Items.Add(removeItem);
     }
@@ -264,6 +283,183 @@ public sealed partial class DashboardSettingsControl : UserControl
         _placedTiles.Clear();
         RebuildGrid();
         OnChanged();
+    }
+
+    private static int? PromptForCustomSize(IWin32Window owner, string label, int initial)
+    {
+        const int minValue = 50;
+        const int maxValue = 5000;
+        var clamped = Math.Clamp(initial, minValue, maxValue);
+
+        using var form = new Form
+        {
+            Text = label,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterParent,
+            MinimizeBox = false,
+            MaximizeBox = false,
+            ShowInTaskbar = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            ColumnCount = 2,
+            RowCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new(12),
+        };
+
+        var promptLabel = new Label
+        {
+            Text = "Значение, px:",
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
+            Margin = new(0, 6, 8, 0),
+        };
+
+        var numeric = new NumericUpDown
+        {
+            Minimum = minValue,
+            Maximum = maxValue,
+            Increment = 10,
+            Value = clamped,
+            Width = 100,
+            Margin = new(0, 4, 0, 0),
+        };
+
+        var buttons = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = new(0, 8, 0, 0),
+        };
+
+        var cancelButton = new Button
+        {
+            Text = "Отмена",
+            DialogResult = DialogResult.Cancel,
+            AutoSize = true,
+        };
+
+        var okButton = new Button
+        {
+            Text = "ОК",
+            DialogResult = DialogResult.OK,
+            AutoSize = true,
+        };
+
+        buttons.Controls.Add(cancelButton);
+        buttons.Controls.Add(okButton);
+
+        layout.Controls.Add(promptLabel, 0, 0);
+        layout.Controls.Add(numeric, 1, 0);
+        layout.Controls.Add(buttons, 0, 1);
+        layout.SetColumnSpan(buttons, 2);
+
+        form.Controls.Add(layout);
+        form.AcceptButton = okButton;
+        form.CancelButton = cancelButton;
+
+        return form.ShowDialog(owner) == DialogResult.OK
+            ? (int)numeric.Value
+            : null;
+    }
+
+    private ToolStripMenuItem BuildMaxSizeMenu(
+        string label,
+        IReadOnlyList<int> presets,
+        int? overrideValue,
+        int? typeDefault,
+        Action<int?> setValue)
+    {
+        var isExplicitAuto = overrideValue is <= 0;
+        var effective = isExplicitAuto ? null : overrideValue ?? typeDefault;
+
+        string headerText;
+
+        if (isExplicitAuto)
+        {
+            headerText = $"{label}: авто";
+        }
+        else if (effective.HasValue)
+        {
+            headerText = overrideValue.HasValue
+                ? $"{label}: {effective.Value}px"
+                : $"{label}: {effective.Value}px (по умолч.)";
+        }
+        else
+        {
+            headerText = $"{label}: авто (по умолч.)";
+        }
+
+        var menu = new ToolStripMenuItem(headerText);
+
+        var defaultLabel = typeDefault.HasValue
+            ? $"По умолчанию ({typeDefault.Value}px)"
+            : "По умолчанию (авто)";
+
+        var defaultItem = new ToolStripMenuItem(defaultLabel)
+        {
+            Checked = !overrideValue.HasValue,
+        };
+
+        defaultItem.Click += (_, _) => setValue(null);
+        menu.DropDownItems.Add(defaultItem);
+
+        if (typeDefault.HasValue)
+        {
+            var autoItem = new ToolStripMenuItem("Авто")
+            {
+                Checked = isExplicitAuto,
+            };
+
+            autoItem.Click += (_, _) => setValue(0);
+            menu.DropDownItems.Add(autoItem);
+        }
+
+        menu.DropDownItems.Add(new ToolStripSeparator());
+
+        var isCustomValue = overrideValue is > 0 && !presets.Contains(overrideValue.Value);
+
+        foreach (var preset in presets)
+        {
+            var value = preset;
+            var item = new ToolStripMenuItem($"{value}px")
+            {
+                Checked = overrideValue == value,
+            };
+
+            item.Click += (_, _) => setValue(value);
+            menu.DropDownItems.Add(item);
+        }
+
+        var customLabel = isCustomValue
+            ? $"Указать... ({overrideValue!.Value}px)"
+            : "Указать...";
+
+        var customItem = new ToolStripMenuItem(customLabel)
+        {
+            Checked = isCustomValue,
+        };
+
+        customItem.Click += (_, _) =>
+        {
+            var initial = overrideValue is > 0 ? overrideValue.Value : typeDefault ?? presets[0];
+            var custom = PromptForCustomSize(FindForm() ?? (IWin32Window)this, label, initial);
+
+            if (custom.HasValue)
+            {
+                setValue(custom.Value);
+            }
+        };
+
+        menu.DropDownItems.Add(customItem);
+
+        return menu;
     }
 
     private void BuildPalette()
@@ -337,6 +533,8 @@ public sealed partial class DashboardSettingsControl : UserControl
                 Column = column,
                 ColumnSpan = Math.Clamp(tile.ColumnSpan, 1, columnCount - column),
                 RowSpan = Math.Clamp(tile.RowSpan, 1, rowCount - row),
+                MaxHeight = tile.MaxHeight,
+                MaxWidth = tile.MaxWidth,
             };
         }
 
@@ -543,6 +741,28 @@ public sealed partial class DashboardSettingsControl : UserControl
         OnChanged();
     }
 
+    private void SetTileMaxHeight(DashboardTileType type, int? value)
+    {
+        if (!_placedTiles.TryGetValue(type, out var placed))
+        {
+            return;
+        }
+
+        placed.MaxHeight = value;
+        OnChanged();
+    }
+
+    private void SetTileMaxWidth(DashboardTileType type, int? value)
+    {
+        if (!_placedTiles.TryGetValue(type, out var placed))
+        {
+            return;
+        }
+
+        placed.MaxWidth = value;
+        OnChanged();
+    }
+
     private void RemoveTile(DashboardTileType type)
     {
         if (!_placedTiles.Remove(type))
@@ -568,6 +788,10 @@ public sealed partial class DashboardSettingsControl : UserControl
         public int ColumnSpan { get; set; }
 
         public int RowSpan { get; set; }
+
+        public int? MaxHeight { get; set; }
+
+        public int? MaxWidth { get; set; }
     }
 
     private sealed record CellPosition(int Row, int Column);
