@@ -68,37 +68,6 @@ public sealed partial class DashboardControl : UserControl
         };
     }
 
-    private static int?[] ComputeRowFixedHeights(IReadOnlyList<TilePlacement> placements, int rowCount)
-    {
-        var heights = new int?[rowCount];
-
-        for (var row = 0; row < rowCount; row++)
-        {
-            var rowIndex = row;
-            var singleRowTiles = placements
-                .Where(p => p.RowSpan == 1 && p.Row == rowIndex)
-                .ToList();
-
-            var hasFlexSingleRow = singleRowTiles.Any(p => p.MaxHeight == null);
-
-            if (hasFlexSingleRow)
-            {
-                heights[row] = null;
-                continue;
-            }
-
-            var compactSingleRow = singleRowTiles
-                .Where(p => p.MaxHeight.HasValue)
-                .ToList();
-
-            heights[row] = compactSingleRow.Count > 0
-                ? compactSingleRow.Max(p => p.MaxHeight!.Value)
-                : null;
-        }
-
-        return heights;
-    }
-
     private static int?[] ComputeColumnFixedWidths(IReadOnlyList<TilePlacement> placements, int columnCount)
     {
         var widths = new int?[columnCount];
@@ -130,6 +99,44 @@ public sealed partial class DashboardControl : UserControl
         return widths;
     }
 
+    private int?[] ComputeRowFixedHeights(IReadOnlyList<TilePlacement> placements, int rowCount, int collapsedDeviceHeight)
+    {
+        var heights = new int?[rowCount];
+
+        for (var row = 0; row < rowCount; row++)
+        {
+            var rowIndex = row;
+            var singleRowTiles = placements
+                .Where(p => p.RowSpan == 1 && p.Row == rowIndex)
+                .ToList();
+
+            if (singleRowTiles.Count > 0 && singleRowTiles.All(p => p.IsCollapsed))
+            {
+                heights[row] = collapsedDeviceHeight;
+                continue;
+            }
+
+            var nonCollapsed = singleRowTiles.Where(p => !p.IsCollapsed).ToList();
+            var hasFlexSingleRow = nonCollapsed.Any(p => p.MaxHeight == null);
+
+            if (hasFlexSingleRow)
+            {
+                heights[row] = null;
+                continue;
+            }
+
+            var compactSingleRow = nonCollapsed
+                .Where(p => p.MaxHeight.HasValue)
+                .ToList();
+
+            heights[row] = compactSingleRow.Count > 0
+                ? LogicalToDeviceUnits(compactSingleRow.Max(p => p.MaxHeight!.Value))
+                : null;
+        }
+
+        return heights;
+    }
+
     private void InitializeHosts()
     {
         var hostMargin = new Padding(LogicalToDeviceUnits(4));
@@ -148,7 +155,17 @@ public sealed partial class DashboardControl : UserControl
                 };
 
                 host.SetTitle(type.Title);
-                host.SetBody(type.CreateBody(ControlFactory));
+
+                var body = type.CreateBody(ControlFactory);
+                host.SetBody(body);
+
+                if (body is IDashboardTileHeaderProvider provider)
+                {
+                    host.SetHeaderActions(provider.CreateHeaderItems());
+                }
+
+                var capturedType = type;
+                host.CollapseToggled += (_, _) => OnTileCollapseToggled(capturedType);
 
                 _hosts[type] = host;
                 _tilesTableLayoutPanel.Controls.Add(host, 0, 0);
@@ -161,6 +178,29 @@ public sealed partial class DashboardControl : UserControl
         {
             _tilesTableLayoutPanel.ResumeLayout();
         }
+    }
+
+    private void OnTileCollapseToggled(DashboardTileType type)
+    {
+        if (!_hosts.TryGetValue(type, out var host))
+        {
+            return;
+        }
+
+        var settings = Settings.Current;
+        var layout = settings.Ui.Dashboard;
+
+        var tile = layout?.Tiles.FirstOrDefault(t => string.Equals(t.TypeId, type.Id, StringComparison.Ordinal));
+
+        if (tile == null)
+        {
+            return;
+        }
+
+        tile.IsCollapsed = !host.IsCollapsed;
+        Settings.SaveSettings(settings);
+
+        ApplyLayout(layout);
     }
 
     private void ApplyLayout(DashboardLayoutSettings layout)
@@ -187,10 +227,16 @@ public sealed partial class DashboardControl : UserControl
 
             placements.Add(new(host, type, row, column, columnSpan, rowSpan,
                 ResolveMaxSize(tile.MaxHeight, type.MaxHeight),
-                ResolveMaxSize(tile.MaxWidth, type.MaxWidth)));
+                ResolveMaxSize(tile.MaxWidth, type.MaxWidth),
+                tile.IsCollapsed));
         }
 
-        var rowFixedHeights = ComputeRowFixedHeights(placements, rowCount);
+        var sampleHost = _hosts.Values.FirstOrDefault();
+        var collapsedHeight = sampleHost != null
+            ? sampleHost.HeaderHeight + sampleHost.Margin.Vertical + 2
+            : LogicalToDeviceUnits(44);
+
+        var rowFixedHeights = ComputeRowFixedHeights(placements, rowCount, collapsedHeight);
         var flexRowCount = rowFixedHeights.Count(height => height == null);
         var percentPerFlexRow = flexRowCount > 0 ? 100F / flexRowCount : 100F / rowCount;
 
@@ -217,7 +263,7 @@ public sealed partial class DashboardControl : UserControl
             for (var row = 0; row < rowCount; row++)
             {
                 _tilesTableLayoutPanel.RowStyles.Add(rowFixedHeights[row] is { } fixedHeight
-                    ? new(SizeType.Absolute, LogicalToDeviceUnits(fixedHeight))
+                    ? new(SizeType.Absolute, fixedHeight)
                     : new RowStyle(SizeType.Percent, percentPerFlexRow));
             }
 
@@ -231,6 +277,7 @@ public sealed partial class DashboardControl : UserControl
                 _tilesTableLayoutPanel.SetCellPosition(placement.Host, new(placement.Column, placement.Row));
                 _tilesTableLayoutPanel.SetColumnSpan(placement.Host, placement.ColumnSpan);
                 _tilesTableLayoutPanel.SetRowSpan(placement.Host, placement.RowSpan);
+                placement.Host.SetCollapsed(placement.IsCollapsed);
                 placement.Host.Visible = true;
             }
         }
@@ -248,5 +295,6 @@ public sealed partial class DashboardControl : UserControl
         int ColumnSpan,
         int RowSpan,
         int? MaxHeight,
-        int? MaxWidth);
+        int? MaxWidth,
+        bool IsCollapsed);
 }

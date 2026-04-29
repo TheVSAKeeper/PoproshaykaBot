@@ -5,12 +5,13 @@ using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Streaming;
+using PoproshaykaBot.WinForms.Tiles;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 using Timer = System.Windows.Forms.Timer;
 
 namespace PoproshaykaBot.WinForms.Broadcast;
 
-public partial class BroadcastProfilesPanel : UserControl
+public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderProvider
 {
     private const int MinCardWidth = 220;
     private const int CardMargin = 6;
@@ -18,6 +19,9 @@ public partial class BroadcastProfilesPanel : UserControl
     private readonly Timer _statusResetTimer;
     private bool _initialized;
     private Guid? _activeProfileId;
+    private ToolStripButton? _addButton;
+    private ToolStripButton? _editCurrentButton;
+    private ToolStripLabel? _statusLabel;
 
     public BroadcastProfilesPanel()
     {
@@ -31,12 +35,14 @@ public partial class BroadcastProfilesPanel : UserControl
         _statusResetTimer.Tick += (_, _) =>
         {
             _statusResetTimer.Stop();
-            _statusLabel.Text = string.Empty;
-            _statusLabel.ForeColor = SystemColors.ControlText;
+
+            if (_statusLabel != null)
+            {
+                _statusLabel.Text = string.Empty;
+                _statusLabel.ForeColor = SystemColors.ControlText;
+            }
         };
 
-        _addButton.Click += OnAddClicked;
-        _editCurrentButton.Click += OnEditCurrentClicked;
         _cardsFlow.ClientSizeChanged += (_, _) => RecomputeCardWidths();
     }
 
@@ -63,6 +69,35 @@ public partial class BroadcastProfilesPanel : UserControl
 
     [Inject]
     public IBroadcasterIdProvider BroadcasterId { get; internal init; } = null!;
+
+    public IReadOnlyList<ToolStripItem> CreateHeaderItems()
+    {
+        _addButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "+ Добавить",
+        };
+
+        _addButton.Click += OnAddClicked;
+
+        _editCurrentButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "✎ Текущие",
+        };
+
+        _editCurrentButton.Click += OnEditCurrentClicked;
+
+        _statusLabel = new()
+        {
+            Text = string.Empty,
+            Margin = new(8, 0, 0, 0),
+        };
+
+        return [_addButton, _editCurrentButton, _statusLabel];
+    }
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -109,7 +144,11 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private async void OnEditCurrentClicked(object? sender, EventArgs e)
     {
-        _editCurrentButton.Enabled = false;
+        if (_editCurrentButton != null)
+        {
+            _editCurrentButton.Enabled = false;
+        }
+
         SetStatus("Загружаем текущие настройки…", false);
 
         BroadcastProfile? draft;
@@ -152,7 +191,10 @@ public partial class BroadcastProfilesPanel : UserControl
         }
         finally
         {
-            _editCurrentButton.Enabled = true;
+            if (_editCurrentButton != null)
+            {
+                _editCurrentButton.Enabled = true;
+            }
         }
 
         using var dialog = Forms.Create<BroadcastProfileEditDialog>();
@@ -500,8 +542,11 @@ public partial class BroadcastProfilesPanel : UserControl
 
     private void SetStatus(string text, bool isError)
     {
-        _statusLabel.Text = text;
-        _statusLabel.ForeColor = isError ? Color.Firebrick : SystemColors.ControlText;
+        if (_statusLabel != null)
+        {
+            _statusLabel.Text = text;
+            _statusLabel.ForeColor = isError ? Color.Firebrick : SystemColors.ControlText;
+        }
 
         if (string.IsNullOrEmpty(text))
         {

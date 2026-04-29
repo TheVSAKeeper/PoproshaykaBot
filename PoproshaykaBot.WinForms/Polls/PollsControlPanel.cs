@@ -1,13 +1,17 @@
 ﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Polling;
+using PoproshaykaBot.WinForms.Tiles;
 
 namespace PoproshaykaBot.WinForms.Polls;
 
-public partial class PollsControlPanel : UserControl
+public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvider
 {
     private readonly List<IDisposable> _subs = [];
     private bool _initialized;
+    private ToolStripButton? _adHocButton;
+    private ToolStripButton? _fromProfileButton;
+    private ToolStripLabel? _statusLabel;
 
     public PollsControlPanel()
     {
@@ -28,6 +32,35 @@ public partial class PollsControlPanel : UserControl
 
     [Inject]
     public IFormFactory Forms { get; internal init; } = null!;
+
+    public IReadOnlyList<ToolStripItem> CreateHeaderItems()
+    {
+        _adHocButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "+ Создать опрос",
+        };
+
+        _adHocButton.Click += OnAdHocClicked;
+
+        _fromProfileButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "Из профиля…",
+        };
+
+        _fromProfileButton.Click += OnFromProfileClicked;
+
+        _statusLabel = new()
+        {
+            Text = string.Empty,
+            Margin = new(8, 0, 0, 0),
+        };
+
+        return [_adHocButton, _fromProfileButton, _statusLabel];
+    }
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -159,6 +192,12 @@ public partial class PollsControlPanel : UserControl
     private void OnStatusResetTimerTick(object? sender, EventArgs e)
     {
         _statusResetTimer.Stop();
+
+        if (_statusLabel == null)
+        {
+            return;
+        }
+
         _statusLabel.Text = string.Empty;
         _statusLabel.ForeColor = SystemColors.ControlText;
     }
@@ -283,8 +322,11 @@ public partial class PollsControlPanel : UserControl
 
     private void SetStatus(string text, bool isError)
     {
-        _statusLabel.Text = text;
-        _statusLabel.ForeColor = isError ? Color.Firebrick : SystemColors.ControlText;
+        if (_statusLabel != null)
+        {
+            _statusLabel.Text = text;
+            _statusLabel.ForeColor = isError ? Color.Firebrick : SystemColors.ControlText;
+        }
 
         if (string.IsNullOrEmpty(text))
         {

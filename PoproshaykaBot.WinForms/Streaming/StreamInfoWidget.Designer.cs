@@ -1,4 +1,4 @@
-﻿﻿namespace PoproshaykaBot.WinForms.Streaming;
+﻿namespace PoproshaykaBot.WinForms.Streaming;
 
 sealed partial class StreamInfoWidget
 {
@@ -18,9 +18,7 @@ sealed partial class StreamInfoWidget
     {
         components = new System.ComponentModel.Container();
         _mainTableLayoutPanel = new TableLayoutPanel();
-        _leftPanel = new TableLayoutPanel();
         _thumbnailPictureBox = new PictureBox();
-        _openChannelButton = new Button();
         _infoTableLayoutPanel = new TableLayoutPanel();
         _statusIconLabel = new Label();
         _statusTextLabel = new Label();
@@ -32,7 +30,6 @@ sealed partial class StreamInfoWidget
         _lastUpdateLabel = new Label();
         _streamInfoTimer = new System.Windows.Forms.Timer(components);
         _mainTableLayoutPanel.SuspendLayout();
-        _leftPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)_thumbnailPictureBox).BeginInit();
         _infoTableLayoutPanel.SuspendLayout();
         _statsTableLayoutPanel.SuspendLayout();
@@ -43,7 +40,7 @@ sealed partial class StreamInfoWidget
         _mainTableLayoutPanel.ColumnCount = 2;
         _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140F));
         _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Controls.Add(_leftPanel, 0, 0);
+        _mainTableLayoutPanel.Controls.Add(_thumbnailPictureBox, 0, 0);
         _mainTableLayoutPanel.Controls.Add(_infoTableLayoutPanel, 1, 0);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
@@ -53,47 +50,17 @@ sealed partial class StreamInfoWidget
         _mainTableLayoutPanel.Size = new Size(369, 158);
         _mainTableLayoutPanel.TabIndex = 0;
         //
-        // _leftPanel
-        //
-        _leftPanel.ColumnCount = 1;
-        _leftPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _leftPanel.Controls.Add(_thumbnailPictureBox, 0, 0);
-        _leftPanel.Controls.Add(_openChannelButton, 0, 1);
-        _leftPanel.Dock = DockStyle.Fill;
-        _leftPanel.Location = new Point(0, 0);
-        _leftPanel.Margin = new Padding(0);
-        _leftPanel.Name = "_leftPanel";
-        _leftPanel.RowCount = 3;
-        _leftPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80F));
-        _leftPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
-        _leftPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _leftPanel.Size = new Size(140, 158);
-        _leftPanel.TabIndex = 0;
-        //
         // _thumbnailPictureBox
         //
         _thumbnailPictureBox.BackColor = Color.FromArgb(240, 240, 240);
         _thumbnailPictureBox.Dock = DockStyle.Fill;
         _thumbnailPictureBox.Location = new Point(3, 3);
+        _thumbnailPictureBox.Margin = new Padding(3);
         _thumbnailPictureBox.Name = "_thumbnailPictureBox";
-        _thumbnailPictureBox.Size = new Size(134, 74);
+        _thumbnailPictureBox.Size = new Size(134, 152);
         _thumbnailPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
         _thumbnailPictureBox.TabIndex = 0;
         _thumbnailPictureBox.TabStop = false;
-        //
-        // _openChannelButton
-        //
-        _openChannelButton.Dock = DockStyle.Fill;
-        _openChannelButton.FlatStyle = FlatStyle.Flat;
-        _openChannelButton.Font = new Font("Segoe UI", 8F);
-        _openChannelButton.Location = new Point(3, 83);
-        _openChannelButton.Name = "_openChannelButton";
-        _openChannelButton.Size = new Size(134, 26);
-        _openChannelButton.TabIndex = 1;
-        _openChannelButton.Text = "🔗 Открыть Twitch";
-        _openChannelButton.UseVisualStyleBackColor = true;
-        _openChannelButton.Visible = false;
-        _openChannelButton.Click += OnOpenChannelClick;
         //
         // _infoTableLayoutPanel
         //
@@ -232,19 +199,16 @@ sealed partial class StreamInfoWidget
         Name = "StreamInfoWidget";
         Size = new Size(369, 158);
         _mainTableLayoutPanel.ResumeLayout(false);
-        _leftPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)_thumbnailPictureBox).EndInit();
         _infoTableLayoutPanel.ResumeLayout(false);
         _statsTableLayoutPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
 
-    private TableLayoutPanel _leftPanel;
     private PictureBox _thumbnailPictureBox;
     private TableLayoutPanel _infoTableLayoutPanel;
     private TableLayoutPanel _statsTableLayoutPanel;
     private Label _lastUpdateLabel;
-    private Button _openChannelButton;
     private Label _statusIconLabel;
     private Label _statusTextLabel;
     private Label _titleLabel;

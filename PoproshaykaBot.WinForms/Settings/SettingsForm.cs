@@ -134,10 +134,33 @@ public partial class SettingsForm : Form
         _applyButton.Enabled = _hasChanges;
     }
 
+    private void SyncCollapseStatesFromLive()
+    {
+        var liveDashboard = _settingsManager.Current.Ui.Dashboard;
+        var draftDashboard = _settings.Ui.Dashboard;
+
+        if (liveDashboard == null || draftDashboard == null)
+        {
+            return;
+        }
+
+        foreach (var draftTile in draftDashboard.Tiles)
+        {
+            var liveTile = liveDashboard.Tiles.FirstOrDefault(t =>
+                string.Equals(t.TypeId, draftTile.TypeId, StringComparison.Ordinal));
+
+            if (liveTile != null)
+            {
+                draftTile.IsCollapsed = liveTile.IsCollapsed;
+            }
+        }
+    }
+
     private void ApplySettings()
     {
         try
         {
+            SyncCollapseStatesFromLive();
             SaveSettingsFromControls();
             var live = _settingsManager.Current;
             CopyLiveTokens(live.Twitch.BotAccount, _settings.Twitch.BotAccount);

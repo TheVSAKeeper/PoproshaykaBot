@@ -6,13 +6,17 @@ using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Streaming;
+using PoproshaykaBot.WinForms.Tiles;
 
 namespace PoproshaykaBot.WinForms.Broadcast;
 
-public sealed partial class BroadcastInfoWidget : UserControl
+public sealed partial class BroadcastInfoWidget : UserControl, IDashboardTileHeaderProvider
 {
     private readonly List<IDisposable> _subs = [];
     private bool _initialized;
+    private ToolStripButton? _toggleButton;
+    private ToolStripButton? _modeToggleButton;
+    private ToolStripButton? _sendNowButton;
 
     public BroadcastInfoWidget()
     {
@@ -33,6 +37,38 @@ public sealed partial class BroadcastInfoWidget : UserControl
 
     [Inject]
     public IEventBus Bus { get; internal init; } = null!;
+
+    public IReadOnlyList<ToolStripItem> CreateHeaderItems()
+    {
+        _toggleButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "Старт",
+        };
+
+        _toggleButton.Click += OnToggleButtonClick;
+
+        _modeToggleButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "В авто",
+        };
+
+        _modeToggleButton.Click += OnModeToggleClick;
+
+        _sendNowButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "Сейчас",
+        };
+
+        _sendNowButton.Click += OnSendNowButtonClick;
+
+        return [_toggleButton, _modeToggleButton, _sendNowButton];
+    }
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -59,7 +95,7 @@ public sealed partial class BroadcastInfoWidget : UserControl
         UpdateState();
     }
 
-    private void OnModeToggleClick(object sender, EventArgs e)
+    private void OnModeToggleClick(object? sender, EventArgs e)
     {
         var settings = Settings.Current;
         var willEnableAuto = !settings.Twitch.AutoBroadcast.AutoBroadcastEnabled;
@@ -102,7 +138,7 @@ public sealed partial class BroadcastInfoWidget : UserControl
         UpdateState();
     }
 
-    private void OnToggleButtonClick(object sender, EventArgs e)
+    private void OnToggleButtonClick(object? sender, EventArgs e)
     {
         if (Scheduler.IsActive)
         {
@@ -133,8 +169,13 @@ public sealed partial class BroadcastInfoWidget : UserControl
         UpdateState();
     }
 
-    private async void OnSendNowButtonClick(object sender, EventArgs e)
+    private async void OnSendNowButtonClick(object? sender, EventArgs e)
     {
+        if (_sendNowButton == null)
+        {
+            return;
+        }
+
         _sendNowButton.Enabled = false;
         await Scheduler.ManualSendAsync();
         _sendNowButton.Enabled = true;
@@ -156,7 +197,15 @@ public sealed partial class BroadcastInfoWidget : UserControl
         }
 
         _modeLabel.Text = $"Режим: {(isAuto ? "Авто" : "Ручной")}";
-        _modeToggleButton.Text = isAuto ? "В ручной" : "В авто";
+
+        if (_modeToggleButton != null)
+        {
+            _modeToggleButton.Text = isAuto ? "В ручной" : "В авто";
+            _modeToggleButton.Enabled = true;
+            _modeToggleButton.ToolTipText = isAuto
+                ? "Перейти в ручное управление рассылкой"
+                : "Включить автоматический запуск рассылки при начале стрима";
+        }
 
         _sentCountLabel.Text = $"Отправлено: {Scheduler.SentMessagesCount}";
 
@@ -165,32 +214,23 @@ public sealed partial class BroadcastInfoWidget : UserControl
             ? $"Следующая: {nextTime.Value:HH:mm:ss}"
             : "Следующая: —";
 
-        _toggleButton.Enabled = true;
-        _modeToggleButton.Enabled = true;
-        _toggleButton.Text = isActive ? "Стоп" : "Старт";
-        _sendNowButton.Enabled = isActive;
-
-        if (isAuto && !isActive)
+        if (_toggleButton != null)
         {
-            _toggleButton.Enabled = false;
-            _toolTip.SetToolTip(_toggleButton, """
-                                               В автоматическом режиме рассылка запускается сама при начале стрима.
-                                               Переключитесь в ручной режим для ручного запуска.
-                                               """);
-        }
-        else
-        {
-            _toolTip.SetToolTip(_toggleButton, isActive ? "Остановить рассылку" : "Запустить рассылку");
+            _toggleButton.Text = isActive ? "Стоп" : "Старт";
+            _toggleButton.Enabled = !(isAuto && !isActive);
+            _toggleButton.ToolTipText = isAuto && !isActive
+                ? "В автоматическом режиме рассылка запускается сама при начале стрима. Переключитесь в ручной режим для ручного запуска."
+                : isActive
+                    ? "Остановить рассылку"
+                    : "Запустить рассылку";
         }
 
-        _toolTip.SetToolTip(_modeToggleButton,
-            isAuto
-                ? "Перейти в ручное управление рассылкой"
-                : "Включить автоматический запуск рассылки при начале стрима");
-
-        _toolTip.SetToolTip(_sendNowButton,
-            isActive
+        if (_sendNowButton != null)
+        {
+            _sendNowButton.Enabled = isActive;
+            _sendNowButton.ToolTipText = isActive
                 ? "Отправить сообщение из рассылки прямо сейчас"
-                : "Для отправки рассылка должна быть активна");
+                : "Для отправки рассылка должна быть активна";
+        }
     }
 }

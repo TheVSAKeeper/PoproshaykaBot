@@ -46,6 +46,12 @@ public sealed partial class DashboardSettingsControl : UserControl
             RowCount = (int)_gridRowsNumeric.Value,
         };
 
+        var collapsedByType = ui.Dashboard?.Tiles
+                                  .Where(t => t.IsCollapsed)
+                                  .Select(t => t.TypeId)
+                                  .ToHashSet(StringComparer.Ordinal)
+                              ?? [];
+
         var order = 0;
 
         foreach (var (type, placed) in _placedTiles
@@ -62,6 +68,7 @@ public sealed partial class DashboardSettingsControl : UserControl
                 ColumnSpan = placed.ColumnSpan,
                 RowSpan = placed.RowSpan,
                 IsVisible = true,
+                IsCollapsed = collapsedByType.Contains(type.Id),
                 MaxHeight = placed.MaxHeight,
                 MaxWidth = placed.MaxWidth,
             });

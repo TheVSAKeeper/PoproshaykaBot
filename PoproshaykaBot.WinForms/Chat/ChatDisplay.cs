@@ -3,12 +3,13 @@ using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Tiles;
 using System.Diagnostics;
 using System.Globalization;
 
 namespace PoproshaykaBot.WinForms.Chat;
 
-public sealed partial class ChatDisplay : UserControl
+public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvider
 {
     private const string WebView2RuntimeDownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
     private const double DefaultZoom = 0.75;
@@ -68,6 +69,10 @@ public sealed partial class ChatDisplay : UserControl
 
     private bool _initialized;
     private bool _reloadAttempted;
+    private ToolStripButton? _reloadButton;
+    private ToolStripButton? _resetZoomButton;
+    private ToolStripButton? _openInBrowserButton;
+    private ToolStripButton? _resetSessionButton;
 
     public ChatDisplay()
     {
@@ -79,6 +84,51 @@ public sealed partial class ChatDisplay : UserControl
 
     [Inject]
     public ILogger<ChatDisplay> Logger { get; internal init; } = null!;
+
+    public IReadOnlyList<ToolStripItem> CreateHeaderItems()
+    {
+        _reloadButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "⟳",
+            ToolTipText = "Перезагрузить страницу чата",
+        };
+
+        _reloadButton.Click += OnReloadClicked;
+
+        _resetZoomButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "🔍",
+            ToolTipText = "Сбросить масштаб к значению по умолчанию",
+        };
+
+        _resetZoomButton.Click += OnResetZoomClicked;
+
+        _openInBrowserButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "🌐",
+            ToolTipText = "Открыть текущую страницу в системном браузере",
+        };
+
+        _openInBrowserButton.Click += OnOpenInBrowserClicked;
+
+        _resetSessionButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "🗑",
+            ToolTipText = "Очистить куки и кэш (разлогинит бота)",
+        };
+
+        _resetSessionButton.Click += OnResetSessionClicked;
+
+        return [_reloadButton, _resetZoomButton, _openInBrowserButton, _resetSessionButton];
+    }
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -311,7 +361,7 @@ public sealed partial class ChatDisplay : UserControl
     private void ShowRuntimeMissingFallback()
     {
         _webView.Visible = false;
-        _toolStrip.Visible = false;
+        SetHeaderItemsEnabled(false);
         _fallbackPanel.Visible = true;
         _fallbackLabel.Text = "Требуется Microsoft Edge WebView2 Runtime.\nУстановите его, чтобы увидеть чат Twitch.";
         _fallbackLink.Text = "Скачать WebView2 Runtime";
@@ -321,10 +371,18 @@ public sealed partial class ChatDisplay : UserControl
     private void ShowGenericFallback()
     {
         _webView.Visible = false;
-        _toolStrip.Visible = false;
+        SetHeaderItemsEnabled(false);
         _fallbackPanel.Visible = true;
         _fallbackLabel.Text = "Не удалось открыть чат Twitch. Подробности — в логах.";
         _fallbackLink.Visible = false;
+    }
+
+    private void SetHeaderItemsEnabled(bool enabled)
+    {
+        _reloadButton?.Enabled = enabled;
+        _resetZoomButton?.Enabled = enabled;
+        _openInBrowserButton?.Enabled = enabled;
+        _resetSessionButton?.Enabled = enabled;
     }
 
     private double LoadSavedZoom()

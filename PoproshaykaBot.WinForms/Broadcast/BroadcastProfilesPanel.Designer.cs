@@ -3,11 +3,6 @@
     partial class BroadcastProfilesPanel
     {
         private System.ComponentModel.IContainer components = null;
-        private System.Windows.Forms.Panel _header;
-        private System.Windows.Forms.FlowLayoutPanel _headerFlow;
-        private System.Windows.Forms.Button _addButton;
-        private System.Windows.Forms.Button _editCurrentButton;
-        private System.Windows.Forms.Label _statusLabel;
         private System.Windows.Forms.FlowLayoutPanel _cardsFlow;
         private System.Windows.Forms.Label _emptyLabel;
 
@@ -23,50 +18,10 @@
 
         private void InitializeComponent()
         {
-            _header = new System.Windows.Forms.Panel();
-            _headerFlow = new System.Windows.Forms.FlowLayoutPanel();
-            _addButton = new System.Windows.Forms.Button();
-            _editCurrentButton = new System.Windows.Forms.Button();
-            _statusLabel = new System.Windows.Forms.Label();
             _cardsFlow = new System.Windows.Forms.FlowLayoutPanel();
             _emptyLabel = new System.Windows.Forms.Label();
 
-            _header.SuspendLayout();
-            _headerFlow.SuspendLayout();
             SuspendLayout();
-
-            _header.Name = "_header";
-            _header.Dock = System.Windows.Forms.DockStyle.Top;
-            _header.Height = 36;
-            _header.Padding = new System.Windows.Forms.Padding(4, 4, 4, 4);
-
-            _headerFlow.Name = "_headerFlow";
-            _headerFlow.Dock = System.Windows.Forms.DockStyle.Fill;
-            _headerFlow.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
-            _headerFlow.WrapContents = false;
-            _headerFlow.AutoSize = false;
-
-            _addButton.Name = "_addButton";
-            _addButton.Text = "+ Добавить";
-            _addButton.AutoSize = true;
-            _addButton.Margin = new System.Windows.Forms.Padding(0, 0, 4, 0);
-
-            _editCurrentButton.Name = "_editCurrentButton";
-            _editCurrentButton.Text = "✎ Текущие";
-            _editCurrentButton.AutoSize = true;
-            _editCurrentButton.Margin = new System.Windows.Forms.Padding(0, 0, 8, 0);
-
-            _statusLabel.Name = "_statusLabel";
-            _statusLabel.AutoSize = true;
-            _statusLabel.Anchor = System.Windows.Forms.AnchorStyles.Right;
-            _statusLabel.Margin = new System.Windows.Forms.Padding(0, 6, 0, 0);
-            _statusLabel.Text = string.Empty;
-
-            _headerFlow.Controls.Add(_addButton);
-            _headerFlow.Controls.Add(_editCurrentButton);
-            _headerFlow.Controls.Add(_statusLabel);
-
-            _header.Controls.Add(_headerFlow);
 
             _cardsFlow.Name = "_cardsFlow";
             _cardsFlow.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -84,7 +39,6 @@
 
             Controls.Add(_cardsFlow);
             Controls.Add(_emptyLabel);
-            Controls.Add(_header);
 
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -92,10 +46,6 @@
             Size = new System.Drawing.Size(700, 440);
             MinimumSize = new System.Drawing.Size(360, 200);
 
-            _headerFlow.ResumeLayout(false);
-            _headerFlow.PerformLayout();
-            _header.ResumeLayout(false);
-            _header.PerformLayout();
             ResumeLayout(false);
         }
     }

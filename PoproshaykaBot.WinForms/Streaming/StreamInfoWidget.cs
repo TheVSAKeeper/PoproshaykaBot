@@ -2,15 +2,17 @@
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
+using PoproshaykaBot.WinForms.Tiles;
 using System.Diagnostics;
 
 namespace PoproshaykaBot.WinForms.Streaming;
 
-public sealed partial class StreamInfoWidget : UserControl
+public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeaderProvider
 {
     private readonly List<IDisposable> _subs = [];
     private string? _lastThumbnailUrl;
     private bool _initialized;
+    private ToolStripButton? _openChannelButton;
 
     public StreamInfoWidget()
     {
@@ -22,6 +24,22 @@ public sealed partial class StreamInfoWidget : UserControl
 
     [Inject]
     public IEventBus Bus { get; internal init; } = null!;
+
+    public IReadOnlyList<ToolStripItem> CreateHeaderItems()
+    {
+        _openChannelButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "🔗 Открыть Twitch",
+            ToolTipText = "Открыть страницу канала на Twitch",
+            Visible = false,
+        };
+
+        _openChannelButton.Click += OnOpenChannelClick;
+
+        return [_openChannelButton];
+    }
 
     public void UpdateStatus(StreamStatus status, StreamInfo? info)
     {
@@ -61,8 +79,11 @@ public sealed partial class StreamInfoWidget : UserControl
 
                     LoadThumbnail(info.ThumbnailUrl);
 
-                    _openChannelButton.Visible = true;
-                    _openChannelButton.Tag = info.UserLogin;
+                    if (_openChannelButton != null)
+                    {
+                        _openChannelButton.Visible = true;
+                        _openChannelButton.Tag = info.UserLogin;
+                    }
                 }
                 else
                 {
@@ -135,7 +156,7 @@ public sealed partial class StreamInfoWidget : UserControl
 
     private void OnOpenChannelClick(object? sender, EventArgs e)
     {
-        if (sender is not Button { Tag: string login } || string.IsNullOrWhiteSpace(login))
+        if (sender is not ToolStripButton { Tag: string login } || string.IsNullOrWhiteSpace(login))
         {
             return;
         }
@@ -192,6 +213,11 @@ public sealed partial class StreamInfoWidget : UserControl
         _uptimeLabel.Text = "⏱️ —";
 
         ClearThumbnail();
+
+        if (_openChannelButton == null)
+        {
+            return;
+        }
 
         _openChannelButton.Visible = false;
         _openChannelButton.Tag = null;
