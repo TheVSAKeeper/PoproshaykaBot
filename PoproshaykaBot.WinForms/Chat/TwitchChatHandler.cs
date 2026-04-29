@@ -1,13 +1,19 @@
 ﻿using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms.Chat;
 
-public sealed class TwitchChatHandler : IChannelProvider, IEventHandler<RawChatMessageReceived>, IEventSubscriber, IDisposable
+public sealed class TwitchChatHandler :
+    IChannelProvider,
+    IEventHandler<RawChatMessageReceived>,
+    IEventHandler<BotJoinedChannel>,
+    IEventSubscriber,
+    IDisposable
 {
     private readonly SettingsManager _settingsManager;
     private readonly AudienceTracker _audienceTracker;
@@ -15,7 +21,7 @@ public sealed class TwitchChatHandler : IChannelProvider, IEventHandler<RawChatM
     private readonly ChatCommandProcessor _commandProcessor;
     private readonly TwitchChatMessenger _messenger;
     private readonly IEventBus _eventBus;
-    private readonly IDisposable _subscription;
+    private readonly List<IDisposable> _subscriptions;
 
     public TwitchChatHandler(
         SettingsManager settingsManager,
@@ -32,7 +38,11 @@ public sealed class TwitchChatHandler : IChannelProvider, IEventHandler<RawChatM
         _messenger = messenger;
         _eventBus = eventBus;
 
-        _subscription = eventBus.Subscribe(this);
+        _subscriptions =
+        [
+            eventBus.Subscribe<RawChatMessageReceived>(this),
+            eventBus.Subscribe<BotJoinedChannel>(this),
+        ];
     }
 
     public string? Channel { get; private set; }
@@ -45,7 +55,16 @@ public sealed class TwitchChatHandler : IChannelProvider, IEventHandler<RawChatM
 
     public void Dispose()
     {
-        _subscription.Dispose();
+        foreach (var subscription in _subscriptions)
+        {
+            subscription.Dispose();
+        }
+    }
+
+    public Task HandleAsync(BotJoinedChannel @event, CancellationToken cancellationToken)
+    {
+        Channel = @event.Channel;
+        return Task.CompletedTask;
     }
 
     public Task HandleAsync(RawChatMessageReceived @event, CancellationToken cancellationToken)
