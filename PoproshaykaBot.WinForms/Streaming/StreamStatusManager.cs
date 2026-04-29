@@ -169,10 +169,6 @@ public class StreamStatusManager : IStreamStatus, IAsyncDisposable
             case "stream.offline":
                 await HandleStreamOfflineAsync(cancellationToken);
                 break;
-
-            default:
-                _logger.LogDebug("EventSub уведомление неизвестного типа: {Type}", args.SubscriptionType);
-                break;
         }
     }
 
