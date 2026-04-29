@@ -19,7 +19,7 @@ public sealed class ChatSender(
     private const int MaxMessageLength = 500;
     private const int MaxSendAttempts = 5;
     private const double RateLimitMaxDelaySeconds = 30.0;
-    private static readonly TimeSpan SendInterval = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan SendInterval = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan StopDrainTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan RateLimitInitialDelay = TimeSpan.FromSeconds(2);
 
@@ -35,12 +35,13 @@ public sealed class ChatSender(
 
     public string Name => "Отправитель сообщений чата (Helix)";
 
-    public int StartOrder => 350;
+    public int StartOrder => 50;
 
     public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
         _cts = new();
         _backgroundTask = RunAsync(_cts.Token);
+        _ = WarmupAsync(_cts.Token);
         logger.LogInformation("ChatSender запущен");
         return Task.CompletedTask;
     }
@@ -139,21 +140,46 @@ public sealed class ChatSender(
         }
     }
 
+    private async Task WarmupAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.WhenAll(broadcasterIdProvider.GetAsync(ct),
+                botUserIdProvider.GetAsync(ct));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "ChatSender: прогрев broadcaster/bot id не удался, будет повторён при первой отправке");
+        }
+    }
+
     private async Task RunAsync(CancellationToken ct)
     {
+        var lastSendStartedAt = DateTimeOffset.MinValue;
+
         try
         {
             await foreach (var item in _channel.Reader.ReadAllAsync(ct))
             {
-                await SendWithRetryAsync(item, ct);
+                var elapsed = DateTimeOffset.UtcNow - lastSendStartedAt;
 
-                try
+                if (elapsed < SendInterval)
                 {
-                    await Task.Delay(SendInterval, ct);
+                    try
+                    {
+                        await Task.Delay(SendInterval - elapsed, ct);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
                 }
-                catch (OperationCanceledException)
-                {
-                }
+
+                lastSendStartedAt = DateTimeOffset.UtcNow;
+                await SendWithRetryAsync(item, ct);
             }
         }
         catch (OperationCanceledException)
