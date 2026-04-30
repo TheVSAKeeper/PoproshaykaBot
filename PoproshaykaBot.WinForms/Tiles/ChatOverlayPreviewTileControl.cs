@@ -5,11 +5,11 @@ using PoproshaykaBot.WinForms.Settings;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 
-public sealed partial class ChatOverlayPreviewControl : UserControl
+public sealed partial class ChatOverlayPreviewTileControl : UserControl
 {
     private bool _initialized;
 
-    public ChatOverlayPreviewControl()
+    public ChatOverlayPreviewTileControl()
     {
         InitializeComponent();
     }

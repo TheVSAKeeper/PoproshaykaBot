@@ -15,6 +15,7 @@ using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Statistics;
 using PoproshaykaBot.WinForms.Streaming;
+using PoproshaykaBot.WinForms.Tiles;
 using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.Chat;
 using PoproshaykaBot.WinForms.Twitch.EventSub;
@@ -304,6 +305,15 @@ public static class Program
 
         services.AddSingleton<TwitchChatHandler>();
         services.AddSingleton<IChannelProvider>(sp => sp.GetRequiredService<TwitchChatHandler>());
+
+        services.AddSingleton<DashboardTileType, StreamInfoTileType>();
+        services.AddSingleton<DashboardTileType, BroadcastStatusTileType>();
+        services.AddSingleton<DashboardTileType, LogsTileType>();
+        services.AddSingleton<DashboardTileType, TwitchChatTileType>();
+        services.AddSingleton<DashboardTileType, ChatOverlayPreviewTileType>();
+        services.AddSingleton<DashboardTileType, BroadcastProfilesTileType>();
+        services.AddSingleton<DashboardTileType, PollsControlTileType>();
+        services.AddSingleton<IDashboardTileCatalog, DashboardTileCatalog>();
 
         services.AddSingleton<BotConnectionManager>();
         services.AddSingleton<MainForm>();

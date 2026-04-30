@@ -1,6 +1,6 @@
 ﻿namespace PoproshaykaBot.WinForms.Tiles;
 
-sealed partial class ChatOverlayPreviewControl
+sealed partial class ChatOverlayPreviewTileControl
 {
     private System.ComponentModel.IContainer components = null;
 
@@ -45,13 +45,13 @@ sealed partial class ChatOverlayPreviewControl
         _fallbackLabel.TextAlign = ContentAlignment.MiddleCenter;
         _fallbackLabel.Visible = false;
         // 
-        // ChatOverlayPreviewControl
+        // ChatOverlayPreviewTileControl
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
         Controls.Add(_fallbackLabel);
         Controls.Add(_webView);
-        Name = "ChatOverlayPreviewControl";
+        Name = "ChatOverlayPreviewTileControl";
         Size = new Size(386, 302);
         ((System.ComponentModel.ISupportInitialize)_webView).EndInit();
         ResumeLayout(false);

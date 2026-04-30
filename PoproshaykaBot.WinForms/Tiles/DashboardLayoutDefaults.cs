@@ -20,23 +20,23 @@ public static class DashboardLayoutDefaults
             RowCount = DefaultRowCount,
         };
 
-        AddTile(layout, StreamInfoTileType.Instance, 0, 0, 2, 1);
-        AddTile(layout, BroadcastStatusTileType.Instance, 0, 2, 2, 1);
-        AddTile(layout, TwitchChatTileType.Instance, 1, 0, 2, 3);
-        AddTile(layout, LogsTileType.Instance, 1, 2, 2, 1);
-        AddTile(layout, ChatOverlayPreviewTileType.Instance, 2, 2, 1, 1);
-        AddTile(layout, BroadcastProfilesTileType.Instance, 2, 3, 1, 1);
-        AddTile(layout, PollsControlTileType.Instance, 3, 2, 2, 1);
+        AddTile(layout, StreamInfoTileType.TypeId, 0, 0, 2, 1);
+        AddTile(layout, BroadcastStatusTileType.TypeId, 0, 2, 2, 1);
+        AddTile(layout, TwitchChatTileType.TypeId, 1, 0, 2, 3);
+        AddTile(layout, LogsTileType.TypeId, 1, 2, 2, 1);
+        AddTile(layout, ChatOverlayPreviewTileType.TypeId, 2, 2, 1, 1);
+        AddTile(layout, BroadcastProfilesTileType.TypeId, 2, 3, 1, 1);
+        AddTile(layout, PollsControlTileType.TypeId, 3, 2, 2, 1);
 
         return layout;
     }
 
-    private static void AddTile(DashboardLayoutSettings layout, DashboardTileType type, int row, int column, int columnSpan, int rowSpan)
+    private static void AddTile(DashboardLayoutSettings layout, string typeId, int row, int column, int columnSpan, int rowSpan)
     {
         layout.Tiles.Add(new()
         {
-            Id = type.Id,
-            TypeId = type.Id,
+            Id = typeId,
+            TypeId = typeId,
             Order = layout.Tiles.Count,
             Row = row,
             Column = column,

@@ -1,23 +1,19 @@
 ﻿namespace PoproshaykaBot.WinForms.Tiles;
 
-public static class DashboardTileCatalog
+public sealed class DashboardTileCatalog : IDashboardTileCatalog
 {
-    public static readonly IReadOnlyList<DashboardTileType> All =
-    [
-        StreamInfoTileType.Instance,
-        BroadcastStatusTileType.Instance,
-        LogsTileType.Instance,
-        TwitchChatTileType.Instance,
-        ChatOverlayPreviewTileType.Instance,
-        BroadcastProfilesTileType.Instance,
-        PollsControlTileType.Instance,
-    ];
+    private readonly Dictionary<string, DashboardTileType> _byId;
 
-    private static readonly Dictionary<string, DashboardTileType> ById =
-        All.ToDictionary(type => type.Id, StringComparer.Ordinal);
-
-    public static DashboardTileType? Find(string? typeId)
+    public DashboardTileCatalog(IEnumerable<DashboardTileType> tiles)
     {
-        return string.IsNullOrWhiteSpace(typeId) ? null : ById.GetValueOrDefault(typeId);
+        All = tiles.ToArray();
+        _byId = All.ToDictionary(type => type.Id, StringComparer.Ordinal);
+    }
+
+    public IReadOnlyList<DashboardTileType> All { get; }
+
+    public DashboardTileType? Find(string? typeId)
+    {
+        return string.IsNullOrWhiteSpace(typeId) ? null : _byId.GetValueOrDefault(typeId);
     }
 }

@@ -19,6 +19,9 @@ public sealed partial class DashboardControl : UserControl
     [Inject]
     public IControlFactory ControlFactory { get; internal init; } = null!;
 
+    [Inject]
+    public IDashboardTileCatalog TileCatalog { get; internal init; } = null!;
+
     public void ReloadDashboard()
     {
         if (!_initialized)
@@ -145,7 +148,7 @@ public sealed partial class DashboardControl : UserControl
 
         try
         {
-            foreach (var type in DashboardTileCatalog.All)
+            foreach (var type in TileCatalog.All)
             {
                 var host = new DashboardTileHost
                 {
@@ -213,7 +216,7 @@ public sealed partial class DashboardControl : UserControl
 
         foreach (var tile in layout.Tiles.Where(tile => tile.IsVisible))
         {
-            var type = DashboardTileCatalog.Find(tile.TypeId);
+            var type = TileCatalog.Find(tile.TypeId);
 
             if (type == null || !seenTypes.Add(type) || !_hosts.TryGetValue(type, out var host))
             {

@@ -22,6 +22,9 @@ public sealed partial class DashboardSettingsControl : UserControl
 
     public event EventHandler? SettingChanged;
 
+    [Inject]
+    public IDashboardTileCatalog TileCatalog { get; internal init; } = null!;
+
     public void LoadSettings(UiSettings ui)
     {
         var layout = ui.Dashboard is { Tiles.Count: > 0 }
@@ -475,7 +478,7 @@ public sealed partial class DashboardSettingsControl : UserControl
 
         try
         {
-            foreach (var type in DashboardTileCatalog.All)
+            foreach (var type in TileCatalog.All)
             {
                 var button = new Button
                 {
@@ -524,7 +527,7 @@ public sealed partial class DashboardSettingsControl : UserControl
 
         foreach (var tile in layout.Tiles.Where(t => t.IsVisible))
         {
-            var type = DashboardTileCatalog.Find(tile.TypeId);
+            var type = TileCatalog.Find(tile.TypeId);
 
             if (type == null || !seen.Add(type))
             {
