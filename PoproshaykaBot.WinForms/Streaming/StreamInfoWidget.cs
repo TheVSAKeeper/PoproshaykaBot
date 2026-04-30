@@ -12,7 +12,9 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
     private readonly List<IDisposable> _subs = [];
     private string? _lastThumbnailUrl;
     private bool _initialized;
+    private bool _refreshing;
     private ToolStripButton? _openChannelButton;
+    private ToolStripButton? _refreshButton;
 
     public StreamInfoWidget()
     {
@@ -27,6 +29,16 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
 
     public IReadOnlyList<ToolStripItem> CreateHeaderItems()
     {
+        _refreshButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "🔄 Обновить",
+            ToolTipText = "Принудительно обновить данные стрима",
+        };
+
+        _refreshButton.Click += OnRefreshClick;
+
         _openChannelButton = new()
         {
             AutoToolTip = false,
@@ -38,7 +50,7 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
 
         _openChannelButton.Click += OnOpenChannelClick;
 
-        return [_openChannelButton];
+        return [_refreshButton, _openChannelButton];
     }
 
     public void UpdateStatus(StreamStatus status, StreamInfo? info)
@@ -153,6 +165,38 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
             _ = Bus.PublishAsync(new BotLogEntry(BotLogLevel.Error,
                 "Stream",
                 $"Ошибка обновления информации о стриме: {exception.Message}"));
+        }
+    }
+
+    private async void OnRefreshClick(object? sender, EventArgs e)
+    {
+        if (_refreshing)
+        {
+            return;
+        }
+
+        _refreshing = true;
+        _refreshButton?.Enabled = false;
+
+        try
+        {
+            await Stream.RefreshLiveSnapshotAsync();
+            UpdateCurrentStatus();
+        }
+        catch (Exception exception)
+        {
+            _ = Bus.PublishAsync(new BotLogEntry(BotLogLevel.Error,
+                "Stream",
+                $"Ошибка обновления информации о стриме: {exception.Message}"));
+        }
+        finally
+        {
+            _refreshing = false;
+
+            if (_refreshButton != null && !IsDisposed)
+            {
+                _refreshButton.Enabled = true;
+            }
         }
     }
 

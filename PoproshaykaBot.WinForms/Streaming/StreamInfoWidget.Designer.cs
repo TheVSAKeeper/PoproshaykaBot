@@ -181,7 +181,7 @@ sealed partial class StreamInfoWidget
         //
         // _streamInfoTimer
         //
-        _streamInfoTimer.Interval = 60000;
+        _streamInfoTimer.Interval = 15000;
         _streamInfoTimer.Tick += OnStreamInfoTimerTick;
         //
         // StreamInfoWidget
