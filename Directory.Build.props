@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -7,6 +7,6 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>3.0.0.2</Version>
+    <Version>3.0.0.3</Version>
   </PropertyGroup>
 </Project>

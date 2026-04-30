@@ -3,7 +3,7 @@ using PoproshaykaBot.WinForms.Streaming;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 
-public sealed class StreamInfoTileType() : DashboardTileType(TypeId, "🔴 Стрим", 200, 420)
+public sealed class StreamInfoTileType() : DashboardTileType(TypeId, "🔴 Стрим", 240, 420)
 {
     public const string TypeId = "stream-info";
 

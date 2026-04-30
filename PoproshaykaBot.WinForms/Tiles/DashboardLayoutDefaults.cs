@@ -4,7 +4,7 @@ namespace PoproshaykaBot.WinForms.Tiles;
 
 public static class DashboardLayoutDefaults
 {
-    public const int DefaultColumnCount = 4;
+    public const int DefaultColumnCount = 3;
     public const int DefaultRowCount = 4;
 
     public const int MinColumnCount = 1;
@@ -20,13 +20,12 @@ public static class DashboardLayoutDefaults
             RowCount = DefaultRowCount,
         };
 
-        AddTile(layout, StreamInfoTileType.TypeId, 0, 0, 2, 1);
-        AddTile(layout, BroadcastStatusTileType.TypeId, 0, 2, 2, 1);
-        AddTile(layout, TwitchChatTileType.TypeId, 1, 0, 2, 3);
-        AddTile(layout, LogsTileType.TypeId, 1, 2, 2, 1);
-        AddTile(layout, ChatOverlayPreviewTileType.TypeId, 2, 2, 1, 1);
-        AddTile(layout, BroadcastProfilesTileType.TypeId, 2, 3, 1, 1);
-        AddTile(layout, PollsControlTileType.TypeId, 3, 2, 2, 1);
+        AddTile(layout, StreamInfoTileType.TypeId, 0, 0, 1, 1);
+        AddTile(layout, BroadcastStatusTileType.TypeId, 1, 0, 1, 1);
+        AddTile(layout, BroadcastProfilesTileType.TypeId, 2, 0, 1, 1);
+        AddTile(layout, PollsControlTileType.TypeId, 3, 0, 1, 1);
+        AddTile(layout, ChatOverlayPreviewTileType.TypeId, 0, 1, 1, 4);
+        AddTile(layout, TwitchChatTileType.TypeId, 0, 2, 1, 4);
 
         return layout;
     }
