@@ -71,13 +71,31 @@ public sealed partial class DashboardControl : UserControl
         };
     }
 
-    private static int?[] ComputeColumnFixedWidths(IReadOnlyList<TilePlacement> placements, int columnCount)
+    private int?[] ComputeColumnFixedWidths(IReadOnlyList<TilePlacement> placements, int columnCount, int rowCount, int collapsedDeviceWidth)
     {
         var widths = new int?[columnCount];
 
         for (var column = 0; column < columnCount; column++)
         {
             var columnIndex = column;
+
+            var fullColumnTile = placements.FirstOrDefault(p => p.Row == 0
+                                                                && p.RowSpan == rowCount
+                                                                && p.Column <= columnIndex
+                                                                && columnIndex < p.Column + p.ColumnSpan);
+
+            if (fullColumnTile is { IsCollapsed: true })
+            {
+                widths[column] = collapsedDeviceWidth;
+                continue;
+            }
+
+            if (fullColumnTile != null)
+            {
+                widths[column] = null;
+                continue;
+            }
+
             var singleColumnTiles = placements
                 .Where(p => p.ColumnSpan == 1 && p.Column == columnIndex)
                 .ToList();
@@ -95,7 +113,7 @@ public sealed partial class DashboardControl : UserControl
                 .ToList();
 
             widths[column] = compactSingleColumn.Count > 0
-                ? compactSingleColumn.Max(p => p.MaxWidth!.Value)
+                ? LogicalToDeviceUnits(compactSingleColumn.Max(p => p.MaxWidth!.Value))
                 : null;
         }
 
@@ -239,11 +257,15 @@ public sealed partial class DashboardControl : UserControl
             ? sampleHost.HeaderHeight + sampleHost.Margin.Vertical + 2
             : LogicalToDeviceUnits(44);
 
+        var collapsedColumnWidth = sampleHost != null
+            ? sampleHost.HeaderHeight + sampleHost.Margin.Horizontal + LogicalToDeviceUnits(16)
+            : LogicalToDeviceUnits(56);
+
         var rowFixedHeights = ComputeRowFixedHeights(placements, rowCount, collapsedHeight);
         var flexRowCount = rowFixedHeights.Count(height => height == null);
         var percentPerFlexRow = flexRowCount > 0 ? 100F / flexRowCount : 100F / rowCount;
 
-        var columnFixedWidths = ComputeColumnFixedWidths(placements, columnCount);
+        var columnFixedWidths = ComputeColumnFixedWidths(placements, columnCount, rowCount, collapsedColumnWidth);
         var flexColumnCount = columnFixedWidths.Count(width => width == null);
         var percentPerFlexColumn = flexColumnCount > 0 ? 100F / flexColumnCount : 100F / columnCount;
 
@@ -259,7 +281,7 @@ public sealed partial class DashboardControl : UserControl
             for (var column = 0; column < columnCount; column++)
             {
                 _tilesTableLayoutPanel.ColumnStyles.Add(columnFixedWidths[column] is { } fixedWidth
-                    ? new(SizeType.Absolute, LogicalToDeviceUnits(fixedWidth))
+                    ? new(SizeType.Absolute, fixedWidth)
                     : new ColumnStyle(SizeType.Percent, percentPerFlexColumn));
             }
 
