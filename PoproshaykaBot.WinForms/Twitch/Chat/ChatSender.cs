@@ -23,12 +23,7 @@ public sealed class ChatSender(
     private static readonly TimeSpan StopDrainTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan RateLimitInitialDelay = TimeSpan.FromSeconds(2);
 
-    private readonly Channel<ChatSendItem> _channel = Channel.CreateBounded<ChatSendItem>(new BoundedChannelOptions(1000)
-    {
-        FullMode = BoundedChannelFullMode.Wait,
-        SingleReader = true,
-        SingleWriter = false,
-    });
+    private Channel<ChatSendItem> _channel = CreateChannel();
 
     private Task? _backgroundTask;
     private CancellationTokenSource? _cts;
@@ -39,11 +34,26 @@ public sealed class ChatSender(
 
     public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
+        if (_channel.Reader.Completion.IsCompleted)
+        {
+            _channel = CreateChannel();
+        }
+
         _cts = new();
         _backgroundTask = RunAsync(_cts.Token);
         _ = WarmupAsync(_cts.Token);
         logger.LogInformation("ChatSender запущен");
         return Task.CompletedTask;
+    }
+
+    private static Channel<ChatSendItem> CreateChannel()
+    {
+        return Channel.CreateBounded<ChatSendItem>(new BoundedChannelOptions(1000)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false,
+        });
     }
 
     public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
@@ -101,11 +111,22 @@ public sealed class ChatSender(
             return;
         }
 
+        var channel = _channel;
+
         foreach (var chunk in SplitByLength(message, MaxMessageLength))
         {
             var item = new ChatSendItem(chunk, replyParentMessageId);
 
-            if (!_channel.Writer.TryWrite(item))
+            if (channel.Writer.TryWrite(item))
+            {
+                continue;
+            }
+
+            if (channel.Reader.Completion.IsCompleted)
+            {
+                logger.LogWarning("ChatSender: канал закрыт, сообщение отброшено (длина сообщения {Length} символов)", chunk.Length);
+            }
+            else
             {
                 logger.LogWarning("ChatSender: очередь переполнена, сообщение отброшено (длина сообщения {Length} символов)", chunk.Length);
             }
