@@ -39,10 +39,6 @@ public class TwitchSettings
 
     public int HttpServerPort { get; set; } = 8080;
 
-    public bool HttpServerEnabled { get; set; } = true;
-
-    public bool ObsOverlayEnabled { get; set; } = true;
-
     public MessageSettings Messages { get; set; } = new();
 
     public ObsChatSettings ObsChat { get; set; } = new();

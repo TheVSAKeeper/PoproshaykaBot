@@ -1,6 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Twitch.Chat;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
@@ -16,15 +14,8 @@ public partial class BasicSettingsControl : UserControl
 
     public event EventHandler? SettingChanged;
 
-    [Inject]
-    public IBotUserIdProvider BotUserIdProvider { get; internal init; } = null!;
-
-    [Inject]
-    public ILogger<BasicSettingsControl> Logger { get; internal init; } = null!;
-
     public void LoadSettings(TwitchSettings settings)
     {
-        _botUsernameTextBox.Text = settings.BotAccount.Login;
         _channelTextBox.Text = settings.Channel;
     }
 
@@ -49,8 +40,7 @@ public partial class BasicSettingsControl : UserControl
 
         _initialized = true;
 
-        SetPlaceholders();
-        _ = RefreshBotLoginFromTokenAsync();
+        _channelTextBox.PlaceholderText = DefaultSettings.Channel;
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -60,45 +50,7 @@ public partial class BasicSettingsControl : UserControl
 
     private void OnChannelResetButtonClicked(object sender, EventArgs e)
     {
-        ResetChannel();
-        SettingChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void ResetChannel()
-    {
         _channelTextBox.Text = DefaultSettings.Channel;
-    }
-
-    private void SetPlaceholders()
-    {
-        _botUsernameTextBox.PlaceholderText = "Авторизуйте бота на вкладке OAuth";
-        _channelTextBox.PlaceholderText = DefaultSettings.Channel;
-    }
-
-    private async Task RefreshBotLoginFromTokenAsync()
-    {
-        try
-        {
-            var user = await BotUserIdProvider.GetUserAsync(CancellationToken.None);
-
-            if (user == null || string.IsNullOrEmpty(user.Login))
-            {
-                return;
-            }
-
-            if (IsDisposed || !IsHandleCreated)
-            {
-                return;
-            }
-
-            BeginInvoke(() =>
-            {
-                _botUsernameTextBox.Text = user.Login;
-            });
-        }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "Не удалось получить имя бота из токена (возможно, бот ещё не авторизован)");
-        }
+        SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 }

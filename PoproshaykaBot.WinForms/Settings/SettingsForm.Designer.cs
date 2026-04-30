@@ -31,14 +31,16 @@ partial class SettingsForm
         var resources = new System.ComponentModel.ComponentResourceManager(typeof(SettingsForm));
         _mainTableLayout = new TableLayoutPanel();
         _tabControl = new TabControl();
-        _basicTabPage = new TabPage();
+        _generalTabPage = new TabPage();
+        _generalTableLayout = new TableLayoutPanel();
+        _basicGroupBox = new GroupBox();
         _basicSettingsControl = new BasicSettingsControl();
-        _rateLimitingTabPage = new TabPage();
+        _rateLimitingGroupBox = new GroupBox();
         _rateLimitingSettingsControl = new RateLimitingSettingsControl();
+        _httpServerGroupBox = new GroupBox();
+        _httpServerSettingsControl = new HttpServerSettingsControl();
         _messagesTabPage = new TabPage();
         _messagesSettingsControl = new MessagesSettingsControl();
-        _httpServerTabPage = new TabPage();
-        _httpServerSettingsControl = new HttpServerSettingsControl();
         _oauthTabPage = new TabPage();
         _oauthSettingsControl = new OAuthSettingsControl();
         _obsChatTabPage = new TabPage();
@@ -58,10 +60,12 @@ partial class SettingsForm
         _applyButton = new Button();
         _mainTableLayout.SuspendLayout();
         _tabControl.SuspendLayout();
-        _basicTabPage.SuspendLayout();
-        _rateLimitingTabPage.SuspendLayout();
+        _generalTabPage.SuspendLayout();
+        _generalTableLayout.SuspendLayout();
+        _basicGroupBox.SuspendLayout();
+        _rateLimitingGroupBox.SuspendLayout();
+        _httpServerGroupBox.SuspendLayout();
         _messagesTabPage.SuspendLayout();
-        _httpServerTabPage.SuspendLayout();
         _oauthTabPage.SuspendLayout();
         _obsChatTabPage.SuspendLayout();
         _autoBroadcastTabPage.SuspendLayout();
@@ -89,10 +93,8 @@ partial class SettingsForm
         // 
         // _tabControl
         // 
-        _tabControl.Controls.Add(_basicTabPage);
-        _tabControl.Controls.Add(_rateLimitingTabPage);
+        _tabControl.Controls.Add(_generalTabPage);
         _tabControl.Controls.Add(_messagesTabPage);
-        _tabControl.Controls.Add(_httpServerTabPage);
         _tabControl.Controls.Add(_oauthTabPage);
         _tabControl.Controls.Add(_obsChatTabPage);
         _tabControl.Controls.Add(_autoBroadcastTabPage);
@@ -105,49 +107,99 @@ partial class SettingsForm
         _tabControl.SelectedIndex = 0;
         _tabControl.Size = new Size(711, 584);
         _tabControl.TabIndex = 13;
-        // 
-        // _basicTabPage
-        // 
-        _basicTabPage.Controls.Add(_basicSettingsControl);
-        _basicTabPage.Location = new Point(4, 24);
-        _basicTabPage.Name = "_basicTabPage";
-        _basicTabPage.Padding = new Padding(10, 10, 10, 10);
-        _basicTabPage.Size = new Size(703, 556);
-        _basicTabPage.TabIndex = 0;
-        _basicTabPage.Text = "Основные";
-        _basicTabPage.UseVisualStyleBackColor = true;
-        // 
+        //
+        // _generalTabPage
+        //
+        _generalTabPage.Controls.Add(_generalTableLayout);
+        _generalTabPage.Location = new Point(4, 24);
+        _generalTabPage.Name = "_generalTabPage";
+        _generalTabPage.Padding = new Padding(10, 10, 10, 10);
+        _generalTabPage.Size = new Size(703, 556);
+        _generalTabPage.TabIndex = 0;
+        _generalTabPage.Text = "Основные";
+        _generalTabPage.UseVisualStyleBackColor = true;
+        //
+        // _generalTableLayout
+        //
+        _generalTableLayout.ColumnCount = 1;
+        _generalTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        _generalTableLayout.Controls.Add(_basicGroupBox, 0, 0);
+        _generalTableLayout.Controls.Add(_rateLimitingGroupBox, 0, 1);
+        _generalTableLayout.Controls.Add(_httpServerGroupBox, 0, 2);
+        _generalTableLayout.Dock = DockStyle.Fill;
+        _generalTableLayout.Location = new Point(10, 10);
+        _generalTableLayout.Name = "_generalTableLayout";
+        _generalTableLayout.RowCount = 4;
+        _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70F));
+        _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100F));
+        _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F));
+        _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        _generalTableLayout.Size = new Size(683, 536);
+        _generalTableLayout.TabIndex = 0;
+        //
+        // _basicGroupBox
+        //
+        _basicGroupBox.Controls.Add(_basicSettingsControl);
+        _basicGroupBox.Dock = DockStyle.Fill;
+        _basicGroupBox.Location = new Point(3, 3);
+        _basicGroupBox.Name = "_basicGroupBox";
+        _basicGroupBox.Size = new Size(677, 124);
+        _basicGroupBox.TabIndex = 0;
+        _basicGroupBox.TabStop = false;
+        _basicGroupBox.Text = "Основные";
+        //
         // _basicSettingsControl
-        // 
+        //
         _basicSettingsControl.Dock = DockStyle.Fill;
-        _basicSettingsControl.Location = new Point(10, 10);
+        _basicSettingsControl.Location = new Point(3, 19);
         _basicSettingsControl.Margin = new Padding(6, 7, 6, 7);
         _basicSettingsControl.Name = "_basicSettingsControl";
-        _basicSettingsControl.Size = new Size(683, 536);
+        _basicSettingsControl.Size = new Size(671, 102);
         _basicSettingsControl.TabIndex = 0;
         _basicSettingsControl.SettingChanged += OnSettingChanged;
-        // 
-        // _rateLimitingTabPage
-        // 
-        _rateLimitingTabPage.Controls.Add(_rateLimitingSettingsControl);
-        _rateLimitingTabPage.Location = new Point(4, 24);
-        _rateLimitingTabPage.Name = "_rateLimitingTabPage";
-        _rateLimitingTabPage.Padding = new Padding(10, 10, 10, 10);
-        _rateLimitingTabPage.Size = new Size(613, 549);
-        _rateLimitingTabPage.TabIndex = 1;
-        _rateLimitingTabPage.Text = "Ограничения";
-        _rateLimitingTabPage.UseVisualStyleBackColor = true;
-        // 
+        //
+        // _rateLimitingGroupBox
+        //
+        _rateLimitingGroupBox.Controls.Add(_rateLimitingSettingsControl);
+        _rateLimitingGroupBox.Dock = DockStyle.Fill;
+        _rateLimitingGroupBox.Location = new Point(3, 133);
+        _rateLimitingGroupBox.Name = "_rateLimitingGroupBox";
+        _rateLimitingGroupBox.Size = new Size(677, 94);
+        _rateLimitingGroupBox.TabIndex = 1;
+        _rateLimitingGroupBox.TabStop = false;
+        _rateLimitingGroupBox.Text = "Ограничения";
+        //
         // _rateLimitingSettingsControl
-        // 
+        //
         _rateLimitingSettingsControl.Dock = DockStyle.Fill;
-        _rateLimitingSettingsControl.Location = new Point(10, 10);
+        _rateLimitingSettingsControl.Location = new Point(3, 19);
         _rateLimitingSettingsControl.Margin = new Padding(6, 7, 6, 7);
         _rateLimitingSettingsControl.Name = "_rateLimitingSettingsControl";
-        _rateLimitingSettingsControl.Size = new Size(593, 529);
+        _rateLimitingSettingsControl.Size = new Size(671, 72);
         _rateLimitingSettingsControl.TabIndex = 0;
         _rateLimitingSettingsControl.SettingChanged += OnSettingChanged;
-        // 
+        //
+        // _httpServerGroupBox
+        //
+        _httpServerGroupBox.Controls.Add(_httpServerSettingsControl);
+        _httpServerGroupBox.Dock = DockStyle.Fill;
+        _httpServerGroupBox.Location = new Point(3, 233);
+        _httpServerGroupBox.Name = "_httpServerGroupBox";
+        _httpServerGroupBox.Size = new Size(677, 300);
+        _httpServerGroupBox.TabIndex = 2;
+        _httpServerGroupBox.TabStop = false;
+        _httpServerGroupBox.Text = "HTTP сервер";
+        //
+        // _httpServerSettingsControl
+        //
+        _httpServerSettingsControl.Dock = DockStyle.Fill;
+        _httpServerSettingsControl.Location = new Point(3, 19);
+        _httpServerSettingsControl.Margin = new Padding(6, 7, 6, 7);
+        _httpServerSettingsControl.Name = "_httpServerSettingsControl";
+        _httpServerSettingsControl.Size = new Size(671, 278);
+        _httpServerSettingsControl.TabIndex = 0;
+        _httpServerSettingsControl.SettingChanged += OnSettingChanged;
+        //
         // _messagesTabPage
         // 
         _messagesTabPage.Controls.Add(_messagesSettingsControl);
@@ -168,28 +220,7 @@ partial class SettingsForm
         _messagesSettingsControl.Size = new Size(593, 529);
         _messagesSettingsControl.TabIndex = 0;
         _messagesSettingsControl.SettingChanged += OnSettingChanged;
-        // 
-        // _httpServerTabPage
-        // 
-        _httpServerTabPage.Controls.Add(_httpServerSettingsControl);
-        _httpServerTabPage.Location = new Point(4, 24);
-        _httpServerTabPage.Name = "_httpServerTabPage";
-        _httpServerTabPage.Padding = new Padding(10, 10, 10, 10);
-        _httpServerTabPage.Size = new Size(613, 549);
-        _httpServerTabPage.TabIndex = 3;
-        _httpServerTabPage.Text = "HTTP Сервер";
-        _httpServerTabPage.UseVisualStyleBackColor = true;
-        // 
-        // _httpServerSettingsControl
-        // 
-        _httpServerSettingsControl.Dock = DockStyle.Fill;
-        _httpServerSettingsControl.Location = new Point(10, 10);
-        _httpServerSettingsControl.Margin = new Padding(6, 7, 6, 7);
-        _httpServerSettingsControl.Name = "_httpServerSettingsControl";
-        _httpServerSettingsControl.Size = new Size(593, 529);
-        _httpServerSettingsControl.TabIndex = 0;
-        _httpServerSettingsControl.SettingChanged += OnSettingChanged;
-        // 
+        //
         // _oauthTabPage
         // 
         _oauthTabPage.Controls.Add(_oauthSettingsControl);
@@ -395,10 +426,12 @@ partial class SettingsForm
         _mainTableLayout.ResumeLayout(false);
         _mainTableLayout.PerformLayout();
         _tabControl.ResumeLayout(false);
-        _basicTabPage.ResumeLayout(false);
-        _rateLimitingTabPage.ResumeLayout(false);
+        _generalTabPage.ResumeLayout(false);
+        _generalTableLayout.ResumeLayout(false);
+        _basicGroupBox.ResumeLayout(false);
+        _rateLimitingGroupBox.ResumeLayout(false);
+        _httpServerGroupBox.ResumeLayout(false);
         _messagesTabPage.ResumeLayout(false);
-        _httpServerTabPage.ResumeLayout(false);
         _oauthTabPage.ResumeLayout(false);
         _obsChatTabPage.ResumeLayout(false);
         _autoBroadcastTabPage.ResumeLayout(false);
@@ -413,10 +446,12 @@ partial class SettingsForm
 
     private TableLayoutPanel _mainTableLayout;
     private TabControl _tabControl;
-    private TabPage _basicTabPage;
-    private TabPage _rateLimitingTabPage;
+    private TabPage _generalTabPage;
+    private TableLayoutPanel _generalTableLayout;
+    private GroupBox _basicGroupBox;
+    private GroupBox _rateLimitingGroupBox;
+    private GroupBox _httpServerGroupBox;
     private TabPage _messagesTabPage;
-    private TabPage _httpServerTabPage;
     private TabPage _oauthTabPage;
     private TabPage _obsChatTabPage;
     private TabPage _autoBroadcastTabPage;

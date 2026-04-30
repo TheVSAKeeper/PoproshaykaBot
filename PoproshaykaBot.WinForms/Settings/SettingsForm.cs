@@ -113,7 +113,6 @@ public partial class SettingsForm : Form
         _basicSettingsControl.SaveSettings(_settings.Twitch);
         _rateLimitingSettingsControl.SaveSettings(_settings.Twitch);
         _messagesSettingsControl.SaveSettings(_settings.Twitch.Messages);
-        _httpServerSettingsControl.SaveSettings(_settings.Twitch);
         _oauthSettingsControl.SaveSettings(_settings);
         _obsChatSettingsControl.SaveSettings(_settings.Twitch.ObsChat);
         _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);

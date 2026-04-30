@@ -116,15 +116,11 @@ public static class Program
 
                 var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
 
-                var twitchSettings = settingsManager.Current.Twitch;
-                var httpServerEnabled = twitchSettings.HttpServerEnabled && !isUiSmoke;
-
                 if (isUiSmoke)
                 {
                     Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
                 }
-
-                if (httpServerEnabled)
+                else
                 {
                     var portValidationPassed = ValidateAndResolvePortConflict(settingsManager);
 
