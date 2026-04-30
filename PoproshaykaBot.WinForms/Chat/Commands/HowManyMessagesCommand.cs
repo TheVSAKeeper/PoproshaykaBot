@@ -1,4 +1,5 @@
-using System.Globalization;
+using PoproshaykaBot.WinForms.Statistics;
+using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
@@ -37,12 +38,7 @@ public sealed class HowManyMessagesCommand(StatisticsCollector statistics, UserR
         var messageCount = userStats?.TotalMessageCount ?? 0;
         var rankDisplay = rankService.GetRankDisplay(messageCount);
 
-        var text = $"{rankDisplay} | {targetDisplayName} {FormatNumber(messageCount)} сообщений";
+        var text = $"{rankDisplay} | {targetDisplayName} {FormattingUtils.FormatNumber(messageCount)} сообщений";
         return OutgoingMessage.Reply(text, context.MessageId);
-    }
-
-    private static string FormatNumber(long number)
-    {
-        return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
     }
 }

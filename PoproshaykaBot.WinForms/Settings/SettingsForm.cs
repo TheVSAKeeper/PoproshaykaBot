@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
@@ -6,20 +7,35 @@ public partial class SettingsForm : Form
 {
     private readonly SettingsManager _settingsManager;
     private AppSettings _settings;
+    private bool _initialized;
     private bool _hasChanges;
 
-    public SettingsForm(SettingsManager settingsManager, TwitchOAuthService oauthService, UnifiedHttpServer httpServer)
+    public SettingsForm(SettingsManager settingsManager)
     {
         _settingsManager = settingsManager;
-        _settings = new();
-
         _settings = CopySettings(settingsManager.Current);
 
-        _oauthSettingsControl = new(settingsManager, oauthService);
-        _miscSettingsControl = new(settingsManager);
-        _httpServerSettingsControl = new(httpServer);
-
         InitializeComponent();
+    }
+
+    public event EventHandler? SettingsApplied;
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
+        _initialized = true;
+
         LoadSettingsToControls();
     }
 
@@ -85,6 +101,8 @@ public partial class SettingsForm : Form
         _obsChatSettingsControl.LoadSettings(_settings.Twitch.ObsChat);
         _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.LoadSettings(_settings);
+        _pollsSettingsControl.LoadSettings(_settings.Twitch.Polls);
+        _dashboardSettingsControl.LoadSettings(_settings.Ui);
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -100,6 +118,8 @@ public partial class SettingsForm : Form
         _obsChatSettingsControl.SaveSettings(_settings.Twitch.ObsChat);
         _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.SaveSettings(_settings);
+        _pollsSettingsControl.SaveSettings(_settings.Twitch.Polls);
+        _dashboardSettingsControl.SaveSettings(_settings.Ui);
     }
 
     private void UpdateButtonStates()
@@ -107,14 +127,39 @@ public partial class SettingsForm : Form
         _applyButton.Enabled = _hasChanges;
     }
 
+    private void SyncCollapseStatesFromLive()
+    {
+        var liveDashboard = _settingsManager.Current.Ui.Dashboard;
+        var draftDashboard = _settings.Ui.Dashboard;
+
+        if (liveDashboard == null || draftDashboard == null)
+        {
+            return;
+        }
+
+        foreach (var draftTile in draftDashboard.Tiles)
+        {
+            var liveTile = liveDashboard.Tiles.FirstOrDefault(t =>
+                string.Equals(t.TypeId, draftTile.TypeId, StringComparison.Ordinal));
+
+            if (liveTile != null)
+            {
+                draftTile.IsCollapsed = liveTile.IsCollapsed;
+            }
+        }
+    }
+
     private void ApplySettings()
     {
         try
         {
+            SyncCollapseStatesFromLive();
             SaveSettingsFromControls();
+            LiveStateMerger.Apply(_settings, _settingsManager.Current);
             _settingsManager.SaveSettings(_settings);
             _hasChanges = false;
             UpdateButtonStates();
+            SettingsApplied?.Invoke(this, EventArgs.Empty);
 
             MessageBox.Show("Настройки успешно сохранены.", "Настройки",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);

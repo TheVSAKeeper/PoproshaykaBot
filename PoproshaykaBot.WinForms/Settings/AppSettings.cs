@@ -1,3 +1,8 @@
+﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Polls;
+using PoproshaykaBot.WinForms.Twitch.Chat;
+using PoproshaykaBot.WinForms.Users;
+
 namespace PoproshaykaBot.WinForms.Settings;
 
 public class AppSettings
@@ -8,16 +13,8 @@ public class AppSettings
     public RanksSettings Ranks { get; set; } = new();
 }
 
-public enum ChatViewMode
-{
-    Legacy = 0,
-    Overlay = 1,
-}
-
 public class TwitchSettings
 {
-    public string BotUsername { get; set; } = "thevsakeeper";
-
     public string Channel { get; set; } = "bobito217";
 
     public int MessagesAllowedInPeriod { get; set; } = 750;
@@ -28,13 +25,28 @@ public class TwitchSettings
 
     public string ClientSecret { get; set; } = string.Empty;
 
-    public string AccessToken { get; set; } = string.Empty;
-
-    public string RefreshToken { get; set; } = string.Empty;
-
     public string RedirectUri { get; set; } = "http://localhost:8080";
 
-    public string[] Scopes { get; set; } = ["chat:read", "chat:edit"];
+    public TwitchAccountSettings BotAccount { get; set; } = new()
+    {
+        Scopes =
+        [
+            TwitchScopes.UserReadChat,
+            TwitchScopes.UserWriteChat,
+            TwitchScopes.UserBot,
+        ],
+    };
+
+    public TwitchAccountSettings BroadcasterAccount { get; set; } = new()
+    {
+        Scopes =
+        [
+            TwitchScopes.ChannelBot,
+            TwitchScopes.ChannelManageBroadcast,
+            TwitchScopes.ChannelManagePolls,
+            TwitchScopes.ChannelReadPolls,
+        ],
+    };
 
     public int HttpServerPort { get; set; } = 8080;
 
@@ -49,6 +61,27 @@ public class TwitchSettings
     public AutoBroadcastSettings AutoBroadcast { get; set; } = new();
 
     public InfrastructureSettings Infrastructure { get; set; } = new();
+
+    public BroadcastProfilesSettings BroadcastProfiles { get; set; } = new();
+
+    public PollsSettings Polls { get; set; } = new();
+}
+
+public class TwitchAccountSettings
+{
+    public string AccessToken { get; set; } = string.Empty;
+
+    public string RefreshToken { get; set; } = string.Empty;
+
+    public string Login { get; set; } = string.Empty;
+
+    public string UserId { get; set; } = string.Empty;
+
+    public string[] Scopes { get; set; } = [];
+
+    public string[] StoredScopes { get; set; } = [];
+
+    public DateTimeOffset? AccessTokenExpiresAt { get; set; }
 }
 
 public class MessageSettings
@@ -83,17 +116,53 @@ public class MessageSettings
     public string DonateCommandMessage { get; set; } = "Принимаем криптой, СБП, куаркод справа снизу, подробнее можно узнать в телеге https://t.me/bobito217";
 }
 
+public class DashboardTileSettings
+{
+    public string Id { get; set; } = string.Empty;
+    public string TypeId { get; set; } = string.Empty;
+    public int Order { get; set; }
+    public int Row { get; set; }
+    public int Column { get; set; }
+    public int ColumnSpan { get; set; } = 1;
+    public int RowSpan { get; set; } = 1;
+    public bool IsVisible { get; set; } = true;
+    public bool IsCollapsed { get; set; }
+    public int? MaxHeight { get; set; }
+    public int? MaxWidth { get; set; }
+}
+
+public class DashboardLayoutSettings
+{
+    public int ColumnCount { get; set; } = 4;
+    public int RowCount { get; set; } = 3;
+    public List<DashboardTileSettings> Tiles { get; set; } = [];
+}
+
 public class UiSettings
 {
-    public bool ShowLogsPanel { get; set; } = true;
-    public bool ShowChatPanel { get; set; } = true;
-    public ChatViewMode CurrentChatViewMode { get; set; } = ChatViewMode.Legacy;
+    public DashboardLayoutSettings? Dashboard { get; set; }
+
+    public MainWindowSettings? MainWindow { get; set; }
+}
+
+public class MainWindowSettings
+{
+    public int X { get; set; }
+
+    public int Y { get; set; }
+
+    public int Width { get; set; }
+
+    public int Height { get; set; }
+
+    public bool Maximized { get; set; }
 }
 
 public class InfrastructureSettings
 {
     public int ChatHistoryMaxItems { get; set; } = 1000;
     public int SseKeepAliveSeconds { get; set; } = 30;
+    public List<GameCategoryCacheEntry> RecentCategories { get; set; } = [];
 }
 
 public class ObsChatSettings
@@ -170,6 +239,25 @@ public static class MessageAnimationType
         "Выскользнуть вправо",
         "Уменьшение",
         "Свернуться вверх",
+    ];
+
+    public static readonly (string Value, string DisplayName)[] EntryAnimations =
+    [
+        (None, "Без анимации"),
+        (SlideInRight, "Скольжение справа"),
+        (SlideInLeft, "Скольжение слева"),
+        (FadeInUp, "Затухание сверху"),
+        (BounceIn, "Прыжок"),
+    ];
+
+    public static readonly (string Value, string DisplayName)[] ExitAnimations =
+    [
+        (None, "Без анимации"),
+        (FadeOut, "Исчезновение"),
+        (SlideOutLeft, "Выскользнуть влево"),
+        (SlideOutRight, "Выскользнуть вправо"),
+        (ScaleDown, "Уменьшение"),
+        (ShrinkUp, "Свернуться вверх"),
     ];
 }
 

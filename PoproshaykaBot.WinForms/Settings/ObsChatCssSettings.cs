@@ -38,6 +38,11 @@ public class ObsChatCssSettings
     public string BroadcasterMessageAnimation { get; set; } = MessageAnimationType.SlideInLeft;
     public string FirstTimeUserMessageAnimation { get; set; } = MessageAnimationType.BounceIn;
 
+    public bool EnableMessageFadeOut { get; set; } = true;
+    public int MessageLifetimeSeconds { get; set; } = 30;
+    public string FadeOutAnimationType { get; set; } = MessageAnimationType.FadeOut;
+    public int FadeOutAnimationDurationMs { get; set; } = 1000;
+
     public static ObsChatCssSettings FromObsChatSettings(ObsChatSettings? settings)
     {
         var safeSettings = settings ?? new ObsChatSettings();
@@ -79,6 +84,11 @@ public class ObsChatCssSettings
             SystemMessageAnimation = safeSettings.SystemMessageAnimation,
             BroadcasterMessageAnimation = safeSettings.BroadcasterMessageAnimation,
             FirstTimeUserMessageAnimation = safeSettings.FirstTimeUserMessageAnimation,
+
+            EnableMessageFadeOut = safeSettings.EnableMessageFadeOut,
+            MessageLifetimeSeconds = ValidateRange(safeSettings.MessageLifetimeSeconds, 1, 3600),
+            FadeOutAnimationType = safeSettings.FadeOutAnimationType,
+            FadeOutAnimationDurationMs = ValidateRange(safeSettings.FadeOutAnimationDurationMs, 100, 10000),
         };
     }
 

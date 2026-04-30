@@ -1,4 +1,5 @@
-using System.Globalization;
+using PoproshaykaBot.WinForms.Statistics;
+using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms.Chat.Commands;
 
@@ -33,16 +34,11 @@ public sealed class TopUsersCommand(StatisticsCollector statistics, UserRankServ
             .Select((x, i) =>
             {
                 var rank = rankService.GetRank(x.TotalMessageCount);
-                return $"{i + 1}. {rank.Emoji} {x.Name} ({FormatNumber(x.TotalMessageCount)})";
+                return $"{i + 1}. {rank.Emoji} {x.Name} ({FormattingUtils.FormatNumber(x.TotalMessageCount)})";
             })
             .ToList();
 
         var text = $"🏆 Топ-{topUsers.Count}: " + string.Join(", ", parts);
         return OutgoingMessage.Normal(text);
-    }
-
-    private static string FormatNumber(long number)
-    {
-        return number.ToString("N0", CultureInfo.GetCultureInfo("ru-RU"));
     }
 }

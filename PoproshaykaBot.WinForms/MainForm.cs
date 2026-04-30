@@ -1,89 +1,93 @@
-﻿using PoproshaykaBot.WinForms.Models;
+﻿using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Infrastructure.Events;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms;
 
 public partial class MainForm : Form
 {
+    private readonly IFormFactory _forms;
+    private readonly IEventBus _eventBus;
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly SettingsManager _settingsManager;
     private readonly BotConnectionManager _connectionManager;
-    private readonly UnifiedHttpServer _httpServer;
-    private readonly TwitchOAuthService _oauthService;
-    private readonly StatisticsCollector _statisticsCollector;
-    private readonly UserRankService _userRankService;
+    private readonly List<IDisposable> _subs = [];
 
-    private Bot? _bot;
-    private bool _isConnected;
-    private UserStatisticsForm? _юзерФорма;
+    private BotLifecyclePhase _currentPhase = BotLifecyclePhase.Idle;
+    private bool _shutdownStarted;
+    private bool _initialized;
+    private UserStatisticsForm? _userStatisticsForm;
+    private SettingsForm? _settingsForm;
 
     public MainForm(
+        IServiceProvider services,
+        IFormFactory forms,
+        IEventBus eventBus,
         ChatHistoryManager chatHistoryManager,
-        UnifiedHttpServer httpServer,
         BotConnectionManager connectionManager,
-        SettingsManager settingsManager,
-        TwitchOAuthService oauthService,
-        StatisticsCollector statisticsCollector,
-        UserRankService userRankService)
+        SettingsManager settingsManager)
     {
+        _forms = forms;
+        _eventBus = eventBus;
         _chatHistoryManager = chatHistoryManager;
-        _httpServer = httpServer;
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
-        _oauthService = oauthService;
-        _statisticsCollector = statisticsCollector;
-        _userRankService = userRankService;
 
         InitializeComponent();
 
-        _connectionManager.ProgressChanged += OnConnectionProgress;
-        _connectionManager.ConnectionCompleted += OnConnectionCompleted;
+        services.HydrateDescendants(this);
 
-        LoadSettings();
-        _broadcastInfoWidget.Setup(_settingsManager);
-        UpdateBroadcastButtonState();
-        UpdateStreamStatus();
-        InitializePanelVisibility();
-
-        _chatHistoryManager.RegisterChatDisplay(_chatDisplay);
-
-        _httpServer.LogMessage += OnHttpServerLogMessage;
-        _settingsManager.ChatSettingsChanged += _httpServer.NotifyChatSettingsChanged;
-
-        AddLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
-
-        KeyPreview = true;
-
-        InitializeWebViewAsync();
+        RestoreWindowBounds();
     }
 
-    protected override async void OnFormClosed(FormClosedEventArgs e)
+    protected override void OnHandleCreated(EventArgs e)
     {
-        _connectionManager.CancelConnection();
-        _connectionManager.Dispose();
+        base.OnHandleCreated(e);
 
-        if (_юзерФорма is { IsDisposed: false })
+        if (_initialized || DesignMode)
         {
-            _юзерФорма.Close();
-            _юзерФорма = null;
+            return;
         }
 
-        await DisconnectBotAsync();
-        base.OnFormClosed(e);
+        _initialized = true;
+
+        Text = $"Попрощайка Бот v{GetDisplayVersion()}";
+
+        _subs.Add(_eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(this, statusEvent => OnBotConnectionProgress(statusEvent.Message)));
+        _subs.Add(_eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(this, OnBotLifecyclePhaseChanged));
+        _subs.DisposeOnClose(this);
+
+        LoadSettings();
+        PublishLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
+
+        KeyPreview = true;
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        base.OnFormClosing(e);
+
+        if (_shutdownStarted || e.Cancel)
+        {
+            return;
+        }
+
+        SaveWindowBounds();
+
+        _shutdownStarted = true;
+        e.Cancel = true;
+        _ = ShutdownAndCloseAsync();
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         switch (keyData)
         {
-            case Keys.Alt | Keys.L:
-                OnToggleLogsButtonClicked(_logsToolStripButton, EventArgs.Empty);
-                return true;
-
-            case Keys.Alt | Keys.C:
-                OnToggleChatButtonClicked(_chatToolStripButton, EventArgs.Empty);
-                return true;
-
             case Keys.Alt | Keys.U:
                 OnOpenUserStatistics();
                 return true;
@@ -96,160 +100,62 @@ public partial class MainForm : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    protected override async void OnFormClosing(FormClosingEventArgs e)
-    {
-        if (_httpServer != null)
-        {
-            try
-            {
-                _settingsManager.ChatSettingsChanged -= _httpServer.NotifyChatSettingsChanged;
-
-                await _httpServer.DisposeAsync();
-            }
-            catch (Exception ex)
-            {
-                AddLogMessage($"Ошибка остановки HTTP сервера: {ex.Message}");
-            }
-        }
-
-        base.OnFormClosing(e);
-    }
-
     private async void OnConnectButtonClicked(object? sender, EventArgs e)
     {
-        if (!_isConnected)
+        switch (_currentPhase)
         {
-            if (_connectionManager.IsBusy)
-            {
-                return;
-            }
+            case BotLifecyclePhase.Idle:
+            case BotLifecyclePhase.Cancelled:
+            case BotLifecyclePhase.Failed:
+            case BotLifecyclePhase.Disconnected:
+                StartBotConnection();
+                break;
 
-            StartBotConnection();
-        }
-        else
-        {
-            if (_connectionManager.IsBusy)
-            {
+            case BotLifecyclePhase.Connecting:
                 _connectionManager.CancelConnection();
-                AddLogMessage("Отмена подключения...");
-            }
-            else
-            {
+                PublishLogMessage("Отмена подключения...");
+                break;
+
+            case BotLifecyclePhase.Connected:
                 await DisconnectBotAsync();
-            }
+                break;
+
+            case BotLifecyclePhase.Disconnecting:
+                break;
         }
-    }
-
-    private void OnConnectionProgress(object? sender, string message)
-    {
-        OnBotConnectionProgress(message);
-    }
-
-    private void OnConnectionCompleted(object? sender, BotConnectionResult result)
-    {
-        ShowConnectionProgress(false);
-
-        if (result.IsCancelled)
-        {
-            AddLogMessage("Подключение отменено пользователем.");
-            _connectToolStripButton.Text = "🔌 Подключить";
-            _connectToolStripButton.BackColor = SystemColors.Control;
-        }
-        else if (result.IsFailed)
-        {
-            AddLogMessage($"Ошибка подключения бота: {result.Exception?.Message}");
-
-            MessageBox.Show($"Ошибка подключения бота: {result.Exception?.Message}", "Ошибка",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-
-            _connectToolStripButton.Text = "🔌 Подключить";
-            _connectToolStripButton.BackColor = SystemColors.Control;
-        }
-        else if (result is { IsSuccess: true, Bot: not null })
-        {
-            _bot = result.Bot;
-            _bot.Connected += OnBotConnected;
-            _bot.LogMessage += OnBotLogMessage;
-            _bot.ConnectionProgress += OnBotConnectionProgress;
-            _bot.StreamStatusChanged += OnStreamStatusChanged;
-            _bot.BroadcastStateChanged += OnBroadcastStateChanged;
-
-            _isConnected = true;
-            _connectToolStripButton.Text = "🔌 Отключить";
-            _connectToolStripButton.BackColor = Color.LightGreen;
-            _broadcastInfoWidget.Setup(_settingsManager, _bot);
-            UpdateBroadcastButtonState();
-            UpdateStreamStatus();
-            AddLogMessage("Бот успешно подключен!");
-        }
-    }
-
-    private void OnBotConnectionProgress(string message)
-    {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<string>(OnBotConnectionProgress), message);
-            return;
-        }
-
-        _connectionStatusLabel.Text = message;
-    }
-
-    private void OnBotConnected(string message)
-    {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<string>(OnBotConnected), message);
-            return;
-        }
-
-        UpdateBroadcastButtonState();
-        UpdateStreamStatus();
-    }
-
-    private void OnBotLogMessage(string message)
-    {
-        AddLogMessage($"[Бот] {message}");
-    }
-
-    private void OnToggleLogsButtonClicked(object? sender, EventArgs e)
-    {
-        var settings = _settingsManager.Current;
-        settings.Ui.ShowLogsPanel = !settings.Ui.ShowLogsPanel;
-        _settingsManager.SaveSettings(settings);
-        UpdatePanelVisibility();
-    }
-
-    private void OnToggleChatButtonClicked(object? sender, EventArgs e)
-    {
-        var settings = _settingsManager.Current;
-        settings.Ui.ShowChatPanel = !settings.Ui.ShowChatPanel;
-        _settingsManager.SaveSettings(settings);
-        UpdatePanelVisibility();
-    }
-
-    private void OnSwitchChatViewButtonClicked(object? sender, EventArgs e)
-    {
-        var settings = _settingsManager.Current;
-        settings.Ui.CurrentChatViewMode = settings.Ui.CurrentChatViewMode == ChatViewMode.Legacy
-            ? ChatViewMode.Overlay
-            : ChatViewMode.Legacy;
-
-        _settingsManager.SaveSettings(settings);
-        UpdateChatViewMode();
     }
 
     private void OnSettingsButtonClicked(object? sender, EventArgs e)
     {
-        using var settingsForm = new SettingsForm(_settingsManager, _oauthService, _httpServer);
+        if (_settingsForm is { IsDisposed: false })
+        {
+            _settingsForm.Activate();
+            return;
+        }
 
-        if (settingsForm.ShowDialog(this) != DialogResult.OK)
+        _settingsForm = _forms.Create<SettingsForm>();
+        _settingsForm.SettingsApplied += OnSettingsApplied;
+        _settingsForm.FormClosed += OnSettingsFormClosed;
+        _settingsForm.Show(this);
+    }
+
+    private void OnSettingsApplied(object? sender, EventArgs e)
+    {
+        LoadSettings(reloadDashboard: true);
+        PublishLogMessage("Настройки обновлены.");
+    }
+
+    private void OnSettingsFormClosed(object? sender, FormClosedEventArgs e)
+    {
+        if (sender is not SettingsForm form)
         {
             return;
         }
 
-        LoadSettings();
-        AddLogMessage("Настройки обновлены.");
+        form.SettingsApplied -= OnSettingsApplied;
+        form.FormClosed -= OnSettingsFormClosed;
+        form.Dispose();
+        _settingsForm = null;
     }
 
     private void OnUserStatisticsButtonClicked(object? sender, EventArgs e)
@@ -257,104 +163,146 @@ public partial class MainForm : Form
         OnOpenUserStatistics();
     }
 
-    private void OnHttpServerLogMessage(string message)
+    private static string GetDisplayVersion()
     {
-        if (InvokeRequired)
+        var version = Application.ProductVersion;
+        var plusIndex = version.IndexOf('+', StringComparison.Ordinal);
+
+        if (plusIndex > 0)
         {
-            Invoke(new Action<string>(OnHttpServerLogMessage), message);
-            return;
+            version = version[..plusIndex];
         }
 
-        AddLogMessage($"HTTP: {message}");
+        return version;
     }
 
-    private void OnStreamStatusChanged()
+    private static bool IsBoundsVisibleOnAnyScreen(Rectangle bounds)
     {
-        UpdateStreamStatus();
-    }
-
-    private void OnBroadcastStateChanged()
-    {
-        _broadcastInfoWidget.UpdateState();
-        UpdateBroadcastButtonState();
-        _settingsManager.SaveSettings(_settingsManager.Current);
-    }
-
-    private async void OnStreamInfoTimerTick(object? sender, EventArgs e)
-    {
-        if (_bot == null)
+        foreach (var screen in Screen.AllScreens)
         {
-            return;
+            if (screen.WorkingArea.IntersectsWith(bounds))
+            {
+                return true;
+            }
         }
 
-        if (_bot.StreamStatus == StreamStatus.Online)
+        return false;
+    }
+
+    private async Task ShutdownAndCloseAsync()
+    {
+        try
         {
-            await _bot.RefreshStreamInfoAsync();
-            UpdateStreamInfo();
+            if (_userStatisticsForm is { IsDisposed: false })
+            {
+                _userStatisticsForm.Close();
+                _userStatisticsForm = null;
+            }
+
+            if (_settingsForm is { IsDisposed: false })
+            {
+                _settingsForm.Close();
+                _settingsForm = null;
+            }
+
+            await _connectionManager.ShutdownAsync();
         }
+        catch (Exception ex)
+        {
+            PublishLogMessage($"Ошибка завершения работы: {ex.Message}", BotLogLevel.Error);
+        }
+        finally
+        {
+            Close();
+        }
+    }
+
+    private void OnBotLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)
+    {
+        _currentPhase = phaseEvent.Phase;
+        ApplyPhaseVisuals(phaseEvent.Phase);
+
+        switch (phaseEvent.Phase)
+        {
+            case BotLifecyclePhase.Connecting:
+                PublishLogMessage("Подключение бота...");
+                break;
+
+            case BotLifecyclePhase.Connected:
+                PublishLogMessage("Бот успешно подключен!");
+                break;
+
+            case BotLifecyclePhase.Cancelled:
+                PublishLogMessage("Подключение отменено пользователем.");
+                break;
+
+            case BotLifecyclePhase.Failed:
+                PublishLogMessage($"Ошибка подключения бота: {phaseEvent.Exception?.Message}", BotLogLevel.Error);
+
+                MessageBox.Show($"Ошибка подключения бота: {phaseEvent.Exception?.Message}", "Ошибка",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+                break;
+
+            case BotLifecyclePhase.Disconnecting:
+                PublishLogMessage("Отключение бота...");
+                break;
+
+            case BotLifecyclePhase.Disconnected:
+                PublishLogMessage("Бот отключен.");
+                break;
+        }
+    }
+
+    private void ApplyPhaseVisuals(BotLifecyclePhase phase)
+    {
+        switch (phase)
+        {
+            case BotLifecyclePhase.Connecting:
+                _connectToolStripButton.Text = "⏹️ Отменить";
+                _connectToolStripButton.BackColor = Color.Orange;
+                ShowConnectionProgress(true);
+                break;
+
+            case BotLifecyclePhase.Connected:
+                _connectToolStripButton.Text = "🔌 Отключить";
+                _connectToolStripButton.BackColor = Color.LightGreen;
+                ShowConnectionProgress(false);
+                break;
+
+            case BotLifecyclePhase.Disconnecting:
+                _connectToolStripButton.Text = "⏳ Отключение...";
+                _connectToolStripButton.BackColor = Color.Orange;
+                ShowConnectionProgress(true);
+                break;
+
+            case BotLifecyclePhase.Idle:
+            case BotLifecyclePhase.Disconnected:
+            case BotLifecyclePhase.Cancelled:
+            case BotLifecyclePhase.Failed:
+                _connectToolStripButton.Text = "🔌 Подключить";
+                _connectToolStripButton.BackColor = SystemColors.Control;
+                ShowConnectionProgress(false);
+                break;
+        }
+    }
+
+    private void OnBotConnectionProgress(string message)
+    {
+        _connectionStatusLabel.Text = message;
     }
 
     private void OnOpenUserStatistics()
     {
-        if (_юзерФорма == null || _юзерФорма.IsDisposed)
+        if (_userStatisticsForm == null || _userStatisticsForm.IsDisposed)
         {
-            _юзерФорма = new(_statisticsCollector, _userRankService, _bot);
-            _юзерФорма.Show(this);
+            _userStatisticsForm = _forms.Create<UserStatisticsForm>();
+            _userStatisticsForm.Show(this);
         }
         else
         {
-            _юзерФорма.UpdateBotReference(_bot);
-            _юзерФорма.Focus();
+            _userStatisticsForm.Focus();
         }
-    }
-
-    private void OnOAuthStatusChanged(string message)
-    {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<string>(OnOAuthStatusChanged), message);
-            return;
-        }
-
-        _connectionStatusLabel.Text = message;
-        AddLogMessage($"[OAuth] {message}");
-    }
-
-    private void UpdateStreamStatus()
-    {
-        if (InvokeRequired)
-        {
-            Invoke(UpdateStreamStatus);
-            return;
-        }
-
-        if (_bot == null)
-        {
-            _streamInfoWidget.UpdateStatus(StreamStatus.Unknown, null);
-            return;
-        }
-
-        _streamInfoWidget.UpdateStatus(_bot.StreamStatus, _bot.CurrentStream);
-
-        if (_bot.StreamStatus == StreamStatus.Online)
-        {
-            if (!_streamInfoTimer.Enabled)
-            {
-                _streamInfoTimer.Start();
-            }
-        }
-        else
-        {
-            if (_streamInfoTimer.Enabled)
-            {
-                _streamInfoTimer.Stop();
-            }
-        }
-    }
-
-    private void UpdateStreamInfo()
-    {
-        UpdateStreamStatus();
     }
 
     private void ClearChatHistory()
@@ -371,199 +319,28 @@ public partial class MainForm : Form
         }
 
         _chatHistoryManager.ClearHistory();
-        AddLogMessage("История сообщений чата очищена.");
-    }
-
-    private void InitializePanelVisibility()
-    {
-        UpdatePanelVisibility();
-    }
-
-    private void UpdatePanelVisibility()
-    {
-        if (InvokeRequired)
-        {
-            Invoke(UpdatePanelVisibility);
-            return;
-        }
-
-        var settings = _settingsManager.Current.Ui;
-        var showLogs = settings.ShowLogsPanel;
-        var showChat = settings.ShowChatPanel;
-
-        _logsToolStripButton.Checked = showLogs;
-        _logsToolStripButton.BackColor = showLogs ? Color.LightGreen : SystemColors.Control;
-        _logsToolStripButton.Text = showLogs ? "📜 Логи" : "📜 Логи"; // Keep icon consistent
-
-        _chatToolStripButton.Checked = showChat;
-        _chatToolStripButton.BackColor = showChat ? Color.LightGreen : SystemColors.Control;
-        _chatToolStripButton.Text = showChat ? "💬 Чат" : "💬 Чат";
-
-        _contentTableLayoutPanel.ColumnStyles.Clear();
-
-        if (showLogs && showChat)
-        {
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
-        }
-        else if (showLogs && !showChat)
-        {
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
-        }
-        else if (!showLogs && showChat)
-        {
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Absolute, 0F));
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 100F));
-        }
-        else
-        {
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
-            _contentTableLayoutPanel.ColumnStyles.Add(new(SizeType.Percent, 50F));
-        }
-
-        _logLabel.Visible = showLogs;
-        _logTextBox.Visible = showLogs;
-
-        UpdateChatViewMode();
-
-        _contentTableLayoutPanel.PerformLayout();
-    }
-
-    private void UpdateChatViewMode()
-    {
-        if (InvokeRequired)
-        {
-            Invoke(UpdateChatViewMode);
-            return;
-        }
-
-        var settings = _settingsManager.Current.Ui;
-        var showChat = settings.ShowChatPanel;
-        var mode = settings.CurrentChatViewMode;
-
-        if (!showChat)
-        {
-            _chatDisplay.Visible = false;
-            _overlayWebView.Visible = false;
-            _chatViewToolStripButton.Enabled = false;
-        }
-        else
-        {
-            _chatViewToolStripButton.Enabled = true;
-            if (mode == ChatViewMode.Legacy)
-            {
-                _chatDisplay.Visible = true;
-                _overlayWebView.Visible = false;
-                _chatViewToolStripButton.Text = "👁️ Чат";
-                _chatViewToolStripButton.Checked = false;
-                _chatViewToolStripButton.BackColor = SystemColors.Control;
-            }
-            else
-            {
-                _chatDisplay.Visible = false;
-                _overlayWebView.Visible = true;
-                _chatViewToolStripButton.Text = "👁️ Overlay";
-                _chatViewToolStripButton.Checked = true;
-                _chatViewToolStripButton.BackColor = Color.LightBlue;
-
-                if (_overlayWebView.CoreWebView2 == null)
-                {
-                    InitializeWebViewAsync();
-                }
-                else
-                {
-                    UpdateOverlayUrl();
-                }
-            }
-        }
-    }
-
-    private async void InitializeWebViewAsync()
-    {
-        try
-        {
-            await _overlayWebView.EnsureCoreWebView2Async(null);
-            UpdateOverlayUrl();
-        }
-        catch (Exception ex)
-        {
-            AddLogMessage($"Ошибка инициализации WebView2: {ex.Message}");
-        }
-    }
-
-    private void UpdateOverlayUrl()
-    {
-        if (_overlayWebView.CoreWebView2 == null)
-        {
-            return;
-        }
-
-        var port = _settingsManager.Current.Twitch.HttpServerPort;
-        var url = $"http://localhost:{port}/chat?preview=true";
-
-        if (_overlayWebView.Source?.ToString() != url)
-        {
-            _overlayWebView.CoreWebView2.Navigate(url);
-        }
+        PublishLogMessage("История сообщений чата очищена.");
     }
 
     private void StartBotConnection()
     {
-        if (_connectionManager.IsBusy)
-        {
-            return;
-        }
-
-        _connectToolStripButton.Text = "⏹️ Отменить";
-        _connectToolStripButton.BackColor = Color.Orange;
-        ShowConnectionProgress(true);
-
         try
         {
             _connectionManager.StartConnection();
         }
         catch (InvalidOperationException exception)
         {
-            AddLogMessage($"Ошибка запуска подключения: {exception.Message}");
-            ShowConnectionProgress(false);
-            _connectToolStripButton.Text = "🔌 Подключить";
-            _connectToolStripButton.BackColor = SystemColors.Control;
+            PublishLogMessage($"Ошибка запуска подключения: {exception.Message}", BotLogLevel.Error);
         }
     }
 
-    private void AddLogMessage(string message)
+    private void PublishLogMessage(string message, BotLogLevel level = BotLogLevel.Information, string source = "Ui")
     {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<string>(AddLogMessage), message);
-            return;
-        }
-
-        _logTextBox.AppendText($"{DateTime.Now:HH:mm:ss} - {message}{Environment.NewLine}");
-        _logTextBox.SelectionStart = _logTextBox.Text.Length;
-        _logTextBox.ScrollToCaret();
-    }
-
-    private void UpdateBroadcastButtonState()
-    {
-        if (InvokeRequired)
-        {
-            Invoke(UpdateBroadcastButtonState);
-            return;
-        }
-
-        _broadcastInfoWidget.UpdateState();
+        _ = _eventBus.PublishAsync(new BotLogEntry(level, source, message));
     }
 
     private void ShowConnectionProgress(bool show)
     {
-        if (InvokeRequired)
-        {
-            Invoke(new Action<bool>(ShowConnectionProgress), show);
-            return;
-        }
-
         _connectionProgressBar.Visible = show;
         _connectionStatusLabel.Visible = show;
 
@@ -580,49 +357,94 @@ public partial class MainForm : Form
 
     private async Task DisconnectBotAsync()
     {
-        AddLogMessage("Отключение бота...");
-
-        if (_bot != null)
+        if (_currentPhase != BotLifecyclePhase.Connected)
         {
-            _bot.Connected -= OnBotConnected;
-            _bot.LogMessage -= OnBotLogMessage;
-            _bot.ConnectionProgress -= OnBotConnectionProgress;
-            _bot.StreamStatusChanged -= OnStreamStatusChanged;
-            _bot.BroadcastStateChanged -= OnBroadcastStateChanged;
-
-            try
-            {
-                await _bot.DisconnectAsync();
-            }
-            catch (Exception exception)
-            {
-                AddLogMessage($"Ошибка при отключении бота: {exception.Message}");
-            }
-
-            await _bot.DisposeAsync();
-            _bot = null;
+            return;
         }
 
-        _isConnected = false;
-        _connectToolStripButton.Text = "🔌 Подключить";
-        _connectToolStripButton.BackColor = SystemColors.Control;
-        UpdateBroadcastButtonState();
-        UpdateStreamStatus();
-
-        AddLogMessage("Бот отключен.");
-    }
-
-    private void LoadSettings()
-    {
         try
         {
-            var settings = _settingsManager.Current;
-            AddLogMessage("Настройки Twitch загружены.");
-            UpdatePanelVisibility();
+            await _connectionManager.StopAsync();
         }
         catch (Exception exception)
         {
-            AddLogMessage($"Ошибка загрузки настроек: {exception.Message}");
+            PublishLogMessage($"Ошибка при отключении бота: {exception.Message}", BotLogLevel.Error);
+        }
+    }
+
+    private void RestoreWindowBounds()
+    {
+        var saved = _settingsManager.Current.Ui.MainWindow;
+
+        if (saved is null || saved.Width <= 0 || saved.Height <= 0)
+        {
+            return;
+        }
+
+        var bounds = new Rectangle(saved.X, saved.Y, saved.Width, saved.Height);
+
+        if (!IsBoundsVisibleOnAnyScreen(bounds))
+        {
+            return;
+        }
+
+        StartPosition = FormStartPosition.Manual;
+        Bounds = bounds;
+
+        if (saved.Maximized)
+        {
+            WindowState = FormWindowState.Maximized;
+        }
+    }
+
+    private void SaveWindowBounds()
+    {
+        var settings = _settingsManager.Current;
+        var isMaximized = WindowState == FormWindowState.Maximized;
+        var bounds = isMaximized || WindowState == FormWindowState.Minimized
+            ? RestoreBounds
+            : Bounds;
+
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        settings.Ui.MainWindow = new()
+        {
+            X = bounds.X,
+            Y = bounds.Y,
+            Width = bounds.Width,
+            Height = bounds.Height,
+            Maximized = isMaximized,
+        };
+
+        try
+        {
+            _settingsManager.SaveSettings(settings);
+        }
+        catch (Exception exception)
+        {
+            PublishLogMessage($"Не удалось сохранить размер окна: {exception.Message}", BotLogLevel.Error);
+        }
+    }
+
+    private void LoadSettings(bool reloadDashboard = false)
+    {
+        try
+        {
+            _ = _settingsManager.Current;
+
+            if (reloadDashboard)
+            {
+                _dashboardControl.ReloadDashboard();
+            }
+
+            PublishLogMessage("Настройки Twitch загружены.");
+        }
+        catch (Exception exception)
+        {
+            PublishLogMessage($"Ошибка загрузки настроек: {exception.Message}", BotLogLevel.Error);
         }
     }
 }

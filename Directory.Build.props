@@ -1,8 +1,12 @@
-<Project>
+﻿<Project>
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>default</LangVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>3.0.0.3</Version>
   </PropertyGroup>
 </Project>
