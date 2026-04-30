@@ -18,6 +18,8 @@ public partial class SettingsForm : Form
         InitializeComponent();
     }
 
+    public event EventHandler? SettingsApplied;
+
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
@@ -89,15 +91,6 @@ public partial class SettingsForm : Form
         return JsonSerializer.Deserialize<AppSettings>(json)!;
     }
 
-    private static void CopyLiveTokens(TwitchAccountSettings source, TwitchAccountSettings target)
-    {
-        target.AccessToken = source.AccessToken;
-        target.RefreshToken = source.RefreshToken;
-        target.Login = source.Login;
-        target.UserId = source.UserId;
-        target.StoredScopes = source.StoredScopes;
-    }
-
     private void LoadSettingsToControls()
     {
         _basicSettingsControl.LoadSettings(_settings.Twitch);
@@ -162,15 +155,11 @@ public partial class SettingsForm : Form
         {
             SyncCollapseStatesFromLive();
             SaveSettingsFromControls();
-            var live = _settingsManager.Current;
-            CopyLiveTokens(live.Twitch.BotAccount, _settings.Twitch.BotAccount);
-            CopyLiveTokens(live.Twitch.BroadcasterAccount, _settings.Twitch.BroadcasterAccount);
-            _settings.Twitch.BroadcastProfiles = live.Twitch.BroadcastProfiles;
-            _settings.Twitch.Polls.Profiles = live.Twitch.Polls.Profiles;
-            _settings.Twitch.Infrastructure.RecentCategories = live.Twitch.Infrastructure.RecentCategories;
+            LiveStateMerger.Apply(_settings, _settingsManager.Current);
             _settingsManager.SaveSettings(_settings);
             _hasChanges = false;
             UpdateButtonStates();
+            SettingsApplied?.Invoke(this, EventArgs.Empty);
 
             MessageBox.Show("Настройки успешно сохранены.", "Настройки",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);

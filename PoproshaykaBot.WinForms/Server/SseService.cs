@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Settings;
@@ -11,10 +11,11 @@ namespace PoproshaykaBot.WinForms.Server;
 public sealed class SseService(SettingsManager settingsManager, ILogger<SseService> logger) : IAsyncDisposable
 {
     private const int ChannelCapacity = 512;
+    private const int DropLogThrottle = 50;
 
     private readonly List<HttpResponse> _sseClients = [];
 
-    private readonly Channel<string> _messageChannel = Channel.CreateBounded<string>(new BoundedChannelOptions(ChannelCapacity)
+    private readonly Channel<SseEnvelope> _messageChannel = Channel.CreateBounded<SseEnvelope>(new BoundedChannelOptions(ChannelCapacity)
     {
         SingleReader = true,
         FullMode = BoundedChannelFullMode.DropOldest,
@@ -26,6 +27,9 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
     private Task? _broadcastTask;
     private Task? _keepAliveTask;
     private bool _isRunning;
+    private long _droppedMessageCount;
+
+    public long DroppedMessageCount => Interlocked.Read(ref _droppedMessageCount);
 
     public void Start()
     {
@@ -124,14 +128,8 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
 
         try
         {
-            var messageData = new
-            {
-                type = "message",
-                message = DtoMapper.ToServerMessage(chatMessage),
-            };
-
-            var json = JsonSerializer.Serialize(messageData, ServerJsonOptions.Default);
-            EnqueueMessage(json);
+            var json = JsonSerializer.Serialize(DtoMapper.ToServerMessage(chatMessage), ServerJsonOptions.Default);
+            Enqueue(new("message", json));
         }
         catch (Exception ex)
         {
@@ -145,9 +143,7 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
 
         try
         {
-            var clearData = new { type = "clear" };
-            var json = JsonSerializer.Serialize(clearData);
-            EnqueueMessage(json);
+            Enqueue(new("clear", "{}"));
         }
         catch (Exception ex)
         {
@@ -162,16 +158,9 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         try
         {
             var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings);
+            var json = JsonSerializer.Serialize(cssSettings, ServerJsonOptions.Default);
 
-            var sseMessage = new
-            {
-                type = "chat_settings_changed",
-                settings = cssSettings,
-            };
-
-            var json = JsonSerializer.Serialize(sseMessage, ServerJsonOptions.Default);
-
-            EnqueueMessage(json);
+            Enqueue(new("chat_settings_changed", json));
             logger.LogInformation("Уведомление об изменении настроек чата поставлено в очередь на отправку");
         }
         catch (Exception ex)
@@ -187,11 +176,28 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         _cts?.Dispose();
     }
 
-    private void EnqueueMessage(string data)
+    private void Enqueue(SseEnvelope envelope)
     {
-        if (!_messageChannel.Writer.TryWrite(data))
+        var willDrop = _messageChannel.Reader.Count >= ChannelCapacity;
+
+        if (!_messageChannel.Writer.TryWrite(envelope))
         {
             logger.LogWarning("Не удалось записать сообщение в канал SSE. Очередь недоступна");
+            return;
+        }
+
+        if (!willDrop)
+        {
+            return;
+        }
+
+        var total = Interlocked.Increment(ref _droppedMessageCount);
+
+        if (total == 1 || total % DropLogThrottle == 0)
+        {
+            logger.LogWarning("SSE очередь переполнена ({Capacity}), теряем старые сообщения. Всего потерь: {Total}",
+                ChannelCapacity,
+                total);
         }
     }
 
@@ -203,7 +209,7 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         {
             while (await timer.WaitForNextTickAsync(token))
             {
-                EnqueueMessage(": keep-alive");
+                Enqueue(SseEnvelope.Comment("keep-alive"));
             }
         }
         catch (OperationCanceledException)
@@ -220,11 +226,9 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
     {
         try
         {
-            await foreach (var data in _messageChannel.Reader.ReadAllAsync(token))
+            await foreach (var envelope in _messageChannel.Reader.ReadAllAsync(token))
             {
-                var isComment = data.StartsWith(':');
-                var payload = isComment ? data + "\n\n" : $"data: {data}\n\n";
-                var buffer = Encoding.UTF8.GetBytes(payload);
+                var buffer = Encoding.UTF8.GetBytes(SseFormatter.Format(envelope));
 
                 List<HttpResponse> activeClients;
                 lock (_sseClients)

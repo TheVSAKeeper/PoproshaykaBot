@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Chat;
+﻿using PoproshaykaBot.WinForms.Chat;
 
 namespace PoproshaykaBot.WinForms.Server;
 
@@ -8,6 +8,7 @@ public static class DtoMapper
     {
         return new
         {
+            messageId = chatMessage.MessageId,
             username = chatMessage.DisplayName,
             displayName = chatMessage.DisplayName,
             message = chatMessage.Message,

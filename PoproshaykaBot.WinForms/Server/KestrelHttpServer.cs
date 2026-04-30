@@ -112,8 +112,9 @@ public sealed class KestrelHttpServer(
 
             _app.Use(async (ctx, next) =>
             {
+                var maskedQuery = QueryStringMasker.Mask(ctx.Request.QueryString.Value ?? string.Empty);
                 PublishLog(BotLogLevel.Information,
-                    $"HTTP запрос: {ctx.Request.Method} {ctx.Request.Path}{ctx.Request.QueryString}");
+                    $"HTTP запрос: {ctx.Request.Method} {ctx.Request.Path}{maskedQuery}");
 
                 await next(ctx);
             });

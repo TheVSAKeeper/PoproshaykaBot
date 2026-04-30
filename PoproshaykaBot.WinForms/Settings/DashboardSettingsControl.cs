@@ -43,6 +43,16 @@ public sealed partial class DashboardSettingsControl : UserControl
 
     public void SaveSettings(UiSettings ui)
     {
+        if (!_initialized)
+        {
+            if (_pendingLayout != null)
+            {
+                ui.Dashboard = _pendingLayout;
+            }
+
+            return;
+        }
+
         var layout = new DashboardLayoutSettings
         {
             ColumnCount = (int)_gridColumnsNumeric.Value,

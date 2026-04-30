@@ -22,6 +22,7 @@ public partial class MainForm : Form
     private bool _shutdownStarted;
     private bool _initialized;
     private UserStatisticsForm? _userStatisticsForm;
+    private SettingsForm? _settingsForm;
 
     public MainForm(
         IServiceProvider services,
@@ -126,15 +127,35 @@ public partial class MainForm : Form
 
     private void OnSettingsButtonClicked(object? sender, EventArgs e)
     {
-        using var settingsForm = _forms.Create<SettingsForm>();
+        if (_settingsForm is { IsDisposed: false })
+        {
+            _settingsForm.Activate();
+            return;
+        }
 
-        if (settingsForm.ShowDialog(this) != DialogResult.OK)
+        _settingsForm = _forms.Create<SettingsForm>();
+        _settingsForm.SettingsApplied += OnSettingsApplied;
+        _settingsForm.FormClosed += OnSettingsFormClosed;
+        _settingsForm.Show(this);
+    }
+
+    private void OnSettingsApplied(object? sender, EventArgs e)
+    {
+        LoadSettings(reloadDashboard: true);
+        PublishLogMessage("Настройки обновлены.");
+    }
+
+    private void OnSettingsFormClosed(object? sender, FormClosedEventArgs e)
+    {
+        if (sender is not SettingsForm form)
         {
             return;
         }
 
-        LoadSettings(reloadDashboard: true);
-        PublishLogMessage("Настройки обновлены.");
+        form.SettingsApplied -= OnSettingsApplied;
+        form.FormClosed -= OnSettingsFormClosed;
+        form.Dispose();
+        _settingsForm = null;
     }
 
     private void OnUserStatisticsButtonClicked(object? sender, EventArgs e)
@@ -155,6 +176,19 @@ public partial class MainForm : Form
         return version;
     }
 
+    private static bool IsBoundsVisibleOnAnyScreen(Rectangle bounds)
+    {
+        foreach (var screen in Screen.AllScreens)
+        {
+            if (screen.WorkingArea.IntersectsWith(bounds))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private async Task ShutdownAndCloseAsync()
     {
         try
@@ -163,6 +197,12 @@ public partial class MainForm : Form
             {
                 _userStatisticsForm.Close();
                 _userStatisticsForm = null;
+            }
+
+            if (_settingsForm is { IsDisposed: false })
+            {
+                _settingsForm.Close();
+                _settingsForm = null;
             }
 
             await _connectionManager.ShutdownAsync();
@@ -370,7 +410,7 @@ public partial class MainForm : Form
             return;
         }
 
-        settings.Ui.MainWindow = new MainWindowSettings
+        settings.Ui.MainWindow = new()
         {
             X = bounds.X,
             Y = bounds.Y,
@@ -387,19 +427,6 @@ public partial class MainForm : Form
         {
             PublishLogMessage($"Не удалось сохранить размер окна: {exception.Message}", BotLogLevel.Error);
         }
-    }
-
-    private static bool IsBoundsVisibleOnAnyScreen(Rectangle bounds)
-    {
-        foreach (var screen in Screen.AllScreens)
-        {
-            if (screen.WorkingArea.IntersectsWith(bounds))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private void LoadSettings(bool reloadDashboard = false)

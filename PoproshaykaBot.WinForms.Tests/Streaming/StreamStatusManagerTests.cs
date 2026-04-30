@@ -149,9 +149,12 @@ public sealed class StreamStatusManagerTests
         _eventSubClient.OnDisconnected +=
             Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(new EventSubDisconnectedArgs("test"), CancellationToken.None);
 
-        Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Unknown));
-        Assert.That(_manager.CurrentStream, Is.Null,
-            "OnDisconnected должен обнулить CurrentStream, иначе StreamInfoCommand отдаст устаревшие данные");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Unknown));
+            Assert.That(_manager.CurrentStream, Is.Null,
+                "OnDisconnected должен обнулить CurrentStream, иначе StreamInfoCommand отдаст устаревшие данные");
+        }
     }
 
     [Test]
@@ -176,10 +179,13 @@ public sealed class StreamStatusManagerTests
 
         await _manager.RefreshLiveSnapshotAsync();
 
-        Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Online),
-            "первый Offline-ответ от API не должен мгновенно сбрасывать локальный Online");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Online),
+                "первый Offline-ответ от API не должен мгновенно сбрасывать локальный Online");
 
-        Assert.That(offlineEvents, Is.Zero);
+            Assert.That(offlineEvents, Is.Zero);
+        }
     }
 
     [Test]
@@ -236,7 +242,10 @@ public sealed class StreamStatusManagerTests
         await receivedSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.That(received, Is.Not.Null);
-        Assert.That(received!.Stream.Id, Is.EqualTo("stream-online-1"));
-        Assert.That(received.Channel, Is.EqualTo(_settings.Twitch.Channel));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(received!.Stream.Id, Is.EqualTo("stream-online-1"));
+            Assert.That(received.Channel, Is.EqualTo(_settings.Twitch.Channel));
+        }
     }
 }

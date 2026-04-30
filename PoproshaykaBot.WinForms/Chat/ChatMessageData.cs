@@ -4,6 +4,7 @@ namespace PoproshaykaBot.WinForms.Chat;
 
 public class ChatMessageData
 {
+    public string MessageId { get; init; } = string.Empty;
     public DateTime Timestamp { get; init; }
     public string DisplayName { get; init; } = string.Empty;
     public string Message { get; init; } = string.Empty;

@@ -85,6 +85,7 @@ public sealed class TwitchChatHandler :
 
         var historyEntry = new ChatMessageData
         {
+            MessageId = chatMessage.Id,
             Timestamp = @event.Timestamp.UtcDateTime,
             DisplayName = chatMessage.DisplayName,
             Message = chatMessage.Message,

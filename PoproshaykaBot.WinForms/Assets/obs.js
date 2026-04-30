@@ -1,4 +1,4 @@
-const chatContainer = document.getElementById('chat');
+﻿const chatContainer = document.getElementById('chat');
 let maxMessages = 50;
 let showTimestamp = true;
 let enableAnimations = true;
@@ -30,6 +30,22 @@ let enableMessageFadeOut = !isPreview; // Отключаем затухание 
 let messageLifetime = 30000;
 let fadeOutAnimationType = 'fade-out';
 let fadeOutDuration = 1000;
+
+const seenMessageIds = new Set();
+const seenMessageIdsOrder = [];
+const seenMessageIdsLimit = 1000;
+
+function rememberMessageId(id) {
+    if (!id) return false;
+    if (seenMessageIds.has(id)) return true;
+    seenMessageIds.add(id);
+    seenMessageIdsOrder.push(id);
+    if (seenMessageIdsOrder.length > seenMessageIdsLimit) {
+        const evicted = seenMessageIdsOrder.shift();
+        seenMessageIds.delete(evicted);
+    }
+    return false;
+}
 
 function smoothScrollToBottom() {
     if (!autoScrollEnabled || scrollPaused) return;
@@ -96,7 +112,7 @@ if (chatContainer) {
     chatContainer.addEventListener('scroll', () => {
         clearTimeout(scrollTimeout);
         scrollTimeout = setTimeout(handleUserScroll, 50);
-    }, {passive: true});
+    }, { passive: true });
 }
 
 function getUserTypeClasses(userStatus) {
@@ -133,20 +149,25 @@ function getAnimationType(userStatus, messageType, isFirstTime = false) {
 function initEventSource() {
     const eventSource = new EventSource('/events');
 
-    eventSource.onmessage = function (event) {
+    eventSource.addEventListener('message', function (event) {
         try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'message') {
-                addMessage(data.message);
-            } else if (data.type === 'clear') {
-                clearChat();
-            } else if (data.type === 'chat_settings_changed') {
-                updateChatSettings(data.settings);
-            }
+            addMessage(JSON.parse(event.data));
         } catch (e) {
-            console.error('Ошибка парсинга SSE данных:', e);
+            console.error('Ошибка парсинга SSE message:', e);
         }
-    };
+    });
+
+    eventSource.addEventListener('clear', function () {
+        clearChat();
+    });
+
+    eventSource.addEventListener('chat_settings_changed', function (event) {
+        try {
+            updateChatSettings(JSON.parse(event.data));
+        } catch (e) {
+            console.error('Ошибка парсинга SSE chat_settings_changed:', e);
+        }
+    });
 
     eventSource.onerror = function (event) {
         console.error('SSE ошибка:', event);
@@ -193,6 +214,10 @@ function fadeOutMessage(messageDiv) {
 }
 
 function addMessage(message, isHistoryMessage = false) {
+    if (rememberMessageId(message.messageId)) {
+        return;
+    }
+
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message';
 
@@ -288,6 +313,8 @@ function addMessage(message, isHistoryMessage = false) {
 
 function clearChat() {
     chatContainer.innerHTML = '';
+    seenMessageIds.clear();
+    seenMessageIdsOrder.length = 0;
 }
 
 function renderBadges(badges) {
