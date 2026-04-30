@@ -20,6 +20,7 @@ sealed partial class StreamInfoWidget
         _mainTableLayoutPanel = new TableLayoutPanel();
         _thumbnailPictureBox = new PictureBox();
         _infoTableLayoutPanel = new TableLayoutPanel();
+        _statusHeaderTableLayoutPanel = new TableLayoutPanel();
         _statusIconLabel = new Label();
         _statusTextLabel = new Label();
         _titleLabel = new Label();
@@ -32,67 +33,76 @@ sealed partial class StreamInfoWidget
         _mainTableLayoutPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)_thumbnailPictureBox).BeginInit();
         _infoTableLayoutPanel.SuspendLayout();
+        _statusHeaderTableLayoutPanel.SuspendLayout();
         _statsTableLayoutPanel.SuspendLayout();
         SuspendLayout();
         //
         // _mainTableLayoutPanel
         //
         _mainTableLayoutPanel.ColumnCount = 2;
-        _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140F));
+        _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240F));
         _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _mainTableLayoutPanel.Controls.Add(_thumbnailPictureBox, 0, 0);
         _mainTableLayoutPanel.Controls.Add(_infoTableLayoutPanel, 1, 0);
+        _mainTableLayoutPanel.Controls.Add(_statsTableLayoutPanel, 0, 1);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
-        _mainTableLayoutPanel.RowCount = 1;
+        _mainTableLayoutPanel.RowCount = 2;
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Size = new Size(369, 158);
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+        _mainTableLayoutPanel.SetColumnSpan(_statsTableLayoutPanel, 2);
+        _mainTableLayoutPanel.Size = new Size(420, 200);
         _mainTableLayoutPanel.TabIndex = 0;
         //
         // _thumbnailPictureBox
         //
-        _thumbnailPictureBox.BackColor = Color.FromArgb(240, 240, 240);
-        _thumbnailPictureBox.Dock = DockStyle.Fill;
-        _thumbnailPictureBox.Location = new Point(3, 3);
+        _thumbnailPictureBox.Anchor = AnchorStyles.None;
+        _thumbnailPictureBox.BackColor = Color.FromArgb(28, 28, 28);
         _thumbnailPictureBox.Margin = new Padding(3);
         _thumbnailPictureBox.Name = "_thumbnailPictureBox";
-        _thumbnailPictureBox.Size = new Size(134, 152);
+        _thumbnailPictureBox.Size = new Size(234, 134);
         _thumbnailPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
         _thumbnailPictureBox.TabIndex = 0;
         _thumbnailPictureBox.TabStop = false;
         //
         // _infoTableLayoutPanel
         //
-        _infoTableLayoutPanel.ColumnCount = 2;
-        _infoTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30F));
+        _infoTableLayoutPanel.ColumnCount = 1;
         _infoTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _infoTableLayoutPanel.Controls.Add(_statusIconLabel, 0, 0);
-        _infoTableLayoutPanel.Controls.Add(_statusTextLabel, 1, 0);
-        _infoTableLayoutPanel.Controls.Add(_titleLabel, 0, 1);
-        _infoTableLayoutPanel.Controls.Add(_gameLabel, 0, 2);
-        _infoTableLayoutPanel.Controls.Add(_statsTableLayoutPanel, 0, 3);
-        _infoTableLayoutPanel.Controls.Add(_lastUpdateLabel, 0, 4);
+        _infoTableLayoutPanel.Controls.Add(_statusHeaderTableLayoutPanel, 0, 1);
+        _infoTableLayoutPanel.Controls.Add(_titleLabel, 0, 2);
+        _infoTableLayoutPanel.Controls.Add(_gameLabel, 0, 3);
         _infoTableLayoutPanel.Dock = DockStyle.Fill;
-        _infoTableLayoutPanel.Location = new Point(143, 3);
+        _infoTableLayoutPanel.Margin = new Padding(3);
         _infoTableLayoutPanel.Name = "_infoTableLayoutPanel";
-        _infoTableLayoutPanel.RowCount = 6;
-        _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
-        _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 45F));
-        _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
-        _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 25F));
+        _infoTableLayoutPanel.RowCount = 5;
+        _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+        _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));
         _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
-        _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _infoTableLayoutPanel.Size = new Size(223, 152);
+        _infoTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
         _infoTableLayoutPanel.TabIndex = 1;
+        //
+        // _statusHeaderTableLayoutPanel
+        //
+        _statusHeaderTableLayoutPanel.ColumnCount = 2;
+        _statusHeaderTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 32F));
+        _statusHeaderTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        _statusHeaderTableLayoutPanel.Controls.Add(_statusIconLabel, 0, 0);
+        _statusHeaderTableLayoutPanel.Controls.Add(_statusTextLabel, 1, 0);
+        _statusHeaderTableLayoutPanel.Dock = DockStyle.Fill;
+        _statusHeaderTableLayoutPanel.Margin = new Padding(0);
+        _statusHeaderTableLayoutPanel.Name = "_statusHeaderTableLayoutPanel";
+        _statusHeaderTableLayoutPanel.RowCount = 1;
+        _statusHeaderTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        _statusHeaderTableLayoutPanel.TabIndex = 0;
         //
         // _statusIconLabel
         //
         _statusIconLabel.Dock = DockStyle.Fill;
-        _statusIconLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
-        _statusIconLabel.Location = new Point(3, 0);
+        _statusIconLabel.Font = new Font("Segoe UI Emoji", 12F, FontStyle.Bold);
         _statusIconLabel.Name = "_statusIconLabel";
-        _statusIconLabel.Size = new Size(24, 25);
         _statusIconLabel.TabIndex = 0;
         _statusIconLabel.Text = "⚪";
         _statusIconLabel.TextAlign = ContentAlignment.MiddleCenter;
@@ -100,91 +110,74 @@ sealed partial class StreamInfoWidget
         // _statusTextLabel
         //
         _statusTextLabel.Dock = DockStyle.Fill;
-        _statusTextLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        _statusTextLabel.Location = new Point(33, 0);
+        _statusTextLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
         _statusTextLabel.Name = "_statusTextLabel";
-        _statusTextLabel.Size = new Size(187, 25);
         _statusTextLabel.TabIndex = 1;
-        _statusTextLabel.Text = "UNKNOWN";
+        _statusTextLabel.Text = "НЕИЗВЕСТНО";
         _statusTextLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
         // _titleLabel
         //
         _titleLabel.AutoEllipsis = true;
-        _infoTableLayoutPanel.SetColumnSpan(_titleLabel, 2);
         _titleLabel.Dock = DockStyle.Fill;
-        _titleLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        _titleLabel.Location = new Point(3, 25);
+        _titleLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
         _titleLabel.Name = "_titleLabel";
-        _titleLabel.Size = new Size(217, 45);
-        _titleLabel.TabIndex = 2;
+        _titleLabel.TabIndex = 1;
         _titleLabel.Text = "Статус неизвестен";
+        _titleLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
         // _gameLabel
         //
         _gameLabel.AutoEllipsis = true;
-        _infoTableLayoutPanel.SetColumnSpan(_gameLabel, 2);
         _gameLabel.Dock = DockStyle.Fill;
-        _gameLabel.Font = new Font("Segoe UI", 8.25F);
         _gameLabel.ForeColor = Color.DimGray;
-        _gameLabel.Location = new Point(3, 70);
         _gameLabel.Name = "_gameLabel";
-        _gameLabel.Size = new Size(217, 20);
-        _gameLabel.TabIndex = 3;
+        _gameLabel.TabIndex = 2;
         _gameLabel.Text = "—";
         _gameLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
         // _statsTableLayoutPanel
         //
-        _statsTableLayoutPanel.ColumnCount = 2;
-        _infoTableLayoutPanel.SetColumnSpan(_statsTableLayoutPanel, 2);
-        _statsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        _statsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        _statsTableLayoutPanel.BackColor = Color.FromArgb(245, 245, 245);
+        _statsTableLayoutPanel.ColumnCount = 3;
+        _statsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28F));
+        _statsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28F));
+        _statsTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44F));
         _statsTableLayoutPanel.Controls.Add(_viewersLabel, 0, 0);
         _statsTableLayoutPanel.Controls.Add(_uptimeLabel, 1, 0);
+        _statsTableLayoutPanel.Controls.Add(_lastUpdateLabel, 2, 0);
         _statsTableLayoutPanel.Dock = DockStyle.Fill;
-        _statsTableLayoutPanel.Location = new Point(0, 90);
         _statsTableLayoutPanel.Margin = new Padding(0);
         _statsTableLayoutPanel.Name = "_statsTableLayoutPanel";
         _statsTableLayoutPanel.RowCount = 1;
         _statsTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _statsTableLayoutPanel.Size = new Size(223, 25);
-        _statsTableLayoutPanel.TabIndex = 4;
+        _statsTableLayoutPanel.TabIndex = 2;
         //
         // _viewersLabel
         //
         _viewersLabel.Dock = DockStyle.Fill;
-        _viewersLabel.Font = new Font("Segoe UI", 8.25F);
-        _viewersLabel.Location = new Point(3, 0);
         _viewersLabel.Name = "_viewersLabel";
-        _viewersLabel.Size = new Size(105, 25);
         _viewersLabel.TabIndex = 0;
         _viewersLabel.Text = "👥 —";
-        _viewersLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _viewersLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // _uptimeLabel
         //
         _uptimeLabel.Dock = DockStyle.Fill;
-        _uptimeLabel.Font = new Font("Segoe UI", 8.25F);
-        _uptimeLabel.Location = new Point(114, 0);
         _uptimeLabel.Name = "_uptimeLabel";
-        _uptimeLabel.Size = new Size(106, 25);
         _uptimeLabel.TabIndex = 1;
         _uptimeLabel.Text = "⏱️ —";
-        _uptimeLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _uptimeLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // _lastUpdateLabel
         //
-        _infoTableLayoutPanel.SetColumnSpan(_lastUpdateLabel, 2);
         _lastUpdateLabel.Dock = DockStyle.Fill;
-        _lastUpdateLabel.Font = new Font("Segoe UI", 7F);
+        _lastUpdateLabel.Font = new Font("Segoe UI", 8F);
         _lastUpdateLabel.ForeColor = Color.Gray;
-        _lastUpdateLabel.Location = new Point(3, 115);
         _lastUpdateLabel.Name = "_lastUpdateLabel";
-        _lastUpdateLabel.Size = new Size(217, 22);
-        _lastUpdateLabel.TabIndex = 5;
-        _lastUpdateLabel.Text = "Обновлено: никогда";
-        _lastUpdateLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _lastUpdateLabel.TabIndex = 2;
+        _lastUpdateLabel.Text = "🕐 —";
+        _lastUpdateLabel.TextAlign = ContentAlignment.MiddleRight;
         //
         // _streamInfoTimer
         //
@@ -197,15 +190,17 @@ sealed partial class StreamInfoWidget
         AutoScaleMode = AutoScaleMode.Font;
         Controls.Add(_mainTableLayoutPanel);
         Name = "StreamInfoWidget";
-        Size = new Size(369, 158);
+        Size = new Size(420, 200);
         _mainTableLayoutPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)_thumbnailPictureBox).EndInit();
         _infoTableLayoutPanel.ResumeLayout(false);
+        _statusHeaderTableLayoutPanel.ResumeLayout(false);
         _statsTableLayoutPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
 
     private PictureBox _thumbnailPictureBox;
+    private TableLayoutPanel _statusHeaderTableLayoutPanel;
     private TableLayoutPanel _infoTableLayoutPanel;
     private TableLayoutPanel _statsTableLayoutPanel;
     private Label _lastUpdateLabel;

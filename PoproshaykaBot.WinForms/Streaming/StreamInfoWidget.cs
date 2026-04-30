@@ -54,7 +54,7 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
             return;
         }
 
-        _lastUpdateLabel.Text = $"Обновлено: {DateTime.Now:HH:mm:ss}";
+        _lastUpdateLabel.Text = $"🕐 {DateTime.Now:HH:mm:ss}";
 
         switch (status)
         {
@@ -66,7 +66,7 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
                 if (info != null)
                 {
                     _titleLabel.Text = info.Title;
-                    _gameLabel.Text = info.GameName;
+                    _gameLabel.Text = string.IsNullOrWhiteSpace(info.GameName) ? "—" : $"🎮 {info.GameName}";
                     _viewersLabel.Text = $"👥 {info.ViewerCount:N0}";
 
                     var duration = DateTime.UtcNow - info.StartedAt;
@@ -238,9 +238,13 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
 
         try
         {
+            var minWidth = LogicalToDeviceUnits(240);
+            var width = Math.Max(_thumbnailPictureBox.Width, minWidth);
+            var height = (int)Math.Round(width * 9.0 / 16.0);
+
             var resolvedUrl = url
-                .Replace("{width}", _thumbnailPictureBox.Width.ToString())
-                .Replace("{height}", _thumbnailPictureBox.Height.ToString());
+                .Replace("{width}", width.ToString())
+                .Replace("{height}", height.ToString());
 
             ClearThumbnail();
 
