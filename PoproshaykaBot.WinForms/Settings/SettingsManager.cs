@@ -119,6 +119,8 @@ public class SettingsManager
                 throw new InvalidOperationException("Не удалось десериализовать настройки (null)");
             }
 
+            AppSettingsHydrator.ApplyDefaults(settings);
+
             _logger.LogInformation("Настройки приложения успешно загружены");
             return settings;
         }

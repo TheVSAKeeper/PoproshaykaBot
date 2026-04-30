@@ -29,23 +29,12 @@ public class TwitchSettings
 
     public TwitchAccountSettings BotAccount { get; set; } = new()
     {
-        Scopes =
-        [
-            TwitchScopes.UserReadChat,
-            TwitchScopes.UserWriteChat,
-            TwitchScopes.UserBot,
-        ],
+        Scopes = [..TwitchScopes.BotRequired],
     };
 
     public TwitchAccountSettings BroadcasterAccount { get; set; } = new()
     {
-        Scopes =
-        [
-            TwitchScopes.ChannelBot,
-            TwitchScopes.ChannelManageBroadcast,
-            TwitchScopes.ChannelManagePolls,
-            TwitchScopes.ChannelReadPolls,
-        ],
+        Scopes = [..TwitchScopes.BroadcasterRequired],
     };
 
     public int HttpServerPort { get; set; } = 8080;
