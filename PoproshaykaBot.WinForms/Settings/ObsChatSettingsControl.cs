@@ -54,14 +54,14 @@ public partial class ObsChatSettingsControl : UserControl
 
         _enableMessageFadeOutCheckBox.Checked = settings.EnableMessageFadeOut;
         _messageLifetimeNumeric.Value = settings.MessageLifetimeSeconds;
-        SetAnimationTypeInComboBox(_fadeOutAnimationComboBox, settings.FadeOutAnimationType);
+        SetAnimationTypeInComboBox(_fadeOutAnimationComboBox, settings.FadeOutAnimationType, MessageAnimationType.ExitAnimations);
         _fadeOutAnimationDurationNumeric.Value = settings.FadeOutAnimationDurationMs;
 
-        SetAnimationTypeInComboBox(_userMessageAnimationComboBox, settings.UserMessageAnimation);
-        SetAnimationTypeInComboBox(_botMessageAnimationComboBox, settings.BotMessageAnimation);
-        SetAnimationTypeInComboBox(_systemMessageAnimationComboBox, settings.SystemMessageAnimation);
-        SetAnimationTypeInComboBox(_broadcasterMessageAnimationComboBox, settings.BroadcasterMessageAnimation);
-        SetAnimationTypeInComboBox(_firstTimeUserMessageAnimationComboBox, settings.FirstTimeUserMessageAnimation);
+        SetAnimationTypeInComboBox(_userMessageAnimationComboBox, settings.UserMessageAnimation, MessageAnimationType.EntryAnimations);
+        SetAnimationTypeInComboBox(_botMessageAnimationComboBox, settings.BotMessageAnimation, MessageAnimationType.EntryAnimations);
+        SetAnimationTypeInComboBox(_systemMessageAnimationComboBox, settings.SystemMessageAnimation, MessageAnimationType.EntryAnimations);
+        SetAnimationTypeInComboBox(_broadcasterMessageAnimationComboBox, settings.BroadcasterMessageAnimation, MessageAnimationType.EntryAnimations);
+        SetAnimationTypeInComboBox(_firstTimeUserMessageAnimationComboBox, settings.FirstTimeUserMessageAnimation, MessageAnimationType.EntryAnimations);
     }
 
     public void SaveSettings(ObsChatSettings settings)
@@ -101,14 +101,14 @@ public partial class ObsChatSettingsControl : UserControl
 
         settings.EnableMessageFadeOut = _enableMessageFadeOutCheckBox.Checked;
         settings.MessageLifetimeSeconds = (int)_messageLifetimeNumeric.Value;
-        settings.FadeOutAnimationType = GetAnimationTypeFromComboBox(_fadeOutAnimationComboBox);
+        settings.FadeOutAnimationType = GetAnimationTypeFromComboBox(_fadeOutAnimationComboBox, MessageAnimationType.ExitAnimations);
         settings.FadeOutAnimationDurationMs = (int)_fadeOutAnimationDurationNumeric.Value;
 
-        settings.UserMessageAnimation = GetAnimationTypeFromComboBox(_userMessageAnimationComboBox);
-        settings.BotMessageAnimation = GetAnimationTypeFromComboBox(_botMessageAnimationComboBox);
-        settings.SystemMessageAnimation = GetAnimationTypeFromComboBox(_systemMessageAnimationComboBox);
-        settings.BroadcasterMessageAnimation = GetAnimationTypeFromComboBox(_broadcasterMessageAnimationComboBox);
-        settings.FirstTimeUserMessageAnimation = GetAnimationTypeFromComboBox(_firstTimeUserMessageAnimationComboBox);
+        settings.UserMessageAnimation = GetAnimationTypeFromComboBox(_userMessageAnimationComboBox, MessageAnimationType.EntryAnimations);
+        settings.BotMessageAnimation = GetAnimationTypeFromComboBox(_botMessageAnimationComboBox, MessageAnimationType.EntryAnimations);
+        settings.SystemMessageAnimation = GetAnimationTypeFromComboBox(_systemMessageAnimationComboBox, MessageAnimationType.EntryAnimations);
+        settings.BroadcasterMessageAnimation = GetAnimationTypeFromComboBox(_broadcasterMessageAnimationComboBox, MessageAnimationType.EntryAnimations);
+        settings.FirstTimeUserMessageAnimation = GetAnimationTypeFromComboBox(_firstTimeUserMessageAnimationComboBox, MessageAnimationType.EntryAnimations);
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)
@@ -231,7 +231,7 @@ public partial class ObsChatSettingsControl : UserControl
 
     private void OnFadeOutAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        _fadeOutAnimationComboBox.SelectedIndex = 5; // Исчезновение (FadeOut)
+        SetAnimationTypeInComboBox(_fadeOutAnimationComboBox, DefaultSettings.FadeOutAnimationType, MessageAnimationType.ExitAnimations);
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -243,31 +243,31 @@ public partial class ObsChatSettingsControl : UserControl
 
     private void OnUserMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_userMessageAnimationComboBox, DefaultSettings.UserMessageAnimation);
+        SetAnimationTypeInComboBox(_userMessageAnimationComboBox, DefaultSettings.UserMessageAnimation, MessageAnimationType.EntryAnimations);
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnBotMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_botMessageAnimationComboBox, DefaultSettings.BotMessageAnimation);
+        SetAnimationTypeInComboBox(_botMessageAnimationComboBox, DefaultSettings.BotMessageAnimation, MessageAnimationType.EntryAnimations);
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnSystemMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_systemMessageAnimationComboBox, DefaultSettings.SystemMessageAnimation);
+        SetAnimationTypeInComboBox(_systemMessageAnimationComboBox, DefaultSettings.SystemMessageAnimation, MessageAnimationType.EntryAnimations);
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnBroadcasterMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_broadcasterMessageAnimationComboBox, DefaultSettings.BroadcasterMessageAnimation);
+        SetAnimationTypeInComboBox(_broadcasterMessageAnimationComboBox, DefaultSettings.BroadcasterMessageAnimation, MessageAnimationType.EntryAnimations);
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnFirstTimeUserMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_firstTimeUserMessageAnimationComboBox, DefaultSettings.FirstTimeUserMessageAnimation);
+        SetAnimationTypeInComboBox(_firstTimeUserMessageAnimationComboBox, DefaultSettings.FirstTimeUserMessageAnimation, MessageAnimationType.EntryAnimations);
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -323,58 +323,39 @@ public partial class ObsChatSettingsControl : UserControl
 
     private void PopulateAnimationItems()
     {
-        var messageComboBoxes = new[]
+        var entryComboBoxes = new[]
         {
             _userMessageAnimationComboBox,
             _botMessageAnimationComboBox,
             _systemMessageAnimationComboBox,
             _broadcasterMessageAnimationComboBox,
             _firstTimeUserMessageAnimationComboBox,
-            _fadeOutAnimationComboBox,
         };
 
-        foreach (var comboBox in messageComboBoxes)
+        foreach (var comboBox in entryComboBoxes)
         {
-            comboBox.Items.AddRange(MessageAnimationType.DisplayNames);
+            foreach (var (_, displayName) in MessageAnimationType.EntryAnimations)
+            {
+                comboBox.Items.Add(displayName);
+            }
+        }
+
+        foreach (var (_, displayName) in MessageAnimationType.ExitAnimations)
+        {
+            _fadeOutAnimationComboBox.Items.Add(displayName);
         }
     }
 
-    private string GetAnimationTypeFromComboBox(ComboBox comboBox)
+    private static string GetAnimationTypeFromComboBox(ComboBox comboBox, (string Value, string DisplayName)[] options)
     {
-        return comboBox.SelectedIndex switch
-        {
-            0 => MessageAnimationType.None,
-            1 => MessageAnimationType.SlideInRight,
-            2 => MessageAnimationType.SlideInLeft,
-            3 => MessageAnimationType.FadeInUp,
-            4 => MessageAnimationType.BounceIn,
-            5 => MessageAnimationType.FadeOut,
-            6 => MessageAnimationType.SlideOutLeft,
-            7 => MessageAnimationType.SlideOutRight,
-            8 => MessageAnimationType.ScaleDown,
-            9 => MessageAnimationType.ShrinkUp,
-            _ => MessageAnimationType.SlideInRight,
-        };
+        var index = comboBox.SelectedIndex;
+        return index >= 0 && index < options.Length ? options[index].Value : options[0].Value;
     }
 
-    private void SetAnimationTypeInComboBox(ComboBox comboBox, string animationType)
+    private static void SetAnimationTypeInComboBox(ComboBox comboBox, string animationType, (string Value, string DisplayName)[] options)
     {
-        var index = animationType switch
-        {
-            MessageAnimationType.None => 0,
-            MessageAnimationType.SlideInRight => 1,
-            MessageAnimationType.SlideInLeft => 2,
-            MessageAnimationType.FadeInUp => 3,
-            MessageAnimationType.BounceIn => 4,
-            MessageAnimationType.FadeOut => 5,
-            MessageAnimationType.SlideOutLeft => 6,
-            MessageAnimationType.SlideOutRight => 7,
-            MessageAnimationType.ScaleDown => 8,
-            MessageAnimationType.ShrinkUp => 9,
-            _ => 1,
-        };
-
-        comboBox.SelectedIndex = index;
+        var index = Array.FindIndex(options, option => option.Value == animationType);
+        comboBox.SelectedIndex = index >= 0 ? index : 0;
     }
 
     private string? ValidateFontFamily(string fontFamily)

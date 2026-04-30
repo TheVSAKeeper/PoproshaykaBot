@@ -240,6 +240,25 @@ public static class MessageAnimationType
         "Уменьшение",
         "Свернуться вверх",
     ];
+
+    public static readonly (string Value, string DisplayName)[] EntryAnimations =
+    [
+        (None, "Без анимации"),
+        (SlideInRight, "Скольжение справа"),
+        (SlideInLeft, "Скольжение слева"),
+        (FadeInUp, "Затухание сверху"),
+        (BounceIn, "Прыжок"),
+    ];
+
+    public static readonly (string Value, string DisplayName)[] ExitAnimations =
+    [
+        (None, "Без анимации"),
+        (FadeOut, "Исчезновение"),
+        (SlideOutLeft, "Выскользнуть влево"),
+        (SlideOutRight, "Выскользнуть вправо"),
+        (ScaleDown, "Уменьшение"),
+        (ShrinkUp, "Свернуться вверх"),
+    ];
 }
 
 // TODO: Костыль из-за того, что сериализатор не умеет работать с системным Color

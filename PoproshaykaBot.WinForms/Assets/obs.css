@@ -1,4 +1,4 @@
-:root {
+﻿:root {
     --chat-bg-color: #000000b5;
     --chat-text-color: #ffffff;
     --chat-username-color: #9146ff;
@@ -122,7 +122,7 @@ body::-webkit-scrollbar {
 }
 
 .message.no-animation {
-    animation: none;
+    animation: none !important;
 }
 
 /* User type differentiation */
@@ -152,7 +152,7 @@ body::-webkit-scrollbar {
     box-shadow: var(--shadow-small), 0px 0px 8px rgba(255, 212, 59, 0.3);
 }
 
-.message.broadcaster.special-effect {
+.message.broadcaster.special-effect.entry-done {
     animation: pulse 2s infinite alternate;
 }
 
@@ -443,23 +443,27 @@ body::-webkit-scrollbar {
 }
 
 .message.fade-out {
-    animation: fadeOutMessage var(--fade-out-duration) ease-out forwards;
+    animation: fadeOutMessage var(--fade-out-duration) ease-out forwards !important;
 }
 
 .message.slide-out-left {
-    animation: slideOutLeft var(--fade-out-duration) ease-out forwards;
+    animation: slideOutLeft var(--fade-out-duration) ease-out forwards !important;
 }
 
 .message.slide-out-right {
-    animation: slideOutRight var(--fade-out-duration) ease-out forwards;
+    animation: slideOutRight var(--fade-out-duration) ease-out forwards !important;
 }
 
 .message.scale-down {
-    animation: scaleDown var(--fade-out-duration) ease-out forwards;
+    animation: scaleDown var(--fade-out-duration) ease-out forwards !important;
 }
 
 .message.shrink-up {
-    animation: shrinkUp var(--fade-out-duration) ease-out forwards;
+    animation: shrinkUp var(--fade-out-duration) ease-out forwards !important;
+}
+
+.message.no-timestamp .timestamp {
+    display: none;
 }
 
 .message.no-shadows {
@@ -506,7 +510,6 @@ body::-webkit-scrollbar {
 }
 
 .message.no-first-time-effects.first-time {
-    animation: slideInRight var(--chat-animation-duration) ease-out;
     border-left: none;
     box-shadow: var(--shadow-small);
 }

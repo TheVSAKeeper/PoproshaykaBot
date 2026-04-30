@@ -35,6 +35,8 @@ const seenMessageIds = new Set();
 const seenMessageIdsOrder = [];
 const seenMessageIdsLimit = 1000;
 
+const fadeTimers = new WeakMap();
+
 function rememberMessageId(id) {
     if (!id) return false;
     if (seenMessageIds.has(id)) return true;
@@ -126,24 +128,32 @@ function getUserTypeClasses(userStatus) {
     return classes;
 }
 
-function getAnimationType(userStatus, messageType, isFirstTime = false) {
-    if (isFirstTime && firstTimeUserMessageAnimation !== 'slide-in-right') {
-        return firstTimeUserMessageAnimation;
-    }
+const validEntryAnimations = ['no-animation', 'slide-in-right', 'slide-in-left', 'fade-in-up', 'bounce-in'];
 
-    switch (messageType) {
-        case 'BotResponse':
-            return botMessageAnimation;
-        case 'SystemNotification':
-            return systemMessageAnimation;
-        case 'UserMessage':
-            if (userStatus & 1) {
-                return broadcasterMessageAnimation;
-            }
-            return userMessageAnimation;
-        default:
-            return userMessageAnimation;
+function sanitizeEntryAnimation(value, fallback) {
+    return validEntryAnimations.includes(value) ? value : fallback;
+}
+
+function getAnimationType(userStatus, messageType, isFirstTime = false) {
+    let raw;
+    if (isFirstTime) {
+        raw = firstTimeUserMessageAnimation;
+    } else {
+        switch (messageType) {
+            case 'BotResponse':
+                raw = botMessageAnimation;
+                break;
+            case 'SystemNotification':
+                raw = systemMessageAnimation;
+                break;
+            case 'UserMessage':
+                raw = (userStatus & 1) ? broadcasterMessageAnimation : userMessageAnimation;
+                break;
+            default:
+                raw = userMessageAnimation;
+        }
     }
+    return sanitizeEntryAnimation(raw, 'slide-in-right');
 }
 
 function initEventSource() {
@@ -174,8 +184,13 @@ function initEventSource() {
     };
 }
 
+const entryAnimationClasses = ['slide-in-left', 'slide-in-right', 'fade-in-up', 'bounce-in'];
+const exitAnimationClasses = ['fade-out', 'slide-out-left', 'slide-out-right', 'scale-down', 'shrink-up'];
+
 function fadeOutMessage(messageDiv) {
     if (!enableMessageFadeOut) return;
+    if (messageDiv.dataset.fading === 'true') return;
+    messageDiv.dataset.fading = 'true';
 
     let animationClass = 'fade-out';
     switch (fadeOutAnimationType) {
@@ -204,6 +219,10 @@ function fadeOutMessage(messageDiv) {
             return;
     }
 
+    entryAnimationClasses.forEach(cls => messageDiv.classList.remove(cls));
+    exitAnimationClasses.forEach(cls => messageDiv.classList.remove(cls));
+    void messageDiv.offsetHeight;
+
     messageDiv.classList.add(animationClass);
 
     setTimeout(() => {
@@ -211,6 +230,39 @@ function fadeOutMessage(messageDiv) {
             messageDiv.parentNode.removeChild(messageDiv);
         }
     }, fadeOutDuration);
+}
+
+function cancelFadeOut(messageDiv) {
+    const id = fadeTimers.get(messageDiv);
+    if (id !== undefined) {
+        clearTimeout(id);
+        fadeTimers.delete(messageDiv);
+    }
+}
+
+function scheduleFadeOut(messageDiv) {
+    cancelFadeOut(messageDiv);
+    if (!enableMessageFadeOut) return;
+    if (messageDiv.dataset.fading === 'true') return;
+
+    const createdAt = parseInt(messageDiv.dataset.createdAt, 10) || Date.now();
+    const remaining = Math.max(0, messageLifetime - (Date.now() - createdAt));
+
+    const id = setTimeout(() => {
+        fadeTimers.delete(messageDiv);
+        fadeOutMessage(messageDiv);
+    }, remaining);
+    fadeTimers.set(messageDiv, id);
+}
+
+function rescheduleAllFades() {
+    document.querySelectorAll('#chat .message').forEach(messageDiv => {
+        if (enableMessageFadeOut) {
+            scheduleFadeOut(messageDiv);
+        } else {
+            cancelFadeOut(messageDiv);
+        }
+    });
 }
 
 function addMessage(message, isHistoryMessage = false) {
@@ -221,11 +273,24 @@ function addMessage(message, isHistoryMessage = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message';
 
+    const createdAtMs = isHistoryMessage
+        ? new Date(message.timestamp).getTime()
+        : Date.now();
+    messageDiv.dataset.createdAt = String(createdAtMs);
+
     if (isHistoryMessage || !enableAnimations) {
         messageDiv.classList.add('no-animation');
+        messageDiv.classList.add('entry-done');
     } else {
         const animationType = getAnimationType(message.status || 0, message.messageType, message.isFirstTime);
         messageDiv.classList.add(animationType);
+
+        const onEntryEnd = (event) => {
+            if (event.target !== messageDiv) return;
+            messageDiv.removeEventListener('animationend', onEntryEnd);
+            messageDiv.classList.add('entry-done');
+        };
+        messageDiv.addEventListener('animationend', onEntryEnd);
     }
 
     const userTypeClasses = getUserTypeClasses(message.status || 0);
@@ -261,10 +326,14 @@ function addMessage(message, isHistoryMessage = false) {
         messageDiv.classList.add('no-mentions');
     }
 
+    if (!showTimestamp) {
+        messageDiv.classList.add('no-timestamp');
+    }
+
     const timestamp = new Date(message.timestamp).toLocaleTimeString();
     const isSystemMessage = message.messageType !== 'UserMessage';
 
-    let timestampHtml = showTimestamp ? `<span class='timestamp'>${timestamp}</span>` : '';
+    const timestampHtml = `<span class='timestamp'>${timestamp}</span>`;
 
     if (isSystemMessage) {
         messageDiv.innerHTML = `
@@ -288,19 +357,13 @@ function addMessage(message, isHistoryMessage = false) {
 
     chatContainer.appendChild(messageDiv);
 
-    if (enableMessageFadeOut) {
-        let remainingLifetime = messageLifetime;
-        if (isHistoryMessage) {
-            const messageTime = new Date(message.timestamp).getTime();
-            const now = Date.now();
-            const age = now - messageTime;
-            remainingLifetime = Math.max(0, messageLifetime - age);
-        }
-
-        setTimeout(() => fadeOutMessage(messageDiv), remainingLifetime);
-    }
+    scheduleFadeOut(messageDiv);
 
     while (chatContainer.children.length > maxMessages) {
+        const removed = chatContainer.firstChild;
+        if (removed) {
+            cancelFadeOut(removed);
+        }
         chatContainer.removeChild(chatContainer.firstChild);
     }
 
@@ -470,7 +533,17 @@ function updateChatSettings(settings) {
     }
 
     if (settings.maxMessages !== undefined) maxMessages = settings.maxMessages;
-    if (settings.showTimestamp !== undefined) showTimestamp = settings.showTimestamp;
+    if (settings.showTimestamp !== undefined) {
+        showTimestamp = settings.showTimestamp;
+        const messages = document.querySelectorAll('#chat .message');
+        messages.forEach(message => {
+            if (showTimestamp) {
+                message.classList.remove('no-timestamp');
+            } else {
+                message.classList.add('no-timestamp');
+            }
+        });
+    }
     if (settings.enableAnimations !== undefined) enableAnimations = settings.enableAnimations;
 
     if (settings.enableSmoothScroll !== undefined) enableSmoothScroll = settings.enableSmoothScroll;
@@ -484,12 +557,26 @@ function updateChatSettings(settings) {
     if (settings.broadcasterMessageAnimation) broadcasterMessageAnimation = settings.broadcasterMessageAnimation;
     if (settings.firstTimeUserMessageAnimation) firstTimeUserMessageAnimation = settings.firstTimeUserMessageAnimation;
 
+    let fadeRescheduleNeeded = false;
     if (settings.enableMessageFadeOut !== undefined) {
-        enableMessageFadeOut = isPreview ? false : settings.enableMessageFadeOut;
+        const next = isPreview ? false : settings.enableMessageFadeOut;
+        if (next !== enableMessageFadeOut) fadeRescheduleNeeded = true;
+        enableMessageFadeOut = next;
     }
-    if (settings.messageLifetimeSeconds !== undefined) messageLifetime = settings.messageLifetimeSeconds * 1000;
+    if (settings.messageLifetimeSeconds !== undefined) {
+        const next = settings.messageLifetimeSeconds * 1000;
+        if (next !== messageLifetime) fadeRescheduleNeeded = true;
+        messageLifetime = next;
+    }
     if (settings.fadeOutAnimationType !== undefined) fadeOutAnimationType = settings.fadeOutAnimationType;
-    if (settings.fadeOutAnimationDurationMs !== undefined) fadeOutDuration = settings.fadeOutAnimationDurationMs;
+    if (settings.fadeOutAnimationDurationMs !== undefined) {
+        fadeOutDuration = settings.fadeOutAnimationDurationMs;
+        root.style.setProperty('--fade-out-duration', fadeOutDuration + 'ms');
+    }
+
+    if (fadeRescheduleNeeded) {
+        rescheduleAllFades();
+    }
 
     console.log('Настройки чата обновлены:', settings);
 }
