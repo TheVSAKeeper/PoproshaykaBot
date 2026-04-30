@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Chat;
@@ -199,6 +200,8 @@ public sealed class KestrelHttpServer(
 
         app.MapGet("/chat", () => Results.Content(OverlayHtml, "text/html; charset=utf-8"));
 
+        var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+
         app.MapGet("/events", async ctx =>
         {
             ctx.Response.ContentType = "text/event-stream";
@@ -212,9 +215,12 @@ public sealed class KestrelHttpServer(
 
             sseService.AddClient(ctx.Response);
 
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted,
+                lifetime.ApplicationStopping);
+
             try
             {
-                await Task.Delay(Timeout.Infinite, ctx.RequestAborted);
+                await Task.Delay(Timeout.Infinite, cts.Token);
             }
             catch (OperationCanceledException)
             {
