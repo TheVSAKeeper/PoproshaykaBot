@@ -101,6 +101,11 @@ public sealed class TwitchOAuthService(
             {
                 authorizationCode = await tcs.Task.WaitAsync(AuthTimeout, ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                logger.LogInformation("OAuth-поток отменён пользователем для роли {Role}", role);
+                throw;
+            }
             catch (TimeoutException ex)
             {
                 logger.LogWarning(ex, "Истекло время ожидания авторизации для роли {Role}", role);

@@ -13,6 +13,7 @@ public sealed partial class OAuthAccountSection : UserControl
     private TwitchOAuthRole _role = TwitchOAuthRole.Bot;
     private bool _initialized;
     private bool _tokensVisible;
+    private CancellationTokenSource? _authCts;
 
     public OAuthAccountSection()
     {
@@ -96,6 +97,23 @@ public sealed partial class OAuthAccountSection : UserControl
 
     private async void OnTestAuthButtonClicked(object? sender, EventArgs e)
     {
+        if (_authCts is { } pending)
+        {
+            _authCts = null;
+            try
+            {
+                await pending.CancelAsync();
+            }
+            catch
+            {
+            }
+
+            _authStatusLabel.Text = "Авторизация отменена";
+            _authStatusLabel.ForeColor = Color.Orange;
+            RestoreAuthButtonMode();
+            return;
+        }
+
         var clientId = _settings.Twitch.ClientId;
         var clientSecret = _settings.Twitch.ClientSecret;
 
@@ -120,7 +138,9 @@ public sealed partial class OAuthAccountSection : UserControl
             return;
         }
 
-        _testAuthButton.Enabled = false;
+        var cts = new CancellationTokenSource();
+        _authCts = cts;
+        SetAuthButtonToCancelMode();
         _authStatusLabel.Text = "Авторизация...";
         _authStatusLabel.ForeColor = Color.Blue;
 
@@ -139,7 +159,12 @@ public sealed partial class OAuthAccountSection : UserControl
                 clientSecret,
                 scopes,
                 string.IsNullOrWhiteSpace(redirectUri) ? null : redirectUri,
-                CancellationToken.None);
+                cts.Token);
+
+            if (!ReferenceEquals(_authCts, cts))
+            {
+                return;
+            }
 
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -151,14 +176,26 @@ public sealed partial class OAuthAccountSection : UserControl
                 SettingChanged?.Invoke(this, EventArgs.Empty);
             }
         }
-        catch (Exception exception)
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception) when (ReferenceEquals(_authCts, cts))
         {
             _authStatusLabel.Text = $"Ошибка: {exception.Message}";
             _authStatusLabel.ForeColor = Color.Red;
         }
+        catch
+        {
+        }
         finally
         {
-            _testAuthButton.Enabled = true;
+            if (ReferenceEquals(_authCts, cts))
+            {
+                _authCts = null;
+                RestoreAuthButtonMode();
+            }
+
+            cts.Dispose();
         }
     }
 
@@ -329,6 +366,18 @@ public sealed partial class OAuthAccountSection : UserControl
     private TwitchAccountSettings GetDefaults()
     {
         return _role == TwitchOAuthRole.Broadcaster ? BroadcasterDefaults : BotDefaults;
+    }
+
+    private void SetAuthButtonToCancelMode()
+    {
+        _testAuthButton.Enabled = true;
+        _testAuthButton.Text = "Отменить авторизацию";
+    }
+
+    private void RestoreAuthButtonMode()
+    {
+        _testAuthButton.Enabled = true;
+        ApplyRoleLabels();
     }
 
     private void ApplyRoleLabels()
