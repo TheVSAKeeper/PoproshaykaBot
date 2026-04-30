@@ -33,10 +33,12 @@
             _clientIdLabel = new Label();
             _clientIdPanel = new Panel();
             _clientIdTextBox = new TextBox();
+            _clientIdViewButton = new Button();
             _clientIdResetButton = new Button();
             _clientSecretLabel = new Label();
             _clientSecretPanel = new Panel();
             _clientSecretTextBox = new TextBox();
+            _clientSecretViewButton = new Button();
             _clientSecretResetButton = new Button();
             _redirectUriLabel = new Label();
             _redirectUriPanel = new Panel();
@@ -115,6 +117,7 @@
             // _clientIdPanel
             //
             _clientIdPanel.Controls.Add(_clientIdTextBox);
+            _clientIdPanel.Controls.Add(_clientIdViewButton);
             _clientIdPanel.Controls.Add(_clientIdResetButton);
             _clientIdPanel.Dock = DockStyle.Fill;
             _clientIdPanel.Location = new Point(85, 3);
@@ -128,10 +131,21 @@
             _clientIdTextBox.Location = new Point(0, 0);
             _clientIdTextBox.Margin = new Padding(0, 0, 3, 0);
             _clientIdTextBox.Name = "_clientIdTextBox";
-            _clientIdTextBox.Size = new Size(437, 23);
+            _clientIdTextBox.Size = new Size(407, 23);
             _clientIdTextBox.TabIndex = 1;
             _clientIdTextBox.UseSystemPasswordChar = true;
             _clientIdTextBox.TextChanged += OnSettingChanged;
+            //
+            // _clientIdViewButton
+            //
+            _clientIdViewButton.Dock = DockStyle.Right;
+            _clientIdViewButton.Location = new Point(407, 0);
+            _clientIdViewButton.Name = "_clientIdViewButton";
+            _clientIdViewButton.Size = new Size(30, 29);
+            _clientIdViewButton.TabIndex = 2;
+            _clientIdViewButton.Text = "👁";
+            _clientIdViewButton.UseVisualStyleBackColor = true;
+            _clientIdViewButton.Click += OnClientIdViewButtonClicked;
             //
             // _clientIdResetButton
             //
@@ -139,7 +153,7 @@
             _clientIdResetButton.Location = new Point(437, 0);
             _clientIdResetButton.Name = "_clientIdResetButton";
             _clientIdResetButton.Size = new Size(25, 29);
-            _clientIdResetButton.TabIndex = 2;
+            _clientIdResetButton.TabIndex = 3;
             _clientIdResetButton.Text = "↺";
             _clientIdResetButton.UseVisualStyleBackColor = true;
             _clientIdResetButton.Click += OnClientIdResetButtonClicked;
@@ -158,6 +172,7 @@
             // _clientSecretPanel
             //
             _clientSecretPanel.Controls.Add(_clientSecretTextBox);
+            _clientSecretPanel.Controls.Add(_clientSecretViewButton);
             _clientSecretPanel.Controls.Add(_clientSecretResetButton);
             _clientSecretPanel.Dock = DockStyle.Fill;
             _clientSecretPanel.Location = new Point(85, 38);
@@ -171,10 +186,21 @@
             _clientSecretTextBox.Location = new Point(0, 0);
             _clientSecretTextBox.Margin = new Padding(0, 0, 3, 0);
             _clientSecretTextBox.Name = "_clientSecretTextBox";
-            _clientSecretTextBox.Size = new Size(437, 23);
+            _clientSecretTextBox.Size = new Size(407, 23);
             _clientSecretTextBox.TabIndex = 4;
             _clientSecretTextBox.UseSystemPasswordChar = true;
             _clientSecretTextBox.TextChanged += OnSettingChanged;
+            //
+            // _clientSecretViewButton
+            //
+            _clientSecretViewButton.Dock = DockStyle.Right;
+            _clientSecretViewButton.Location = new Point(407, 0);
+            _clientSecretViewButton.Name = "_clientSecretViewButton";
+            _clientSecretViewButton.Size = new Size(30, 29);
+            _clientSecretViewButton.TabIndex = 5;
+            _clientSecretViewButton.Text = "👁";
+            _clientSecretViewButton.UseVisualStyleBackColor = true;
+            _clientSecretViewButton.Click += OnClientSecretViewButtonClicked;
             //
             // _clientSecretResetButton
             //
@@ -182,7 +208,7 @@
             _clientSecretResetButton.Location = new Point(437, 0);
             _clientSecretResetButton.Name = "_clientSecretResetButton";
             _clientSecretResetButton.Size = new Size(25, 29);
-            _clientSecretResetButton.TabIndex = 5;
+            _clientSecretResetButton.TabIndex = 6;
             _clientSecretResetButton.Text = "↺";
             _clientSecretResetButton.UseVisualStyleBackColor = true;
             _clientSecretResetButton.Click += OnClientSecretResetButtonClicked;
@@ -345,9 +371,11 @@
         private Panel _redirectUriPanel;
         private Label _clientIdLabel;
         private TextBox _clientIdTextBox;
+        private Button _clientIdViewButton;
         private Button _clientIdResetButton;
         private Label _clientSecretLabel;
         private TextBox _clientSecretTextBox;
+        private Button _clientSecretViewButton;
         private Button _clientSecretResetButton;
         private Label _redirectUriLabel;
         private TextBox _redirectUriTextBox;

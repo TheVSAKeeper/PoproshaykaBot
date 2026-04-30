@@ -34,6 +34,11 @@ public partial class OAuthSettingsControl : UserControl
         _clientSecretTextBox.Text = settings.Twitch.ClientSecret;
         _redirectUriTextBox.Text = settings.Twitch.RedirectUri;
 
+        _clientIdTextBox.UseSystemPasswordChar = true;
+        _clientSecretTextBox.UseSystemPasswordChar = true;
+        _clientIdViewButton.Text = "👁";
+        _clientSecretViewButton.Text = "👁";
+
         _botAccountSection.LoadSettings(settings);
         _broadcasterAccountSection.LoadSettings(settings);
 
@@ -89,6 +94,22 @@ public partial class OAuthSettingsControl : UserControl
     {
         _clientSecretTextBox.Text = DefaultSettings.ClientSecret;
         SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnClientIdViewButtonClicked(object sender, EventArgs e)
+    {
+        ToggleSecretVisibility(_clientIdTextBox, _clientIdViewButton);
+    }
+
+    private void OnClientSecretViewButtonClicked(object sender, EventArgs e)
+    {
+        ToggleSecretVisibility(_clientSecretTextBox, _clientSecretViewButton);
+    }
+
+    private static void ToggleSecretVisibility(TextBox textBox, Button viewButton)
+    {
+        textBox.UseSystemPasswordChar = !textBox.UseSystemPasswordChar;
+        viewButton.Text = textBox.UseSystemPasswordChar ? "👁" : "🙈";
     }
 
     private void OnRedirectUriResetButtonClicked(object sender, EventArgs e)
