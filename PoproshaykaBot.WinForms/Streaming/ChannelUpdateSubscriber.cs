@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Twitch;
@@ -70,6 +71,7 @@ public sealed class ChannelUpdateSubscriber(
         {
             logger.LogError("ChannelUpdateSubscriber: не удалось получить broadcaster id");
             IsHealthy = false;
+            PublishHealthError("не удалось определить broadcaster id для подписки channel.update");
             return;
         }
 
@@ -91,6 +93,7 @@ public sealed class ChannelUpdateSubscriber(
         {
             logger.LogError(ex, "ChannelUpdateSubscriber: ошибка подписки на {Type}", SubscriptionType);
             IsHealthy = false;
+            PublishHealthError($"не удалось подписаться на {SubscriptionType}: смена title/game работать не будет");
         }
     }
 
@@ -122,15 +125,51 @@ public sealed class ChannelUpdateSubscriber(
         }
     }
 
-    private Task HandleRevocationAsync(EventSubRevocationArgs args, CancellationToken cancellationToken)
+    private async Task HandleRevocationAsync(EventSubRevocationArgs args, CancellationToken cancellationToken)
     {
-        if (string.Equals(args.SubscriptionType, SubscriptionType, StringComparison.Ordinal))
+        if (!string.Equals(args.SubscriptionType, SubscriptionType, StringComparison.Ordinal))
         {
-            logger.LogWarning("ChannelUpdateSubscriber: подписка {Type} отозвана ({Status})", args.SubscriptionType, args.Status);
-            IsHealthy = false;
+            return;
         }
 
-        return Task.CompletedTask;
+        logger.LogWarning("ChannelUpdateSubscriber: подписка {Type} отозвана ({Status})", args.SubscriptionType, args.Status);
+        IsHealthy = false;
+
+        var sessionId = eventSubClient.SessionId;
+
+        if (string.IsNullOrEmpty(sessionId))
+        {
+            PublishHealthError($"подписка {SubscriptionType} отозвана, нет активной сессии для восстановления");
+            return;
+        }
+
+        var broadcasterId = await broadcasterIdProvider.GetAsync(cancellationToken);
+
+        if (string.IsNullOrEmpty(broadcasterId))
+        {
+            PublishHealthError($"подписка {SubscriptionType} отозвана, broadcaster id недоступен");
+            return;
+        }
+
+        try
+        {
+            await helix.CreateEventSubSubscriptionAsync(SubscriptionType,
+                SubscriptionVersion,
+                new Dictionary<string, string>
+                {
+                    ["broadcaster_user_id"] = broadcasterId,
+                },
+                sessionId,
+                cancellationToken);
+
+            IsHealthy = true;
+            logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} восстановлена после revocation", SubscriptionType);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "ChannelUpdateSubscriber: не удалось восстановить подписку {Type} после revocation", SubscriptionType);
+            PublishHealthError($"не удалось восстановить подписку {SubscriptionType} после revocation");
+        }
     }
 
     private static IReadOnlyList<string> ParseStringArray(JsonElement parent, string propertyName)
@@ -158,5 +197,10 @@ public sealed class ChannelUpdateSubscriber(
         }
 
         return result;
+    }
+
+    private void PublishHealthError(string message)
+    {
+        _ = eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Error, "ChannelUpdateSubscriber", $"EventSub channel.update: {message}"));
     }
 }

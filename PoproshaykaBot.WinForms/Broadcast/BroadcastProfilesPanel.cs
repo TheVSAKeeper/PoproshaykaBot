@@ -122,6 +122,7 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplyFailed>(this, OnProfileApplyFailed));
         _subs.Add(Bus.SubscribeOnUi<StreamWentOnline>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<StreamWentOffline>(this, _ => ReloadCards()));
+        _subs.Add(Bus.SubscribeOnUi<StreamMetadataResolved>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<ChannelUpdated>(this, _ => ReloadCards()));
         _subs.DisposeOnClose(this);
 

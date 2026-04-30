@@ -129,6 +129,8 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
 
         _subs.Add(Bus.SubscribeOnUi<StreamWentOnline>(this, _ => UpdateCurrentStatus()));
         _subs.Add(Bus.SubscribeOnUi<StreamWentOffline>(this, _ => UpdateCurrentStatus()));
+        _subs.Add(Bus.SubscribeOnUi<StreamMetadataResolved>(this, _ => UpdateCurrentStatus()));
+        _subs.Add(Bus.SubscribeOnUi<ChannelUpdated>(this, _ => UpdateCurrentStatus()));
         _subs.DisposeOnClose(this);
 
         UpdateCurrentStatus();
@@ -143,7 +145,7 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
 
         try
         {
-            await Stream.RefreshCurrentStatusAsync();
+            await Stream.RefreshLiveSnapshotAsync();
             UpdateCurrentStatus();
         }
         catch (Exception exception)

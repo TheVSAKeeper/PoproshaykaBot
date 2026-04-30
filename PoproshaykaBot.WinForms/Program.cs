@@ -246,6 +246,8 @@ public static class Program
         services.AddSingleton<StreamStatusManager>();
         services.AddSingleton<IStreamStatus>(sp => sp.GetRequiredService<StreamStatusManager>());
         services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<StreamStatusManager>());
+        services.AddSingleton<StreamStatusWatchdog>();
+        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<StreamStatusWatchdog>());
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
         services.AddSingleton<UserMessagesManagementService>();

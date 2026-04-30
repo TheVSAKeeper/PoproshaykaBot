@@ -89,6 +89,7 @@ public sealed partial class BroadcastInfoWidget : UserControl, IDashboardTileHea
         _subs.Add(Bus.SubscribeOnUi<BroadcastSchedulerStateChanged>(this, _ => UpdateState()));
         _subs.Add(Bus.SubscribeOnUi<StreamWentOnline>(this, _ => UpdateState()));
         _subs.Add(Bus.SubscribeOnUi<StreamWentOffline>(this, _ => UpdateState()));
+        _subs.Add(Bus.SubscribeOnUi<StreamMetadataResolved>(this, _ => UpdateState()));
         _subs.Add(Bus.SubscribeOnUi<BotLifecyclePhaseChanged>(this, _ => UpdateState()));
         _subs.DisposeOnClose(this);
 
