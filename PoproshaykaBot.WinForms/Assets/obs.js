@@ -249,7 +249,7 @@ function scheduleFadeOut(messageDiv) {
     if (!enableMessageFadeOut) return;
     if (messageDiv.dataset.fading === 'true') return;
 
-    const createdAt = parseInt(messageDiv.dataset.createdAt, 10) || Date.now();
+    const createdAt = Number.parseInt(messageDiv.dataset.createdAt, 10) || Date.now();
     const remaining = Math.max(0, messageLifetime - (Date.now() - createdAt));
 
     const id = setTimeout(() => {

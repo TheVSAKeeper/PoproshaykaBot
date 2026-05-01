@@ -120,6 +120,8 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         return false;
     }
 
+    private static readonly TimeSpan TitleMatchTimeout = TimeSpan.FromMilliseconds(100);
+
     internal static bool TitleMatches(string profileTitle, string streamTitle)
     {
         const string Placeholder = "{n}";
@@ -134,7 +136,7 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
                           .Replace(Regex.Escape(Placeholder), "\\d+")
                       + "$";
 
-        return Regex.IsMatch(streamTitle, pattern);
+        return Regex.IsMatch(streamTitle, pattern, RegexOptions.None, TitleMatchTimeout);
     }
 
     protected override void OnHandleCreated(EventArgs e)

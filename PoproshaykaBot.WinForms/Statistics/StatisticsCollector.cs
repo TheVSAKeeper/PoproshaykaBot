@@ -402,6 +402,7 @@ public sealed class StatisticsCollector : IAsyncDisposable
     }
 
     private async Task<T?> LoadDataFromFileAsync<T>(string filePath, string entityName)
+        where T : class
     {
         _logger.LogDebug("Загрузка статистики {EntityName} из файла {FilePath}", entityName, filePath);
 

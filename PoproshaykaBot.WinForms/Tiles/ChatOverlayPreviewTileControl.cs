@@ -53,10 +53,10 @@ public sealed partial class ChatOverlayPreviewTileControl : UserControl, IDashbo
         }
 
         _initialized = true;
-        InitializeWebViewAsync();
+        _ = InitializeWebViewAsync();
     }
 
-    private async void InitializeWebViewAsync()
+    private async Task InitializeWebViewAsync()
     {
         try
         {
@@ -70,7 +70,7 @@ public sealed partial class ChatOverlayPreviewTileControl : UserControl, IDashbo
             _fallbackLabel.Text = "Не удалось открыть OBS-превью чата. Подробности — в логах.";
             _fallbackLabel.BringToFront();
 
-            _ = Bus.PublishAsync(new BotLogEntry(BotLogLevel.Error, "Ui", $"Ошибка инициализации WebView2: {ex.Message}"));
+            await Bus.PublishAsync(new BotLogEntry(BotLogLevel.Error, "Ui", $"Ошибка инициализации WebView2: {ex.Message}"));
         }
     }
 

@@ -76,7 +76,11 @@ public sealed class ChatSender(
         catch (OperationCanceledException)
         {
             logger.LogWarning("ChatSender: не все сообщения успели отправиться (timeout), принудительная остановка");
-            _cts?.Cancel();
+
+            if (_cts != null)
+            {
+                await _cts.CancelAsync();
+            }
 
             try
             {
