@@ -89,9 +89,9 @@ public class MessageSettings
 
     public bool PunishmentEnabled { get; set; } = true;
 
-    public string PunishmentMessage { get; set; } = "🏴‍☠️ ВНИМАНИЕ! Пользователь @{username} был лично наказан СЕРЁГОЙ ПИРАТОМ! ⚔️ Убрано {count} сообщений из статистики. 💀 #пиратская_справедливость";
+    public string PunishmentMessage { get; set; } = "🏴\u200D☠️ ВНИМАНИЕ! Пользователь @{username} был лично наказан СЕРЁГОЙ ПИРАТОМ! ⚔️ Убрано {count} сообщений из статистики. 💀 #пиратская_справедливость";
 
-    public string PunishmentNotification { get; set; } = "🏴‍☠️ Пользователя {username} лично наказал СЕРЁГА ПИРАТ! ⚔️ Убрано {count} сообщений. 💀";
+    public string PunishmentNotification { get; set; } = "🏴\u200D☠️ Пользователя {username} лично наказал СЕРЁГА ПИРАТ! ⚔️ Убрано {count} сообщений. 💀";
 
     public bool RewardEnabled { get; set; } = false;
 

@@ -182,31 +182,27 @@ public sealed partial class BroadcastInfoWidget : UserControl, IDashboardTileHea
         _sendNowButton.Enabled = true;
     }
 
+    private static string ResolveToggleButtonTooltip(bool isActive, bool isAuto)
+    {
+        if (isAuto && !isActive)
+        {
+            return "В автоматическом режиме рассылка запускается сама при начале стрима. Переключитесь в ручной режим для ручного запуска.";
+        }
+
+        return isActive ? "Остановить рассылку" : "Запустить рассылку";
+    }
+
     private void UpdateState()
     {
         var isActive = Scheduler.IsActive;
         var isAuto = Settings.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled;
         var streamOnline = Stream.CurrentStatus == StreamStatus.Online;
 
-        _statusLabel.Text = isActive ? "✅ Активна" : "❌ Неактивна";
-        _statusLabel.ForeColor = isActive ? Color.Green : Color.Red;
-
-        if (isAuto && !isActive)
-        {
-            _statusLabel.Text = streamOnline ? "❌ Неактивна (Авто)" : "⏳ Ожидание стрима";
-            _statusLabel.ForeColor = Color.Orange;
-        }
+        UpdateStatusLabel(isActive, isAuto, streamOnline);
 
         _modeLabel.Text = $"Режим: {(isAuto ? "Авто" : "Ручной")}";
 
-        if (_modeToggleButton != null)
-        {
-            _modeToggleButton.Text = isAuto ? "В ручной" : "В авто";
-            _modeToggleButton.Enabled = true;
-            _modeToggleButton.ToolTipText = isAuto
-                ? "Перейти в ручное управление рассылкой"
-                : "Включить автоматический запуск рассылки при начале стрима";
-        }
+        UpdateModeToggleButton(isAuto);
 
         _sentCountLabel.Text = $"Отправлено: {Scheduler.SentMessagesCount}";
 
@@ -215,23 +211,58 @@ public sealed partial class BroadcastInfoWidget : UserControl, IDashboardTileHea
             ? $"Следующая: {nextTime.Value:HH:mm:ss}"
             : "Следующая: —";
 
-        if (_toggleButton != null)
+        UpdateToggleButton(isActive, isAuto);
+        UpdateSendNowButton(isActive);
+    }
+
+    private void UpdateStatusLabel(bool isActive, bool isAuto, bool streamOnline)
+    {
+        _statusLabel.Text = isActive ? "✅ Активна" : "❌ Неактивна";
+        _statusLabel.ForeColor = isActive ? Color.Green : Color.Red;
+
+        if (isAuto && !isActive)
         {
-            _toggleButton.Text = isActive ? "Стоп" : "Старт";
-            _toggleButton.Enabled = !(isAuto && !isActive);
-            _toggleButton.ToolTipText = isAuto && !isActive
-                ? "В автоматическом режиме рассылка запускается сама при начале стрима. Переключитесь в ручной режим для ручного запуска."
-                : isActive
-                    ? "Остановить рассылку"
-                    : "Запустить рассылку";
+            _statusLabel.Text = streamOnline ? "❌ Неактивна (Авто)" : "⏳ Ожидание стрима";
+            _statusLabel.ForeColor = Color.Orange;
+        }
+    }
+
+    private void UpdateModeToggleButton(bool isAuto)
+    {
+        if (_modeToggleButton == null)
+        {
+            return;
         }
 
-        if (_sendNowButton != null)
+        _modeToggleButton.Text = isAuto ? "В ручной" : "В авто";
+        _modeToggleButton.Enabled = true;
+        _modeToggleButton.ToolTipText = isAuto
+            ? "Перейти в ручное управление рассылкой"
+            : "Включить автоматический запуск рассылки при начале стрима";
+    }
+
+    private void UpdateToggleButton(bool isActive, bool isAuto)
+    {
+        if (_toggleButton == null)
         {
-            _sendNowButton.Enabled = isActive;
-            _sendNowButton.ToolTipText = isActive
-                ? "Отправить сообщение из рассылки прямо сейчас"
-                : "Для отправки рассылка должна быть активна";
+            return;
         }
+
+        _toggleButton.Text = isActive ? "Стоп" : "Старт";
+        _toggleButton.Enabled = !(isAuto && !isActive);
+        _toggleButton.ToolTipText = ResolveToggleButtonTooltip(isActive, isAuto);
+    }
+
+    private void UpdateSendNowButton(bool isActive)
+    {
+        if (_sendNowButton == null)
+        {
+            return;
+        }
+
+        _sendNowButton.Enabled = isActive;
+        _sendNowButton.ToolTipText = isActive
+            ? "Отправить сообщение из рассылки прямо сейчас"
+            : "Для отправки рассылка должна быть активна";
     }
 }

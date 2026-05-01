@@ -28,6 +28,12 @@ public sealed class ChatSender(
     private Task? _backgroundTask;
     private CancellationTokenSource? _cts;
 
+    private enum SendOutcome
+    {
+        Done = 0,
+        RateLimited = 1,
+    }
+
     public string Name => "Отправитель сообщений чата (Helix)";
 
     public int StartOrder => 50;
@@ -44,16 +50,6 @@ public sealed class ChatSender(
         _ = WarmupAsync(_cts.Token);
         logger.LogInformation("ChatSender запущен");
         return Task.CompletedTask;
-    }
-
-    private static Channel<ChatSendItem> CreateChannel()
-    {
-        return Channel.CreateBounded<ChatSendItem>(new BoundedChannelOptions(1000)
-        {
-            FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = true,
-            SingleWriter = false,
-        });
     }
 
     public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
@@ -131,6 +127,16 @@ public sealed class ChatSender(
                 logger.LogWarning("ChatSender: очередь переполнена, сообщение отброшено (длина сообщения {Length} символов)", chunk.Length);
             }
         }
+    }
+
+    private static Channel<ChatSendItem> CreateChannel()
+    {
+        return Channel.CreateBounded<ChatSendItem>(new BoundedChannelOptions(1000)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false,
+        });
     }
 
     private static IEnumerable<string> SplitByLength(string text, int maxLength)
@@ -214,68 +220,89 @@ public sealed class ChatSender(
 
         for (var attempt = 1; attempt <= MaxSendAttempts; attempt++)
         {
-            try
-            {
-                var broadcasterId = await broadcasterIdProvider.GetAsync(ct);
+            var outcome = await TrySendOnceAsync(item, ct);
 
-                if (string.IsNullOrEmpty(broadcasterId))
-                {
-                    logger.LogWarning("ChatSender: broadcaster id не получен, сообщение пропущено");
-                    return;
-                }
-
-                var senderId = await botUserIdProvider.GetAsync(ct);
-
-                if (string.IsNullOrEmpty(senderId))
-                {
-                    logger.LogWarning("ChatSender: sender id не получен, сообщение пропущено");
-                    return;
-                }
-
-                await helix.SendChatMessageAsync(broadcasterId, senderId, item.Message, item.ReplyParentMessageId, ct);
-                return;
-            }
-            catch (HelixMessageDroppedException ex)
-            {
-                logger.LogWarning("Сообщение отклонено Twitch: {Code} {Reason}", ex.ReasonCode, ex.ReasonMessage);
-                return;
-            }
-            catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
-            {
-                if (attempt >= MaxSendAttempts)
-                {
-                    logger.LogError("ChatSender: rate limit 429, исчерпаны все {MaxAttempts} попыток — сообщение отброшено", MaxSendAttempts);
-                    return;
-                }
-
-                logger.LogWarning("ChatSender: rate limit 429, ожидание {Delay}с (попытка {Attempt}/{Max})",
-                    rateLimitDelay.TotalSeconds, attempt, MaxSendAttempts);
-
-                try
-                {
-                    await Task.Delay(rateLimitDelay, ct);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-
-                rateLimitDelay = TimeSpan.FromSeconds(Math.Min(rateLimitDelay.TotalSeconds * 2, RateLimitMaxDelaySeconds));
-            }
-            catch (HelixRequestException ex)
-            {
-                logger.LogError("ChatSender: ошибка Helix {Status} при отправке сообщения", (int)ex.StatusCode);
-                return;
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            if (outcome != SendOutcome.RateLimited)
             {
                 return;
             }
-            catch (Exception ex)
+
+            if (!await WaitForRateLimitAsync(attempt, rateLimitDelay, ct))
             {
-                logger.LogError(ex, "ChatSender: неожиданная ошибка при отправке сообщения");
                 return;
             }
+
+            rateLimitDelay = TimeSpan.FromSeconds(Math.Min(rateLimitDelay.TotalSeconds * 2, RateLimitMaxDelaySeconds));
+        }
+    }
+
+    private async Task<SendOutcome> TrySendOnceAsync(ChatSendItem item, CancellationToken ct)
+    {
+        try
+        {
+            var broadcasterId = await broadcasterIdProvider.GetAsync(ct);
+
+            if (string.IsNullOrEmpty(broadcasterId))
+            {
+                logger.LogWarning("ChatSender: broadcaster id не получен, сообщение пропущено");
+                return SendOutcome.Done;
+            }
+
+            var senderId = await botUserIdProvider.GetAsync(ct);
+
+            if (string.IsNullOrEmpty(senderId))
+            {
+                logger.LogWarning("ChatSender: sender id не получен, сообщение пропущено");
+                return SendOutcome.Done;
+            }
+
+            await helix.SendChatMessageAsync(broadcasterId, senderId, item.Message, item.ReplyParentMessageId, ct);
+            return SendOutcome.Done;
+        }
+        catch (HelixMessageDroppedException ex)
+        {
+            logger.LogWarning("Сообщение отклонено Twitch: {Code} {Reason}", ex.ReasonCode, ex.ReasonMessage);
+            return SendOutcome.Done;
+        }
+        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            return SendOutcome.RateLimited;
+        }
+        catch (HelixRequestException ex)
+        {
+            logger.LogError("ChatSender: ошибка Helix {Status} при отправке сообщения", (int)ex.StatusCode);
+            return SendOutcome.Done;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return SendOutcome.Done;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "ChatSender: неожиданная ошибка при отправке сообщения");
+            return SendOutcome.Done;
+        }
+    }
+
+    private async Task<bool> WaitForRateLimitAsync(int attempt, TimeSpan delay, CancellationToken ct)
+    {
+        if (attempt >= MaxSendAttempts)
+        {
+            logger.LogError("ChatSender: rate limit 429, исчерпаны все {MaxAttempts} попыток — сообщение отброшено", MaxSendAttempts);
+            return false;
+        }
+
+        logger.LogWarning("ChatSender: rate limit 429, ожидание {Delay}с (попытка {Attempt}/{Max})",
+            delay.TotalSeconds, attempt, MaxSendAttempts);
+
+        try
+        {
+            await Task.Delay(delay, ct);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
         }
     }
 

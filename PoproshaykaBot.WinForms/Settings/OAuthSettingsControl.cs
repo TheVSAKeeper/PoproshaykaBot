@@ -7,7 +7,6 @@ public partial class OAuthSettingsControl : UserControl
 {
     private static readonly TwitchSettings DefaultSettings = new();
 
-    private AppSettings _settings = new();
     private bool _initialized;
     private bool _redirectUriEditable;
 
@@ -28,8 +27,6 @@ public partial class OAuthSettingsControl : UserControl
 
     public void LoadSettings(AppSettings settings)
     {
-        _settings = settings;
-
         _clientIdTextBox.Text = settings.Twitch.ClientId;
         _clientSecretTextBox.Text = settings.Twitch.ClientSecret;
         _redirectUriTextBox.Text = settings.Twitch.RedirectUri;
@@ -106,12 +103,6 @@ public partial class OAuthSettingsControl : UserControl
         ToggleSecretVisibility(_clientSecretTextBox, _clientSecretViewButton);
     }
 
-    private static void ToggleSecretVisibility(TextBox textBox, Button viewButton)
-    {
-        textBox.UseSystemPasswordChar = !textBox.UseSystemPasswordChar;
-        viewButton.Text = textBox.UseSystemPasswordChar ? "👁" : "🙈";
-    }
-
     private void OnRedirectUriResetButtonClicked(object sender, EventArgs e)
     {
         _redirectUriTextBox.Text = DefaultSettings.RedirectUri;
@@ -127,6 +118,12 @@ public partial class OAuthSettingsControl : UserControl
         {
             SettingChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private static void ToggleSecretVisibility(TextBox textBox, Button viewButton)
+    {
+        textBox.UseSystemPasswordChar = !textBox.UseSystemPasswordChar;
+        viewButton.Text = textBox.UseSystemPasswordChar ? "👁" : "🙈";
     }
 
     private void SetPlaceholders()

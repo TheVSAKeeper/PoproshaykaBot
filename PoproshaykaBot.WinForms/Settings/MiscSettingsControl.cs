@@ -29,10 +29,12 @@ public partial class MiscSettingsControl : UserControl
 
     public void LoadSettings(AppSettings settings)
     {
+        // Состояния нет, метод существует ради единообразия с другими *SettingsControl в SettingsForm.LoadSettingsToControls.
     }
 
     public void SaveSettings(AppSettings settings)
     {
+        // Сохранять нечего, см. LoadSettings.
     }
 
     private void OnOpenSettingsFolderButtonClicked(object sender, EventArgs e)

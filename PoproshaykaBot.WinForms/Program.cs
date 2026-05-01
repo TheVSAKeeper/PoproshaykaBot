@@ -53,117 +53,14 @@ public static class Program
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             ApplicationConfiguration.Initialize();
 
-            var memoryCheckTimer = new Timer();
-
-            const long ThresholdMb = 1024;
-            const long MemoryThreshold = 1024 * 1024 * ThresholdMb;
-            const int CheckIntervalMs = 1000;
-            const int KillDelayMs = 1000;
-
-            memoryCheckTimer.Interval = CheckIntervalMs;
-            memoryCheckTimer.Tick += (_, _) =>
-            {
-                var currentProcess = Process.GetCurrentProcess();
-                var memoryBytes = currentProcess.PrivateMemorySize64;
-
-                if (memoryBytes <= MemoryThreshold)
-                {
-                    return;
-                }
-
-                Log.Warning("Обнаружено аномальное потребление памяти: {MemoryBytes} байт", memoryBytes);
-                memoryCheckTimer.Stop();
-
-                Task.Run(async () =>
-                {
-                    await Task.Delay(KillDelayMs);
-                    Log.Fatal("Принудительное завершение процесса из-за утечки памяти");
-                    await Log.CloseAndFlushAsync();
-                    currentProcess.Kill();
-                });
-
-                var memoryMb = memoryBytes / (1024.0 * 1024.0);
-                var killDelaySeconds = KillDelayMs / 1000;
-                var secondsWord = GetRussianSecondsWord(killDelaySeconds);
-                var message =
-                    $"""
-                     Внимание! Обнаружено аномальное потребление ресурсов.
-
-                     Текущее использование: {memoryMb:F2} MB
-                     Установленный лимит: {ThresholdMb:F2} MB
-
-                     У вас есть {killDelaySeconds} {secondsWord}, чтобы прочитать это сообщение, затем процесс будет убит принудительно.
-                     """;
-
-                MessageBox.Show(message, "Критическая нагрузка на память", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                Environment.FailFast("Пользователь подтвердил закрытие при утечке памяти.");
-            };
+            var memoryCheckTimer = CreateMemoryWatchdogTimer();
 
             if (!isUiSmoke)
             {
                 memoryCheckTimer.Start();
             }
 
-            var services = new ServiceCollection();
-            ConfigureServices(services);
-
-            var serviceProvider = services.BuildServiceProvider();
-            var appLifetime = serviceProvider.GetRequiredService<AppLifetime>();
-            var appLifetimeStarted = false;
-            try
-            {
-                serviceProvider.ActivateEventSubscribers(typeof(Program).Assembly);
-
-                var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
-
-                if (isUiSmoke)
-                {
-                    Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
-                }
-                else
-                {
-                    var portValidationPassed = ValidateAndResolvePortConflict(settingsManager);
-
-                    if (portValidationPassed)
-                    {
-                        try
-                        {
-                            appLifetime.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-                            appLifetimeStarted = true;
-                            Log.Information("HTTP сервер успешно запущен");
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Error(ex, "Ошибка запуска HTTP сервера");
-                            MessageBox.Show($"Ошибка запуска HTTP сервера: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        }
-                    }
-                    else
-                    {
-                        Log.Warning("Не удалось разрешить конфликт портов. HTTP сервер не запущен");
-                        MessageBox.Show("Не удалось разрешить конфликт портов. HTTP сервер не запущен.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                }
-
-                var mainForm = serviceProvider.GetRequiredService<MainForm>();
-                Application.Run(mainForm);
-            }
-            finally
-            {
-                if (appLifetimeStarted)
-                {
-                    try
-                    {
-                        appLifetime.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error(ex, "Ошибка остановки AppLifetime");
-                    }
-                }
-
-                serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            }
+            RunApp(isUiSmoke);
         }
         catch (Exception ex)
         {
@@ -174,6 +71,125 @@ public static class Program
             Log.Information("Завершение работы приложения");
             Log.CloseAndFlush();
         }
+    }
+
+    private static void RunApp(bool isUiSmoke)
+    {
+        var services = new ServiceCollection();
+        ConfigureServices(services);
+
+        var serviceProvider = services.BuildServiceProvider();
+        var appLifetime = serviceProvider.GetRequiredService<AppLifetime>();
+        var appLifetimeStarted = false;
+        try
+        {
+            serviceProvider.ActivateEventSubscribers(typeof(Program).Assembly);
+
+            var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
+            appLifetimeStarted = StartHttpServerIfNeeded(isUiSmoke, settingsManager, appLifetime);
+
+            var mainForm = serviceProvider.GetRequiredService<MainForm>();
+            Application.Run(mainForm);
+        }
+        finally
+        {
+            if (appLifetimeStarted)
+            {
+                StopAppLifetime(appLifetime);
+            }
+
+            serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+
+    private static bool StartHttpServerIfNeeded(bool isUiSmoke, SettingsManager settingsManager, AppLifetime appLifetime)
+    {
+        if (isUiSmoke)
+        {
+            Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
+            return false;
+        }
+
+        if (!ValidateAndResolvePortConflict(settingsManager))
+        {
+            Log.Warning("Не удалось разрешить конфликт портов. HTTP сервер не запущен");
+            MessageBox.Show("Не удалось разрешить конфликт портов. HTTP сервер не запущен.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+
+        try
+        {
+            appLifetime.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Log.Information("HTTP сервер успешно запущен");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Ошибка запуска HTTP сервера");
+            MessageBox.Show($"Ошибка запуска HTTP сервера: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+    }
+
+    private static void StopAppLifetime(AppLifetime appLifetime)
+    {
+        try
+        {
+            appLifetime.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Ошибка остановки AppLifetime");
+        }
+    }
+
+    private static Timer CreateMemoryWatchdogTimer()
+    {
+        const long ThresholdMb = 1024;
+        const long MemoryThreshold = 1024 * 1024 * ThresholdMb;
+        const int CheckIntervalMs = 1000;
+        const int KillDelayMs = 1000;
+
+        var memoryCheckTimer = new Timer { Interval = CheckIntervalMs };
+        memoryCheckTimer.Tick += (_, _) =>
+        {
+            var currentProcess = Process.GetCurrentProcess();
+            var memoryBytes = currentProcess.PrivateMemorySize64;
+
+            if (memoryBytes <= MemoryThreshold)
+            {
+                return;
+            }
+
+            Log.Warning("Обнаружено аномальное потребление памяти: {MemoryBytes} байт", memoryBytes);
+            memoryCheckTimer.Stop();
+
+            Task.Run(async () =>
+            {
+                await Task.Delay(KillDelayMs);
+                Log.Fatal("Принудительное завершение процесса из-за утечки памяти");
+                await Log.CloseAndFlushAsync();
+                currentProcess.Kill();
+            });
+
+            var memoryMb = memoryBytes / (1024.0 * 1024.0);
+            var killDelaySeconds = KillDelayMs / 1000;
+            var secondsWord = GetRussianSecondsWord(killDelaySeconds);
+            var message =
+                $"""
+                 Внимание! Обнаружено аномальное потребление ресурсов.
+
+                 Текущее использование: {memoryMb:F2} MB
+                 Установленный лимит: {ThresholdMb:F2} MB
+
+                 У вас есть {killDelaySeconds} {secondsWord}, чтобы прочитать это сообщение, затем процесс будет убит принудительно.
+                 """;
+
+            MessageBox.Show(message, "Критическая нагрузка на память", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Environment.FailFast("Пользователь подтвердил закрытие при утечке памяти.");
+        };
+
+        return memoryCheckTimer;
     }
 
     private static void ConfigureServices(IServiceCollection services)

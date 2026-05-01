@@ -71,37 +71,7 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
         switch (status)
         {
             case StreamStatus.Online:
-                _statusIconLabel.Text = "🔴";
-                _statusTextLabel.Text = "В ЭФИРЕ";
-                _statusTextLabel.ForeColor = Color.Red;
-
-                if (info != null)
-                {
-                    _titleLabel.Text = info.Title;
-                    _gameLabel.Text = string.IsNullOrWhiteSpace(info.GameName) ? "—" : $"🎮 {info.GameName}";
-                    _viewersLabel.Text = $"👥 {info.ViewerCount:N0}";
-
-                    var duration = DateTime.UtcNow - info.StartedAt;
-                    if (duration < TimeSpan.Zero)
-                    {
-                        duration = TimeSpan.Zero;
-                    }
-
-                    _uptimeLabel.Text = $"⏱️ {(int)duration.TotalHours}ч {duration.Minutes:00}м";
-
-                    LoadThumbnail(info.ThumbnailUrl);
-
-                    if (_openChannelButton != null)
-                    {
-                        _openChannelButton.Visible = true;
-                        _openChannelButton.Tag = info.UserLogin;
-                    }
-                }
-                else
-                {
-                    ClearInfoLabels("Загрузка данных...");
-                }
-
+                ApplyOnlineStatus(info);
                 break;
 
             case StreamStatus.Offline:
@@ -225,6 +195,39 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
                              Ошибка: {ex.Message}
                              """,
                 "Ошибка навигации", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ApplyOnlineStatus(StreamInfo? info)
+    {
+        _statusIconLabel.Text = "🔴";
+        _statusTextLabel.Text = "В ЭФИРЕ";
+        _statusTextLabel.ForeColor = Color.Red;
+
+        if (info == null)
+        {
+            ClearInfoLabels("Загрузка данных...");
+            return;
+        }
+
+        _titleLabel.Text = info.Title;
+        _gameLabel.Text = string.IsNullOrWhiteSpace(info.GameName) ? "—" : $"🎮 {info.GameName}";
+        _viewersLabel.Text = $"👥 {info.ViewerCount:N0}";
+
+        var duration = DateTime.UtcNow - info.StartedAt;
+        if (duration < TimeSpan.Zero)
+        {
+            duration = TimeSpan.Zero;
+        }
+
+        _uptimeLabel.Text = $"⏱️ {(int)duration.TotalHours}ч {duration.Minutes:00}м";
+
+        LoadThumbnail(info.ThumbnailUrl);
+
+        if (_openChannelButton != null)
+        {
+            _openChannelButton.Visible = true;
+            _openChannelButton.Tag = info.UserLogin;
         }
     }
 

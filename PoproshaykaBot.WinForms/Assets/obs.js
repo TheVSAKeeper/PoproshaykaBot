@@ -37,6 +37,10 @@ const seenMessageIdsLimit = 1000;
 
 const fadeTimers = new WeakMap();
 
+function forceReflow(element) {
+    return element.offsetHeight;
+}
+
 function rememberMessageId(id) {
     if (!id) return false;
     if (seenMessageIds.has(id)) return true;
@@ -147,7 +151,7 @@ function getAnimationType(userStatus, messageType, isFirstTime = false) {
                 raw = systemMessageAnimation;
                 break;
             case 'UserMessage':
-                raw = (userStatus & 1) ? broadcasterMessageAnimation : userMessageAnimation;
+                raw = userStatus & 1 ? broadcasterMessageAnimation : userMessageAnimation;
                 break;
             default:
                 raw = userMessageAnimation;
@@ -221,7 +225,7 @@ function fadeOutMessage(messageDiv) {
 
     entryAnimationClasses.forEach(cls => messageDiv.classList.remove(cls));
     exitAnimationClasses.forEach(cls => messageDiv.classList.remove(cls));
-    void messageDiv.offsetHeight;
+    forceReflow(messageDiv);
 
     messageDiv.classList.add(animationClass);
 
@@ -265,6 +269,60 @@ function rescheduleAllFades() {
     });
 }
 
+function applyEntryAnimation(messageDiv, message, isHistoryMessage) {
+    if (isHistoryMessage || !enableAnimations) {
+        messageDiv.classList.add('no-animation');
+        messageDiv.classList.add('entry-done');
+        return;
+    }
+
+    const animationType = getAnimationType(message.status || 0, message.messageType, message.isFirstTime);
+    messageDiv.classList.add(animationType);
+
+    const onEntryEnd = event => {
+        if (event.target !== messageDiv) return;
+        messageDiv.removeEventListener('animationend', onEntryEnd);
+        messageDiv.classList.add('entry-done');
+    };
+    messageDiv.addEventListener('animationend', onEntryEnd);
+}
+
+function applySpecialEffects(messageDiv, message) {
+    if (!enableSpecialEffects) {
+        messageDiv.classList.add('no-special-effects');
+        return;
+    }
+
+    const isBroadcasterOrVip = message.status & 1 || message.status & 4;
+    if (isBroadcasterOrVip) {
+        messageDiv.classList.add('special-effect');
+    }
+}
+
+function applyFirstTimeMarker(messageDiv, message) {
+    if (!message.isFirstTime) {
+        return;
+    }
+
+    if (highlightFirstTimeUsers) {
+        messageDiv.classList.add('first-time');
+    } else {
+        messageDiv.classList.add('first-time', 'no-first-time-effects');
+    }
+}
+
+function applyToggleClasses(messageDiv) {
+    const toggles = [
+        [showUserTypeBorders, 'no-borders'],
+        [enableMessageShadows, 'no-shadows'],
+        [isHighlightMentions, 'no-mentions'],
+        [showTimestamp, 'no-timestamp'],
+    ];
+    toggles.forEach(([enabled, className]) => {
+        if (!enabled) messageDiv.classList.add(className);
+    });
+}
+
 function addMessage(message, isHistoryMessage = false) {
     if (rememberMessageId(message.messageId)) {
         return;
@@ -278,57 +336,14 @@ function addMessage(message, isHistoryMessage = false) {
         : Date.now();
     messageDiv.dataset.createdAt = String(createdAtMs);
 
-    if (isHistoryMessage || !enableAnimations) {
-        messageDiv.classList.add('no-animation');
-        messageDiv.classList.add('entry-done');
-    } else {
-        const animationType = getAnimationType(message.status || 0, message.messageType, message.isFirstTime);
-        messageDiv.classList.add(animationType);
-
-        const onEntryEnd = (event) => {
-            if (event.target !== messageDiv) return;
-            messageDiv.removeEventListener('animationend', onEntryEnd);
-            messageDiv.classList.add('entry-done');
-        };
-        messageDiv.addEventListener('animationend', onEntryEnd);
-    }
+    applyEntryAnimation(messageDiv, message, isHistoryMessage);
 
     const userTypeClasses = getUserTypeClasses(message.status || 0);
     userTypeClasses.forEach(cls => messageDiv.classList.add(cls));
 
-    if (!showUserTypeBorders) {
-        messageDiv.classList.add('no-borders');
-    }
-
-    if (!enableMessageShadows) {
-        messageDiv.classList.add('no-shadows');
-    }
-
-    if (!enableSpecialEffects) {
-        messageDiv.classList.add('no-special-effects');
-    } else {
-        if (message.status & 1) { // Broadcaster
-            messageDiv.classList.add('special-effect');
-        } else if (message.status & 4) { // VIP
-            messageDiv.classList.add('special-effect');
-        }
-    }
-
-    if (message.isFirstTime) {
-        if (highlightFirstTimeUsers) {
-            messageDiv.classList.add('first-time');
-        } else {
-            messageDiv.classList.add('first-time', 'no-first-time-effects');
-        }
-    }
-
-    if (!isHighlightMentions) {
-        messageDiv.classList.add('no-mentions');
-    }
-
-    if (!showTimestamp) {
-        messageDiv.classList.add('no-timestamp');
-    }
+    applyToggleClasses(messageDiv);
+    applySpecialEffects(messageDiv, message);
+    applyFirstTimeMarker(messageDiv, message);
 
     const timestamp = new Date(message.timestamp).toLocaleTimeString();
     const isSystemMessage = message.messageType !== 'UserMessage';
@@ -449,115 +464,97 @@ function escapeHtml(text, preserveImgTags = false) {
         .replace(/'/g, '&#039;');
 }
 
-function updateChatSettings(settings) {
-    if (typeof settings === 'string') {
-        try {
-            settings = JSON.parse(settings);
-        } catch (e) {
-            console.error('Некорректные настройки чата (ожидался объект):', e);
-            return;
+const cssVariableMap = [
+    ['backgroundColor', '--chat-bg-color'],
+    ['textColor', '--chat-text-color'],
+    ['usernameColor', '--chat-username-color'],
+    ['systemMessageColor', '--chat-system-color'],
+    ['timestampColor', '--chat-timestamp-color'],
+    ['fontFamily', '--chat-font-family'],
+    ['fontSize', '--chat-font-size'],
+    ['fontWeight', '--chat-font-weight'],
+    ['padding', '--chat-padding'],
+    ['margin', '--chat-margin'],
+    ['borderRadius', '--chat-border-radius'],
+    ['animationDuration', '--chat-animation-duration'],
+    ['emoteSize', '--emote-size'],
+    ['badgeSize', '--badge-size'],
+];
+
+const animationFieldMap = {
+    userMessageAnimation: v => userMessageAnimation = v,
+    botMessageAnimation: v => botMessageAnimation = v,
+    systemMessageAnimation: v => systemMessageAnimation = v,
+    broadcasterMessageAnimation: v => broadcasterMessageAnimation = v,
+    firstTimeUserMessageAnimation: v => firstTimeUserMessageAnimation = v,
+};
+
+function toggleNegationClass(selector, className, enabled) {
+    document.querySelectorAll(selector).forEach(message => {
+        if (enabled) {
+            message.classList.remove(className);
+        } else {
+            message.classList.add(className);
         }
-    }
-    const root = document.documentElement;
+    });
+}
 
-    if (settings.backgroundColor) root.style.setProperty('--chat-bg-color', settings.backgroundColor);
-    if (settings.textColor) root.style.setProperty('--chat-text-color', settings.textColor);
-    if (settings.usernameColor) root.style.setProperty('--chat-username-color', settings.usernameColor);
-    if (settings.systemMessageColor) root.style.setProperty('--chat-system-color', settings.systemMessageColor);
-    if (settings.timestampColor) root.style.setProperty('--chat-timestamp-color', settings.timestampColor);
-    if (settings.fontFamily) root.style.setProperty('--chat-font-family', settings.fontFamily);
-    if (settings.fontSize) root.style.setProperty('--chat-font-size', settings.fontSize);
-    if (settings.fontWeight) root.style.setProperty('--chat-font-weight', settings.fontWeight);
-    if (settings.padding) root.style.setProperty('--chat-padding', settings.padding);
-    if (settings.margin) root.style.setProperty('--chat-margin', settings.margin);
-    if (settings.borderRadius) root.style.setProperty('--chat-border-radius', settings.borderRadius);
-    if (settings.animationDuration) root.style.setProperty('--chat-animation-duration', settings.animationDuration);
+function parseSettings(settings) {
+    if (typeof settings !== 'string') {
+        return settings;
+    }
+    try {
+        return JSON.parse(settings);
+    } catch (e) {
+        console.error('Некорректные настройки чата (ожидался объект):', e);
+        return null;
+    }
+}
 
-    if (settings.emoteSize) root.style.setProperty('--emote-size', settings.emoteSize);
-    if (settings.badgeSize) root.style.setProperty('--badge-size', settings.badgeSize);
+function applyCssVariables(settings, root) {
+    cssVariableMap.forEach(([key, cssVar]) => {
+        if (settings[key]) {
+            root.style.setProperty(cssVar, settings[key]);
+        }
+    });
+}
 
-    if (settings.showUserTypeBorders !== undefined) {
-        showUserTypeBorders = settings.showUserTypeBorders;
-        const messages = document.querySelectorAll('.message');
-        messages.forEach(message => {
-            if (showUserTypeBorders) {
-                message.classList.remove('no-borders');
-            } else {
-                message.classList.add('no-borders');
-            }
-        });
-    }
-    if (settings.highlightFirstTimeUsers !== undefined) {
-        highlightFirstTimeUsers = settings.highlightFirstTimeUsers;
-        const firstTimeMessages = document.querySelectorAll('.message.first-time');
-        firstTimeMessages.forEach(message => {
-            if (highlightFirstTimeUsers) {
-                message.classList.remove('no-first-time-effects');
-            } else {
-                message.classList.add('no-first-time-effects');
-            }
-        });
-    }
-    if (settings.highlightMentions !== undefined) {
-        isHighlightMentions = settings.highlightMentions;
-        const messages = document.querySelectorAll('.message');
-        messages.forEach(message => {
-            if (isHighlightMentions) {
-                message.classList.remove('no-mentions');
-            } else {
-                message.classList.add('no-mentions');
-            }
-        });
-    }
-    if (settings.enableMessageShadows !== undefined) {
-        enableMessageShadows = settings.enableMessageShadows;
-        const messages = document.querySelectorAll('.message');
-        messages.forEach(message => {
-            if (enableMessageShadows) {
-                message.classList.remove('no-shadows');
-            } else {
-                message.classList.add('no-shadows');
-            }
-        });
-    }
-    if (settings.enableSpecialEffects !== undefined) {
-        enableSpecialEffects = settings.enableSpecialEffects;
-        const messages = document.querySelectorAll('.message');
-        messages.forEach(message => {
-            if (enableSpecialEffects) {
-                message.classList.remove('no-special-effects');
-            } else {
-                message.classList.add('no-special-effects');
-            }
-        });
-    }
+function applyClassToggleSettings(settings) {
+    const toggles = [
+        ['showUserTypeBorders', '.message', 'no-borders', v => showUserTypeBorders = v, () => showUserTypeBorders],
+        ['highlightFirstTimeUsers', '.message.first-time', 'no-first-time-effects', v => highlightFirstTimeUsers = v, () => highlightFirstTimeUsers],
+        ['highlightMentions', '.message', 'no-mentions', v => isHighlightMentions = v, () => isHighlightMentions],
+        ['enableMessageShadows', '.message', 'no-shadows', v => enableMessageShadows = v, () => enableMessageShadows],
+        ['enableSpecialEffects', '.message', 'no-special-effects', v => enableSpecialEffects = v, () => enableSpecialEffects],
+        ['showTimestamp', '#chat .message', 'no-timestamp', v => showTimestamp = v, () => showTimestamp],
+    ];
 
-    if (settings.maxMessages !== undefined) maxMessages = settings.maxMessages;
-    if (settings.showTimestamp !== undefined) {
-        showTimestamp = settings.showTimestamp;
-        const messages = document.querySelectorAll('#chat .message');
-        messages.forEach(message => {
-            if (showTimestamp) {
-                message.classList.remove('no-timestamp');
-            } else {
-                message.classList.add('no-timestamp');
-            }
-        });
-    }
+    toggles.forEach(([key, selector, className, setter, getter]) => {
+        if (settings[key] !== undefined) {
+            setter(settings[key]);
+            toggleNegationClass(selector, className, getter());
+        }
+    });
+}
+
+function applyAnimationSettings(settings) {
     if (settings.enableAnimations !== undefined) enableAnimations = settings.enableAnimations;
 
+    Object.keys(animationFieldMap).forEach(key => {
+        if (settings[key]) animationFieldMap[key](settings[key]);
+    });
+}
+
+function applyScrollSettings(settings) {
     if (settings.enableSmoothScroll !== undefined) enableSmoothScroll = settings.enableSmoothScroll;
     if (settings.scrollAnimationDuration !== undefined) scrollAnimationDuration = settings.scrollAnimationDuration;
     if (settings.autoScrollEnabled !== undefined) autoScrollEnabled = settings.autoScrollEnabled;
     if (settings.scrollToBottomThreshold !== undefined) scrollToBottomThreshold = settings.scrollToBottomThreshold;
+}
 
-    if (settings.userMessageAnimation) userMessageAnimation = settings.userMessageAnimation;
-    if (settings.botMessageAnimation) botMessageAnimation = settings.botMessageAnimation;
-    if (settings.systemMessageAnimation) systemMessageAnimation = settings.systemMessageAnimation;
-    if (settings.broadcasterMessageAnimation) broadcasterMessageAnimation = settings.broadcasterMessageAnimation;
-    if (settings.firstTimeUserMessageAnimation) firstTimeUserMessageAnimation = settings.firstTimeUserMessageAnimation;
-
+function applyFadeSettings(settings, root) {
     let fadeRescheduleNeeded = false;
+
     if (settings.enableMessageFadeOut !== undefined) {
         const next = isPreview ? false : settings.enableMessageFadeOut;
         if (next !== enableMessageFadeOut) fadeRescheduleNeeded = true;
@@ -574,7 +571,25 @@ function updateChatSettings(settings) {
         root.style.setProperty('--fade-out-duration', fadeOutDuration + 'ms');
     }
 
-    if (fadeRescheduleNeeded) {
+    return fadeRescheduleNeeded;
+}
+
+function updateChatSettings(settings) {
+    settings = parseSettings(settings);
+    if (settings === null) {
+        return;
+    }
+    const root = document.documentElement;
+
+    applyCssVariables(settings, root);
+    applyClassToggleSettings(settings);
+
+    if (settings.maxMessages !== undefined) maxMessages = settings.maxMessages;
+
+    applyAnimationSettings(settings);
+    applyScrollSettings(settings);
+
+    if (applyFadeSettings(settings, root)) {
         rescheduleAllFades();
     }
 
