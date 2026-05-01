@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Infrastructure.Hosting;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 
 namespace PoproshaykaBot.WinForms.Tests.Infrastructure.Hosting;
 
@@ -6,11 +6,11 @@ namespace PoproshaykaBot.WinForms.Tests.Infrastructure.Hosting;
 public sealed class AppHostTests
 {
     [Test]
-    public async Task StartAsync_NoComponents_DoesNothing()
+    public void StartAsync_NoComponents_DoesNothing()
     {
         var host = new AppHost([], NullLogger<AppHost>.Instance);
 
-        await host.StartAsync(CancellationToken.None);
+        Assert.DoesNotThrowAsync(() => host.StartAsync(CancellationToken.None));
     }
 
     [Test]

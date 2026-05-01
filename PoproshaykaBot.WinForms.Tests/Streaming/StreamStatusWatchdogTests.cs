@@ -19,11 +19,14 @@ public sealed class StreamStatusWatchdogTests
     private StreamStatusWatchdog _watchdog = null!;
 
     [Test]
-    public async Task StartStop_DoesNotLeakLoopTask()
+    public void StartStop_DoesNotLeakLoopTask()
     {
-        await _watchdog.StartAsync(NullProgress, CancellationToken.None);
-        await Task.Delay(100);
-        await _watchdog.StopAsync(NullProgress, CancellationToken.None);
+        Assert.DoesNotThrowAsync(async () =>
+        {
+            await _watchdog.StartAsync(NullProgress, CancellationToken.None);
+            await Task.Delay(100);
+            await _watchdog.StopAsync(NullProgress, CancellationToken.None);
+        });
     }
 
     [Test]

@@ -1,4 +1,4 @@
-using NSubstitute.ExceptionExtensions;
+﻿using NSubstitute.ExceptionExtensions;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 
 namespace PoproshaykaBot.WinForms.Tests.Infrastructure.Events;
@@ -15,9 +15,9 @@ public sealed class InMemoryEventBusTests
     private InMemoryEventBus _bus = null!;
 
     [Test]
-    public async Task PublishAsync_NoSubscribers_CompletesWithoutError()
+    public void PublishAsync_NoSubscribers_CompletesWithoutError()
     {
-        await _bus.PublishAsync(new TestEvent("hello"));
+        Assert.DoesNotThrowAsync(() => _bus.PublishAsync(new TestEvent("hello")));
     }
 
     [Test]
