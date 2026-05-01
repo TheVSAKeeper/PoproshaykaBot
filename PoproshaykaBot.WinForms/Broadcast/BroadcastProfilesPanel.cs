@@ -7,6 +7,7 @@ using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Streaming;
 using PoproshaykaBot.WinForms.Tiles;
 using PoproshaykaBot.WinForms.Twitch.Helix;
+using System.Text.RegularExpressions;
 using Timer = System.Windows.Forms.Timer;
 
 namespace PoproshaykaBot.WinForms.Broadcast;
@@ -97,6 +98,43 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         };
 
         return [_addButton, _editCurrentButton, _statusLabel];
+    }
+
+    internal static bool ProfileDivergesFromStream(BroadcastProfile profile, StreamInfo? stream)
+    {
+        if (stream == null)
+        {
+            return false;
+        }
+
+        if (!TitleMatches(profile.Title?.Trim() ?? string.Empty, stream.Title?.Trim() ?? string.Empty))
+        {
+            return true;
+        }
+
+        if (!string.Equals(profile.GameId ?? string.Empty, stream.GameId ?? string.Empty, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    internal static bool TitleMatches(string profileTitle, string streamTitle)
+    {
+        const string Placeholder = "{n}";
+
+        if (!profileTitle.Contains(Placeholder, StringComparison.Ordinal))
+        {
+            return string.Equals(profileTitle, streamTitle, StringComparison.Ordinal);
+        }
+
+        var pattern = "^"
+                      + Regex.Escape(profileTitle)
+                          .Replace(Regex.Escape(Placeholder), "\\d+")
+                      + "$";
+
+        return Regex.IsMatch(streamTitle, pattern);
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -274,24 +312,20 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         }
     }
 
-    private static bool ProfileDivergesFromStream(BroadcastProfile profile, StreamInfo? stream)
+    private void OnCardIncrementNumberRequested(object? sender, EventArgs e)
     {
-        if (stream == null)
+        if (sender is BroadcastProfileCard card)
         {
-            return false;
+            AdjustCurrentNumber(card, +1);
         }
+    }
 
-        if (!string.Equals(profile.Title?.Trim(), stream.Title?.Trim(), StringComparison.Ordinal))
+    private void OnCardDecrementNumberRequested(object? sender, EventArgs e)
+    {
+        if (sender is BroadcastProfileCard card)
         {
-            return true;
+            AdjustCurrentNumber(card, -1);
         }
-
-        if (!string.Equals(profile.GameId ?? string.Empty, stream.GameId ?? string.Empty, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        return false;
     }
 
     private static BroadcastProfile Clone(BroadcastProfile source)
@@ -305,7 +339,35 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
             GameName = source.GameName,
             BroadcasterLanguage = source.BroadcasterLanguage,
             Tags = source.Tags.ToList(),
+            CurrentNumber = source.CurrentNumber,
+            LastApplyAt = source.LastApplyAt,
         };
+    }
+
+    private void AdjustCurrentNumber(BroadcastProfileCard card, int delta)
+    {
+        if (card.Profile == null)
+        {
+            return;
+        }
+
+        var newNumber = card.Profile.CurrentNumber + delta;
+        if (newNumber < 1)
+        {
+            return;
+        }
+
+        var copy = Clone(card.Profile);
+        copy.CurrentNumber = newNumber;
+
+        try
+        {
+            Manager.Upsert(copy);
+        }
+        catch (InvalidOperationException ex)
+        {
+            SetStatus(ex.Message, true);
+        }
     }
 
     private bool EditProfile(BroadcastProfile profile)
@@ -518,6 +580,8 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
     {
         card.ApplyRequested += OnCardApplyRequested;
         card.EditRequested += OnCardEditRequested;
+        card.IncrementNumberRequested += OnCardIncrementNumberRequested;
+        card.DecrementNumberRequested += OnCardDecrementNumberRequested;
         card.DuplicateRequested += OnCardDuplicateRequested;
         card.DeleteRequested += OnCardDeleteRequested;
     }
@@ -526,6 +590,8 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
     {
         card.ApplyRequested -= OnCardApplyRequested;
         card.EditRequested -= OnCardEditRequested;
+        card.IncrementNumberRequested -= OnCardIncrementNumberRequested;
+        card.DecrementNumberRequested -= OnCardDecrementNumberRequested;
         card.DuplicateRequested -= OnCardDuplicateRequested;
         card.DeleteRequested -= OnCardDeleteRequested;
     }

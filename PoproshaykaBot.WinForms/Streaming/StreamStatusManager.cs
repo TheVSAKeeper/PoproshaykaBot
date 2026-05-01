@@ -205,7 +205,7 @@ public class StreamStatusManager : IStreamStatus, IHostedComponent, IAsyncDispos
                     _logger.LogInformation("Live-snapshot: переход {OldStatus} → Online для BroadcasterId {BroadcasterId}", CurrentStatus, broadcasterId);
                     CurrentStatus = StreamStatus.Online;
                     CurrentStream = MapToStreamInfo(stream!);
-                    await PublishStatusTransitionAsync(StreamStatus.Online).ConfigureAwait(false);
+                    await PublishStatusTransitionAsync(StreamStatus.Online, true).ConfigureAwait(false);
                 }
                 else
                 {
@@ -403,7 +403,7 @@ public class StreamStatusManager : IStreamStatus, IHostedComponent, IAsyncDispos
             {
                 _logger.LogInformation("Инициализация: статус стрима {OldStatus} → {NewStatus} для BroadcasterId {BroadcasterId}", CurrentStatus, newStatus, broadcasterId);
                 CurrentStatus = newStatus;
-                await PublishStatusTransitionAsync(newStatus).ConfigureAwait(false);
+                await PublishStatusTransitionAsync(newStatus, isOnline).ConfigureAwait(false);
             }
 
             CurrentStream = isOnline ? MapToStreamInfo(stream!) : null;
@@ -555,7 +555,7 @@ public class StreamStatusManager : IStreamStatus, IHostedComponent, IAsyncDispos
         }
     }
 
-    private Task PublishStatusTransitionAsync(StreamStatus newStatus)
+    private Task PublishStatusTransitionAsync(StreamStatus newStatus, bool isCatchUp = false)
     {
         var channel = _settingsManager.Current.Twitch.Channel;
 
@@ -567,7 +567,7 @@ public class StreamStatusManager : IStreamStatus, IHostedComponent, IAsyncDispos
 
         return newStatus switch
         {
-            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(channel, CurrentStream)),
+            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(channel, CurrentStream, isCatchUp)),
             StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(channel)),
             _ => Task.CompletedTask,
         };

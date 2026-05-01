@@ -15,7 +15,7 @@ public sealed class ChannelInformationApplier(
 {
     private static readonly TimeSpan ConfirmationTimeout = TimeSpan.FromSeconds(8);
 
-    public async Task ApplyAsync(BroadcastProfile profile, CancellationToken cancellationToken)
+    public async Task<bool> ApplyAsync(BroadcastProfile profile, CancellationToken cancellationToken)
     {
         var broadcasterId = await idProvider.GetAsync(cancellationToken);
 
@@ -24,7 +24,7 @@ public sealed class ChannelInformationApplier(
             await eventBus.PublishAsync(new BroadcastProfileApplyFailed(profile, "Не удалось определить канал"),
                 cancellationToken);
 
-            return;
+            return false;
         }
 
         var request = new PatchChannelRequest
@@ -47,7 +47,7 @@ public sealed class ChannelInformationApplier(
             await eventBus.PublishAsync(new BroadcastProfileApplyFailed(profile, HelixErrorMessages.SafeMessage(exception)),
                 cancellationToken);
 
-            return;
+            return false;
         }
 
         var confirmed = await confirmationTask;
@@ -59,9 +59,10 @@ public sealed class ChannelInformationApplier(
         }
 
         await eventBus.PublishAsync(new BroadcastProfileApplied(profile), cancellationToken);
+        return true;
     }
 
-    public async Task ApplyPatchAsync(string? title, string? gameId, string? gameName, CancellationToken cancellationToken)
+    public async Task<bool> ApplyPatchAsync(string? title, string? gameId, string? gameName, CancellationToken cancellationToken)
     {
         var broadcasterId = await idProvider.GetAsync(cancellationToken);
 
@@ -79,7 +80,7 @@ public sealed class ChannelInformationApplier(
             await eventBus.PublishAsync(new BroadcastProfileApplyFailed(virtualProfile, "Не удалось определить канал"),
                 cancellationToken);
 
-            return;
+            return false;
         }
 
         var request = new PatchChannelRequest
@@ -102,7 +103,7 @@ public sealed class ChannelInformationApplier(
             await eventBus.PublishAsync(new BroadcastProfileApplyFailed(virtualProfile, HelixErrorMessages.SafeMessage(exception)),
                 cancellationToken);
 
-            return;
+            return false;
         }
 
         var confirmed = await confirmationTask;
@@ -113,5 +114,6 @@ public sealed class ChannelInformationApplier(
         }
 
         await eventBus.PublishAsync(new BroadcastProfileApplied(virtualProfile), cancellationToken);
+        return true;
     }
 }

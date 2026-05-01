@@ -9,6 +9,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
         private System.Windows.Forms.TableLayoutPanel _mainLayout;
         private System.Windows.Forms.TableLayoutPanel _headerRow;
         private System.Windows.Forms.Label _activeBadge;
+        private System.Windows.Forms.Label _numberBadge;
         private System.Windows.Forms.Label _nameLabel;
         private System.Windows.Forms.Label _titleLabel;
         private System.Windows.Forms.Label _metaLabel;
@@ -17,6 +18,9 @@ namespace PoproshaykaBot.WinForms.Broadcast
         private System.Windows.Forms.ContextMenuStrip _menu;
         private System.Windows.Forms.ToolStripMenuItem _applyMenuItem;
         private System.Windows.Forms.ToolStripMenuItem _editMenuItem;
+        private System.Windows.Forms.ToolStripSeparator _numberMenuSeparator;
+        private System.Windows.Forms.ToolStripMenuItem _incrementNumberMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem _decrementNumberMenuItem;
         private System.Windows.Forms.ToolStripSeparator _menuSeparator;
         private System.Windows.Forms.ToolStripMenuItem _duplicateMenuItem;
         private System.Windows.Forms.ToolStripMenuItem _deleteMenuItem;
@@ -34,6 +38,9 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _menu = new ContextMenuStrip(components);
             _applyMenuItem = new ToolStripMenuItem();
             _editMenuItem = new ToolStripMenuItem();
+            _numberMenuSeparator = new ToolStripSeparator();
+            _incrementNumberMenuItem = new ToolStripMenuItem();
+            _decrementNumberMenuItem = new ToolStripMenuItem();
             _menuSeparator = new ToolStripSeparator();
             _duplicateMenuItem = new ToolStripMenuItem();
             _deleteMenuItem = new ToolStripMenuItem();
@@ -41,6 +48,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _mainLayout = new TableLayoutPanel();
             _headerRow = new TableLayoutPanel();
             _activeBadge = new Label();
+            _numberBadge = new Label();
             _nameLabel = new Label();
             _titleLabel = new Label();
             _metaLabel = new Label();
@@ -53,7 +61,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             //
             // _menu
             //
-            _menu.Items.AddRange(new ToolStripItem[] { _applyMenuItem, _editMenuItem, _menuSeparator, _duplicateMenuItem, _deleteMenuItem });
+            _menu.Items.AddRange(new ToolStripItem[] { _applyMenuItem, _editMenuItem, _numberMenuSeparator, _incrementNumberMenuItem, _decrementNumberMenuItem, _menuSeparator, _duplicateMenuItem, _deleteMenuItem });
             _menu.Name = "_menu";
             //
             // _applyMenuItem
@@ -65,6 +73,20 @@ namespace PoproshaykaBot.WinForms.Broadcast
             //
             _editMenuItem.Name = "_editMenuItem";
             _editMenuItem.Text = "✎ Редактировать";
+            //
+            // _numberMenuSeparator
+            //
+            _numberMenuSeparator.Name = "_numberMenuSeparator";
+            //
+            // _incrementNumberMenuItem
+            //
+            _incrementNumberMenuItem.Name = "_incrementNumberMenuItem";
+            _incrementNumberMenuItem.Text = "▲ Номер +1";
+            //
+            // _decrementNumberMenuItem
+            //
+            _decrementNumberMenuItem.Name = "_decrementNumberMenuItem";
+            _decrementNumberMenuItem.Text = "▼ Номер −1";
             //
             // _menuSeparator
             //
@@ -104,11 +126,13 @@ namespace PoproshaykaBot.WinForms.Broadcast
             //
             _headerRow.AutoSize = true;
             _headerRow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            _headerRow.ColumnCount = 2;
+            _headerRow.ColumnCount = 3;
             _headerRow.ColumnStyles.Add(new ColumnStyle());
             _headerRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _headerRow.ColumnStyles.Add(new ColumnStyle());
             _headerRow.Controls.Add(_activeBadge, 0, 0);
             _headerRow.Controls.Add(_nameLabel, 1, 0);
+            _headerRow.Controls.Add(_numberBadge, 2, 0);
             _headerRow.Dock = DockStyle.Top;
             _headerRow.Margin = new Padding(0, 0, 0, 2);
             _headerRow.Name = "_headerRow";
@@ -134,6 +158,15 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _nameLabel.Margin = new Padding(0);
             _nameLabel.Name = "_nameLabel";
             _nameLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _numberBadge
+            //
+            _numberBadge.Anchor = AnchorStyles.Right;
+            _numberBadge.AutoSize = true;
+            _numberBadge.ForeColor = Color.SteelBlue;
+            _numberBadge.Margin = new Padding(6, 0, 0, 0);
+            _numberBadge.Name = "_numberBadge";
+            _numberBadge.Visible = false;
             //
             // _titleLabel
             //

@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
+﻿namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
 public sealed class BroadcastProfile
 {
@@ -9,4 +9,6 @@ public sealed class BroadcastProfile
     public string GameName { get; set; } = string.Empty;
     public string BroadcasterLanguage { get; set; } = "ru";
     public List<string> Tags { get; set; } = [];
+    public int CurrentNumber { get; set; } = 1;
+    public DateTimeOffset? LastApplyAt { get; set; }
 }

@@ -221,6 +221,42 @@ public sealed class StreamStatusManagerTests
     }
 
     [Test]
+    public async Task StreamOnlineFromEventSub_PublishesStreamWentOnline_WithIsCatchUpFalse()
+    {
+        var stream = SampleStream();
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>()).Returns(stream);
+
+        var receivedSignal = new TaskCompletionSource<StreamWentOnline>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(@event => receivedSignal.TrySetResult(@event));
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnNotification +=
+            Raise.Event<EventSubAsyncHandler<EventSubNotificationArgs>>(StreamOnlineNotification(), CancellationToken.None);
+
+        var received = await receivedSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.That(received.IsCatchUp, Is.False);
+    }
+
+    [Test]
+    public async Task InitializeFromApi_StreamAlreadyOnline_PublishesWithIsCatchUpTrue()
+    {
+        var stream = SampleStream();
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>()).Returns(stream);
+
+        var receivedSignal = new TaskCompletionSource<StreamWentOnline>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(@event => receivedSignal.TrySetResult(@event));
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        var received = await receivedSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.That(received.IsCatchUp, Is.True);
+    }
+
+    [Test]
     public async Task HandleStreamOnline_PublishesStreamMetadataResolved_AfterMetadataFetch()
     {
         var stream = SampleStream("stream-online-1");

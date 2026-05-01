@@ -11,6 +11,11 @@ namespace PoproshaykaBot.WinForms.Broadcast
         private System.Windows.Forms.TextBox _nameTextBox;
         private System.Windows.Forms.Label _titleLbl;
         private System.Windows.Forms.TextBox _titleTextBox;
+        private System.Windows.Forms.Label _currentNumberLbl;
+        private System.Windows.Forms.FlowLayoutPanel _currentNumberRow;
+        private System.Windows.Forms.NumericUpDown _currentNumberSpinner;
+        private System.Windows.Forms.Label _currentNumberHintLbl;
+        private System.Windows.Forms.Label _previewLabel;
         private System.Windows.Forms.Label _gameLbl;
         private GameAutocompleteBox _gameBox;
         private System.Windows.Forms.Label _tagsLbl;
@@ -34,6 +39,11 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _nameTextBox = new TextBox();
             _titleLbl = new Label();
             _titleTextBox = new TextBox();
+            _currentNumberLbl = new Label();
+            _currentNumberRow = new FlowLayoutPanel();
+            _currentNumberSpinner = new NumericUpDown();
+            _currentNumberHintLbl = new Label();
+            _previewLabel = new Label();
             _gameLbl = new Label();
             _gameBox = new GameAutocompleteBox();
             _tagsLbl = new Label();
@@ -44,6 +54,8 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _okButton = new Button();
             _cancelButton = new Button();
             _mainLayout.SuspendLayout();
+            _currentNumberRow.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)_currentNumberSpinner).BeginInit();
             _buttonsFlow.SuspendLayout();
             SuspendLayout();
             // 
@@ -56,25 +68,30 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _mainLayout.Controls.Add(_nameTextBox, 1, 0);
             _mainLayout.Controls.Add(_titleLbl, 0, 1);
             _mainLayout.Controls.Add(_titleTextBox, 1, 1);
-            _mainLayout.Controls.Add(_gameLbl, 0, 2);
-            _mainLayout.Controls.Add(_gameBox, 1, 2);
-            _mainLayout.Controls.Add(_tagsLbl, 0, 3);
-            _mainLayout.Controls.Add(_tagsTextBox, 1, 3);
-            _mainLayout.Controls.Add(_languageLbl, 0, 4);
-            _mainLayout.Controls.Add(_languageComboBox, 1, 4);
-            _mainLayout.Controls.Add(_buttonsFlow, 0, 5);
+            _mainLayout.Controls.Add(_currentNumberLbl, 0, 2);
+            _mainLayout.Controls.Add(_currentNumberRow, 1, 2);
+            _mainLayout.Controls.Add(_previewLabel, 1, 3);
+            _mainLayout.Controls.Add(_gameLbl, 0, 4);
+            _mainLayout.Controls.Add(_gameBox, 1, 4);
+            _mainLayout.Controls.Add(_tagsLbl, 0, 5);
+            _mainLayout.Controls.Add(_tagsTextBox, 1, 5);
+            _mainLayout.Controls.Add(_languageLbl, 0, 6);
+            _mainLayout.Controls.Add(_languageComboBox, 1, 6);
+            _mainLayout.Controls.Add(_buttonsFlow, 0, 7);
             _mainLayout.Dock = DockStyle.Fill;
             _mainLayout.Location = new Point(0, 0);
             _mainLayout.Name = "_mainLayout";
             _mainLayout.Padding = new Padding(8);
-            _mainLayout.RowCount = 6;
+            _mainLayout.RowCount = 8;
             _mainLayout.RowStyles.Add(new RowStyle());
             _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
+            _mainLayout.RowStyles.Add(new RowStyle());
+            _mainLayout.RowStyles.Add(new RowStyle());
             _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120F));
             _mainLayout.RowStyles.Add(new RowStyle());
             _mainLayout.RowStyles.Add(new RowStyle());
             _mainLayout.RowStyles.Add(new RowStyle());
-            _mainLayout.Size = new Size(661, 321);
+            _mainLayout.Size = new Size(661, 391);
             _mainLayout.TabIndex = 0;
             // 
             // _nameLbl
@@ -120,16 +137,70 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _titleTextBox.ScrollBars = ScrollBars.Vertical;
             _titleTextBox.Size = new Size(565, 54);
             _titleTextBox.TabIndex = 3;
-            // 
+            _titleTextBox.TextChanged += OnTitleOrNumberChanged;
+            //
+            // _currentNumberLbl
+            //
+            _currentNumberLbl.Anchor = AnchorStyles.Left;
+            _currentNumberLbl.AutoSize = true;
+            _currentNumberLbl.Margin = new Padding(0, 6, 6, 4);
+            _currentNumberLbl.Name = "_currentNumberLbl";
+            _currentNumberLbl.TabIndex = 4;
+            _currentNumberLbl.Text = "Серия №:";
+            //
+            // _currentNumberRow
+            //
+            _currentNumberRow.AutoSize = true;
+            _currentNumberRow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _currentNumberRow.Controls.Add(_currentNumberSpinner);
+            _currentNumberRow.Controls.Add(_currentNumberHintLbl);
+            _currentNumberRow.Dock = DockStyle.Fill;
+            _currentNumberRow.Margin = new Padding(0, 0, 0, 4);
+            _currentNumberRow.Name = "_currentNumberRow";
+            _currentNumberRow.TabIndex = 5;
+            _currentNumberRow.WrapContents = false;
+            //
+            // _currentNumberSpinner
+            //
+            _currentNumberSpinner.Margin = new Padding(0, 3, 6, 0);
+            _currentNumberSpinner.Maximum = new decimal(new int[] { 1000000, 0, 0, 0 });
+            _currentNumberSpinner.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            _currentNumberSpinner.Name = "_currentNumberSpinner";
+            _currentNumberSpinner.Size = new Size(80, 23);
+            _currentNumberSpinner.TabIndex = 0;
+            _currentNumberSpinner.Value = new decimal(new int[] { 1, 0, 0, 0 });
+            _currentNumberSpinner.ValueChanged += OnTitleOrNumberChanged;
+            //
+            // _currentNumberHintLbl
+            //
+            _currentNumberHintLbl.Anchor = AnchorStyles.Left;
+            _currentNumberHintLbl.AutoSize = true;
+            _currentNumberHintLbl.ForeColor = Color.Gray;
+            _currentNumberHintLbl.Margin = new Padding(0, 6, 0, 0);
+            _currentNumberHintLbl.Name = "_currentNumberHintLbl";
+            _currentNumberHintLbl.Text = "(подставится в {n}; +1 при следующем выходе в эфир)";
+            //
+            // _previewLabel
+            //
+            _previewLabel.AutoEllipsis = true;
+            _previewLabel.AutoSize = false;
+            _previewLabel.Dock = DockStyle.Fill;
+            _previewLabel.ForeColor = Color.DimGray;
+            _previewLabel.Margin = new Padding(0, 0, 0, 6);
+            _previewLabel.MinimumSize = new Size(0, 18);
+            _previewLabel.Name = "_previewLabel";
+            _previewLabel.TextAlign = ContentAlignment.MiddleLeft;
+            _previewLabel.Visible = false;
+            //
             // _gameLbl
-            // 
+            //
             _gameLbl.Anchor = AnchorStyles.Left;
             _gameLbl.AutoSize = true;
             _gameLbl.Location = new Point(8, 153);
             _gameLbl.Margin = new Padding(0, 6, 6, 4);
             _gameLbl.Name = "_gameLbl";
             _gameLbl.Size = new Size(37, 15);
-            _gameLbl.TabIndex = 4;
+            _gameLbl.TabIndex = 6;
             _gameLbl.Text = "Игра:";
             // 
             // _gameBox
@@ -139,7 +210,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _gameBox.Margin = new Padding(0, 3, 0, 4);
             _gameBox.Name = "_gameBox";
             _gameBox.Size = new Size(565, 113);
-            _gameBox.TabIndex = 5;
+            _gameBox.TabIndex = 7;
             // 
             // _tagsLbl
             // 
@@ -149,7 +220,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _tagsLbl.Margin = new Padding(0, 6, 6, 4);
             _tagsLbl.Name = "_tagsLbl";
             _tagsLbl.Size = new Size(34, 15);
-            _tagsLbl.TabIndex = 6;
+            _tagsLbl.TabIndex = 8;
             _tagsLbl.Text = "Теги:";
             // 
             // _tagsTextBox
@@ -160,7 +231,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _tagsTextBox.Name = "_tagsTextBox";
             _tagsTextBox.PlaceholderText = "через запятую";
             _tagsTextBox.Size = new Size(565, 23);
-            _tagsTextBox.TabIndex = 7;
+            _tagsTextBox.TabIndex = 9;
             // 
             // _languageLbl
             // 
@@ -170,7 +241,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _languageLbl.Margin = new Padding(0, 6, 6, 4);
             _languageLbl.Name = "_languageLbl";
             _languageLbl.Size = new Size(37, 15);
-            _languageLbl.TabIndex = 8;
+            _languageLbl.TabIndex = 10;
             _languageLbl.Text = "Язык:";
             // 
             // _languageComboBox
@@ -182,7 +253,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _languageComboBox.Margin = new Padding(0, 3, 0, 4);
             _languageComboBox.Name = "_languageComboBox";
             _languageComboBox.Size = new Size(565, 23);
-            _languageComboBox.TabIndex = 9;
+            _languageComboBox.TabIndex = 11;
             // 
             // _buttonsFlow
             // 
@@ -195,7 +266,7 @@ namespace PoproshaykaBot.WinForms.Broadcast
             _buttonsFlow.Margin = new Padding(0, 8, 0, 0);
             _buttonsFlow.Name = "_buttonsFlow";
             _buttonsFlow.Size = new Size(156, 25);
-            _buttonsFlow.TabIndex = 10;
+            _buttonsFlow.TabIndex = 12;
             // 
             // _okButton
             // 
@@ -226,16 +297,19 @@ namespace PoproshaykaBot.WinForms.Broadcast
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             CancelButton = _cancelButton;
-            ClientSize = new Size(661, 321);
+            ClientSize = new Size(661, 391);
             Controls.Add(_mainLayout);
             MinimizeBox = false;
-            MinimumSize = new Size(420, 320);
+            MinimumSize = new Size(420, 390);
             Name = "BroadcastProfileEditDialog";
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.CenterParent;
             Text = "Редактировать профиль";
             _mainLayout.ResumeLayout(false);
             _mainLayout.PerformLayout();
+            _currentNumberRow.ResumeLayout(false);
+            _currentNumberRow.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)_currentNumberSpinner).EndInit();
             _buttonsFlow.ResumeLayout(false);
             _buttonsFlow.PerformLayout();
             ResumeLayout(false);

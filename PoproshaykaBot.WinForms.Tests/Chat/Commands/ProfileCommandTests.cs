@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Broadcast.Profiles;
+﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Chat.Commands;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
@@ -16,6 +16,7 @@ public class ProfileCommandTests
                 Substitute.For<IEventBus>()),
             Substitute.For<IChannelInformationApplier>(),
             Substitute.For<IEventBus>(),
+            TimeProvider.System,
             NullLogger<BroadcastProfilesManager>.Instance);
 
         _command = new(_manager, NullLogger<ProfileCommand>.Instance);

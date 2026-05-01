@@ -122,4 +122,71 @@ public class ChannelInformationApplierTests
                     r.Title == "Hello" && r.GameId == null && r.BroadcasterLanguage == null && r.Tags == null),
                 Arg.Any<CancellationToken>());
     }
+
+    [Test]
+    public async Task ApplyAsync_Success_ReturnsTrue()
+    {
+        var profile = new BroadcastProfile
+        {
+            Name = "N",
+            Title = "T",
+        };
+
+        var result = await _applier.ApplyAsync(profile, CancellationToken.None);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task ApplyAsync_NoBroadcasterId_ReturnsFalse()
+    {
+        _idProvider.GetAsync(Arg.Any<CancellationToken>()).Returns((string?)null);
+        var profile = new BroadcastProfile
+        {
+            Name = "N",
+            Title = "T",
+        };
+
+        var result = await _applier.ApplyAsync(profile, CancellationToken.None);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task ApplyAsync_ApiThrows_ReturnsFalse()
+    {
+        _channelsApi
+            .ModifyChannelInformationAsync(Arg.Any<string>(), Arg.Any<PatchChannelRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("boom")));
+
+        var profile = new BroadcastProfile
+        {
+            Name = "N",
+            Title = "T",
+        };
+
+        var result = await _applier.ApplyAsync(profile, CancellationToken.None);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task ApplyPatchAsync_Success_ReturnsTrue()
+    {
+        var result = await _applier.ApplyPatchAsync("Hello", null, null, CancellationToken.None);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task ApplyPatchAsync_ApiThrows_ReturnsFalse()
+    {
+        _channelsApi
+            .ModifyChannelInformationAsync(Arg.Any<string>(), Arg.Any<PatchChannelRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("boom")));
+
+        var result = await _applier.ApplyPatchAsync("Hello", null, null, CancellationToken.None);
+
+        Assert.That(result, Is.False);
+    }
 }

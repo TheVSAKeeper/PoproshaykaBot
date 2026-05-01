@@ -1,4 +1,5 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Settings;
@@ -10,6 +11,7 @@ public class BroadcastProfilesManager(
     SettingsManager settingsManager,
     IChannelInformationApplier applier,
     IEventBus eventBus,
+    TimeProvider timeProvider,
     ILogger<BroadcastProfilesManager> logger)
 {
     private readonly object _syncLock = new();
@@ -38,16 +40,78 @@ public class BroadcastProfilesManager(
             return null;
         }
 
-        await applier.ApplyAsync(profile, cancellationToken);
+        var template = MessageTemplate.For(profile.Title);
+        var hasPlaceholder = template.Contains("n");
+
+        BroadcastProfile profileToApply;
+        if (hasPlaceholder)
+        {
+            profileToApply = new()
+            {
+                Id = profile.Id,
+                Name = profile.Name,
+                Title = template.With("n", profile.CurrentNumber.ToString()).Render(),
+                GameId = profile.GameId,
+                GameName = profile.GameName,
+                BroadcasterLanguage = profile.BroadcasterLanguage,
+                Tags = profile.Tags.ToList(),
+                CurrentNumber = profile.CurrentNumber,
+                LastApplyAt = profile.LastApplyAt,
+            };
+        }
+        else
+        {
+            profileToApply = profile;
+        }
+
+        var success = await applier.ApplyAsync(profileToApply, cancellationToken);
 
         lock (_syncLock)
         {
             var settings = settingsManager.Current;
             settings.Twitch.BroadcastProfiles.LastAppliedProfileId = profile.Id;
+
+            if (success && hasPlaceholder)
+            {
+                var stored = settings.Twitch.BroadcastProfiles.Profiles.FirstOrDefault(p => p.Id == profile.Id);
+                if (stored != null)
+                {
+                    stored.LastApplyAt = timeProvider.GetUtcNow();
+                }
+            }
+
             settingsManager.SaveSettings(settings);
         }
 
         return profile;
+    }
+
+    public virtual BroadcastProfile? Find(Guid id)
+    {
+        lock (_syncLock)
+        {
+            return settingsManager.Current.Twitch.BroadcastProfiles.Profiles
+                .FirstOrDefault(p => p.Id == id);
+        }
+    }
+
+    public virtual bool AdvanceCurrentNumber(Guid id, int nextValue, DateTimeOffset appliedAt)
+    {
+        lock (_syncLock)
+        {
+            var settings = settingsManager.Current;
+            var stored = settings.Twitch.BroadcastProfiles.Profiles.FirstOrDefault(p => p.Id == id);
+
+            if (stored == null)
+            {
+                return false;
+            }
+
+            stored.CurrentNumber = nextValue;
+            stored.LastApplyAt = appliedAt;
+            settingsManager.SaveSettings(settings);
+            return true;
+        }
     }
 
     public IReadOnlyList<BroadcastProfile> GetAll()
@@ -55,15 +119,6 @@ public class BroadcastProfilesManager(
         lock (_syncLock)
         {
             return settingsManager.Current.Twitch.BroadcastProfiles.Profiles.ToList();
-        }
-    }
-
-    public BroadcastProfile? Find(Guid id)
-    {
-        lock (_syncLock)
-        {
-            return settingsManager.Current.Twitch.BroadcastProfiles.Profiles
-                .FirstOrDefault(p => p.Id == id);
         }
     }
 

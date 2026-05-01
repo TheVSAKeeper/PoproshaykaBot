@@ -37,6 +37,35 @@ public class BroadcastProfilesPanelTests
         Assert.That(manager.GetAll().Select(p => p.Name), Is.EquivalentTo(["Профиль 1"]));
     }
 
+    [Test]
+    public void TitleMatches_NoPlaceholder_LiteralEqualityWins()
+    {
+        Assert.That(BroadcastProfilesPanel.TitleMatches("Просто стрим", "Просто стрим"), Is.True);
+        Assert.That(BroadcastProfilesPanel.TitleMatches("Просто стрим", "Другое"), Is.False);
+    }
+
+    [Test]
+    public void TitleMatches_WithPlaceholder_AnyDigitsAccepted()
+    {
+        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Серия #14"), Is.True);
+        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Серия #1"), Is.True);
+        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Серия #999"), Is.True);
+    }
+
+    [Test]
+    public void TitleMatches_WithPlaceholder_NonDigitsRejected()
+    {
+        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Серия #abc"), Is.False);
+        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Другая #14"), Is.False);
+    }
+
+    [Test]
+    public void TitleMatches_RegexSpecialCharsInProfileTitle_TreatedAsLiterals()
+    {
+        Assert.That(BroadcastProfilesPanel.TitleMatches("a.b+c?d", "a.b+c?d"), Is.True);
+        Assert.That(BroadcastProfilesPanel.TitleMatches("a.b+c?d", "axbXcYd"), Is.False);
+    }
+
     private static BroadcastProfilesManager CreateManager()
     {
         var logger = Substitute.For<ILogger<BroadcastProfilesManager>>();
@@ -46,6 +75,6 @@ public class BroadcastProfilesPanelTests
         var settingsManager = Substitute.For<SettingsManager>(settingsLogger, bus);
         settingsManager.Current.Returns(new AppSettings());
         var applier = Substitute.For<IChannelInformationApplier>();
-        return new(settingsManager, applier, bus, logger);
+        return new(settingsManager, applier, bus, TimeProvider.System, logger);
     }
 }

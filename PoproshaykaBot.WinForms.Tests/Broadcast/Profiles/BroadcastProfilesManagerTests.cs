@@ -1,7 +1,8 @@
-using PoproshaykaBot.WinForms.Broadcast.Profiles;
+﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Tests.Polls;
 
 namespace PoproshaykaBot.WinForms.Tests.Broadcast.Profiles;
 
@@ -17,10 +18,14 @@ public class BroadcastProfilesManagerTests
 
         _settingsManager.Current.Returns(_settings);
         _applier = Substitute.For<IChannelInformationApplier>();
+        _applier.ApplyAsync(Arg.Any<BroadcastProfile>(), Arg.Any<CancellationToken>()).Returns(true);
+        _applier.ApplyPatchAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
         _eventBus = Substitute.For<IEventBus>();
+        _clock = new() { UtcNow = new(2026, 4, 30, 12, 0, 0, TimeSpan.Zero) };
         _manager = new(_settingsManager,
             _applier,
             _eventBus,
+            _clock,
             NullLogger<BroadcastProfilesManager>.Instance);
     }
 
@@ -28,6 +33,7 @@ public class BroadcastProfilesManagerTests
     private AppSettings _settings = null!;
     private IChannelInformationApplier _applier = null!;
     private IEventBus _eventBus = null!;
+    private TestTimeProvider _clock = null!;
     private BroadcastProfilesManager _manager = null!;
 
     [Test]
@@ -136,5 +142,139 @@ public class BroadcastProfilesManagerTests
 
         Assert.That(applied, Is.Null);
         await _applier.DidNotReceiveWithAnyArgs().ApplyAsync(null!, CancellationToken.None);
+    }
+
+    [Test]
+    public async Task ApplyAsync_PlaceholderInTitle_RendersWithCurrentNumber()
+    {
+        var profile = new BroadcastProfile
+        {
+            Name = "X",
+            Title = "Серия #{n}",
+            CurrentNumber = 14,
+        };
+
+        _manager.Upsert(profile);
+
+        await _manager.ApplyAsync(profile.Id, CancellationToken.None);
+
+        await _applier.Received(1)
+            .ApplyAsync(Arg.Is<BroadcastProfile>(p => p.Title == "Серия #14"),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ApplyAsync_PlaceholderAndSuccess_DoesNotChangeCurrentNumber()
+    {
+        var profile = new BroadcastProfile
+        {
+            Name = "X",
+            Title = "Серия #{n}",
+            CurrentNumber = 14,
+        };
+
+        _manager.Upsert(profile);
+
+        await _manager.ApplyAsync(profile.Id, CancellationToken.None);
+
+        Assert.That(_settings.Twitch.BroadcastProfiles.Profiles[0].CurrentNumber, Is.EqualTo(14));
+    }
+
+    [Test]
+    public async Task ApplyAsync_PlaceholderAndSuccess_SetsLastApplyAt()
+    {
+        var profile = new BroadcastProfile
+        {
+            Name = "X",
+            Title = "Серия #{n}",
+            CurrentNumber = 14,
+        };
+
+        _manager.Upsert(profile);
+
+        await _manager.ApplyAsync(profile.Id, CancellationToken.None);
+
+        Assert.That(_settings.Twitch.BroadcastProfiles.Profiles[0].LastApplyAt, Is.EqualTo(_clock.UtcNow));
+    }
+
+    [Test]
+    public async Task ApplyAsync_PlaceholderAndApplierFailure_DoesNotTouchProfile()
+    {
+        _applier.ApplyAsync(Arg.Any<BroadcastProfile>(), Arg.Any<CancellationToken>()).Returns(false);
+        var profile = new BroadcastProfile
+        {
+            Name = "X",
+            Title = "Серия #{n}",
+            CurrentNumber = 14,
+        };
+
+        _manager.Upsert(profile);
+
+        await _manager.ApplyAsync(profile.Id, CancellationToken.None);
+
+        var stored = _settings.Twitch.BroadcastProfiles.Profiles[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.CurrentNumber, Is.EqualTo(14));
+            Assert.That(stored.LastApplyAt, Is.Null);
+        }
+    }
+
+    [Test]
+    public void AdvanceCurrentNumber_StoredProfile_MutatesAndPersists()
+    {
+        var profile = new BroadcastProfile
+        {
+            Name = "X",
+            Title = "Серия #{n}",
+            CurrentNumber = 14,
+        };
+
+        _manager.Upsert(profile);
+        _settingsManager.ClearReceivedCalls();
+
+        var appliedAt = _clock.UtcNow.AddMinutes(-1);
+        var result = _manager.AdvanceCurrentNumber(profile.Id, 15, appliedAt);
+
+        var stored = _settings.Twitch.BroadcastProfiles.Profiles[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(stored.CurrentNumber, Is.EqualTo(15));
+            Assert.That(stored.LastApplyAt, Is.EqualTo(appliedAt));
+        }
+
+        _settingsManager.Received(1).SaveSettings(_settings);
+    }
+
+    [Test]
+    public void AdvanceCurrentNumber_UnknownId_ReturnsFalse_AndDoesNotPersist()
+    {
+        var result = _manager.AdvanceCurrentNumber(Guid.NewGuid(), 99, _clock.UtcNow);
+
+        Assert.That(result, Is.False);
+        _settingsManager.DidNotReceiveWithAnyArgs().SaveSettings(default!);
+    }
+
+    [Test]
+    public async Task ApplyAsync_NoPlaceholder_DoesNotTouchProfile()
+    {
+        var profile = new BroadcastProfile
+        {
+            Name = "X",
+            Title = "Без номера",
+            CurrentNumber = 5,
+        };
+
+        _manager.Upsert(profile);
+
+        await _manager.ApplyAsync(profile.Id, CancellationToken.None);
+
+        var stored = _settings.Twitch.BroadcastProfiles.Profiles[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.CurrentNumber, Is.EqualTo(5));
+            Assert.That(stored.LastApplyAt, Is.Null);
+        }
     }
 }

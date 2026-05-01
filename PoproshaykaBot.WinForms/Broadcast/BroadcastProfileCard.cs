@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
+using PoproshaykaBot.WinForms.Chat;
 
 namespace PoproshaykaBot.WinForms.Broadcast;
 
@@ -13,6 +14,7 @@ public partial class BroadcastProfileCard : UserControl
 
         _nameLabel.Font = new(Font.FontFamily, Font.SizeInPoints + 1, FontStyle.Bold);
         _activeBadge.Font = new(Font, FontStyle.Bold);
+        _numberBadge.Font = new(Font, FontStyle.Bold);
         _titleLabel.Font = new(Font, FontStyle.Italic);
 
         _nameLabel.Height = NameRowHeight;
@@ -23,6 +25,8 @@ public partial class BroadcastProfileCard : UserControl
 
         _applyMenuItem.Click += (_, e) => ApplyRequested?.Invoke(this, e);
         _editMenuItem.Click += (_, e) => EditRequested?.Invoke(this, e);
+        _incrementNumberMenuItem.Click += (_, e) => IncrementNumberRequested?.Invoke(this, e);
+        _decrementNumberMenuItem.Click += (_, e) => DecrementNumberRequested?.Invoke(this, e);
         _duplicateMenuItem.Click += (_, e) => DuplicateRequested?.Invoke(this, e);
         _deleteMenuItem.Click += (_, e) => DeleteRequested?.Invoke(this, e);
 
@@ -33,9 +37,11 @@ public partial class BroadcastProfileCard : UserControl
     }
 
     public event EventHandler? ApplyRequested;
+    public event EventHandler? DecrementNumberRequested;
     public event EventHandler? DeleteRequested;
     public event EventHandler? DuplicateRequested;
     public event EventHandler? EditRequested;
+    public event EventHandler? IncrementNumberRequested;
 
     public BroadcastProfile? Profile { get; private set; }
     public bool IsActive { get; private set; }
@@ -46,6 +52,23 @@ public partial class BroadcastProfileCard : UserControl
         IsActive = isActive;
 
         _nameLabel.Text = profile.Name;
+
+        var titleTemplate = MessageTemplate.For(profile.Title);
+        var hasNumberPlaceholder = titleTemplate.Contains("n");
+        if (hasNumberPlaceholder)
+        {
+            _numberBadge.Text = $"#{profile.CurrentNumber}";
+            _numberBadge.Visible = true;
+        }
+        else
+        {
+            _numberBadge.Visible = false;
+        }
+
+        _numberMenuSeparator.Visible = hasNumberPlaceholder;
+        _incrementNumberMenuItem.Visible = hasNumberPlaceholder;
+        _decrementNumberMenuItem.Visible = hasNumberPlaceholder;
+        _decrementNumberMenuItem.Enabled = hasNumberPlaceholder && profile.CurrentNumber > 1;
 
         if (string.IsNullOrWhiteSpace(profile.Title))
         {
