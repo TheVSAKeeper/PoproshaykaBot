@@ -1,17 +1,22 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 
 namespace PoproshaykaBot.WinForms.Infrastructure.Hosting;
 
-public sealed class AppHost
+public class AppHost
 {
     private static readonly IProgress<string> NullProgress = new Progress<string>(_ => { });
 
     private readonly IReadOnlyList<IHostedComponent> _components;
-    private readonly ILogger<AppHost> _logger;
+    private readonly ILogger _logger;
     private readonly List<IHostedComponent> _started = [];
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
 
     public AppHost(IEnumerable<IHostedComponent> components, ILogger<AppHost> logger)
+        : this(components, (ILogger)logger)
+    {
+    }
+
+    protected AppHost(IEnumerable<IHostedComponent> components, ILogger logger)
     {
         _components = components.OrderBy(c => c.StartOrder).ToArray();
         _logger = logger;

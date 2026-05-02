@@ -80,7 +80,9 @@ public static class Program
 
         var serviceProvider = services.BuildServiceProvider();
         var appLifetime = serviceProvider.GetRequiredService<AppLifetime>();
+        var streamMonitoringHost = serviceProvider.GetRequiredService<StreamMonitoringHost>();
         var appLifetimeStarted = false;
+        var streamMonitoringStarted = false;
         try
         {
             serviceProvider.ActivateEventSubscribers(typeof(Program).Assembly);
@@ -88,17 +90,54 @@ public static class Program
             var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
             appLifetimeStarted = StartHttpServerIfNeeded(isUiSmoke, settingsManager, appLifetime);
 
+            if (!isUiSmoke)
+            {
+                streamMonitoringStarted = StartStreamMonitoring(streamMonitoringHost);
+            }
+
             var mainForm = serviceProvider.GetRequiredService<MainForm>();
             Application.Run(mainForm);
         }
         finally
         {
+            if (streamMonitoringStarted)
+            {
+                StopStreamMonitoring(streamMonitoringHost);
+            }
+
             if (appLifetimeStarted)
             {
                 StopAppLifetime(appLifetime);
             }
 
             serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+
+    private static bool StartStreamMonitoring(StreamMonitoringHost host)
+    {
+        try
+        {
+            host.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Log.Information("Стрим-мониторинг запущен независимо от подключения бота");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Ошибка запуска стрим-мониторинга");
+            return false;
+        }
+    }
+
+    private static void StopStreamMonitoring(StreamMonitoringHost host)
+    {
+        try
+        {
+            host.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Ошибка остановки стрим-мониторинга");
         }
     }
 
@@ -253,13 +292,14 @@ public static class Program
         services.AddSingleton<IAppLifetimeComponent, KestrelHttpServerLifetimeAdapter>();
 
         services.AddSingleton<ITwitchEventSubClient, TwitchEventSubClient>();
+        services.AddSingleton<StreamMonitoringHost>();
         services.AddSingleton<EventSubConnectionHost>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<EventSubConnectionHost>());
+        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredService<EventSubConnectionHost>());
         services.AddSingleton<StreamStatusManager>();
         services.AddSingleton<IStreamStatus>(sp => sp.GetRequiredService<StreamStatusManager>());
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<StreamStatusManager>());
+        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredService<StreamStatusManager>());
         services.AddSingleton<StreamStatusWatchdog>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<StreamStatusWatchdog>());
+        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredService<StreamStatusWatchdog>());
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
         services.AddSingleton<UserMessagesManagementService>();
@@ -267,13 +307,14 @@ public static class Program
         services.AddSingleton<TwitchChatMessenger>();
         services.AddSingleton<IChatMessenger>(sp => sp.GetRequiredService<TwitchChatMessenger>());
         services.AddSingleton<BroadcastScheduler>();
+        services.AddSingleton<IBroadcastScheduler>(sp => sp.GetRequiredService<BroadcastScheduler>());
 
         services.AddSingleton<ITwitchChannelsApi, TwitchChannelsApiAdapter>();
         services.AddSingleton<ITwitchSearchApi, TwitchSearchApiAdapter>();
         services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
         services.AddSingleton<IBotUserIdProvider, BotUserIdProvider>();
         services.AddSingleton<ChannelUpdateSubscriber>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChannelUpdateSubscriber>());
+        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredService<ChannelUpdateSubscriber>());
         services.AddSingleton<IChannelUpdateConfirmation>(sp => sp.GetRequiredService<ChannelUpdateConfirmationService>());
         services.AddSingleton<ChannelInformationApplier>();
         services.AddSingleton<IChannelInformationApplier>(sp => sp.GetRequiredService<ChannelInformationApplier>());

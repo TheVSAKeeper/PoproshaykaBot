@@ -19,7 +19,7 @@ public sealed class ChannelUpdateSubscriber(
     IBroadcasterIdProvider broadcasterIdProvider,
     IEventBus eventBus,
     ILogger<ChannelUpdateSubscriber> logger)
-    : IHostedComponent
+    : IStreamHostedComponent
 {
     private const string SubscriptionType = "channel.update";
     private const string SubscriptionVersion = "2";

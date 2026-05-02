@@ -281,7 +281,8 @@ public sealed class TwitchOAuthService(
         IEnumerable<string>? newScopes,
         string login,
         string userId,
-        int expiresInSeconds = 0)
+        int expiresInSeconds = 0,
+        bool publishAuthorizationRefreshed = false)
     {
         var settings = settingsManager.Current;
         var account = GetAccount(settings.Twitch, role);
@@ -302,6 +303,11 @@ public sealed class TwitchOAuthService(
 
         settingsManager.SaveSettings(settings);
         logger.LogInformation("Токены роли {Role} обновлены в настройках (login={Login})", role, login);
+
+        if (publishAuthorizationRefreshed)
+        {
+            _ = eventBus.PublishAsync(new TwitchAuthorizationRefreshed(role));
+        }
     }
 
     public void ClearTokens(TwitchOAuthRole role)
@@ -520,7 +526,8 @@ public sealed class TwitchOAuthService(
             tokenResponse.Scope,
             validation.Login,
             validation.UserId,
-            tokenResponse.ExpiresIn);
+            tokenResponse.ExpiresIn,
+            true);
 
         return tokenResponse.AccessToken;
     }

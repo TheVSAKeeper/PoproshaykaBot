@@ -16,7 +16,7 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Streaming;
 
-public class StreamStatusManager : IStreamStatus, IHostedComponent, IAsyncDisposable
+public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsyncDisposable
 {
     internal static readonly TimeSpan StuckOnlineThreshold = TimeSpan.FromMinutes(2);
 

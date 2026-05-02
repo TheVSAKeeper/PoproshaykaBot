@@ -41,6 +41,12 @@ public sealed class ChatIngestionService(
         _subscribed = true;
 
         logger.LogInformation("ChatIngestionService: подписка на EventSub установлена");
+
+        if (eventSubClient.SessionId is { } sessionId)
+        {
+            return HandleSessionWelcomeAsync(new(sessionId, null), cancellationToken);
+        }
+
         return Task.CompletedTask;
     }
 

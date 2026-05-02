@@ -14,7 +14,7 @@ public sealed class BroadcastScheduler(
     IStreamStatus streamStatusManager,
     IEventBus eventBus,
     ILogger<BroadcastScheduler> logger)
-    : IAsyncDisposable
+    : IBroadcastScheduler, IAsyncDisposable
 {
     private readonly object _stateLock = new();
     private int _sentMessagesCount;

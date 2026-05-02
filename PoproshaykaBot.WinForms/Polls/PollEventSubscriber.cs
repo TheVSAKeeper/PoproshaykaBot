@@ -48,6 +48,12 @@ public sealed class PollEventSubscriber(
         _subscribed = true;
 
         logger.LogInformation("PollEventSubscriber: хуки EventSub установлены");
+
+        if (eventSubClient.SessionId is { } sessionId)
+        {
+            return HandleSessionWelcomeAsync(new(sessionId, null), cancellationToken);
+        }
+
         return Task.CompletedTask;
     }
 

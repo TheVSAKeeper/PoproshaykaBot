@@ -3,7 +3,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 
 namespace PoproshaykaBot.WinForms.Streaming;
 
-public sealed class StreamStatusWatchdog : IHostedComponent, IAsyncDisposable
+public sealed class StreamStatusWatchdog : IStreamHostedComponent, IAsyncDisposable
 {
     internal static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMinutes(1);
 

@@ -3,8 +3,10 @@ using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Streaming;
 using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms;
@@ -60,6 +62,7 @@ public partial class MainForm : Form
 
         _subs.Add(_eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(this, statusEvent => OnBotConnectionProgress(statusEvent.Message)));
         _subs.Add(_eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(this, OnBotLifecyclePhaseChanged));
+        _subs.Add(_eventBus.SubscribeOnUi<StreamMonitoringStatusChanged>(this, OnStreamMonitoringStatusChanged));
         _subs.DisposeOnClose(this);
 
         LoadSettings();
@@ -290,6 +293,21 @@ public partial class MainForm : Form
     private void OnBotConnectionProgress(string message)
     {
         _connectionStatusLabel.Text = message;
+    }
+
+    private void OnStreamMonitoringStatusChanged(StreamMonitoringStatusChanged statusEvent)
+    {
+        var (icon, label) = statusEvent.Status switch
+        {
+            StreamMonitoringStatus.Connecting => ("🟡", "подключение"),
+            StreamMonitoringStatus.Connected => ("🟢", "работает"),
+            StreamMonitoringStatus.Reconnecting => ("🟡", "переподключение"),
+            StreamMonitoringStatus.Failed => ("🔴", "ошибка"),
+            _ => ("⚪", "остановлен"),
+        };
+
+        var detail = string.IsNullOrWhiteSpace(statusEvent.Detail) ? string.Empty : $" ({statusEvent.Detail})";
+        _streamMonitoringStatusLabel.Text = $"{icon} Стрим-мониторинг: {label}{detail}";
     }
 
     private void OnOpenUserStatistics()

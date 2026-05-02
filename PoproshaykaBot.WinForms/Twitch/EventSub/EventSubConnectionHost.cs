@@ -1,19 +1,30 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Infrastructure.Reconnection;
+using PoproshaykaBot.WinForms.Streaming;
 
 namespace PoproshaykaBot.WinForms.Twitch.EventSub;
 
-public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
+public sealed class EventSubConnectionHost :
+    IStreamHostedComponent,
+    IEventHandler<TwitchAuthorizationRefreshed>,
+    IEventSubscriber,
+    IAsyncDisposable
 {
     private const int MaxReconnectAttempts = 5;
+
+    private static readonly IProgress<string> NullProgress = new Progress<string>(_ => { });
 
     private readonly ITwitchEventSubClient _eventSubClient;
     private readonly IEventBus _eventBus;
     private readonly ILogger<EventSubConnectionHost> _logger;
     private readonly ExponentialBackoffPolicy _reconnectionPolicy = new(MaxReconnectAttempts);
+    private readonly IDisposable _authSubscription;
 
     private readonly object _lockObj = new();
     private CancellationTokenSource? _runCts;
@@ -32,6 +43,7 @@ public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
 
         _eventSubClient.OnSessionWelcome += OnSessionWelcomeAsync;
         _eventSubClient.OnDisconnected += OnDisconnectedAsync;
+        _authSubscription = _eventBus.Subscribe(this);
     }
 
     public string Name => "EventSub WebSocket";
@@ -59,6 +71,7 @@ public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
         _reconnectionPolicy.Reset();
 
         PublishLog("Подключение к EventSub WebSocket...");
+        PublishStatus(StreamMonitoringStatus.Connecting);
         _logger.LogDebug("Запуск EventSub WebSocket");
 
         try
@@ -94,6 +107,7 @@ public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
         }
 
         PublishLog("Отключение от EventSub WebSocket...");
+        PublishStatus(StreamMonitoringStatus.Disconnected);
 
         try
         {
@@ -107,6 +121,37 @@ public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
         }
     }
 
+    public async Task HandleAsync(TwitchAuthorizationRefreshed @event, CancellationToken cancellationToken)
+    {
+        if (@event.Role != TwitchOAuthRole.Bot)
+        {
+            return;
+        }
+
+        if (_disposed)
+        {
+            return;
+        }
+
+        bool isRunning;
+        lock (_lockObj)
+        {
+            isRunning = _runCts is { IsCancellationRequested: false };
+        }
+
+        if (isRunning)
+        {
+            _logger.LogInformation("Перезапуск EventSub WebSocket после обновления авторизации бота");
+            await StopAsync(NullProgress, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            _logger.LogInformation("Запуск EventSub WebSocket после получения авторизации бота");
+        }
+
+        await StartAsync(NullProgress, cancellationToken).ConfigureAwait(false);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed)
@@ -116,6 +161,7 @@ public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
 
         _disposed = true;
 
+        _authSubscription.Dispose();
         _eventSubClient.OnSessionWelcome -= OnSessionWelcomeAsync;
         _eventSubClient.OnDisconnected -= OnDisconnectedAsync;
 
@@ -136,6 +182,7 @@ public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
     private Task OnSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
         _reconnectionPolicy.Reset();
+        PublishStatus(StreamMonitoringStatus.Connected);
         return Task.CompletedTask;
     }
 
@@ -153,6 +200,7 @@ public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
         {
             _logger.LogError("Превышено максимальное количество попыток переподключения ({MaxAttempts})", _reconnectionPolicy.MaxAttempts);
             PublishError($"Превышено максимальное количество попыток переподключения ({_reconnectionPolicy.MaxAttempts}). EventSub остановлен.");
+            PublishStatus(StreamMonitoringStatus.Failed);
 
             lock (_lockObj)
             {
@@ -167,6 +215,7 @@ public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
 
         _logger.LogWarning("Попытка переподключения EventSub {Attempt}/{MaxAttempts} через {DelayMs}мс...", attempt, maxAttempts, (int)delay.TotalMilliseconds);
         PublishLog($"Попытка переподключения {attempt}/{maxAttempts} через {(int)delay.TotalSeconds} сек...");
+        PublishStatus(StreamMonitoringStatus.Reconnecting, $"Попытка {attempt}/{maxAttempts}");
 
         CancellationToken token;
         lock (_lockObj)
@@ -223,5 +272,10 @@ public sealed class EventSubConnectionHost : IHostedComponent, IAsyncDisposable
     private void PublishError(string message)
     {
         _ = _eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Error, "EventSub", $"Ошибка EventSub: {message}"));
+    }
+
+    private void PublishStatus(StreamMonitoringStatus status, string? detail = null)
+    {
+        _ = _eventBus.PublishAsync(new StreamMonitoringStatusChanged(status, detail));
     }
 }
