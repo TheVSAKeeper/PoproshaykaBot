@@ -299,6 +299,49 @@ public sealed class StreamStatusManagerTests
     }
 
     [Test]
+    public async Task RefreshLiveSnapshot_PreservesChannelUpdateValuesOverLaggingHelixSnapshot()
+    {
+        var oldSnapshot = new HelixStreamInfo("stream-1",
+            BroadcasterId,
+            "bobito217",
+            "Bobito217",
+            "509658",
+            "Just Chatting",
+            "live",
+            "Старый заголовок",
+            42,
+            DateTime.UtcNow,
+            "ru",
+            "https://example.com/{width}x{height}.jpg",
+            ["Russian"],
+            false);
+
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>()).Returns(oldSnapshot);
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await Task.Delay(50);
+        Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Online));
+
+        await _eventBus.PublishAsync(new ChannelUpdated("Новый заголовок", "ru", "999", "Программирование", []));
+
+        await _manager.RefreshLiveSnapshotAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_manager.CurrentStream, Is.Not.Null);
+            Assert.That(_manager.CurrentStream!.Title, Is.EqualTo("Новый заголовок"),
+                "EventSub channel.update авторитетен по title — Helix GetStreams лагает после смены профиля и не должен перетирать свежие значения");
+
+            Assert.That(_manager.CurrentStream.GameId, Is.EqualTo("999"));
+            Assert.That(_manager.CurrentStream.GameName, Is.EqualTo("Программирование"));
+        }
+    }
+
+    [Test]
     public async Task HandleStreamOnline_PublishesStreamMetadataResolved_AfterMetadataFetch()
     {
         var stream = SampleStream("stream-online-1");

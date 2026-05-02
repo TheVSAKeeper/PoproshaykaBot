@@ -32,6 +32,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private IDisposable? _channelUpdatedSubscription;
     private CancellationTokenSource? _runCts;
     private DateTime? _firstOfflineFromApiUtc;
+    private ChannelUpdated? _lastChannelUpdate;
     private bool _subscribed;
     private bool _disposed;
 
@@ -127,6 +128,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         CurrentStatus = StreamStatus.Unknown;
         CurrentStream = null;
+        _lastChannelUpdate = null;
 
         _logger.LogInformation("StreamStatusManager: подписки на EventSub сняты");
     }
@@ -204,12 +206,12 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 {
                     _logger.LogInformation("Live-snapshot: переход {OldStatus} → Online для BroadcasterId {BroadcasterId}", CurrentStatus, broadcasterId);
                     CurrentStatus = StreamStatus.Online;
-                    CurrentStream = MapToStreamInfo(stream!);
+                    CurrentStream = ApplyChannelUpdateOverlay(MapToStreamInfo(stream!));
                     await PublishStatusTransitionAsync(StreamStatus.Online, true).ConfigureAwait(false);
                 }
                 else
                 {
-                    CurrentStream = MapToStreamInfo(stream!);
+                    CurrentStream = ApplyChannelUpdateOverlay(MapToStreamInfo(stream!));
                 }
 
                 PublishMonitoringLog("Текущий статус: онлайн (по данным API)");
@@ -258,6 +260,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         _logger.LogInformation("EventSub WebSocket подключен. SessionId: {SessionId}", args.SessionId);
         PublishMonitoringLog($"EventSub WebSocket подключен (Session: {args.SessionId})");
+
+        _lastChannelUpdate = null;
 
         await CreateEventSubSubscriptionsAsync(args.SessionId, cancellationToken);
         await InitializeFromApiAsync();
@@ -329,6 +333,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         CurrentStatus = StreamStatus.Unknown;
         CurrentStream = null;
         _firstOfflineFromApiUtc = null;
+        _lastChannelUpdate = null;
         return Task.CompletedTask;
     }
 
@@ -406,7 +411,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 await PublishStatusTransitionAsync(newStatus, isOnline).ConfigureAwait(false);
             }
 
-            CurrentStream = isOnline ? MapToStreamInfo(stream!) : null;
+            CurrentStream = isOnline ? ApplyChannelUpdateOverlay(MapToStreamInfo(stream!)) : null;
 
             PublishMonitoringLog(isOnline
                 ? "Начальный статус: онлайн (по данным API)"
@@ -440,7 +445,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 return false;
             }
 
-            CurrentStream = MapToStreamInfo(stream);
+            CurrentStream = ApplyChannelUpdateOverlay(MapToStreamInfo(stream));
             return true;
         }
         catch (OperationCanceledException)
@@ -457,11 +462,13 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private void OnChannelUpdated(ChannelUpdated @event)
     {
+        _lastChannelUpdate = @event;
+
         var stream = CurrentStream;
 
         if (stream == null)
         {
-            _logger.LogDebug("ChannelUpdated проигнорирован: стрим не в состоянии online");
+            _logger.LogDebug("ChannelUpdated сохранён без обновления CurrentStream: стрим не в состоянии online");
             return;
         }
 
@@ -472,6 +479,22 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         _logger.LogInformation("Метаданные стрима обновлены через channel.update: title={Title}, game={GameName}",
             @event.Title, @event.GameName);
+    }
+
+    private StreamInfo ApplyChannelUpdateOverlay(StreamInfo info)
+    {
+        var update = _lastChannelUpdate;
+
+        if (update is null)
+        {
+            return info;
+        }
+
+        info.Title = update.Title;
+        info.Language = update.Language;
+        info.GameId = update.GameId;
+        info.GameName = update.GameName;
+        return info;
     }
 
     private async Task HandleStreamOnlineAsync(JsonElement payload, CancellationToken cancellationToken)
