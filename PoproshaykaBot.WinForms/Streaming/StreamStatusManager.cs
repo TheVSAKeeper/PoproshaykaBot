@@ -259,8 +259,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _logger.LogInformation("EventSub WebSocket подключен. SessionId: {SessionId}", args.SessionId);
         PublishMonitoringLog($"EventSub WebSocket подключен (Session: {args.SessionId})");
 
-        await InitializeFromApiAsync();
         await CreateEventSubSubscriptionsAsync(args.SessionId, cancellationToken);
+        await InitializeFromApiAsync();
     }
 
     private async Task OnNotificationAsync(EventSubNotificationArgs args, CancellationToken cancellationToken)

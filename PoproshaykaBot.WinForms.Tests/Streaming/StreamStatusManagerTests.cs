@@ -257,6 +257,48 @@ public sealed class StreamStatusManagerTests
     }
 
     [Test]
+    public async Task OnSessionWelcome_CreatesSubscriptionsBeforeFetchingInitialStatus()
+    {
+        var subscriptionsCreated = 0;
+        var streamFetchedBeforeSubscriptions = false;
+
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Interlocked.Increment(ref subscriptionsCreated);
+                return Task.FromResult("sub-id");
+            });
+
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Volatile.Read(ref subscriptionsCreated) < 2)
+                {
+                    streamFetchedBeforeSubscriptions = true;
+                }
+
+                return Task.FromResult<HelixStreamInfo?>(SampleStream());
+            });
+
+        var onlineSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(_ => onlineSignal.TrySetResult());
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await onlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.That(streamFetchedBeforeSubscriptions, Is.False,
+            "подписки stream.* должны создаваться до запроса начального статуса, иначе Twitch успеет закрыть сессию по 10-секундному дедлайну");
+    }
+
+    [Test]
     public async Task HandleStreamOnline_PublishesStreamMetadataResolved_AfterMetadataFetch()
     {
         var stream = SampleStream("stream-online-1");
