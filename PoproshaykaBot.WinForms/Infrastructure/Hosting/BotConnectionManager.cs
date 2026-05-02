@@ -3,7 +3,6 @@ using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Settings;
 
 namespace PoproshaykaBot.WinForms.Infrastructure.Hosting;
@@ -180,9 +179,7 @@ public sealed class BotConnectionManager : IDisposable
     private void ReportProgress(string message)
     {
         _ = _eventBus.PublishAsync(new BotConnectionStatusUpdated(message));
-        _ = _eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Information,
-            nameof(BotConnectionManager),
-            message));
+        _logger.LogInformation("{Message}", message);
     }
 
     private void PublishPhase(BotLifecyclePhase phase, Exception? exception = null)

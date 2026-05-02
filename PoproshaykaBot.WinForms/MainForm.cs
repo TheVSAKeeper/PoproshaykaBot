@@ -1,8 +1,8 @@
-﻿using PoproshaykaBot.WinForms.Chat;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Settings;
@@ -18,6 +18,7 @@ public partial class MainForm : Form
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly SettingsManager _settingsManager;
     private readonly BotConnectionManager _connectionManager;
+    private readonly ILogger<MainForm> _logger;
     private readonly List<IDisposable> _subs = [];
 
     private BotLifecyclePhase _currentPhase = BotLifecyclePhase.Idle;
@@ -32,13 +33,15 @@ public partial class MainForm : Form
         IEventBus eventBus,
         ChatHistoryManager chatHistoryManager,
         BotConnectionManager connectionManager,
-        SettingsManager settingsManager)
+        SettingsManager settingsManager,
+        ILogger<MainForm> logger)
     {
         _forms = forms;
         _eventBus = eventBus;
         _chatHistoryManager = chatHistoryManager;
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
+        _logger = logger;
 
         InitializeComponent();
 
@@ -66,7 +69,7 @@ public partial class MainForm : Form
         _subs.DisposeOnClose(this);
 
         LoadSettings();
-        PublishLogMessage("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
+        _logger.LogInformation("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
     }
@@ -116,7 +119,7 @@ public partial class MainForm : Form
 
             case BotLifecyclePhase.Connecting:
                 _connectionManager.CancelConnection();
-                PublishLogMessage("Отмена подключения...");
+                _logger.LogInformation("Отмена подключения...");
                 break;
 
             case BotLifecyclePhase.Connected:
@@ -145,7 +148,7 @@ public partial class MainForm : Form
     private void OnSettingsApplied(object? sender, EventArgs e)
     {
         LoadSettings(reloadDashboard: true);
-        PublishLogMessage("Настройки обновлены.");
+        _logger.LogInformation("Настройки обновлены.");
     }
 
     private void OnSettingsFormClosed(object? sender, FormClosedEventArgs e)
@@ -212,7 +215,7 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            PublishLogMessage($"Ошибка завершения работы: {ex.Message}", BotLogLevel.Error);
+            _logger.LogError(ex, "Ошибка завершения работы");
         }
         finally
         {
@@ -228,19 +231,19 @@ public partial class MainForm : Form
         switch (phaseEvent.Phase)
         {
             case BotLifecyclePhase.Connecting:
-                PublishLogMessage("Подключение бота...");
+                _logger.LogInformation("Подключение бота...");
                 break;
 
             case BotLifecyclePhase.Connected:
-                PublishLogMessage("Бот успешно подключен!");
+                _logger.LogInformation("Бот успешно подключен!");
                 break;
 
             case BotLifecyclePhase.Cancelled:
-                PublishLogMessage("Подключение отменено пользователем.");
+                _logger.LogInformation("Подключение отменено пользователем.");
                 break;
 
             case BotLifecyclePhase.Failed:
-                PublishLogMessage($"Ошибка подключения бота: {phaseEvent.Exception?.Message}", BotLogLevel.Error);
+                _logger.LogError(phaseEvent.Exception, "Ошибка подключения бота");
 
                 MessageBox.Show($"Ошибка подключения бота: {phaseEvent.Exception?.Message}", "Ошибка",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -248,11 +251,11 @@ public partial class MainForm : Form
                 break;
 
             case BotLifecyclePhase.Disconnecting:
-                PublishLogMessage("Отключение бота...");
+                _logger.LogInformation("Отключение бота...");
                 break;
 
             case BotLifecyclePhase.Disconnected:
-                PublishLogMessage("Бот отключен.");
+                _logger.LogInformation("Бот отключен.");
                 break;
         }
     }
@@ -337,7 +340,7 @@ public partial class MainForm : Form
         }
 
         _chatHistoryManager.ClearHistory();
-        PublishLogMessage("История сообщений чата очищена.");
+        _logger.LogInformation("История сообщений чата очищена.");
     }
 
     private void StartBotConnection()
@@ -348,13 +351,8 @@ public partial class MainForm : Form
         }
         catch (InvalidOperationException exception)
         {
-            PublishLogMessage($"Ошибка запуска подключения: {exception.Message}", BotLogLevel.Error);
+            _logger.LogError(exception, "Ошибка запуска подключения");
         }
-    }
-
-    private void PublishLogMessage(string message, BotLogLevel level = BotLogLevel.Information, string source = "Ui")
-    {
-        _ = _eventBus.PublishAsync(new BotLogEntry(level, source, message));
     }
 
     private void ShowConnectionProgress(bool show)
@@ -386,7 +384,7 @@ public partial class MainForm : Form
         }
         catch (Exception exception)
         {
-            PublishLogMessage($"Ошибка при отключении бота: {exception.Message}", BotLogLevel.Error);
+            _logger.LogError(exception, "Ошибка при отключении бота");
         }
     }
 
@@ -443,7 +441,7 @@ public partial class MainForm : Form
         }
         catch (Exception exception)
         {
-            PublishLogMessage($"Не удалось сохранить размер окна: {exception.Message}", BotLogLevel.Error);
+            _logger.LogError(exception, "Не удалось сохранить размер окна");
         }
     }
 
@@ -458,11 +456,11 @@ public partial class MainForm : Form
                 _dashboardControl.ReloadDashboard();
             }
 
-            PublishLogMessage("Настройки Twitch загружены.");
+            _logger.LogInformation("Настройки Twitch загружены.");
         }
         catch (Exception exception)
         {
-            PublishLogMessage($"Ошибка загрузки настроек: {exception.Message}", BotLogLevel.Error);
+            _logger.LogError(exception, "Ошибка загрузки настроек");
         }
     }
 }

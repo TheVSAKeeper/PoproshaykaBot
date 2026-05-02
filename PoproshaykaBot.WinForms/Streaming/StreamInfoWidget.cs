@@ -1,6 +1,6 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Tiles;
 using System.Diagnostics;
@@ -26,6 +26,9 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
 
     [Inject]
     public IEventBus Bus { get; internal init; } = null!;
+
+    [Inject]
+    public ILogger<StreamInfoWidget> Logger { get; internal init; } = null!;
 
     public IReadOnlyList<ToolStripItem> CreateHeaderItems()
     {
@@ -132,9 +135,7 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
         }
         catch (Exception exception)
         {
-            _ = Bus.PublishAsync(new BotLogEntry(BotLogLevel.Error,
-                "Stream",
-                $"Ошибка обновления информации о стриме: {exception.Message}"));
+            Logger.LogError(exception, "Ошибка обновления информации о стриме");
         }
     }
 
@@ -155,9 +156,7 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
         }
         catch (Exception exception)
         {
-            _ = Bus.PublishAsync(new BotLogEntry(BotLogLevel.Error,
-                "Stream",
-                $"Ошибка обновления информации о стриме: {exception.Message}"));
+            Logger.LogError(exception, "Ошибка обновления информации о стриме");
         }
         finally
         {

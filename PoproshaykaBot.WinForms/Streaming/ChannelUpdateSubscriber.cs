@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Twitch;
@@ -69,9 +68,8 @@ public sealed class ChannelUpdateSubscriber(
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            logger.LogError("ChannelUpdateSubscriber: не удалось получить broadcaster id");
+            logger.LogError("ChannelUpdateSubscriber: не удалось определить broadcaster id для подписки channel.update");
             IsHealthy = false;
-            PublishHealthError("не удалось определить broadcaster id для подписки channel.update");
             return;
         }
 
@@ -91,9 +89,8 @@ public sealed class ChannelUpdateSubscriber(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "ChannelUpdateSubscriber: ошибка подписки на {Type}", SubscriptionType);
+            logger.LogError(ex, "ChannelUpdateSubscriber: не удалось подписаться на {Type} — смена title/game работать не будет", SubscriptionType);
             IsHealthy = false;
-            PublishHealthError($"не удалось подписаться на {SubscriptionType}: смена title/game работать не будет");
         }
     }
 
@@ -139,7 +136,7 @@ public sealed class ChannelUpdateSubscriber(
 
         if (string.IsNullOrEmpty(sessionId))
         {
-            PublishHealthError($"подписка {SubscriptionType} отозвана, нет активной сессии для восстановления");
+            logger.LogError("ChannelUpdateSubscriber: подписка {Type} отозвана, нет активной сессии для восстановления", SubscriptionType);
             return;
         }
 
@@ -147,7 +144,7 @@ public sealed class ChannelUpdateSubscriber(
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            PublishHealthError($"подписка {SubscriptionType} отозвана, broadcaster id недоступен");
+            logger.LogError("ChannelUpdateSubscriber: подписка {Type} отозвана, broadcaster id недоступен", SubscriptionType);
             return;
         }
 
@@ -168,7 +165,6 @@ public sealed class ChannelUpdateSubscriber(
         catch (Exception ex)
         {
             logger.LogError(ex, "ChannelUpdateSubscriber: не удалось восстановить подписку {Type} после revocation", SubscriptionType);
-            PublishHealthError($"не удалось восстановить подписку {SubscriptionType} после revocation");
         }
     }
 
@@ -197,10 +193,5 @@ public sealed class ChannelUpdateSubscriber(
         }
 
         return result;
-    }
-
-    private void PublishHealthError(string message)
-    {
-        _ = eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Error, "ChannelUpdateSubscriber", $"EventSub channel.update: {message}"));
     }
 }

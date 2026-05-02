@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Twitch.EventSub;
@@ -121,8 +120,7 @@ public sealed class ChatIngestionService(
                 }
             }
 
-            logger.LogError(lastError, "ChatIngestionService: все {Max} попытки создать подписку channel.chat.message провалились", delays.Length);
-            await eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Error, "ChatIngestion", "Не удалось подписаться на чат Twitch"), ct);
+            logger.LogError(lastError, "ChatIngestionService: не удалось подписаться на чат Twitch — все {Max} попытки создать подписку channel.chat.message провалились", delays.Length);
         }
         catch (Exception ex)
         {

@@ -7,8 +7,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Chat;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Settings;
 using System.Text.Encodings.Web;
 
@@ -19,12 +17,10 @@ public sealed class KestrelHttpServer(
     SseService sseService,
     SettingsManager settingsManager,
     TwitchOAuthService twitchOAuthService,
-    IEventBus eventBus,
+    ILogger<KestrelHttpServer> logger,
     ILoggerFactory loggerFactory)
     : IAsyncDisposable
 {
-    private const string LogSource = "Http";
-
     private const string OAuthSuccessHtml =
         """
         <!DOCTYPE html>
@@ -114,8 +110,8 @@ public sealed class KestrelHttpServer(
             _app.Use(async (ctx, next) =>
             {
                 var maskedQuery = QueryStringMasker.Mask(ctx.Request.QueryString.Value ?? string.Empty);
-                PublishLog(BotLogLevel.Information,
-                    $"HTTP запрос: {ctx.Request.Method} {ctx.Request.Path}{maskedQuery}");
+                logger.LogInformation("HTTP запрос: {Method} {Path}{Query}",
+                    ctx.Request.Method, ctx.Request.Path, maskedQuery);
 
                 await next(ctx);
             });
@@ -128,11 +124,11 @@ public sealed class KestrelHttpServer(
 
             IsRunning = true;
 
-            PublishLog(BotLogLevel.Information, $"HTTP сервер запущен на порту {port}");
+            logger.LogInformation("HTTP сервер запущен на порту {Port}", port);
         }
         catch (Exception ex)
         {
-            PublishLog(BotLogLevel.Error, $"Ошибка запуска HTTP сервера: {ex.Message}");
+            logger.LogError(ex, "Ошибка запуска HTTP сервера");
             throw;
         }
     }
@@ -156,22 +152,17 @@ public sealed class KestrelHttpServer(
                 _app = null;
             }
 
-            PublishLog(BotLogLevel.Information, "HTTP сервер остановлен");
+            logger.LogInformation("HTTP сервер остановлен");
         }
         catch (Exception ex)
         {
-            PublishLog(BotLogLevel.Error, $"Ошибка остановки HTTP сервера: {ex.Message}");
+            logger.LogError(ex, "Ошибка остановки HTTP сервера");
         }
     }
 
     public async ValueTask DisposeAsync()
     {
         await StopAsync();
-    }
-
-    private void PublishLog(BotLogLevel level, string message)
-    {
-        _ = eventBus.PublishAsync(new BotLogEntry(level, LogSource, message));
     }
 
     private void MapEndpoints(WebApplication app)

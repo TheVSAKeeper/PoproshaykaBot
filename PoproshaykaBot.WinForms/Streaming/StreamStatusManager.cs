@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Settings;
@@ -214,7 +213,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                     CurrentStream = ApplyChannelUpdateOverlay(MapToStreamInfo(stream!));
                 }
 
-                PublishMonitoringLog("Текущий статус: онлайн (по данным API)");
+                _logger.LogInformation("Текущий статус: онлайн (по данным API)");
                 return;
             }
 
@@ -227,8 +226,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
                 if (elapsed >= StuckOnlineThreshold)
                 {
-                    _logger.LogWarning("Live-snapshot: принудительный перевод в Offline после {Elapsed} расхождения с API для BroadcasterId {BroadcasterId}", elapsed, broadcasterId);
-                    PublishMonitoringLog($"Принудительный перевод в Offline после {(int)elapsed.TotalSeconds} c расхождения с API");
+                    _logger.LogWarning("Принудительный перевод в Offline после {ElapsedSeconds} с расхождения с API для BroadcasterId {BroadcasterId}",
+                        (int)elapsed.TotalSeconds, broadcasterId);
 
                     CurrentStatus = StreamStatus.Offline;
                     CurrentStream = null;
@@ -237,29 +236,26 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                     return;
                 }
 
-                _logger.LogWarning("Live-snapshot: API вернул Offline при локальном Online (расхождение {Elapsed}/{Threshold})", elapsed, StuckOnlineThreshold);
-                PublishMonitoringLog("Текущий статус: API сообщает офлайн, ждём подтверждения");
+                _logger.LogWarning("API сообщает офлайн при локальном Online, ждём подтверждения (расхождение {Elapsed}/{Threshold})", elapsed, StuckOnlineThreshold);
                 return;
             }
 
             _firstOfflineFromApiUtc = null;
             CurrentStream = null;
-            PublishMonitoringLog("Текущий статус: офлайн (по данным API)");
+            _logger.LogInformation("Текущий статус: офлайн (по данным API)");
         }
         catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
         {
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Не удалось обновить live-snapshot стрима");
-            PublishMonitoringError($"Ошибка получения live-snapshot: {SafeMessage(ex)}");
+            _logger.LogError(ex, "Не удалось обновить live-snapshot стрима: {Reason}", SafeMessage(ex));
         }
     }
 
     private async Task OnSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
         _logger.LogInformation("EventSub WebSocket подключен. SessionId: {SessionId}", args.SessionId);
-        PublishMonitoringLog($"EventSub WebSocket подключен (Session: {args.SessionId})");
 
         _lastChannelUpdate = null;
 
@@ -284,14 +280,12 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private Task OnSessionReconnectAsync(EventSubReconnectArgs args, CancellationToken cancellationToken)
     {
         _logger.LogInformation("EventSub session_reconnect → {Url} (старый session: {OldSession})", args.ReconnectUrl, args.OldSessionId);
-        PublishMonitoringLog($"EventSub переподключение (Session: {args.OldSessionId} → новый)...");
         return Task.CompletedTask;
     }
 
     private async Task OnRevocationAsync(EventSubRevocationArgs args, CancellationToken cancellationToken)
     {
         _logger.LogWarning("EventSub revocation: id={Id}, type={Type}, status={Status}", args.SubscriptionId, args.SubscriptionType, args.Status);
-        PublishMonitoringLog($"EventSub подписка отозвана: {args.SubscriptionType} (status: {args.Status})");
 
         if (string.IsNullOrEmpty(_eventSubClient.SessionId))
         {
@@ -319,12 +313,10 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 cancellationToken);
 
             _logger.LogInformation("Подписка {Type} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, newId);
-            PublishMonitoringLog($"Подписка {args.SubscriptionType} восстановлена");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Не удалось восстановить подписку {Type} после revocation", args.SubscriptionType);
-            PublishMonitoringError($"Ошибка восстановления подписки {args.SubscriptionType}: {SafeMessage(ex)}");
+            _logger.LogError(ex, "Не удалось восстановить подписку {Type} после revocation: {Reason}", args.SubscriptionType, SafeMessage(ex));
         }
     }
 
@@ -413,7 +405,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
             CurrentStream = isOnline ? ApplyChannelUpdateOverlay(MapToStreamInfo(stream!)) : null;
 
-            PublishMonitoringLog(isOnline
+            _logger.LogInformation(isOnline
                 ? "Начальный статус: онлайн (по данным API)"
                 : "Начальный статус: офлайн (по данным API)");
         }
@@ -422,8 +414,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Не удалось получить начальный статус стрима");
-            PublishMonitoringError($"Ошибка получения начального статуса: {SafeMessage(ex)}");
+            _logger.LogError(ex, "Не удалось получить начальный статус стрима: {Reason}", SafeMessage(ex));
         }
     }
 
@@ -454,8 +445,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка получения метаданных стрима");
-            PublishMonitoringError($"Ошибка получения метаданных стрима: {SafeMessage(ex)}");
+            _logger.LogError(ex, "Ошибка получения метаданных стрима: {Reason}", SafeMessage(ex));
             return false;
         }
     }
@@ -502,8 +492,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var data = payload.Deserialize<EventSubStreamOnlinePayloadDto>(options);
 
-        _logger.LogInformation("Событие стрима ONLINE получено через EventSub, Тип: {EventType}", data?.Event?.Type);
-        PublishMonitoringLog($"Стрим запущен (EventSub): {data?.Event?.Type ?? "live"}");
+        _logger.LogInformation("Стрим запущен (EventSub), тип: {EventType}", data?.Event?.Type ?? "live");
 
         if (CurrentStatus != StreamStatus.Online)
         {
@@ -530,7 +519,6 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                     if (metadataLoaded && CurrentStream != null)
                     {
                         _logger.LogInformation("Метаданные стрима успешно получены из API на попытке {Attempt}", i + 1);
-                        PublishMonitoringLog("Метаданные стрима успешно получены из API");
                         await PublishMetadataResolvedAsync().ConfigureAwait(false);
                         break;
                     }
@@ -542,8 +530,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                     }
 
                     var delaySeconds = 5 * (i + 1);
-                    _logger.LogWarning("Метаданные еще не доступны в API. Повтор через {DelaySeconds}с (Попытка {Attempt}/6)...", delaySeconds, i + 1);
-                    PublishMonitoringLog($"Метаданные еще не доступны в API. Повтор через {delaySeconds} сек (попытка {i + 1}/6)...");
+                    _logger.LogWarning("Метаданные еще не доступны в API. Повтор через {DelaySeconds} сек (попытка {Attempt}/6)...", delaySeconds, i + 1);
 
                     await Task.Delay(TimeSpan.FromSeconds(delaySeconds), loopToken);
                 }
@@ -565,11 +552,10 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private async Task HandleStreamOfflineAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Событие стрима OFFLINE получено через EventSub");
+        _logger.LogInformation("Стрим завершен (EventSub)");
 
         var oldStatus = CurrentStatus;
         CurrentStatus = StreamStatus.Offline;
-        PublishMonitoringLog("Стрим завершен (EventSub)");
         CurrentStream = null;
 
         if (oldStatus != CurrentStatus)
@@ -615,13 +601,11 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            _logger.LogWarning("Невозможно создать подписки EventSub: BroadcasterId недоступен");
-            PublishMonitoringError("Не удалось определить BroadcasterId для подписок EventSub");
+            _logger.LogError("Невозможно создать подписки EventSub: BroadcasterId недоступен");
             return;
         }
 
-        _logger.LogDebug("Создание подписок EventSub для BroadcasterId: {BroadcasterId}", broadcasterId);
-        PublishMonitoringLog("Создание подписок EventSub...");
+        _logger.LogInformation("Создание подписок EventSub для BroadcasterId: {BroadcasterId}", broadcasterId);
 
         var subscriptionsCreated = 0;
         var condition = new Dictionary<string, string>
@@ -631,8 +615,6 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         try
         {
-            PublishMonitoringLog("Создание подписки stream.online...");
-
             var subscriptionId = await _helix.CreateEventSubSubscriptionAsync("stream.online",
                 "1",
                 condition,
@@ -641,19 +623,15 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
             subscriptionsCreated++;
 
-            _logger.LogInformation("Успешно создана подписка 'stream.online'. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}", subscriptionId, sessionId);
-            PublishMonitoringLog($"Подписка на stream.online создана (ID: {subscriptionId})");
+            _logger.LogInformation("Подписка 'stream.online' создана. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}", subscriptionId, sessionId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка при создании подписки 'stream.online' для BroadcasterId: {BroadcasterId}", broadcasterId);
-            PublishMonitoringError($"Ошибка создания подписки stream.online: {SafeMessage(ex)}");
+            _logger.LogError(ex, "Ошибка создания подписки stream.online для BroadcasterId {BroadcasterId}: {Reason}", broadcasterId, SafeMessage(ex));
         }
 
         try
         {
-            PublishMonitoringLog("Создание подписки stream.offline...");
-
             var subscriptionId = await _helix.CreateEventSubSubscriptionAsync("stream.offline",
                 "1",
                 condition,
@@ -662,35 +640,22 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
             subscriptionsCreated++;
 
-            _logger.LogInformation("Успешно создана подписка 'stream.offline'. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}", subscriptionId, sessionId);
-            PublishMonitoringLog($"Подписка на stream.offline создана (ID: {subscriptionId})");
+            _logger.LogInformation("Подписка 'stream.offline' создана. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}", subscriptionId, sessionId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка при создании подписки 'stream.offline' для BroadcasterId: {BroadcasterId}", broadcasterId);
-            PublishMonitoringError($"Ошибка создания подписки stream.offline: {SafeMessage(ex)}");
+            _logger.LogError(ex, "Ошибка создания подписки stream.offline для BroadcasterId {BroadcasterId}: {Reason}", broadcasterId, SafeMessage(ex));
         }
 
         if (subscriptionsCreated == 2)
         {
             _logger.LogInformation("Все необходимые подписки EventSub успешно созданы для BroadcasterId: {BroadcasterId}", broadcasterId);
-            PublishMonitoringLog("Все подписки EventSub созданы успешно");
         }
         else
         {
-            _logger.LogWarning("Успешно создано только {CreatedCount}/2 подписок EventSub для BroadcasterId: {BroadcasterId}", subscriptionsCreated, broadcasterId);
-            PublishMonitoringError($"Создано только {subscriptionsCreated}/2 подписок EventSub stream.* — статус стрима будет неполным");
+            _logger.LogWarning("Создано только {CreatedCount}/2 подписок EventSub stream.* для BroadcasterId {BroadcasterId} — статус стрима будет неполным",
+                subscriptionsCreated, broadcasterId);
         }
-    }
-
-    private void PublishMonitoringLog(string message)
-    {
-        _ = _eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Debug, "StreamMonitoring", $"[Monitoring] {message}"));
-    }
-
-    private void PublishMonitoringError(string message)
-    {
-        _ = _eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Error, "StreamMonitoring", $"Ошибка EventSub: {message}"));
     }
 
     internal Task? MetadataRetryTask { get; private set; }

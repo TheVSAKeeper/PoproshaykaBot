@@ -2,7 +2,6 @@
 using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Infrastructure.Reconnection;
@@ -70,20 +69,17 @@ public sealed class EventSubConnectionHost :
 
         _reconnectionPolicy.Reset();
 
-        PublishLog("Подключение к EventSub WebSocket...");
         PublishStatus(StreamMonitoringStatus.Connecting);
-        _logger.LogDebug("Запуск EventSub WebSocket");
+        _logger.LogInformation("Подключение к EventSub WebSocket...");
 
         try
         {
             await _eventSubClient.StartAsync(cts.Token);
-            _logger.LogInformation("Соединение EventSub инициировано. Ожидание подтверждения...");
-            PublishLog("Ожидание подтверждения подключения...");
+            _logger.LogInformation("Соединение EventSub инициировано. Ожидание подтверждения подключения...");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Исключение при запуске EventSub WebSocket");
-            PublishError($"Ошибка запуска EventSub: {ex.Message}");
+            _logger.LogError(ex, "Ошибка запуска EventSub WebSocket");
             throw;
         }
     }
@@ -106,7 +102,7 @@ public sealed class EventSubConnectionHost :
             cts.Dispose();
         }
 
-        PublishLog("Отключение от EventSub WebSocket...");
+        _logger.LogInformation("Отключение от EventSub WebSocket...");
         PublishStatus(StreamMonitoringStatus.Disconnected);
 
         try
@@ -116,8 +112,7 @@ public sealed class EventSubConnectionHost :
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка при остановке EventSub WebSocket");
-            PublishError($"Ошибка остановки EventSub: {ex.Message}");
+            _logger.LogError(ex, "Ошибка остановки EventSub WebSocket");
         }
     }
 
@@ -198,8 +193,9 @@ public sealed class EventSubConnectionHost :
 
         if (!_reconnectionPolicy.TryNextAttempt(out var delay))
         {
-            _logger.LogError("Превышено максимальное количество попыток переподключения ({MaxAttempts})", _reconnectionPolicy.MaxAttempts);
-            PublishError($"Превышено максимальное количество попыток переподключения ({_reconnectionPolicy.MaxAttempts}). EventSub остановлен.");
+            _logger.LogError("Превышено максимальное количество попыток переподключения ({MaxAttempts}). EventSub остановлен.",
+                _reconnectionPolicy.MaxAttempts);
+
             PublishStatus(StreamMonitoringStatus.Failed);
 
             lock (_lockObj)
@@ -213,8 +209,9 @@ public sealed class EventSubConnectionHost :
         var attempt = _reconnectionPolicy.CurrentAttempt;
         var maxAttempts = _reconnectionPolicy.MaxAttempts;
 
-        _logger.LogWarning("Попытка переподключения EventSub {Attempt}/{MaxAttempts} через {DelayMs}мс...", attempt, maxAttempts, (int)delay.TotalMilliseconds);
-        PublishLog($"Попытка переподключения {attempt}/{maxAttempts} через {(int)delay.TotalSeconds} сек...");
+        _logger.LogWarning("Попытка переподключения EventSub {Attempt}/{MaxAttempts} через {DelaySeconds} сек...",
+            attempt, maxAttempts, (int)delay.TotalSeconds);
+
         PublishStatus(StreamMonitoringStatus.Reconnecting, $"Попытка {attempt}/{maxAttempts}");
 
         CancellationToken token;
@@ -243,12 +240,10 @@ public sealed class EventSubConnectionHost :
         {
             await _eventSubClient.StartAsync(token);
             _logger.LogInformation("Переподключение EventSub WebSocket инициировано (попытка {Attempt})", attempt);
-            PublishLog("Переподключение инициировано...");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Исключение при попытке переподключения {Attempt}/{MaxAttempts}", attempt, maxAttempts);
-            PublishError($"Ошибка переподключения (попытка {attempt}/{maxAttempts}): {ex.Message}");
+            _logger.LogError(ex, "Ошибка переподключения EventSub (попытка {Attempt}/{MaxAttempts})", attempt, maxAttempts);
         }
     }
 
@@ -262,16 +257,6 @@ public sealed class EventSubConnectionHost :
         _reconnectCts.Cancel();
         _reconnectCts.Dispose();
         _reconnectCts = null;
-    }
-
-    private void PublishLog(string message)
-    {
-        _ = _eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Debug, "EventSub", $"[EventSub] {message}"));
-    }
-
-    private void PublishError(string message)
-    {
-        _ = _eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Error, "EventSub", $"Ошибка EventSub: {message}"));
     }
 
     private void PublishStatus(StreamMonitoringStatus status, string? detail = null)

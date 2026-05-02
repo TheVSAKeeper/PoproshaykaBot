@@ -1,14 +1,12 @@
 ﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Logging;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 
 public sealed partial class LogsTileControl : UserControl
 {
-    private const int MaxLogLines = 500;
+    private const int MaxLogLines = UiLogSink.BufferCapacity;
 
-    private readonly List<IDisposable> _subs = [];
     private bool _initialized;
 
     public LogsTileControl()
@@ -17,7 +15,7 @@ public sealed partial class LogsTileControl : UserControl
     }
 
     [Inject]
-    public IEventBus Bus { get; internal init; } = null!;
+    public UiLogSink Sink { get; internal init; } = null!;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -35,22 +33,32 @@ public sealed partial class LogsTileControl : UserControl
 
         _initialized = true;
 
-        _subs.Add(Bus.SubscribeOnUi<BotLogEntry>(this, OnBotLogEntry));
-        _subs.DisposeOnClose(this);
-    }
-
-    private void OnBotLogEntry(BotLogEntry entry)
-    {
-        var message = entry.Source switch
+        foreach (var entry in Sink.Snapshot())
         {
-            "Http" => $"HTTP: {entry.Message}",
-            _ => entry.Message,
-        };
+            AppendEntry(entry);
+        }
 
-        AddLogMessage(message);
+        Sink.Emitted += OnEmitted;
+        Disposed += (_, _) => Sink.Emitted -= OnEmitted;
     }
 
-    private void AddLogMessage(string message)
+    private void OnEmitted(UiLogEntry entry)
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => AppendEntry(entry));
+            return;
+        }
+
+        AppendEntry(entry);
+    }
+
+    private void AppendEntry(UiLogEntry entry)
     {
         if (_logTextBox.Lines.Length > MaxLogLines)
         {
@@ -62,7 +70,7 @@ public sealed partial class LogsTileControl : UserControl
             }
         }
 
-        _logTextBox.AppendText($"{DateTime.Now:HH:mm:ss} - {message}{Environment.NewLine}");
+        _logTextBox.AppendText(entry.Text + Environment.NewLine);
         _logTextBox.SelectionStart = _logTextBox.Text.Length;
         _logTextBox.ScrollToCaret();
     }

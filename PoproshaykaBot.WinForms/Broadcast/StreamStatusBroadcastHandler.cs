@@ -2,7 +2,6 @@
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Streaming;
@@ -65,7 +64,7 @@ public sealed class StreamStatusBroadcastHandler :
             return Task.CompletedTask;
         }
 
-        return StartBroadcastAsync(channel, cancellationToken);
+        return StartBroadcast(channel);
     }
 
     public Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
@@ -78,10 +77,10 @@ public sealed class StreamStatusBroadcastHandler :
             return Task.CompletedTask;
         }
 
-        return StartBroadcastAsync(@event.Channel, cancellationToken);
+        return StartBroadcast(@event.Channel);
     }
 
-    public async Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
+    public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
     {
         var settings = _settingsManager.Current.Twitch;
         var channel = @event.Channel;
@@ -91,18 +90,14 @@ public sealed class StreamStatusBroadcastHandler :
         if (!_botConnected)
         {
             _logger.LogDebug("Бот не подключён — обработка офлайн пропущена");
-            return;
+            return Task.CompletedTask;
         }
 
         if (settings.AutoBroadcast.AutoBroadcastEnabled && _scheduler.IsActive)
         {
             _logger.LogInformation("Остановка планировщика автоматической рассылки для канала {Channel}", channel);
             _scheduler.Stop();
-
-            await _eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Information, nameof(StreamStatusBroadcastHandler),
-                        "⚫ Стрим офлайн. Автоматически останавливаю рассылку."),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            _logger.LogInformation("⚫ Стрим офлайн. Автоматически останавливаю рассылку.");
         }
 
         if (settings.AutoBroadcast.StreamStatusNotificationsEnabled
@@ -111,6 +106,8 @@ public sealed class StreamStatusBroadcastHandler :
             _logger.LogDebug("Отправка уведомления об окончании стрима в канал {Channel}", channel);
             _messenger.Send(settings.AutoBroadcast.StreamStopMessage);
         }
+
+        return Task.CompletedTask;
     }
 
     public void Dispose()
@@ -120,7 +117,7 @@ public sealed class StreamStatusBroadcastHandler :
         _phaseSubscription.Dispose();
     }
 
-    private async Task StartBroadcastAsync(string channel, CancellationToken cancellationToken)
+    private Task StartBroadcast(string channel)
     {
         var settings = _settingsManager.Current.Twitch;
 
@@ -128,11 +125,7 @@ public sealed class StreamStatusBroadcastHandler :
         {
             _logger.LogInformation("Запуск планировщика автоматической рассылки для канала {Channel}", channel);
             _scheduler.Start(channel);
-
-            await _eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Information, nameof(StreamStatusBroadcastHandler),
-                        "🔴 Стрим онлайн. Автоматически запускаю рассылку."),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            _logger.LogInformation("🔴 Стрим онлайн. Автоматически запускаю рассылку.");
         }
 
         if (settings.AutoBroadcast.StreamStatusNotificationsEnabled
@@ -141,5 +134,7 @@ public sealed class StreamStatusBroadcastHandler :
             _logger.LogDebug("Отправка уведомления о начале стрима в канал {Channel}", channel);
             _messenger.Send(settings.AutoBroadcast.StreamStartMessage);
         }
+
+        return Task.CompletedTask;
     }
 }

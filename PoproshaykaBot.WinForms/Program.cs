@@ -10,6 +10,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting.Components;
+using PoproshaykaBot.WinForms.Infrastructure.Logging;
 using PoproshaykaBot.WinForms.Polls;
 using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
@@ -36,11 +37,14 @@ public static class Program
 
         const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
+        var uiLogSink = new UiLogSink();
+
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .WriteTo.Console(outputTemplate: OutputTemplate)
             .WriteTo.Debug(outputTemplate: OutputTemplate)
             .WriteTo.File(AppPaths.Combine("logs", "bot_log_.txt"), rollingInterval: RollingInterval.Day, outputTemplate: OutputTemplate)
+            .WriteTo.Sink(uiLogSink)
             .CreateLogger();
 
         try
@@ -60,7 +64,7 @@ public static class Program
                 memoryCheckTimer.Start();
             }
 
-            RunApp(isUiSmoke);
+            RunApp(isUiSmoke, uiLogSink);
         }
         catch (Exception ex)
         {
@@ -73,10 +77,10 @@ public static class Program
         }
     }
 
-    private static void RunApp(bool isUiSmoke)
+    private static void RunApp(bool isUiSmoke, UiLogSink uiLogSink)
     {
         var services = new ServiceCollection();
-        ConfigureServices(services);
+        ConfigureServices(services, uiLogSink);
 
         var serviceProvider = services.BuildServiceProvider();
         var appLifetime = serviceProvider.GetRequiredService<AppLifetime>();
@@ -231,13 +235,15 @@ public static class Program
         return memoryCheckTimer;
     }
 
-    private static void ConfigureServices(IServiceCollection services)
+    private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)
     {
         services.AddLogging(builder =>
         {
             builder.ClearProviders();
             builder.AddSerilog(dispose: true);
         });
+
+        services.AddSingleton(uiLogSink);
 
         services.AddHttpClient();
 

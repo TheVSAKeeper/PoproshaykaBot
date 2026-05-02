@@ -1,8 +1,8 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Users;
 
@@ -21,6 +21,7 @@ public sealed class TwitchChatHandler :
     private readonly ChatCommandProcessor _commandProcessor;
     private readonly TwitchChatMessenger _messenger;
     private readonly IEventBus _eventBus;
+    private readonly ILogger<TwitchChatHandler> _logger;
     private readonly List<IDisposable> _subscriptions;
 
     public TwitchChatHandler(
@@ -29,7 +30,8 @@ public sealed class TwitchChatHandler :
         ChatDecorationsProvider chatDecorationsProvider,
         ChatCommandProcessor commandProcessor,
         TwitchChatMessenger messenger,
-        IEventBus eventBus)
+        IEventBus eventBus,
+        ILogger<TwitchChatHandler> logger)
     {
         _settingsManager = settingsManager;
         _audienceTracker = audienceTracker;
@@ -37,6 +39,7 @@ public sealed class TwitchChatHandler :
         _commandProcessor = commandProcessor;
         _messenger = messenger;
         _eventBus = eventBus;
+        _logger = logger;
 
         _subscriptions =
         [
@@ -153,7 +156,7 @@ public sealed class TwitchChatHandler :
             }
         }
 
-        PublishBotLog(chatMessage.DisplayName + ": " + chatMessage.Message);
+        _logger.LogDebug("[Бот] {DisplayName}: {Message}", chatMessage.DisplayName, chatMessage.Message);
 
         return Task.CompletedTask;
     }
@@ -183,10 +186,5 @@ public sealed class TwitchChatHandler :
         }
 
         return status;
-    }
-
-    private void PublishBotLog(string message)
-    {
-        _ = _eventBus.PublishAsync(new BotLogEntry(BotLogLevel.Debug, "Bot", $"[Бот] {message}"));
     }
 }
