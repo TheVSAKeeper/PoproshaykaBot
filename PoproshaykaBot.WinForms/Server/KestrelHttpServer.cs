@@ -7,7 +7,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.WinForms.Server.Obs;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using System.Text.Encodings.Web;
 
 namespace PoproshaykaBot.WinForms.Server;
@@ -16,6 +18,7 @@ public sealed class KestrelHttpServer(
     ChatHistoryManager chatHistoryManager,
     SseService sseService,
     SettingsManager settingsManager,
+    ObsChatStore obsChatStore,
     TwitchOAuthService twitchOAuthService,
     ILogger<KestrelHttpServer> logger,
     ILoggerFactory loggerFactory)
@@ -224,7 +227,7 @@ public sealed class KestrelHttpServer(
 
         app.MapGet("/api/history", () =>
         {
-            var obsSettings = settingsManager.Current.Twitch.ObsChat;
+            var obsSettings = obsChatStore.Load();
             var maxMessages = obsSettings.MaxMessages;
             var history = chatHistoryManager.GetHistory();
 
@@ -243,7 +246,7 @@ public sealed class KestrelHttpServer(
 
         app.MapGet("/api/chat-settings", () =>
         {
-            var settings = settingsManager.Current.Twitch.ObsChat;
+            var settings = obsChatStore.Load();
             var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings);
             return Results.Json(cssSettings, ServerJsonOptions.Default);
         });

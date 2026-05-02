@@ -1,4 +1,4 @@
-﻿using PoproshaykaBot.WinForms.Settings;
+﻿using PoproshaykaBot.WinForms.Settings.Ui;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 

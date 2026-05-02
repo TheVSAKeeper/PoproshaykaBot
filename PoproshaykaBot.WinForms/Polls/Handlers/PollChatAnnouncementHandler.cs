@@ -1,7 +1,7 @@
 ﻿using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Polling;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Polls.Handlers;
 
@@ -15,7 +15,7 @@ public sealed class PollChatAnnouncementHandler :
     IDisposable
 {
     private readonly IChatMessenger _messenger;
-    private readonly SettingsManager _settingsManager;
+    private readonly PollsStore _pollsStore;
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, DateTime> _lastProgressAnnouncement = new(StringComparer.Ordinal);
     private readonly object _sync = new();
@@ -23,12 +23,12 @@ public sealed class PollChatAnnouncementHandler :
 
     public PollChatAnnouncementHandler(
         IChatMessenger messenger,
-        SettingsManager settingsManager,
+        PollsStore pollsStore,
         IEventBus eventBus,
         TimeProvider timeProvider)
     {
         _messenger = messenger;
-        _settingsManager = settingsManager;
+        _pollsStore = pollsStore;
         _timeProvider = timeProvider;
         _subscriptions =
         [
@@ -40,7 +40,7 @@ public sealed class PollChatAnnouncementHandler :
         ];
     }
 
-    private PollChatTemplatesSettings Templates => _settingsManager.Current.Twitch.Polls.ChatTemplates;
+    private PollChatTemplatesSettings Templates => _pollsStore.Load().ChatTemplates;
 
     public Task HandleAsync(PollStarted @event, CancellationToken cancellationToken)
     {

@@ -2,13 +2,13 @@
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
 // TODO: Логгер не используется
 public class BroadcastProfilesManager(
-    SettingsManager settingsManager,
+    BroadcastProfilesStore profilesStore,
     IChannelInformationApplier applier,
     IEventBus eventBus,
     TimeProvider timeProvider,
@@ -20,7 +20,8 @@ public class BroadcastProfilesManager(
     {
         lock (_syncLock)
         {
-            return settingsManager.Current.Twitch.BroadcastProfiles.Profiles
+            return profilesStore.Load()
+                .Profiles
                 .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
         }
     }
@@ -68,19 +69,19 @@ public class BroadcastProfilesManager(
 
         lock (_syncLock)
         {
-            var settings = settingsManager.Current;
-            settings.Twitch.BroadcastProfiles.LastAppliedProfileId = profile.Id;
+            var bp = profilesStore.Load();
+            bp.LastAppliedProfileId = profile.Id;
 
             if (success && hasPlaceholder)
             {
-                var stored = settings.Twitch.BroadcastProfiles.Profiles.FirstOrDefault(p => p.Id == profile.Id);
+                var stored = bp.Profiles.FirstOrDefault(p => p.Id == profile.Id);
                 if (stored != null)
                 {
                     stored.LastApplyAt = timeProvider.GetUtcNow();
                 }
             }
 
-            settingsManager.SaveSettings(settings);
+            profilesStore.Save();
         }
 
         return profile;
@@ -90,7 +91,8 @@ public class BroadcastProfilesManager(
     {
         lock (_syncLock)
         {
-            return settingsManager.Current.Twitch.BroadcastProfiles.Profiles
+            return profilesStore.Load()
+                .Profiles
                 .FirstOrDefault(p => p.Id == id);
         }
     }
@@ -99,8 +101,8 @@ public class BroadcastProfilesManager(
     {
         lock (_syncLock)
         {
-            var settings = settingsManager.Current;
-            var stored = settings.Twitch.BroadcastProfiles.Profiles.FirstOrDefault(p => p.Id == id);
+            var bp = profilesStore.Load();
+            var stored = bp.Profiles.FirstOrDefault(p => p.Id == id);
 
             if (stored == null)
             {
@@ -109,7 +111,7 @@ public class BroadcastProfilesManager(
 
             stored.CurrentNumber = nextValue;
             stored.LastApplyAt = appliedAt;
-            settingsManager.SaveSettings(settings);
+            profilesStore.Save();
             return true;
         }
     }
@@ -118,7 +120,7 @@ public class BroadcastProfilesManager(
     {
         lock (_syncLock)
         {
-            return settingsManager.Current.Twitch.BroadcastProfiles.Profiles.ToList();
+            return profilesStore.Load().Profiles.ToList();
         }
     }
 
@@ -131,8 +133,8 @@ public class BroadcastProfilesManager(
 
         lock (_syncLock)
         {
-            var settings = settingsManager.Current;
-            var profiles = settings.Twitch.BroadcastProfiles.Profiles;
+            var bp = profilesStore.Load();
+            var profiles = bp.Profiles;
 
             var duplicate = profiles.FirstOrDefault(p =>
                 p.Id != profile.Id && string.Equals(p.Name, profile.Name, StringComparison.OrdinalIgnoreCase));
@@ -154,7 +156,7 @@ public class BroadcastProfilesManager(
                 profiles[index] = profile;
             }
 
-            settingsManager.SaveSettings(settings);
+            profilesStore.Save();
         }
 
         _ = eventBus.PublishAsync(new BroadcastProfilesChanged());
@@ -164,15 +166,15 @@ public class BroadcastProfilesManager(
     {
         lock (_syncLock)
         {
-            var settings = settingsManager.Current;
-            settings.Twitch.BroadcastProfiles.Profiles.RemoveAll(p => p.Id == id);
+            var bp = profilesStore.Load();
+            bp.Profiles.RemoveAll(p => p.Id == id);
 
-            if (settings.Twitch.BroadcastProfiles.LastAppliedProfileId == id)
+            if (bp.LastAppliedProfileId == id)
             {
-                settings.Twitch.BroadcastProfiles.LastAppliedProfileId = null;
+                bp.LastAppliedProfileId = null;
             }
 
-            settingsManager.SaveSettings(settings);
+            profilesStore.Save();
         }
 
         _ = eventBus.PublishAsync(new BroadcastProfilesChanged());

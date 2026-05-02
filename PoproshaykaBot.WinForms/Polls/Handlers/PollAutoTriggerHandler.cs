@@ -2,7 +2,7 @@
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Polls.Handlers;
 
@@ -16,7 +16,7 @@ public sealed class PollAutoTriggerHandler :
     private readonly PollProfilesManager _profilesManager;
     private readonly IPollController _controller;
     private readonly PollSnapshotStore _store;
-    private readonly SettingsManager _settingsManager;
+    private readonly PollsStore _pollsStore;
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<Guid, DateTime> _lastAutoStartedAt = new();
     private readonly object _sync = new();
@@ -27,7 +27,7 @@ public sealed class PollAutoTriggerHandler :
         PollProfilesManager profilesManager,
         IPollController controller,
         PollSnapshotStore store,
-        SettingsManager settingsManager,
+        PollsStore pollsStore,
         IEventBus eventBus,
         TimeProvider timeProvider,
         ILogger<PollAutoTriggerHandler> logger)
@@ -35,7 +35,7 @@ public sealed class PollAutoTriggerHandler :
         _profilesManager = profilesManager;
         _controller = controller;
         _store = store;
-        _settingsManager = settingsManager;
+        _pollsStore = pollsStore;
         _timeProvider = timeProvider;
         _logger = logger;
         _subscriptions =
@@ -133,7 +133,7 @@ public sealed class PollAutoTriggerHandler :
 
     private bool IsKillSwitchActive()
     {
-        var date = _settingsManager.Current.Twitch.Polls.AutoTriggerKillSwitchDateUtc;
+        var date = _pollsStore.Load().AutoTriggerKillSwitchDateUtc;
         return date is not null && date.Value.Date == _timeProvider.GetUtcNow().UtcDateTime.Date;
     }
 

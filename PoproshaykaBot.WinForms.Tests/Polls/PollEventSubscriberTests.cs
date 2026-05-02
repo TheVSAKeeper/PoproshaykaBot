@@ -1,7 +1,7 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Polls;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Twitch.EventSub;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 
@@ -34,7 +34,7 @@ public sealed class PollEventSubscriberTests
 
         _availability = Substitute.For<PollsAvailabilityService>(Substitute.For<ITwitchHelixClient>(),
             _broadcasterIdProvider,
-            CreateSettingsManager(),
+            new AccountsStore(),
             NullLogger<PollsAvailabilityService>.Instance);
 
         _availability.GetAsync(Arg.Any<CancellationToken>()).Returns(PollsAvailability.Available);
@@ -98,12 +98,4 @@ public sealed class PollEventSubscriberTests
                 Arg.Any<CancellationToken>());
     }
 
-    private static SettingsManager CreateSettingsManager()
-    {
-        var manager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance,
-            Substitute.For<IEventBus>());
-
-        manager.Current.Returns(new AppSettings());
-        return manager;
-    }
 }

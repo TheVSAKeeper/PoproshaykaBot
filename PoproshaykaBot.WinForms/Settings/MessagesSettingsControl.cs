@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.WinForms.Settings;
+﻿using PoproshaykaBot.WinForms.Chat;
+
+namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class MessagesSettingsControl : UserControl
 {

@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
+using PoproshaykaBot.WinForms.Settings.Ui;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 
@@ -14,7 +15,7 @@ public sealed partial class DashboardControl : UserControl
     }
 
     [Inject]
-    public SettingsManager Settings { get; internal init; } = null!;
+    public DashboardLayoutStore LayoutStore { get; internal init; } = null!;
 
     [Inject]
     public IControlFactory ControlFactory { get; internal init; } = null!;
@@ -29,14 +30,12 @@ public sealed partial class DashboardControl : UserControl
             return;
         }
 
-        var settings = Settings.Current;
-        var layout = settings.Ui.Dashboard;
+        var layout = LayoutStore.LoadDashboard();
 
         if (layout == null || layout.Tiles.Count == 0)
         {
             layout = DashboardLayoutDefaults.Create();
-            settings.Ui.Dashboard = layout;
-            Settings.SaveSettings(settings);
+            LayoutStore.SaveDashboard(layout);
         }
 
         ApplyLayout(layout);
@@ -208,8 +207,7 @@ public sealed partial class DashboardControl : UserControl
             return;
         }
 
-        var settings = Settings.Current;
-        var layout = settings.Ui.Dashboard;
+        var layout = LayoutStore.LoadDashboard();
 
         var tile = layout?.Tiles.FirstOrDefault(t => string.Equals(t.TypeId, type.Id, StringComparison.Ordinal));
 
@@ -219,9 +217,9 @@ public sealed partial class DashboardControl : UserControl
         }
 
         tile.IsCollapsed = !host.IsCollapsed;
-        Settings.SaveSettings(settings);
+        LayoutStore.SaveDashboard(layout!);
 
-        ApplyLayout(layout);
+        ApplyLayout(layout!);
     }
 
     private void ApplyLayout(DashboardLayoutSettings layout)

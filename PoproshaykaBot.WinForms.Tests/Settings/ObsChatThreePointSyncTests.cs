@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.WinForms.Settings;
+﻿using PoproshaykaBot.WinForms.Server.Obs;
+using PoproshaykaBot.WinForms.Settings.Obs;
 using System.Reflection;
 
 namespace PoproshaykaBot.WinForms.Tests.Settings;

@@ -3,7 +3,7 @@ using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Streaming;
 
 namespace PoproshaykaBot.WinForms.Tests.Broadcast;
@@ -19,16 +19,15 @@ public class BroadcastProfilesPanelTests
         var forms = Substitute.For<IFormFactory>();
         var bus = Substitute.For<IEventBus>();
         var streamStatus = Substitute.For<IStreamStatus>();
-        var settingsLogger = Substitute.For<ILogger<SettingsManager>>();
-        var settingsManager = Substitute.For<SettingsManager>(settingsLogger, bus);
-        settingsManager.Current.Returns(new AppSettings());
+        var profilesStore = Substitute.For<BroadcastProfilesStore>(NullLogger<BroadcastProfilesStore>.Instance, null);
+        profilesStore.Load().Returns(new BroadcastProfilesSettings());
 
         using var panel = new BroadcastProfilesPanel
         {
             Manager = manager,
             Forms = forms,
             Bus = bus,
-            Settings = settingsManager,
+            Profiles = profilesStore,
             Stream = streamStatus,
         };
 
@@ -69,12 +68,11 @@ public class BroadcastProfilesPanelTests
     private static BroadcastProfilesManager CreateManager()
     {
         var logger = Substitute.For<ILogger<BroadcastProfilesManager>>();
-        var settingsLogger = Substitute.For<ILogger<SettingsManager>>();
         var busLogger = Substitute.For<ILogger<InMemoryEventBus>>();
         var bus = new InMemoryEventBus(busLogger);
-        var settingsManager = Substitute.For<SettingsManager>(settingsLogger, bus);
-        settingsManager.Current.Returns(new AppSettings());
+        var tempPath = Path.Combine(Path.GetTempPath(), $"broadcast-profiles-panel-{Guid.NewGuid():N}.json");
+        var store = new BroadcastProfilesStore(filePath: tempPath);
         var applier = Substitute.For<IChannelInformationApplier>();
-        return new(settingsManager, applier, bus, TimeProvider.System, logger);
+        return new(store, applier, bus, TimeProvider.System, logger);
     }
 }

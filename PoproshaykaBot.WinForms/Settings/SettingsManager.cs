@@ -1,11 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Infrastructure;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Settings;
 using PoproshaykaBot.WinForms.Infrastructure.Persistence;
 using PoproshaykaBot.WinForms.Settings.Migrations;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -14,18 +12,20 @@ namespace PoproshaykaBot.WinForms.Settings;
 public class SettingsManager
 {
     private readonly ILogger<SettingsManager> _logger;
-    private readonly IEventBus _eventBus;
     private readonly string _settingsFilePath;
-
     private readonly object _syncLock = new();
 
     private AppSettings? _currentSettings;
 
-    public SettingsManager(ILogger<SettingsManager> logger, IEventBus eventBus)
+    public SettingsManager(ILogger<SettingsManager> logger)
+        : this(logger, null)
+    {
+    }
+
+    public SettingsManager(ILogger<SettingsManager> logger, string? settingsFilePath)
     {
         _logger = logger;
-        _eventBus = eventBus;
-        _settingsFilePath = AppPaths.Combine("settings.json");
+        _settingsFilePath = settingsFilePath ?? AppPaths.SettingsFile("settings.json");
     }
 
     public virtual AppSettings Current
@@ -41,19 +41,17 @@ public class SettingsManager
 
     public virtual void SaveSettings(AppSettings settings)
     {
-        _logger.LogDebug("Начало сохранения настроек в {SettingsFilePath}", _settingsFilePath);
+        _logger.LogDebug("Начало сохранения user-настроек в {SettingsFilePath}", _settingsFilePath);
 
         lock (_syncLock)
         {
             try
             {
-                var json = JsonSerializer.Serialize(settings, GetJsonOptions());
+                var json = JsonSerializer.Serialize(settings, JsonStoreOptions.Default);
                 AtomicFile.Save(_settingsFilePath, json, _logger);
 
                 _currentSettings = settings;
-                _logger.LogInformation("Настройки приложения успешно сохранены");
-
-                InvokeChatSettingsChanged(settings.Twitch.ObsChat);
+                _logger.LogInformation("User-настройки приложения успешно сохранены");
             }
             catch (Exception exception)
             {
@@ -66,21 +64,6 @@ public class SettingsManager
     private static AppSettings CreateDefaultSettings()
     {
         return new();
-    }
-
-    private static JsonSerializerOptions GetJsonOptions()
-    {
-        return new()
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        };
-    }
-
-    private void InvokeChatSettingsChanged(ObsChatSettings obsChatSettings)
-    {
-        _ = _eventBus.PublishAsync(new ChatSettingsChangedEvent(obsChatSettings));
     }
 
     private AppSettings LoadSettingsInternal()
@@ -96,7 +79,6 @@ public class SettingsManager
             }
 
             var json = File.ReadAllText(_settingsFilePath, Encoding.UTF8);
-            var options = GetJsonOptions();
             var node = JsonNode.Parse(json);
 
             if (node is not JsonObject root)
@@ -104,22 +86,22 @@ public class SettingsManager
                 throw new InvalidOperationException("Корневой элемент settings.json не является JSON-объектом");
             }
 
-            if (SettingsMigrator.TryMigrate(root, _logger))
+            var baseDirectory = Path.GetDirectoryName(_settingsFilePath)!;
+
+            if (SettingsMigrator.TryMigrate(root, _logger, baseDirectory))
             {
-                CreateBackupFile(_settingsFilePath, "pre-migration");
-                var migratedJson = root.ToJsonString(options);
+                JsonStoreBackup.CreateBackup(_settingsFilePath, "pre-migration", _logger);
+                var migratedJson = root.ToJsonString(JsonStoreOptions.Default);
                 AtomicFile.Save(_settingsFilePath, migratedJson, _logger);
                 _logger.LogInformation("Настройки мигрированы в актуальный формат и сохранены");
             }
 
-            var settings = root.Deserialize<AppSettings>(options);
+            var settings = root.Deserialize<AppSettings>(JsonStoreOptions.Default);
 
             if (settings == null)
             {
                 throw new InvalidOperationException("Не удалось десериализовать настройки (null)");
             }
-
-            AppSettingsHydrator.ApplyDefaults(settings);
 
             _logger.LogInformation("Настройки приложения успешно загружены");
             return settings;
@@ -128,34 +110,10 @@ public class SettingsManager
         {
             _logger.LogError(exception, "Ошибка загрузки или десериализации настроек из файла {SettingsFilePath}", _settingsFilePath);
 
-            CreateBackupFile(_settingsFilePath, "invalid");
+            JsonStoreBackup.CreateBackup(_settingsFilePath, "invalid", _logger);
 
             _logger.LogWarning("Из-за ошибки загрузки применяются настройки по умолчанию");
             return CreateDefaultSettings();
-        }
-    }
-
-    private void CreateBackupFile(string originalPath, string suffix)
-    {
-        if (!File.Exists(originalPath))
-        {
-            return;
-        }
-
-        try
-        {
-            var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            var fileName = Path.GetFileNameWithoutExtension(originalPath);
-            var extension = Path.GetExtension(originalPath);
-            var backupFileName = $"{fileName}.{suffix}-{timestamp}{extension}";
-            var backupPath = Path.Combine(Path.GetDirectoryName(originalPath)!, backupFileName);
-
-            File.Copy(originalPath, backupPath, true);
-            _logger.LogInformation("Создан бэкап поврежденного файла настроек: {BackupPath}", backupPath);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Ошибка при создании бэкапа для файла {OriginalPath}", originalPath);
         }
     }
 }

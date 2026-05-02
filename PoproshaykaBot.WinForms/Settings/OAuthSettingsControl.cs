@@ -20,12 +20,9 @@ public partial class OAuthSettingsControl : UserControl
     public event EventHandler? SettingChanged;
 
     [Inject]
-    public SettingsManager SettingsManager { get; internal init; } = null!;
-
-    [Inject]
     public TwitchOAuthService OAuthService { get; internal init; } = null!;
 
-    public void LoadSettings(AppSettings settings)
+    public void LoadSettings(AppSettings settings, TwitchAccountSettings botDraft, TwitchAccountSettings broadcasterDraft)
     {
         _clientIdTextBox.Text = settings.Twitch.ClientId;
         _clientSecretTextBox.Text = settings.Twitch.ClientSecret;
@@ -36,8 +33,8 @@ public partial class OAuthSettingsControl : UserControl
         _clientIdViewButton.Text = "👁";
         _clientSecretViewButton.Text = "👁";
 
-        _botAccountSection.LoadSettings(settings);
-        _broadcasterAccountSection.LoadSettings(settings);
+        _botAccountSection.LoadSettings(settings, botDraft);
+        _broadcasterAccountSection.LoadSettings(settings, broadcasterDraft);
 
         UpdateRedirectUriEditState();
     }
@@ -48,8 +45,8 @@ public partial class OAuthSettingsControl : UserControl
         settings.Twitch.ClientSecret = _clientSecretTextBox.Text.Trim();
         settings.Twitch.RedirectUri = _redirectUriTextBox.Text.Trim();
 
-        _botAccountSection.SaveSettings(settings);
-        _broadcasterAccountSection.SaveSettings(settings);
+        _botAccountSection.SaveSettings();
+        _broadcasterAccountSection.SaveSettings();
     }
 
     protected override void OnHandleCreated(EventArgs e)

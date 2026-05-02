@@ -1,7 +1,6 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Polls;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 
 namespace PoproshaykaBot.WinForms.Tests.Polls;
@@ -12,14 +11,14 @@ public class PollHistoryStoreTests
     [SetUp]
     public void SetUp()
     {
-        _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, Substitute.For<IEventBus>());
-        _settingsManager.Current.Returns(_settings);
+        _polls = new();
+        _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null);
+        _pollsStore.Load().Returns(_polls);
         _helix = Substitute.For<ITwitchHelixClient>();
         _broadcasterIdProvider = Substitute.For<IBroadcasterIdProvider>();
         _broadcasterIdProvider.GetAsync(Arg.Any<CancellationToken>()).Returns("1");
         _tempFile = Path.Combine(Path.GetTempPath(), $"poll-history-{Guid.NewGuid():N}.json");
-        _store = new(_settingsManager, _helix, _broadcasterIdProvider, NullLogger<PollHistoryStore>.Instance, _tempFile);
+        _store = new(_pollsStore, _helix, _broadcasterIdProvider, NullLogger<PollHistoryStore>.Instance, _tempFile);
     }
 
     [TearDown]
@@ -35,8 +34,8 @@ public class PollHistoryStoreTests
         }
     }
 
-    private SettingsManager _settingsManager = null!;
-    private AppSettings _settings = null!;
+    private PollsStore _pollsStore = null!;
+    private PollsSettings _polls = null!;
     private ITwitchHelixClient _helix = null!;
     private IBroadcasterIdProvider _broadcasterIdProvider = null!;
     private PollHistoryStore _store = null!;
@@ -83,7 +82,7 @@ public class PollHistoryStoreTests
     [Test]
     public void TryAdd_TruncatesToHistoryMaxItems()
     {
-        _settings.Twitch.Polls.HistoryMaxItems = 3;
+        _polls.HistoryMaxItems = 3;
 
         _store.TryAdd(Entry("p1"));
         _store.TryAdd(Entry("p2"));
@@ -101,7 +100,7 @@ public class PollHistoryStoreTests
         _store.TryAdd(Entry("p1"));
         _store.TryAdd(Entry("p2"));
 
-        var second = new PollHistoryStore(_settingsManager, _helix, _broadcasterIdProvider, NullLogger<PollHistoryStore>.Instance, _tempFile);
+        var second = new PollHistoryStore(_pollsStore, _helix, _broadcasterIdProvider, NullLogger<PollHistoryStore>.Instance, _tempFile);
         var all = second.GetAll();
 
         Assert.That(all, Has.Count.EqualTo(2));

@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Settings;
+﻿using PoproshaykaBot.WinForms.Settings.Obs;
 
 namespace PoproshaykaBot.WinForms.Infrastructure.Events.Settings;
 

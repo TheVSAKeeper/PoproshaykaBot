@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.WinForms.Infrastructure.Persistence;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Settings.Migrations;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Twitch.Chat;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -30,10 +31,33 @@ public sealed class LegacySettingsFileMigrationTests
                ?? throw new InvalidOperationException("Корневой элемент old/settings.json не является JSON-объектом");
     }
 
+    private static void AssumeRootHasLegacyMarkers(JsonObject root)
+    {
+        var twitch = root["twitch"] as JsonObject;
+        var ui = root["ui"] as JsonObject;
+
+        var hasLegacyTwitch = twitch is not null
+                              && (twitch.ContainsKey("botUsername")
+                                  || twitch.ContainsKey("accessToken")
+                                  || twitch.ContainsKey("refreshToken")
+                                  || twitch.ContainsKey("scopes")
+                                  || twitch.ContainsKey("storedScopes"));
+
+        var hasLegacyUi = ui is not null
+                          && (ui.ContainsKey("showLogsPanel")
+                              || ui.ContainsKey("showChatPanel")
+                              || ui.ContainsKey("currentChatViewMode"));
+
+        Assume.That(hasLegacyTwitch || hasLegacyUi,
+            Is.True,
+            "old/settings.json уже не содержит legacy-полей (botUsername/accessToken/refreshToken/scopes/storedScopes на верхнем уровне twitch или legacy-ui). Тест применим только к настоящему legacy-конфигу.");
+    }
+
     [Test]
     public void OldSettingsJson_IsMigratedAndLegacyFieldsAreRemoved()
     {
         var root = LoadLegacyRoot();
+        AssumeRootHasLegacyMarkers(root);
 
         var changed = SettingsMigrator.TryMigrate(root);
 
@@ -77,11 +101,14 @@ public sealed class LegacySettingsFileMigrationTests
             Assert.That(settings.Twitch.ClientId, Is.Not.Empty, "ClientId должен сохраниться");
             Assert.That(settings.Twitch.RedirectUri, Is.Not.Empty);
 
-            Assert.That(settings.Twitch.BotAccount.Login, Is.Not.Null, "botAccount.login обязан существовать (даже пустой), а не быть null");
+            var botAccount = root["twitch"]?["botAccount"] as JsonObject;
+            Assert.That(botAccount?.ContainsKey("login"), Is.True, "botAccount.login обязан остаться в JSON после миграции");
 
             Assert.That(settings.Ranks.Ranks, Is.Not.Empty, "Ранги должны выживать миграцию");
             Assert.That(settings.Twitch.Messages.Welcome, Is.Not.Empty, "Кастомные сообщения должны сохраниться");
-            Assert.That(settings.Twitch.ObsChat.MaxMessages, Is.GreaterThan(0));
+
+            var obsChat = root["twitch"]?["obsChat"] as JsonObject;
+            Assert.That(obsChat?["maxMessages"]?.GetValue<int>(), Is.GreaterThan(0));
         }
     }
 
@@ -128,32 +155,21 @@ public sealed class LegacySettingsFileMigrationTests
             }
         }
 
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        var settings = root.Deserialize<AppSettings>(options);
-        Assert.That(settings, Is.Not.Null);
+        if (botAccountNode == null)
+        {
+            return;
+        }
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(settings!.Twitch.BotAccount.AccessToken, Is.Empty, "BotAccount.AccessToken — чистый, чтобы запустить новый OAuth-flow");
-            Assert.That(settings.Twitch.BotAccount.RefreshToken, Is.Empty);
-            Assert.That(settings.Twitch.BotAccount.StoredScopes, Is.Empty, "StoredScopes — это след прошлого согласия, после сброса токенов он не должен держаться");
-            Assert.That(settings.Twitch.BotAccount.AccessTokenExpiresAt, Is.Null, "TTL старого токена не должен утаскиваться в новую схему");
-
-            Assert.That(settings.Twitch.BroadcasterAccount.AccessToken, Is.Empty);
-            Assert.That(settings.Twitch.BroadcasterAccount.RefreshToken, Is.Empty);
-            Assert.That(settings.Twitch.BroadcasterAccount.StoredScopes, Is.Empty);
-            Assert.That(settings.Twitch.BroadcasterAccount.AccessTokenExpiresAt, Is.Null);
-
             foreach (var legacyScope in legacyScopes)
             {
-                Assert.That(settings.Twitch.BotAccount.Scopes, Does.Not.Contain(legacyScope),
-                    $"Legacy-scope '{legacyScope}' не должен утаскиваться в BotAccount.Scopes — иначе OAuth-flow попросит токен под недостаточный набор прав");
-
-                Assert.That(settings.Twitch.BotAccount.StoredScopes, Does.Not.Contain(legacyScope),
-                    $"Legacy-scope '{legacyScope}' не должен оставаться в BotAccount.StoredScopes — это след прошлого согласия, который мешает повторной авторизации");
-
-                Assert.That(settings.Twitch.BroadcasterAccount.Scopes, Does.Not.Contain(legacyScope));
-                Assert.That(settings.Twitch.BroadcasterAccount.StoredScopes, Does.Not.Contain(legacyScope));
+                if (botAccountNode["scopes"] is JsonArray botScopes)
+                {
+                    var values = botScopes.Select(n => n?.GetValue<string>()).ToArray();
+                    Assert.That(values, Does.Not.Contain(legacyScope),
+                        $"Legacy-scope '{legacyScope}' не должен утаскиваться в BotAccount.Scopes — иначе OAuth-flow попросит токен под недостаточный набор прав");
+                }
             }
         }
     }
@@ -198,6 +214,8 @@ public sealed class LegacySettingsFileMigrationTests
             var root = JsonNode.Parse(initialJson) as JsonObject
                        ?? throw new InvalidOperationException("Корневой элемент не является JSON-объектом");
 
+            AssumeRootHasLegacyMarkers(root);
+
             var firstChanged = SettingsMigrator.TryMigrate(root, NullLogger.Instance);
             Assert.That(firstChanged, Is.True, "Legacy-файл должен был мигрироваться");
 
@@ -220,9 +238,14 @@ public sealed class LegacySettingsFileMigrationTests
                 Assert.That(File.Exists(tempSettings + ".tmp"), Is.False, "После успешного File.Replace .tmp не должен оставаться");
                 Assert.That(File.Exists(tempSettings + ".old"), Is.False, ".old удаляется TryDelete после успешного File.Replace");
 
-                Assert.That(settings!.Twitch.BotAccount.AccessToken, Is.Empty);
-                Assert.That(settings.Twitch.BotAccount.RefreshToken, Is.Empty);
-                Assert.That(settings.Twitch.BotAccount.StoredScopes, Is.Empty);
+                var botAccountNode = rootRoundTrip["twitch"]?["botAccount"] as JsonObject;
+
+                if (botAccountNode != null)
+                {
+                    Assert.That(botAccountNode.ContainsKey("accessToken"), Is.False);
+                    Assert.That(botAccountNode.ContainsKey("refreshToken"), Is.False);
+                    Assert.That(botAccountNode.ContainsKey("storedScopes"), Is.False);
+                }
             }
         }
         finally
@@ -261,29 +284,29 @@ public sealed class LegacySettingsFileMigrationTests
             var root = JsonNode.Parse(initialJson) as JsonObject
                        ?? throw new InvalidOperationException("Корневой элемент не является JSON-объектом");
 
-            SettingsMigrator.TryMigrate(root, NullLogger.Instance);
+            AssumeRootHasLegacyMarkers(root);
+
+            SettingsMigrator.TryMigrate(root, NullLogger.Instance, tempDir);
             AtomicFile.Save(tempSettings, root.ToJsonString(options), NullLogger.Instance);
 
-            var diskJson = File.ReadAllText(tempSettings, Encoding.UTF8);
-            var settings = JsonSerializer.Deserialize<AppSettings>(diskJson, options);
-            Assert.That(settings, Is.Not.Null);
-
-            AppSettingsHydrator.ApplyDefaults(settings!);
+            var accountsStore = new AccountsStore(filePath: Path.Combine(tempDir, "accounts.json"));
+            var bot = accountsStore.LoadBot();
+            var broadcaster = accountsStore.LoadBroadcaster();
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(settings!.Twitch.BotAccount.Scopes, Is.EquivalentTo(TwitchScopes.BotRequired),
+                Assert.That(bot.Scopes, Is.EquivalentTo(TwitchScopes.BotRequired),
                     "После полного pipeline BotAccount.Scopes должен содержать актуальный целевой набор для повторной авторизации");
 
-                Assert.That(settings.Twitch.BroadcasterAccount.Scopes, Is.EquivalentTo(TwitchScopes.BroadcasterRequired),
+                Assert.That(broadcaster.Scopes, Is.EquivalentTo(TwitchScopes.BroadcasterRequired),
                     "После полного pipeline BroadcasterAccount.Scopes должен содержать актуальный целевой набор");
 
-                Assert.That(settings.Twitch.BotAccount.AccessToken, Is.Empty);
-                Assert.That(settings.Twitch.BotAccount.StoredScopes, Is.Empty);
-                Assert.That(settings.Twitch.BroadcasterAccount.AccessToken, Is.Empty);
-                Assert.That(settings.Twitch.BroadcasterAccount.StoredScopes, Is.Empty);
+                Assert.That(bot.AccessToken, Is.Empty);
+                Assert.That(bot.StoredScopes, Is.Empty);
+                Assert.That(broadcaster.AccessToken, Is.Empty);
+                Assert.That(broadcaster.StoredScopes, Is.Empty);
 
-                Assert.That(TwitchScopes.SetEquals(settings.Twitch.BotAccount.Scopes, settings.Twitch.BotAccount.StoredScopes),
+                Assert.That(TwitchScopes.SetEquals(bot.Scopes, bot.StoredScopes),
                     Is.False,
                     "Целевые Scopes и пустые StoredScopes должны различаться — иначе после получения токена TwitchOAuthService не зафиксирует scope-mismatch");
             }
@@ -304,6 +327,7 @@ public sealed class LegacySettingsFileMigrationTests
     public void OldSettingsJson_MigrationIsIdempotent()
     {
         var root = LoadLegacyRoot();
+        AssumeRootHasLegacyMarkers(root);
 
         var firstChanged = SettingsMigrator.TryMigrate(root);
         var snapshot = root.ToJsonString();

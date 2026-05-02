@@ -1,7 +1,7 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Tests.Polls;
 
 namespace PoproshaykaBot.WinForms.Tests.Broadcast.Profiles;
@@ -12,13 +12,14 @@ public class StreamEpisodeNumbererTests
     [SetUp]
     public void SetUp()
     {
-        _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance,
-            Substitute.For<IEventBus>());
+        _tempDir = Path.Combine(Path.GetTempPath(), "stream-episode-numberer-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
 
-        _settingsManager.Current.Returns(_settings);
+        _broadcastProfiles = new();
+        _profilesStore = Substitute.For<BroadcastProfilesStore>(NullLogger<BroadcastProfilesStore>.Instance, null);
+        _profilesStore.Load().Returns(_broadcastProfiles);
 
-        _profilesManager = Substitute.For<BroadcastProfilesManager>(_settingsManager,
+        _profilesManager = Substitute.For<BroadcastProfilesManager>(new BroadcastProfilesStore(filePath: Path.Combine(_tempDir, "broadcast-profiles.json")),
             Substitute.For<IChannelInformationApplier>(),
             Substitute.For<IEventBus>(),
             TimeProvider.System,
@@ -30,7 +31,7 @@ public class StreamEpisodeNumbererTests
                 var id = call.Arg<Guid>();
                 var nextValue = call.Arg<int>();
                 var appliedAt = call.Arg<DateTimeOffset>();
-                var stored = _settings.Twitch.BroadcastProfiles.Profiles.FirstOrDefault(p => p.Id == id);
+                var stored = _broadcastProfiles.Profiles.FirstOrDefault(p => p.Id == id);
 
                 if (stored == null)
                 {
@@ -49,7 +50,7 @@ public class StreamEpisodeNumbererTests
         _eventBus = Substitute.For<IEventBus>();
         _clock = new() { UtcNow = new(2026, 4, 30, 12, 0, 0, TimeSpan.Zero) };
 
-        _handler = new(_settingsManager,
+        _handler = new(_profilesStore,
             _profilesManager,
             _applier,
             _eventBus,
@@ -57,8 +58,21 @@ public class StreamEpisodeNumbererTests
             NullLogger<StreamEpisodeNumberer>.Instance);
     }
 
-    private SettingsManager _settingsManager = null!;
-    private AppSettings _settings = null!;
+    [TearDown]
+    public void TearDown()
+    {
+        try
+        {
+            Directory.Delete(_tempDir, true);
+        }
+        catch
+        {
+        }
+    }
+
+    private string _tempDir = null!;
+    private BroadcastProfilesStore _profilesStore = null!;
+    private BroadcastProfilesSettings _broadcastProfiles = null!;
     private BroadcastProfilesManager _profilesManager = null!;
     private IChannelInformationApplier _applier = null!;
     private IEventBus _eventBus = null!;
@@ -76,8 +90,8 @@ public class StreamEpisodeNumbererTests
             LastApplyAt = lastApplyAt,
         };
 
-        _settings.Twitch.BroadcastProfiles.LastAppliedProfileId = profile.Id;
-        _settings.Twitch.BroadcastProfiles.Profiles.Add(profile);
+        _broadcastProfiles.LastAppliedProfileId = profile.Id;
+        _broadcastProfiles.Profiles.Add(profile);
         _profilesManager.Find(profile.Id).Returns(profile);
         return profile;
     }
@@ -87,7 +101,7 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(currentNumber: 14);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null, false), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
 
         await _applier.DidNotReceiveWithAnyArgs().ApplyPatchAsync(default, default, default, default);
         Assert.That(profile.CurrentNumber, Is.EqualTo(14));
@@ -98,7 +112,7 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow.AddMinutes(-30));
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null, false), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
 
         await _applier.Received(1).ApplyPatchAsync("Серия #15", null, null, Arg.Any<CancellationToken>());
         Assert.That(profile.CurrentNumber, Is.EqualTo(15));
@@ -118,7 +132,7 @@ public class StreamEpisodeNumbererTests
     [Test]
     public async Task NoActiveProfile_DoesNothing()
     {
-        _settings.Twitch.BroadcastProfiles.LastAppliedProfileId = null;
+        _broadcastProfiles.LastAppliedProfileId = null;
 
         await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
 
@@ -136,8 +150,8 @@ public class StreamEpisodeNumbererTests
             CurrentNumber = 5,
         };
 
-        _settings.Twitch.BroadcastProfiles.LastAppliedProfileId = profile.Id;
-        _settings.Twitch.BroadcastProfiles.Profiles.Add(profile);
+        _broadcastProfiles.LastAppliedProfileId = profile.Id;
+        _broadcastProfiles.Profiles.Add(profile);
         _profilesManager.Find(profile.Id).Returns(profile);
 
         await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);

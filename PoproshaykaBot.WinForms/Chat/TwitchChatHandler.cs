@@ -4,6 +4,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms.Chat;
@@ -16,6 +17,7 @@ public sealed class TwitchChatHandler :
     IDisposable
 {
     private readonly SettingsManager _settingsManager;
+    private readonly ObsChatStore _obsChatStore;
     private readonly AudienceTracker _audienceTracker;
     private readonly ChatDecorationsProvider _chatDecorations;
     private readonly ChatCommandProcessor _commandProcessor;
@@ -26,6 +28,7 @@ public sealed class TwitchChatHandler :
 
     public TwitchChatHandler(
         SettingsManager settingsManager,
+        ObsChatStore obsChatStore,
         AudienceTracker audienceTracker,
         ChatDecorationsProvider chatDecorationsProvider,
         ChatCommandProcessor commandProcessor,
@@ -34,6 +37,7 @@ public sealed class TwitchChatHandler :
         ILogger<TwitchChatHandler> logger)
     {
         _settingsManager = settingsManager;
+        _obsChatStore = obsChatStore;
         _audienceTracker = audienceTracker;
         _chatDecorations = chatDecorationsProvider;
         _commandProcessor = commandProcessor;
@@ -96,9 +100,9 @@ public sealed class TwitchChatHandler :
             Status = status,
             IsFirstTime = isFirstSeen,
 
-            Emotes = _chatDecorations.ExtractEmotes(chatMessage, settings.ObsChat.EmoteSizePixels),
+            Emotes = _chatDecorations.ExtractEmotes(chatMessage, _obsChatStore.Load().EmoteSizePixels),
             Badges = badgesKvp,
-            BadgeUrls = _chatDecorations.ExtractBadgeUrls(chatMessage.Badges, settings.ObsChat.BadgeSizePixels),
+            BadgeUrls = _chatDecorations.ExtractBadgeUrls(chatMessage.Badges, _obsChatStore.Load().BadgeSizePixels),
         };
 
         _ = _eventBus.PublishAsync(new ChatMessageReceived(chatMessage.Channel,

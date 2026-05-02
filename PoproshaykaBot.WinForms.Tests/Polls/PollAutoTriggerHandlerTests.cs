@@ -4,7 +4,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Polls;
 using PoproshaykaBot.WinForms.Polls.Handlers;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Tests.Polls;
 
@@ -14,11 +14,14 @@ public class PollAutoTriggerHandlerTests
     [SetUp]
     public void SetUp()
     {
-        _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, Substitute.For<IEventBus>());
-        _settingsManager.Current.Returns(_settings);
+        _tempDir = Path.Combine(Path.GetTempPath(), "poll-auto-trigger-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
 
-        _profilesManager = Substitute.For<PollProfilesManager>(_settingsManager,
+        _polls = new();
+        _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null);
+        _pollsStore.Load().Returns(_polls);
+
+        _profilesManager = Substitute.For<PollProfilesManager>(new PollsStore(filePath: Path.Combine(_tempDir, "polls.json")),
             Substitute.For<IEventBus>(),
             NullLogger<PollProfilesManager>.Instance);
 
@@ -29,11 +32,24 @@ public class PollAutoTriggerHandlerTests
 
         _clock = new() { UtcNow = new(2026, 4, 24, 10, 0, 0, TimeSpan.Zero) };
 
-        _handler = new(_profilesManager, _controller, _store, _settingsManager, _eventBus, _clock, NullLogger<PollAutoTriggerHandler>.Instance);
+        _handler = new(_profilesManager, _controller, _store, _pollsStore, _eventBus, _clock, NullLogger<PollAutoTriggerHandler>.Instance);
     }
 
-    private SettingsManager _settingsManager = null!;
-    private AppSettings _settings = null!;
+    [TearDown]
+    public void TearDown()
+    {
+        try
+        {
+            Directory.Delete(_tempDir, true);
+        }
+        catch
+        {
+        }
+    }
+
+    private string _tempDir = null!;
+    private PollsStore _pollsStore = null!;
+    private PollsSettings _polls = null!;
     private PollProfilesManager _profilesManager = null!;
     private IPollController _controller = null!;
     private PollSnapshotStore _store = null!;
@@ -122,7 +138,7 @@ public class PollAutoTriggerHandlerTests
     {
         var profile = Profile(PollAutoTriggerEvent.StreamOnline);
         _profilesManager.GetAll().Returns([profile]);
-        _settings.Twitch.Polls.AutoTriggerKillSwitchDateUtc = _now.Date;
+        _polls.AutoTriggerKillSwitchDateUtc = _now.Date;
 
         await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
 
@@ -134,7 +150,7 @@ public class PollAutoTriggerHandlerTests
     {
         var profile = Profile(PollAutoTriggerEvent.StreamOnline);
         _profilesManager.GetAll().Returns([profile]);
-        _settings.Twitch.Polls.AutoTriggerKillSwitchDateUtc = _now.Date.AddDays(-1);
+        _polls.AutoTriggerKillSwitchDateUtc = _now.Date.AddDays(-1);
 
         await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
 

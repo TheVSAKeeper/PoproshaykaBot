@@ -2,7 +2,7 @@
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
@@ -15,7 +15,7 @@ public sealed class StreamEpisodeNumberer :
     public static readonly TimeSpan FlapCooldown = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan RecentApplyWindow = TimeSpan.FromMinutes(15);
 
-    private readonly SettingsManager _settingsManager;
+    private readonly BroadcastProfilesStore _profilesStore;
     private readonly BroadcastProfilesManager _profilesManager;
     private readonly IChannelInformationApplier _applier;
     private readonly TimeProvider _timeProvider;
@@ -25,14 +25,14 @@ public sealed class StreamEpisodeNumberer :
     private DateTimeOffset? _lastOfflineAt;
 
     public StreamEpisodeNumberer(
-        SettingsManager settingsManager,
+        BroadcastProfilesStore profilesStore,
         BroadcastProfilesManager profilesManager,
         IChannelInformationApplier applier,
         IEventBus eventBus,
         TimeProvider timeProvider,
         ILogger<StreamEpisodeNumberer> logger)
     {
-        _settingsManager = settingsManager;
+        _profilesStore = profilesStore;
         _profilesManager = profilesManager;
         _applier = applier;
         _timeProvider = timeProvider;
@@ -52,7 +52,7 @@ public sealed class StreamEpisodeNumberer :
             return;
         }
 
-        var lastAppliedId = _settingsManager.Current.Twitch.BroadcastProfiles.LastAppliedProfileId;
+        var lastAppliedId = _profilesStore.Load().LastAppliedProfileId;
         if (lastAppliedId is null)
         {
             return;

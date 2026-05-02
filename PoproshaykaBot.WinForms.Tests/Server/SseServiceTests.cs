@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Chat;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
 
@@ -13,8 +12,7 @@ public sealed class SseServiceTests
     public void SetUp()
     {
         _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance,
-            Substitute.For<IEventBus>());
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
 
         _settingsManager.Current.Returns(_settings);
         _logger = new();

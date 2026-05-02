@@ -1,12 +1,12 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Polling;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Polls;
 
 public class PollProfilesManager(
-    SettingsManager settingsManager,
+    PollsStore pollsStore,
     IEventBus eventBus,
     ILogger<PollProfilesManager> logger)
 {
@@ -16,7 +16,8 @@ public class PollProfilesManager(
     {
         lock (_syncLock)
         {
-            return settingsManager.Current.Twitch.Polls.Profiles
+            return pollsStore.Load()
+                .Profiles
                 .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
         }
     }
@@ -25,7 +26,7 @@ public class PollProfilesManager(
     {
         lock (_syncLock)
         {
-            return settingsManager.Current.Twitch.Polls.Profiles.FirstOrDefault(p => p.Id == id);
+            return pollsStore.Load().Profiles.FirstOrDefault(p => p.Id == id);
         }
     }
 
@@ -33,7 +34,7 @@ public class PollProfilesManager(
     {
         lock (_syncLock)
         {
-            return settingsManager.Current.Twitch.Polls.Profiles.ToList();
+            return pollsStore.Load().Profiles.ToList();
         }
     }
 
@@ -43,8 +44,8 @@ public class PollProfilesManager(
 
         lock (_syncLock)
         {
-            var settings = settingsManager.Current;
-            var profiles = settings.Twitch.Polls.Profiles;
+            var polls = pollsStore.Load();
+            var profiles = polls.Profiles;
 
             var duplicate = profiles.FirstOrDefault(p =>
                 p.Id != profile.Id && string.Equals(p.Name, profile.Name, StringComparison.OrdinalIgnoreCase));
@@ -66,7 +67,7 @@ public class PollProfilesManager(
                 profiles[index] = profile;
             }
 
-            settingsManager.SaveSettings(settings);
+            pollsStore.Save();
         }
 
         logger.LogDebug("Upsert профиля голосования {ProfileName}", profile.Name);
@@ -102,10 +103,10 @@ public class PollProfilesManager(
 
         lock (_syncLock)
         {
-            var settings = settingsManager.Current;
-            settings.Twitch.Polls.Profiles.Clear();
-            settings.Twitch.Polls.Profiles.AddRange(snapshot);
-            settingsManager.SaveSettings(settings);
+            var polls = pollsStore.Load();
+            polls.Profiles.Clear();
+            polls.Profiles.AddRange(snapshot);
+            pollsStore.Save();
         }
 
         logger.LogDebug("ReplaceAll профилей голосований ({Count})", snapshot.Count);
@@ -116,9 +117,9 @@ public class PollProfilesManager(
     {
         lock (_syncLock)
         {
-            var settings = settingsManager.Current;
-            settings.Twitch.Polls.Profiles.RemoveAll(p => p.Id == id);
-            settingsManager.SaveSettings(settings);
+            var polls = pollsStore.Load();
+            polls.Profiles.RemoveAll(p => p.Id == id);
+            pollsStore.Save();
         }
 
         _ = eventBus.PublishAsync(new PollProfilesChanged());

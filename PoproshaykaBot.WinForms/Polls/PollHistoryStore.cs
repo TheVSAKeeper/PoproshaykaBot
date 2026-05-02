@@ -4,7 +4,7 @@ using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Infrastructure.Persistence;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 using System.Text.Encodings.Web;
@@ -13,7 +13,7 @@ using System.Text.Json;
 namespace PoproshaykaBot.WinForms.Polls;
 
 public sealed class PollHistoryStore(
-    SettingsManager settingsManager,
+    PollsStore pollsStore,
     [FromKeyedServices(TwitchEndpoints.HelixBroadcasterClient)]
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
@@ -208,7 +208,7 @@ public sealed class PollHistoryStore(
 
     private void TruncateToMax()
     {
-        var max = Math.Max(1, settingsManager.Current.Twitch.Polls.HistoryMaxItems);
+        var max = Math.Max(1, pollsStore.Load().HistoryMaxItems);
 
         if (_entries.Count <= max)
         {

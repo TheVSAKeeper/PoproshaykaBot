@@ -1,15 +1,18 @@
 ﻿using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Settings.Stores;
+using PoproshaykaBot.WinForms.Twitch.Chat;
 using System.ComponentModel;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
 public sealed partial class OAuthAccountSection : UserControl
 {
-    private static readonly TwitchAccountSettings BotDefaults = new TwitchSettings().BotAccount;
-    private static readonly TwitchAccountSettings BroadcasterDefaults = new TwitchSettings().BroadcasterAccount;
+    private static readonly string[] BotDefaultScopes = [..TwitchScopes.BotRequired];
+    private static readonly string[] BroadcasterDefaultScopes = [..TwitchScopes.BroadcasterRequired];
 
     private AppSettings _settings = new();
+    private TwitchAccountSettings _draft = new();
     private TwitchOAuthRole _role = TwitchOAuthRole.Bot;
     private bool _initialized;
     private bool _tokensVisible;
@@ -23,7 +26,7 @@ public sealed partial class OAuthAccountSection : UserControl
     public event EventHandler? SettingChanged;
 
     [Inject]
-    public SettingsManager SettingsManager { get; internal init; } = null!;
+    public AccountsStore AccountsStore { get; internal init; } = null!;
 
     [Inject]
     public TwitchOAuthService OAuthService { get; internal init; } = null!;
@@ -45,20 +48,19 @@ public sealed partial class OAuthAccountSection : UserControl
         }
     }
 
-    public void LoadSettings(AppSettings settings)
+    public void LoadSettings(AppSettings settings, TwitchAccountSettings draft)
     {
         _settings = settings;
+        _draft = draft;
 
-        var account = GetAccount(settings);
-        _scopesTextBox.Text = string.Join(" ", account.Scopes);
+        _scopesTextBox.Text = string.Join(" ", _draft.Scopes);
 
         LoadTokenInformation();
     }
 
-    public void SaveSettings(AppSettings settings)
+    public void SaveSettings()
     {
-        var account = GetAccount(settings);
-        account.Scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        _draft.Scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -91,7 +93,7 @@ public sealed partial class OAuthAccountSection : UserControl
 
     private void OnScopesResetButtonClicked(object? sender, EventArgs e)
     {
-        _scopesTextBox.Text = string.Join(" ", GetDefaults().Scopes);
+        _scopesTextBox.Text = string.Join(" ", GetDefaultScopes());
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -151,7 +153,7 @@ public sealed partial class OAuthAccountSection : UserControl
 
             if (scopes.Length == 0)
             {
-                scopes = GetDefaults().Scopes;
+                scopes = GetDefaultScopes();
             }
 
             var accessToken = await OAuthService.StartOAuthFlowAsync(_role,
@@ -171,7 +173,6 @@ public sealed partial class OAuthAccountSection : UserControl
                 _authStatusLabel.Text = "Авторизация успешна!";
                 _authStatusLabel.ForeColor = Color.Green;
 
-                _settings = SettingsManager.Current;
                 LoadTokenInformation();
                 SettingChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -201,7 +202,7 @@ public sealed partial class OAuthAccountSection : UserControl
 
     private async void OnValidateTokenButtonClicked(object? sender, EventArgs e)
     {
-        var accessToken = GetAccount(_settings).AccessToken;
+        var accessToken = GetLiveAccount().AccessToken;
 
         if (string.IsNullOrWhiteSpace(accessToken))
         {
@@ -244,7 +245,7 @@ public sealed partial class OAuthAccountSection : UserControl
     {
         var clientId = _settings.Twitch.ClientId;
         var clientSecret = _settings.Twitch.ClientSecret;
-        var refreshToken = GetAccount(_settings).RefreshToken;
+        var refreshToken = GetLiveAccount().RefreshToken;
 
         if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
         {
@@ -270,7 +271,6 @@ public sealed partial class OAuthAccountSection : UserControl
         {
             await OAuthService.RefreshTokenAsync(_role, clientId, clientSecret, refreshToken);
 
-            _settings = SettingsManager.Current;
             LoadTokenInformation();
             _tokenStatusValueLabel.Text = "Обновлен успешно";
             _tokenStatusValueLabel.ForeColor = Color.Green;
@@ -307,7 +307,6 @@ public sealed partial class OAuthAccountSection : UserControl
         }
 
         OAuthService.ClearTokens(_role);
-        _settings = SettingsManager.Current;
 
         LoadTokenInformation();
         _tokenStatusValueLabel.Text = "Токены очищены";
@@ -353,19 +352,14 @@ public sealed partial class OAuthAccountSection : UserControl
         }
     }
 
-    private TwitchAccountSettings GetAccount(AppSettings settings)
+    private TwitchAccountSettings GetLiveAccount()
     {
-        return _role switch
-        {
-            TwitchOAuthRole.Bot => settings.Twitch.BotAccount,
-            TwitchOAuthRole.Broadcaster => settings.Twitch.BroadcasterAccount,
-            _ => settings.Twitch.BotAccount,
-        };
+        return AccountsStore.Load(_role);
     }
 
-    private TwitchAccountSettings GetDefaults()
+    private string[] GetDefaultScopes()
     {
-        return _role == TwitchOAuthRole.Broadcaster ? BroadcasterDefaults : BotDefaults;
+        return _role == TwitchOAuthRole.Broadcaster ? BroadcasterDefaultScopes : BotDefaultScopes;
     }
 
     private void SetAuthButtonToCancelMode()
@@ -409,7 +403,7 @@ public sealed partial class OAuthAccountSection : UserControl
 
     private void UpdateTokenDisplay()
     {
-        var account = GetAccount(_settings);
+        var account = GetLiveAccount();
         var accessToken = account.AccessToken;
         var refreshToken = account.RefreshToken;
 
@@ -422,12 +416,12 @@ public sealed partial class OAuthAccountSection : UserControl
 
     private void SetPlaceholders()
     {
-        _scopesTextBox.PlaceholderText = string.Join(" ", GetDefaults().Scopes);
+        _scopesTextBox.PlaceholderText = string.Join(" ", GetDefaultScopes());
     }
 
     private void LoadTokenInformation()
     {
-        var account = GetAccount(_settings);
+        var account = GetLiveAccount();
         var accessToken = account.AccessToken;
         var refreshToken = account.RefreshToken;
         var login = account.Login;

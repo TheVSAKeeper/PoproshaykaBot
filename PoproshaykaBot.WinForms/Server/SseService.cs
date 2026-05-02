@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.WinForms.Server.Obs;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Obs;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;

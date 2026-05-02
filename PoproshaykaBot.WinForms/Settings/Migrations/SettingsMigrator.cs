@@ -1,11 +1,13 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.WinForms.Infrastructure.Persistence;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using System.Text.Json.Nodes;
 
 namespace PoproshaykaBot.WinForms.Settings.Migrations;
 
 public static class SettingsMigrator
 {
-    public static bool TryMigrate(JsonObject root, ILogger? logger = null)
+    public static bool TryMigrate(JsonObject root, ILogger? logger = null, string? baseDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(root);
 
@@ -17,6 +19,140 @@ public static class SettingsMigrator
         }
 
         changed |= RemoveLegacyUiFields(root, logger);
+
+        if (baseDirectory != null)
+        {
+            changed |= SplitMonolithicSettings(root, baseDirectory, logger);
+        }
+
+        return changed;
+    }
+
+    private static bool SplitMonolithicSettings(JsonObject root, string baseDirectory, ILogger? logger)
+    {
+        var changed = false;
+
+        if (root["twitch"] is JsonObject twitch)
+        {
+            // accounts.json
+            var botAccount = twitch["botAccount"] as JsonObject;
+            var broadcasterAccount = twitch["broadcasterAccount"] as JsonObject;
+
+            if (botAccount != null || broadcasterAccount != null)
+            {
+                var accountsTarget = Path.Combine(baseDirectory, "accounts.json");
+
+                if (!File.Exists(accountsTarget))
+                {
+                    var dto = new JsonObject
+                    {
+                        ["botAccount"] = botAccount?.DeepClone() ?? new JsonObject(),
+                        ["broadcasterAccount"] = broadcasterAccount?.DeepClone() ?? new JsonObject(),
+                    };
+
+                    AtomicFile.Save(accountsTarget, dto.ToJsonString(JsonStoreOptions.Default), logger);
+                    logger?.LogInformation("Миграция настроек: вынесен botAccount/broadcasterAccount в accounts.json");
+                }
+
+                if (twitch.Remove("botAccount"))
+                {
+                    changed = true;
+                }
+
+                if (twitch.Remove("broadcasterAccount"))
+                {
+                    changed = true;
+                }
+            }
+
+            // broadcast-profiles.json
+            if (twitch["broadcastProfiles"] is JsonObject broadcastProfiles)
+            {
+                var target = Path.Combine(baseDirectory, "broadcast-profiles.json");
+
+                if (!File.Exists(target))
+                {
+                    AtomicFile.Save(target, broadcastProfiles.DeepClone()!.ToJsonString(JsonStoreOptions.Default), logger);
+                    logger?.LogInformation("Миграция настроек: вынесен broadcastProfiles в broadcast-profiles.json");
+                }
+
+                twitch.Remove("broadcastProfiles");
+                changed = true;
+            }
+
+            // polls.json
+            if (twitch["polls"] is JsonObject polls)
+            {
+                var target = Path.Combine(baseDirectory, "polls.json");
+
+                if (!File.Exists(target))
+                {
+                    AtomicFile.Save(target, polls.DeepClone()!.ToJsonString(JsonStoreOptions.Default), logger);
+                    logger?.LogInformation("Миграция настроек: вынесен polls в polls.json");
+                }
+
+                twitch.Remove("polls");
+                changed = true;
+            }
+
+            // recent-categories.json
+            if (twitch["infrastructure"] is JsonObject infrastructure
+                && infrastructure["recentCategories"] is JsonArray recentCategories)
+            {
+                var target = Path.Combine(baseDirectory, "recent-categories.json");
+
+                if (!File.Exists(target))
+                {
+                    var dto = new JsonObject
+                    {
+                        ["items"] = recentCategories.DeepClone(),
+                    };
+
+                    AtomicFile.Save(target, dto.ToJsonString(JsonStoreOptions.Default), logger);
+                    logger?.LogInformation("Миграция настроек: вынесен infrastructure.recentCategories в recent-categories.json");
+                }
+
+                infrastructure.Remove("recentCategories");
+                changed = true;
+            }
+
+            // obs-chat.json
+            if (twitch["obsChat"] is JsonObject obsChat)
+            {
+                var target = Path.Combine(baseDirectory, "obs-chat.json");
+
+                if (!File.Exists(target))
+                {
+                    AtomicFile.Save(target, obsChat.DeepClone()!.ToJsonString(JsonStoreOptions.Default), logger);
+                    logger?.LogInformation("Миграция настроек: вынесен obsChat в obs-chat.json");
+                }
+
+                twitch.Remove("obsChat");
+                changed = true;
+            }
+        }
+
+        // dashboard-layout.json
+        if (root["ui"] is JsonObject ui
+            && (ui.ContainsKey("dashboard") || ui.ContainsKey("mainWindow")))
+        {
+            var target = Path.Combine(baseDirectory, "dashboard-layout.json");
+
+            if (!File.Exists(target))
+            {
+                var dto = new JsonObject
+                {
+                    ["dashboard"] = ui["dashboard"]?.DeepClone(),
+                    ["mainWindow"] = ui["mainWindow"]?.DeepClone(),
+                };
+
+                AtomicFile.Save(target, dto.ToJsonString(JsonStoreOptions.Default), logger);
+                logger?.LogInformation("Миграция настроек: вынесены ui.dashboard/ui.mainWindow в dashboard-layout.json");
+            }
+
+            root.Remove("ui");
+            changed = true;
+        }
 
         return changed;
     }
@@ -110,5 +246,4 @@ public static class SettingsMigrator
                && value.TryGetValue(out string? text)
                && !string.IsNullOrEmpty(text);
     }
-
 }

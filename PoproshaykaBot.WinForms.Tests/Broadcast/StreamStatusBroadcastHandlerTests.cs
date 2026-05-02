@@ -34,8 +34,7 @@ public sealed class StreamStatusBroadcastHandlerTests
             },
         };
 
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance,
-            Substitute.For<IEventBus>());
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
 
         _settingsManager.Current.Returns(_settings);
 

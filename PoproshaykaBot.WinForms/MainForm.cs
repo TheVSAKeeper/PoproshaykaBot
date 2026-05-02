@@ -6,6 +6,8 @@ using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
 using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
+using PoproshaykaBot.WinForms.Settings.Ui;
 using PoproshaykaBot.WinForms.Streaming;
 using PoproshaykaBot.WinForms.Users;
 
@@ -17,6 +19,7 @@ public partial class MainForm : Form
     private readonly IEventBus _eventBus;
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly SettingsManager _settingsManager;
+    private readonly DashboardLayoutStore _dashboardLayoutStore;
     private readonly BotConnectionManager _connectionManager;
     private readonly ILogger<MainForm> _logger;
     private readonly List<IDisposable> _subs = [];
@@ -34,6 +37,7 @@ public partial class MainForm : Form
         ChatHistoryManager chatHistoryManager,
         BotConnectionManager connectionManager,
         SettingsManager settingsManager,
+        DashboardLayoutStore dashboardLayoutStore,
         ILogger<MainForm> logger)
     {
         _forms = forms;
@@ -41,6 +45,7 @@ public partial class MainForm : Form
         _chatHistoryManager = chatHistoryManager;
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
+        _dashboardLayoutStore = dashboardLayoutStore;
         _logger = logger;
 
         InitializeComponent();
@@ -390,7 +395,7 @@ public partial class MainForm : Form
 
     private void RestoreWindowBounds()
     {
-        var saved = _settingsManager.Current.Ui.MainWindow;
+        var saved = _dashboardLayoutStore.LoadMainWindow();
 
         if (saved is null || saved.Width <= 0 || saved.Height <= 0)
         {
@@ -415,7 +420,6 @@ public partial class MainForm : Form
 
     private void SaveWindowBounds()
     {
-        var settings = _settingsManager.Current;
         var isMaximized = WindowState == FormWindowState.Maximized;
         var bounds = isMaximized || WindowState == FormWindowState.Minimized
             ? RestoreBounds
@@ -426,7 +430,7 @@ public partial class MainForm : Form
             return;
         }
 
-        settings.Ui.MainWindow = new()
+        var window = new MainWindowSettings
         {
             X = bounds.X,
             Y = bounds.Y,
@@ -437,7 +441,7 @@ public partial class MainForm : Form
 
         try
         {
-            _settingsManager.SaveSettings(settings);
+            _dashboardLayoutStore.SaveMainWindow(window);
         }
         catch (Exception exception)
         {

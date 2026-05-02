@@ -1,7 +1,7 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast.Profiles;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Tests.Polls;
 
 namespace PoproshaykaBot.WinForms.Tests.Broadcast.Profiles;
@@ -12,25 +12,35 @@ public class BroadcastProfilesManagerTests
     [SetUp]
     public void SetUp()
     {
-        _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance,
-            Substitute.For<IEventBus>());
-
-        _settingsManager.Current.Returns(_settings);
+        _tempDir = Path.Combine(Path.GetTempPath(), "broadcast-profiles-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
+        _store = new(filePath: Path.Combine(_tempDir, "broadcast-profiles.json"));
         _applier = Substitute.For<IChannelInformationApplier>();
         _applier.ApplyAsync(Arg.Any<BroadcastProfile>(), Arg.Any<CancellationToken>()).Returns(true);
         _applier.ApplyPatchAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(true);
         _eventBus = Substitute.For<IEventBus>();
         _clock = new() { UtcNow = new(2026, 4, 30, 12, 0, 0, TimeSpan.Zero) };
-        _manager = new(_settingsManager,
+        _manager = new(_store,
             _applier,
             _eventBus,
             _clock,
             NullLogger<BroadcastProfilesManager>.Instance);
     }
 
-    private SettingsManager _settingsManager = null!;
-    private AppSettings _settings = null!;
+    [TearDown]
+    public void TearDown()
+    {
+        try
+        {
+            Directory.Delete(_tempDir, true);
+        }
+        catch
+        {
+        }
+    }
+
+    private string _tempDir = null!;
+    private BroadcastProfilesStore _store = null!;
     private IChannelInformationApplier _applier = null!;
     private IEventBus _eventBus = null!;
     private TestTimeProvider _clock = null!;
@@ -46,8 +56,7 @@ public class BroadcastProfilesManagerTests
 
         _manager.Upsert(profile);
 
-        Assert.That(_settings.Twitch.BroadcastProfiles.Profiles, Has.Count.EqualTo(1));
-        _settingsManager.Received(1).SaveSettings(_settings);
+        Assert.That(_store.Load().Profiles, Has.Count.EqualTo(1));
         _eventBus.Received(1).PublishAsync(Arg.Any<BroadcastProfilesChanged>(), Arg.Any<CancellationToken>());
     }
 
@@ -85,8 +94,8 @@ public class BroadcastProfilesManagerTests
         profile.Title = "new";
         _manager.Upsert(profile);
 
-        Assert.That(_settings.Twitch.BroadcastProfiles.Profiles, Has.Count.EqualTo(1));
-        Assert.That(_settings.Twitch.BroadcastProfiles.Profiles[0].Title, Is.EqualTo("new"));
+        Assert.That(_store.Load().Profiles, Has.Count.EqualTo(1));
+        Assert.That(_store.Load().Profiles[0].Title, Is.EqualTo("new"));
     }
 
     [Test]
@@ -100,7 +109,7 @@ public class BroadcastProfilesManagerTests
         _manager.Upsert(profile);
         _manager.Remove(profile.Id);
 
-        Assert.That(_settings.Twitch.BroadcastProfiles.Profiles, Is.Empty);
+        Assert.That(_store.Load().Profiles, Is.Empty);
     }
 
     [Test]
@@ -116,7 +125,7 @@ public class BroadcastProfilesManagerTests
         await _manager.ApplyAsync(profile.Id, CancellationToken.None);
 
         await _applier.Received(1).ApplyAsync(profile, Arg.Any<CancellationToken>());
-        Assert.That(_settings.Twitch.BroadcastProfiles.LastAppliedProfileId, Is.EqualTo(profile.Id));
+        Assert.That(_store.Load().LastAppliedProfileId, Is.EqualTo(profile.Id));
     }
 
     [Test]
@@ -177,7 +186,7 @@ public class BroadcastProfilesManagerTests
 
         await _manager.ApplyAsync(profile.Id, CancellationToken.None);
 
-        Assert.That(_settings.Twitch.BroadcastProfiles.Profiles[0].CurrentNumber, Is.EqualTo(14));
+        Assert.That(_store.Load().Profiles[0].CurrentNumber, Is.EqualTo(14));
     }
 
     [Test]
@@ -194,7 +203,7 @@ public class BroadcastProfilesManagerTests
 
         await _manager.ApplyAsync(profile.Id, CancellationToken.None);
 
-        Assert.That(_settings.Twitch.BroadcastProfiles.Profiles[0].LastApplyAt, Is.EqualTo(_clock.UtcNow));
+        Assert.That(_store.Load().Profiles[0].LastApplyAt, Is.EqualTo(_clock.UtcNow));
     }
 
     [Test]
@@ -212,7 +221,7 @@ public class BroadcastProfilesManagerTests
 
         await _manager.ApplyAsync(profile.Id, CancellationToken.None);
 
-        var stored = _settings.Twitch.BroadcastProfiles.Profiles[0];
+        var stored = _store.Load().Profiles[0];
         using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.CurrentNumber, Is.EqualTo(14));
@@ -231,20 +240,17 @@ public class BroadcastProfilesManagerTests
         };
 
         _manager.Upsert(profile);
-        _settingsManager.ClearReceivedCalls();
 
         var appliedAt = _clock.UtcNow.AddMinutes(-1);
         var result = _manager.AdvanceCurrentNumber(profile.Id, 15, appliedAt);
 
-        var stored = _settings.Twitch.BroadcastProfiles.Profiles[0];
+        var stored = _store.Load().Profiles[0];
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.True);
             Assert.That(stored.CurrentNumber, Is.EqualTo(15));
             Assert.That(stored.LastApplyAt, Is.EqualTo(appliedAt));
         }
-
-        _settingsManager.Received(1).SaveSettings(_settings);
     }
 
     [Test]
@@ -253,7 +259,6 @@ public class BroadcastProfilesManagerTests
         var result = _manager.AdvanceCurrentNumber(Guid.NewGuid(), 99, _clock.UtcNow);
 
         Assert.That(result, Is.False);
-        _settingsManager.DidNotReceiveWithAnyArgs().SaveSettings(default!);
     }
 
     [Test]
@@ -270,7 +275,7 @@ public class BroadcastProfilesManagerTests
 
         await _manager.ApplyAsync(profile.Id, CancellationToken.None);
 
-        var stored = _settings.Twitch.BroadcastProfiles.Profiles[0];
+        var stored = _store.Load().Profiles[0];
         using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.CurrentNumber, Is.EqualTo(5));

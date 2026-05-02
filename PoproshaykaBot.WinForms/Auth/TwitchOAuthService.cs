@@ -2,6 +2,7 @@
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Twitch.Chat;
 using System.Diagnostics;
 using System.Security.Cryptography;
@@ -12,6 +13,7 @@ namespace PoproshaykaBot.WinForms.Auth;
 
 public sealed class TwitchOAuthService(
     SettingsManager settingsManager,
+    AccountsStore accountsStore,
     IHttpClientFactory httpClientFactory,
     ILogger<TwitchOAuthService> logger,
     IEventBus eventBus)
@@ -63,7 +65,7 @@ public sealed class TwitchOAuthService(
         try
         {
             var settings = settingsManager.Current.Twitch;
-            scopes ??= GetAccount(settings, role).Scopes;
+            scopes ??= accountsStore.Load(role).Scopes;
             redirectUri ??= settings.RedirectUri;
 
             var scopeString = string.Join(" ", scopes);
@@ -251,7 +253,7 @@ public sealed class TwitchOAuthService(
 
     public async Task<string?> GetAccessTokenAsync(TwitchOAuthRole role, CancellationToken ct = default)
     {
-        var account = GetAccount(settingsManager.Current.Twitch, role);
+        var account = accountsStore.Load(role);
 
         if (string.IsNullOrWhiteSpace(account.AccessToken))
         {
@@ -284,8 +286,7 @@ public sealed class TwitchOAuthService(
         int expiresInSeconds = 0,
         bool publishAuthorizationRefreshed = false)
     {
-        var settings = settingsManager.Current;
-        var account = GetAccount(settings.Twitch, role);
+        var account = accountsStore.Load(role);
 
         account.AccessToken = accessToken;
         account.RefreshToken = refreshToken;
@@ -301,7 +302,7 @@ public sealed class TwitchOAuthService(
             ? DateTimeOffset.UtcNow.AddSeconds(expiresInSeconds)
             : null;
 
-        settingsManager.SaveSettings(settings);
+        accountsStore.SaveAll();
         logger.LogInformation("Токены роли {Role} обновлены в настройках (login={Login})", role, login);
 
         if (publishAuthorizationRefreshed)
@@ -312,11 +313,10 @@ public sealed class TwitchOAuthService(
 
     public void ClearTokens(TwitchOAuthRole role)
     {
-        var settings = settingsManager.Current;
-        var account = GetAccount(settings.Twitch, role);
+        var account = accountsStore.Load(role);
 
         ClearAccountInPlace(account);
-        settingsManager.SaveSettings(settings);
+        accountsStore.SaveAll();
 
         ReportStatus(role, "Токены очищены.");
         logger.LogInformation("Токены роли {Role} удалены из настроек", role);
@@ -350,16 +350,6 @@ public sealed class TwitchOAuthService(
         {
             [TwitchOAuthRole.Bot] = new(1, 1),
             [TwitchOAuthRole.Broadcaster] = new(1, 1),
-        };
-    }
-
-    private static TwitchAccountSettings GetAccount(TwitchSettings twitch, TwitchOAuthRole role)
-    {
-        return role switch
-        {
-            TwitchOAuthRole.Bot => twitch.BotAccount,
-            TwitchOAuthRole.Broadcaster => twitch.BroadcasterAccount,
-            _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
         };
     }
 
@@ -403,7 +393,7 @@ public sealed class TwitchOAuthService(
         try
         {
             var settings = settingsManager.Current.Twitch;
-            var account = GetAccount(settings, role);
+            var account = accountsStore.Load(role);
 
             if (!string.IsNullOrWhiteSpace(account.AccessToken)
                 && !string.Equals(account.AccessToken, staleToken, StringComparison.Ordinal))
@@ -445,7 +435,7 @@ public sealed class TwitchOAuthService(
         _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(changeMsg), ct);
 
         ClearAccountInPlace(account);
-        settingsManager.SaveSettings(settingsManager.Current);
+        accountsStore.SaveAll();
     }
 
     private async Task<string> RefreshTokenInternalAsync(

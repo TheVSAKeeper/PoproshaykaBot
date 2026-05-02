@@ -3,7 +3,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Polling;
 using PoproshaykaBot.WinForms.Polls;
 using PoproshaykaBot.WinForms.Polls.Handlers;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Tests.Polls;
 
@@ -13,17 +13,17 @@ public class PollChatAnnouncementHandlerTests
     [SetUp]
     public void SetUp()
     {
-        _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, Substitute.For<IEventBus>());
-        _settingsManager.Current.Returns(_settings);
+        _polls = new();
+        _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null);
+        _pollsStore.Load().Returns(_polls);
         _messenger = Substitute.For<IChatMessenger>();
         _eventBus = Substitute.For<IEventBus>();
         _clock = new() { UtcNow = new(2026, 4, 24, 10, 0, 0, TimeSpan.Zero) };
-        _handler = new(_messenger, _settingsManager, _eventBus, _clock);
+        _handler = new(_messenger, _pollsStore, _eventBus, _clock);
     }
 
-    private SettingsManager _settingsManager = null!;
-    private AppSettings _settings = null!;
+    private PollsStore _pollsStore = null!;
+    private PollsSettings _polls = null!;
     private IChatMessenger _messenger = null!;
     private IEventBus _eventBus = null!;
     private PollChatAnnouncementHandler _handler = null!;
@@ -50,8 +50,8 @@ public class PollChatAnnouncementHandlerTests
     [Test]
     public async Task PollStarted_EnabledTemplate_SendsMessage()
     {
-        _settings.Twitch.Polls.ChatTemplates.StartEnabled = true;
-        _settings.Twitch.Polls.ChatTemplates.StartTemplate = "Старт: {title}";
+        _polls.ChatTemplates.StartEnabled = true;
+        _polls.ChatTemplates.StartTemplate = "Старт: {title}";
 
         await _handler.HandleAsync(new PollStarted(Active()), CancellationToken.None);
 
@@ -61,7 +61,7 @@ public class PollChatAnnouncementHandlerTests
     [Test]
     public async Task PollStarted_Disabled_DoesNotSend()
     {
-        _settings.Twitch.Polls.ChatTemplates.StartEnabled = false;
+        _polls.ChatTemplates.StartEnabled = false;
 
         await _handler.HandleAsync(new PollStarted(Active()), CancellationToken.None);
 
@@ -71,8 +71,8 @@ public class PollChatAnnouncementHandlerTests
     [Test]
     public async Task PollFinalized_WithWinner_ExpandsWinnerPlaceholder()
     {
-        _settings.Twitch.Polls.ChatTemplates.EndEnabled = true;
-        _settings.Twitch.Polls.ChatTemplates.EndTemplate = "Победил: {winner} ({winnerVotes}/{totalVotes})";
+        _polls.ChatTemplates.EndEnabled = true;
+        _polls.ChatTemplates.EndTemplate = "Победил: {winner} ({winnerVotes}/{totalVotes})";
 
         var snapshot = Active(choices: [("A", 5), ("B", 3)]);
         var winner = new PollChoiceSnapshot("c0", "A", 5, 0, 0);
@@ -85,8 +85,8 @@ public class PollChatAnnouncementHandlerTests
     [Test]
     public async Task PollFinalized_Tie_ExpandsWinnerAsNichya()
     {
-        _settings.Twitch.Polls.ChatTemplates.EndEnabled = true;
-        _settings.Twitch.Polls.ChatTemplates.EndTemplate = "Победил: {winner}";
+        _polls.ChatTemplates.EndEnabled = true;
+        _polls.ChatTemplates.EndTemplate = "Победил: {winner}";
 
         var snapshot = Active(choices: [("A", 5), ("B", 5)]);
 
@@ -98,9 +98,9 @@ public class PollChatAnnouncementHandlerTests
     [Test]
     public async Task PollProgressed_ThrottledWithinInterval_SendsOnlyOnce()
     {
-        _settings.Twitch.Polls.ChatTemplates.ProgressEnabled = true;
-        _settings.Twitch.Polls.ChatTemplates.ProgressTemplate = "Лидер: {leader}";
-        _settings.Twitch.Polls.ChatTemplates.ProgressAnnounceIntervalSeconds = 60;
+        _polls.ChatTemplates.ProgressEnabled = true;
+        _polls.ChatTemplates.ProgressTemplate = "Лидер: {leader}";
+        _polls.ChatTemplates.ProgressAnnounceIntervalSeconds = 60;
 
         var snapshot1 = Active(choices: [("A", 3), ("B", 1)]);
         var snapshot2 = Active(choices: [("A", 5), ("B", 2)]);
@@ -115,9 +115,9 @@ public class PollChatAnnouncementHandlerTests
     [Test]
     public async Task PollProgressed_AfterIntervalPasses_SendsAgain()
     {
-        _settings.Twitch.Polls.ChatTemplates.ProgressEnabled = true;
-        _settings.Twitch.Polls.ChatTemplates.ProgressTemplate = "Лидер: {leader}";
-        _settings.Twitch.Polls.ChatTemplates.ProgressAnnounceIntervalSeconds = 60;
+        _polls.ChatTemplates.ProgressEnabled = true;
+        _polls.ChatTemplates.ProgressTemplate = "Лидер: {leader}";
+        _polls.ChatTemplates.ProgressAnnounceIntervalSeconds = 60;
 
         var snapshot1 = Active(choices: [("A", 3), ("B", 1)]);
         var snapshot2 = Active(choices: [("A", 5), ("B", 2)]);
@@ -132,8 +132,8 @@ public class PollChatAnnouncementHandlerTests
     [Test]
     public async Task PollTerminated_Enabled_SendsMessage()
     {
-        _settings.Twitch.Polls.ChatTemplates.TerminatedEnabled = true;
-        _settings.Twitch.Polls.ChatTemplates.TerminatedTemplate = "Досрочно: {title}";
+        _polls.ChatTemplates.TerminatedEnabled = true;
+        _polls.ChatTemplates.TerminatedTemplate = "Досрочно: {title}";
 
         await _handler.HandleAsync(new PollTerminated(Active()), CancellationToken.None);
 
@@ -143,7 +143,7 @@ public class PollChatAnnouncementHandlerTests
     [Test]
     public async Task PollArchived_Disabled_DoesNotSend()
     {
-        _settings.Twitch.Polls.ChatTemplates.ArchivedEnabled = false;
+        _polls.ChatTemplates.ArchivedEnabled = false;
 
         await _handler.HandleAsync(new PollArchived(Active()), CancellationToken.None);
 
@@ -153,8 +153,8 @@ public class PollChatAnnouncementHandlerTests
     [Test]
     public async Task PollStarted_ChoicesPlaceholder_ExpandsNumberedList()
     {
-        _settings.Twitch.Polls.ChatTemplates.StartEnabled = true;
-        _settings.Twitch.Polls.ChatTemplates.StartTemplate = "Варианты: {choices}";
+        _polls.ChatTemplates.StartEnabled = true;
+        _polls.ChatTemplates.StartTemplate = "Варианты: {choices}";
 
         var snapshot = Active(choices: [("A", 0), ("B", 0), ("C", 0)]);
 

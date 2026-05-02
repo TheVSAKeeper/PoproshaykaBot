@@ -2,7 +2,7 @@
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Chat.Commands;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Tests.Chat.Commands;
 
@@ -12,8 +12,10 @@ public class ProfileCommandTests
     [SetUp]
     public void SetUp()
     {
-        _manager = Substitute.For<BroadcastProfilesManager>(Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance,
-                Substitute.For<IEventBus>()),
+        _tempDir = Path.Combine(Path.GetTempPath(), "profile-command-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
+        var store = new BroadcastProfilesStore(filePath: Path.Combine(_tempDir, "broadcast-profiles.json"));
+        _manager = Substitute.For<BroadcastProfilesManager>(store,
             Substitute.For<IChannelInformationApplier>(),
             Substitute.For<IEventBus>(),
             TimeProvider.System,
@@ -22,6 +24,19 @@ public class ProfileCommandTests
         _command = new(_manager, NullLogger<ProfileCommand>.Instance);
     }
 
+    [TearDown]
+    public void TearDown()
+    {
+        try
+        {
+            Directory.Delete(_tempDir, true);
+        }
+        catch
+        {
+        }
+    }
+
+    private string _tempDir = null!;
     private BroadcastProfilesManager _manager = null!;
     private ProfileCommand _command = null!;
 

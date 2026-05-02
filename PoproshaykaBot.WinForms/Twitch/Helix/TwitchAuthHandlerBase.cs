@@ -1,12 +1,14 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Auth;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Twitch.Helix;
 
 public abstract class TwitchAuthHandlerBase(
     TwitchOAuthService oauthService,
     SettingsManager settingsManager,
+    AccountsStore accountsStore,
     ILogger logger)
     : DelegatingHandler
 {
@@ -38,8 +40,7 @@ public abstract class TwitchAuthHandlerBase(
         logger.LogWarning("Helix запрос {Method} {Path} (роль {Role}) вернул 401 — очищаем сохранённый токен",
             request.Method, request.RequestUri?.AbsolutePath, Role);
 
-        var settings = settingsManager.Current;
-        var account = GetAccount(settings.Twitch);
+        var account = accountsStore.Load(Role);
 
         if (!string.Equals(account.AccessToken, token, StringComparison.Ordinal))
         {
@@ -47,12 +48,10 @@ public abstract class TwitchAuthHandlerBase(
         }
 
         account.AccessToken = string.Empty;
-        settingsManager.SaveSettings(settings);
+        accountsStore.SaveAll();
 
         return response;
     }
 
     protected abstract Task<string?> GetTokenAsync(TwitchOAuthService oauthService, CancellationToken cancellationToken);
-
-    protected abstract TwitchAccountSettings GetAccount(TwitchSettings twitch);
 }

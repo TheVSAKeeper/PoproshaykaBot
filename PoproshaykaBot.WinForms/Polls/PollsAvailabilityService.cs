@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Broadcast.Profiles;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 
@@ -16,7 +16,7 @@ public class PollsAvailabilityService(
     [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
-    SettingsManager settingsManager,
+    AccountsStore accountsStore,
     ILogger<PollsAvailabilityService>? logger = null)
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -56,7 +56,7 @@ public class PollsAvailabilityService(
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(settingsManager.Current.Twitch.BroadcasterAccount.AccessToken))
+            if (string.IsNullOrWhiteSpace(accountsStore.LoadBroadcaster().AccessToken))
             {
                 logger?.LogInformation("PollsAvailability: токен стримера отсутствует — голосования недоступны");
                 return PollsAvailability.NoBroadcasterToken;

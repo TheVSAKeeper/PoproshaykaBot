@@ -1,3 +1,5 @@
+﻿using PoproshaykaBot.WinForms.Broadcast;
+
 namespace PoproshaykaBot.WinForms.Settings;
 
 public partial class AutoBroadcastSettingsControl : UserControl

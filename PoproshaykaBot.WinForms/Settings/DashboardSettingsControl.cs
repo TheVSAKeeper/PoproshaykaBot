@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Settings.Ui;
 using PoproshaykaBot.WinForms.Tiles;
 using System.ComponentModel;
 
@@ -25,11 +26,15 @@ public sealed partial class DashboardSettingsControl : UserControl
     [Inject]
     public IDashboardTileCatalog TileCatalog { get; internal init; } = null!;
 
-    public void LoadSettings(UiSettings ui)
+    public DashboardLayoutSettings? CurrentLayout { get; private set; }
+
+    public void LoadSettings(DashboardLayoutSettings? draft)
     {
-        var layout = ui.Dashboard is { Tiles.Count: > 0 }
-            ? ui.Dashboard
+        var layout = draft is { Tiles.Count: > 0 }
+            ? draft
             : DashboardLayoutDefaults.Create();
+
+        CurrentLayout = layout;
 
         if (_initialized)
         {
@@ -41,16 +46,11 @@ public sealed partial class DashboardSettingsControl : UserControl
         }
     }
 
-    public void SaveSettings(UiSettings ui)
+    public DashboardLayoutSettings SaveSettings()
     {
         if (!_initialized)
         {
-            if (_pendingLayout != null)
-            {
-                ui.Dashboard = _pendingLayout;
-            }
-
-            return;
+            return _pendingLayout ?? DashboardLayoutDefaults.Create();
         }
 
         var layout = new DashboardLayoutSettings
@@ -59,7 +59,7 @@ public sealed partial class DashboardSettingsControl : UserControl
             RowCount = (int)_gridRowsNumeric.Value,
         };
 
-        var collapsedByType = ui.Dashboard?.Tiles
+        var collapsedByType = CurrentLayout?.Tiles
                                   .Where(t => t.IsCollapsed)
                                   .Select(t => t.TypeId)
                                   .ToHashSet(StringComparer.Ordinal)
@@ -87,7 +87,8 @@ public sealed partial class DashboardSettingsControl : UserControl
             });
         }
 
-        ui.Dashboard = layout;
+        CurrentLayout = layout;
+        return layout;
     }
 
     protected override void OnHandleCreated(EventArgs e)

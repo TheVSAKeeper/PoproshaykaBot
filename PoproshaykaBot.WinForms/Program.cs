@@ -14,6 +14,8 @@ using PoproshaykaBot.WinForms.Infrastructure.Logging;
 using PoproshaykaBot.WinForms.Polls;
 using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Migrations;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Statistics;
 using PoproshaykaBot.WinForms.Streaming;
 using PoproshaykaBot.WinForms.Tiles;
@@ -23,6 +25,7 @@ using PoproshaykaBot.WinForms.Twitch.EventSub;
 using PoproshaykaBot.WinForms.Twitch.Helix;
 using PoproshaykaBot.WinForms.Users;
 using Serilog;
+using Serilog.Extensions.Logging;
 using System.Diagnostics;
 using Timer = System.Windows.Forms.Timer;
 
@@ -79,6 +82,8 @@ public static class Program
 
     private static void RunApp(bool isUiSmoke, UiLogSink uiLogSink)
     {
+        MigrateLegacySettingsLayout();
+
         var services = new ServiceCollection();
         ConfigureServices(services, uiLogSink);
 
@@ -115,6 +120,21 @@ public static class Program
             }
 
             serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+
+    private static void MigrateLegacySettingsLayout()
+    {
+        var loggerFactory = new SerilogLoggerFactory(Log.Logger, false);
+        var logger = loggerFactory.CreateLogger(nameof(LegacySettingsLayoutMigrator));
+
+        try
+        {
+            LegacySettingsLayoutMigrator.Run(AppPaths.BaseDirectory, AppPaths.SettingsDirectory, logger);
+        }
+        catch (Exception exception)
+        {
+            Log.Error(exception, "Ошибка пред-миграции layout-а настроек");
         }
     }
 
@@ -263,6 +283,12 @@ public static class Program
         services.AddEventSubscribers(typeof(Program).Assembly);
 
         services.AddSingleton<SettingsManager>();
+        services.AddSingleton<AccountsStore>();
+        services.AddSingleton<BroadcastProfilesStore>();
+        services.AddSingleton<PollsStore>();
+        services.AddSingleton<RecentCategoriesStore>();
+        services.AddSingleton<DashboardLayoutStore>();
+        services.AddSingleton<ObsChatStore>();
 
         services.AddTransient<BotTwitchAuthHandler>();
         services.AddTransient<BroadcasterTwitchAuthHandler>();

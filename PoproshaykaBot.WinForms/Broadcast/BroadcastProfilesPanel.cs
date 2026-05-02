@@ -3,7 +3,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Streaming;
 using PoproshaykaBot.WinForms.Tiles;
 using PoproshaykaBot.WinForms.Twitch.Helix;
@@ -57,7 +57,7 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
     public IEventBus Bus { get; internal init; } = null!;
 
     [Inject]
-    public SettingsManager Settings { get; internal init; } = null!;
+    public BroadcastProfilesStore Profiles { get; internal init; } = null!;
 
     [Inject]
     public IStreamStatus Stream { get; internal init; } = null!;
@@ -155,7 +155,7 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
 
         _initialized = true;
 
-        _activeProfileId = Settings.Current.Twitch.BroadcastProfiles.LastAppliedProfileId;
+        _activeProfileId = Profiles.Load().LastAppliedProfileId;
 
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfilesChanged>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplied>(this, OnProfileApplied));
@@ -520,7 +520,7 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
 
             _cardsFlow.Controls.Clear();
 
-            var activeId = _activeProfileId ?? Settings.Current.Twitch.BroadcastProfiles.LastAppliedProfileId;
+            var activeId = _activeProfileId ?? Profiles.Load().LastAppliedProfileId;
             var currentStream = Stream.CurrentStream;
 
             var profiles = Manager.GetAll();

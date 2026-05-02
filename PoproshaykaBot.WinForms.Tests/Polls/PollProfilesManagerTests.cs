@@ -1,7 +1,7 @@
 ﻿using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Polling;
 using PoproshaykaBot.WinForms.Polls;
-using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Tests.Polls;
 
@@ -11,17 +11,27 @@ public class PollProfilesManagerTests
     [SetUp]
     public void SetUp()
     {
-        _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance,
-            Substitute.For<IEventBus>());
-
-        _settingsManager.Current.Returns(_settings);
+        _tempDir = Path.Combine(Path.GetTempPath(), "poll-profiles-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
+        _store = new(filePath: Path.Combine(_tempDir, "polls.json"));
         _eventBus = Substitute.For<IEventBus>();
-        _manager = new(_settingsManager, _eventBus, NullLogger<PollProfilesManager>.Instance);
+        _manager = new(_store, _eventBus, NullLogger<PollProfilesManager>.Instance);
     }
 
-    private SettingsManager _settingsManager = null!;
-    private AppSettings _settings = null!;
+    [TearDown]
+    public void TearDown()
+    {
+        try
+        {
+            Directory.Delete(_tempDir, true);
+        }
+        catch
+        {
+        }
+    }
+
+    private string _tempDir = null!;
+    private PollsStore _store = null!;
     private IEventBus _eventBus = null!;
     private PollProfilesManager _manager = null!;
 
@@ -43,8 +53,7 @@ public class PollProfilesManagerTests
 
         _manager.Upsert(profile);
 
-        Assert.That(_settings.Twitch.Polls.Profiles, Has.Count.EqualTo(1));
-        _settingsManager.Received(1).SaveSettings(_settings);
+        Assert.That(_store.Load().Profiles, Has.Count.EqualTo(1));
         _eventBus.Received(1).PublishAsync(Arg.Any<PollProfilesChanged>(), Arg.Any<CancellationToken>());
     }
 
@@ -76,8 +85,8 @@ public class PollProfilesManagerTests
         profile.Title = "Новый вопрос";
         _manager.Upsert(profile);
 
-        Assert.That(_settings.Twitch.Polls.Profiles, Has.Count.EqualTo(1));
-        Assert.That(_settings.Twitch.Polls.Profiles[0].Title, Is.EqualTo("Новый вопрос"));
+        Assert.That(_store.Load().Profiles, Has.Count.EqualTo(1));
+        Assert.That(_store.Load().Profiles[0].Title, Is.EqualTo("Новый вопрос"));
     }
 
     [Test]
@@ -154,7 +163,7 @@ public class PollProfilesManagerTests
 
         _manager.Remove(profile.Id);
 
-        Assert.That(_settings.Twitch.Polls.Profiles, Is.Empty);
+        Assert.That(_store.Load().Profiles, Is.Empty);
         _eventBus.Received(1).PublishAsync(Arg.Any<PollProfilesChanged>(), Arg.Any<CancellationToken>());
     }
 
@@ -201,6 +210,6 @@ public class PollProfilesManagerTests
 
         // Mutating returned list must not affect underlying storage
         ((List<PollProfile>)list).Clear();
-        Assert.That(_settings.Twitch.Polls.Profiles, Has.Count.EqualTo(2));
+        Assert.That(_store.Load().Profiles, Has.Count.EqualTo(2));
     }
 }

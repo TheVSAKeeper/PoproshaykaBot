@@ -1,6 +1,8 @@
-namespace PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Obs;
 
-public class ObsChatCssSettings
+namespace PoproshaykaBot.WinForms.Server.Obs;
+
+public sealed class ObsChatCssSettings
 {
     public string BackgroundColor { get; set; } = "#000000b5";
     public string TextColor { get; set; } = "#ffffff";

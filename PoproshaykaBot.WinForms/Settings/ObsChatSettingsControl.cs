@@ -1,4 +1,5 @@
 ﻿using Cyotek.Windows.Forms;
+using PoproshaykaBot.WinForms.Settings.Obs;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
@@ -316,6 +317,18 @@ public partial class ObsChatSettingsControl : UserControl
         }
     }
 
+    private static string GetAnimationTypeFromComboBox(ComboBox comboBox, (string Value, string DisplayName)[] options)
+    {
+        var index = comboBox.SelectedIndex;
+        return index >= 0 && index < options.Length ? options[index].Value : options[0].Value;
+    }
+
+    private static void SetAnimationTypeInComboBox(ComboBox comboBox, string animationType, (string Value, string DisplayName)[] options)
+    {
+        var index = Array.FindIndex(options, option => option.Value == animationType);
+        comboBox.SelectedIndex = index >= 0 ? index : 0;
+    }
+
     private void SetPlaceholders()
     {
         _fontFamilyTextBox.PlaceholderText = DefaultSettings.FontFamily;
@@ -344,18 +357,6 @@ public partial class ObsChatSettingsControl : UserControl
         {
             _fadeOutAnimationComboBox.Items.Add(displayName);
         }
-    }
-
-    private static string GetAnimationTypeFromComboBox(ComboBox comboBox, (string Value, string DisplayName)[] options)
-    {
-        var index = comboBox.SelectedIndex;
-        return index >= 0 && index < options.Length ? options[index].Value : options[0].Value;
-    }
-
-    private static void SetAnimationTypeInComboBox(ComboBox comboBox, string animationType, (string Value, string DisplayName)[] options)
-    {
-        var index = Array.FindIndex(options, option => option.Value == animationType);
-        comboBox.SelectedIndex = index >= 0 ? index : 0;
     }
 
     private string? ValidateFontFamily(string fontFamily)

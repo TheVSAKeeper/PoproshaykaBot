@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Ui;
 using PoproshaykaBot.WinForms.Tiles;
 
 namespace PoproshaykaBot.WinForms.Tests.Settings;
@@ -55,36 +56,28 @@ public sealed class DashboardSettingsControlTests
             ],
         };
 
-        var ui = new UiSettings { Dashboard = initialLayout };
+        _control.LoadSettings(initialLayout);
 
-        _control.LoadSettings(ui);
+        var saved = _control.SaveSettings();
 
-        var target = new UiSettings { Dashboard = new() { ColumnCount = 99 } };
-        _control.SaveSettings(target);
-
-        Assert.That(target.Dashboard, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(target.Dashboard!.Tiles, Has.Count.EqualTo(2),
+            Assert.That(saved.Tiles, Has.Count.EqualTo(2),
                 "Контрол не открывался — должен сохранить layout, который мы загрузили, а не пустоту.");
 
-            Assert.That(target.Dashboard.ColumnCount, Is.EqualTo(5));
-            Assert.That(target.Dashboard.RowCount, Is.EqualTo(4));
+            Assert.That(saved.ColumnCount, Is.EqualTo(5));
+            Assert.That(saved.RowCount, Is.EqualTo(4));
         }
     }
 
     [Test]
-    public void SaveSettings_NotInitialized_NullDashboard_LeavesTargetUntouched()
+    public void SaveSettings_NotInitialized_NullDashboard_FallsBackToDefaults()
     {
-        var ui = new UiSettings { Dashboard = null };
+        _control.LoadSettings(null);
 
-        _control.LoadSettings(ui);
+        var saved = _control.SaveSettings();
 
-        var target = new UiSettings();
-        _control.SaveSettings(target);
-
-        Assert.That(target.Dashboard, Is.Not.Null);
-        Assert.That(target.Dashboard!.Tiles, Is.Not.Empty,
-            "Если LoadSettings подсунул defaults, SaveSettings без инициализации должен их сохранить.");
+        Assert.That(saved.Tiles, Is.Not.Empty,
+            "Если LoadSettings получил null, SaveSettings без инициализации должен вернуть defaults.");
     }
 }

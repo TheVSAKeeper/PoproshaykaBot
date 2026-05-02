@@ -1,6 +1,4 @@
-﻿using PoproshaykaBot.WinForms.Settings;
-using PoproshaykaBot.WinForms.Settings.Migrations;
-using System.Text.Json;
+﻿using PoproshaykaBot.WinForms.Settings.Migrations;
 using System.Text.Json.Nodes;
 
 namespace PoproshaykaBot.WinForms.Tests.Settings.Migrations;
@@ -12,13 +10,6 @@ public sealed class SettingsMigratorTests
     {
         var node = JsonNode.Parse(json) ?? throw new InvalidOperationException("JSON is null");
         return node.AsObject();
-    }
-
-    private static AppSettings DeserializeAfterMigration(JsonObject root)
-    {
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        var serialized = root.ToJsonString(options);
-        return JsonSerializer.Deserialize<AppSettings>(serialized, options)!;
     }
 
     [Test]
@@ -59,7 +50,7 @@ public sealed class SettingsMigratorTests
     }
 
     [Test]
-    public void TryMigrate_LegacySingleAccount_DeserializesIntoCurrentAppSettings()
+    public void TryMigrate_LegacySingleAccount_PreservesBotAccountInJson()
     {
         const string Legacy = """
             {
@@ -74,14 +65,15 @@ public sealed class SettingsMigratorTests
 
         var root = Parse(Legacy);
         SettingsMigrator.TryMigrate(root);
-        var settings = DeserializeAfterMigration(root);
+
+        var bot = root["twitch"]!.AsObject()["botAccount"]!.AsObject();
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(settings.Twitch.BotAccount.Login, Is.EqualTo("thevsakeeper"));
-            Assert.That(settings.Twitch.BotAccount.AccessToken, Is.Empty, "Токен сбрасывается, чтобы запустить чистый OAuth-flow под новый набор прав");
-            Assert.That(settings.Twitch.BotAccount.RefreshToken, Is.Empty);
-            Assert.That(settings.Twitch.BotAccount.StoredScopes, Is.Empty);
+            Assert.That(bot["login"]!.GetValue<string>(), Is.EqualTo("thevsakeeper"));
+            Assert.That(bot.ContainsKey("accessToken"), Is.False, "Токены сбрасываются, чтобы запустить чистый OAuth-flow под новый набор прав");
+            Assert.That(bot.ContainsKey("refreshToken"), Is.False);
+            Assert.That(bot.ContainsKey("storedScopes"), Is.False);
         }
     }
 

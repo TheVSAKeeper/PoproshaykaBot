@@ -2,6 +2,7 @@
 using PoproshaykaBot.WinForms.Infrastructure.Events;
 using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.WinForms.Settings;
+using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Tests.Auth;
 
@@ -11,26 +12,36 @@ public sealed class TwitchOAuthServiceTests
     [SetUp]
     public void SetUp()
     {
+        _tempDir = Path.Combine(Path.GetTempPath(), "twitch-oauth-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
         _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance,
-            Substitute.For<IEventBus>());
-
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
         _settingsManager.Current.Returns(_settings);
+        _accountsStore = new(filePath: Path.Combine(_tempDir, "accounts.json"));
 
         _httpFactory = Substitute.For<IHttpClientFactory>();
         _eventBus = Substitute.For<IEventBus>();
 
-        _service = new(_settingsManager, _httpFactory, NullLogger<TwitchOAuthService>.Instance, _eventBus);
+        _service = new(_settingsManager, _accountsStore, _httpFactory, NullLogger<TwitchOAuthService>.Instance, _eventBus);
     }
 
     [TearDown]
     public void TearDown()
     {
         _service.Dispose();
+        try
+        {
+            Directory.Delete(_tempDir, true);
+        }
+        catch
+        {
+        }
     }
 
+    private string _tempDir = null!;
     private AppSettings _settings = null!;
     private SettingsManager _settingsManager = null!;
+    private AccountsStore _accountsStore = null!;
     private IHttpClientFactory _httpFactory = null!;
     private IEventBus _eventBus = null!;
     private TwitchOAuthService _service = null!;

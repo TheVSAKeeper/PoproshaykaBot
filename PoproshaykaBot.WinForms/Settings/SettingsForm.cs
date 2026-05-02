@@ -1,4 +1,9 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+﻿using PoproshaykaBot.WinForms.Auth;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Polls;
+using PoproshaykaBot.WinForms.Settings.Obs;
+using PoproshaykaBot.WinForms.Settings.Stores;
+using PoproshaykaBot.WinForms.Settings.Ui;
 using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Settings;
@@ -6,14 +11,38 @@ namespace PoproshaykaBot.WinForms.Settings;
 public partial class SettingsForm : Form
 {
     private readonly SettingsManager _settingsManager;
+    private readonly AccountsStore _accountsStore;
+    private readonly ObsChatStore _obsChatStore;
+    private readonly DashboardLayoutStore _dashboardLayoutStore;
+    private readonly PollsStore _pollsStore;
     private AppSettings _settings;
+    private TwitchAccountSettings _botDraft;
+    private TwitchAccountSettings _broadcasterDraft;
+    private ObsChatSettings _obsChatDraft;
+    private PollsSettings _pollsDraft;
+    private DashboardLayoutSettings? _dashboardDraft;
     private bool _initialized;
     private bool _hasChanges;
 
-    public SettingsForm(SettingsManager settingsManager)
+    public SettingsForm(
+        SettingsManager settingsManager,
+        AccountsStore accountsStore,
+        ObsChatStore obsChatStore,
+        DashboardLayoutStore dashboardLayoutStore,
+        PollsStore pollsStore)
     {
         _settingsManager = settingsManager;
-        _settings = CopySettings(settingsManager.Current);
+        _accountsStore = accountsStore;
+        _obsChatStore = obsChatStore;
+        _dashboardLayoutStore = dashboardLayoutStore;
+        _pollsStore = pollsStore;
+
+        _settings = DeepClone(settingsManager.Current);
+        _botDraft = DeepClone(accountsStore.LoadBot());
+        _broadcasterDraft = DeepClone(accountsStore.LoadBroadcaster());
+        _obsChatDraft = DeepClone(obsChatStore.Load());
+        _pollsDraft = DeepClone(pollsStore.Load());
+        _dashboardDraft = DeepCloneNullable(dashboardLayoutStore.LoadDashboard());
 
         InitializeComponent();
     }
@@ -80,15 +109,32 @@ public partial class SettingsForm : Form
         }
 
         _settings = new();
+        _botDraft = new();
+        _broadcasterDraft = new();
+        _obsChatDraft = new();
+        _pollsDraft = new();
+        _dashboardDraft = null;
+
         LoadSettingsToControls();
         _hasChanges = true;
         UpdateButtonStates();
     }
 
-    private static AppSettings CopySettings(AppSettings source)
+    private static T DeepClone<T>(T source) where T : class, new()
     {
         var json = JsonSerializer.Serialize(source);
-        return JsonSerializer.Deserialize<AppSettings>(json)!;
+        return JsonSerializer.Deserialize<T>(json) ?? new();
+    }
+
+    private static T? DeepCloneNullable<T>(T? source) where T : class
+    {
+        if (source == null)
+        {
+            return null;
+        }
+
+        var json = JsonSerializer.Serialize(source);
+        return JsonSerializer.Deserialize<T>(json);
     }
 
     private void LoadSettingsToControls()
@@ -97,12 +143,12 @@ public partial class SettingsForm : Form
         _rateLimitingSettingsControl.LoadSettings(_settings.Twitch);
         _messagesSettingsControl.LoadSettings(_settings.Twitch.Messages);
         _httpServerSettingsControl.LoadSettings(_settings.Twitch);
-        _oauthSettingsControl.LoadSettings(_settings);
-        _obsChatSettingsControl.LoadSettings(_settings.Twitch.ObsChat);
+        _oauthSettingsControl.LoadSettings(_settings, _botDraft, _broadcasterDraft);
+        _obsChatSettingsControl.LoadSettings(_obsChatDraft);
         _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.LoadSettings(_settings);
-        _pollsSettingsControl.LoadSettings(_settings.Twitch.Polls);
-        _dashboardSettingsControl.LoadSettings(_settings.Ui);
+        _pollsSettingsControl.LoadSettings(_pollsDraft);
+        _dashboardSettingsControl.LoadSettings(_dashboardDraft);
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -114,11 +160,11 @@ public partial class SettingsForm : Form
         _rateLimitingSettingsControl.SaveSettings(_settings.Twitch);
         _messagesSettingsControl.SaveSettings(_settings.Twitch.Messages);
         _oauthSettingsControl.SaveSettings(_settings);
-        _obsChatSettingsControl.SaveSettings(_settings.Twitch.ObsChat);
+        _obsChatSettingsControl.SaveSettings(_obsChatDraft);
         _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);
         _miscSettingsControl.SaveSettings(_settings);
-        _pollsSettingsControl.SaveSettings(_settings.Twitch.Polls);
-        _dashboardSettingsControl.SaveSettings(_settings.Ui);
+        _pollsSettingsControl.SaveSettings(_pollsDraft);
+        _dashboardDraft = _dashboardSettingsControl.SaveSettings();
     }
 
     private void UpdateButtonStates()
@@ -126,36 +172,22 @@ public partial class SettingsForm : Form
         _applyButton.Enabled = _hasChanges;
     }
 
-    private void SyncCollapseStatesFromLive()
-    {
-        var liveDashboard = _settingsManager.Current.Ui.Dashboard;
-        var draftDashboard = _settings.Ui.Dashboard;
-
-        if (liveDashboard == null || draftDashboard == null)
-        {
-            return;
-        }
-
-        foreach (var draftTile in draftDashboard.Tiles)
-        {
-            var liveTile = liveDashboard.Tiles.FirstOrDefault(t =>
-                string.Equals(t.TypeId, draftTile.TypeId, StringComparison.Ordinal));
-
-            if (liveTile != null)
-            {
-                draftTile.IsCollapsed = liveTile.IsCollapsed;
-            }
-        }
-    }
-
     private void ApplySettings()
     {
         try
         {
-            SyncCollapseStatesFromLive();
             SaveSettingsFromControls();
-            LiveStateMerger.Apply(_settings, _settingsManager.Current);
+
             _settingsManager.SaveSettings(_settings);
+            _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
+            _obsChatStore.Save(_obsChatDraft);
+            _pollsStore.Save(_pollsDraft);
+
+            if (_dashboardDraft != null)
+            {
+                _dashboardLayoutStore.SaveDashboard(_dashboardDraft);
+            }
+
             _hasChanges = false;
             UpdateButtonStates();
             SettingsApplied?.Invoke(this, EventArgs.Empty);
