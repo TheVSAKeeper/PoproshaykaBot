@@ -16,6 +16,8 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
 {
     private const int MinCardWidth = 220;
     private const int CardMargin = 6;
+
+    private static readonly TimeSpan TitleMatchTimeout = TimeSpan.FromMilliseconds(100);
     private readonly List<IDisposable> _subs = [];
     private readonly Timer _statusResetTimer;
     private bool _initialized;
@@ -119,8 +121,6 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
 
         return false;
     }
-
-    private static readonly TimeSpan TitleMatchTimeout = TimeSpan.FromMilliseconds(100);
 
     internal static bool TitleMatches(string profileTitle, string streamTitle)
     {
@@ -314,19 +314,19 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         }
     }
 
-    private void OnCardIncrementNumberRequested(object? sender, EventArgs e)
+    private async void OnCardIncrementNumberRequested(object? sender, EventArgs e)
     {
         if (sender is BroadcastProfileCard card)
         {
-            AdjustCurrentNumber(card, +1);
+            await AdjustCurrentNumberAsync(card, +1);
         }
     }
 
-    private void OnCardDecrementNumberRequested(object? sender, EventArgs e)
+    private async void OnCardDecrementNumberRequested(object? sender, EventArgs e)
     {
         if (sender is BroadcastProfileCard card)
         {
-            AdjustCurrentNumber(card, -1);
+            await AdjustCurrentNumberAsync(card, -1);
         }
     }
 
@@ -346,7 +346,7 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         };
     }
 
-    private void AdjustCurrentNumber(BroadcastProfileCard card, int delta)
+    private async Task AdjustCurrentNumberAsync(BroadcastProfileCard card, int delta)
     {
         if (card.Profile == null)
         {
@@ -359,6 +359,10 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
             return;
         }
 
+        var wasActive = card.IsActive;
+        var profileId = card.Profile.Id;
+        var profileName = card.Profile.Name;
+
         var copy = Clone(card.Profile);
         copy.CurrentNumber = newNumber;
 
@@ -369,6 +373,23 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         catch (InvalidOperationException ex)
         {
             SetStatus(ex.Message, true);
+            return;
+        }
+
+        if (!wasActive)
+        {
+            return;
+        }
+
+        SetStatus($"⏳ Применяется «{profileName}»…", false);
+
+        try
+        {
+            await Manager.ApplyAsync(profileId, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"✗ {HelixErrorMessages.SafeMessage(ex)}", true);
         }
     }
 
