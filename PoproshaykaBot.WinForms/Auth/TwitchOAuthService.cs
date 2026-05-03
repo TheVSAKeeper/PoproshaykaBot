@@ -5,6 +5,7 @@ using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Settings.Stores;
 using PoproshaykaBot.WinForms.Twitch.Chat;
 using System.Diagnostics;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -202,7 +203,7 @@ public sealed class TwitchOAuthService(
 
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogInformation("Validate-эндпойнт вернул {StatusCode}", response.StatusCode);
+                logger.LogInformation("Validate-эндпойнт Twitch отклонил токен (StatusCode={StatusCode})", response.StatusCode);
                 return null;
             }
 
@@ -211,6 +212,7 @@ public sealed class TwitchOAuthService(
 
             if (dto == null)
             {
+                logger.LogWarning("Validate-эндпойнт Twitch вернул 200, но тело не парсится как ValidateResponse");
                 return null;
             }
 
@@ -220,9 +222,13 @@ public sealed class TwitchOAuthService(
                 dto.Scopes ?? new(),
                 dto.ExpiresIn);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Сетевая или внутренняя ошибка при проверке токена Twitch");
+            logger.LogWarning(ex, "Сетевая или внутренняя ошибка при проверке токена Twitch (validate-эндпойнт)");
             return null;
         }
     }
@@ -239,11 +245,18 @@ public sealed class TwitchOAuthService(
             throw new ArgumentException("Refresh token не может быть пустым", nameof(refreshToken));
         }
 
+        logger.LogInformation("Ручное обновление токена доступа для роли {Role}", role);
+
         var semaphore = _refreshSemaphores[role];
         await semaphore.WaitAsync(ct);
         try
         {
             return await RefreshTokenInternalAsync(role, clientId, clientSecret, refreshToken, ct);
+        }
+        catch (OAuthRefreshRejectedException ex)
+        {
+            HandleRefreshRejected(role, ex, ct);
+            throw;
         }
         finally
         {
@@ -401,12 +414,13 @@ public sealed class TwitchOAuthService(
             if (!string.IsNullOrWhiteSpace(account.AccessToken)
                 && !string.Equals(account.AccessToken, staleToken, StringComparison.Ordinal))
             {
+                logger.LogDebug("Refresh для роли {Role} пропущен: токен в хранилище уже сменился между чтением и захватом семафора", role);
                 return account.AccessToken;
             }
 
             if (string.IsNullOrWhiteSpace(account.RefreshToken))
             {
-                logger.LogWarning("Refresh-токен для роли {Role} отсутствует, обновление невозможно", role);
+                logger.LogWarning("Refresh-токен для роли {Role} отсутствует — обновление невозможно, требуется ручная авторизация", role);
                 return null;
             }
 
@@ -414,9 +428,18 @@ public sealed class TwitchOAuthService(
             {
                 return await RefreshTokenInternalAsync(role, settings.ClientId, settings.ClientSecret, account.RefreshToken, ct);
             }
+            catch (OAuthRefreshRejectedException ex)
+            {
+                HandleRefreshRejected(role, ex, ct);
+                return null;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Сбой при обновлении токена роли {Role}", role);
+                logger.LogError(ex, "Сбой при обновлении токена роли {Role} (transient — refresh-токен сохранён)", role);
                 return null;
             }
         }
@@ -436,6 +459,20 @@ public sealed class TwitchOAuthService(
         var changeMsg = $"Требуется повторная авторизация Twitch ({DescribeRole(role)}): изменился набор прав.";
         ReportStatus(role, changeMsg);
         _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(changeMsg), ct);
+
+        accountsStore.Mutate(role, ClearAccountInPlace);
+    }
+
+    private void HandleRefreshRejected(TwitchOAuthRole role, OAuthRefreshRejectedException exception, CancellationToken ct)
+    {
+        logger.LogWarning("Refresh-токен роли {Role} отвергнут Twitch (HTTP {Status}, code={ErrorCode}) — токены сброшены, требуется повторная авторизация",
+            role,
+            exception.HttpStatus,
+            exception.ErrorCode ?? "—");
+
+        var msg = $"Требуется повторная авторизация Twitch ({DescribeRole(role)}): refresh-токен отвергнут сервером.";
+        ReportStatus(role, msg);
+        _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(msg), ct);
 
         accountsStore.Mutate(role, ClearAccountInPlace);
     }
@@ -474,6 +511,12 @@ public sealed class TwitchOAuthService(
             validation.Login,
             validation.UserId,
             tokenResponse.ExpiresIn);
+
+        logger.LogInformation("Refresh для роли {Role} выполнен успешно (login={Login}, expiresIn={ExpiresIn}s, scopes={ScopeCount})",
+            role,
+            validation.Login,
+            tokenResponse.ExpiresIn,
+            tokenResponse.Scope?.Count ?? 0);
 
         ReportStatus(role, "Токен доступа обновлён успешно!");
         return tokenResponse.AccessToken;
@@ -560,8 +603,6 @@ public sealed class TwitchOAuthService(
 
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogDebug("Raw OAuth error body: {Body}", jsonResponse);
-
             var errorStatus = (int)response.StatusCode;
             string? errorMessage = null;
             try
@@ -577,7 +618,16 @@ public sealed class TwitchOAuthService(
             {
             }
 
-            logger.LogError("Ошибка HTTP-запроса при получении токена. StatusCode: {StatusCode}", response.StatusCode);
+            logger.LogError("OAuth token-эндпойнт ответил ошибкой. HttpStatus={HttpStatus}, OAuthStatus={OAuthStatus}, OAuthMessage={OAuthMessage}",
+                response.StatusCode,
+                errorStatus,
+                errorMessage ?? "(нет описания)");
+
+            if (response.StatusCode == HttpStatusCode.BadRequest)
+            {
+                throw new OAuthRefreshRejectedException(errorStatus, errorMessage);
+            }
+
             throw new InvalidOperationException($"OAuth error {errorStatus}: {errorMessage ?? "нет описания"}");
         }
 
@@ -619,6 +669,13 @@ internal sealed record OAuthErrorResponse(
     int Status,
     [property: JsonPropertyName("message")]
     string? Message);
+
+internal sealed class OAuthRefreshRejectedException(int httpStatus, string? errorCode)
+    : Exception($"OAuth refresh отвергнут сервером (HTTP {httpStatus}, code={errorCode ?? "—"})")
+{
+    public int HttpStatus { get; } = httpStatus;
+    public string? ErrorCode { get; } = errorCode;
+}
 
 internal sealed record ValidateResponse(
     [property: JsonPropertyName("client_id")]

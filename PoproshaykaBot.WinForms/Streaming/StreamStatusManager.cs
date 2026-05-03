@@ -30,6 +30,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private readonly CancellationTokenSource _disposeCts = new();
     private IDisposable? _channelUpdatedSubscription;
     private CancellationTokenSource? _runCts;
+    private CancellationTokenSource? _metadataRetryCts;
     private DateTime? _firstOfflineFromApiUtc;
     private ChannelUpdated? _lastChannelUpdate;
     private bool _subscribed;
@@ -125,11 +126,13 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _runCts?.Dispose();
         _runCts = null;
 
+        Interlocked.Exchange(ref _metadataRetryCts, null);
+
         CurrentStatus = StreamStatus.Unknown;
         CurrentStream = null;
         _lastChannelUpdate = null;
 
-        _logger.LogInformation("StreamStatusManager: подписки на EventSub сняты");
+        _logger.LogInformation("StreamStatusManager: подписки на EventSub сняты, retry-цикл метаданных остановлен");
     }
 
     public async ValueTask DisposeAsync()
@@ -165,6 +168,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _disposeCts.Dispose();
         _runCts?.Dispose();
         _runCts = null;
+
+        Interlocked.Exchange(ref _metadataRetryCts, null);
 
         if (_subscribed)
         {
@@ -274,6 +279,10 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             case "stream.offline":
                 await HandleStreamOfflineAsync(cancellationToken);
                 break;
+
+            default:
+                _logger.LogDebug("StreamStatusManager игнорирует EventSub-нотификацию типа {Type}", args.SubscriptionType);
+                break;
         }
     }
 
@@ -322,6 +331,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private Task OnDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken cancellationToken)
     {
+        _logger.LogWarning("EventSub WebSocket отключен ({Reason}) — статус стрима сброшен в Unknown до восстановления соединения", args.Reason);
+
         CurrentStatus = StreamStatus.Unknown;
         CurrentStream = null;
         _firstOfflineFromApiUtc = null;
@@ -500,15 +511,18 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             await PublishStatusTransitionAsync(StreamStatus.Online).ConfigureAwait(false);
         }
 
+        await CancelPreviousMetadataRetryAsync().ConfigureAwait(false);
+
         var runToken = _runCts?.Token ?? CancellationToken.None;
         var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token, runToken);
+        _metadataRetryCts = linkedCts;
         var loopToken = linkedCts.Token;
 
         MetadataRetryTask = Task.Run(async () =>
         {
             try
             {
-                _logger.LogDebug("Запуск опроса метаданных стрима");
+                _logger.LogDebug("Запуск опроса метаданных стрима (попыток до 6, бэкофф 5/10/15/20/25/30 сек)");
 
                 for (var i = 0; i < 6; i++)
                 {
@@ -518,26 +532,26 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
                     if (metadataLoaded && CurrentStream != null)
                     {
-                        _logger.LogInformation("Метаданные стрима успешно получены из API на попытке {Attempt}", i + 1);
+                        _logger.LogInformation("Метаданные стрима получены из API (попытка {Attempt}/6)", i + 1);
                         await PublishMetadataResolvedAsync().ConfigureAwait(false);
                         break;
                     }
 
                     if (CurrentStatus != StreamStatus.Online)
                     {
-                        _logger.LogDebug("Стрим больше не онлайн, прерывание опроса метаданных");
+                        _logger.LogDebug("Опрос метаданных прерван: стрим больше не онлайн (попытка {Attempt}/6)", i + 1);
                         break;
                     }
 
                     var delaySeconds = 5 * (i + 1);
-                    _logger.LogWarning("Метаданные еще не доступны в API. Повтор через {DelaySeconds} сек (попытка {Attempt}/6)...", delaySeconds, i + 1);
+                    _logger.LogWarning("Метаданные ещё не доступны в API. Повтор через {DelaySeconds} сек (попытка {Attempt}/6)", delaySeconds, i + 1);
 
                     await Task.Delay(TimeSpan.FromSeconds(delaySeconds), loopToken);
                 }
             }
             catch (OperationCanceledException)
             {
-                _logger.LogDebug("Опрос метаданных стрима отменен из-за завершения работы менеджера");
+                _logger.LogDebug("Опрос метаданных стрима отменён (новый stream.online или остановка менеджера)");
             }
             catch (Exception ex)
             {
@@ -545,9 +559,42 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             }
             finally
             {
+                Interlocked.CompareExchange(ref _metadataRetryCts, null, linkedCts);
                 linkedCts.Dispose();
             }
         }, loopToken);
+    }
+
+    private async Task CancelPreviousMetadataRetryAsync()
+    {
+        var previousCts = Interlocked.Exchange(ref _metadataRetryCts, null);
+        var previousTask = MetadataRetryTask;
+
+        if (previousCts != null)
+        {
+            try
+            {
+                await previousCts.CancelAsync().ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        if (previousTask is { IsCompleted: false })
+        {
+            try
+            {
+                await previousTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Предыдущий retry-цикл метаданных завершился с ошибкой при отмене (игнорируется)");
+            }
+        }
     }
 
     private async Task HandleStreamOfflineAsync(CancellationToken cancellationToken)
