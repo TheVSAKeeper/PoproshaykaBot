@@ -14,6 +14,7 @@
     let isHighlightMentions = true;
     let enableMessageShadows = true;
     let enableSpecialEffects = true;
+    let showUserAvatars = false;
 
     let enableSmoothScroll = true;
     let scrollAnimationDuration = 300;
@@ -38,6 +39,91 @@
     const seenMessageIds = new Set();
     const seenMessageIdsOrder = [];
     const seenMessageIdsLimit = 1000;
+
+    const avatarMemoryCache = new Map();
+    const avatarStorageKeyPrefix = 'poproshaykabot.avatar.';
+    const avatarStorageTtlMs = 24 * 60 * 60 * 1000;
+
+    function readAvatarFromStorage(userId) {
+        try {
+            const raw = window.localStorage.getItem(avatarStorageKeyPrefix + userId);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed.exp !== 'number' || Date.now() > parsed.exp) {
+                window.localStorage.removeItem(avatarStorageKeyPrefix + userId);
+                return null;
+            }
+            return parsed.url || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function writeAvatarToStorage(userId, url) {
+        try {
+            window.localStorage.setItem(
+                avatarStorageKeyPrefix + userId,
+                JSON.stringify({ url: url || '', exp: Date.now() + avatarStorageTtlMs })
+            );
+        } catch (e) {
+            // localStorage может быть отключён или переполнен — молча пропускаем
+        }
+    }
+
+    function resolveAvatar(userId) {
+        if (!userId) return Promise.resolve(null);
+
+        if (avatarMemoryCache.has(userId)) {
+            return avatarMemoryCache.get(userId);
+        }
+
+        const stored = readAvatarFromStorage(userId);
+        if (stored !== null) {
+            const resolved = Promise.resolve(stored || null);
+            avatarMemoryCache.set(userId, resolved);
+            return resolved;
+        }
+
+        const promise = fetch('/api/user-avatar?id=' + encodeURIComponent(userId))
+            .then(response => {
+                if (response.status === 404) {
+                    writeAvatarToStorage(userId, '');
+                    return null;
+                }
+                if (!response.ok) {
+                    return null;
+                }
+                return response.json().then(payload => {
+                    const url = payload && payload.url || null;
+                    if (url) writeAvatarToStorage(userId, url);
+                    return url;
+                });
+            })
+            .catch(() => null);
+
+        avatarMemoryCache.set(userId, promise);
+        return promise;
+    }
+
+    function attachAvatar(messageDiv, userId) {
+        const placeholder = messageDiv.querySelector('.avatar[data-user-id="' + escapeAttr(userId) + '"]');
+        if (!placeholder) return;
+
+        resolveAvatar(userId).then(url => {
+            if (!url) {
+                placeholder.classList.add('avatar-missing');
+                return;
+            }
+            placeholder.src = url;
+            placeholder.classList.add('avatar-loaded');
+        });
+    }
+
+    function renderAvatarPlaceholder(userId) {
+        if (!showUserAvatars || !userId) return '';
+        const safeId = escapeAttr(userId);
+        return `<img class="avatar" data-user-id="${safeId}" alt="" src="" loading="lazy">`;
+    }
 
     const fadeTimers = new WeakMap();
 
@@ -349,6 +435,7 @@
             [enableMessageShadows, 'no-shadows'],
             [isHighlightMentions, 'no-mentions'],
             [showTimestamp, 'no-timestamp'],
+            [showUserAvatars, 'no-avatars'],
         ];
         toggles.forEach(([enabled, className]) => {
             if (!enabled) messageDiv.classList.add(className);
@@ -392,16 +479,36 @@
         } else {
             const badgesHtml = renderBadges(message.badges || []);
             const messageWithEmotes = renderMessageWithEmotes(message.message, message.emotes || []);
+            const avatarHtml = renderAvatarPlaceholder(message.userId);
 
             const usernameClasses = ['username', ...userTypeClasses].join(' ');
-            const usernameHtml = `<span class="${usernameClasses}">${escapeHtml(message.displayName || message.username || '')}:</span>`;
+            const usernameHtml = `<span class="${usernameClasses}">${escapeHtml(message.displayName || message.username || '')}</span>`;
 
-            messageDiv.innerHTML = `
-            ${timestampHtml}
-            ${badgesHtml}
-            ${usernameHtml}
-            <span class="message-text"> ${messageWithEmotes}</span>
+            const headerHtml = `
+            <div class="message-header">
+                ${timestampHtml}
+                ${badgesHtml}
+                ${usernameHtml}
+            </div>`;
+
+            const bodyHtml = `<div class="message-text">${messageWithEmotes}</div>`;
+
+            const contentHtml = `
+            <div class="message-content">
+                ${headerHtml}
+                ${bodyHtml}
+            </div>`;
+
+            if (avatarHtml) {
+                messageDiv.innerHTML = `
+            ${avatarHtml}
+            ${contentHtml}
         `;
+
+                attachAvatar(messageDiv, message.userId);
+            } else {
+                messageDiv.innerHTML = contentHtml;
+            }
         }
 
         chatContainer.appendChild(messageDiv);
@@ -545,6 +652,7 @@
         ['animationDuration', '--chat-animation-duration'],
         ['emoteSize', '--emote-size'],
         ['badgeSize', '--badge-size'],
+        ['userAvatarSize', '--avatar-size'],
     ];
 
     const animationFieldMap = {
@@ -593,6 +701,7 @@
             ['enableMessageShadows', '.message', 'no-shadows', v => enableMessageShadows = v, () => enableMessageShadows],
             ['enableSpecialEffects', '.message', 'no-special-effects', v => enableSpecialEffects = v, () => enableSpecialEffects],
             ['showTimestamp', '#chat .message', 'no-timestamp', v => showTimestamp = v, () => showTimestamp],
+            ['showUserAvatars', '.message', 'no-avatars', v => showUserAvatars = v, () => showUserAvatars],
         ];
 
         toggles.forEach(([key, selector, className, setter, getter]) => {

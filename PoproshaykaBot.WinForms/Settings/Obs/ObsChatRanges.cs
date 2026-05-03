@@ -26,6 +26,9 @@ public static class ObsChatRanges
     public const int BadgeSizeMin = 12;
     public const int BadgeSizeMax = 72;
 
+    public const int UserAvatarSizeMin = 16;
+    public const int UserAvatarSizeMax = 96;
+
     public const int MessageLifetimeMin = 1;
     public const int MessageLifetimeMax = 3600;
 

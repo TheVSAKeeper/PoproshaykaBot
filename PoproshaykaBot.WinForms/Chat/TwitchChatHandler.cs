@@ -94,6 +94,7 @@ public sealed class TwitchChatHandler :
         {
             MessageId = chatMessage.Id,
             Timestamp = @event.Timestamp.UtcDateTime,
+            UserId = chatMessage.UserId,
             DisplayName = chatMessage.DisplayName,
             Message = chatMessage.Message,
             MessageType = ChatMessageType.UserMessage,

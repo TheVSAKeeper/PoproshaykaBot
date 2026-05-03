@@ -6,6 +6,7 @@ public class ChatMessageData
 {
     public string MessageId { get; init; } = string.Empty;
     public DateTime Timestamp { get; init; }
+    public string UserId { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
     public string Message { get; init; } = string.Empty;
     public ChatMessageType MessageType { get; init; }

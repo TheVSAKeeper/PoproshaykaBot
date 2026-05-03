@@ -23,6 +23,9 @@ public sealed class ObsChatCssSettings
     public string EmoteSize { get; set; } = "28px";
     public string BadgeSize { get; set; } = "18px";
 
+    public bool ShowUserAvatars { get; set; }
+    public string UserAvatarSize { get; set; } = "32px";
+
     public bool ShowUserTypeBorders { get; set; } = true;
     public bool HighlightFirstTimeUsers { get; set; } = true;
     public bool HighlightMentions { get; set; } = true;
@@ -70,6 +73,9 @@ public sealed class ObsChatCssSettings
 
             EmoteSize = $"{ObsChatRanges.Clamp(safeSettings.EmoteSizePixels, ObsChatRanges.EmoteSizeMin, ObsChatRanges.EmoteSizeMax)}px",
             BadgeSize = $"{ObsChatRanges.Clamp(safeSettings.BadgeSizePixels, ObsChatRanges.BadgeSizeMin, ObsChatRanges.BadgeSizeMax)}px",
+
+            ShowUserAvatars = safeSettings.ShowUserAvatars,
+            UserAvatarSize = $"{ObsChatRanges.Clamp(safeSettings.UserAvatarSizePixels, ObsChatRanges.UserAvatarSizeMin, ObsChatRanges.UserAvatarSizeMax)}px",
 
             ShowUserTypeBorders = safeSettings.ShowUserTypeBorders,
             HighlightFirstTimeUsers = safeSettings.HighlightFirstTimeUsers,

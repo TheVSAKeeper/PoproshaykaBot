@@ -47,6 +47,9 @@ public partial class ObsChatSettingsControl : UserControl
         _emoteSizeNumeric.Value = settings.EmoteSizePixels;
         _badgeSizeNumeric.Value = settings.BadgeSizePixels;
 
+        _showUserAvatarsCheckBox.Checked = settings.ShowUserAvatars;
+        _userAvatarSizeNumeric.Value = settings.UserAvatarSizePixels;
+
         _showUserTypeBordersCheckBox.Checked = settings.ShowUserTypeBorders;
         _highlightFirstTimeUsersCheckBox.Checked = settings.HighlightFirstTimeUsers;
         _highlightMentionsCheckBox.Checked = settings.HighlightMentions;
@@ -98,6 +101,9 @@ public partial class ObsChatSettingsControl : UserControl
 
         settings.EmoteSizePixels = (int)_emoteSizeNumeric.Value;
         settings.BadgeSizePixels = (int)_badgeSizeNumeric.Value;
+
+        settings.ShowUserAvatars = _showUserAvatarsCheckBox.Checked;
+        settings.UserAvatarSizePixels = (int)_userAvatarSizeNumeric.Value;
 
         settings.ShowUserTypeBorders = _showUserTypeBordersCheckBox.Checked;
         settings.HighlightFirstTimeUsers = _highlightFirstTimeUsersCheckBox.Checked;
@@ -199,6 +205,11 @@ public partial class ObsChatSettingsControl : UserControl
     private void OnBadgeSizeResetButtonClicked(object sender, EventArgs e)
     {
         ResetNumeric(_badgeSizeNumeric, DefaultSettings.BadgeSizePixels);
+    }
+
+    private void OnUserAvatarSizeResetButtonClicked(object sender, EventArgs e)
+    {
+        ResetNumeric(_userAvatarSizeNumeric, DefaultSettings.UserAvatarSizePixels);
     }
 
     private void OnScrollAnimationDurationResetButtonClicked(object sender, EventArgs e)
@@ -406,6 +417,7 @@ public partial class ObsChatSettingsControl : UserControl
         SetRange(_maxMessagesNumeric, ObsChatRanges.MaxMessagesMin, ObsChatRanges.MaxMessagesMax);
         SetRange(_emoteSizeNumeric, ObsChatRanges.EmoteSizeMin, ObsChatRanges.EmoteSizeMax);
         SetRange(_badgeSizeNumeric, ObsChatRanges.BadgeSizeMin, ObsChatRanges.BadgeSizeMax);
+        SetRange(_userAvatarSizeNumeric, ObsChatRanges.UserAvatarSizeMin, ObsChatRanges.UserAvatarSizeMax);
         SetRange(_messageLifetimeNumeric, ObsChatRanges.MessageLifetimeMin, ObsChatRanges.MessageLifetimeMax);
         SetRange(_fadeOutAnimationDurationNumeric, ObsChatRanges.FadeOutAnimationDurationMin, ObsChatRanges.FadeOutAnimationDurationMax);
         SetRange(_scrollAnimationDurationNumeric, ObsChatRanges.ScrollAnimationDurationMin, ObsChatRanges.ScrollAnimationDurationMax);

@@ -72,6 +72,10 @@
             _badgeSizeLabel = new Label();
             _badgeSizeNumeric = new NumericUpDown();
             _badgeSizeResetButton = new Button();
+            _userAvatarSizeLabel = new Label();
+            _userAvatarSizeNumeric = new NumericUpDown();
+            _userAvatarSizeResetButton = new Button();
+            _showUserAvatarsCheckBox = new CheckBox();
             _animationsTabPage = new TabPage();
             _animationsTableLayout = new TableLayoutPanel();
             _enableAnimationsCheckBox = new CheckBox();
@@ -138,6 +142,7 @@
             ((System.ComponentModel.ISupportInitialize)_borderRadiusNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)_emoteSizeNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)_badgeSizeNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)_userAvatarSizeNumeric).BeginInit();
             _animationsTabPage.SuspendLayout();
             _animationsTableLayout.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)_animationDurationNumeric).BeginInit();
@@ -526,11 +531,15 @@
             _layoutTableLayout.Controls.Add(_badgeSizeLabel, 0, 4);
             _layoutTableLayout.Controls.Add(_badgeSizeNumeric, 1, 4);
             _layoutTableLayout.Controls.Add(_badgeSizeResetButton, 2, 4);
+            _layoutTableLayout.Controls.Add(_userAvatarSizeLabel, 0, 5);
+            _layoutTableLayout.Controls.Add(_userAvatarSizeNumeric, 1, 5);
+            _layoutTableLayout.Controls.Add(_userAvatarSizeResetButton, 2, 5);
             _layoutTableLayout.Dock = DockStyle.Fill;
             _layoutTableLayout.Location = new Point(3, 3);
             _layoutTableLayout.Name = "_layoutTableLayout";
             _layoutTableLayout.Padding = new Padding(10);
-            _layoutTableLayout.RowCount = 7;
+            _layoutTableLayout.RowCount = 8;
+            _layoutTableLayout.RowStyles.Add(new RowStyle());
             _layoutTableLayout.RowStyles.Add(new RowStyle());
             _layoutTableLayout.RowStyles.Add(new RowStyle());
             _layoutTableLayout.RowStyles.Add(new RowStyle());
@@ -722,9 +731,46 @@
             _badgeSizeResetButton.Text = "↻";
             _badgeSizeResetButton.UseVisualStyleBackColor = true;
             _badgeSizeResetButton.Click += OnBadgeSizeResetButtonClicked;
-            // 
+            //
+            // _userAvatarSizeLabel
+            //
+            _userAvatarSizeLabel.AutoSize = true;
+            _userAvatarSizeLabel.Dock = DockStyle.Fill;
+            _userAvatarSizeLabel.Location = new Point(13, 168);
+            _userAvatarSizeLabel.Margin = new Padding(3);
+            _userAvatarSizeLabel.Name = "_userAvatarSizeLabel";
+            _userAvatarSizeLabel.Size = new Size(125, 25);
+            _userAvatarSizeLabel.TabIndex = 15;
+            _userAvatarSizeLabel.Text = "Размер аватара (px):";
+            _userAvatarSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _userAvatarSizeNumeric
+            //
+            _userAvatarSizeNumeric.Dock = DockStyle.Fill;
+            _userAvatarSizeNumeric.Location = new Point(144, 168);
+            _userAvatarSizeNumeric.Maximum = new decimal(new int[] { 96, 0, 0, 0 });
+            _userAvatarSizeNumeric.Minimum = new decimal(new int[] { 16, 0, 0, 0 });
+            _userAvatarSizeNumeric.MinimumSize = new Size(80, 0);
+            _userAvatarSizeNumeric.Name = "_userAvatarSizeNumeric";
+            _userAvatarSizeNumeric.Size = new Size(332, 23);
+            _userAvatarSizeNumeric.TabIndex = 16;
+            _userAvatarSizeNumeric.Value = new decimal(new int[] { 32, 0, 0, 0 });
+            _userAvatarSizeNumeric.ValueChanged += OnSettingChanged;
+            //
+            // _userAvatarSizeResetButton
+            //
+            _userAvatarSizeResetButton.AutoSize = true;
+            _userAvatarSizeResetButton.Location = new Point(482, 168);
+            _userAvatarSizeResetButton.MinimumSize = new Size(40, 23);
+            _userAvatarSizeResetButton.Name = "_userAvatarSizeResetButton";
+            _userAvatarSizeResetButton.Size = new Size(40, 25);
+            _userAvatarSizeResetButton.TabIndex = 17;
+            _userAvatarSizeResetButton.Text = "↻";
+            _userAvatarSizeResetButton.UseVisualStyleBackColor = true;
+            _userAvatarSizeResetButton.Click += OnUserAvatarSizeResetButtonClicked;
+            //
             // _animationsTabPage
-            // 
+            //
             _animationsTabPage.Controls.Add(_animationsTableLayout);
             _animationsTabPage.Location = new Point(4, 24);
             _animationsTabPage.Name = "_animationsTabPage";
@@ -1008,22 +1054,24 @@
             _limitsTableLayout.Controls.Add(_maxMessagesNumeric, 1, 0);
             _limitsTableLayout.Controls.Add(_maxMessagesResetButton, 2, 0);
             _limitsTableLayout.Controls.Add(_showTimestampCheckBox, 0, 1);
-            _limitsTableLayout.Controls.Add(_showUserTypeBordersCheckBox, 0, 2);
-            _limitsTableLayout.Controls.Add(_highlightFirstTimeUsersCheckBox, 0, 3);
-            _limitsTableLayout.Controls.Add(_highlightMentionsCheckBox, 0, 4);
-            _limitsTableLayout.Controls.Add(_enableMessageShadowsCheckBox, 0, 5);
-            _limitsTableLayout.Controls.Add(_enableSpecialEffectsCheckBox, 0, 6);
-            _limitsTableLayout.Controls.Add(_enableSmoothScrollCheckBox, 0, 7);
-            _limitsTableLayout.Controls.Add(_autoScrollEnabledCheckBox, 0, 8);
-            _limitsTableLayout.Controls.Add(_scrollAnimationDurationLabel, 0, 9);
-            _limitsTableLayout.Controls.Add(_scrollAnimationDurationNumeric, 1, 9);
-            _limitsTableLayout.Controls.Add(_scrollAnimationDurationResetButton, 2, 9);
+            _limitsTableLayout.Controls.Add(_showUserAvatarsCheckBox, 0, 2);
+            _limitsTableLayout.Controls.Add(_showUserTypeBordersCheckBox, 0, 3);
+            _limitsTableLayout.Controls.Add(_highlightFirstTimeUsersCheckBox, 0, 4);
+            _limitsTableLayout.Controls.Add(_highlightMentionsCheckBox, 0, 5);
+            _limitsTableLayout.Controls.Add(_enableMessageShadowsCheckBox, 0, 6);
+            _limitsTableLayout.Controls.Add(_enableSpecialEffectsCheckBox, 0, 7);
+            _limitsTableLayout.Controls.Add(_enableSmoothScrollCheckBox, 0, 8);
+            _limitsTableLayout.Controls.Add(_autoScrollEnabledCheckBox, 0, 9);
+            _limitsTableLayout.Controls.Add(_scrollAnimationDurationLabel, 0, 10);
+            _limitsTableLayout.Controls.Add(_scrollAnimationDurationNumeric, 1, 10);
+            _limitsTableLayout.Controls.Add(_scrollAnimationDurationResetButton, 2, 10);
 
             _limitsTableLayout.Dock = DockStyle.Fill;
             _limitsTableLayout.Location = new Point(3, 3);
             _limitsTableLayout.Name = "_limitsTableLayout";
             _limitsTableLayout.Padding = new Padding(10);
-            _limitsTableLayout.RowCount = 11;
+            _limitsTableLayout.RowCount = 12;
+            _limitsTableLayout.RowStyles.Add(new RowStyle());
             _limitsTableLayout.RowStyles.Add(new RowStyle());
             _limitsTableLayout.RowStyles.Add(new RowStyle());
             _limitsTableLayout.RowStyles.Add(new RowStyle());
@@ -1086,9 +1134,21 @@
             _showTimestampCheckBox.Text = "Показывать время";
             _showTimestampCheckBox.UseVisualStyleBackColor = true;
             _showTimestampCheckBox.CheckedChanged += OnSettingChanged;
-            // 
+            //
+            // _showUserAvatarsCheckBox
+            //
+            _showUserAvatarsCheckBox.AutoSize = true;
+            _showUserAvatarsCheckBox.Dock = DockStyle.Fill;
+            _showUserAvatarsCheckBox.Location = new Point(13, 69);
+            _showUserAvatarsCheckBox.Name = "_showUserAvatarsCheckBox";
+            _showUserAvatarsCheckBox.Size = new Size(200, 19);
+            _showUserAvatarsCheckBox.TabIndex = 30;
+            _showUserAvatarsCheckBox.Text = "Показывать аватары пользователей";
+            _showUserAvatarsCheckBox.UseVisualStyleBackColor = true;
+            _showUserAvatarsCheckBox.CheckedChanged += OnSettingChanged;
+            //
             // _showUserTypeBordersCheckBox
-            // 
+            //
             _showUserTypeBordersCheckBox.AutoSize = true;
             _showUserTypeBordersCheckBox.Dock = DockStyle.Fill;
             _showUserTypeBordersCheckBox.Location = new Point(13, 69);
@@ -1403,6 +1463,7 @@
             ((System.ComponentModel.ISupportInitialize)_borderRadiusNumeric).EndInit();
             ((System.ComponentModel.ISupportInitialize)_emoteSizeNumeric).EndInit();
             ((System.ComponentModel.ISupportInitialize)_badgeSizeNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)_userAvatarSizeNumeric).EndInit();
             _animationsTabPage.ResumeLayout(false);
             _animationsTableLayout.ResumeLayout(false);
             _animationsTableLayout.PerformLayout();
@@ -1462,6 +1523,10 @@
         private Label _badgeSizeLabel;
         private NumericUpDown _badgeSizeNumeric;
         private Button _badgeSizeResetButton;
+        private Label _userAvatarSizeLabel;
+        private NumericUpDown _userAvatarSizeNumeric;
+        private Button _userAvatarSizeResetButton;
+        private CheckBox _showUserAvatarsCheckBox;
         private TabPage _animationsTabPage;
         private TableLayoutPanel _animationsTableLayout;
         private CheckBox _enableAnimationsCheckBox;

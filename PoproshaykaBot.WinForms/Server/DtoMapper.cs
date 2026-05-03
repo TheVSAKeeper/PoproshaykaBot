@@ -9,6 +9,7 @@ public static class DtoMapper
         return new
         {
             messageId = chatMessage.MessageId,
+            userId = chatMessage.UserId,
             username = chatMessage.DisplayName,
             displayName = chatMessage.DisplayName,
             message = chatMessage.Message,

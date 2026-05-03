@@ -10,6 +10,7 @@ using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Server.Obs;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Settings.Stores;
+using PoproshaykaBot.WinForms.Users;
 using System.Text.Encodings.Web;
 
 namespace PoproshaykaBot.WinForms.Server;
@@ -20,6 +21,7 @@ public sealed class KestrelHttpServer(
     SettingsManager settingsManager,
     ObsChatStore obsChatStore,
     TwitchOAuthService twitchOAuthService,
+    UserProfileImageProvider userProfileImageProvider,
     ILogger<KestrelHttpServer> logger,
     ILoggerFactory loggerFactory)
     : IAsyncDisposable
@@ -92,6 +94,7 @@ public sealed class KestrelHttpServer(
             builder.Services.AddSingleton(sseService);
             builder.Services.AddSingleton(settingsManager);
             builder.Services.AddSingleton(twitchOAuthService);
+            builder.Services.AddSingleton(userProfileImageProvider);
 
             builder.Services.AddCors(options =>
             {
@@ -249,6 +252,26 @@ public sealed class KestrelHttpServer(
             var settings = obsChatStore.Load();
             var cssSettings = ObsChatCssSettings.FromObsChatSettings(settings);
             return Results.Json(cssSettings, ServerJsonOptions.Default);
+        });
+
+        app.MapGet("/api/user-avatar", async (HttpContext ctx) =>
+        {
+            var userId = ctx.Request.Query["id"].FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Results.BadRequest();
+            }
+
+            var url = await userProfileImageProvider.GetAsync(userId, ctx.RequestAborted);
+
+            if (string.IsNullOrEmpty(url))
+            {
+                return Results.NotFound();
+            }
+
+            ctx.Response.Headers.CacheControl = "public, max-age=86400";
+            return Results.Json(new { url }, ServerJsonOptions.Default);
         });
 
         app.MapGet("/assets/obs.css", () => Results.Bytes(ObsCssBytes, "text/css; charset=utf-8"));

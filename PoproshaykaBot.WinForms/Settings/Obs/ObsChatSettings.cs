@@ -29,6 +29,9 @@ public sealed class ObsChatSettings
     public int EmoteSizePixels { get; set; } = 28;
     public int BadgeSizePixels { get; set; } = 18;
 
+    public bool ShowUserAvatars { get; set; } = false;
+    public int UserAvatarSizePixels { get; set; } = 32;
+
     public bool ShowUserTypeBorders { get; set; } = true;
     public bool HighlightFirstTimeUsers { get; set; } = true;
     public bool HighlightMentions { get; set; } = true;

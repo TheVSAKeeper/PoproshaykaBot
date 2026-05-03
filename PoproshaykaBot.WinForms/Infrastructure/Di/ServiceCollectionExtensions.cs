@@ -107,6 +107,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
         services.AddSingleton<UserMessagesManagementService>();
+        services.AddSingleton<UserProfileImageProvider>();
 
         services.AddSingleton<TwitchChatMessenger>();
         services.AddSingleton<IChatMessenger>(sp => sp.GetRequiredService<TwitchChatMessenger>());

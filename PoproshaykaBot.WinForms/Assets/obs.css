@@ -14,6 +14,7 @@
 
     --emote-size: 28px;
     --badge-size: 18px;
+    --avatar-size: 32px;
 
     --broadcaster-color: #ff6b6b;
     --moderator-color: #51cf66;
@@ -119,6 +120,22 @@ body::-webkit-scrollbar {
     box-shadow: var(--shadow-small);
 
     backdrop-filter: blur(2px);
+}
+
+.message:has(.avatar:not(.avatar-missing)) .avatar {
+    float: left;
+    margin-top: 1px;
+    margin-right: 10px;
+}
+
+.message-header .timestamp {
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.message-text {
+    margin-top: 3px;
 }
 
 .message.no-animation {
@@ -298,6 +315,59 @@ body::-webkit-scrollbar {
     vertical-align: middle;
     border-radius: 3px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.avatar {
+    width: var(--avatar-size);
+    height: var(--avatar-size);
+    margin-right: 6px;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    transform: scale(0.85);
+    vertical-align: middle;
+    opacity: 0;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    object-fit: cover;
+}
+
+.avatar.avatar-loaded {
+    transform: scale(1);
+    opacity: 1;
+}
+
+.avatar.avatar-missing {
+    display: none;
+}
+
+.message.broadcaster .avatar {
+    border-color: var(--broadcaster-color);
+    box-shadow: 0 0 8px rgba(255, 107, 107, 0.5);
+}
+
+.message.moderator .avatar {
+    border-color: var(--moderator-color);
+    box-shadow: 0 0 6px rgba(81, 207, 102, 0.45);
+}
+
+.message.vip .avatar {
+    border-color: var(--vip-color);
+    box-shadow: 0 0 6px rgba(132, 94, 247, 0.45);
+}
+
+.message.subscriber .avatar {
+    border-color: var(--subscriber-color);
+    box-shadow: 0 0 4px rgba(51, 154, 240, 0.4);
+}
+
+.message.first-time .avatar {
+    border-color: var(--firsttime-color);
+    box-shadow: 0 0 8px rgba(255, 212, 59, 0.5);
+}
+
+.message.no-avatars .avatar {
+    display: none;
 }
 
 .emote {
