@@ -41,95 +41,53 @@ public static class SettingsMigrator
             if (botAccount != null || broadcasterAccount != null)
             {
                 var accountsTarget = Path.Combine(baseDirectory, "accounts.json");
-
-                if (!File.Exists(accountsTarget))
+                var dto = new JsonObject
                 {
-                    var dto = new JsonObject
+                    ["botAccount"] = botAccount?.DeepClone() ?? new JsonObject(),
+                    ["broadcasterAccount"] = broadcasterAccount?.DeepClone() ?? new JsonObject(),
+                };
+
+                if (TryWriteSplit(accountsTarget,
+                        dto.ToJsonString(JsonStoreOptions.Default),
+                        "accounts.json",
+                        logger,
+                        AccountsTokenRedactor.Redact))
+                {
+                    if (twitch.Remove("botAccount"))
                     {
-                        ["botAccount"] = botAccount?.DeepClone() ?? new JsonObject(),
-                        ["broadcasterAccount"] = broadcasterAccount?.DeepClone() ?? new JsonObject(),
-                    };
+                        changed = true;
+                    }
 
-                    AtomicFile.Save(accountsTarget, dto.ToJsonString(JsonStoreOptions.Default), logger);
-                    logger?.LogInformation("Миграция настроек: вынесен botAccount/broadcasterAccount в accounts.json");
-                }
-
-                if (twitch.Remove("botAccount"))
-                {
-                    changed = true;
-                }
-
-                if (twitch.Remove("broadcasterAccount"))
-                {
-                    changed = true;
+                    if (twitch.Remove("broadcasterAccount"))
+                    {
+                        changed = true;
+                    }
                 }
             }
 
-            // broadcast-profiles.json
-            if (twitch["broadcastProfiles"] is JsonObject broadcastProfiles)
-            {
-                var target = Path.Combine(baseDirectory, "broadcast-profiles.json");
+            changed |= TrySplitObject(twitch, "broadcastProfiles", baseDirectory, "broadcast-profiles.json", logger);
+            changed |= TrySplitObject(twitch, "polls", baseDirectory, "polls.json", logger);
 
-                if (!File.Exists(target))
-                {
-                    AtomicFile.Save(target, broadcastProfiles.DeepClone()!.ToJsonString(JsonStoreOptions.Default), logger);
-                    logger?.LogInformation("Миграция настроек: вынесен broadcastProfiles в broadcast-profiles.json");
-                }
-
-                twitch.Remove("broadcastProfiles");
-                changed = true;
-            }
-
-            // polls.json
-            if (twitch["polls"] is JsonObject polls)
-            {
-                var target = Path.Combine(baseDirectory, "polls.json");
-
-                if (!File.Exists(target))
-                {
-                    AtomicFile.Save(target, polls.DeepClone()!.ToJsonString(JsonStoreOptions.Default), logger);
-                    logger?.LogInformation("Миграция настроек: вынесен polls в polls.json");
-                }
-
-                twitch.Remove("polls");
-                changed = true;
-            }
-
-            // recent-categories.json
+            // recent-categories.json (под infrastructure)
             if (twitch["infrastructure"] is JsonObject infrastructure
                 && infrastructure["recentCategories"] is JsonArray recentCategories)
             {
                 var target = Path.Combine(baseDirectory, "recent-categories.json");
-
-                if (!File.Exists(target))
+                var dto = new JsonObject
                 {
-                    var dto = new JsonObject
+                    ["items"] = recentCategories.DeepClone(),
+                };
+
+                if (TryWriteSplit(target, dto.ToJsonString(JsonStoreOptions.Default), "recent-categories.json", logger))
+                {
+                    if (infrastructure.Remove("recentCategories"))
                     {
-                        ["items"] = recentCategories.DeepClone(),
-                    };
-
-                    AtomicFile.Save(target, dto.ToJsonString(JsonStoreOptions.Default), logger);
-                    logger?.LogInformation("Миграция настроек: вынесен infrastructure.recentCategories в recent-categories.json");
+                        changed = true;
+                    }
                 }
-
-                infrastructure.Remove("recentCategories");
-                changed = true;
             }
 
-            // obs-chat.json
-            if (twitch["obsChat"] is JsonObject obsChat)
-            {
-                var target = Path.Combine(baseDirectory, "obs-chat.json");
-
-                if (!File.Exists(target))
-                {
-                    AtomicFile.Save(target, obsChat.DeepClone()!.ToJsonString(JsonStoreOptions.Default), logger);
-                    logger?.LogInformation("Миграция настроек: вынесен obsChat в obs-chat.json");
-                }
-
-                twitch.Remove("obsChat");
-                changed = true;
-            }
+            changed |= TrySplitObject(twitch, "obsChat", baseDirectory, "obs-chat.json", logger);
         }
 
         // dashboard-layout.json
@@ -137,24 +95,71 @@ public static class SettingsMigrator
             && (ui.ContainsKey("dashboard") || ui.ContainsKey("mainWindow")))
         {
             var target = Path.Combine(baseDirectory, "dashboard-layout.json");
-
-            if (!File.Exists(target))
+            var dto = new JsonObject
             {
-                var dto = new JsonObject
+                ["dashboard"] = ui["dashboard"]?.DeepClone(),
+                ["mainWindow"] = ui["mainWindow"]?.DeepClone(),
+            };
+
+            if (TryWriteSplit(target, dto.ToJsonString(JsonStoreOptions.Default), "dashboard-layout.json", logger))
+            {
+                if (root.Remove("ui"))
                 {
-                    ["dashboard"] = ui["dashboard"]?.DeepClone(),
-                    ["mainWindow"] = ui["mainWindow"]?.DeepClone(),
-                };
-
-                AtomicFile.Save(target, dto.ToJsonString(JsonStoreOptions.Default), logger);
-                logger?.LogInformation("Миграция настроек: вынесены ui.dashboard/ui.mainWindow в dashboard-layout.json");
+                    changed = true;
+                }
             }
-
-            root.Remove("ui");
-            changed = true;
         }
 
         return changed;
+    }
+
+    private static bool TrySplitObject(JsonObject parent, string key, string baseDirectory, string targetFileName, ILogger? logger)
+    {
+        if (parent[key] is not JsonObject value)
+        {
+            return false;
+        }
+
+        var target = Path.Combine(baseDirectory, targetFileName);
+
+        if (!TryWriteSplit(target, value.DeepClone()!.ToJsonString(JsonStoreOptions.Default), targetFileName, logger))
+        {
+            return false;
+        }
+
+        return parent.Remove(key);
+    }
+
+    private static bool TryWriteSplit(
+        string target,
+        string content,
+        string targetFileName,
+        ILogger? logger,
+        Func<string, string>? backupRedactor = null)
+    {
+        try
+        {
+            if (File.Exists(target))
+            {
+                JsonStoreBackup.CreateBackup(target, "pre-migration", logger, backupRedactor);
+                logger?.LogWarning("Миграция настроек: целевой {TargetFileName} уже существовал — создан бэкап перед перезаписью авторитетным источником из settings.json",
+                    targetFileName);
+            }
+
+            AtomicFile.Save(target, content, logger);
+            logger?.LogInformation("Миграция настроек: данные из settings.json вынесены в {TargetFileName}",
+                targetFileName);
+
+            return true;
+        }
+        catch (Exception exception)
+        {
+            logger?.LogError(exception,
+                "Миграция настроек: не удалось записать {TargetFileName} — легаси-поле в settings.json оставлено без изменений",
+                targetFileName);
+
+            return false;
+        }
     }
 
     private static bool MigrateBotAccount(JsonObject twitch, ILogger? logger)

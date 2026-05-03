@@ -19,19 +19,31 @@ public class PollsStore
         _logger = logger;
         _filePath = filePath ?? AppPaths.SettingsFile("polls.json");
         _state = ReadFile();
+
+        _logger?.LogDebug("PollsStore инициализирован из {FilePath} (профилей: {ProfileCount})",
+            _filePath,
+            _state.Profiles.Count);
     }
 
     public virtual PollsSettings Load()
     {
-        return _state;
-    }
-
-    public virtual void Save()
-    {
         lock (_syncLock)
         {
-            var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
-            AtomicFile.Save(_filePath, json, _logger);
+            return JsonStoreClone.DeepClone(_state);
+        }
+    }
+
+    public virtual void Mutate(Action<PollsSettings> mutator)
+    {
+        ArgumentNullException.ThrowIfNull(mutator);
+
+        lock (_syncLock)
+        {
+            mutator(_state);
+            PersistInternal();
+
+            _logger?.LogDebug("PollsStore: применена мутация, состояние сохранено (профилей: {ProfileCount})",
+                _state.Profiles.Count);
         }
     }
 
@@ -41,16 +53,25 @@ public class PollsStore
 
         lock (_syncLock)
         {
-            _state = value;
-            var json = JsonSerializer.Serialize(value, JsonStoreOptions.Default);
-            AtomicFile.Save(_filePath, json, _logger);
+            _state = JsonStoreClone.DeepClone(value);
+            PersistInternal();
+
+            _logger?.LogInformation("PollsStore: состояние заменено целиком (профилей: {ProfileCount})",
+                _state.Profiles.Count);
         }
+    }
+
+    private void PersistInternal()
+    {
+        var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
+        AtomicFile.Save(_filePath, json, _logger);
     }
 
     private PollsSettings ReadFile()
     {
         if (!File.Exists(_filePath))
         {
+            _logger?.LogDebug("PollsStore: файл {FilePath} не найден, используются дефолты", _filePath);
             return new();
         }
 

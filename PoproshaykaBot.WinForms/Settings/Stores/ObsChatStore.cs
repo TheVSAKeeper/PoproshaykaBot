@@ -23,31 +23,43 @@ public sealed class ObsChatStore
         _logger = logger;
         _filePath = filePath ?? AppPaths.SettingsFile("obs-chat.json");
         _state = ReadFile();
+
+        _logger?.LogDebug("ObsChatStore инициализирован из {FilePath}", _filePath);
     }
 
     public ObsChatSettings Load()
     {
-        return _state;
+        lock (_syncLock)
+        {
+            return JsonStoreClone.DeepClone(_state);
+        }
     }
 
     public void Save(ObsChatSettings value)
     {
         ArgumentNullException.ThrowIfNull(value);
 
+        ObsChatSettings broadcastCopy;
+
         lock (_syncLock)
         {
-            _state = value;
-            var json = JsonSerializer.Serialize(value, JsonStoreOptions.Default);
+            _state = JsonStoreClone.DeepClone(value);
+            var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
             AtomicFile.Save(_filePath, json, _logger);
+
+            broadcastCopy = JsonStoreClone.DeepClone(_state);
+
+            _logger?.LogInformation("ObsChatStore: настройки чата сохранены в {FilePath}", _filePath);
         }
 
-        _ = _eventBus.PublishAsync(new ChatSettingsChangedEvent(value));
+        _ = _eventBus.PublishAsync(new ChatSettingsChangedEvent(broadcastCopy));
     }
 
     private ObsChatSettings ReadFile()
     {
         if (!File.Exists(_filePath))
         {
+            _logger?.LogDebug("ObsChatStore: файл {FilePath} не найден, используются дефолты", _filePath);
             return new();
         }
 

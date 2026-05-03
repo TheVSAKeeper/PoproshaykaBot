@@ -53,8 +53,7 @@ public static class LegacySettingsLayoutMigrator
 
             if (File.Exists(target))
             {
-                logger?.LogWarning(
-                    "Legacy-файл {Legacy} оставлен на месте: целевой {Target} уже существует",
+                logger?.LogWarning("Legacy-файл {Legacy} оставлен на месте: целевой {Target} уже существует",
                     legacy,
                     target);
 
@@ -66,8 +65,7 @@ public static class LegacySettingsLayoutMigrator
                 File.Copy(legacy, target);
                 var backupPath = BuildLegacyBackupPath(legacy);
                 File.Move(legacy, backupPath);
-                logger?.LogInformation(
-                    "Legacy-файл перенесён: {Legacy} → {Target}; оригинал сохранён как {Backup}",
+                logger?.LogInformation("Legacy-файл перенесён: {Legacy} → {Target}; оригинал сохранён как {Backup}",
                     legacy,
                     target,
                     backupPath);
@@ -113,9 +111,10 @@ public static class LegacySettingsLayoutMigrator
                 return;
             }
 
-            JsonStoreBackup.CreateBackup(settingsFile, "pre-migration", logger);
+            JsonStoreBackup.CreateBackup(settingsFile, "pre-migration", logger, AccountsTokenRedactor.Redact);
             AtomicFile.Save(settingsFile, root.ToJsonString(JsonStoreOptions.Default), logger);
-            logger?.LogInformation("Монолитный settings.json мигрирован и разбит на отдельные файлы");
+            logger?.LogInformation("Монолитный settings.json мигрирован и разбит на отдельные файлы (директория {Directory})",
+                settingsDirectory);
         }
         catch (Exception exception)
         {
@@ -125,8 +124,7 @@ public static class LegacySettingsLayoutMigrator
 
     private static bool PathsAreEqual(string a, string b)
     {
-        return string.Equals(
-            Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+        return string.Equals(Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             StringComparison.OrdinalIgnoreCase);
     }

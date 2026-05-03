@@ -124,7 +124,9 @@ public class BroadcastProfilesManagerTests
 
         await _manager.ApplyAsync(profile.Id, CancellationToken.None);
 
-        await _applier.Received(1).ApplyAsync(profile, Arg.Any<CancellationToken>());
+        await _applier.Received(1)
+            .ApplyAsync(Arg.Is<BroadcastProfile>(p => p.Id == profile.Id), Arg.Any<CancellationToken>());
+
         Assert.That(_store.Load().LastAppliedProfileId, Is.EqualTo(profile.Id));
     }
 
@@ -141,7 +143,8 @@ public class BroadcastProfilesManagerTests
         var applied = await _manager.ApplyByNameAsync("myprofile", CancellationToken.None);
 
         Assert.That(applied, Is.Not.Null);
-        await _applier.Received(1).ApplyAsync(profile, Arg.Any<CancellationToken>());
+        await _applier.Received(1)
+            .ApplyAsync(Arg.Is<BroadcastProfile>(p => p.Id == profile.Id), Arg.Any<CancellationToken>());
     }
 
     [Test]

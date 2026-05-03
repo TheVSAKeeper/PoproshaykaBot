@@ -19,16 +19,24 @@ public class DashboardLayoutStore
         _logger = logger;
         _filePath = filePath ?? AppPaths.SettingsFile("dashboard-layout.json");
         _state = ReadFile();
+
+        _logger?.LogDebug("DashboardLayoutStore инициализирован из {FilePath}", _filePath);
     }
 
     public virtual DashboardLayoutSettings? LoadDashboard()
     {
-        return _state.Dashboard;
+        lock (_syncLock)
+        {
+            return _state.Dashboard == null ? null : JsonStoreClone.DeepClone(_state.Dashboard);
+        }
     }
 
     public virtual MainWindowSettings? LoadMainWindow()
     {
-        return _state.MainWindow;
+        lock (_syncLock)
+        {
+            return _state.MainWindow == null ? null : JsonStoreClone.DeepClone(_state.MainWindow);
+        }
     }
 
     public virtual void SaveDashboard(DashboardLayoutSettings layout)
@@ -37,8 +45,10 @@ public class DashboardLayoutStore
 
         lock (_syncLock)
         {
-            _state.Dashboard = layout;
+            _state.Dashboard = JsonStoreClone.DeepClone(layout);
             SaveInternal();
+
+            _logger?.LogDebug("DashboardLayoutStore: раскладка дашборда сохранена");
         }
     }
 
@@ -48,8 +58,10 @@ public class DashboardLayoutStore
 
         lock (_syncLock)
         {
-            _state.MainWindow = window;
+            _state.MainWindow = JsonStoreClone.DeepClone(window);
             SaveInternal();
+
+            _logger?.LogDebug("DashboardLayoutStore: параметры главного окна сохранены");
         }
     }
 
@@ -63,6 +75,7 @@ public class DashboardLayoutStore
     {
         if (!File.Exists(_filePath))
         {
+            _logger?.LogDebug("DashboardLayoutStore: файл {FilePath} не найден, используются дефолты", _filePath);
             return new();
         }
 

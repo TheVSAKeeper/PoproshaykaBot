@@ -10,41 +10,29 @@ public class PollProfilesManager(
     IEventBus eventBus,
     ILogger<PollProfilesManager> logger)
 {
-    private readonly object _syncLock = new();
-
     public virtual PollProfile? FindByName(string name)
     {
-        lock (_syncLock)
-        {
-            return pollsStore.Load()
-                .Profiles
-                .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
-        }
+        return pollsStore.Load()
+            .Profiles
+            .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     public virtual PollProfile? Find(Guid id)
     {
-        lock (_syncLock)
-        {
-            return pollsStore.Load().Profiles.FirstOrDefault(p => p.Id == id);
-        }
+        return pollsStore.Load().Profiles.FirstOrDefault(p => p.Id == id);
     }
 
     public virtual IReadOnlyList<PollProfile> GetAll()
     {
-        lock (_syncLock)
-        {
-            return pollsStore.Load().Profiles.ToList();
-        }
+        return pollsStore.Load().Profiles.ToList();
     }
 
     public virtual void Upsert(PollProfile profile)
     {
         Validate(profile);
 
-        lock (_syncLock)
+        pollsStore.Mutate(polls =>
         {
-            var polls = pollsStore.Load();
             var profiles = polls.Profiles;
 
             var duplicate = profiles.FirstOrDefault(p =>
@@ -66,11 +54,9 @@ public class PollProfilesManager(
                 var index = profiles.IndexOf(existing);
                 profiles[index] = profile;
             }
+        });
 
-            pollsStore.Save();
-        }
-
-        logger.LogDebug("Upsert профиля голосования {ProfileName}", profile.Name);
+        logger.LogDebug("Upsert профиля голосования {ProfileName} (Id={ProfileId})", profile.Name, profile.Id);
         _ = eventBus.PublishAsync(new PollProfilesChanged());
     }
 
@@ -101,25 +87,32 @@ public class PollProfilesManager(
             }
         }
 
-        lock (_syncLock)
+        pollsStore.Mutate(polls =>
         {
-            var polls = pollsStore.Load();
             polls.Profiles.Clear();
             polls.Profiles.AddRange(snapshot);
-            pollsStore.Save();
-        }
+        });
 
-        logger.LogDebug("ReplaceAll профилей голосований ({Count})", snapshot.Count);
+        logger.LogInformation("ReplaceAll профилей голосований ({Count})", snapshot.Count);
         _ = eventBus.PublishAsync(new PollProfilesChanged());
     }
 
     public virtual void Remove(Guid id)
     {
-        lock (_syncLock)
+        var removed = 0;
+
+        pollsStore.Mutate(polls =>
         {
-            var polls = pollsStore.Load();
-            polls.Profiles.RemoveAll(p => p.Id == id);
-            pollsStore.Save();
+            removed = polls.Profiles.RemoveAll(p => p.Id == id);
+        });
+
+        if (removed > 0)
+        {
+            logger.LogInformation("Удалён профиль голосования Id={ProfileId}", id);
+        }
+        else
+        {
+            logger.LogDebug("Запрос на удаление профиля голосования Id={ProfileId} — записей не найдено", id);
         }
 
         _ = eventBus.PublishAsync(new PollProfilesChanged());

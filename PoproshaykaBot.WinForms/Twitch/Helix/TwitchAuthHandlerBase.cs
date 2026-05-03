@@ -37,18 +37,18 @@ public abstract class TwitchAuthHandlerBase(
             return response;
         }
 
-        logger.LogWarning("Helix запрос {Method} {Path} (роль {Role}) вернул 401 — очищаем сохранённый токен",
-            request.Method, request.RequestUri?.AbsolutePath, Role);
+        logger.LogWarning("Helix запрос {Method} {Path} (роль {Role}) вернул 401 — пробуем очистить сохранённый токен",
+            request.Method,
+            request.RequestUri?.AbsolutePath,
+            Role);
 
-        var account = accountsStore.Load(Role);
+        var cleared = accountsStore.TryClearAccessToken(Role, token);
 
-        if (!string.Equals(account.AccessToken, token, StringComparison.Ordinal))
+        if (!cleared)
         {
-            return response;
+            logger.LogDebug("Helix 401 (роль {Role}): токен в хранилище уже сменился, оставляем без изменений",
+                Role);
         }
-
-        account.AccessToken = string.Empty;
-        accountsStore.SaveAll();
 
         return response;
     }

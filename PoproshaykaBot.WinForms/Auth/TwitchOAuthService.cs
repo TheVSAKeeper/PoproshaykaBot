@@ -286,24 +286,30 @@ public sealed class TwitchOAuthService(
         int expiresInSeconds = 0,
         bool publishAuthorizationRefreshed = false)
     {
-        var account = accountsStore.Load(role);
+        var scopesSnapshot = newScopes?.ToArray();
 
-        account.AccessToken = accessToken;
-        account.RefreshToken = refreshToken;
-        account.Login = login;
-        account.UserId = userId;
-
-        if (newScopes != null)
+        accountsStore.Mutate(role, account =>
         {
-            account.StoredScopes = newScopes.ToArray();
-        }
+            account.AccessToken = accessToken;
+            account.RefreshToken = refreshToken;
+            account.Login = login;
+            account.UserId = userId;
 
-        account.AccessTokenExpiresAt = expiresInSeconds > 0
-            ? DateTimeOffset.UtcNow.AddSeconds(expiresInSeconds)
-            : null;
+            if (scopesSnapshot != null)
+            {
+                account.StoredScopes = scopesSnapshot;
+            }
 
-        accountsStore.SaveAll();
-        logger.LogInformation("Токены роли {Role} обновлены в настройках (login={Login})", role, login);
+            account.AccessTokenExpiresAt = expiresInSeconds > 0
+                ? DateTimeOffset.UtcNow.AddSeconds(expiresInSeconds)
+                : null;
+        });
+
+        logger.LogInformation("Токены роли {Role} обновлены в настройках (login={Login}, expiresIn={ExpiresIn}s, scopes={ScopeCount})",
+            role,
+            login,
+            expiresInSeconds,
+            scopesSnapshot?.Length ?? -1);
 
         if (publishAuthorizationRefreshed)
         {
@@ -313,10 +319,7 @@ public sealed class TwitchOAuthService(
 
     public void ClearTokens(TwitchOAuthRole role)
     {
-        var account = accountsStore.Load(role);
-
-        ClearAccountInPlace(account);
-        accountsStore.SaveAll();
+        accountsStore.Mutate(role, ClearAccountInPlace);
 
         ReportStatus(role, "Токены очищены.");
         logger.LogInformation("Токены роли {Role} удалены из настроек", role);
@@ -423,19 +426,18 @@ public sealed class TwitchOAuthService(
         }
     }
 
-    private void HandleScopeMismatch(TwitchOAuthRole role, TwitchAccountSettings account, CancellationToken ct)
+    private void HandleScopeMismatch(TwitchOAuthRole role, TwitchAccountSettings accountSnapshot, CancellationToken ct)
     {
-        logger.LogWarning("Scope set роли {Role} изменился — требуется повторная авторизация. Старые: {Old}. Новые: {New}",
+        logger.LogWarning("Scope set роли {Role} изменился — требуется повторная авторизация. Старые: [{Old}]. Новые: [{New}]",
             role,
-            string.Join(" ", account.StoredScopes),
-            string.Join(" ", account.Scopes));
+            string.Join(" ", accountSnapshot.StoredScopes),
+            string.Join(" ", accountSnapshot.Scopes));
 
         var changeMsg = $"Требуется повторная авторизация Twitch ({DescribeRole(role)}): изменился набор прав.";
         ReportStatus(role, changeMsg);
         _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(changeMsg), ct);
 
-        ClearAccountInPlace(account);
-        accountsStore.SaveAll();
+        accountsStore.Mutate(role, ClearAccountInPlace);
     }
 
     private async Task<string> RefreshTokenInternalAsync(

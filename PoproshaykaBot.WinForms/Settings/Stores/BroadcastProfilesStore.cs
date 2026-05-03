@@ -19,19 +19,31 @@ public class BroadcastProfilesStore
         _logger = logger;
         _filePath = filePath ?? AppPaths.SettingsFile("broadcast-profiles.json");
         _state = ReadFile();
+
+        _logger?.LogDebug("BroadcastProfilesStore инициализирован из {FilePath} (профилей: {ProfileCount})",
+            _filePath,
+            _state.Profiles.Count);
     }
 
     public virtual BroadcastProfilesSettings Load()
     {
-        return _state;
-    }
-
-    public virtual void Save()
-    {
         lock (_syncLock)
         {
-            var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
-            AtomicFile.Save(_filePath, json, _logger);
+            return JsonStoreClone.DeepClone(_state);
+        }
+    }
+
+    public virtual void Mutate(Action<BroadcastProfilesSettings> mutator)
+    {
+        ArgumentNullException.ThrowIfNull(mutator);
+
+        lock (_syncLock)
+        {
+            mutator(_state);
+            PersistInternal();
+
+            _logger?.LogDebug("BroadcastProfilesStore: применена мутация, состояние сохранено (профилей: {ProfileCount})",
+                _state.Profiles.Count);
         }
     }
 
@@ -41,16 +53,25 @@ public class BroadcastProfilesStore
 
         lock (_syncLock)
         {
-            _state = value;
-            var json = JsonSerializer.Serialize(value, JsonStoreOptions.Default);
-            AtomicFile.Save(_filePath, json, _logger);
+            _state = JsonStoreClone.DeepClone(value);
+            PersistInternal();
+
+            _logger?.LogInformation("BroadcastProfilesStore: состояние заменено целиком (профилей: {ProfileCount})",
+                _state.Profiles.Count);
         }
+    }
+
+    private void PersistInternal()
+    {
+        var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
+        AtomicFile.Save(_filePath, json, _logger);
     }
 
     private BroadcastProfilesSettings ReadFile()
     {
         if (!File.Exists(_filePath))
         {
+            _logger?.LogDebug("BroadcastProfilesStore: файл {FilePath} не найден, используются дефолты", _filePath);
             return new();
         }
 

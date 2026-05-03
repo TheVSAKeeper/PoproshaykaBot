@@ -6,7 +6,6 @@ using PoproshaykaBot.WinForms.Settings.Stores;
 
 namespace PoproshaykaBot.WinForms.Broadcast.Profiles;
 
-// TODO: Логгер не используется
 public class BroadcastProfilesManager(
     BroadcastProfilesStore profilesStore,
     IChannelInformationApplier applier,
@@ -14,16 +13,11 @@ public class BroadcastProfilesManager(
     TimeProvider timeProvider,
     ILogger<BroadcastProfilesManager> logger)
 {
-    private readonly object _syncLock = new();
-
     public virtual BroadcastProfile? FindByName(string name)
     {
-        lock (_syncLock)
-        {
-            return profilesStore.Load()
-                .Profiles
-                .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
-        }
+        return profilesStore.Load()
+            .Profiles
+            .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     public virtual async Task<BroadcastProfile?> ApplyByNameAsync(string name, CancellationToken cancellationToken)
@@ -38,6 +32,7 @@ public class BroadcastProfilesManager(
 
         if (profile == null)
         {
+            logger.LogDebug("ApplyAsync: профиль Id={ProfileId} не найден", id);
             return null;
         }
 
@@ -67,9 +62,8 @@ public class BroadcastProfilesManager(
 
         var success = await applier.ApplyAsync(profileToApply, cancellationToken);
 
-        lock (_syncLock)
+        profilesStore.Mutate(bp =>
         {
-            var bp = profilesStore.Load();
             bp.LastAppliedProfileId = profile.Id;
 
             if (success && hasPlaceholder)
@@ -80,48 +74,54 @@ public class BroadcastProfilesManager(
                     stored.LastApplyAt = timeProvider.GetUtcNow();
                 }
             }
+        });
 
-            profilesStore.Save();
-        }
+        logger.LogInformation("Профиль трансляции применён: {ProfileName} (Id={ProfileId}, success={Success})",
+            profile.Name,
+            profile.Id,
+            success);
 
         return profile;
     }
 
     public virtual BroadcastProfile? Find(Guid id)
     {
-        lock (_syncLock)
-        {
-            return profilesStore.Load()
-                .Profiles
-                .FirstOrDefault(p => p.Id == id);
-        }
+        return profilesStore.Load()
+            .Profiles
+            .FirstOrDefault(p => p.Id == id);
     }
 
     public virtual bool AdvanceCurrentNumber(Guid id, int nextValue, DateTimeOffset appliedAt)
     {
-        lock (_syncLock)
+        var advanced = false;
+
+        profilesStore.Mutate(bp =>
         {
-            var bp = profilesStore.Load();
             var stored = bp.Profiles.FirstOrDefault(p => p.Id == id);
 
             if (stored == null)
             {
-                return false;
+                return;
             }
 
             stored.CurrentNumber = nextValue;
             stored.LastApplyAt = appliedAt;
-            profilesStore.Save();
-            return true;
+            advanced = true;
+        });
+
+        if (advanced)
+        {
+            logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} → CurrentNumber={NextValue}",
+                id,
+                nextValue);
         }
+
+        return advanced;
     }
 
     public IReadOnlyList<BroadcastProfile> GetAll()
     {
-        lock (_syncLock)
-        {
-            return profilesStore.Load().Profiles.ToList();
-        }
+        return profilesStore.Load().Profiles.ToList();
     }
 
     public void Upsert(BroadcastProfile profile)
@@ -131,9 +131,8 @@ public class BroadcastProfilesManager(
             throw new InvalidOperationException("Имя профиля не может быть пустым");
         }
 
-        lock (_syncLock)
+        profilesStore.Mutate(bp =>
         {
-            var bp = profilesStore.Load();
             var profiles = bp.Profiles;
 
             var duplicate = profiles.FirstOrDefault(p =>
@@ -155,26 +154,33 @@ public class BroadcastProfilesManager(
                 var index = profiles.IndexOf(existing);
                 profiles[index] = profile;
             }
+        });
 
-            profilesStore.Save();
-        }
-
+        logger.LogInformation("Upsert профиля трансляции {ProfileName} (Id={ProfileId})", profile.Name, profile.Id);
         _ = eventBus.PublishAsync(new BroadcastProfilesChanged());
     }
 
     public void Remove(Guid id)
     {
-        lock (_syncLock)
+        var removed = 0;
+
+        profilesStore.Mutate(bp =>
         {
-            var bp = profilesStore.Load();
-            bp.Profiles.RemoveAll(p => p.Id == id);
+            removed = bp.Profiles.RemoveAll(p => p.Id == id);
 
             if (bp.LastAppliedProfileId == id)
             {
                 bp.LastAppliedProfileId = null;
             }
+        });
 
-            profilesStore.Save();
+        if (removed > 0)
+        {
+            logger.LogInformation("Удалён профиль трансляции Id={ProfileId}", id);
+        }
+        else
+        {
+            logger.LogDebug("Запрос на удаление профиля трансляции Id={ProfileId} — записей не найдено", id);
         }
 
         _ = eventBus.PublishAsync(new BroadcastProfilesChanged());
