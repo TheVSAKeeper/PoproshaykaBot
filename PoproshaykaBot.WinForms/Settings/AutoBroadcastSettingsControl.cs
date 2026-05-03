@@ -23,8 +23,6 @@ public partial class AutoBroadcastSettingsControl : UserControl
         _streamEndStatsMessageTextBox.Text = settings.StreamEndStatsMessage;
         _broadcastIntervalNumericUpDown.Value = Math.Max(1, settings.BroadcastIntervalMinutes);
         _broadcastTemplateTextBox.Text = settings.BroadcastMessageTemplate;
-
-        UpdateControlsState();
     }
 
     public void SaveSettings(AutoBroadcastSettings settings)
@@ -40,25 +38,7 @@ public partial class AutoBroadcastSettingsControl : UserControl
 
     private void OnSettingChanged(object? sender, EventArgs e)
     {
-        UpdateControlsState();
         SettingChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void UpdateControlsState()
-    {
-        var autoBroadcastEnabled = _autoBroadcastEnabledCheckBox.Checked;
-
-        _streamNotificationsEnabledCheckBox.Enabled = autoBroadcastEnabled;
-        _streamStartMessageTextBox.Enabled = autoBroadcastEnabled && _streamNotificationsEnabledCheckBox.Checked;
-        _streamStopMessageTextBox.Enabled = autoBroadcastEnabled && _streamNotificationsEnabledCheckBox.Checked;
-        _streamEndStatsMessageTextBox.Enabled = autoBroadcastEnabled && _streamNotificationsEnabledCheckBox.Checked;
-        _streamStartMessageLabel.Enabled = autoBroadcastEnabled;
-        _streamStopMessageLabel.Enabled = autoBroadcastEnabled;
-        _streamEndStatsMessageLabel.Enabled = autoBroadcastEnabled;
-        _broadcastIntervalLabel.Enabled = autoBroadcastEnabled;
-        _broadcastIntervalNumericUpDown.Enabled = autoBroadcastEnabled;
-        _broadcastTemplateLabel.Enabled = autoBroadcastEnabled;
-        _broadcastTemplateTextBox.Enabled = autoBroadcastEnabled;
     }
 
     private void SetPlaceholders()
