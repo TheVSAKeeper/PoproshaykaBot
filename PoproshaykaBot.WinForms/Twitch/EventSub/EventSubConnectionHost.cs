@@ -69,7 +69,7 @@ public sealed class EventSubConnectionHost :
 
         _reconnectionPolicy.Reset();
 
-        PublishStatus(StreamMonitoringStatus.Connecting);
+        await PublishStatusAsync(StreamMonitoringStatus.Connecting).ConfigureAwait(false);
         _logger.LogInformation("Подключение к EventSub WebSocket...");
 
         try
@@ -103,7 +103,7 @@ public sealed class EventSubConnectionHost :
         }
 
         _logger.LogInformation("Отключение от EventSub WebSocket...");
-        PublishStatus(StreamMonitoringStatus.Disconnected);
+        await PublishStatusAsync(StreamMonitoringStatus.Disconnected).ConfigureAwait(false);
 
         try
         {
@@ -120,11 +120,13 @@ public sealed class EventSubConnectionHost :
     {
         if (@event.Role != TwitchOAuthRole.Bot)
         {
+            _logger.LogDebug("TwitchAuthorizationRefreshed для роли {Role} игнорируется EventSubConnectionHost (ожидался Bot)", @event.Role);
             return;
         }
 
         if (_disposed)
         {
+            _logger.LogDebug("TwitchAuthorizationRefreshed получен после dispose — игнорируется");
             return;
         }
 
@@ -177,8 +179,8 @@ public sealed class EventSubConnectionHost :
     private Task OnSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
         _reconnectionPolicy.Reset();
-        PublishStatus(StreamMonitoringStatus.Connected);
-        return Task.CompletedTask;
+        _logger.LogInformation("EventSub session welcome (SessionId: {SessionId}) — статус мониторинга: Connected", args.SessionId);
+        return PublishStatusAsync(StreamMonitoringStatus.Connected);
     }
 
     private async Task OnDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken cancellationToken)
@@ -188,6 +190,7 @@ public sealed class EventSubConnectionHost :
 
         if (_disposed || _stopRequested)
         {
+            _logger.LogDebug("Переподключение EventSub пропущено: disposed={IsDisposed}, stopRequested={IsStopRequested}", _disposed, _stopRequested);
             return;
         }
 
@@ -196,7 +199,7 @@ public sealed class EventSubConnectionHost :
             _logger.LogError("Превышено максимальное количество попыток переподключения ({MaxAttempts}). EventSub остановлен.",
                 _reconnectionPolicy.MaxAttempts);
 
-            PublishStatus(StreamMonitoringStatus.Failed);
+            await PublishStatusAsync(StreamMonitoringStatus.Failed).ConfigureAwait(false);
 
             lock (_lockObj)
             {
@@ -212,13 +215,14 @@ public sealed class EventSubConnectionHost :
         _logger.LogWarning("Попытка переподключения EventSub {Attempt}/{MaxAttempts} через {DelaySeconds} сек...",
             attempt, maxAttempts, (int)delay.TotalSeconds);
 
-        PublishStatus(StreamMonitoringStatus.Reconnecting, $"Попытка {attempt}/{maxAttempts}");
+        await PublishStatusAsync(StreamMonitoringStatus.Reconnecting, $"Попытка {attempt}/{maxAttempts}").ConfigureAwait(false);
 
         CancellationToken token;
         lock (_lockObj)
         {
             if (_runCts == null)
             {
+                _logger.LogDebug("Переподключение EventSub отменено: _runCts уже null (видимо, StopAsync прошёл одновременно)");
                 return;
             }
 
@@ -233,6 +237,7 @@ public sealed class EventSubConnectionHost :
         }
         catch (OperationCanceledException)
         {
+            _logger.LogDebug("Задержка перед переподключением EventSub отменена (попытка {Attempt}/{MaxAttempts})", attempt, maxAttempts);
             return;
         }
 
@@ -240,6 +245,10 @@ public sealed class EventSubConnectionHost :
         {
             await _eventSubClient.StartAsync(token);
             _logger.LogInformation("Переподключение EventSub WebSocket инициировано (попытка {Attempt})", attempt);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("Переподключение EventSub отменено (попытка {Attempt}/{MaxAttempts})", attempt, maxAttempts);
         }
         catch (Exception ex)
         {
@@ -259,8 +268,9 @@ public sealed class EventSubConnectionHost :
         _reconnectCts = null;
     }
 
-    private void PublishStatus(StreamMonitoringStatus status, string? detail = null)
+    private Task PublishStatusAsync(StreamMonitoringStatus status, string? detail = null)
     {
-        _ = _eventBus.PublishAsync(new StreamMonitoringStatusChanged(status, detail));
+        _logger.LogDebug("Публикация StreamMonitoringStatusChanged: {Status} ({Detail})", status, detail ?? "—");
+        return _eventBus.PublishAsync(new StreamMonitoringStatusChanged(status, detail));
     }
 }

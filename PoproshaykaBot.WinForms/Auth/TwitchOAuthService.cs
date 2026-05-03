@@ -276,7 +276,7 @@ public sealed class TwitchOAuthService(
         if (account.StoredScopes.Length > 0
             && !TwitchScopes.SetEquals(account.StoredScopes, account.Scopes))
         {
-            HandleScopeMismatch(role, account, ct);
+            await HandleScopeMismatchAsync(role, account, ct);
             return null;
         }
 
@@ -449,7 +449,7 @@ public sealed class TwitchOAuthService(
         }
     }
 
-    private void HandleScopeMismatch(TwitchOAuthRole role, TwitchAccountSettings accountSnapshot, CancellationToken ct)
+    private async Task HandleScopeMismatchAsync(TwitchOAuthRole role, TwitchAccountSettings accountSnapshot, CancellationToken ct)
     {
         logger.LogWarning("Scope set роли {Role} изменился — требуется повторная авторизация. Старые: [{Old}]. Новые: [{New}]",
             role,
@@ -458,9 +458,22 @@ public sealed class TwitchOAuthService(
 
         var changeMsg = $"Требуется повторная авторизация Twitch ({DescribeRole(role)}): изменился набор прав.";
         ReportStatus(role, changeMsg);
-        _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(changeMsg), ct);
+
+        try
+        {
+            await eventBus.PublishAsync(new BotConnectionStatusUpdated(changeMsg), ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            logger.LogDebug("Публикация BotConnectionStatusUpdated (scope mismatch, роль {Role}) отменена", role);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Не удалось опубликовать BotConnectionStatusUpdated при scope mismatch (роль {Role})", role);
+        }
 
         accountsStore.Mutate(role, ClearAccountInPlace);
+        logger.LogInformation("Учётные данные роли {Role} очищены из-за расхождения scope — ожидается повторная авторизация", role);
     }
 
     private void HandleRefreshRejected(TwitchOAuthRole role, OAuthRefreshRejectedException exception, CancellationToken ct)
@@ -614,8 +627,11 @@ public sealed class TwitchOAuthService(
                     errorMessage = errorDto.Message;
                 }
             }
-            catch (JsonException)
+            catch (JsonException ex)
             {
+                logger.LogWarning(ex, "Не удалось распарсить тело OAuth-ответа об ошибке. HttpStatus={HttpStatus}, BodyLength={BodyLength}",
+                    response.StatusCode,
+                    jsonResponse.Length);
             }
 
             logger.LogError("OAuth token-эндпойнт ответил ошибкой. HttpStatus={HttpStatus}, OAuthStatus={OAuthStatus}, OAuthMessage={OAuthMessage}",
@@ -631,10 +647,26 @@ public sealed class TwitchOAuthService(
             throw new InvalidOperationException($"OAuth error {errorStatus}: {errorMessage ?? "нет описания"}");
         }
 
-        var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(jsonResponse);
+        TokenResponse? tokenResponse;
+        try
+        {
+            tokenResponse = JsonSerializer.Deserialize<TokenResponse>(jsonResponse);
+        }
+        catch (JsonException ex)
+        {
+            logger.LogError(ex, "Не удалось десериализовать ответ сервера токенов. HttpStatus={HttpStatus}, BodyLength={BodyLength}",
+                response.StatusCode,
+                jsonResponse.Length);
+
+            throw new InvalidOperationException("Не удалось десериализовать ответ сервера", ex);
+        }
 
         if (tokenResponse == null)
         {
+            logger.LogError("Десериализация ответа сервера токенов вернула null. HttpStatus={HttpStatus}, BodyLength={BodyLength}",
+                response.StatusCode,
+                jsonResponse.Length);
+
             throw new InvalidOperationException("Не удалось десериализовать ответ сервера");
         }
 

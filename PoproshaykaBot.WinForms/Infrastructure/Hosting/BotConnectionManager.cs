@@ -157,10 +157,11 @@ public sealed class BotConnectionManager : IDisposable
             var progressReporter = new Progress<string>(ReportProgress);
             await _appHost.StartAsync(progressReporter, ct);
 
-            _ = _eventBus.PublishAsync(new BotJoinedChannel(settings.Channel), ct);
+            _logger.LogDebug("Публикация BotJoinedChannel для канала {Channel}", settings.Channel);
+            await _eventBus.PublishAsync(new BotJoinedChannel(settings.Channel), ct);
 
             ReportProgress("Подключение установлено успешно");
-            _logger.LogInformation("Процесс подключения бота успешно завершен");
+            _logger.LogInformation("Процесс подключения бота успешно завершен (канал {Channel})", settings.Channel);
             PublishPhase(BotLifecyclePhase.Connected);
         }
         catch (OperationCanceledException)

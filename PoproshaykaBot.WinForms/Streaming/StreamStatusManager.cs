@@ -19,6 +19,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 {
     internal static readonly TimeSpan StuckOnlineThreshold = TimeSpan.FromMinutes(2);
 
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly ITwitchEventSubClient _eventSubClient;
     private readonly ITwitchHelixClient _helix;
     private readonly IBroadcasterIdProvider _broadcasterIdProvider;
@@ -28,11 +30,15 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private readonly ILogger<StreamStatusManager> _logger;
 
     private readonly CancellationTokenSource _disposeCts = new();
+    private readonly object _stateLock = new();
+
     private IDisposable? _channelUpdatedSubscription;
     private CancellationTokenSource? _runCts;
     private CancellationTokenSource? _metadataRetryCts;
     private DateTime? _firstOfflineFromApiUtc;
     private ChannelUpdated? _lastChannelUpdate;
+    private StreamStatus _currentStatus = StreamStatus.Unknown;
+    private StreamInfo? _currentStream;
     private bool _subscribed;
     private bool _disposed;
 
@@ -55,8 +61,27 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _logger = logger;
     }
 
-    public StreamStatus CurrentStatus { get; private set; } = StreamStatus.Unknown;
-    public StreamInfo? CurrentStream { get; private set; }
+    public StreamStatus CurrentStatus
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _currentStatus;
+            }
+        }
+    }
+
+    public StreamInfo? CurrentStream
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _currentStream;
+            }
+        }
+    }
 
     public string Name => "Отслеживание статуса стрима";
 
@@ -66,6 +91,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         if (_subscribed)
         {
+            _logger.LogDebug("StreamStatusManager.StartAsync проигнорирован: подписки уже установлены");
             return Task.CompletedTask;
         }
 
@@ -88,6 +114,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         if (!_subscribed)
         {
+            _logger.LogDebug("StreamStatusManager.StopAsync проигнорирован: подписки уже сняты");
             return;
         }
 
@@ -128,11 +155,15 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         Interlocked.Exchange(ref _metadataRetryCts, null);
 
-        CurrentStatus = StreamStatus.Unknown;
-        CurrentStream = null;
-        _lastChannelUpdate = null;
+        SetState(StreamStatus.Unknown, null);
 
-        _logger.LogInformation("StreamStatusManager: подписки на EventSub сняты, retry-цикл метаданных остановлен");
+        lock (_stateLock)
+        {
+            _firstOfflineFromApiUtc = null;
+            _lastChannelUpdate = null;
+        }
+
+        _logger.LogInformation("StreamStatusManager: подписки на EventSub сняты, состояние сброшено в Unknown");
     }
 
     public async ValueTask DisposeAsync()
@@ -189,9 +220,11 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     public async Task RefreshLiveSnapshotAsync()
     {
+        var token = _disposeCts.Token;
+
         try
         {
-            var broadcasterId = await _broadcasterIdProvider.GetAsync(_disposeCts.Token);
+            var broadcasterId = await _broadcasterIdProvider.GetAsync(token);
 
             if (string.IsNullOrEmpty(broadcasterId))
             {
@@ -199,44 +232,66 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 return;
             }
 
-            var stream = await _helix.GetStreamAsync(broadcasterId);
+            _logger.LogDebug("Live-snapshot: запрос статуса для BroadcasterId {BroadcasterId} (текущий статус {CurrentStatus})", broadcasterId, CurrentStatus);
+            var stream = await _helix.GetStreamAsync(broadcasterId, token);
             var apiSaysOnline = stream != null;
 
             if (apiSaysOnline)
             {
-                _firstOfflineFromApiUtc = null;
-
-                if (CurrentStatus != StreamStatus.Online)
+                bool transitioned;
+                StreamStatus previousStatus;
+                lock (_stateLock)
                 {
-                    _logger.LogInformation("Live-snapshot: переход {OldStatus} → Online для BroadcasterId {BroadcasterId}", CurrentStatus, broadcasterId);
-                    CurrentStatus = StreamStatus.Online;
-                    CurrentStream = ApplyChannelUpdateOverlay(MapToStreamInfo(stream!));
+                    _firstOfflineFromApiUtc = null;
+                    previousStatus = _currentStatus;
+                    transitioned = previousStatus != StreamStatus.Online;
+                    _currentStatus = StreamStatus.Online;
+                    _currentStream = ApplyChannelUpdateOverlayLocked(MapToStreamInfo(stream!));
+                }
+
+                if (transitioned)
+                {
+                    _logger.LogInformation("Live-snapshot: переход {OldStatus} → Online для BroadcasterId {BroadcasterId}", previousStatus, broadcasterId);
                     await PublishStatusTransitionAsync(StreamStatus.Online, true).ConfigureAwait(false);
                 }
                 else
                 {
-                    CurrentStream = ApplyChannelUpdateOverlay(MapToStreamInfo(stream!));
+                    _logger.LogDebug("Live-snapshot: статус Online подтверждён для BroadcasterId {BroadcasterId}", broadcasterId);
                 }
 
-                _logger.LogInformation("Текущий статус: онлайн (по данным API)");
                 return;
             }
 
-            if (CurrentStatus == StreamStatus.Online)
+            StreamStatus statusForOfflineBranch;
+            lock (_stateLock)
+            {
+                statusForOfflineBranch = _currentStatus;
+            }
+
+            if (statusForOfflineBranch == StreamStatus.Online)
             {
                 var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
-                _firstOfflineFromApiUtc ??= nowUtc;
+                bool forceOffline;
+                TimeSpan elapsed;
+                lock (_stateLock)
+                {
+                    _firstOfflineFromApiUtc ??= nowUtc;
+                    elapsed = nowUtc - _firstOfflineFromApiUtc.Value;
+                    forceOffline = elapsed >= StuckOnlineThreshold;
 
-                var elapsed = nowUtc - _firstOfflineFromApiUtc.Value;
+                    if (forceOffline)
+                    {
+                        _currentStatus = StreamStatus.Offline;
+                        _currentStream = null;
+                        _firstOfflineFromApiUtc = null;
+                    }
+                }
 
-                if (elapsed >= StuckOnlineThreshold)
+                if (forceOffline)
                 {
                     _logger.LogWarning("Принудительный перевод в Offline после {ElapsedSeconds} с расхождения с API для BroadcasterId {BroadcasterId}",
                         (int)elapsed.TotalSeconds, broadcasterId);
 
-                    CurrentStatus = StreamStatus.Offline;
-                    CurrentStream = null;
-                    _firstOfflineFromApiUtc = null;
                     await PublishStatusTransitionAsync(StreamStatus.Offline).ConfigureAwait(false);
                     return;
                 }
@@ -245,12 +300,17 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 return;
             }
 
-            _firstOfflineFromApiUtc = null;
-            CurrentStream = null;
-            _logger.LogInformation("Текущий статус: офлайн (по данным API)");
+            lock (_stateLock)
+            {
+                _firstOfflineFromApiUtc = null;
+                _currentStream = null;
+            }
+
+            _logger.LogDebug("Live-snapshot: статус Offline подтверждён для BroadcasterId {BroadcasterId}", broadcasterId);
         }
         catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
         {
+            _logger.LogDebug("Live-snapshot отменён: StreamStatusManager уничтожается");
         }
         catch (Exception ex)
         {
@@ -262,10 +322,13 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         _logger.LogInformation("EventSub WebSocket подключен. SessionId: {SessionId}", args.SessionId);
 
-        _lastChannelUpdate = null;
+        lock (_stateLock)
+        {
+            _lastChannelUpdate = null;
+        }
 
         await CreateEventSubSubscriptionsAsync(args.SessionId, cancellationToken);
-        await InitializeFromApiAsync();
+        await InitializeFromApiAsync(cancellationToken);
     }
 
     private async Task OnNotificationAsync(EventSubNotificationArgs args, CancellationToken cancellationToken)
@@ -298,6 +361,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         if (string.IsNullOrEmpty(_eventSubClient.SessionId))
         {
+            _logger.LogDebug("Восстановление подписки {Type} пропущено: SessionId уже отсутствует", args.SubscriptionType);
             return;
         }
 
@@ -307,6 +371,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
             if (string.IsNullOrEmpty(broadcasterId))
             {
+                _logger.LogWarning("Восстановление подписки {Type} прервано: BroadcasterId недоступен", args.SubscriptionType);
                 return;
             }
 
@@ -323,6 +388,11 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
             _logger.LogInformation("Подписка {Type} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, newId);
         }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("Восстановление подписки {Type} отменено", args.SubscriptionType);
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Не удалось восстановить подписку {Type} после revocation: {Reason}", args.SubscriptionType, SafeMessage(ex));
@@ -333,10 +403,14 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         _logger.LogWarning("EventSub WebSocket отключен ({Reason}) — статус стрима сброшен в Unknown до восстановления соединения", args.Reason);
 
-        CurrentStatus = StreamStatus.Unknown;
-        CurrentStream = null;
-        _firstOfflineFromApiUtc = null;
-        _lastChannelUpdate = null;
+        SetState(StreamStatus.Unknown, null);
+
+        lock (_stateLock)
+        {
+            _firstOfflineFromApiUtc = null;
+            _lastChannelUpdate = null;
+        }
+
         return Task.CompletedTask;
     }
 
@@ -357,6 +431,26 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             ThumbnailUrl = stream.ThumbnailUrl,
             Tags = stream.Tags,
             IsMature = stream.IsMature,
+        };
+    }
+
+    private static StreamInfo CloneStreamInfo(StreamInfo source)
+    {
+        return new()
+        {
+            Id = source.Id,
+            UserId = source.UserId,
+            UserLogin = source.UserLogin,
+            UserName = source.UserName,
+            GameId = source.GameId,
+            GameName = source.GameName,
+            Title = source.Title,
+            Language = source.Language,
+            ViewerCount = source.ViewerCount,
+            StartedAt = source.StartedAt,
+            ThumbnailUrl = source.ThumbnailUrl,
+            Tags = source.Tags,
+            IsMature = source.IsMature,
         };
     }
 
@@ -388,11 +482,14 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         };
     }
 
-    private async Task InitializeFromApiAsync()
+    private async Task InitializeFromApiAsync(CancellationToken cancellationToken)
     {
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+        var token = linkedCts.Token;
+
         try
         {
-            var broadcasterId = await _broadcasterIdProvider.GetAsync(_disposeCts.Token);
+            var broadcasterId = await _broadcasterIdProvider.GetAsync(token);
 
             if (string.IsNullOrEmpty(broadcasterId))
             {
@@ -401,27 +498,41 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             }
 
             _logger.LogDebug("Запрос начального статуса стрима через API для BroadcasterId: {BroadcasterId}", broadcasterId);
-            var stream = await _helix.GetStreamAsync(broadcasterId);
-            _firstOfflineFromApiUtc = null;
+            var stream = await _helix.GetStreamAsync(broadcasterId, token);
 
             var isOnline = stream != null;
             var newStatus = isOnline ? StreamStatus.Online : StreamStatus.Offline;
+            var newStream = isOnline ? ApplyChannelUpdateOverlay(MapToStreamInfo(stream!)) : null;
 
-            if (CurrentStatus != newStatus)
+            bool transitioned;
+            StreamStatus previousStatus;
+            lock (_stateLock)
             {
-                _logger.LogInformation("Инициализация: статус стрима {OldStatus} → {NewStatus} для BroadcasterId {BroadcasterId}", CurrentStatus, newStatus, broadcasterId);
-                CurrentStatus = newStatus;
-                await PublishStatusTransitionAsync(newStatus, isOnline).ConfigureAwait(false);
+                _firstOfflineFromApiUtc = null;
+                previousStatus = _currentStatus;
+                transitioned = previousStatus != newStatus;
+                _currentStatus = newStatus;
+                _currentStream = newStream;
             }
 
-            CurrentStream = isOnline ? ApplyChannelUpdateOverlay(MapToStreamInfo(stream!)) : null;
+            if (transitioned)
+            {
+                _logger.LogInformation("Инициализация: статус стрима {OldStatus} → {NewStatus} для BroadcasterId {BroadcasterId}", previousStatus, newStatus, broadcasterId);
+                await PublishStatusTransitionAsync(newStatus, isOnline).ConfigureAwait(false);
+            }
+            else
+            {
+                _logger.LogDebug("Инициализация: статус стрима {Status} подтверждён для BroadcasterId {BroadcasterId}", newStatus, broadcasterId);
+            }
 
             _logger.LogInformation(isOnline
                 ? "Начальный статус: онлайн (по данным API)"
                 : "Начальный статус: офлайн (по данным API)");
         }
-        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
+            _logger.LogDebug("Инициализация по API отменена (cancellationToken: {CallerCancelled}, dispose: {DisposeCancelled})",
+                cancellationToken.IsCancellationRequested, _disposeCts.IsCancellationRequested);
         }
         catch (Exception ex)
         {
@@ -447,7 +558,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 return false;
             }
 
-            CurrentStream = ApplyChannelUpdateOverlay(MapToStreamInfo(stream));
+            var info = ApplyChannelUpdateOverlay(MapToStreamInfo(stream));
+            SetStream(info);
             return true;
         }
         catch (OperationCanceledException)
@@ -463,26 +575,42 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private void OnChannelUpdated(ChannelUpdated @event)
     {
-        _lastChannelUpdate = @event;
+        StreamInfo? updatedStream = null;
 
-        var stream = CurrentStream;
+        lock (_stateLock)
+        {
+            _lastChannelUpdate = @event;
 
-        if (stream == null)
+            if (_currentStream != null)
+            {
+                updatedStream = CloneStreamInfo(_currentStream);
+                updatedStream.Title = @event.Title;
+                updatedStream.Language = @event.Language;
+                updatedStream.GameId = @event.GameId;
+                updatedStream.GameName = @event.GameName;
+                _currentStream = updatedStream;
+            }
+        }
+
+        if (updatedStream == null)
         {
             _logger.LogDebug("ChannelUpdated сохранён без обновления CurrentStream: стрим не в состоянии online");
             return;
         }
-
-        stream.Title = @event.Title;
-        stream.Language = @event.Language;
-        stream.GameId = @event.GameId;
-        stream.GameName = @event.GameName;
 
         _logger.LogInformation("Метаданные стрима обновлены через channel.update: title={Title}, game={GameName}",
             @event.Title, @event.GameName);
     }
 
     private StreamInfo ApplyChannelUpdateOverlay(StreamInfo info)
+    {
+        lock (_stateLock)
+        {
+            return ApplyChannelUpdateOverlayLocked(info);
+        }
+    }
+
+    private StreamInfo ApplyChannelUpdateOverlayLocked(StreamInfo info)
     {
         var update = _lastChannelUpdate;
 
@@ -498,16 +626,41 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         return info;
     }
 
+    private void SetState(StreamStatus status, StreamInfo? stream)
+    {
+        lock (_stateLock)
+        {
+            _currentStatus = status;
+            _currentStream = stream;
+        }
+    }
+
+    private void SetStream(StreamInfo? stream)
+    {
+        lock (_stateLock)
+        {
+            _currentStream = stream;
+        }
+    }
+
     private async Task HandleStreamOnlineAsync(JsonElement payload, CancellationToken cancellationToken)
     {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var data = payload.Deserialize<EventSubStreamOnlinePayloadDto>(options);
+        var data = payload.Deserialize<EventSubStreamOnlinePayloadDto>(WebJsonOptions);
 
         _logger.LogInformation("Стрим запущен (EventSub), тип: {EventType}", data?.Event?.Type ?? "live");
 
-        if (CurrentStatus != StreamStatus.Online)
+        bool transitioned;
+        StreamStatus previousStatus;
+        lock (_stateLock)
         {
-            CurrentStatus = StreamStatus.Online;
+            previousStatus = _currentStatus;
+            transitioned = previousStatus != StreamStatus.Online;
+            _currentStatus = StreamStatus.Online;
+        }
+
+        if (transitioned)
+        {
+            _logger.LogInformation("EventSub: переход {OldStatus} → Online", previousStatus);
             await PublishStatusTransitionAsync(StreamStatus.Online).ConfigureAwait(false);
         }
 
@@ -601,12 +754,19 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         _logger.LogInformation("Стрим завершен (EventSub)");
 
-        var oldStatus = CurrentStatus;
-        CurrentStatus = StreamStatus.Offline;
-        CurrentStream = null;
-
-        if (oldStatus != CurrentStatus)
+        bool transitioned;
+        StreamStatus previousStatus;
+        lock (_stateLock)
         {
+            previousStatus = _currentStatus;
+            transitioned = previousStatus != StreamStatus.Offline;
+            _currentStatus = StreamStatus.Offline;
+            _currentStream = null;
+        }
+
+        if (transitioned)
+        {
+            _logger.LogInformation("EventSub: переход {OldStatus} → Offline", previousStatus);
             await PublishStatusTransitionAsync(StreamStatus.Offline).ConfigureAwait(false);
         }
     }
@@ -636,6 +796,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         if (string.IsNullOrWhiteSpace(channel) || stream == null)
         {
+            _logger.LogDebug("Публикация StreamMetadataResolved пропущена (channel пуст или stream null)");
             return Task.CompletedTask;
         }
 
