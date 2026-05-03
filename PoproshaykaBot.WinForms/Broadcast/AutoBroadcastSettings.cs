@@ -10,6 +10,8 @@ public sealed class AutoBroadcastSettings
 
     public string StreamStopMessage { get; set; } = "⚫ Стрим завершен. Рассылка остановлена.";
 
+    public string StreamEndStatsMessage { get; set; } = "📊 Стрим завершён! Длительность: {duration}, сообщений: {messages}, активных зрителей: {chatters}, пик: {peakViewers}, средний онлайн: {avgViewers}. Играли в {game}.";
+
     public int BroadcastIntervalMinutes { get; set; } = 15;
 
     public string BroadcastMessageTemplate { get; set; } = "Присылайте деняк, пожалуйста, {counter} раз прошу. https://bob217.ru/donate/";
