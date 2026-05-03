@@ -7,6 +7,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Twitch.EventSub;
 using PoproshaykaBot.WinForms.Twitch.Helix;
+using System.Net;
 
 namespace PoproshaykaBot.WinForms.Twitch.Chat;
 
@@ -110,6 +111,13 @@ public sealed class ChatIngestionService(
 
                     logger.LogInformation("ChatIngestionService: подписка channel.chat.message создана (broadcaster={BroadcasterId}, bot={BotId}, попытка {Attempt})",
                         broadcasterId, botId, attempt + 1);
+
+                    return;
+                }
+                catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+                {
+                    logger.LogInformation("ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии — переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
+                        broadcasterId, botId);
 
                     return;
                 }

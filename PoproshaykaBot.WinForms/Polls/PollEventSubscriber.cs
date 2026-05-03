@@ -7,6 +7,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Twitch;
 using PoproshaykaBot.WinForms.Twitch.EventSub;
 using PoproshaykaBot.WinForms.Twitch.Helix;
+using System.Net;
 
 namespace PoproshaykaBot.WinForms.Polls;
 
@@ -108,6 +109,10 @@ public sealed class PollEventSubscriber(
                     ct);
 
                 logger.LogInformation("PollEventSubscriber: подписка на {Type} создана", type);
+            }
+            catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+            {
+                logger.LogInformation("PollEventSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", type);
             }
             catch (Exception ex)
             {
