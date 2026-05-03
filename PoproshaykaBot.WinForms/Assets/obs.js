@@ -360,7 +360,7 @@ function addMessage(message, isHistoryMessage = false) {
         const messageWithEmotes = renderMessageWithEmotes(message.message, message.emotes || []);
 
         const usernameClasses = ['username', ...userTypeClasses].join(' ');
-        const usernameHtml = `<span class='${usernameClasses}'>${message.displayName || message.username}:</span>`;
+        const usernameHtml = `<span class='${usernameClasses}'>${escapeHtml(message.displayName || message.username || '')}:</span>`;
 
         messageDiv.innerHTML = `
             ${timestampHtml}
@@ -400,7 +400,10 @@ function renderBadges(badges) {
 
     return badges.map(badge => {
         if (!badge.imageUrl) return '';
-        return `<img src="${badge.imageUrl}" alt="${badge.type}" title="${badge.type} ${badge.version}" class="badge">`;
+        const src = escapeAttr(badge.imageUrl);
+        const type = escapeAttr(badge.type);
+        const version = escapeAttr(badge.version);
+        return `<img src="${src}" alt="${type}" title="${type} ${version}" class="badge">`;
     }).join('');
 }
 
@@ -418,7 +421,9 @@ function renderMessageWithEmotes(message, emotes) {
             const after = result.substring(emote.endIndex + 1);
 
             const animatedClass = enableSpecialEffects && isAnimatedEmote(emote.name) ? ' animated' : '';
-            const emoteImg = `<img src=\"${emote.imageUrl}\" alt=\"${emote.name}\" title=\"${emote.name}\" class=\"emote${animatedClass}\">`;
+            const src = escapeAttr(emote.imageUrl);
+            const name = escapeAttr(emote.name);
+            const emoteImg = `<img src="${src}" alt="${name}" title="${name}" class="emote${animatedClass}">`;
 
             result = before + emoteImg + after;
         }
@@ -436,6 +441,15 @@ function highlightMentions(text) {
     if (!isHighlightMentions) return text;
 
     return text.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+}
+
+function escapeAttr(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
 }
 
 function escapeHtml(text, preserveImgTags = false) {
@@ -603,8 +617,8 @@ function initOverlay() {
         .then(() => fetch('/api/history'))
         .then(response => response.json())
         .then(messages => messages.forEach(message => addMessage(message, true)))
-        .then(() => initEventSource())
-        .catch(error => console.error('Ошибка инициализации оверлея:', error));
+        .catch(error => console.error('Ошибка инициализации оверлея:', error))
+        .finally(() => initEventSource());
 }
 
 initOverlay();

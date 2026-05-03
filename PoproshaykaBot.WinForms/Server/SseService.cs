@@ -24,6 +24,7 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
     });
 
     private readonly object _lifecycleLock = new();
+    private readonly object _enqueueLock = new();
 
     private CancellationTokenSource? _cts;
     private Task? _broadcastTask;
@@ -180,12 +181,16 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
 
     private void Enqueue(SseEnvelope envelope)
     {
-        var willDrop = _messageChannel.Reader.Count >= ChannelCapacity;
-
-        if (!_messageChannel.Writer.TryWrite(envelope))
+        bool willDrop;
+        lock (_enqueueLock)
         {
-            logger.LogWarning("Не удалось записать сообщение в канал SSE. Очередь недоступна");
-            return;
+            willDrop = _messageChannel.Reader.Count >= ChannelCapacity;
+
+            if (!_messageChannel.Writer.TryWrite(envelope))
+            {
+                logger.LogWarning("Не удалось записать сообщение в канал SSE. Очередь недоступна");
+                return;
+            }
         }
 
         if (!willDrop)
