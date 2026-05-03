@@ -7,6 +7,8 @@ using PoproshaykaBot.WinForms.Infrastructure.Logging;
 using PoproshaykaBot.WinForms.Settings;
 using PoproshaykaBot.WinForms.Settings.Migrations;
 using Serilog;
+using Serilog.Debugging;
+using Serilog.Events;
 using Serilog.Extensions.Logging;
 using System.Diagnostics;
 using Timer = System.Windows.Forms.Timer;
@@ -24,12 +26,14 @@ public static class Program
 
         var uiLogSink = new UiLogSink();
 
+        SelfLog.Enable(message => Debug.WriteLine($"[Serilog] {message}"));
+
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .WriteTo.Console(outputTemplate: OutputTemplate)
             .WriteTo.Debug(outputTemplate: OutputTemplate)
             .WriteTo.File(AppPaths.Combine("logs", "bot_log_.txt"), rollingInterval: RollingInterval.Day, outputTemplate: OutputTemplate)
-            .WriteTo.Sink(uiLogSink)
+            .WriteTo.Sink(uiLogSink, LogEventLevel.Information)
             .CreateLogger();
 
         try

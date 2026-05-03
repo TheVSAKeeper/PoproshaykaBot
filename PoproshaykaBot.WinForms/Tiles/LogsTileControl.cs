@@ -51,7 +51,25 @@ public sealed partial class LogsTileControl : UserControl
 
         if (InvokeRequired)
         {
-            BeginInvoke(() => AppendEntry(entry));
+            try
+            {
+                BeginInvoke(() =>
+                {
+                    if (IsDisposed || !IsHandleCreated)
+                    {
+                        return;
+                    }
+
+                    AppendEntry(entry);
+                });
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
             return;
         }
 

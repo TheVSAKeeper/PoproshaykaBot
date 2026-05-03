@@ -1,4 +1,5 @@
 ﻿using Serilog.Core;
+using Serilog.Debugging;
 using Serilog.Events;
 using Serilog.Formatting;
 using Serilog.Formatting.Display;
@@ -29,10 +30,19 @@ public sealed class UiLogSink : ILogEventSink
 
     public void Emit(LogEvent logEvent)
     {
-        using var writer = new StringWriter();
-        _formatter.Format(logEvent, writer);
-        var text = writer.ToString().TrimEnd('\r', '\n');
-        var entry = new UiLogEntry(logEvent.Timestamp, logEvent.Level, text);
+        UiLogEntry entry;
+        try
+        {
+            using var writer = new StringWriter();
+            _formatter.Format(logEvent, writer);
+            var text = writer.ToString().TrimEnd('\r', '\n');
+            entry = new(logEvent.Timestamp, logEvent.Level, text);
+        }
+        catch (Exception ex)
+        {
+            SelfLog.WriteLine("UiLogSink: ошибка форматирования LogEvent: {0}", ex);
+            return;
+        }
 
         lock (_lock)
         {
@@ -44,7 +54,20 @@ public sealed class UiLogSink : ILogEventSink
             _buffer.Enqueue(entry);
         }
 
-        Emitted?.Invoke(entry);
+        var handler = Emitted;
+        if (handler == null)
+        {
+            return;
+        }
+
+        try
+        {
+            handler.Invoke(entry);
+        }
+        catch (Exception ex)
+        {
+            SelfLog.WriteLine("UiLogSink: подписчик Emitted бросил исключение: {0}", ex);
+        }
     }
 
     public IReadOnlyList<UiLogEntry> Snapshot()
