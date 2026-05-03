@@ -146,6 +146,7 @@ public partial class SettingsForm : Form
         _oauthSettingsControl.LoadSettings(_settings, _botDraft, _broadcasterDraft);
         _obsChatSettingsControl.LoadSettings(_obsChatDraft);
         _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast);
+        _botLifecycleAutomationSettingsControl.LoadSettings(_settings.Twitch.BotLifecycleAutomation);
         _miscSettingsControl.LoadSettings(_settings);
         _pollsSettingsControl.LoadSettings(_pollsDraft);
         _dashboardSettingsControl.LoadSettings(_dashboardDraft);
@@ -162,6 +163,7 @@ public partial class SettingsForm : Form
         _oauthSettingsControl.SaveSettings(_settings);
         _obsChatSettingsControl.SaveSettings(_obsChatDraft);
         _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);
+        _botLifecycleAutomationSettingsControl.SaveSettings(_settings.Twitch.BotLifecycleAutomation);
         _miscSettingsControl.SaveSettings(_settings);
         _pollsSettingsControl.SaveSettings(_pollsDraft);
         _dashboardDraft = _dashboardSettingsControl.SaveSettings();

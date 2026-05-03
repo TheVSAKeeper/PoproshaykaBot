@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.WinForms.Broadcast;
 using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.WinForms.Streaming;
 
 namespace PoproshaykaBot.WinForms.Settings;
 
@@ -22,6 +23,8 @@ public sealed class TwitchSettings
     public MessageSettings Messages { get; set; } = new();
 
     public AutoBroadcastSettings AutoBroadcast { get; set; } = new();
+
+    public BotLifecycleAutomationSettings BotLifecycleAutomation { get; set; } = new();
 
     public InfrastructureSettings Infrastructure { get; set; } = new();
 }

@@ -47,6 +47,8 @@ partial class SettingsForm
         _obsChatSettingsControl = new ObsChatSettingsControl();
         _autoBroadcastTabPage = new TabPage();
         _autoBroadcastSettingsControl = new AutoBroadcastSettingsControl();
+        _botLifecycleAutomationTabPage = new TabPage();
+        _botLifecycleAutomationSettingsControl = new BotLifecycleAutomationSettingsControl();
         _pollsTabPage = new TabPage();
         _pollsSettingsControl = new PollsSettingsControl();
         _dashboardTabPage = new TabPage();
@@ -69,6 +71,7 @@ partial class SettingsForm
         _oauthTabPage.SuspendLayout();
         _obsChatTabPage.SuspendLayout();
         _autoBroadcastTabPage.SuspendLayout();
+        _botLifecycleAutomationTabPage.SuspendLayout();
         _pollsTabPage.SuspendLayout();
         _dashboardTabPage.SuspendLayout();
         _miscTabPage.SuspendLayout();
@@ -98,6 +101,7 @@ partial class SettingsForm
         _tabControl.Controls.Add(_oauthTabPage);
         _tabControl.Controls.Add(_obsChatTabPage);
         _tabControl.Controls.Add(_autoBroadcastTabPage);
+        _tabControl.Controls.Add(_botLifecycleAutomationTabPage);
         _tabControl.Controls.Add(_pollsTabPage);
         _tabControl.Controls.Add(_dashboardTabPage);
         _tabControl.Controls.Add(_miscTabPage);
@@ -283,7 +287,28 @@ partial class SettingsForm
         _autoBroadcastSettingsControl.Size = new Size(593, 529);
         _autoBroadcastSettingsControl.TabIndex = 0;
         _autoBroadcastSettingsControl.SettingChanged += OnSettingChanged;
-//
+        //
+        // _botLifecycleAutomationTabPage
+        //
+        _botLifecycleAutomationTabPage.Controls.Add(_botLifecycleAutomationSettingsControl);
+        _botLifecycleAutomationTabPage.Location = new Point(4, 24);
+        _botLifecycleAutomationTabPage.Name = "_botLifecycleAutomationTabPage";
+        _botLifecycleAutomationTabPage.Padding = new Padding(10, 10, 10, 10);
+        _botLifecycleAutomationTabPage.Size = new Size(613, 549);
+        _botLifecycleAutomationTabPage.TabIndex = 10;
+        _botLifecycleAutomationTabPage.Text = "Автозапуск бота";
+        _botLifecycleAutomationTabPage.UseVisualStyleBackColor = true;
+        //
+        // _botLifecycleAutomationSettingsControl
+        //
+        _botLifecycleAutomationSettingsControl.Dock = DockStyle.Fill;
+        _botLifecycleAutomationSettingsControl.Location = new Point(10, 10);
+        _botLifecycleAutomationSettingsControl.Margin = new Padding(6, 7, 6, 7);
+        _botLifecycleAutomationSettingsControl.Name = "_botLifecycleAutomationSettingsControl";
+        _botLifecycleAutomationSettingsControl.Size = new Size(593, 529);
+        _botLifecycleAutomationSettingsControl.TabIndex = 0;
+        _botLifecycleAutomationSettingsControl.SettingChanged += OnSettingChanged;
+        //
         // _pollsTabPage
         //
         _pollsTabPage.Controls.Add(_pollsSettingsControl);
@@ -435,6 +460,7 @@ partial class SettingsForm
         _oauthTabPage.ResumeLayout(false);
         _obsChatTabPage.ResumeLayout(false);
         _autoBroadcastTabPage.ResumeLayout(false);
+        _botLifecycleAutomationTabPage.ResumeLayout(false);
         _pollsTabPage.ResumeLayout(false);
         _dashboardTabPage.ResumeLayout(false);
         _miscTabPage.ResumeLayout(false);
@@ -455,6 +481,7 @@ partial class SettingsForm
     private TabPage _oauthTabPage;
     private TabPage _obsChatTabPage;
     private TabPage _autoBroadcastTabPage;
+    private TabPage _botLifecycleAutomationTabPage;
     private TabPage _miscTabPage;
     private BasicSettingsControl _basicSettingsControl;
     private RateLimitingSettingsControl _rateLimitingSettingsControl;
@@ -463,6 +490,7 @@ partial class SettingsForm
     private OAuthSettingsControl _oauthSettingsControl;
     private ObsChatSettingsControl _obsChatSettingsControl;
     private AutoBroadcastSettingsControl _autoBroadcastSettingsControl;
+    private BotLifecycleAutomationSettingsControl _botLifecycleAutomationSettingsControl;
     private MiscSettingsControl _miscSettingsControl;
     private TabPage _pollsTabPage;
     private PollsSettingsControl _pollsSettingsControl;
