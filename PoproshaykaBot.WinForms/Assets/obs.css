@@ -4,7 +4,7 @@
     --chat-username-color: #9146ff;
     --chat-system-color: #ffcc00;
     --chat-timestamp-color: #999999;
-    --chat-font-family: Arial, sans-serif;
+    --chat-font-family: "Motiva Sans", "Inter", "Noto Sans", Arial, sans-serif;
     --chat-font-size: 14px;
     --chat-font-weight: normal;
     --chat-padding: 5px;
@@ -442,23 +442,23 @@ body::-webkit-scrollbar {
     }
 }
 
-.message.fade-out {
+.message[data-exit-anim="fade-out"] {
     animation: fadeOutMessage var(--fade-out-duration) ease-out forwards !important;
 }
 
-.message.slide-out-left {
+.message[data-exit-anim="slide-out-left"] {
     animation: slideOutLeft var(--fade-out-duration) ease-out forwards !important;
 }
 
-.message.slide-out-right {
+.message[data-exit-anim="slide-out-right"] {
     animation: slideOutRight var(--fade-out-duration) ease-out forwards !important;
 }
 
-.message.scale-down {
+.message[data-exit-anim="scale-down"] {
     animation: scaleDown var(--fade-out-duration) ease-out forwards !important;
 }
 
-.message.shrink-up {
+.message[data-exit-anim="shrink-up"] {
     animation: shrinkUp var(--fade-out-duration) ease-out forwards !important;
 }
 
@@ -523,4 +523,49 @@ body::-webkit-scrollbar {
     color: inherit;
     border-radius: 0;
     background: transparent;
+}
+
+#new-messages-indicator {
+    font-family: var(--chat-font-family);
+    font-size: 13px;
+    font-weight: 600;
+    position: fixed;
+    z-index: 100;
+    bottom: 16px;
+    left: 50%;
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    transform: translate(-50%, 8px);
+    pointer-events: none;
+    opacity: 0;
+    color: #fff;
+    border: none;
+    border-radius: 16px;
+    background: rgba(0, 0, 0, 0.85);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    gap: 6px;
+}
+
+#new-messages-indicator.visible {
+    transform: translate(-50%, 0);
+    pointer-events: auto;
+    opacity: 1;
+}
+
+#new-messages-indicator:hover {
+    background: rgba(20, 20, 20, 0.95);
+}
+
+#new-messages-indicator:focus-visible {
+    outline: 2px solid var(--chat-username-color);
+    outline-offset: 2px;
+}
+
+.new-messages-indicator-arrow {
+    font-size: 14px;
+    line-height: 1;
 }

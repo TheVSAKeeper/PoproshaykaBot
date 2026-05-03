@@ -12,12 +12,15 @@ namespace PoproshaykaBot.WinForms.Server;
 
 public sealed class SseService(SettingsManager settingsManager, ILogger<SseService> logger) : IAsyncDisposable
 {
-    private const int ChannelCapacity = 512;
+    private const int GlobalChannelCapacity = 512;
+    private const int ClientChannelCapacity = 256;
     private const int DropLogThrottle = 50;
+    private const int DropNotifyThreshold = 10;
 
-    private readonly List<HttpResponse> _sseClients = [];
+    private readonly Dictionary<HttpResponse, ClientPipeline> _clients = new();
+    private readonly object _clientsLock = new();
 
-    private readonly Channel<SseEnvelope> _messageChannel = Channel.CreateBounded<SseEnvelope>(new BoundedChannelOptions(ChannelCapacity)
+    private readonly Channel<SseEnvelope> _messageChannel = Channel.CreateBounded<SseEnvelope>(new BoundedChannelOptions(GlobalChannelCapacity)
     {
         SingleReader = true,
         FullMode = BoundedChannelFullMode.DropOldest,
@@ -31,8 +34,11 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
     private Task? _keepAliveTask;
     private bool _isRunning;
     private long _droppedMessageCount;
+    private long _clientDroppedMessageCount;
 
     public long DroppedMessageCount => Interlocked.Read(ref _droppedMessageCount);
+
+    public long ClientDroppedMessageCount => Interlocked.Read(ref _clientDroppedMessageCount);
 
     public void Start()
     {
@@ -88,33 +94,71 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         {
         }
 
-        lock (_sseClients)
+        List<ClientPipeline> pipelines;
+        lock (_clientsLock)
         {
-            logger.LogInformation("Отключено {ClientCount} SSE клиентов при остановке сервиса", _sseClients.Count);
-            _sseClients.Clear();
+            logger.LogInformation("Отключено {ClientCount} SSE клиентов при остановке сервиса", _clients.Count);
+            pipelines = _clients.Values.ToList();
+            _clients.Clear();
+        }
+
+        foreach (var pipeline in pipelines)
+        {
+            pipeline.Channel.Writer.TryComplete();
+        }
+
+        try
+        {
+            await Task.WhenAll(pipelines.Select(p => p.WriterTask ?? Task.CompletedTask));
+        }
+        catch (OperationCanceledException)
+        {
         }
     }
 
     public void RemoveClient(HttpResponse response)
     {
-        lock (_sseClients)
+        ClientPipeline? pipeline;
+
+        lock (_clientsLock)
         {
-            _sseClients.Remove(response);
-            logger.LogDebug("SSE клиент удалён по завершению соединения. Активных: {Count}", _sseClients.Count);
+            if (!_clients.Remove(response, out pipeline))
+            {
+                return;
+            }
         }
+
+        pipeline.Channel.Writer.TryComplete();
+        logger.LogDebug("SSE клиент удалён по завершению соединения. Активных: {Count}", _clients.Count);
     }
 
     public void AddClient(HttpResponse response)
     {
         logger.LogDebug("Попытка регистрации нового SSE клиента");
 
+        CancellationToken token;
+
+        lock (_lifecycleLock)
+        {
+            if (!_isRunning || _cts is null)
+            {
+                logger.LogWarning("Попытка зарегистрировать SSE клиента до Start() сервиса. Подключение отклонено");
+                return;
+            }
+
+            token = _cts.Token;
+        }
+
         try
         {
+            var pipeline = new ClientPipeline(response, ClientChannelCapacity);
             int clientCount;
-            lock (_sseClients)
+
+            lock (_clientsLock)
             {
-                _sseClients.Add(response);
-                clientCount = _sseClients.Count;
+                _clients[response] = pipeline;
+                clientCount = _clients.Count;
+                pipeline.WriterTask = Task.Run(() => ClientWriterLoopAsync(pipeline, token));
             }
 
             logger.LogInformation("Установлено новое SSE подключение. Всего активных клиентов: {ClientCount}", clientCount);
@@ -184,7 +228,7 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         bool willDrop;
         lock (_enqueueLock)
         {
-            willDrop = _messageChannel.Reader.Count >= ChannelCapacity;
+            willDrop = _messageChannel.Reader.Count >= GlobalChannelCapacity;
 
             if (!_messageChannel.Writer.TryWrite(envelope))
             {
@@ -203,7 +247,7 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         if (total == 1 || total % DropLogThrottle == 0)
         {
             logger.LogWarning("SSE очередь переполнена ({Capacity}), теряем старые сообщения. Всего потерь: {Total}",
-                ChannelCapacity,
+                GlobalChannelCapacity,
                 total);
         }
     }
@@ -231,55 +275,30 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
 
     private async Task BroadcastLoopAsync(CancellationToken token)
     {
+        long lastNotifiedGlobalDrops = 0;
+        long lastNotifiedClientDrops = 0;
+
         try
         {
             await foreach (var envelope in _messageChannel.Reader.ReadAllAsync(token))
             {
+                var currentGlobalDrops = Interlocked.Read(ref _droppedMessageCount);
+                var currentClientDrops = Interlocked.Read(ref _clientDroppedMessageCount);
+
+                if (currentGlobalDrops - lastNotifiedGlobalDrops >= DropNotifyThreshold
+                    || currentClientDrops - lastNotifiedClientDrops >= DropNotifyThreshold)
+                {
+                    var droppedJson = JsonSerializer.Serialize(new DroppedNotice(currentGlobalDrops, currentClientDrops),
+                        ServerJsonOptions.Default);
+
+                    var droppedBuffer = Encoding.UTF8.GetBytes(SseFormatter.Format(new("dropped", droppedJson)));
+                    BroadcastBuffer(droppedBuffer);
+                    lastNotifiedGlobalDrops = currentGlobalDrops;
+                    lastNotifiedClientDrops = currentClientDrops;
+                }
+
                 var buffer = Encoding.UTF8.GetBytes(SseFormatter.Format(envelope));
-
-                List<HttpResponse> activeClients;
-                lock (_sseClients)
-                {
-                    if (_sseClients.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    activeClients = _sseClients.ToList();
-                }
-
-                var results = await Task.WhenAll(activeClients.Select(async client =>
-                {
-                    try
-                    {
-                        await client.Body.WriteAsync(buffer, token);
-                        await client.Body.FlushAsync(token);
-                        return (client, ok: true);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogDebug(ex, "Сбой записи в поток SSE. Клиент помечается на удаление");
-                        return (client, ok: false);
-                    }
-                }));
-
-                var disconnected = results.Where(r => !r.ok).Select(r => r.client).ToList();
-
-                if (disconnected.Count == 0)
-                {
-                    continue;
-                }
-
-                lock (_sseClients)
-                {
-                    foreach (var client in disconnected)
-                    {
-                        _sseClients.Remove(client);
-                    }
-                }
-
-                logger.LogInformation("Удалено {DisconnectedCount} отключившихся SSE клиентов. Оставшиеся активные клиенты: {RemainingCount}",
-                    disconnected.Count, _sseClients.Count);
+                BroadcastBuffer(buffer);
             }
         }
         catch (OperationCanceledException)
@@ -290,5 +309,98 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         {
             logger.LogError(ex, "Критическая ошибка в фоновом цикле рассылки SSE");
         }
+    }
+
+    private void BroadcastBuffer(byte[] buffer)
+    {
+        List<ClientPipeline> snapshot;
+        lock (_clientsLock)
+        {
+            if (_clients.Count == 0)
+            {
+                return;
+            }
+
+            snapshot = _clients.Values.ToList();
+        }
+
+        foreach (var pipeline in snapshot)
+        {
+            var willDrop = pipeline.Channel.Reader.Count >= ClientChannelCapacity;
+
+            if (!pipeline.Channel.Writer.TryWrite(buffer))
+            {
+                continue;
+            }
+
+            if (!willDrop)
+            {
+                continue;
+            }
+
+            var total = Interlocked.Increment(ref _clientDroppedMessageCount);
+
+            if (total == 1 || total % DropLogThrottle == 0)
+            {
+                logger.LogWarning("Per-client SSE очередь переполнена ({Capacity}). Всего потерь по клиентам: {Total}",
+                    ClientChannelCapacity,
+                    total);
+            }
+        }
+    }
+
+    private async Task ClientWriterLoopAsync(ClientPipeline pipeline, CancellationToken token)
+    {
+        try
+        {
+            await foreach (var buffer in pipeline.Channel.Reader.ReadAllAsync(token))
+            {
+                try
+                {
+                    await pipeline.Response.Body.WriteAsync(buffer, token);
+                    await pipeline.Response.Body.FlushAsync(token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Сбой записи в поток SSE. Клиент будет удалён");
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Неожиданная ошибка в цикле записи SSE-клиента");
+        }
+        finally
+        {
+            RemoveClient(pipeline.Response);
+        }
+    }
+
+    private sealed record DroppedNotice(long Count, long ClientCount);
+
+    private sealed class ClientPipeline
+    {
+        public ClientPipeline(HttpResponse response, int capacity)
+        {
+            Response = response;
+            Channel = System.Threading.Channels.Channel.CreateBounded<byte[]>(new BoundedChannelOptions(capacity)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = false,
+            });
+        }
+
+        public HttpResponse Response { get; }
+        public Channel<byte[]> Channel { get; }
+        public Task? WriterTask { get; set; }
     }
 }

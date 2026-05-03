@@ -1,7 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.WinForms.Chat;
 using PoproshaykaBot.WinForms.Server;
 using PoproshaykaBot.WinForms.Settings;
+using System.Text;
 
 namespace PoproshaykaBot.WinForms.Tests.Server;
 
@@ -76,6 +78,90 @@ public sealed class SseServiceTests
         }
 
         Assert.That(_service.DroppedMessageCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task AddChatMessage_WithRegisteredClient_DeliversFormattedSseToClient()
+    {
+        _service.Start();
+
+        var http = new DefaultHttpContext();
+        var responseBody = new MemoryStream();
+        http.Response.Body = responseBody;
+
+        _service.AddClient(http.Response);
+
+        _service.AddChatMessage(SampleMessage());
+
+        await WaitForBytesAsync(responseBody, 1, TimeSpan.FromSeconds(2));
+
+        var text = Encoding.UTF8.GetString(responseBody.ToArray());
+        Assert.That(text, Does.StartWith("event: message\n"),
+            "Клиент должен получить SSE-сообщение типа 'message'.");
+    }
+
+    [Test]
+    public async Task AddChatMessage_WhenSlowClient_DoesNotBlockOtherClient()
+    {
+        _service.Start();
+
+        var slowHttp = new DefaultHttpContext();
+        var slowStream = new BlockingStream();
+        slowHttp.Response.Body = slowStream;
+
+        var fastHttp = new DefaultHttpContext();
+        var fastStream = new MemoryStream();
+        fastHttp.Response.Body = fastStream;
+
+        _service.AddClient(slowHttp.Response);
+        _service.AddClient(fastHttp.Response);
+
+        _service.AddChatMessage(SampleMessage());
+
+        await WaitForBytesAsync(fastStream, 1, TimeSpan.FromSeconds(2));
+
+        slowStream.Release();
+
+        Assert.That(fastStream.Length, Is.GreaterThan(0),
+            "Быстрый клиент должен получить сообщение независимо от заблокированного клиента.");
+    }
+
+    private static async Task WaitForBytesAsync(MemoryStream stream, long expectedAtLeast, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (stream.Length >= expectedAtLeast)
+            {
+                return;
+            }
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException($"Ожидалось >= {expectedAtLeast} байт в потоке, но за {timeout.TotalSeconds:F1}с пришло {stream.Length}.");
+    }
+
+    private sealed class BlockingStream : MemoryStream
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            await _gate.Task.WaitAsync(cancellationToken);
+            await base.WriteAsync(buffer, offset, count, cancellationToken);
+        }
+
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await _gate.Task.WaitAsync(cancellationToken);
+            await base.WriteAsync(buffer, cancellationToken);
+        }
+
+        public void Release()
+        {
+            _gate.TrySetResult();
+        }
     }
 
     private static ChatMessageData SampleMessage()

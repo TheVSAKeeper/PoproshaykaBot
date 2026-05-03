@@ -7,11 +7,15 @@ public partial class ObsChatSettingsControl : UserControl
 {
     private static readonly ObsChatSettings DefaultSettings = new();
 
+    private readonly ErrorProvider _fontFamilyErrorProvider = new();
+
     public ObsChatSettingsControl()
     {
         InitializeComponent();
         SetPlaceholders();
         PopulateAnimationItems();
+        ApplyRanges();
+        WireFontFamilyValidation();
     }
 
     public event EventHandler? SettingChanged;
@@ -73,7 +77,12 @@ public partial class ObsChatSettingsControl : UserControl
         settings.SystemMessageColor = _systemMessageColorButton.BackColor;
         settings.TimestampColor = _timestampColorButton.BackColor;
 
-        settings.FontFamily = ValidateFontFamily(_fontFamilyTextBox.Text.Trim()) ?? DefaultSettings.FontFamily;
+        var validatedFontFamily = ValidateFontFamily(_fontFamilyTextBox.Text.Trim());
+        if (validatedFontFamily != null)
+        {
+            settings.FontFamily = validatedFontFamily;
+        }
+
         settings.FontSize = (int)_fontSizeNumeric.Value;
         settings.FontBold = _fontBoldCheckBox.Checked;
 
@@ -119,202 +128,173 @@ public partial class ObsChatSettingsControl : UserControl
 
     private void OnBackgroundColorResetButtonClicked(object sender, EventArgs e)
     {
-        _backgroundColorButton.BackColor = DefaultSettings.BackgroundColor;
-        UpdateColorButtons();
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetColor(_backgroundColorButton, DefaultSettings.BackgroundColor);
     }
 
     private void OnTextColorResetButtonClicked(object sender, EventArgs e)
     {
-        _textColorButton.BackColor = DefaultSettings.TextColor;
-        UpdateColorButtons();
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetColor(_textColorButton, DefaultSettings.TextColor);
     }
 
     private void OnUsernameColorResetButtonClicked(object sender, EventArgs e)
     {
-        _usernameColorButton.BackColor = DefaultSettings.UsernameColor;
-        UpdateColorButtons();
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetColor(_usernameColorButton, DefaultSettings.UsernameColor);
     }
 
     private void OnSystemMessageColorResetButtonClicked(object sender, EventArgs e)
     {
-        _systemMessageColorButton.BackColor = DefaultSettings.SystemMessageColor;
-        UpdateColorButtons();
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetColor(_systemMessageColorButton, DefaultSettings.SystemMessageColor);
     }
 
     private void OnTimestampColorResetButtonClicked(object sender, EventArgs e)
     {
-        _timestampColorButton.BackColor = DefaultSettings.TimestampColor;
-        UpdateColorButtons();
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetColor(_timestampColorButton, DefaultSettings.TimestampColor);
     }
 
     private void OnFontFamilyResetButtonClicked(object sender, EventArgs e)
     {
-        _fontFamilyTextBox.Text = DefaultSettings.FontFamily;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetText(_fontFamilyTextBox, DefaultSettings.FontFamily);
     }
 
     private void OnFontSizeResetButtonClicked(object sender, EventArgs e)
     {
-        _fontSizeNumeric.Value = DefaultSettings.FontSize;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_fontSizeNumeric, DefaultSettings.FontSize);
     }
 
     private void OnPaddingResetButtonClicked(object sender, EventArgs e)
     {
-        _paddingNumeric.Value = DefaultSettings.Padding;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_paddingNumeric, DefaultSettings.Padding);
     }
 
     private void OnMarginResetButtonClicked(object sender, EventArgs e)
     {
-        _marginNumeric.Value = DefaultSettings.Margin;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_marginNumeric, DefaultSettings.Margin);
     }
 
     private void OnBorderRadiusResetButtonClicked(object sender, EventArgs e)
     {
-        _borderRadiusNumeric.Value = DefaultSettings.BorderRadius;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_borderRadiusNumeric, DefaultSettings.BorderRadius);
     }
 
     private void OnAnimationDurationResetButtonClicked(object sender, EventArgs e)
     {
-        _animationDurationNumeric.Value = DefaultSettings.AnimationDuration;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_animationDurationNumeric, DefaultSettings.AnimationDuration);
     }
 
     private void OnEnableAnimationsResetButtonClicked(object sender, EventArgs e)
     {
-        _enableAnimationsCheckBox.Checked = DefaultSettings.EnableAnimations;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetCheck(_enableAnimationsCheckBox, DefaultSettings.EnableAnimations);
     }
 
     private void OnMaxMessagesResetButtonClicked(object sender, EventArgs e)
     {
-        _maxMessagesNumeric.Value = DefaultSettings.MaxMessages;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_maxMessagesNumeric, DefaultSettings.MaxMessages);
     }
 
     private void OnEmoteSizeResetButtonClicked(object sender, EventArgs e)
     {
-        _emoteSizeNumeric.Value = DefaultSettings.EmoteSizePixels;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_emoteSizeNumeric, DefaultSettings.EmoteSizePixels);
     }
 
     private void OnBadgeSizeResetButtonClicked(object sender, EventArgs e)
     {
-        _badgeSizeNumeric.Value = DefaultSettings.BadgeSizePixels;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_badgeSizeNumeric, DefaultSettings.BadgeSizePixels);
     }
 
     private void OnScrollAnimationDurationResetButtonClicked(object sender, EventArgs e)
     {
-        _scrollAnimationDurationNumeric.Value = 300;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_scrollAnimationDurationNumeric, DefaultSettings.ScrollAnimationDuration);
     }
 
     private void OnEnableMessageFadeOutResetButtonClicked(object sender, EventArgs e)
     {
-        _enableMessageFadeOutCheckBox.Checked = DefaultSettings.EnableMessageFadeOut;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetCheck(_enableMessageFadeOutCheckBox, DefaultSettings.EnableMessageFadeOut);
     }
 
     private void OnMessageLifetimeResetButtonClicked(object sender, EventArgs e)
     {
-        _messageLifetimeNumeric.Value = DefaultSettings.MessageLifetimeSeconds;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_messageLifetimeNumeric, DefaultSettings.MessageLifetimeSeconds);
     }
 
     private void OnFadeOutAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_fadeOutAnimationComboBox, DefaultSettings.FadeOutAnimationType, MessageAnimationType.ExitAnimations);
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetAnimation(_fadeOutAnimationComboBox, DefaultSettings.FadeOutAnimationType, MessageAnimationType.ExitAnimations);
     }
 
     private void OnFadeOutAnimationDurationResetButtonClicked(object sender, EventArgs e)
     {
-        _fadeOutAnimationDurationNumeric.Value = DefaultSettings.FadeOutAnimationDurationMs;
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetNumeric(_fadeOutAnimationDurationNumeric, DefaultSettings.FadeOutAnimationDurationMs);
     }
 
     private void OnUserMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_userMessageAnimationComboBox, DefaultSettings.UserMessageAnimation, MessageAnimationType.EntryAnimations);
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetAnimation(_userMessageAnimationComboBox, DefaultSettings.UserMessageAnimation, MessageAnimationType.EntryAnimations);
     }
 
     private void OnBotMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_botMessageAnimationComboBox, DefaultSettings.BotMessageAnimation, MessageAnimationType.EntryAnimations);
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetAnimation(_botMessageAnimationComboBox, DefaultSettings.BotMessageAnimation, MessageAnimationType.EntryAnimations);
     }
 
     private void OnSystemMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_systemMessageAnimationComboBox, DefaultSettings.SystemMessageAnimation, MessageAnimationType.EntryAnimations);
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetAnimation(_systemMessageAnimationComboBox, DefaultSettings.SystemMessageAnimation, MessageAnimationType.EntryAnimations);
     }
 
     private void OnBroadcasterMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_broadcasterMessageAnimationComboBox, DefaultSettings.BroadcasterMessageAnimation, MessageAnimationType.EntryAnimations);
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetAnimation(_broadcasterMessageAnimationComboBox, DefaultSettings.BroadcasterMessageAnimation, MessageAnimationType.EntryAnimations);
     }
 
     private void OnFirstTimeUserMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
-        SetAnimationTypeInComboBox(_firstTimeUserMessageAnimationComboBox, DefaultSettings.FirstTimeUserMessageAnimation, MessageAnimationType.EntryAnimations);
-        SettingChanged?.Invoke(this, EventArgs.Empty);
+        ResetAnimation(_firstTimeUserMessageAnimationComboBox, DefaultSettings.FirstTimeUserMessageAnimation, MessageAnimationType.EntryAnimations);
     }
 
     private void OnBackgroundColorButtonClicked(object sender, EventArgs e)
     {
-        if (ShowColorPickerDialog(_backgroundColorButton))
-        {
-            UpdateColorButtons();
-            SettingChanged?.Invoke(this, EventArgs.Empty);
-        }
+        HandleColorPick(_backgroundColorButton);
     }
 
     private void OnTextColorButtonClicked(object sender, EventArgs e)
     {
-        if (ShowColorPickerDialog(_textColorButton))
-        {
-            UpdateColorButtons();
-            SettingChanged?.Invoke(this, EventArgs.Empty);
-        }
+        HandleColorPick(_textColorButton);
     }
 
     private void OnUsernameColorButtonClicked(object sender, EventArgs e)
     {
-        if (ShowColorPickerDialog(_usernameColorButton))
-        {
-            UpdateColorButtons();
-            SettingChanged?.Invoke(this, EventArgs.Empty);
-        }
+        HandleColorPick(_usernameColorButton);
     }
 
     private void OnSystemMessageColorButtonClicked(object sender, EventArgs e)
     {
-        if (ShowColorPickerDialog(_systemMessageColorButton))
-        {
-            UpdateColorButtons();
-            SettingChanged?.Invoke(this, EventArgs.Empty);
-        }
+        HandleColorPick(_systemMessageColorButton);
     }
 
     private void OnTimestampColorButtonClicked(object sender, EventArgs e)
     {
-        if (ShowColorPickerDialog(_timestampColorButton))
+        HandleColorPick(_timestampColorButton);
+    }
+
+    private void OnFontFamilyTextChanged(object? sender, EventArgs e)
+    {
+        var input = _fontFamilyTextBox.Text.Trim();
+
+        if (input.Length == 0)
         {
-            UpdateColorButtons();
-            SettingChanged?.Invoke(this, EventArgs.Empty);
+            _fontFamilyErrorProvider.SetError(_fontFamilyTextBox, string.Empty);
+            return;
         }
+
+        if (ContainsForbiddenFontFamilyChars(input))
+        {
+            _fontFamilyErrorProvider.SetError(_fontFamilyTextBox,
+                "Недопустимые символы. Запрещены: ; < > { }");
+
+            return;
+        }
+
+        _fontFamilyErrorProvider.SetError(_fontFamilyTextBox, string.Empty);
     }
 
     private static string GetAnimationTypeFromComboBox(ComboBox comboBox, (string Value, string DisplayName)[] options)
@@ -327,6 +307,63 @@ public partial class ObsChatSettingsControl : UserControl
     {
         var index = Array.FindIndex(options, option => option.Value == animationType);
         comboBox.SelectedIndex = index >= 0 ? index : 0;
+    }
+
+    private static void SetRange(NumericUpDown control, int min, int max)
+    {
+        control.Minimum = min;
+        control.Maximum = max;
+    }
+
+    private static bool ContainsForbiddenFontFamilyChars(string fontFamily)
+    {
+        return fontFamily.Contains(';')
+               || fontFamily.Contains('<')
+               || fontFamily.Contains('>')
+               || fontFamily.Contains('{')
+               || fontFamily.Contains('}');
+    }
+
+    private void ResetNumeric(NumericUpDown control, int defaultValue)
+    {
+        control.Value = ObsChatRanges.Clamp(defaultValue, (int)control.Minimum, (int)control.Maximum);
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ResetCheck(CheckBox control, bool defaultValue)
+    {
+        control.Checked = defaultValue;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ResetText(TextBox control, string defaultValue)
+    {
+        control.Text = defaultValue;
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ResetColor(Button button, Color defaultColor)
+    {
+        button.BackColor = defaultColor;
+        UpdateColorButtons();
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ResetAnimation(ComboBox combo, string defaultValue, (string Value, string DisplayName)[] options)
+    {
+        SetAnimationTypeInComboBox(combo, defaultValue, options);
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void HandleColorPick(Button button)
+    {
+        if (!ShowColorPickerDialog(button))
+        {
+            return;
+        }
+
+        UpdateColorButtons();
+        SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void SetPlaceholders()
@@ -359,6 +396,30 @@ public partial class ObsChatSettingsControl : UserControl
         }
     }
 
+    private void ApplyRanges()
+    {
+        SetRange(_fontSizeNumeric, ObsChatRanges.FontSizeMin, ObsChatRanges.FontSizeMax);
+        SetRange(_paddingNumeric, ObsChatRanges.PaddingMin, ObsChatRanges.PaddingMax);
+        SetRange(_marginNumeric, ObsChatRanges.MarginMin, ObsChatRanges.MarginMax);
+        SetRange(_borderRadiusNumeric, ObsChatRanges.BorderRadiusMin, ObsChatRanges.BorderRadiusMax);
+        SetRange(_animationDurationNumeric, ObsChatRanges.AnimationDurationMin, ObsChatRanges.AnimationDurationMax);
+        SetRange(_maxMessagesNumeric, ObsChatRanges.MaxMessagesMin, ObsChatRanges.MaxMessagesMax);
+        SetRange(_emoteSizeNumeric, ObsChatRanges.EmoteSizeMin, ObsChatRanges.EmoteSizeMax);
+        SetRange(_badgeSizeNumeric, ObsChatRanges.BadgeSizeMin, ObsChatRanges.BadgeSizeMax);
+        SetRange(_messageLifetimeNumeric, ObsChatRanges.MessageLifetimeMin, ObsChatRanges.MessageLifetimeMax);
+        SetRange(_fadeOutAnimationDurationNumeric, ObsChatRanges.FadeOutAnimationDurationMin, ObsChatRanges.FadeOutAnimationDurationMax);
+        SetRange(_scrollAnimationDurationNumeric, ObsChatRanges.ScrollAnimationDurationMin, ObsChatRanges.ScrollAnimationDurationMax);
+    }
+
+    private void WireFontFamilyValidation()
+    {
+        _fontFamilyErrorProvider.SetIconAlignment(_fontFamilyTextBox, ErrorIconAlignment.MiddleRight);
+        _fontFamilyErrorProvider.BlinkStyle = ErrorBlinkStyle.NeverBlink;
+
+        _fontFamilyTextBox.TextChanged += OnFontFamilyTextChanged;
+        Disposed += (_, _) => _fontFamilyErrorProvider.Dispose();
+    }
+
     private string? ValidateFontFamily(string fontFamily)
     {
         if (string.IsNullOrWhiteSpace(fontFamily))
@@ -366,7 +427,7 @@ public partial class ObsChatSettingsControl : UserControl
             return null;
         }
 
-        if (fontFamily.Contains(';') || fontFamily.Contains('"') || fontFamily.Contains('\''))
+        if (ContainsForbiddenFontFamilyChars(fontFamily))
         {
             return null;
         }

@@ -121,9 +121,9 @@ public sealed class KestrelHttpServer(
 
             MapEndpoints(_app);
 
-            await _app.StartAsync();
-
             sseService.Start();
+
+            await _app.StartAsync();
 
             IsRunning = true;
 

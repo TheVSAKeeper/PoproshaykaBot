@@ -454,7 +454,7 @@
             _fontSizeLabel.Name = "_fontSizeLabel";
             _fontSizeLabel.Size = new Size(118, 25);
             _fontSizeLabel.TabIndex = 3;
-            _fontSizeLabel.Text = "Размер шрифта:";
+            _fontSizeLabel.Text = "Размер шрифта (px):";
             _fontSizeLabel.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // _fontSizeNumeric
@@ -550,7 +550,7 @@
             _paddingLabel.Name = "_paddingLabel";
             _paddingLabel.Size = new Size(125, 25);
             _paddingLabel.TabIndex = 0;
-            _paddingLabel.Text = "Внутренний отступ:";
+            _paddingLabel.Text = "Внутренний отступ (px):";
             _paddingLabel.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // _paddingNumeric
@@ -586,7 +586,7 @@
             _marginLabel.Name = "_marginLabel";
             _marginLabel.Size = new Size(125, 25);
             _marginLabel.TabIndex = 3;
-            _marginLabel.Text = "Внешний отступ:";
+            _marginLabel.Text = "Внешний отступ (px):";
             _marginLabel.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // _marginNumeric
@@ -622,7 +622,7 @@
             _borderRadiusLabel.Name = "_borderRadiusLabel";
             _borderRadiusLabel.Size = new Size(125, 25);
             _borderRadiusLabel.TabIndex = 6;
-            _borderRadiusLabel.Text = "Скругление углов:";
+            _borderRadiusLabel.Text = "Скругление углов (px):";
             _borderRadiusLabel.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // _borderRadiusNumeric
@@ -1188,7 +1188,7 @@
             _scrollAnimationDurationNumeric.Dock = DockStyle.Fill;
             _scrollAnimationDurationNumeric.Location = new Point(219, 244);
             _scrollAnimationDurationNumeric.Maximum = new decimal(new int[] { 2000, 0, 0, 0 });
-            _scrollAnimationDurationNumeric.Minimum = new decimal(new int[] { 100, 0, 0, 0 });
+            _scrollAnimationDurationNumeric.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
             _scrollAnimationDurationNumeric.MinimumSize = new Size(80, 0);
             _scrollAnimationDurationNumeric.Name = "_scrollAnimationDurationNumeric";
             _scrollAnimationDurationNumeric.Size = new Size(257, 23);

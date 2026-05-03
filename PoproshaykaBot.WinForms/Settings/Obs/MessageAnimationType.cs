@@ -46,4 +46,10 @@ public static class MessageAnimationType
         (ScaleDown, "Уменьшение"),
         (ShrinkUp, "Свернуться вверх"),
     ];
+
+    public static readonly string[] EntryValues =
+        EntryAnimations.Select(animation => animation.Value).ToArray();
+
+    public static readonly string[] ExitValues =
+        ExitAnimations.Select(animation => animation.Value).ToArray();
 }

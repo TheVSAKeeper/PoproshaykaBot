@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.WinForms.Server.Obs;
 using PoproshaykaBot.WinForms.Settings.Obs;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace PoproshaykaBot.WinForms.Tests.Settings;
 
@@ -37,6 +38,48 @@ public sealed class ObsChatThreePointSyncTests
         Assert.That(jsSource, Does.Contain(camelCase),
             $"Поле ObsChatCssSettings.{cssProp.Name} (JSON: {camelCase}) не используется в obs.js — "
             + "пропустили шаг (2) three-point sync.");
+    }
+
+    [Test]
+    public void ValidEntryAnimationsInObsJs_MatchMessageAnimationTypeEntryValues()
+    {
+        var jsSource = File.ReadAllText(LocateOverlayJs());
+        var jsValues = ExtractStringArrayLiteral(jsSource, "validEntryAnimations");
+
+        Assert.That(jsValues, Is.EquivalentTo(MessageAnimationType.EntryValues),
+            "Массив validEntryAnimations в obs.js рассинхронизирован с MessageAnimationType.EntryValues. "
+            + "Шаг (3) three-point sync пропущен.");
+    }
+
+    [Test]
+    public void ValidExitAnimationsInObsJs_MatchMessageAnimationTypeExitValuesWithoutNone()
+    {
+        var jsSource = File.ReadAllText(LocateOverlayJs());
+        var jsValues = ExtractStringArrayLiteral(jsSource, "validExitAnimations");
+
+        var expected = MessageAnimationType.ExitValues
+            .Where(value => value != MessageAnimationType.None)
+            .ToArray();
+
+        Assert.That(jsValues, Is.EquivalentTo(expected),
+            "Массив validExitAnimations в obs.js рассинхронизирован с MessageAnimationType.ExitValues "
+            + "(без \"no-animation\", который обрабатывается отдельной веткой). Шаг (3) three-point sync пропущен.");
+    }
+
+    private static string[] ExtractStringArrayLiteral(string jsSource, string variableName)
+    {
+        var pattern = $@"const\s+{Regex.Escape(variableName)}\s*=\s*\[(?<body>[^\]]*)\]";
+        var match = Regex.Match(jsSource, pattern);
+
+        if (!match.Success)
+        {
+            throw new InvalidOperationException($"Не нашли массив '{variableName}' в obs.js. Возможно, его переименовали — "
+                                                + "обновите тест или верните прежнее имя.");
+        }
+
+        return Regex.Matches(match.Groups["body"].Value, "'(?<value>[^']*)'")
+            .Select(m => m.Groups["value"].Value)
+            .ToArray();
     }
 
     private static IEnumerable<PropertyInfo> GetMutableSourceProperties()

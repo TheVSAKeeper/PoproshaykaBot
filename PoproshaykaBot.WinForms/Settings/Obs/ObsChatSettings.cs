@@ -2,13 +2,17 @@
 
 public sealed class ObsChatSettings
 {
+    public const string DefaultFontFamily = """
+                                            "Motiva Sans", "Inter", "Noto Sans", Arial, sans-serif
+                                            """;
+
     public AppColor BackgroundColor { get; set; } = AppColor.FromArgb(179, 0, 0, 0);
     public AppColor TextColor { get; set; } = AppColor.FromArgb(255, 255, 255);
     public AppColor UsernameColor { get; set; } = AppColor.FromArgb(145, 70, 255);
     public AppColor SystemMessageColor { get; set; } = AppColor.FromArgb(255, 204, 0);
     public AppColor TimestampColor { get; set; } = AppColor.FromArgb(153, 153, 153);
 
-    public string FontFamily { get; set; } = "Arial, sans-serif";
+    public string FontFamily { get; set; } = DefaultFontFamily;
     public int FontSize { get; set; } = 14;
     public bool FontBold { get; set; } = false;
 
@@ -35,6 +39,7 @@ public sealed class ObsChatSettings
     public int ScrollAnimationDuration { get; set; } = 300;
     public bool AutoScrollEnabled { get; set; } = true;
     public int ScrollToBottomThreshold { get; set; } = 100;
+    public int ScrollPauseAfterUserMs { get; set; } = 3000;
 
     public string UserMessageAnimation { get; set; } = MessageAnimationType.SlideInRight;
     public string BotMessageAnimation { get; set; } = MessageAnimationType.FadeInUp;

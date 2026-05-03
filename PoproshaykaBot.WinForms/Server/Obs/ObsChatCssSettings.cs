@@ -1,4 +1,4 @@
-using PoproshaykaBot.WinForms.Settings.Obs;
+﻿using PoproshaykaBot.WinForms.Settings.Obs;
 
 namespace PoproshaykaBot.WinForms.Server.Obs;
 
@@ -9,7 +9,7 @@ public sealed class ObsChatCssSettings
     public string UsernameColor { get; set; } = "#9146ff";
     public string SystemMessageColor { get; set; } = "#ffcc00";
     public string TimestampColor { get; set; } = "#999999";
-    public string FontFamily { get; set; } = "Arial, sans-serif";
+    public string FontFamily { get; set; } = ObsChatSettings.DefaultFontFamily;
     public string FontSize { get; set; } = "14px";
     public string FontWeight { get; set; } = "normal";
     public string Padding { get; set; } = "5px";
@@ -33,6 +33,7 @@ public sealed class ObsChatCssSettings
     public int ScrollAnimationDuration { get; set; } = 300;
     public bool AutoScrollEnabled { get; set; } = true;
     public int ScrollToBottomThreshold { get; set; } = 100;
+    public int ScrollPauseAfterUserMs { get; set; } = 3000;
 
     public string UserMessageAnimation { get; set; } = MessageAnimationType.SlideInRight;
     public string BotMessageAnimation { get; set; } = MessageAnimationType.FadeInUp;
@@ -56,19 +57,19 @@ public sealed class ObsChatCssSettings
             UsernameColor = ColorToCssString(safeSettings.UsernameColor),
             SystemMessageColor = ColorToCssString(safeSettings.SystemMessageColor),
             TimestampColor = ColorToCssString(safeSettings.TimestampColor),
-            FontFamily = safeSettings.FontFamily ?? "Arial, sans-serif",
-            FontSize = $"{ValidateRange(safeSettings.FontSize, 8, 72)}px",
+            FontFamily = safeSettings.FontFamily ?? ObsChatSettings.DefaultFontFamily,
+            FontSize = $"{ObsChatRanges.Clamp(safeSettings.FontSize, ObsChatRanges.FontSizeMin, ObsChatRanges.FontSizeMax)}px",
             FontWeight = safeSettings.FontBold ? "bold" : "normal",
-            Padding = $"{ValidateRange(safeSettings.Padding, 0, 50)}px",
-            Margin = $"{ValidateRange(safeSettings.Margin, 0, 50)}px 0",
-            BorderRadius = $"{ValidateRange(safeSettings.BorderRadius, 0, 50)}px",
-            AnimationDuration = $"{ValidateRange(safeSettings.AnimationDuration, 100, 2000)}ms",
+            Padding = $"{ObsChatRanges.Clamp(safeSettings.Padding, ObsChatRanges.PaddingMin, ObsChatRanges.PaddingMax)}px",
+            Margin = $"{ObsChatRanges.Clamp(safeSettings.Margin, ObsChatRanges.MarginMin, ObsChatRanges.MarginMax)}px 0",
+            BorderRadius = $"{ObsChatRanges.Clamp(safeSettings.BorderRadius, ObsChatRanges.BorderRadiusMin, ObsChatRanges.BorderRadiusMax)}px",
+            AnimationDuration = $"{ObsChatRanges.Clamp(safeSettings.AnimationDuration, ObsChatRanges.AnimationDurationMin, ObsChatRanges.AnimationDurationMax)}ms",
             EnableAnimations = safeSettings.EnableAnimations,
-            MaxMessages = ValidateRange(safeSettings.MaxMessages, 10, 200),
+            MaxMessages = ObsChatRanges.Clamp(safeSettings.MaxMessages, ObsChatRanges.MaxMessagesMin, ObsChatRanges.MaxMessagesMax),
             ShowTimestamp = safeSettings.ShowTimestamp,
 
-            EmoteSize = $"{ValidateRange(safeSettings.EmoteSizePixels, 16, 128)}px",
-            BadgeSize = $"{ValidateRange(safeSettings.BadgeSizePixels, 12, 72)}px",
+            EmoteSize = $"{ObsChatRanges.Clamp(safeSettings.EmoteSizePixels, ObsChatRanges.EmoteSizeMin, ObsChatRanges.EmoteSizeMax)}px",
+            BadgeSize = $"{ObsChatRanges.Clamp(safeSettings.BadgeSizePixels, ObsChatRanges.BadgeSizeMin, ObsChatRanges.BadgeSizeMax)}px",
 
             ShowUserTypeBorders = safeSettings.ShowUserTypeBorders,
             HighlightFirstTimeUsers = safeSettings.HighlightFirstTimeUsers,
@@ -77,9 +78,10 @@ public sealed class ObsChatCssSettings
             EnableSpecialEffects = safeSettings.EnableSpecialEffects,
 
             EnableSmoothScroll = safeSettings.EnableSmoothScroll,
-            ScrollAnimationDuration = safeSettings.ScrollAnimationDuration,
+            ScrollAnimationDuration = ObsChatRanges.Clamp(safeSettings.ScrollAnimationDuration, ObsChatRanges.ScrollAnimationDurationMin, ObsChatRanges.ScrollAnimationDurationMax),
             AutoScrollEnabled = safeSettings.AutoScrollEnabled,
-            ScrollToBottomThreshold = safeSettings.ScrollToBottomThreshold,
+            ScrollToBottomThreshold = ObsChatRanges.Clamp(safeSettings.ScrollToBottomThreshold, ObsChatRanges.ScrollToBottomThresholdMin, ObsChatRanges.ScrollToBottomThresholdMax),
+            ScrollPauseAfterUserMs = ObsChatRanges.Clamp(safeSettings.ScrollPauseAfterUserMs, ObsChatRanges.ScrollPauseAfterUserMsMin, ObsChatRanges.ScrollPauseAfterUserMsMax),
 
             UserMessageAnimation = safeSettings.UserMessageAnimation,
             BotMessageAnimation = safeSettings.BotMessageAnimation,
@@ -88,15 +90,10 @@ public sealed class ObsChatCssSettings
             FirstTimeUserMessageAnimation = safeSettings.FirstTimeUserMessageAnimation,
 
             EnableMessageFadeOut = safeSettings.EnableMessageFadeOut,
-            MessageLifetimeSeconds = ValidateRange(safeSettings.MessageLifetimeSeconds, 1, 3600),
+            MessageLifetimeSeconds = ObsChatRanges.Clamp(safeSettings.MessageLifetimeSeconds, ObsChatRanges.MessageLifetimeMin, ObsChatRanges.MessageLifetimeMax),
             FadeOutAnimationType = safeSettings.FadeOutAnimationType,
-            FadeOutAnimationDurationMs = ValidateRange(safeSettings.FadeOutAnimationDurationMs, 100, 10000),
+            FadeOutAnimationDurationMs = ObsChatRanges.Clamp(safeSettings.FadeOutAnimationDurationMs, ObsChatRanges.FadeOutAnimationDurationMin, ObsChatRanges.FadeOutAnimationDurationMax),
         };
-    }
-
-    private static int ValidateRange(int value, int min, int max)
-    {
-        return Math.Max(min, Math.Min(max, value));
     }
 
     private static string ColorToCssString(Color color)
