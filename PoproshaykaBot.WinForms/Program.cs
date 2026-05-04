@@ -10,6 +10,7 @@ using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Migrations;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
@@ -252,6 +253,7 @@ public static class Program
     {
         services
             .AddCoreInfrastructure(uiLogSink)
+            .AddStatistics()
             .AddSettingsStores()
             .AddTwitchClients()
             .AddChatPipeline()

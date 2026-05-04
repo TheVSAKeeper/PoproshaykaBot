@@ -4,7 +4,6 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Hosting.Components;
 using PoproshaykaBot.Core.Infrastructure.Logging;
-using PoproshaykaBot.Core.Statistics;
 using Serilog;
 
 namespace PoproshaykaBot.Core.Infrastructure.Di;
@@ -28,8 +27,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<UiEventDispatcher>();
         services.AddSingleton<AppHost>();
 
-        services.AddSingleton<StatisticsCollector>();
-        services.AddSingleton<IHostedComponent, StatisticsHostedComponent>();
         services.AddSingleton<IHostedComponent, ChatDecorationsHostedComponent>();
         services.AddSingleton<IHostedComponent, BroadcastSchedulerHostedComponent>();
 

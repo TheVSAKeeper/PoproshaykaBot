@@ -1,9 +1,9 @@
-using PoproshaykaBot.Core.Statistics;
+﻿using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class MyProfileCommand(StatisticsCollector statistics, UserRankService rankService) : IChatCommand
+public sealed class MyProfileCommand(IUserStatisticsRepository statistics, UserRankService rankService) : IChatCommand
 {
     public string Canonical => "мойпрофиль";
     public IReadOnlyCollection<string> Aliases => ["profile"];
@@ -22,7 +22,7 @@ public sealed class MyProfileCommand(StatisticsCollector statistics, UserRankSer
         if (context.Arguments.Count > 0)
         {
             var username = context.Arguments[0];
-            var otherUserStats = statistics.GetUserStatisticsByName(username);
+            var otherUserStats = statistics.GetByName(username);
             if (otherUserStats != null)
             {
                 targetUserId = otherUserStats.UserId;
@@ -34,7 +34,7 @@ public sealed class MyProfileCommand(StatisticsCollector statistics, UserRankSer
             }
         }
 
-        var userStats = statistics.GetUserStatistics(targetUserId);
+        var userStats = statistics.GetById(targetUserId);
 
         if (userStats == null)
         {

@@ -1,9 +1,9 @@
-using PoproshaykaBot.Core.Statistics;
+﻿using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class TopUsersCommand(StatisticsCollector statistics, UserRankService rankService) : IChatCommand
+public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRankService rankService) : IChatCommand
 {
     public string Canonical => "топпользователи";
     public IReadOnlyCollection<string> Aliases => ["top"];
@@ -23,7 +23,7 @@ public sealed class TopUsersCommand(StatisticsCollector statistics, UserRankServ
             count = Math.Clamp(requestedCount, 1, 20);
         }
 
-        var topUsers = statistics.GetTopUsers(count);
+        var topUsers = statistics.GetTop(count);
 
         if (topUsers.Count == 0)
         {

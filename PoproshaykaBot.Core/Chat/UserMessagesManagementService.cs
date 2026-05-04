@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
@@ -6,7 +6,7 @@ using PoproshaykaBot.Core.Statistics;
 namespace PoproshaykaBot.Core.Chat;
 
 public sealed class UserMessagesManagementService(
-    StatisticsCollector statisticsCollector,
+    IUserStatisticsRepository userStatistics,
     SettingsManager settingsManager,
     IEventBus eventBus)
 {
@@ -22,7 +22,7 @@ public sealed class UserMessagesManagementService(
             return false;
         }
 
-        var updated = statisticsCollector.DecrementUserMessages(userId, removedMessagesCount);
+        var updated = userStatistics.IncrementShtrafMessages(userId, removedMessagesCount);
 
         if (!updated)
         {
@@ -46,7 +46,7 @@ public sealed class UserMessagesManagementService(
             return false;
         }
 
-        var updated = statisticsCollector.IncrementUserMessages(userId, addedMessagesCount);
+        var updated = userStatistics.IncrementBonusMessages(userId, addedMessagesCount);
 
         if (!updated)
         {

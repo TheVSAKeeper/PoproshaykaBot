@@ -9,7 +9,8 @@ namespace PoproshaykaBot.WinForms.Forms.Users;
 
 public sealed partial class UserStatisticsForm : Form
 {
-    private readonly StatisticsCollector _statisticsCollector;
+    private readonly IUserStatisticsRepository _userStatistics;
+    private readonly StatisticsAutoSaver _statisticsAutoSaver;
     private readonly UserRankService _userRankService;
     private readonly UserMessagesManagementService _userMessagesManagementService;
     private readonly IChannelProvider _channelProvider;
@@ -18,12 +19,14 @@ public sealed partial class UserStatisticsForm : Form
     private bool _initialized;
 
     public UserStatisticsForm(
-        StatisticsCollector statisticsCollector,
+        IUserStatisticsRepository userStatistics,
+        StatisticsAutoSaver statisticsAutoSaver,
         UserRankService userRankService,
         UserMessagesManagementService userMessagesManagementService,
         IChannelProvider channelProvider)
     {
-        _statisticsCollector = statisticsCollector;
+        _userStatistics = userStatistics;
+        _statisticsAutoSaver = statisticsAutoSaver;
         _userRankService = userRankService;
         _userMessagesManagementService = userMessagesManagementService;
         _channelProvider = channelProvider;
@@ -112,7 +115,7 @@ public sealed partial class UserStatisticsForm : Form
 
         try
         {
-            await _statisticsCollector.SaveNowAsync();
+            await _statisticsAutoSaver.SaveNowAsync();
         }
         catch (Exception ex)
         {
@@ -207,14 +210,14 @@ public sealed partial class UserStatisticsForm : Form
 
     private void LoadData()
     {
-        _allUsers = _statisticsCollector.GetAllUsers();
+        _allUsers = _userStatistics.GetAll().ToList();
         UpdateGlobalStats();
         ApplyFilter();
     }
 
     private void RefreshUserList()
     {
-        _allUsers = _statisticsCollector.GetAllUsers();
+        _allUsers = _userStatistics.GetAll().ToList();
         UpdateGlobalStats();
         ApplyFilter();
 
