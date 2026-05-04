@@ -106,7 +106,7 @@ public sealed class StreamEpisodeNumberer :
             return;
         }
 
-        _profilesManager.AdvanceCurrentNumber(profile.Id, nextValue, now);
+        _profilesManager.AdvanceCurrentNumber(profile.Id, profile.CurrentNumber, nextValue, now);
     }
 
     public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)

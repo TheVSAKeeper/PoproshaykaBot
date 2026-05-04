@@ -66,18 +66,9 @@ public sealed class ChannelInformationApplier(
     {
         var broadcasterId = await idProvider.GetAsync(cancellationToken);
 
-        var virtualProfile = new BroadcastProfile
-        {
-            Id = Guid.Empty,
-            Name = "(ad-hoc)",
-            Title = title ?? string.Empty,
-            GameId = gameId ?? string.Empty,
-            GameName = gameName ?? string.Empty,
-        };
-
         if (broadcasterId == null)
         {
-            await eventBus.PublishAsync(new BroadcastProfileApplyFailed(virtualProfile, "Не удалось определить канал"),
+            await eventBus.PublishAsync(new ChannelInformationPatchFailed(title, gameId, gameName, "Не удалось определить канал"),
                 cancellationToken);
 
             return false;
@@ -100,7 +91,7 @@ public sealed class ChannelInformationApplier(
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Не удалось применить патч канала");
-            await eventBus.PublishAsync(new BroadcastProfileApplyFailed(virtualProfile, HelixErrorMessages.SafeMessage(exception)),
+            await eventBus.PublishAsync(new ChannelInformationPatchFailed(title, gameId, gameName, HelixErrorMessages.SafeMessage(exception)),
                 cancellationToken);
 
             return false;
@@ -110,10 +101,10 @@ public sealed class ChannelInformationApplier(
 
         if (!confirmed)
         {
-            logger.LogInformation("Не получено подтверждение channel.update для ad-hoc патча, публикуем Applied по успешному Helix-ответу");
+            logger.LogInformation("Не получено подтверждение channel.update для ad-hoc патча, публикуем Patched по успешному Helix-ответу");
         }
 
-        await eventBus.PublishAsync(new BroadcastProfileApplied(virtualProfile), cancellationToken);
+        await eventBus.PublishAsync(new ChannelInformationPatched(title, gameId, gameName), cancellationToken);
         return true;
     }
 }

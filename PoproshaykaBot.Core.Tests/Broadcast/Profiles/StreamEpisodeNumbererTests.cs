@@ -25,12 +25,13 @@ public class StreamEpisodeNumbererTests
             TimeProvider.System,
             NullLogger<BroadcastProfilesManager>.Instance);
 
-        _profilesManager.AdvanceCurrentNumber(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<DateTimeOffset>())
+        _profilesManager.AdvanceCurrentNumber(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<DateTimeOffset>())
             .Returns(call =>
             {
                 var id = call.Arg<Guid>();
-                var nextValue = call.Arg<int>();
-                var appliedAt = call.Arg<DateTimeOffset>();
+                var expected = call.ArgAt<int>(1);
+                var nextValue = call.ArgAt<int>(2);
+                var advancedAt = call.Arg<DateTimeOffset>();
                 var stored = _broadcastProfiles.Profiles.FirstOrDefault(p => p.Id == id);
 
                 if (stored == null)
@@ -38,8 +39,13 @@ public class StreamEpisodeNumbererTests
                     return false;
                 }
 
+                if (stored.CurrentNumber != expected)
+                {
+                    return false;
+                }
+
                 stored.CurrentNumber = nextValue;
-                stored.LastApplyAt = appliedAt;
+                stored.LastAutoAdvanceAt = advancedAt;
                 return true;
             });
 
@@ -224,12 +230,42 @@ public class StreamEpisodeNumbererTests
     }
 
     [Test]
-    public async Task SuccessfulAdvance_SetsLastApplyAtToNow()
+    public async Task SuccessfulAdvance_SetsLastAutoAdvanceAt_AndPreservesLastApplyAt()
+    {
+        var lastApplyAt = _clock.UtcNow.AddMinutes(-30);
+        var profile = RegisterActiveNumberedProfile(14, lastApplyAt);
+
+        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(profile.LastAutoAdvanceAt, Is.EqualTo(_clock.UtcNow));
+            Assert.That(profile.LastApplyAt, Is.EqualTo(lastApplyAt));
+        }
+    }
+
+    [Test]
+    public async Task ConsecutiveOnlineWithinRecentApplyWindow_OfPreviousAutoAdvance_StillIncrementsAgain()
+    {
+        var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow.AddHours(-2));
+
+        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        Assert.That(profile.CurrentNumber, Is.EqualTo(15));
+
+        await _handler.HandleAsync(new StreamWentOffline("chan"), CancellationToken.None);
+        _clock.UtcNow = _clock.UtcNow.AddMinutes(12);
+        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+
+        Assert.That(profile.CurrentNumber, Is.EqualTo(16));
+    }
+
+    [Test]
+    public async Task NumbererPassesExpectedCurrentNumberToManager()
     {
         var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow.AddMinutes(-30));
 
         await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
 
-        Assert.That(profile.LastApplyAt, Is.EqualTo(_clock.UtcNow));
+        _profilesManager.Received(1).AdvanceCurrentNumber(profile.Id, 14, 15, _clock.UtcNow);
     }
 }

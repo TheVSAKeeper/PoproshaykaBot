@@ -11,4 +11,5 @@ public sealed class BroadcastProfile
     public List<string> Tags { get; set; } = [];
     public int CurrentNumber { get; set; } = 1;
     public DateTimeOffset? LastApplyAt { get; set; }
+    public DateTimeOffset? LastAutoAdvanceAt { get; set; }
 }

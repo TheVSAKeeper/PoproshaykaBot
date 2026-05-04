@@ -124,6 +124,51 @@ public class ChannelInformationApplierTests
     }
 
     [Test]
+    public async Task ApplyPatchAsync_Success_PublishesPatched_NotApplied()
+    {
+        await _applier.ApplyPatchAsync("Hello", "509658", "Just Chatting", CancellationToken.None);
+
+        await _eventBus.Received(1)
+            .PublishAsync(Arg.Is<ChannelInformationPatched>(e =>
+                    e.Title == "Hello" && e.GameId == "509658" && e.GameName == "Just Chatting"),
+                Arg.Any<CancellationToken>());
+
+        await _eventBus.DidNotReceive()
+            .PublishAsync(Arg.Any<BroadcastProfileApplied>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ApplyPatchAsync_NoBroadcasterId_PublishesPatchFailed_NotApplyFailed()
+    {
+        _idProvider.GetAsync(Arg.Any<CancellationToken>()).Returns((string?)null);
+
+        await _applier.ApplyPatchAsync("Hello", null, null, CancellationToken.None);
+
+        await _eventBus.Received(1)
+            .PublishAsync(Arg.Is<ChannelInformationPatchFailed>(e =>
+                    e.Title == "Hello" && !string.IsNullOrEmpty(e.ErrorMessage)),
+                Arg.Any<CancellationToken>());
+
+        await _eventBus.DidNotReceive()
+            .PublishAsync(Arg.Any<BroadcastProfileApplyFailed>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ApplyPatchAsync_ApiThrows_PublishesPatchFailed_WithSafeMessage()
+    {
+        _channelsApi
+            .ModifyChannelInformationAsync(Arg.Any<string>(), Arg.Any<PatchChannelRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("boom")));
+
+        await _applier.ApplyPatchAsync("Hello", null, null, CancellationToken.None);
+
+        await _eventBus.Received(1)
+            .PublishAsync(Arg.Is<ChannelInformationPatchFailed>(e =>
+                    !e.ErrorMessage.Contains("boom") && !string.IsNullOrEmpty(e.ErrorMessage)),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task ApplyAsync_Success_ReturnsTrue()
     {
         var profile = new BroadcastProfile

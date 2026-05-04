@@ -233,7 +233,42 @@ public class BroadcastProfilesManagerTests
     }
 
     [Test]
-    public void AdvanceCurrentNumber_StoredProfile_MutatesAndPersists()
+    public void AdvanceCurrentNumber_StoredProfile_MutatesAutoAdvanceAt_PreservesLastApplyAt()
+    {
+        var manualApplyAt = _clock.UtcNow.AddHours(-2);
+        var profile = new BroadcastProfile
+        {
+            Name = "X",
+            Title = "Серия #{n}",
+            CurrentNumber = 14,
+            LastApplyAt = manualApplyAt,
+        };
+
+        _manager.Upsert(profile);
+
+        var advancedAt = _clock.UtcNow.AddMinutes(-1);
+        var result = _manager.AdvanceCurrentNumber(profile.Id, 14, 15, advancedAt);
+
+        var stored = _store.Load().Profiles[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(stored.CurrentNumber, Is.EqualTo(15));
+            Assert.That(stored.LastAutoAdvanceAt, Is.EqualTo(advancedAt));
+            Assert.That(stored.LastApplyAt, Is.EqualTo(manualApplyAt));
+        }
+    }
+
+    [Test]
+    public void AdvanceCurrentNumber_UnknownId_ReturnsFalse_AndDoesNotPersist()
+    {
+        var result = _manager.AdvanceCurrentNumber(Guid.NewGuid(), 0, 99, _clock.UtcNow);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void AdvanceCurrentNumber_ExpectedNumberMismatch_ReturnsFalse_AndDoesNotOverwrite()
     {
         var profile = new BroadcastProfile
         {
@@ -244,24 +279,17 @@ public class BroadcastProfilesManagerTests
 
         _manager.Upsert(profile);
 
-        var appliedAt = _clock.UtcNow.AddMinutes(-1);
-        var result = _manager.AdvanceCurrentNumber(profile.Id, 15, appliedAt);
+        _store.Mutate(bp => bp.Profiles[0].CurrentNumber = 20);
+
+        var result = _manager.AdvanceCurrentNumber(profile.Id, 14, 15, _clock.UtcNow);
 
         var stored = _store.Load().Profiles[0];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result, Is.True);
-            Assert.That(stored.CurrentNumber, Is.EqualTo(15));
-            Assert.That(stored.LastApplyAt, Is.EqualTo(appliedAt));
+            Assert.That(result, Is.False);
+            Assert.That(stored.CurrentNumber, Is.EqualTo(20));
+            Assert.That(stored.LastAutoAdvanceAt, Is.Null);
         }
-    }
-
-    [Test]
-    public void AdvanceCurrentNumber_UnknownId_ReturnsFalse_AndDoesNotPersist()
-    {
-        var result = _manager.AdvanceCurrentNumber(Guid.NewGuid(), 99, _clock.UtcNow);
-
-        Assert.That(result, Is.False);
     }
 
     [Test]

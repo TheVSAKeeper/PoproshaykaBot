@@ -53,6 +53,7 @@ public class BroadcastProfilesManager(
                 Tags = profile.Tags.ToList(),
                 CurrentNumber = profile.CurrentNumber,
                 LastApplyAt = profile.LastApplyAt,
+                LastAutoAdvanceAt = profile.LastAutoAdvanceAt,
             };
         }
         else
@@ -91,9 +92,10 @@ public class BroadcastProfilesManager(
             .FirstOrDefault(p => p.Id == id);
     }
 
-    public virtual bool AdvanceCurrentNumber(Guid id, int nextValue, DateTimeOffset appliedAt)
+    public virtual bool AdvanceCurrentNumber(Guid id, int expectedCurrentNumber, int nextValue, DateTimeOffset advancedAt)
     {
         var advanced = false;
+        var raceDetected = false;
 
         profilesStore.Mutate(bp =>
         {
@@ -104,8 +106,14 @@ public class BroadcastProfilesManager(
                 return;
             }
 
+            if (stored.CurrentNumber != expectedCurrentNumber)
+            {
+                raceDetected = true;
+                return;
+            }
+
             stored.CurrentNumber = nextValue;
-            stored.LastApplyAt = appliedAt;
+            stored.LastAutoAdvanceAt = advancedAt;
             advanced = true;
         });
 
@@ -114,6 +122,10 @@ public class BroadcastProfilesManager(
             logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} → CurrentNumber={NextValue}",
                 id,
                 nextValue);
+        }
+        else if (raceDetected)
+        {
+            logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} изменён вручную, авто-инкремент отменён", id);
         }
 
         return advanced;

@@ -160,6 +160,8 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfilesChanged>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplied>(this, OnProfileApplied));
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplyFailed>(this, OnProfileApplyFailed));
+        _subs.Add(Bus.SubscribeOnUi<ChannelInformationPatched>(this, OnChannelInformationPatched));
+        _subs.Add(Bus.SubscribeOnUi<ChannelInformationPatchFailed>(this, OnChannelInformationPatchFailed));
         _subs.Add(Bus.SubscribeOnUi<StreamWentOnline>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<StreamWentOffline>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<StreamMetadataResolved>(this, _ => ReloadCards()));
@@ -343,6 +345,7 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
             Tags = source.Tags.ToList(),
             CurrentNumber = source.CurrentNumber,
             LastApplyAt = source.LastApplyAt,
+            LastAutoAdvanceAt = source.LastAutoAdvanceAt,
         };
     }
 
@@ -409,14 +412,25 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
 
     private void OnProfileApplied(BroadcastProfileApplied @event)
     {
-        var isSavedProfile = @event.Profile.Id != Guid.Empty;
-        _activeProfileId = isSavedProfile ? @event.Profile.Id : null;
+        _activeProfileId = @event.Profile.Id;
         ClearInFlightStates();
         ReloadCards();
-        SetStatus(isSavedProfile ? $"✓ Применён профиль «{@event.Profile.Name}»" : "✓ Применено", false);
+        SetStatus($"✓ Применён профиль «{@event.Profile.Name}»", false);
     }
 
     private void OnProfileApplyFailed(BroadcastProfileApplyFailed @event)
+    {
+        ClearInFlightStates();
+        SetStatus($"✗ {@event.ErrorMessage}", true);
+    }
+
+    private void OnChannelInformationPatched(ChannelInformationPatched @event)
+    {
+        ClearInFlightStates();
+        SetStatus("✓ Применено", false);
+    }
+
+    private void OnChannelInformationPatchFailed(ChannelInformationPatchFailed @event)
     {
         ClearInFlightStates();
         SetStatus($"✗ {@event.ErrorMessage}", true);
