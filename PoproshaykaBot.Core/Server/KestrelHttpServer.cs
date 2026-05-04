@@ -20,7 +20,7 @@ public sealed class KestrelHttpServer(
     SseService sseService,
     SettingsManager settingsManager,
     ObsChatStore obsChatStore,
-    TwitchOAuthService twitchOAuthService,
+    ITwitchOAuthService twitchOAuthService,
     UserProfileImageProvider userProfileImageProvider,
     ILogger<KestrelHttpServer> logger,
     ILoggerFactory loggerFactory)

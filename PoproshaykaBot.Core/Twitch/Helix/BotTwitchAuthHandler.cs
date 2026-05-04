@@ -6,7 +6,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 namespace PoproshaykaBot.Core.Twitch.Helix;
 
 public sealed class BotTwitchAuthHandler(
-    TwitchOAuthService oauthService,
+    ITwitchOAuthService oauthService,
     SettingsManager settingsManager,
     AccountsStore accountsStore,
     ILogger<BotTwitchAuthHandler> logger)
@@ -17,7 +17,7 @@ public sealed class BotTwitchAuthHandler(
     protected override string MissingTokenHint =>
         "Авторизуйте бота в настройках Twitch (вкладка «Бот»).";
 
-    protected override Task<string?> GetTokenAsync(TwitchOAuthService oauthService, CancellationToken cancellationToken)
+    protected override Task<string?> GetTokenAsync(ITwitchOAuthService oauthService, CancellationToken cancellationToken)
     {
         return oauthService.GetAccessTokenAsync(Role, cancellationToken);
     }

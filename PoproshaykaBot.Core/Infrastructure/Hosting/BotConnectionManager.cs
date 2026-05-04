@@ -9,7 +9,7 @@ namespace PoproshaykaBot.Core.Infrastructure.Hosting;
 
 public sealed class BotConnectionManager : IDisposable
 {
-    private readonly TwitchOAuthService _tokenService;
+    private readonly ITwitchOAuthService _tokenService;
     private readonly SettingsManager _settingsManager;
     private readonly TwitchChatHandler _twitchChatHandler;
     private readonly AppHost _appHost;
@@ -21,7 +21,7 @@ public sealed class BotConnectionManager : IDisposable
     private bool _disposed;
 
     public BotConnectionManager(
-        TwitchOAuthService tokenService,
+        ITwitchOAuthService tokenService,
         SettingsManager settingsManager,
         TwitchChatHandler twitchChatHandler,
         AppHost appHost,

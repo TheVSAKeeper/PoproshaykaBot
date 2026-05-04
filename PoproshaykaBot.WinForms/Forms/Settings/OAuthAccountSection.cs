@@ -30,7 +30,7 @@ public sealed partial class OAuthAccountSection : UserControl
     public AccountsStore AccountsStore { get; internal init; } = null!;
 
     [Inject]
-    public TwitchOAuthService OAuthService { get; internal init; } = null!;
+    public ITwitchOAuthService OAuthService { get; internal init; } = null!;
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]

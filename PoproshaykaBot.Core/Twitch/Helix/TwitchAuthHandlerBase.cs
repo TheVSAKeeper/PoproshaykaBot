@@ -6,7 +6,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 namespace PoproshaykaBot.Core.Twitch.Helix;
 
 public abstract class TwitchAuthHandlerBase(
-    TwitchOAuthService oauthService,
+    ITwitchOAuthService oauthService,
     SettingsManager settingsManager,
     AccountsStore accountsStore,
     ILogger logger)
@@ -53,5 +53,5 @@ public abstract class TwitchAuthHandlerBase(
         return response;
     }
 
-    protected abstract Task<string?> GetTokenAsync(TwitchOAuthService oauthService, CancellationToken cancellationToken);
+    protected abstract Task<string?> GetTokenAsync(ITwitchOAuthService oauthService, CancellationToken cancellationToken);
 }

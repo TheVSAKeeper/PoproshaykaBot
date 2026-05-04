@@ -28,7 +28,13 @@ public sealed class TwitchOAuthServiceTests
         _httpFactory.CreateClient(Arg.Any<string>()).Returns(_ => new(_handler, false));
         _eventBus = Substitute.For<IEventBus>();
 
-        _service = new(_settingsManager, _accountsStore, _httpFactory, NullLogger<TwitchOAuthService>.Instance, _eventBus);
+        var statusReporter = new OAuthStatusReporter(NullLogger<OAuthStatusReporter>.Instance);
+        var tokenClient = new OAuthTokenClient(_httpFactory, NullLogger<OAuthTokenClient>.Instance);
+        var accountWriter = new OAuthAccountWriter(_accountsStore, _eventBus, statusReporter, NullLogger<OAuthAccountWriter>.Instance);
+        var flow = new OAuthFlowCoordinator(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsManager, NullLogger<OAuthFlowCoordinator>.Instance);
+        var refresher = new OAuthTokenRefresher(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsManager, _eventBus, NullLogger<OAuthTokenRefresher>.Instance);
+
+        _service = new(flow, refresher, tokenClient, accountWriter, statusReporter);
     }
 
     [TearDown]

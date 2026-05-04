@@ -21,7 +21,7 @@ public partial class OAuthSettingsControl : UserControl
     public event EventHandler? SettingChanged;
 
     [Inject]
-    public TwitchOAuthService OAuthService { get; internal init; } = null!;
+    public ITwitchOAuthService OAuthService { get; internal init; } = null!;
 
     public void LoadSettings(AppSettings settings, TwitchAccountSettings botDraft, TwitchAccountSettings broadcasterDraft)
     {

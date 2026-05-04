@@ -6,7 +6,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 namespace PoproshaykaBot.Core.Twitch.Helix;
 
 public sealed class BroadcasterTwitchAuthHandler(
-    TwitchOAuthService oauthService,
+    ITwitchOAuthService oauthService,
     SettingsManager settingsManager,
     AccountsStore accountsStore,
     ILogger<BroadcasterTwitchAuthHandler> logger)
@@ -17,7 +17,7 @@ public sealed class BroadcasterTwitchAuthHandler(
     protected override string MissingTokenHint =>
         "Авторизуйте стримера в настройках Twitch (вкладка «Стример»).";
 
-    protected override Task<string?> GetTokenAsync(TwitchOAuthService oauthService, CancellationToken cancellationToken)
+    protected override Task<string?> GetTokenAsync(ITwitchOAuthService oauthService, CancellationToken cancellationToken)
     {
         return oauthService.GetAccessTokenAsync(Role, cancellationToken);
     }
