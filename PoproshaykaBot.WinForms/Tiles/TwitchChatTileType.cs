@@ -1,5 +1,5 @@
-﻿using PoproshaykaBot.WinForms.Chat;
-using PoproshaykaBot.WinForms.Infrastructure.Di;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Widgets;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 

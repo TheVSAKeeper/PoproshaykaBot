@@ -1,6 +1,6 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Settings.Stores;
-using PoproshaykaBot.WinForms.Settings.Ui;
+﻿using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Settings.Ui;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 

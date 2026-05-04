@@ -1,15 +1,16 @@
 ﻿using Microsoft.Extensions.Logging;
-using PoproshaykaBot.WinForms.Chat;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Settings.Ui;
+using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.WinForms.Forms.Settings;
+using PoproshaykaBot.WinForms.Forms.Users;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Lifecycle;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Streaming;
-using PoproshaykaBot.WinForms.Infrastructure.Hosting;
-using PoproshaykaBot.WinForms.Settings;
-using PoproshaykaBot.WinForms.Settings.Stores;
-using PoproshaykaBot.WinForms.Settings.Ui;
-using PoproshaykaBot.WinForms.Streaming;
-using PoproshaykaBot.WinForms.Users;
 
 namespace PoproshaykaBot.WinForms;
 

@@ -1,4 +1,4 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Events;
+﻿using PoproshaykaBot.Core.Infrastructure.Events;
 
 namespace PoproshaykaBot.WinForms.Infrastructure.Di;
 

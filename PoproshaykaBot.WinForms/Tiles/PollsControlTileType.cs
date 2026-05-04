@@ -1,5 +1,5 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Polls;
+﻿using PoproshaykaBot.WinForms.Forms.Polls;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 

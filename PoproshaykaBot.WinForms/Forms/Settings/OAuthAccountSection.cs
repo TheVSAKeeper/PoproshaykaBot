@@ -1,0 +1,465 @@
+﻿using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Chat;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
+using System.ComponentModel;
+
+namespace PoproshaykaBot.WinForms.Forms.Settings;
+
+public sealed partial class OAuthAccountSection : UserControl
+{
+    private static readonly string[] BotDefaultScopes = [..TwitchScopes.BotRequired];
+    private static readonly string[] BroadcasterDefaultScopes = [..TwitchScopes.BroadcasterRequired];
+
+    private AppSettings _settings = new();
+    private TwitchAccountSettings _draft = new();
+    private TwitchOAuthRole _role = TwitchOAuthRole.Bot;
+    private bool _initialized;
+    private bool _tokensVisible;
+    private CancellationTokenSource? _authCts;
+
+    public OAuthAccountSection()
+    {
+        InitializeComponent();
+    }
+
+    public event EventHandler? SettingChanged;
+
+    [Inject]
+    public AccountsStore AccountsStore { get; internal init; } = null!;
+
+    [Inject]
+    public TwitchOAuthService OAuthService { get; internal init; } = null!;
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public TwitchOAuthRole Role
+    {
+        get => _role;
+        set
+        {
+            if (_role == value)
+            {
+                return;
+            }
+
+            _role = value;
+            ApplyRoleLabels();
+        }
+    }
+
+    public void LoadSettings(AppSettings settings, TwitchAccountSettings draft)
+    {
+        _settings = settings;
+        _draft = draft;
+
+        _scopesTextBox.Text = string.Join(" ", _draft.Scopes);
+
+        LoadTokenInformation();
+    }
+
+    public void SaveSettings()
+    {
+        _draft.Scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
+        _initialized = true;
+
+        ApplyRoleLabels();
+        SetPlaceholders();
+
+        OAuthService.StatusChanged += OnOAuthStatusChanged;
+        Disposed += (_, _) => OAuthService.StatusChanged -= OnOAuthStatusChanged;
+    }
+
+    private void OnScopesTextChanged(object? sender, EventArgs e)
+    {
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnScopesResetButtonClicked(object? sender, EventArgs e)
+    {
+        _scopesTextBox.Text = string.Join(" ", GetDefaultScopes());
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async void OnTestAuthButtonClicked(object? sender, EventArgs e)
+    {
+        if (_authCts is { } pending)
+        {
+            _authCts = null;
+            try
+            {
+                await pending.CancelAsync();
+            }
+            catch
+            {
+            }
+
+            _authStatusLabel.Text = "Авторизация отменена";
+            _authStatusLabel.ForeColor = Color.Orange;
+            RestoreAuthButtonMode();
+            return;
+        }
+
+        var clientId = _settings.Twitch.ClientId;
+        var clientSecret = _settings.Twitch.ClientSecret;
+
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            _authStatusLabel.Text = "Введите Client ID";
+            _authStatusLabel.ForeColor = Color.Red;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(clientSecret))
+        {
+            _authStatusLabel.Text = "Введите Client Secret";
+            _authStatusLabel.ForeColor = Color.Red;
+            return;
+        }
+
+        if (_role == TwitchOAuthRole.Broadcaster && string.IsNullOrWhiteSpace(_settings.Twitch.Channel))
+        {
+            _authStatusLabel.Text = "Не задан Channel в настройках Twitch";
+            _authStatusLabel.ForeColor = Color.Red;
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _authCts = cts;
+        SetAuthButtonToCancelMode();
+        _authStatusLabel.Text = "Авторизация...";
+        _authStatusLabel.ForeColor = Color.Blue;
+
+        try
+        {
+            var scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var redirectUri = _settings.Twitch.RedirectUri;
+
+            if (scopes.Length == 0)
+            {
+                scopes = GetDefaultScopes();
+            }
+
+            var accessToken = await OAuthService.StartOAuthFlowAsync(_role,
+                clientId,
+                clientSecret,
+                scopes,
+                string.IsNullOrWhiteSpace(redirectUri) ? null : redirectUri,
+                cts.Token);
+
+            if (!ReferenceEquals(_authCts, cts))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                _authStatusLabel.Text = "Авторизация успешна!";
+                _authStatusLabel.ForeColor = Color.Green;
+
+                LoadTokenInformation();
+                SettingChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception) when (ReferenceEquals(_authCts, cts))
+        {
+            _authStatusLabel.Text = $"Ошибка: {exception.Message}";
+            _authStatusLabel.ForeColor = Color.Red;
+        }
+        catch
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(_authCts, cts))
+            {
+                _authCts = null;
+                RestoreAuthButtonMode();
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    private async void OnValidateTokenButtonClicked(object? sender, EventArgs e)
+    {
+        var accessToken = GetLiveAccount().AccessToken;
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            _tokenStatusValueLabel.Text = "Токен отсутствует";
+            _tokenStatusValueLabel.ForeColor = Color.Red;
+            return;
+        }
+
+        _validateTokenButton.Enabled = false;
+        _tokenStatusValueLabel.Text = "Проверка...";
+        _tokenStatusValueLabel.ForeColor = Color.Blue;
+
+        try
+        {
+            var isValid = await OAuthService.IsTokenValidAsync(accessToken);
+
+            if (isValid)
+            {
+                _tokenStatusValueLabel.Text = "Действителен";
+                _tokenStatusValueLabel.ForeColor = Color.Green;
+            }
+            else
+            {
+                _tokenStatusValueLabel.Text = "Недействителен";
+                _tokenStatusValueLabel.ForeColor = Color.Red;
+            }
+        }
+        catch (Exception exception)
+        {
+            _tokenStatusValueLabel.Text = $"Ошибка: {exception.Message}";
+            _tokenStatusValueLabel.ForeColor = Color.Red;
+        }
+        finally
+        {
+            _validateTokenButton.Enabled = true;
+        }
+    }
+
+    private async void OnRefreshTokenButtonClicked(object? sender, EventArgs e)
+    {
+        var clientId = _settings.Twitch.ClientId;
+        var clientSecret = _settings.Twitch.ClientSecret;
+        var refreshToken = GetLiveAccount().RefreshToken;
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            MessageBox.Show("Client ID и Client Secret должны быть настроены для обновления токена.",
+                "Настройки отсутствуют", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            MessageBox.Show("Refresh Token отсутствует. Требуется повторная авторизация.",
+                "Refresh Token отсутствует", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        _refreshTokenButton.Enabled = false;
+        _tokenStatusValueLabel.Text = "Обновление...";
+        _tokenStatusValueLabel.ForeColor = Color.Blue;
+
+        try
+        {
+            await OAuthService.RefreshTokenAsync(_role, clientId, clientSecret, refreshToken);
+
+            LoadTokenInformation();
+            _tokenStatusValueLabel.Text = "Обновлен успешно";
+            _tokenStatusValueLabel.ForeColor = Color.Green;
+            _lastRefreshValueLabel.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss");
+            _lastRefreshValueLabel.ForeColor = Color.Black;
+
+            SettingChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception exception)
+        {
+            _tokenStatusValueLabel.Text = $"Ошибка: {exception.Message}";
+            _tokenStatusValueLabel.ForeColor = Color.Red;
+
+            MessageBox.Show($"Не удалось обновить токен: {exception.Message}",
+                "Ошибка обновления токена", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _refreshTokenButton.Enabled = true;
+        }
+    }
+
+    private void OnClearTokensButtonClicked(object? sender, EventArgs e)
+    {
+        var roleName = _role == TwitchOAuthRole.Broadcaster ? "стримера" : "бота";
+        var result = MessageBox.Show($"Вы уверены, что хотите очистить сохранённые токены {roleName}?\n\nЭто потребует повторной авторизации при следующем подключении.",
+            "Подтверждение очистки токенов",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (result != DialogResult.Yes)
+        {
+            return;
+        }
+
+        OAuthService.ClearTokens(_role);
+
+        LoadTokenInformation();
+        _tokenStatusValueLabel.Text = "Токены очищены";
+        _tokenStatusValueLabel.ForeColor = Color.Orange;
+        _lastRefreshValueLabel.Text = "Неизвестно";
+        _lastRefreshValueLabel.ForeColor = Color.Gray;
+
+        SettingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnShowTokenButtonClicked(object? sender, EventArgs e)
+    {
+        _tokensVisible = !_tokensVisible;
+        UpdateTokenDisplay();
+        UpdateShowTokenButton();
+    }
+
+    private void OnOAuthStatusChanged(TwitchOAuthRole role, string message)
+    {
+        if (role != _role)
+        {
+            return;
+        }
+
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            BeginInvoke(() =>
+            {
+                _authStatusLabel.Text = message;
+                _authStatusLabel.ForeColor = Color.Blue;
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException) when (IsDisposed)
+        {
+        }
+    }
+
+    private TwitchAccountSettings GetLiveAccount()
+    {
+        return AccountsStore.Load(_role);
+    }
+
+    private string[] GetDefaultScopes()
+    {
+        return _role == TwitchOAuthRole.Broadcaster ? BroadcasterDefaultScopes : BotDefaultScopes;
+    }
+
+    private void SetAuthButtonToCancelMode()
+    {
+        _testAuthButton.Enabled = true;
+        _testAuthButton.Text = "Отменить авторизацию";
+    }
+
+    private void RestoreAuthButtonMode()
+    {
+        _testAuthButton.Enabled = true;
+        ApplyRoleLabels();
+    }
+
+    private void ApplyRoleLabels()
+    {
+        if (!IsHandleCreated)
+        {
+            return;
+        }
+
+        _sectionHeaderLabel.Text = _role switch
+        {
+            TwitchOAuthRole.Bot => "Авторизация бота",
+            TwitchOAuthRole.Broadcaster => "Авторизация стримера",
+            _ => "Авторизация",
+        };
+
+        _testAuthButton.Text = _role switch
+        {
+            TwitchOAuthRole.Bot => "Авторизовать бота",
+            TwitchOAuthRole.Broadcaster => "Авторизовать стримера",
+            _ => "Авторизовать",
+        };
+    }
+
+    private void UpdateShowTokenButton()
+    {
+        _showTokenButton.Text = _tokensVisible ? "🙈" : "👁";
+    }
+
+    private void UpdateTokenDisplay()
+    {
+        var account = GetLiveAccount();
+        var accessToken = account.AccessToken;
+        var refreshToken = account.RefreshToken;
+
+        _accessTokenTextBox.Text = !string.IsNullOrWhiteSpace(accessToken) ? accessToken : "Не установлен";
+        _refreshTokenTextBox.Text = !string.IsNullOrWhiteSpace(refreshToken) ? refreshToken : "Не установлен";
+
+        _accessTokenTextBox.UseSystemPasswordChar = !_tokensVisible && !string.IsNullOrWhiteSpace(accessToken);
+        _refreshTokenTextBox.UseSystemPasswordChar = !_tokensVisible && !string.IsNullOrWhiteSpace(refreshToken);
+    }
+
+    private void SetPlaceholders()
+    {
+        _scopesTextBox.PlaceholderText = string.Join(" ", GetDefaultScopes());
+    }
+
+    private void LoadTokenInformation()
+    {
+        var account = GetLiveAccount();
+        var accessToken = account.AccessToken;
+        var refreshToken = account.RefreshToken;
+        var login = account.Login;
+
+        UpdateTokenDisplay();
+        UpdateShowTokenButton();
+
+        if (!string.IsNullOrWhiteSpace(login))
+        {
+            _accountLoginValueLabel.Text = login;
+            _accountLoginValueLabel.ForeColor = Color.Black;
+        }
+        else
+        {
+            _accountLoginValueLabel.Text = "—";
+            _accountLoginValueLabel.ForeColor = Color.Gray;
+        }
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            _tokenStatusValueLabel.Text = "Токен отсутствует";
+            _tokenStatusValueLabel.ForeColor = Color.Red;
+        }
+        else
+        {
+            _tokenStatusValueLabel.Text = "Не проверен";
+            _tokenStatusValueLabel.ForeColor = Color.Gray;
+        }
+
+        var hasTokens = !string.IsNullOrWhiteSpace(accessToken);
+        var hasRefreshToken = !string.IsNullOrWhiteSpace(refreshToken);
+        var hasCredentials = !string.IsNullOrWhiteSpace(_settings.Twitch.ClientId)
+                             && !string.IsNullOrWhiteSpace(_settings.Twitch.ClientSecret);
+
+        _validateTokenButton.Enabled = hasTokens;
+        _refreshTokenButton.Enabled = hasRefreshToken && hasCredentials;
+        _clearTokensButton.Enabled = hasTokens || hasRefreshToken;
+        _showTokenButton.Enabled = hasTokens || hasRefreshToken;
+    }
+}

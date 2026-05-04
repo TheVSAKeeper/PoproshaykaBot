@@ -1,11 +1,18 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using PoproshaykaBot.WinForms.Infrastructure;
+using PoproshaykaBot.Core.Broadcast;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Infrastructure.Di;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Infrastructure.Logging;
+using PoproshaykaBot.Core.Polls;
+using PoproshaykaBot.Core.Server;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Migrations;
+using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Hosting;
-using PoproshaykaBot.WinForms.Infrastructure.Logging;
-using PoproshaykaBot.WinForms.Settings;
-using PoproshaykaBot.WinForms.Settings.Migrations;
 using Serilog;
 using Serilog.Debugging;
 using Serilog.Events;
@@ -80,7 +87,7 @@ public static class Program
         var streamMonitoringStarted = false;
         try
         {
-            serviceProvider.ActivateEventSubscribers(typeof(Program).Assembly);
+            serviceProvider.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
 
             var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
             appLifetimeStarted = StartHttpServerIfNeeded(isUiSmoke, settingsManager, appLifetime);

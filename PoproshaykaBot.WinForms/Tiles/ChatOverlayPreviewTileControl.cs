@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Settings;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 
