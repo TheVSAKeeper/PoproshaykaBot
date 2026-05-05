@@ -15,8 +15,6 @@ public sealed class OAuthFlowCoordinator(
     ILogger<OAuthFlowCoordinator> logger)
     : IDisposable
 {
-    private static readonly TimeSpan AuthTimeout = TimeSpan.FromMinutes(5);
-
     private readonly Dictionary<TwitchOAuthRole, SemaphoreSlim> _authSemaphores = new()
     {
         [TwitchOAuthRole.Bot] = new(1, 1),
@@ -27,6 +25,9 @@ public sealed class OAuthFlowCoordinator(
     private readonly object _pendingAuthsLock = new();
 
     private bool _isDisposed;
+
+    private TimeSpan AuthTimeout =>
+        TimeSpan.FromMinutes(settingsManager.Current.Twitch.Infrastructure.OAuthAuthTimeoutMinutes);
 
     public async Task<string> StartOAuthFlowAsync(
         TwitchOAuthRole role,
@@ -62,6 +63,7 @@ public sealed class OAuthFlowCoordinator(
         try
         {
             var settings = settingsManager.Current.Twitch;
+            var authTimeout = AuthTimeout;
             scopes ??= accountsStore.Load(role).Scopes;
             redirectUri ??= settings.RedirectUri;
 
@@ -93,12 +95,12 @@ public sealed class OAuthFlowCoordinator(
                 throw new InvalidOperationException($"Не удалось открыть браузер: {ex.Message}", ex);
             }
 
-            statusReporter.Report(role, $"Ожидание авторизации пользователя ({AuthTimeout.TotalMinutes} мин)...");
+            statusReporter.Report(role, $"Ожидание авторизации пользователя ({authTimeout.TotalMinutes} мин)...");
 
             string authorizationCode;
             try
             {
-                authorizationCode = await tcs.Task.WaitAsync(AuthTimeout, ct);
+                authorizationCode = await tcs.Task.WaitAsync(authTimeout, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -108,7 +110,7 @@ public sealed class OAuthFlowCoordinator(
             catch (TimeoutException ex)
             {
                 logger.LogWarning(ex, "Истекло время ожидания авторизации для роли {Role}", role);
-                throw new OperationCanceledException($"Время ожидания авторизации истекло ({AuthTimeout.TotalMinutes} мин)", ex);
+                throw new OperationCanceledException($"Время ожидания авторизации истекло ({authTimeout.TotalMinutes} мин)", ex);
             }
 
             if (string.IsNullOrEmpty(authorizationCode))

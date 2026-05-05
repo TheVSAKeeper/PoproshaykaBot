@@ -13,8 +13,6 @@ namespace PoproshaykaBot.Core.Streaming;
 
 public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsyncDisposable
 {
-    internal static readonly TimeSpan StuckOnlineThreshold = TimeSpan.FromMinutes(2);
-
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly ITwitchEventSubClient _eventSubClient;
@@ -61,6 +59,9 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     public string Name => "Отслеживание статуса стрима";
 
     public int StartOrder => 256;
+
+    private TimeSpan StuckOnlineThreshold =>
+        TimeSpan.FromSeconds(_settingsManager.Current.Twitch.Infrastructure.StreamStuckOnlineThresholdSeconds);
 
     public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Server.Endpoints;
+using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Server;
 
@@ -8,7 +9,15 @@ public static class ServerServiceCollectionExtensions
 {
     public static IServiceCollection AddHttpServer(this IServiceCollection services)
     {
-        services.AddSingleton<SseChannelOptions>();
+        services.AddSingleton<SseChannelOptions>(sp =>
+        {
+            var infrastructure = sp.GetRequiredService<SettingsManager>().Current.Twitch.Infrastructure;
+            return new(infrastructure.SseGlobalChannelCapacity,
+                infrastructure.SseClientChannelCapacity,
+                infrastructure.SseDropLogThrottle,
+                infrastructure.SseDropNotifyThreshold);
+        });
+
         services.AddSingleton<SseDropMetrics>();
         services.AddSingleton<SseClientRegistry>();
         services.AddSingleton<SseService>();

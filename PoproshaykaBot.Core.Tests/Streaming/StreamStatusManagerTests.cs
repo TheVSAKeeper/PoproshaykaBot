@@ -217,7 +217,8 @@ public sealed class StreamStatusManagerTests
         await _manager.RefreshLiveSnapshotAsync();
         Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Online));
 
-        _clock.UtcNow = _clock.UtcNow.Add(StreamStatusManager.StuckOnlineThreshold + TimeSpan.FromSeconds(1));
+        var stuckOnlineThreshold = TimeSpan.FromSeconds(_settings.Twitch.Infrastructure.StreamStuckOnlineThresholdSeconds);
+        _clock.UtcNow = _clock.UtcNow.Add(stuckOnlineThreshold + TimeSpan.FromSeconds(1));
 
         await _manager.RefreshLiveSnapshotAsync();
 
