@@ -13,6 +13,7 @@ public sealed class BroadcastScheduler(
     SettingsManager settingsManager,
     IStreamStatus streamStatusManager,
     IEventBus eventBus,
+    TimeProvider timeProvider,
     ILogger<BroadcastScheduler> logger)
     : IBroadcastScheduler, IAsyncDisposable
 {
@@ -56,9 +57,9 @@ public sealed class BroadcastScheduler(
             _stopCts = new();
 
             _timer?.Dispose();
-            _timer = new(_interval);
+            _timer = new(_interval, timeProvider);
 
-            NextBroadcastTime = DateTime.Now + _interval;
+            NextBroadcastTime = timeProvider.GetLocalNow().DateTime + _interval;
 
             var previousTask = _runnerTask;
             _runnerTask = RunLoopAsync(previousTask, _stopCts.Token);
@@ -220,7 +221,7 @@ public sealed class BroadcastScheduler(
 
                 lock (_stateLock)
                 {
-                    NextBroadcastTime = DateTime.Now + _interval;
+                    NextBroadcastTime = timeProvider.GetLocalNow().DateTime + _interval;
                 }
 
                 PublishStateChanged();
