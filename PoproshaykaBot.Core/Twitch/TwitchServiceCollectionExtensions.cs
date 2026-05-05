@@ -36,6 +36,8 @@ public static class TwitchServiceCollectionExtensions
         services.AddSingleton<OAuthTokenRefresher>();
         services.AddSingleton<ITwitchOAuthService, TwitchOAuthService>();
 
+        services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
+
         return services;
     }
 }

@@ -1,10 +1,9 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
 
-namespace PoproshaykaBot.Core.Broadcast.Profiles;
+namespace PoproshaykaBot.Core.Twitch;
 
 public sealed class BroadcasterIdProvider(
     [FromKeyedServices(TwitchEndpoints.HelixBotClient)]

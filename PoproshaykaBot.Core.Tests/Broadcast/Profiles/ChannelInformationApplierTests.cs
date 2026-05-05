@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
 
 namespace PoproshaykaBot.Core.Tests.Broadcast.Profiles;

@@ -10,7 +10,6 @@ public static class BroadcastServiceCollectionExtensions
     {
         services.AddSingleton<ITwitchChannelsApi, TwitchChannelsApiAdapter>();
         services.AddSingleton<ITwitchSearchApi, TwitchSearchApiAdapter>();
-        services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
         services.AddSingleton<IBotUserIdProvider, BotUserIdProvider>();
         services.AddSingleton<IChannelUpdateConfirmation>(sp => sp.GetRequiredService<ChannelUpdateConfirmationService>());
         services.AddSingleton<ChannelInformationApplier>();

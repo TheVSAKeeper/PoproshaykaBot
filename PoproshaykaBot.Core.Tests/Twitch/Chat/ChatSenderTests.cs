@@ -1,4 +1,4 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+﻿using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.Helix;
 

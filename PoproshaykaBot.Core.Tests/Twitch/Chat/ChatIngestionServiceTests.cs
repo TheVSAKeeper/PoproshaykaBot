@@ -1,6 +1,6 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
-using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;

@@ -1,4 +1,4 @@
-﻿namespace PoproshaykaBot.Core.Broadcast.Profiles;
+﻿namespace PoproshaykaBot.Core.Twitch;
 
 public interface IBroadcasterIdProvider
 {

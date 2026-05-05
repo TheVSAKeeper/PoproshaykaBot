@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
 
 namespace PoproshaykaBot.Core.Broadcast.Profiles;

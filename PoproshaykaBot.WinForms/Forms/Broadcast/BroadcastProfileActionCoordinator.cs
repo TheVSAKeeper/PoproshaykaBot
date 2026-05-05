@@ -1,4 +1,5 @@
-using PoproshaykaBot.Core.Broadcast.Profiles;
+﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
 using PoproshaykaBot.WinForms.Controls;
 using PoproshaykaBot.WinForms.Infrastructure.Di;

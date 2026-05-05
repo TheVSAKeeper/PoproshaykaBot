@@ -1,9 +1,9 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
-using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Tests.Polls;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
 using System.Text.Json;

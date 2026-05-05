@@ -1,7 +1,7 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
-using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
 

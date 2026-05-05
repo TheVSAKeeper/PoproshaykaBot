@@ -1,7 +1,7 @@
 ﻿using NSubstitute.ExceptionExtensions;
-using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
 
