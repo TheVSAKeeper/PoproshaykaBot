@@ -135,13 +135,16 @@ public sealed class StreamStatusManagerTests
         _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>())
             .Returns(SampleStream());
 
+        var onlineSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(_ => onlineSignal.TrySetResult());
+
         await _manager.StartAsync(NullProgress, CancellationToken.None);
 
         var welcome = new EventSubSessionWelcomeArgs("session-1", 60);
         _eventSubClient.OnSessionWelcome +=
             Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(welcome, CancellationToken.None);
 
-        await Task.Delay(50);
+        await onlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.That(_manager.CurrentStream, Is.Not.Null);
 
@@ -168,12 +171,15 @@ public sealed class StreamStatusManagerTests
         var offlineEvents = 0;
         _eventBus.Subscribe<StreamWentOffline>(_ => Interlocked.Increment(ref offlineEvents));
 
+        var onlineSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(_ => onlineSignal.TrySetResult());
+
         await _manager.StartAsync(NullProgress, CancellationToken.None);
 
         _eventSubClient.OnSessionWelcome +=
             Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
 
-        await Task.Delay(50);
+        await onlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Online));
 
         await _manager.RefreshLiveSnapshotAsync();
@@ -197,12 +203,15 @@ public sealed class StreamStatusManagerTests
         var offlineReceived = new TaskCompletionSource<StreamWentOffline>(TaskCreationOptions.RunContinuationsAsynchronously);
         _eventBus.Subscribe<StreamWentOffline>(@event => offlineReceived.TrySetResult(@event));
 
+        var onlineSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(_ => onlineSignal.TrySetResult());
+
         await _manager.StartAsync(NullProgress, CancellationToken.None);
 
         _eventSubClient.OnSessionWelcome +=
             Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
 
-        await Task.Delay(50);
+        await onlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Online));
 
         await _manager.RefreshLiveSnapshotAsync();
@@ -317,12 +326,15 @@ public sealed class StreamStatusManagerTests
 
         _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>()).Returns(oldSnapshot);
 
+        var onlineSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(_ => onlineSignal.TrySetResult());
+
         await _manager.StartAsync(NullProgress, CancellationToken.None);
 
         _eventSubClient.OnSessionWelcome +=
             Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
 
-        await Task.Delay(50);
+        await onlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Online));
 
         await _eventBus.PublishAsync(new ChannelUpdated("Новый заголовок", "ru", "999", "Программирование", []));

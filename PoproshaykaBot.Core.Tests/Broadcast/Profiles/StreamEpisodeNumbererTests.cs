@@ -225,8 +225,11 @@ public class StreamEpisodeNumbererTests
 
         await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
 
-        Assert.That(profile.CurrentNumber, Is.EqualTo(14));
-        Assert.That(profile.LastApplyAt, Is.EqualTo(lastApplyAt));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(profile.CurrentNumber, Is.EqualTo(14));
+            Assert.That(profile.LastApplyAt, Is.EqualTo(lastApplyAt));
+        }
     }
 
     [Test]

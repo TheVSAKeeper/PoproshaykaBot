@@ -9,9 +9,10 @@ public sealed class StreamStatusWatchdogTests
     public void SetUp()
     {
         _stream = Substitute.For<IStreamStatus>();
-        _watchdog = new(_stream, TimeProvider.System, TimeSpan.FromMilliseconds(40),
-            NullLogger<StreamStatusWatchdog>.Instance);
+        _watchdog = new(_stream, TimeProvider.System, PollInterval, NullLogger<StreamStatusWatchdog>.Instance);
     }
+
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(40);
 
     private static readonly IProgress<string> NullProgress = new Progress<string>(_ => { });
 
@@ -19,14 +20,10 @@ public sealed class StreamStatusWatchdogTests
     private StreamStatusWatchdog _watchdog = null!;
 
     [Test]
-    public void StartStop_DoesNotLeakLoopTask()
+    public async Task StartStop_DoesNotLeakLoopTask()
     {
-        Assert.DoesNotThrowAsync(async () =>
-        {
-            await _watchdog.StartAsync(NullProgress, CancellationToken.None);
-            await Task.Delay(100);
-            await _watchdog.StopAsync(NullProgress, CancellationToken.None);
-        });
+        await _watchdog.StartAsync(NullProgress, CancellationToken.None);
+        await _watchdog.StopAsync(NullProgress, CancellationToken.None);
     }
 
     [Test]
@@ -49,14 +46,32 @@ public sealed class StreamStatusWatchdogTests
     }
 
     [Test]
-    public async Task RunLoop_SkipsRefreshWhenOffline()
+    public async Task RunLoop_SkipsRefreshWhenOffline_WhileStillTicking()
     {
-        _stream.CurrentStatus.Returns(StreamStatus.Offline);
+        var firstOnlineRefresh = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var refreshCount = 0;
+
+        _stream.CurrentStatus.Returns(StreamStatus.Online);
+        _stream.RefreshLiveSnapshotAsync()
+            .Returns(_ =>
+            {
+                Interlocked.Increment(ref refreshCount);
+                firstOnlineRefresh.TrySetResult();
+                return Task.CompletedTask;
+            });
 
         await _watchdog.StartAsync(NullProgress, CancellationToken.None);
-        await Task.Delay(150);
+
+        await firstOnlineRefresh.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var snapshot = Volatile.Read(ref refreshCount);
+
+        _stream.CurrentStatus.Returns(StreamStatus.Offline);
+
+        await Task.Delay(PollInterval * 5);
+
         await _watchdog.StopAsync(NullProgress, CancellationToken.None);
 
-        await _stream.DidNotReceive().RefreshLiveSnapshotAsync();
+        Assert.That(Volatile.Read(ref refreshCount), Is.EqualTo(snapshot),
+            "После переключения на Offline loop обязан тикать вхолостую — RefreshLiveSnapshotAsync не должен вызываться");
     }
 }

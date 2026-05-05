@@ -98,7 +98,7 @@ public sealed class AppHostTests
     public async Task StartAsync_PassesProgressToComponents()
     {
         var reports = new List<string>();
-        var progress = new Progress<string>(reports.Add);
+        var progress = new SynchronousProgress<string>(reports.Add);
 
         var trace = new List<string>();
         var components = new IHostedComponent[]
@@ -108,8 +108,6 @@ public sealed class AppHostTests
 
         var host = new AppHost(components, NullLogger<AppHost>.Instance);
         await host.StartAsync(progress, CancellationToken.None);
-
-        await Task.Delay(50);
 
         Assert.That(reports, Does.Contain("only"));
     }
@@ -149,6 +147,14 @@ public sealed class AppHostTests
         await host.StartAsync(CancellationToken.None);
 
         Assert.That(trace, Is.EqualTo(["start:a"]));
+    }
+
+    private sealed class SynchronousProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value)
+        {
+            handler(value);
+        }
     }
 
     private sealed class RecordingComponent(string name, int order, List<string> trace) : IHostedComponent

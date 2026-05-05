@@ -118,9 +118,12 @@ public sealed class TwitchOAuthServiceTests
         Assert.That(token, Is.Null);
 
         var bot = _accountsStore.LoadBot();
-        Assert.That(bot.AccessToken, Is.Empty);
-        Assert.That(bot.RefreshToken, Is.Empty);
-        Assert.That(bot.AccessTokenExpiresAt, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(bot.AccessToken, Is.Empty);
+            Assert.That(bot.RefreshToken, Is.Empty);
+            Assert.That(bot.AccessTokenExpiresAt, Is.Null);
+        }
 
         await _eventBus.Received(1)
             .PublishAsync(Arg.Is<BotConnectionStatusUpdated>(e => e.Message.Contains("повторная авторизация")),
@@ -131,9 +134,12 @@ public sealed class TwitchOAuthServiceTests
 
         var second = await _service.GetAccessTokenAsync(TwitchOAuthRole.Bot);
 
-        Assert.That(second, Is.Null);
-        Assert.That(_handler.Requests.Count, Is.EqualTo(requestsAfterFirst),
-            "Повторный GetAccessTokenAsync не должен снова идти в Twitch — токены очищены");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(second, Is.Null);
+            Assert.That(_handler.Requests.Count, Is.EqualTo(requestsAfterFirst),
+                "Повторный GetAccessTokenAsync не должен снова идти в Twitch — токены очищены");
+        }
     }
 
     [Test]
@@ -150,8 +156,11 @@ public sealed class TwitchOAuthServiceTests
                 "stale-refresh"));
 
         var bot = _accountsStore.LoadBot();
-        Assert.That(bot.AccessToken, Is.Empty);
-        Assert.That(bot.RefreshToken, Is.Empty);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(bot.AccessToken, Is.Empty);
+            Assert.That(bot.RefreshToken, Is.Empty);
+        }
     }
 
     [Test]

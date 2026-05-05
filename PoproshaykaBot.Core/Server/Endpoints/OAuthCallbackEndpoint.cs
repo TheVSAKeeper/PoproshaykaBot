@@ -31,7 +31,7 @@ internal sealed class OAuthCallbackEndpoint(ITwitchOAuthService twitchOAuthServi
             }
 
             twitchOAuthService.SetAuthError(new InvalidOperationException($"OAuth ошибка: {error}"));
-            var html = string.Format(ErrorHtmlTemplate, HtmlEncoder.Default.Encode(error));
+            var html = ErrorHtmlTemplate.Replace("{0}", HtmlEncoder.Default.Encode(error), StringComparison.Ordinal);
             return Results.Content(html, "text/html; charset=utf-8");
         });
     }

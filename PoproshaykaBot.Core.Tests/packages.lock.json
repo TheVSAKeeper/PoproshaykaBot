@@ -2,6 +2,15 @@
   "version": 1,
   "dependencies": {
     "net8.0-windows7.0": {
+      "Microsoft.AspNetCore.TestHost": {
+        "type": "Direct",
+        "requested": "[8.0.26, )",
+        "resolved": "8.0.26",
+        "contentHash": "IisB39TXuanDkmFpNKK7DSpwFJ2eQq1uL5pMEp3owHu8bMX7YP6bs+y2q7hLd9hQH3LQgLKwV9/ALp4IQaBlbg==",
+        "dependencies": {
+          "System.IO.Pipelines": "8.0.0"
+        }
+      },
       "Microsoft.NET.Test.Sdk": {
         "type": "Direct",
         "requested": "[18.4.0, )",
@@ -368,6 +377,11 @@
           "Microsoft.Win32.SystemEvents": "8.0.0"
         }
       },
+      "System.IO.Pipelines": {
+        "type": "Transitive",
+        "resolved": "8.0.0",
+        "contentHash": "FHNOatmUq0sqJOkTx+UF/9YK1f180cnW5FVqnQMvYUN0elp6wFzbtPSiqbo1/ru8ICp43JM1i7kKkk6GsNGHlA=="
+      },
       "System.Reflection.Metadata": {
         "type": "Transitive",
         "resolved": "8.0.0",
@@ -409,7 +423,7 @@
           "Microsoft.Extensions.Logging.Console": "[8.0.0, )",
           "Microsoft.Extensions.Logging.Debug": "[8.0.0, )",
           "Microsoft.Web.WebView2": "[1.0.3650.58, )",
-          "PoproshaykaBot.Core": "[3.1.0, )",
+          "PoproshaykaBot.Core": "[3.1.0.1, )",
           "Serilog.Extensions.Logging": "[8.0.0, )",
           "Serilog.Sinks.Console": "[6.1.1, )",
           "Serilog.Sinks.Debug": "[3.0.0, )",
