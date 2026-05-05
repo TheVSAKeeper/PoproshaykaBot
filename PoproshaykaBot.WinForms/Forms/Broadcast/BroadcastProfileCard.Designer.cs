@@ -141,7 +141,6 @@
             //
             _activeBadge.Anchor = AnchorStyles.Left;
             _activeBadge.AutoSize = true;
-            _activeBadge.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             _activeBadge.ForeColor = Color.SeaGreen;
             _activeBadge.Margin = new Padding(0, 0, 4, 0);
             _activeBadge.Name = "_activeBadge";
@@ -153,6 +152,7 @@
             _nameLabel.AutoEllipsis = true;
             _nameLabel.AutoSize = false;
             _nameLabel.Dock = DockStyle.Fill;
+            _nameLabel.Height = 22;
             _nameLabel.Margin = new Padding(0);
             _nameLabel.Name = "_nameLabel";
             _nameLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -172,6 +172,7 @@
             _titleLabel.AutoSize = false;
             _titleLabel.Dock = DockStyle.Fill;
             _titleLabel.ForeColor = Color.DimGray;
+            _titleLabel.Height = 18;
             _titleLabel.Margin = new Padding(0, 0, 0, 1);
             _titleLabel.Name = "_titleLabel";
             _titleLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -183,6 +184,7 @@
             _metaLabel.AutoSize = false;
             _metaLabel.Dock = DockStyle.Fill;
             _metaLabel.ForeColor = Color.Gray;
+            _metaLabel.Height = 18;
             _metaLabel.Margin = new Padding(0, 0, 0, 1);
             _metaLabel.Name = "_metaLabel";
             _metaLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -194,6 +196,7 @@
             _driftLabel.AutoSize = false;
             _driftLabel.Dock = DockStyle.Fill;
             _driftLabel.ForeColor = Color.DarkOrange;
+            _driftLabel.Height = 18;
             _driftLabel.Margin = new Padding(0);
             _driftLabel.Name = "_driftLabel";
             _driftLabel.Text = "⚠ Стрим изменён вручную";
@@ -206,6 +209,7 @@
             _applyingLabel.AutoSize = false;
             _applyingLabel.Dock = DockStyle.Fill;
             _applyingLabel.ForeColor = Color.SteelBlue;
+            _applyingLabel.Height = 18;
             _applyingLabel.Margin = new Padding(0);
             _applyingLabel.Name = "_applyingLabel";
             _applyingLabel.Text = "⏳ Применяется…";

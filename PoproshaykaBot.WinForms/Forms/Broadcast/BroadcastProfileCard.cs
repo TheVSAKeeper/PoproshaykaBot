@@ -1,27 +1,16 @@
 ﻿using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Forms.Broadcast;
 
 public partial class BroadcastProfileCard : UserControl
 {
-    private const int LabelHeight = 18;
-    private const int NameRowHeight = 22;
+    private bool _initialized;
 
     public BroadcastProfileCard()
     {
         InitializeComponent();
-
-        _nameLabel.Font = new(Font.FontFamily, Font.SizeInPoints + 1, FontStyle.Bold);
-        _activeBadge.Font = new(Font, FontStyle.Bold);
-        _numberBadge.Font = new(Font, FontStyle.Bold);
-        _titleLabel.Font = new(Font, FontStyle.Italic);
-
-        _nameLabel.Height = NameRowHeight;
-        _titleLabel.Height = LabelHeight;
-        _metaLabel.Height = LabelHeight;
-        _driftLabel.Height = LabelHeight;
-        _applyingLabel.Height = LabelHeight;
 
         _applyMenuItem.Click += (_, e) => ApplyRequested?.Invoke(this, e);
         _editMenuItem.Click += (_, e) => EditRequested?.Invoke(this, e);
@@ -112,6 +101,28 @@ public partial class BroadcastProfileCard : UserControl
     {
         _applyingLabel.Visible = inFlight;
         _applyMenuItem.Enabled = !inFlight;
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        if (_initialized)
+        {
+            return;
+        }
+
+        if (this.IsInDesignMode())
+        {
+            return;
+        }
+
+        _initialized = true;
+
+        _nameLabel.Font = new(Font.FontFamily, Font.SizeInPoints + 1, FontStyle.Bold);
+        _activeBadge.Font = new(Font, FontStyle.Bold);
+        _numberBadge.Font = new(Font, FontStyle.Bold);
+        _titleLabel.Font = new(Font, FontStyle.Italic);
     }
 
     private void OnCardDoubleClick(object? sender, EventArgs e)
