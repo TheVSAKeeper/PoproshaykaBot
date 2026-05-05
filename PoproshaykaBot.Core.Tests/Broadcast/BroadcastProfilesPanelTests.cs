@@ -39,30 +39,42 @@ public class BroadcastProfilesPanelTests
     [Test]
     public void TitleMatches_NoPlaceholder_LiteralEqualityWins()
     {
-        Assert.That(BroadcastProfilesPanel.TitleMatches("Просто стрим", "Просто стрим"), Is.True);
-        Assert.That(BroadcastProfilesPanel.TitleMatches("Просто стрим", "Другое"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(BroadcastProfileStreamComparer.TitleMatches("Просто стрим", "Просто стрим"), Is.True);
+            Assert.That(BroadcastProfileStreamComparer.TitleMatches("Просто стрим", "Другое"), Is.False);
+        }
     }
 
     [Test]
     public void TitleMatches_WithPlaceholder_AnyDigitsAccepted()
     {
-        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Серия #14"), Is.True);
-        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Серия #1"), Is.True);
-        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Серия #999"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(BroadcastProfileStreamComparer.TitleMatches("Серия #{n}", "Серия #14"), Is.True);
+            Assert.That(BroadcastProfileStreamComparer.TitleMatches("Серия #{n}", "Серия #1"), Is.True);
+            Assert.That(BroadcastProfileStreamComparer.TitleMatches("Серия #{n}", "Серия #999"), Is.True);
+        }
     }
 
     [Test]
     public void TitleMatches_WithPlaceholder_NonDigitsRejected()
     {
-        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Серия #abc"), Is.False);
-        Assert.That(BroadcastProfilesPanel.TitleMatches("Серия #{n}", "Другая #14"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(BroadcastProfileStreamComparer.TitleMatches("Серия #{n}", "Серия #abc"), Is.False);
+            Assert.That(BroadcastProfileStreamComparer.TitleMatches("Серия #{n}", "Другая #14"), Is.False);
+        }
     }
 
     [Test]
     public void TitleMatches_RegexSpecialCharsInProfileTitle_TreatedAsLiterals()
     {
-        Assert.That(BroadcastProfilesPanel.TitleMatches("a.b+c?d", "a.b+c?d"), Is.True);
-        Assert.That(BroadcastProfilesPanel.TitleMatches("a.b+c?d", "axbXcYd"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(BroadcastProfileStreamComparer.TitleMatches("a.b+c?d", "a.b+c?d"), Is.True);
+            Assert.That(BroadcastProfileStreamComparer.TitleMatches("a.b+c?d", "axbXcYd"), Is.False);
+        }
     }
 
     private static BroadcastProfilesManager CreateManager()

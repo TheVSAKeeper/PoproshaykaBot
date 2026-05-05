@@ -6,7 +6,6 @@ partial class PollsControlPanel
 
     private FlowLayoutPanel _cardsFlow;
     private Label _emptyLabel;
-    private System.Windows.Forms.Timer _statusResetTimer;
     private System.Windows.Forms.Timer _liveRefreshTimer;
 
     protected override void Dispose(bool disposing)
@@ -24,7 +23,6 @@ partial class PollsControlPanel
         components = new System.ComponentModel.Container();
         _cardsFlow = new FlowLayoutPanel();
         _emptyLabel = new Label();
-        _statusResetTimer = new System.Windows.Forms.Timer(components);
         _liveRefreshTimer = new System.Windows.Forms.Timer(components);
         SuspendLayout();
         //
@@ -51,11 +49,6 @@ partial class PollsControlPanel
         _emptyLabel.TabIndex = 1;
         _emptyLabel.Text = "Нет активного голосования. Нажмите «+ Создать опрос» или «Из профиля…».";
         _emptyLabel.TextAlign = ContentAlignment.MiddleCenter;
-        //
-        // _statusResetTimer
-        //
-        _statusResetTimer.Interval = 5000;
-        _statusResetTimer.Tick += OnStatusResetTimerTick;
         //
         // _liveRefreshTimer
         //

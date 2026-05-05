@@ -1,52 +1,31 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Core.Twitch.Helix;
+using PoproshaykaBot.WinForms.Controls;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Tiles;
-using System.Text.RegularExpressions;
-using Timer = System.Windows.Forms.Timer;
 
 namespace PoproshaykaBot.WinForms.Forms.Broadcast;
 
 public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderProvider
 {
-    private const int MinCardWidth = 220;
-    private const int CardMargin = 6;
-
-    private static readonly TimeSpan TitleMatchTimeout = TimeSpan.FromMilliseconds(100);
     private readonly List<IDisposable> _subs = [];
-    private readonly Timer _statusResetTimer;
+    private readonly ToolStripStatusIndicator _status = new();
+    private readonly BroadcastProfileCardsView _cards;
+    private BroadcastProfileActionCoordinator? _actions;
     private bool _initialized;
     private Guid? _activeProfileId;
     private ToolStripButton? _addButton;
     private ToolStripButton? _editCurrentButton;
-    private ToolStripLabel? _statusLabel;
 
     public BroadcastProfilesPanel()
     {
         InitializeComponent();
 
-        _statusResetTimer = new()
-        {
-            Interval = 5000,
-        };
-
-        _statusResetTimer.Tick += (_, _) =>
-        {
-            _statusResetTimer.Stop();
-
-            if (_statusLabel != null)
-            {
-                _statusLabel.Text = string.Empty;
-                _statusLabel.ForeColor = SystemColors.ControlText;
-            }
-        };
-
-        _cardsFlow.ClientSizeChanged += (_, _) => RecomputeCardWidths();
+        _cards = new(_cardsFlow, _emptyLabel);
     }
 
     [Inject]
@@ -93,50 +72,7 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
 
         _editCurrentButton.Click += OnEditCurrentClicked;
 
-        _statusLabel = new()
-        {
-            Text = string.Empty,
-            Margin = new(8, 0, 0, 0),
-        };
-
-        return [_addButton, _editCurrentButton, _statusLabel];
-    }
-
-    internal static bool ProfileDivergesFromStream(BroadcastProfile profile, StreamInfo? stream)
-    {
-        if (stream == null)
-        {
-            return false;
-        }
-
-        if (!TitleMatches(profile.Title?.Trim() ?? string.Empty, stream.Title?.Trim() ?? string.Empty))
-        {
-            return true;
-        }
-
-        if (!string.Equals(profile.GameId ?? string.Empty, stream.GameId ?? string.Empty, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    internal static bool TitleMatches(string profileTitle, string streamTitle)
-    {
-        const string Placeholder = "{n}";
-
-        if (!profileTitle.Contains(Placeholder, StringComparison.Ordinal))
-        {
-            return string.Equals(profileTitle, streamTitle, StringComparison.Ordinal);
-        }
-
-        var pattern = "^"
-                      + Regex.Escape(profileTitle)
-                          .Replace(Regex.Escape(Placeholder), "\\d+")
-                      + "$";
-
-        return Regex.IsMatch(streamTitle, pattern, RegexOptions.None, TitleMatchTimeout);
+        return [_addButton, _editCurrentButton, _status.Label];
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -156,6 +92,14 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         _initialized = true;
 
         _activeProfileId = Profiles.Load().LastAppliedProfileId;
+        _actions = new(Manager, Applier, ChannelsApi, BroadcasterId, Forms, _status, this);
+
+        _cards.ApplyRequested += (_, card) => _ = _actions.ApplyAsync(card);
+        _cards.EditRequested += (_, card) => _actions.Edit(card);
+        _cards.DuplicateRequested += (_, card) => _actions.Duplicate(card);
+        _cards.DeleteRequested += (_, card) => _actions.Delete(card);
+        _cards.IncrementNumberRequested += (_, card) => _ = _actions.AdjustNumberAsync(card, +1);
+        _cards.DecrementNumberRequested += (_, card) => _ = _actions.AdjustNumberAsync(card, -1);
 
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfilesChanged>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplied>(this, OnProfileApplied));
@@ -168,498 +112,69 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         _subs.Add(Bus.SubscribeOnUi<ChannelUpdated>(this, _ => ReloadCards()));
         _subs.DisposeOnClose(this);
 
-        Disposed += (_, _) => _statusResetTimer.Dispose();
+        Disposed += (_, _) => _status.Dispose();
 
         ReloadCards();
     }
 
     private void OnAddClicked(object? sender, EventArgs e)
     {
-        var profile = new BroadcastProfile { Name = $"Новый профиль {DateTime.Now:HH:mm:ss}" };
-
-        if (!EditProfile(profile))
-        {
-            return;
-        }
-
-        PersistEdited(profile);
+        _actions?.Add();
     }
 
     private async void OnEditCurrentClicked(object? sender, EventArgs e)
     {
-        if (_editCurrentButton != null)
+        if (_actions == null)
         {
-            _editCurrentButton.Enabled = false;
-        }
-
-        SetStatus("Загружаем текущие настройки…", false);
-
-        BroadcastProfile? draft;
-
-        try
-        {
-            var broadcasterId = await BroadcasterId.GetAsync(CancellationToken.None);
-
-            if (string.IsNullOrEmpty(broadcasterId))
-            {
-                SetStatus("✗ Не удалось определить канал", true);
-                return;
-            }
-
-            var info = await ChannelsApi.GetChannelInformationAsync(broadcasterId, CancellationToken.None);
-
-            if (info == null)
-            {
-                SetStatus("✗ Не удалось загрузить настройки канала", true);
-                return;
-            }
-
-            draft = new()
-            {
-                Id = Guid.Empty,
-                Name = "(текущие настройки)",
-                Title = info.Title ?? string.Empty,
-                GameId = info.GameId ?? string.Empty,
-                GameName = info.GameName ?? string.Empty,
-                BroadcasterLanguage = string.IsNullOrEmpty(info.BroadcasterLanguage) ? "ru" : info.BroadcasterLanguage,
-                Tags = info.Tags?.ToList() ?? [],
-            };
-
-            SetStatus(string.Empty, false);
-        }
-        catch (Exception ex)
-        {
-            SetStatus($"✗ {HelixErrorMessages.SafeMessage(ex)}", true);
             return;
         }
-        finally
+
+        await _actions.EditCurrentAsync(busy =>
         {
             if (_editCurrentButton != null)
             {
-                _editCurrentButton.Enabled = true;
+                _editCurrentButton.Enabled = !busy;
             }
-        }
-
-        using var dialog = Forms.Create<BroadcastProfileEditDialog>();
-        dialog.LoadFrom(draft);
-        dialog.ConfigureCurrentSettingsMode();
-
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-        {
-            return;
-        }
-
-        dialog.SaveTo(draft);
-
-        var newProfileName = dialog.NewProfileName;
-
-        if (string.IsNullOrEmpty(newProfileName))
-        {
-            SetStatus("⏳ Применяется текущая конфигурация…", false);
-            await Applier.ApplyAsync(draft, CancellationToken.None);
-            return;
-        }
-
-        var saved = new BroadcastProfile
-        {
-            Name = newProfileName,
-            Title = draft.Title,
-            GameId = draft.GameId,
-            GameName = draft.GameName,
-            BroadcasterLanguage = draft.BroadcasterLanguage,
-            Tags = draft.Tags.ToList(),
-        };
-
-        try
-        {
-            Manager.Upsert(saved);
-        }
-        catch (InvalidOperationException ex)
-        {
-            SetStatus(ex.Message, true);
-            return;
-        }
-
-        SetStatus($"⏳ Применяется «{saved.Name}»…", false);
-        await Manager.ApplyAsync(saved.Id, CancellationToken.None);
-    }
-
-    private void OnCardApplyRequested(object? sender, EventArgs e)
-    {
-        if (sender is BroadcastProfileCard card)
-        {
-            OnApplyRequested(card);
-        }
-    }
-
-    private void OnCardEditRequested(object? sender, EventArgs e)
-    {
-        if (sender is BroadcastProfileCard card)
-        {
-            OnEditRequested(card);
-        }
-    }
-
-    private void OnCardDuplicateRequested(object? sender, EventArgs e)
-    {
-        if (sender is BroadcastProfileCard card)
-        {
-            OnDuplicateRequested(card);
-        }
-    }
-
-    private void OnCardDeleteRequested(object? sender, EventArgs e)
-    {
-        if (sender is BroadcastProfileCard card)
-        {
-            OnDeleteRequested(card);
-        }
-    }
-
-    private async void OnCardIncrementNumberRequested(object? sender, EventArgs e)
-    {
-        if (sender is BroadcastProfileCard card)
-        {
-            await AdjustCurrentNumberAsync(card, +1);
-        }
-    }
-
-    private async void OnCardDecrementNumberRequested(object? sender, EventArgs e)
-    {
-        if (sender is BroadcastProfileCard card)
-        {
-            await AdjustCurrentNumberAsync(card, -1);
-        }
-    }
-
-    private static BroadcastProfile Clone(BroadcastProfile source)
-    {
-        return new()
-        {
-            Id = source.Id,
-            Name = source.Name,
-            Title = source.Title,
-            GameId = source.GameId,
-            GameName = source.GameName,
-            BroadcasterLanguage = source.BroadcasterLanguage,
-            Tags = source.Tags.ToList(),
-            CurrentNumber = source.CurrentNumber,
-            LastApplyAt = source.LastApplyAt,
-            LastAutoAdvanceAt = source.LastAutoAdvanceAt,
-        };
-    }
-
-    private async Task AdjustCurrentNumberAsync(BroadcastProfileCard card, int delta)
-    {
-        if (card.Profile == null)
-        {
-            return;
-        }
-
-        var newNumber = card.Profile.CurrentNumber + delta;
-        if (newNumber < 1)
-        {
-            return;
-        }
-
-        var wasActive = card.IsActive;
-        var profileId = card.Profile.Id;
-        var profileName = card.Profile.Name;
-
-        var copy = Clone(card.Profile);
-        copy.CurrentNumber = newNumber;
-
-        try
-        {
-            Manager.Upsert(copy);
-        }
-        catch (InvalidOperationException ex)
-        {
-            SetStatus(ex.Message, true);
-            return;
-        }
-
-        if (!wasActive)
-        {
-            return;
-        }
-
-        SetStatus($"⏳ Применяется «{profileName}»…", false);
-
-        try
-        {
-            await Manager.ApplyAsync(profileId, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            SetStatus($"✗ {HelixErrorMessages.SafeMessage(ex)}", true);
-        }
-    }
-
-    private bool EditProfile(BroadcastProfile profile)
-    {
-        using var dialog = Forms.Create<BroadcastProfileEditDialog>();
-        dialog.LoadFrom(profile);
-
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-        {
-            return false;
-        }
-
-        dialog.SaveTo(profile);
-        return true;
+        });
     }
 
     private void OnProfileApplied(BroadcastProfileApplied @event)
     {
         _activeProfileId = @event.Profile.Id;
-        ClearInFlightStates();
+        _cards.ClearInFlightStates();
         ReloadCards();
-        SetStatus($"✓ Применён профиль «{@event.Profile.Name}»", false);
+        _status.Show($"✓ Применён профиль «{@event.Profile.Name}»", false);
     }
 
     private void OnProfileApplyFailed(BroadcastProfileApplyFailed @event)
     {
-        ClearInFlightStates();
-        SetStatus($"✗ {@event.ErrorMessage}", true);
+        _cards.ClearInFlightStates();
+        _status.Show($"✗ {@event.ErrorMessage}", true);
     }
 
     private void OnChannelInformationPatched(ChannelInformationPatched @event)
     {
-        ClearInFlightStates();
-        SetStatus("✓ Применено", false);
+        _cards.ClearInFlightStates();
+        _status.Show("✓ Применено", false);
     }
 
     private void OnChannelInformationPatchFailed(ChannelInformationPatchFailed @event)
     {
-        ClearInFlightStates();
-        SetStatus($"✗ {@event.ErrorMessage}", true);
-    }
-
-    private void OnEditRequested(BroadcastProfileCard card)
-    {
-        var original = card.Profile;
-
-        if (original == null)
-        {
-            return;
-        }
-
-        var copy = Clone(original);
-
-        if (EditProfile(copy))
-        {
-            PersistEdited(copy);
-        }
-    }
-
-    private void PersistEdited(BroadcastProfile edited)
-    {
-        try
-        {
-            Manager.Upsert(edited);
-        }
-        catch (InvalidOperationException ex)
-        {
-            SetStatus(ex.Message, true);
-        }
-    }
-
-    private void OnDuplicateRequested(BroadcastProfileCard card)
-    {
-        if (card.Profile == null)
-        {
-            return;
-        }
-
-        var source = card.Profile;
-        var copy = new BroadcastProfile
-        {
-            Name = source.Name + " (копия)",
-            Title = source.Title,
-            GameId = source.GameId,
-            GameName = source.GameName,
-            BroadcasterLanguage = source.BroadcasterLanguage,
-            Tags = source.Tags.ToList(),
-        };
-
-        try
-        {
-            Manager.Upsert(copy);
-        }
-        catch (InvalidOperationException ex)
-        {
-            SetStatus(ex.Message, true);
-        }
-    }
-
-    private void OnDeleteRequested(BroadcastProfileCard card)
-    {
-        if (card.Profile == null)
-        {
-            return;
-        }
-
-        var result = MessageBox.Show(this,
-            $"Удалить профиль «{card.Profile.Name}»?",
-            "Удаление профиля",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question,
-            MessageBoxDefaultButton.Button2);
-
-        if (result != DialogResult.Yes)
-        {
-            return;
-        }
-
-        Manager.Remove(card.Profile.Id);
-    }
-
-    private async void OnApplyRequested(BroadcastProfileCard card)
-    {
-        if (card.Profile == null)
-        {
-            return;
-        }
-
-        card.SetApplyInFlight(true);
-        SetStatus($"⏳ Применяется «{card.Profile.Name}»…", false);
-
-        try
-        {
-            await Manager.ApplyAsync(card.Profile.Id, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            card.SetApplyInFlight(false);
-            SetStatus($"✗ {HelixErrorMessages.SafeMessage(ex)}", true);
-        }
+        _cards.ClearInFlightStates();
+        _status.Show($"✗ {@event.ErrorMessage}", true);
     }
 
     private void ReloadCards()
     {
-        _cardsFlow.SuspendLayout();
+        var profiles = Manager.GetAll();
+        var activeId = _activeProfileId ?? Profiles.Load().LastAppliedProfileId;
 
-        try
+        if (activeId.HasValue && profiles.All(p => p.Id != activeId.Value))
         {
-            foreach (var child in _cardsFlow.Controls.Cast<Control>().ToList())
-            {
-                if (child is not BroadcastProfileCard oldCard)
-                {
-                    continue;
-                }
-
-                DetachCard(oldCard);
-                oldCard.Dispose();
-            }
-
-            _cardsFlow.Controls.Clear();
-
-            var activeId = _activeProfileId ?? Profiles.Load().LastAppliedProfileId;
-            var currentStream = Stream.CurrentStream;
-
-            var profiles = Manager.GetAll();
-            if (activeId.HasValue && profiles.All(p => p.Id != activeId.Value))
-            {
-                _activeProfileId = null;
-                activeId = null;
-            }
-
-            var cardWidth = ComputeCardWidth();
-
-            foreach (var profile in profiles)
-            {
-                var isActive = activeId.HasValue && activeId.Value == profile.Id;
-                var hasDrift = isActive && ProfileDivergesFromStream(profile, currentStream);
-
-                var card = new BroadcastProfileCard { Width = cardWidth };
-                card.UpdateFrom(profile, isActive, hasDrift);
-                AttachCard(card);
-                _cardsFlow.Controls.Add(card);
-            }
-
-            var hasProfiles = _cardsFlow.Controls.Count > 0;
-            _emptyLabel.Visible = !hasProfiles;
-            _cardsFlow.Visible = hasProfiles;
-        }
-        finally
-        {
-            _cardsFlow.ResumeLayout();
-        }
-    }
-
-    private int ComputeCardWidth()
-    {
-        var available = _cardsFlow.ClientSize.Width - _cardsFlow.Padding.Horizontal;
-        if (available <= MinCardWidth)
-        {
-            return Math.Max(MinCardWidth, available);
+            _activeProfileId = null;
+            activeId = null;
         }
 
-        var columns = Math.Max(1, (available + CardMargin) / (MinCardWidth + CardMargin));
-        return Math.Max(MinCardWidth, (available - columns * CardMargin) / columns);
-    }
-
-    private void RecomputeCardWidths()
-    {
-        var width = ComputeCardWidth();
-
-        foreach (var control in _cardsFlow.Controls)
-        {
-            if (control is BroadcastProfileCard card)
-            {
-                card.Width = width;
-            }
-        }
-    }
-
-    private void AttachCard(BroadcastProfileCard card)
-    {
-        card.ApplyRequested += OnCardApplyRequested;
-        card.EditRequested += OnCardEditRequested;
-        card.IncrementNumberRequested += OnCardIncrementNumberRequested;
-        card.DecrementNumberRequested += OnCardDecrementNumberRequested;
-        card.DuplicateRequested += OnCardDuplicateRequested;
-        card.DeleteRequested += OnCardDeleteRequested;
-    }
-
-    private void DetachCard(BroadcastProfileCard card)
-    {
-        card.ApplyRequested -= OnCardApplyRequested;
-        card.EditRequested -= OnCardEditRequested;
-        card.IncrementNumberRequested -= OnCardIncrementNumberRequested;
-        card.DecrementNumberRequested -= OnCardDecrementNumberRequested;
-        card.DuplicateRequested -= OnCardDuplicateRequested;
-        card.DeleteRequested -= OnCardDeleteRequested;
-    }
-
-    private void ClearInFlightStates()
-    {
-        foreach (var control in _cardsFlow.Controls)
-        {
-            if (control is BroadcastProfileCard card)
-            {
-                card.SetApplyInFlight(false);
-            }
-        }
-    }
-
-    private void SetStatus(string text, bool isError)
-    {
-        if (_statusLabel != null)
-        {
-            _statusLabel.Text = text;
-            _statusLabel.ForeColor = isError ? Color.Firebrick : SystemColors.ControlText;
-        }
-
-        if (string.IsNullOrEmpty(text))
-        {
-            _statusResetTimer.Stop();
-        }
-        else
-        {
-            _statusResetTimer.Stop();
-            _statusResetTimer.Start();
-        }
+        _cards.Reload(profiles, activeId, Stream.CurrentStream);
     }
 }

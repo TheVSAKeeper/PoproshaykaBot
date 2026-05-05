@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Polling;
 using PoproshaykaBot.Core.Polls;
+using PoproshaykaBot.WinForms.Controls;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Tiles;
 
@@ -9,10 +10,10 @@ namespace PoproshaykaBot.WinForms.Forms.Polls;
 public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvider
 {
     private readonly List<IDisposable> _subs = [];
+    private readonly ToolStripStatusIndicator _status = new();
     private bool _initialized;
     private ToolStripButton? _adHocButton;
     private ToolStripButton? _fromProfileButton;
-    private ToolStripLabel? _statusLabel;
 
     public PollsControlPanel()
     {
@@ -54,13 +55,7 @@ public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvid
 
         _fromProfileButton.Click += OnFromProfileClicked;
 
-        _statusLabel = new()
-        {
-            Text = string.Empty,
-            Margin = new(8, 0, 0, 0),
-        };
-
-        return [_adHocButton, _fromProfileButton, _statusLabel];
+        return [_adHocButton, _fromProfileButton, _status.Label];
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -81,7 +76,7 @@ public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvid
 
         _subs.Add(Bus.SubscribeOnUi<PollStarted>(this, _ =>
         {
-            SetStatus(string.Empty, false);
+            _status.Clear();
             RebuildSnapshotCard();
         }));
 
@@ -94,6 +89,8 @@ public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvid
 
         _liveRefreshTimer.Start();
         RebuildSnapshotCard();
+
+        Disposed += (_, _) => _status.Dispose();
     }
 
     private void OnAdHocClicked(object? sender, EventArgs e)
@@ -163,12 +160,12 @@ public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvid
 
             if (!ok)
             {
-                SetStatus("✗ Не удалось завершить голосование", true);
+                _status.Show("✗ Не удалось завершить голосование", true);
             }
         }
         catch (Exception ex)
         {
-            SetStatus($"✗ {ex.Message}", true);
+            _status.Show($"✗ {ex.Message}", true);
         }
     }
 
@@ -190,19 +187,6 @@ public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvid
         }
     }
 
-    private void OnStatusResetTimerTick(object? sender, EventArgs e)
-    {
-        _statusResetTimer.Stop();
-
-        if (_statusLabel == null)
-        {
-            return;
-        }
-
-        _statusLabel.Text = string.Empty;
-        _statusLabel.ForeColor = SystemColors.ControlText;
-    }
-
     private void OnCardsFlowClientSizeChanged(object? sender, EventArgs e)
     {
         ResizeCardsToFlow();
@@ -210,7 +194,7 @@ public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvid
 
     private async Task StartPollAsync(PollProfile profile)
     {
-        SetStatus("Запуск голосования…", false);
+        _status.Show("Запуск голосования…", false);
 
         try
         {
@@ -218,13 +202,13 @@ public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvid
         }
         catch (Exception ex)
         {
-            SetStatus($"✗ {ex.Message}", true);
+            _status.Show($"✗ {ex.Message}", true);
         }
     }
 
     private void OnPollStartFailed(PollStartFailed @event)
     {
-        SetStatus($"✗ {@event.SafeMessage}", true);
+        _status.Show($"✗ {@event.SafeMessage}", true);
     }
 
     private void RebuildSnapshotCard()
@@ -319,24 +303,5 @@ public partial class PollsControlPanel : UserControl, IDashboardTileHeaderProvid
     private void DetachCard(ActivePollCard card)
     {
         card.StopRequested -= OnCardStopRequested;
-    }
-
-    private void SetStatus(string text, bool isError)
-    {
-        if (_statusLabel != null)
-        {
-            _statusLabel.Text = text;
-            _statusLabel.ForeColor = isError ? Color.Firebrick : SystemColors.ControlText;
-        }
-
-        if (string.IsNullOrEmpty(text))
-        {
-            _statusResetTimer.Stop();
-        }
-        else
-        {
-            _statusResetTimer.Stop();
-            _statusResetTimer.Start();
-        }
     }
 }
