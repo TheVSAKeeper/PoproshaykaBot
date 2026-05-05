@@ -8,6 +8,9 @@ public static class ServerServiceCollectionExtensions
 {
     public static IServiceCollection AddHttpServer(this IServiceCollection services)
     {
+        services.AddSingleton<SseChannelOptions>();
+        services.AddSingleton<SseDropMetrics>();
+        services.AddSingleton<SseClientRegistry>();
         services.AddSingleton<SseService>();
         services.AddSingleton<KestrelHttpServer>();
         services.AddSingleton<AppLifetime>();

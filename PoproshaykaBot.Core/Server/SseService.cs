@@ -10,22 +10,15 @@ using System.Threading.Channels;
 
 namespace PoproshaykaBot.Core.Server;
 
-public sealed class SseService(SettingsManager settingsManager, ILogger<SseService> logger) : IAsyncDisposable
+public sealed class SseService : IAsyncDisposable
 {
-    private const int GlobalChannelCapacity = 512;
-    private const int ClientChannelCapacity = 256;
-    private const int DropLogThrottle = 50;
-    private const int DropNotifyThreshold = 10;
+    private readonly SettingsManager _settingsManager;
+    private readonly ILogger<SseService> _logger;
+    private readonly SseChannelOptions _options;
+    private readonly SseClientRegistry _registry;
+    private readonly SseDropMetrics _metrics;
 
-    private readonly Dictionary<HttpResponse, ClientPipeline> _clients = new();
-    private readonly object _clientsLock = new();
-
-    private readonly Channel<SseEnvelope> _messageChannel = Channel.CreateBounded<SseEnvelope>(new BoundedChannelOptions(GlobalChannelCapacity)
-    {
-        SingleReader = true,
-        FullMode = BoundedChannelFullMode.DropOldest,
-    });
-
+    private readonly Channel<SseEnvelope> _messageChannel;
     private readonly object _lifecycleLock = new();
     private readonly object _enqueueLock = new();
 
@@ -33,39 +26,57 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
     private Task? _broadcastTask;
     private Task? _keepAliveTask;
     private bool _isRunning;
-    private long _droppedMessageCount;
-    private long _clientDroppedMessageCount;
 
-    public long DroppedMessageCount => Interlocked.Read(ref _droppedMessageCount);
+    public SseService(
+        SettingsManager settingsManager,
+        ILogger<SseService> logger,
+        SseChannelOptions options,
+        SseClientRegistry registry,
+        SseDropMetrics metrics)
+    {
+        _settingsManager = settingsManager;
+        _logger = logger;
+        _options = options;
+        _registry = registry;
+        _metrics = metrics;
 
-    public long ClientDroppedMessageCount => Interlocked.Read(ref _clientDroppedMessageCount);
+        _messageChannel = Channel.CreateBounded<SseEnvelope>(new BoundedChannelOptions(_options.GlobalChannelCapacity)
+        {
+            SingleReader = true,
+            FullMode = BoundedChannelFullMode.DropOldest,
+        });
+    }
+
+    public long DroppedMessageCount => _metrics.GlobalDropCount;
+
+    public long ClientDroppedMessageCount => _metrics.ClientDropCount;
 
     public void Start()
     {
-        logger.LogDebug("Инициализация запуска сервиса SSE");
+        _logger.LogDebug("Инициализация запуска сервиса SSE");
 
         lock (_lifecycleLock)
         {
             if (_isRunning)
             {
-                logger.LogWarning("Сервис SSE уже запущен. Повторный запрос на запуск проигнорирован");
+                _logger.LogWarning("Сервис SSE уже запущен. Повторный запрос на запуск проигнорирован");
                 return;
             }
 
             _cts = new();
-            var keepAliveSeconds = Math.Max(5, settingsManager.Current.Twitch.Infrastructure.SseKeepAliveSeconds);
+            var keepAliveSeconds = Math.Max(5, _settingsManager.Current.Twitch.Infrastructure.SseKeepAliveSeconds);
 
             _keepAliveTask = Task.Run(() => KeepAliveLoopAsync(keepAliveSeconds, _cts.Token));
             _broadcastTask = Task.Run(() => BroadcastLoopAsync(_cts.Token));
 
             _isRunning = true;
-            logger.LogInformation("Сервис SSE успешно запущен. Интервал keep-alive: {KeepAliveSeconds} сек", keepAliveSeconds);
+            _logger.LogInformation("Сервис SSE успешно запущен. Интервал keep-alive: {KeepAliveSeconds} сек", keepAliveSeconds);
         }
     }
 
     public async Task StopAsync()
     {
-        logger.LogDebug("Остановка сервиса SSE");
+        _logger.LogDebug("Остановка сервиса SSE");
 
         CancellationTokenSource? cts;
         Task? broadcastTask;
@@ -94,13 +105,8 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         {
         }
 
-        List<ClientPipeline> pipelines;
-        lock (_clientsLock)
-        {
-            logger.LogInformation("Отключено {ClientCount} SSE клиентов при остановке сервиса", _clients.Count);
-            pipelines = _clients.Values.ToList();
-            _clients.Clear();
-        }
+        var pipelines = _registry.DrainAll();
+        _logger.LogInformation("Отключено {ClientCount} SSE клиентов при остановке сервиса", pipelines.Count);
 
         foreach (var pipeline in pipelines)
         {
@@ -118,23 +124,18 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
 
     public void RemoveClient(HttpResponse response)
     {
-        ClientPipeline? pipeline;
-
-        lock (_clientsLock)
+        if (!_registry.TryRemove(response, out var pipeline))
         {
-            if (!_clients.Remove(response, out pipeline))
-            {
-                return;
-            }
+            return;
         }
 
         pipeline.Channel.Writer.TryComplete();
-        logger.LogDebug("SSE клиент удалён по завершению соединения. Активных: {Count}", _clients.Count);
+        _logger.LogDebug("SSE клиент удалён по завершению соединения. Активных: {Count}", _registry.Count);
     }
 
     public void AddClient(HttpResponse response)
     {
-        logger.LogDebug("Попытка регистрации нового SSE клиента");
+        _logger.LogDebug("Попытка регистрации нового SSE клиента");
 
         CancellationToken token;
 
@@ -142,7 +143,7 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         {
             if (!_isRunning || _cts is null)
             {
-                logger.LogWarning("Попытка зарегистрировать SSE клиента до Start() сервиса. Подключение отклонено");
+                _logger.LogWarning("Попытка зарегистрировать SSE клиента до Start() сервиса. Подключение отклонено");
                 return;
             }
 
@@ -151,27 +152,21 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
 
         try
         {
-            var pipeline = new ClientPipeline(response, ClientChannelCapacity);
-            int clientCount;
+            var pipeline = new SseClientPipeline(response, _options.ClientChannelCapacity);
+            var clientCount = _registry.Add(response, pipeline);
+            pipeline.WriterTask = Task.Run(() => ClientWriterLoopAsync(pipeline, token));
 
-            lock (_clientsLock)
-            {
-                _clients[response] = pipeline;
-                clientCount = _clients.Count;
-                pipeline.WriterTask = Task.Run(() => ClientWriterLoopAsync(pipeline, token));
-            }
-
-            logger.LogInformation("Установлено новое SSE подключение. Всего активных клиентов: {ClientCount}", clientCount);
+            _logger.LogInformation("Установлено новое SSE подключение. Всего активных клиентов: {ClientCount}", clientCount);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка при установке нового SSE подключения");
+            _logger.LogError(ex, "Ошибка при установке нового SSE подключения");
         }
     }
 
     public void AddChatMessage(ChatMessageData chatMessage)
     {
-        logger.LogDebug("Подготовка нового сообщения чата для отправки в SSE");
+        _logger.LogDebug("Подготовка нового сообщения чата для отправки в SSE");
 
         try
         {
@@ -180,13 +175,13 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка сериализации или постановки в очередь сообщения чата");
+            _logger.LogError(ex, "Ошибка сериализации или постановки в очередь сообщения чата");
         }
     }
 
     public void ClearChat()
     {
-        logger.LogInformation("Инициация события очистки чата для всех SSE клиентов");
+        _logger.LogInformation("Инициация события очистки чата для всех SSE клиентов");
 
         try
         {
@@ -194,13 +189,13 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка постановки в очередь события очистки чата");
+            _logger.LogError(ex, "Ошибка постановки в очередь события очистки чата");
         }
     }
 
     public void NotifyChatSettingsChanged(ObsChatSettings settings)
     {
-        logger.LogDebug("Подготовка уведомления об изменении настроек чата");
+        _logger.LogDebug("Подготовка уведомления об изменении настроек чата");
 
         try
         {
@@ -208,17 +203,17 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
             var json = JsonSerializer.Serialize(cssSettings, ServerJsonOptions.Default);
 
             Enqueue(new("chat_settings_changed", json));
-            logger.LogInformation("Уведомление об изменении настроек чата поставлено в очередь на отправку");
+            _logger.LogInformation("Уведомление об изменении настроек чата поставлено в очередь на отправку");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка подготовки уведомления о настройках чата");
+            _logger.LogError(ex, "Ошибка подготовки уведомления о настройках чата");
         }
     }
 
     public async ValueTask DisposeAsync()
     {
-        logger.LogDebug("Освобождение ресурсов сервиса SSE (DisposeAsync)");
+        _logger.LogDebug("Освобождение ресурсов сервиса SSE (DisposeAsync)");
         await StopAsync();
         _cts?.Dispose();
     }
@@ -228,11 +223,11 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         bool willDrop;
         lock (_enqueueLock)
         {
-            willDrop = _messageChannel.Reader.Count >= GlobalChannelCapacity;
+            willDrop = _messageChannel.Reader.Count >= _options.GlobalChannelCapacity;
 
             if (!_messageChannel.Writer.TryWrite(envelope))
             {
-                logger.LogWarning("Не удалось записать сообщение в канал SSE. Очередь недоступна");
+                _logger.LogWarning("Не удалось записать сообщение в канал SSE. Очередь недоступна");
                 return;
             }
         }
@@ -242,12 +237,12 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
             return;
         }
 
-        var total = Interlocked.Increment(ref _droppedMessageCount);
+        var total = _metrics.IncrementGlobalDrops();
 
-        if (total == 1 || total % DropLogThrottle == 0)
+        if (total == 1 || total % _options.DropLogThrottle == 0)
         {
-            logger.LogWarning("SSE очередь переполнена ({Capacity}), теряем старые сообщения. Всего потерь: {Total}",
-                GlobalChannelCapacity,
+            _logger.LogWarning("SSE очередь переполнена ({Capacity}), теряем старые сообщения. Всего потерь: {Total}",
+                _options.GlobalChannelCapacity,
                 total);
         }
     }
@@ -265,11 +260,11 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         }
         catch (OperationCanceledException)
         {
-            logger.LogDebug("Цикл keep-alive остановлен штатно");
+            _logger.LogDebug("Цикл keep-alive остановлен штатно");
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Неожиданная ошибка в цикле keep-alive SSE");
+            _logger.LogWarning(ex, "Неожиданная ошибка в цикле keep-alive SSE");
         }
     }
 
@@ -282,11 +277,11 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         {
             await foreach (var envelope in _messageChannel.Reader.ReadAllAsync(token))
             {
-                var currentGlobalDrops = Interlocked.Read(ref _droppedMessageCount);
-                var currentClientDrops = Interlocked.Read(ref _clientDroppedMessageCount);
+                var currentGlobalDrops = _metrics.GlobalDropCount;
+                var currentClientDrops = _metrics.ClientDropCount;
 
-                if (currentGlobalDrops - lastNotifiedGlobalDrops >= DropNotifyThreshold
-                    || currentClientDrops - lastNotifiedClientDrops >= DropNotifyThreshold)
+                if (currentGlobalDrops - lastNotifiedGlobalDrops >= _options.DropNotifyThreshold
+                    || currentClientDrops - lastNotifiedClientDrops >= _options.DropNotifyThreshold)
                 {
                     var droppedJson = JsonSerializer.Serialize(new DroppedNotice(currentGlobalDrops, currentClientDrops),
                         ServerJsonOptions.Default);
@@ -303,30 +298,26 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         }
         catch (OperationCanceledException)
         {
-            logger.LogDebug("Цикл рассылки SSE остановлен штатно");
+            _logger.LogDebug("Цикл рассылки SSE остановлен штатно");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Критическая ошибка в фоновом цикле рассылки SSE");
+            _logger.LogError(ex, "Критическая ошибка в фоновом цикле рассылки SSE");
         }
     }
 
     private void BroadcastBuffer(byte[] buffer)
     {
-        List<ClientPipeline> snapshot;
-        lock (_clientsLock)
-        {
-            if (_clients.Count == 0)
-            {
-                return;
-            }
+        var snapshot = _registry.Snapshot();
 
-            snapshot = _clients.Values.ToList();
+        if (snapshot.Count == 0)
+        {
+            return;
         }
 
         foreach (var pipeline in snapshot)
         {
-            var willDrop = pipeline.Channel.Reader.Count >= ClientChannelCapacity;
+            var willDrop = pipeline.Channel.Reader.Count >= _options.ClientChannelCapacity;
 
             if (!pipeline.Channel.Writer.TryWrite(buffer))
             {
@@ -338,18 +329,18 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
                 continue;
             }
 
-            var total = Interlocked.Increment(ref _clientDroppedMessageCount);
+            var total = _metrics.IncrementClientDrops();
 
-            if (total == 1 || total % DropLogThrottle == 0)
+            if (total == 1 || total % _options.DropLogThrottle == 0)
             {
-                logger.LogWarning("Per-client SSE очередь переполнена ({Capacity}). Всего потерь по клиентам: {Total}",
-                    ClientChannelCapacity,
+                _logger.LogWarning("Per-client SSE очередь переполнена ({Capacity}). Всего потерь по клиентам: {Total}",
+                    _options.ClientChannelCapacity,
                     total);
             }
         }
     }
 
-    private async Task ClientWriterLoopAsync(ClientPipeline pipeline, CancellationToken token)
+    private async Task ClientWriterLoopAsync(SseClientPipeline pipeline, CancellationToken token)
     {
         try
         {
@@ -366,7 +357,7 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
                 }
                 catch (Exception ex)
                 {
-                    logger.LogDebug(ex, "Сбой записи в поток SSE. Клиент будет удалён");
+                    _logger.LogDebug(ex, "Сбой записи в поток SSE. Клиент будет удалён");
                     break;
                 }
             }
@@ -376,7 +367,7 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Неожиданная ошибка в цикле записи SSE-клиента");
+            _logger.LogWarning(ex, "Неожиданная ошибка в цикле записи SSE-клиента");
         }
         finally
         {
@@ -385,22 +376,4 @@ public sealed class SseService(SettingsManager settingsManager, ILogger<SseServi
     }
 
     private sealed record DroppedNotice(long Count, long ClientCount);
-
-    private sealed class ClientPipeline
-    {
-        public ClientPipeline(HttpResponse response, int capacity)
-        {
-            Response = response;
-            Channel = System.Threading.Channels.Channel.CreateBounded<byte[]>(new BoundedChannelOptions(capacity)
-            {
-                FullMode = BoundedChannelFullMode.DropOldest,
-                SingleReader = true,
-                SingleWriter = false,
-            });
-        }
-
-        public HttpResponse Response { get; }
-        public Channel<byte[]> Channel { get; }
-        public Task? WriterTask { get; set; }
-    }
 }

@@ -19,7 +19,7 @@ public sealed class SseServiceTests
 
         _settingsManager.Current.Returns(_settings);
         _logger = new();
-        _service = new(_settingsManager, _logger);
+        _service = new(_settingsManager, _logger, new(), new(), new());
     }
 
     [TearDown]
