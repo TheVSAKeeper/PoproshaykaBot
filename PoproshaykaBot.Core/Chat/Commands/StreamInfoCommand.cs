@@ -20,7 +20,7 @@ public sealed class StreamInfoCommand(IStreamStatus streamStatusManager) : IChat
         if (info == null)
         {
             var text = streamStatusManager.CurrentStatus == StreamStatus.Online
-                ? "Стрим онлайн, но детали временно недоступны"
+                ? "Стрим онлайн, детали загружаются"
                 : "Сейчас стрим офлайн";
 
             return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
