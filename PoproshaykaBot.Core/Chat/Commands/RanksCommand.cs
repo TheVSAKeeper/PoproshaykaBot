@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Settings;
+﻿using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
@@ -13,7 +13,7 @@ public sealed class RanksCommand(SettingsManager settingsManager) : IChatCommand
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var ranks = settingsManager.Current.Ranks.Ranks
             .OrderByDescending(x => x.MinMessages)
@@ -21,12 +21,12 @@ public sealed class RanksCommand(SettingsManager settingsManager) : IChatCommand
 
         if (ranks.Count == 0)
         {
-            return OutgoingMessage.Reply("Ранги не настроены", context.MessageId);
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply("Ранги не настроены", context.MessageId));
         }
 
         var parts = ranks.Select(x => $"{x.Emoji} {x.DisplayName} ({FormattingUtils.FormatNumber(x.MinMessages)})");
         var text = "🏆 Шахматная лестница: " + string.Join(", ", parts);
 
-        return OutgoingMessage.Normal(text);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Normal(text));
     }
 }

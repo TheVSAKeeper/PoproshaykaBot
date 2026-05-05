@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Settings;
+﻿using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
@@ -13,9 +13,9 @@ public sealed class DonateCommand(SettingsManager settingsManager) : IChatComman
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var text = settingsManager.Current.Twitch.Messages.DonateCommandMessage;
-        return OutgoingMessage.Normal(text);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Normal(text));
     }
 }

@@ -14,7 +14,7 @@ public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRa
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var count = 5;
 
@@ -27,7 +27,7 @@ public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRa
 
         if (topUsers.Count == 0)
         {
-            return OutgoingMessage.Normal("Пока нет данных о пользователях");
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Normal("Пока нет данных о пользователях"));
         }
 
         var parts = topUsers
@@ -39,6 +39,6 @@ public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRa
             .ToList();
 
         var text = $"🏆 Топ-{topUsers.Count}: " + string.Join(", ", parts);
-        return OutgoingMessage.Normal(text);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Normal(text));
     }
 }

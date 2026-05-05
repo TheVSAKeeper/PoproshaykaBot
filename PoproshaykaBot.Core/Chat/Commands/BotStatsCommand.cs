@@ -13,13 +13,13 @@ public sealed class BotStatsCommand(IBotStatisticsRepository statistics) : IChat
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var botStats = statistics.GetSnapshot();
         var uptime = FormattingUtils.FormatTimeSpan(botStats.TotalUptime);
         var totalMessages = FormattingUtils.FormatNumber(botStats.TotalMessagesProcessed);
         var startTime = FormattingUtils.FormatDateTime(botStats.BotStartTime);
         var text = $"📊 Бот: {totalMessages} сообщений | Аптайм: {uptime} | Старт: {startTime}";
-        return OutgoingMessage.Normal(text);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Normal(text));
     }
 }

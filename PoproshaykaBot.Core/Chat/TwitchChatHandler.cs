@@ -74,7 +74,7 @@ public sealed class TwitchChatHandler :
         return Task.CompletedTask;
     }
 
-    public Task HandleAsync(RawChatMessageReceived @event, CancellationToken cancellationToken)
+    public async Task HandleAsync(RawChatMessageReceived @event, CancellationToken cancellationToken)
     {
         var chatMessage = @event.Message;
 
@@ -127,7 +127,8 @@ public sealed class TwitchChatHandler :
             IsModerator = chatMessage.IsModerator,
         };
 
-        var isCommand = _commandProcessor.TryProcess(chatMessage.Message, context, out var response);
+        var commandResult = await _commandProcessor.TryProcessAsync(chatMessage.Message, context, cancellationToken);
+        var response = commandResult.Response;
 
         if (settings.Messages.WelcomeEnabled && isFirstSeen)
         {
@@ -135,11 +136,11 @@ public sealed class TwitchChatHandler :
 
             if (!string.IsNullOrWhiteSpace(welcomeMessage))
             {
-                if (isCommand && response != null)
+                if (commandResult.IsCommand && response != null)
                 {
                     response = response with { Text = $"{welcomeMessage} {response.Text}" };
                 }
-                else if (!isCommand)
+                else if (!commandResult.IsCommand)
                 {
                     _messenger.Reply(chatMessage.Id, welcomeMessage);
                 }
@@ -162,8 +163,6 @@ public sealed class TwitchChatHandler :
         }
 
         _logger.LogDebug("[Бот] {DisplayName}: {Message}", chatMessage.DisplayName, chatMessage.Message);
-
-        return Task.CompletedTask;
     }
 
     private static UserStatus GetUserStatusFlags(ChatMessage chatMessage)

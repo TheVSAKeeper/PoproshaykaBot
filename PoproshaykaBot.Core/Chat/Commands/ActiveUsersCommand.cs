@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.Core.Chat.Commands;
+﻿namespace PoproshaykaBot.Core.Chat.Commands;
 
 public sealed class ActiveUsersCommand(AudienceTracker audienceTracker) : IChatCommand
 {
@@ -11,9 +11,9 @@ public sealed class ActiveUsersCommand(AudienceTracker audienceTracker) : IChatC
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var text = audienceTracker.BuildActiveUsersSummary();
-        return OutgoingMessage.Normal(text);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Normal(text));
     }
 }

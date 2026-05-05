@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
@@ -14,7 +14,7 @@ public sealed class ProfileCommand(BroadcastProfilesManager manager, ILogger<Pro
         return context.IsBroadcaster || context.IsModerator;
     }
 
-    public OutgoingMessage? Execute(CommandContext context)
+    public async Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         if (context.Arguments.Count == 0)
         {
@@ -29,21 +29,15 @@ public sealed class ProfileCommand(BroadcastProfilesManager manager, ILogger<Pro
             return OutgoingMessage.Reply($"""Профиль "{name}" не найден""", context.MessageId);
         }
 
-        var resolvedId = profile.Id;
-        var resolvedName = profile.Name;
-
-        _ = Task.Run(async () =>
+        try
         {
-            try
-            {
-                await manager.ApplyAsync(resolvedId, CancellationToken.None);
-            }
-            catch (Exception exception)
-            {
-                logger.LogWarning(exception, "Не удалось применить профиль '{Name}' из чата", resolvedName);
-            }
-        });
-
-        return OutgoingMessage.Reply($"Применяю профиль: {resolvedName}", context.MessageId);
+            await manager.ApplyAsync(profile.Id, cancellationToken);
+            return OutgoingMessage.Reply($"Профиль применён: {profile.Name}", context.MessageId);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Не удалось применить профиль '{Name}' из чата", profile.Name);
+            return OutgoingMessage.Reply($"Не удалось применить профиль: {profile.Name}", context.MessageId);
+        }
     }
 }

@@ -14,7 +14,7 @@ public sealed class MyProfileCommand(IUserStatisticsRepository statistics, UserR
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var targetUserId = context.UserId;
         var targetDisplayName = "твоя";
@@ -30,7 +30,7 @@ public sealed class MyProfileCommand(IUserStatisticsRepository statistics, UserR
             }
             else
             {
-                return OutgoingMessage.Reply($"Пользователь {username} не найден", context.MessageId);
+                return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply($"Пользователь {username} не найден", context.MessageId));
             }
         }
 
@@ -39,7 +39,7 @@ public sealed class MyProfileCommand(IUserStatisticsRepository statistics, UserR
         if (userStats == null)
         {
             var msg = targetUserId == context.UserId ? "У тебя пока нет статистики" : "У этого пользователя пока нет статистики";
-            return OutgoingMessage.Reply(msg, context.MessageId);
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(msg, context.MessageId));
         }
 
         var messageCount = FormattingUtils.FormatNumber(userStats.TotalMessageCount);
@@ -48,6 +48,6 @@ public sealed class MyProfileCommand(IUserStatisticsRepository statistics, UserR
         var rankDisplay = rankService.GetRankDisplay(userStats.TotalMessageCount);
 
         var text = $"👤 {targetDisplayName} {rankDisplay} | {messageCount} мсг | С нами с: {firstSeen} | В чате: {lastSeen}";
-        return OutgoingMessage.Reply(text, context.MessageId);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
     }
 }

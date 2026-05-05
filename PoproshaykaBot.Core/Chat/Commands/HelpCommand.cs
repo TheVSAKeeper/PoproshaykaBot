@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.Core.Chat.Commands;
+﻿namespace PoproshaykaBot.Core.Chat.Commands;
 
 public sealed class HelpCommand(Func<IReadOnlyCollection<IChatCommand>> getAllCommands) : IChatCommand
 {
@@ -11,7 +11,7 @@ public sealed class HelpCommand(Func<IReadOnlyCollection<IChatCommand>> getAllCo
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var allCommands = getAllCommands();
 
@@ -29,7 +29,7 @@ public sealed class HelpCommand(Func<IReadOnlyCollection<IChatCommand>> getAllCo
                     : string.Empty;
 
                 var text = $"❓ !{command.Canonical}: {command.Description}{aliases}";
-                return OutgoingMessage.Reply(text, context.MessageId);
+                return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
             }
         }
 
@@ -40,10 +40,10 @@ public sealed class HelpCommand(Func<IReadOnlyCollection<IChatCommand>> getAllCo
 
         if (commandNames.Count == 0)
         {
-            return OutgoingMessage.Reply("Команды недоступны", context.MessageId);
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply("Команды недоступны", context.MessageId));
         }
 
         var responseText = "📋 Команды: " + string.Join(", ", commandNames);
-        return OutgoingMessage.Reply(responseText, context.MessageId);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(responseText, context.MessageId));
     }
 }

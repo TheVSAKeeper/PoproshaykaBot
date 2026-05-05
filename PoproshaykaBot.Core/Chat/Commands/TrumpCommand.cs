@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Settings;
+﻿using PoproshaykaBot.Core.Settings;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
@@ -27,24 +27,7 @@ public sealed class TrumpCommand : IChatCommand
         return true;
     }
 
-    public OutgoingMessage? Execute(CommandContext context)
-    {
-        // TODO: Сделать асинхронные IChatCommand
-        return ExecuteAsync(context).GetAwaiter().GetResult();
-    }
-
-    private static string FormatNumber(decimal number)
-    {
-        return number switch
-        {
-            >= 1_000_000_000 => $"{number / 1_000_000_000:F2}B",
-            >= 1_000_000 => $"{number / 1_000_000:F2}M",
-            >= 1_000 => $"{number / 1_000:F2}K",
-            _ => number.ToString("F2"),
-        };
-    }
-
-    private async Task<OutgoingMessage?> ExecuteAsync(CommandContext context)
+    public async Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var settings = _settingsManager.Current.SpecialCommands;
         var isAllowed = settings.AllowedUsers.Contains(context.Username, StringComparer.OrdinalIgnoreCase);
@@ -56,7 +39,7 @@ public sealed class TrumpCommand : IChatCommand
 
         try
         {
-            var trumpData = await GetTrumpDataAsync();
+            var trumpData = await GetTrumpDataAsync(cancellationToken);
 
             if (trumpData == null)
             {
@@ -96,18 +79,29 @@ public sealed class TrumpCommand : IChatCommand
         }
     }
 
-    private async Task<TrumpData?> GetTrumpDataAsync()
+    private static string FormatNumber(decimal number)
+    {
+        return number switch
+        {
+            >= 1_000_000_000 => $"{number / 1_000_000_000:F2}B",
+            >= 1_000_000 => $"{number / 1_000_000:F2}M",
+            >= 1_000 => $"{number / 1_000:F2}K",
+            _ => number.ToString("F2"),
+        };
+    }
+
+    private async Task<TrumpData?> GetTrumpDataAsync(CancellationToken cancellationToken)
     {
         try
         {
-            var response = await _httpClient.GetAsync(CryptoApiUrl);
+            var response = await _httpClient.GetAsync(CryptoApiUrl, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
                 return null;
             }
 
-            var json = await response.Content.ReadAsStringAsync();
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
             var data = JsonSerializer.Deserialize<JsonElement>(json);
 
             if (!data.TryGetProperty("market_data", out var marketData))

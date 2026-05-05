@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.Core.Chat.Commands;
+﻿namespace PoproshaykaBot.Core.Chat.Commands;
 
 /// <summary>
 /// Интерфейс команды чата.
@@ -28,5 +28,5 @@ public interface IChatCommand
     /// <summary>
     /// Выполняет команду и возвращает исходящее сообщение.
     /// </summary>
-    OutgoingMessage? Execute(CommandContext context);
+    Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken);
 }

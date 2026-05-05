@@ -1,5 +1,4 @@
-using PoproshaykaBot.Core.Broadcast.Profiles;
-using PoproshaykaBot.Core.Chat;
+﻿using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat.Commands;
 
 namespace PoproshaykaBot.Core.Tests.Chat.Commands;
@@ -35,87 +34,53 @@ public class GameCommandTests
     }
 
     [Test]
-    public void Execute_NoArgs_ReturnsUsage()
+    public async Task Execute_NoArgs_ReturnsUsage()
     {
-        var response = _command.Execute(new()
+        var response = await _command.ExecuteAsync(new()
         {
             IsBroadcaster = true,
             Arguments = [],
-        });
+        }, CancellationToken.None);
 
         Assert.That(response!.Text, Does.Contain("!game"));
     }
 
     [Test]
-    public void Execute_WithQuery_ReturnsProvisionalReply()
+    public async Task Execute_GameFound_AppliesPatchAndReturnsConfirmation()
     {
-        var ctx = new CommandContext
-        {
-            IsBroadcaster = true,
-            MessageId = "m1",
-            Arguments = ["dota"],
-        };
-
-        var response = _command.Execute(ctx);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(response!.Text, Does.Contain("dota"));
-            Assert.That(response.Text, Does.Contain("категорию"));
-        }
-    }
-
-    [Test]
-    public async Task Execute_GameFound_EventuallyAppliesPatch()
-    {
-        var applied = new TaskCompletionSource();
-
         _resolver.ResolveAsync("dota", Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<GameSuggestion?>(new("1", "Dota 2", "")));
 
-        _applier
-            .When(x => x.ApplyPatchAsync(null, "1", "Dota 2", Arg.Any<CancellationToken>()))
-            .Do(_ => applied.TrySetResult());
-
-        _command.Execute(new()
+        var response = await _command.ExecuteAsync(new()
         {
             IsBroadcaster = true,
             MessageId = "m1",
             Arguments = ["dota"],
-        });
-
-        await applied.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }, CancellationToken.None);
 
         await _applier.Received(1)
             .ApplyPatchAsync(null,
                 "1",
                 "Dota 2",
                 Arg.Any<CancellationToken>());
+
+        Assert.That(response!.Text, Does.Contain("Dota 2"));
     }
 
     [Test]
     public async Task Execute_GameNotFound_DoesNotCallApplier()
     {
-        var resolved = new TaskCompletionSource();
-
         _resolver.ResolveAsync("unknown", Arg.Any<CancellationToken>())
-            .Returns(async _ =>
-            {
-                resolved.TrySetResult();
-                await Task.Yield();
-                return null;
-            });
+            .Returns(Task.FromResult<GameSuggestion?>(null));
 
-        _command.Execute(new()
+        var response = await _command.ExecuteAsync(new()
         {
             IsBroadcaster = true,
             MessageId = "m1",
             Arguments = ["unknown"],
-        });
-
-        await resolved.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Yield();
+        }, CancellationToken.None);
 
         await _applier.DidNotReceiveWithAnyArgs().ApplyPatchAsync(null, null, null, CancellationToken.None);
+        Assert.That(response!.Text, Does.Contain("unknown"));
     }
 }

@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
@@ -14,7 +14,7 @@ public sealed class TitleCommand(IChannelInformationApplier applier, ILogger<Tit
         return context.IsBroadcaster || context.IsModerator;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public async Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         if (context.Arguments.Count == 0)
         {
@@ -23,17 +23,15 @@ public sealed class TitleCommand(IChannelInformationApplier applier, ILogger<Tit
 
         var title = string.Join(" ", context.Arguments);
 
-        _ = Task.Run(async () =>
+        try
         {
-            try
-            {
-                await applier.ApplyPatchAsync(title, null, null, CancellationToken.None);
-            }
-            catch (Exception exception)
-            {
-                logger.LogWarning(exception, "Не удалось обновить название");
-            }
-        });
+            await applier.ApplyPatchAsync(title, null, null, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Не удалось обновить название");
+            return OutgoingMessage.Reply("Не удалось обновить название", context.MessageId);
+        }
 
         return OutgoingMessage.Reply("Название обновлено", context.MessageId);
     }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
@@ -47,7 +48,8 @@ public static class ChatServiceCollectionExtensions
         services.AddSingleton<ChatCommandProcessor>(sp =>
         {
             var commands = sp.GetServices<IChatCommand>().ToList();
-            var processor = new ChatCommandProcessor(commands);
+            var logger = sp.GetRequiredService<ILogger<ChatCommandProcessor>>();
+            var processor = new ChatCommandProcessor(commands, logger);
             processor.Register(new HelpCommand(processor.GetAllCommands));
             return processor;
         });

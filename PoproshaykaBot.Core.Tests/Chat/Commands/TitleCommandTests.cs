@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Broadcast.Profiles;
+﻿using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 
@@ -38,19 +38,19 @@ public class TitleCommandTests
     }
 
     [Test]
-    public void Execute_NoArgs_ReturnsUsage()
+    public async Task Execute_NoArgs_ReturnsUsage()
     {
-        var response = _command.Execute(new()
+        var response = await _command.ExecuteAsync(new()
         {
             IsBroadcaster = true,
             Arguments = [],
-        });
+        }, CancellationToken.None);
 
         Assert.That(response!.Text, Does.Contain("!title"));
     }
 
     [Test]
-    public void Execute_WithTitle_ReturnsConfirmation()
+    public async Task Execute_WithTitle_ReturnsConfirmation()
     {
         var ctx = new CommandContext
         {
@@ -59,7 +59,7 @@ public class TitleCommandTests
             Arguments = ["новое", "название"],
         };
 
-        var response = _command.Execute(ctx);
+        var response = await _command.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.That(response!.Text, Does.Contain("Название обновлено"));
     }

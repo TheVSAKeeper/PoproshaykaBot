@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Chat.Commands;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure;
 
 namespace PoproshaykaBot.Core.Chat;
@@ -8,9 +9,12 @@ public sealed class ChatCommandProcessor
     private readonly string _unknownCommandsFilePath;
     private readonly Dictionary<string, IChatCommand> _tokenToCommand;
     private readonly string _prefix;
+    private readonly ILogger<ChatCommandProcessor> _logger;
 
-    public ChatCommandProcessor(IEnumerable<IChatCommand> commands, string prefix = "!")
+    public ChatCommandProcessor(IEnumerable<IChatCommand> commands, ILogger<ChatCommandProcessor> logger, string prefix = "!")
     {
+        _logger = logger;
+
         Directory.CreateDirectory(AppPaths.BaseDirectory);
         _unknownCommandsFilePath = AppPaths.Combine("unknown_commands.txt");
 
@@ -45,27 +49,25 @@ public sealed class ChatCommandProcessor
             .ToList();
     }
 
-    public bool TryProcess(string messageText, CommandContext context, out OutgoingMessage? response)
+    public async Task<ChatCommandResult> TryProcessAsync(string messageText, CommandContext context, CancellationToken cancellationToken)
     {
-        response = null;
-
         if (string.IsNullOrWhiteSpace(messageText))
         {
-            return false;
+            return ChatCommandResult.NotHandled;
         }
 
         var trimmed = messageText.Trim();
 
-        if (!trimmed.StartsWith(_prefix))
+        if (!trimmed.StartsWith(_prefix, StringComparison.Ordinal))
         {
-            return false;
+            return ChatCommandResult.NotHandled;
         }
 
         var afterPrefix = trimmed[_prefix.Length..].Trim();
 
         if (string.IsNullOrEmpty(afterPrefix))
         {
-            return false;
+            return ChatCommandResult.NotHandled;
         }
 
         var spaceIdx = afterPrefix.IndexOf(' ');
@@ -75,7 +77,7 @@ public sealed class ChatCommandProcessor
         if (!_tokenToCommand.TryGetValue(token, out var command))
         {
             LogUnknown(messageText, context);
-            return false;
+            return ChatCommandResult.NotHandled;
         }
 
         var args = string.IsNullOrWhiteSpace(argsString)
@@ -96,11 +98,19 @@ public sealed class ChatCommandProcessor
 
         if (!command.CanExecute(enrichedContext))
         {
-            return false;
+            return ChatCommandResult.NotHandled;
         }
 
-        response = command.Execute(enrichedContext);
-        return true;
+        try
+        {
+            var response = await command.ExecuteAsync(enrichedContext, cancellationToken);
+            return ChatCommandResult.Handled(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Команда {Canonical} упала на сообщении от {Username}", command.Canonical, enrichedContext.Username);
+            return ChatCommandResult.Handled(null);
+        }
     }
 
     private void LogUnknown(string originalText, CommandContext context)
@@ -110,10 +120,20 @@ public sealed class ChatCommandProcessor
             var line = $"{DateTime.UtcNow:O}\t{context.Channel}\t{context.UserId}\t{context.Username}\t{originalText}{Environment.NewLine}";
             File.AppendAllText(_unknownCommandsFilePath, line);
         }
-        catch
+        catch (Exception ex)
         {
-            // TODO: Логирование
+            _logger.LogWarning(ex, "Не удалось записать неизвестную команду в {File}", _unknownCommandsFilePath);
         }
+    }
+}
+
+public readonly record struct ChatCommandResult(bool IsCommand, OutgoingMessage? Response)
+{
+    public static ChatCommandResult NotHandled { get; } = new(false, null);
+
+    public static ChatCommandResult Handled(OutgoingMessage? response)
+    {
+        return new(true, response);
     }
 }
 

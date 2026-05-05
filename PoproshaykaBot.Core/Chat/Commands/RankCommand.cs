@@ -14,7 +14,7 @@ public sealed class RankCommand(IUserStatisticsRepository statistics, UserRankSe
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var targetUserId = context.UserId;
         var targetDisplayName = "Твой";
@@ -30,7 +30,7 @@ public sealed class RankCommand(IUserStatisticsRepository statistics, UserRankSe
             }
             else
             {
-                return OutgoingMessage.Reply($"Пользователь {username} не найден", context.MessageId);
+                return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply($"Пользователь {username} не найден", context.MessageId));
             }
         }
 
@@ -39,6 +39,6 @@ public sealed class RankCommand(IUserStatisticsRepository statistics, UserRankSe
         var rankDisplay = rankService.GetRankDisplay(messageCount);
 
         var text = $"{targetDisplayName}: {rankDisplay} ({FormattingUtils.FormatNumber(messageCount)} сообщений)";
-        return OutgoingMessage.Reply(text, context.MessageId);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
     }
 }

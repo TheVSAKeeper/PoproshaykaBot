@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.Core.Chat.Commands;
+﻿namespace PoproshaykaBot.Core.Chat.Commands;
 
 public sealed class ByeCommand(AudienceTracker audienceTracker) : IChatCommand
 {
@@ -11,15 +11,15 @@ public sealed class ByeCommand(AudienceTracker audienceTracker) : IChatCommand
         return true;
     }
 
-    public OutgoingMessage? Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var farewell = audienceTracker.CreateFarewell(context.UserId, context.DisplayName);
 
         if (string.IsNullOrWhiteSpace(farewell))
         {
-            return null;
+            return Task.FromResult<OutgoingMessage?>(null);
         }
 
-        return OutgoingMessage.Reply(farewell, context.MessageId);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(farewell, context.MessageId));
     }
 }

@@ -70,7 +70,7 @@ public class ProfileCommandTests
     }
 
     [Test]
-    public void Execute_NoArguments_ReturnsUsage()
+    public async Task Execute_NoArguments_ReturnsUsage()
     {
         var ctx = new CommandContext
         {
@@ -78,14 +78,14 @@ public class ProfileCommandTests
             Arguments = [],
         };
 
-        var response = _command.Execute(ctx);
+        var response = await _command.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Text, Does.Contain("!profile"));
     }
 
     [Test]
-    public void Execute_ProfileNotFound_ReturnsNotFoundMessage()
+    public async Task Execute_ProfileNotFound_ReturnsNotFoundMessage()
     {
         _manager.FindByName("unknown").Returns((BroadcastProfile?)null);
         var ctx = new CommandContext
@@ -95,7 +95,7 @@ public class ProfileCommandTests
             Arguments = ["unknown"],
         };
 
-        var response = _command.Execute(ctx);
+        var response = await _command.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.That(response, Is.Not.Null);
         using (Assert.EnterMultipleScope())
@@ -106,22 +106,16 @@ public class ProfileCommandTests
     }
 
     [Test]
-    public async Task Execute_ProfileFound_FiresApplyAndReturnsConfirmation()
+    public async Task Execute_ProfileFound_AppliesAndReturnsConfirmation()
     {
         var profile = new BroadcastProfile
         {
             Name = "Dota",
         };
 
-        var applied = new TaskCompletionSource();
-
         _manager.FindByName("Dota").Returns(profile);
         _manager.ApplyAsync(profile.Id, Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                applied.TrySetResult();
-                return Task.FromResult<BroadcastProfile?>(profile);
-            });
+            .Returns(Task.FromResult<BroadcastProfile?>(profile));
 
         var ctx = new CommandContext
         {
@@ -130,12 +124,11 @@ public class ProfileCommandTests
             Arguments = ["Dota"],
         };
 
-        var response = _command.Execute(ctx);
+        var response = await _command.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Text, Does.Contain("Dota"));
 
-        await applied.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await _manager.Received(1).ApplyAsync(profile.Id, Arg.Any<CancellationToken>());
     }
 }

@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
@@ -18,7 +18,7 @@ public sealed class GameCommand(
         return context.IsBroadcaster || context.IsModerator;
     }
 
-    public OutgoingMessage? Execute(CommandContext context)
+    public async Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         if (context.Arguments.Count == 0)
         {
@@ -27,29 +27,27 @@ public sealed class GameCommand(
 
         var query = string.Join(" ", context.Arguments);
 
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            var suggestion = await resolver.ResolveAsync(query, cancellationToken);
+
+            if (suggestion == null)
             {
-                var suggestion = await resolver.ResolveAsync(query, CancellationToken.None);
-
-                if (suggestion == null)
-                {
-                    logger.LogInformation("Категория '{Query}' не найдена", query);
-                    return;
-                }
-
-                await applier.ApplyPatchAsync(null,
-                    suggestion.Id,
-                    suggestion.Name,
-                    CancellationToken.None);
+                logger.LogInformation("Категория '{Query}' не найдена", query);
+                return OutgoingMessage.Reply($"Категория '{query}' не найдена", context.MessageId);
             }
-            catch (Exception exception)
-            {
-                logger.LogWarning(exception, "Не удалось обновить категорию");
-            }
-        });
 
-        return OutgoingMessage.Reply($"Применяю категорию: {query}", context.MessageId);
+            await applier.ApplyPatchAsync(null,
+                suggestion.Id,
+                suggestion.Name,
+                cancellationToken);
+
+            return OutgoingMessage.Reply($"Категория обновлена: {suggestion.Name}", context.MessageId);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Не удалось обновить категорию");
+            return OutgoingMessage.Reply("Не удалось обновить категорию", context.MessageId);
+        }
     }
 }

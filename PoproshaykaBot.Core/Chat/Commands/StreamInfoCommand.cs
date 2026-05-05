@@ -13,7 +13,7 @@ public sealed class StreamInfoCommand(IStreamStatus streamStatusManager) : IChat
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var info = streamStatusManager.CurrentStream;
 
@@ -23,7 +23,7 @@ public sealed class StreamInfoCommand(IStreamStatus streamStatusManager) : IChat
                 ? "Стрим онлайн, но детали временно недоступны"
                 : "Сейчас стрим офлайн";
 
-            return OutgoingMessage.Reply(text, context.MessageId);
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
         }
 
         var duration = DateTime.UtcNow - info.StartedAt;
@@ -34,6 +34,6 @@ public sealed class StreamInfoCommand(IStreamStatus streamStatusManager) : IChat
         var game = string.IsNullOrWhiteSpace(info.GameName) ? "Без категории" : info.GameName;
 
         var textFull = $"🔴 Стрим: {title} | {game} | 👥 {info.ViewerCount} | ⏱ {hours:0}ч {minutes:00}м";
-        return OutgoingMessage.Reply(textFull, context.MessageId);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(textFull, context.MessageId));
     }
 }

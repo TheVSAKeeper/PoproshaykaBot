@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.Core.Chat.Commands;
+﻿namespace PoproshaykaBot.Core.Chat.Commands;
 
 public sealed class HelloCommand : IChatCommand
 {
@@ -11,9 +11,9 @@ public sealed class HelloCommand : IChatCommand
         return true;
     }
 
-    public OutgoingMessage Execute(CommandContext context)
+    public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var text = $"Привет, {context.Username}!";
-        return OutgoingMessage.Reply(text, context.MessageId);
+        return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
     }
 }
