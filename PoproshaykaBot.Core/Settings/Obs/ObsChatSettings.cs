@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.Core.Settings.Obs;
+﻿using System.Drawing;
+
+namespace PoproshaykaBot.Core.Settings.Obs;
 
 public sealed class ObsChatSettings
 {
@@ -6,11 +8,11 @@ public sealed class ObsChatSettings
                                             "Motiva Sans", "Inter", "Noto Sans", Arial, sans-serif
                                             """;
 
-    public AppColor BackgroundColor { get; set; } = AppColor.FromArgb(179, 0, 0, 0);
-    public AppColor TextColor { get; set; } = AppColor.FromArgb(255, 255, 255);
-    public AppColor UsernameColor { get; set; } = AppColor.FromArgb(145, 70, 255);
-    public AppColor SystemMessageColor { get; set; } = AppColor.FromArgb(255, 204, 0);
-    public AppColor TimestampColor { get; set; } = AppColor.FromArgb(153, 153, 153);
+    public Color BackgroundColor { get; set; } = Color.FromArgb(179, 0, 0, 0);
+    public Color TextColor { get; set; } = Color.FromArgb(255, 255, 255);
+    public Color UsernameColor { get; set; } = Color.FromArgb(145, 70, 255);
+    public Color SystemMessageColor { get; set; } = Color.FromArgb(255, 204, 0);
+    public Color TimestampColor { get; set; } = Color.FromArgb(153, 153, 153);
 
     public string FontFamily { get; set; } = DefaultFontFamily;
     public int FontSize { get; set; } = 14;

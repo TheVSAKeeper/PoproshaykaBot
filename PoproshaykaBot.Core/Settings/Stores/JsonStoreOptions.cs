@@ -10,5 +10,6 @@ internal static class JsonStoreOptions
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        Converters = { new ColorJsonConverter() },
     };
 }

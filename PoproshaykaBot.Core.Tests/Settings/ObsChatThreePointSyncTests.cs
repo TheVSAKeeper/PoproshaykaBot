@@ -118,10 +118,6 @@ public sealed class ObsChatThreePointSyncTests
                 prop.SetValue(target, s + "_mut");
                 return true;
 
-            case AppColor:
-                prop.SetValue(target, (AppColor)Color.FromArgb(1, 2, 3, 4));
-                return true;
-
             case Color:
                 prop.SetValue(target, Color.FromArgb(1, 2, 3, 4));
                 return true;
