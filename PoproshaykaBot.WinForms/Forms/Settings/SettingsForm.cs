@@ -16,6 +16,7 @@ public partial class SettingsForm : Form
     private readonly ObsChatStore _obsChatStore;
     private readonly DashboardLayoutStore _dashboardLayoutStore;
     private readonly PollsStore _pollsStore;
+    private readonly List<SettingsDraftSection> _sections;
     private AppSettings _settings;
     private TwitchAccountSettings _botDraft;
     private TwitchAccountSettings _broadcasterDraft;
@@ -46,6 +47,35 @@ public partial class SettingsForm : Form
         _dashboardDraft = DeepCloneNullable(dashboardLayoutStore.LoadDashboard());
 
         InitializeComponent();
+
+        _sections =
+        [
+            new(() => _basicSettingsControl.LoadSettings(_settings.Twitch),
+                () => _basicSettingsControl.SaveSettings(_settings.Twitch)),
+            new(() => _rateLimitingSettingsControl.LoadSettings(_settings.Twitch),
+                () => _rateLimitingSettingsControl.SaveSettings(_settings.Twitch)),
+            new(() => _messagesSettingsControl.LoadSettings(_settings.Twitch.Messages),
+                () => _messagesSettingsControl.SaveSettings(_settings.Twitch.Messages)),
+            new(() => _httpServerSettingsControl.LoadSettings(_settings.Twitch),
+                () =>
+                {
+                    // read-only
+                }),
+            new(() => _oauthSettingsControl.LoadSettings(_settings, _botDraft, _broadcasterDraft),
+                () => _oauthSettingsControl.SaveSettings(_settings)),
+            new(() => _obsChatSettingsControl.LoadSettings(_obsChatDraft),
+                () => _obsChatSettingsControl.SaveSettings(_obsChatDraft)),
+            new(() => _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast),
+                () => _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast)),
+            new(() => _botLifecycleAutomationSettingsControl.LoadSettings(_settings.Twitch.BotLifecycleAutomation),
+                () => _botLifecycleAutomationSettingsControl.SaveSettings(_settings.Twitch.BotLifecycleAutomation)),
+            new(() => _miscSettingsControl.LoadSettings(_settings),
+                () => _miscSettingsControl.SaveSettings(_settings)),
+            new(() => _pollsSettingsControl.LoadSettings(_pollsDraft),
+                () => _pollsSettingsControl.SaveSettings(_pollsDraft)),
+            new(() => _dashboardSettingsControl.LoadSettings(_dashboardDraft),
+                () => _dashboardDraft = _dashboardSettingsControl.SaveSettings()),
+        ];
     }
 
     public event EventHandler? SettingsApplied;
@@ -140,17 +170,10 @@ public partial class SettingsForm : Form
 
     private void LoadSettingsToControls()
     {
-        _basicSettingsControl.LoadSettings(_settings.Twitch);
-        _rateLimitingSettingsControl.LoadSettings(_settings.Twitch);
-        _messagesSettingsControl.LoadSettings(_settings.Twitch.Messages);
-        _httpServerSettingsControl.LoadSettings(_settings.Twitch);
-        _oauthSettingsControl.LoadSettings(_settings, _botDraft, _broadcasterDraft);
-        _obsChatSettingsControl.LoadSettings(_obsChatDraft);
-        _autoBroadcastSettingsControl.LoadSettings(_settings.Twitch.AutoBroadcast);
-        _botLifecycleAutomationSettingsControl.LoadSettings(_settings.Twitch.BotLifecycleAutomation);
-        _miscSettingsControl.LoadSettings(_settings);
-        _pollsSettingsControl.LoadSettings(_pollsDraft);
-        _dashboardSettingsControl.LoadSettings(_dashboardDraft);
+        foreach (var section in _sections)
+        {
+            section.Load();
+        }
 
         _hasChanges = false;
         UpdateButtonStates();
@@ -158,16 +181,10 @@ public partial class SettingsForm : Form
 
     private void SaveSettingsFromControls()
     {
-        _basicSettingsControl.SaveSettings(_settings.Twitch);
-        _rateLimitingSettingsControl.SaveSettings(_settings.Twitch);
-        _messagesSettingsControl.SaveSettings(_settings.Twitch.Messages);
-        _oauthSettingsControl.SaveSettings(_settings);
-        _obsChatSettingsControl.SaveSettings(_obsChatDraft);
-        _autoBroadcastSettingsControl.SaveSettings(_settings.Twitch.AutoBroadcast);
-        _botLifecycleAutomationSettingsControl.SaveSettings(_settings.Twitch.BotLifecycleAutomation);
-        _miscSettingsControl.SaveSettings(_settings);
-        _pollsSettingsControl.SaveSettings(_pollsDraft);
-        _dashboardDraft = _dashboardSettingsControl.SaveSettings();
+        foreach (var section in _sections)
+        {
+            section.Save();
+        }
     }
 
     private void UpdateButtonStates()
@@ -204,4 +221,6 @@ public partial class SettingsForm : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
+
+    private readonly record struct SettingsDraftSection(Action Load, Action Save);
 }
