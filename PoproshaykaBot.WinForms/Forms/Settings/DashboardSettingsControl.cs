@@ -5,13 +5,13 @@ using System.ComponentModel;
 
 namespace PoproshaykaBot.WinForms.Forms.Settings;
 
-public sealed partial class DashboardSettingsControl : UserControl
+public sealed partial class DashboardSettingsControl : UserControl, IDashboardTileCommands
 {
-    private static readonly int[] MaxHeightPresets = [100, 150, 200, 250, 300, 400, 500];
-    private static readonly int[] MaxWidthPresets = [200, 300, 400, 500, 600, 800];
     private readonly Dictionary<DashboardTileType, Button> _paletteCards = [];
     private readonly Dictionary<DashboardTileType, PlacedTile> _placedTiles = [];
     private readonly Dictionary<DashboardTileType, Panel> _tilePanels = [];
+    private readonly DashboardTileContextMenuBuilder _contextMenuBuilder = new();
+    private DashboardTileDragDropController? _dragDrop;
     private DashboardLayoutSettings? _pendingLayout;
     private bool _initialized;
     private bool _suppressEvents;
@@ -107,95 +107,11 @@ public sealed partial class DashboardSettingsControl : UserControl
 
         _initialized = true;
 
+        _dragDrop = new(_placedTiles, PlaceOrMoveTile, ShowTileContextMenu);
+
         BuildPalette();
         ApplyLayout(_pendingLayout ?? DashboardLayoutDefaults.Create());
         _pendingLayout = null;
-    }
-
-    private void OnPaletteButtonMouseDown(object? sender, MouseEventArgs e)
-    {
-        if (e.Button != MouseButtons.Left)
-        {
-            return;
-        }
-
-        if (sender is not Button { Enabled: true } button)
-        {
-            return;
-        }
-
-        if (button.Tag is not DashboardTileType type)
-        {
-            return;
-        }
-
-        button.DoDragDrop(new TileDragPayload(type, false), DragDropEffects.Copy);
-    }
-
-    private void OnTilePanelMouseDown(object? sender, MouseEventArgs e)
-    {
-        if (sender is not Control control)
-        {
-            return;
-        }
-
-        var owner = control.Tag is DashboardTileType ? control : control.Parent;
-
-        if (owner?.Tag is not DashboardTileType type || owner == null)
-        {
-            return;
-        }
-
-        if (e.Button == MouseButtons.Right)
-        {
-            _tileContextMenu.Tag = type;
-            _tileContextMenu.Show(control, e.Location);
-            return;
-        }
-
-        if (e.Button != MouseButtons.Left)
-        {
-            return;
-        }
-
-        owner.DoDragDrop(new TileDragPayload(type, true), DragDropEffects.Move);
-    }
-
-    private void OnCellDragEnter(object? sender, DragEventArgs e)
-    {
-        if (e.Data?.GetData(typeof(TileDragPayload)) is TileDragPayload payload)
-        {
-            e.Effect = payload.FromGrid ? DragDropEffects.Move : DragDropEffects.Copy;
-        }
-    }
-
-    private void OnCellDragDrop(object? sender, DragEventArgs e)
-    {
-        if (e.Data?.GetData(typeof(TileDragPayload)) is not TileDragPayload payload)
-        {
-            return;
-        }
-
-        if (sender is not Control control)
-        {
-            return;
-        }
-
-        switch (control.Tag)
-        {
-            case CellPosition pos:
-                PlaceOrMoveTile(payload.Type, pos.Row, pos.Column);
-                break;
-
-            case DashboardTileType targetType when _placedTiles.TryGetValue(targetType, out var target):
-                if (targetType == payload.Type)
-                {
-                    return;
-                }
-
-                PlaceOrMoveTile(payload.Type, target.Row, target.Column);
-                break;
-        }
     }
 
     private void OnTileContextMenuOpening(object? sender, CancelEventArgs e)
@@ -206,69 +122,13 @@ public sealed partial class DashboardSettingsControl : UserControl
             return;
         }
 
-        var oldItems = _tileContextMenu.Items.Cast<ToolStripItem>().ToList();
-        _tileContextMenu.Items.Clear();
-
-        foreach (var oldItem in oldItems)
-        {
-            oldItem.Dispose();
-        }
-
-        var columnCount = (int)_gridColumnsNumeric.Value;
-        var rowCount = (int)_gridRowsNumeric.Value;
-        var maxColumnSpan = Math.Max(1, columnCount - placed.Column);
-        var maxRowSpan = Math.Max(1, rowCount - placed.Row);
-
-        var widthMenu = new ToolStripMenuItem($"Ширина: {placed.ColumnSpan}");
-
-        for (var i = 1; i <= maxColumnSpan; i++)
-        {
-            var span = i;
-            var item = new ToolStripMenuItem(span.ToString())
-            {
-                Checked = span == placed.ColumnSpan,
-            };
-
-            item.Click += (_, _) => SetTileColumnSpan(type, span);
-            widthMenu.DropDownItems.Add(item);
-        }
-
-        var heightMenu = new ToolStripMenuItem($"Высота: {placed.RowSpan}");
-
-        for (var i = 1; i <= maxRowSpan; i++)
-        {
-            var span = i;
-            var item = new ToolStripMenuItem(span.ToString())
-            {
-                Checked = span == placed.RowSpan,
-            };
-
-            item.Click += (_, _) => SetTileRowSpan(type, span);
-            heightMenu.DropDownItems.Add(item);
-        }
-
-        var maxWidthMenu = BuildMaxSizeMenu("Макс. ширина",
-            MaxWidthPresets,
-            placed.MaxWidth,
-            type.MaxWidth,
-            value => SetTileMaxWidth(type, value));
-
-        var maxHeightMenu = BuildMaxSizeMenu("Макс. высота",
-            MaxHeightPresets,
-            placed.MaxHeight,
-            type.MaxHeight,
-            value => SetTileMaxHeight(type, value));
-
-        var removeItem = new ToolStripMenuItem("Удалить плитку");
-        removeItem.Click += (_, _) => RemoveTile(type);
-
-        _tileContextMenu.Items.Add(widthMenu);
-        _tileContextMenu.Items.Add(heightMenu);
-        _tileContextMenu.Items.Add(new ToolStripSeparator());
-        _tileContextMenu.Items.Add(maxWidthMenu);
-        _tileContextMenu.Items.Add(maxHeightMenu);
-        _tileContextMenu.Items.Add(new ToolStripSeparator());
-        _tileContextMenu.Items.Add(removeItem);
+        _contextMenuBuilder.Populate(_tileContextMenu,
+            type,
+            placed,
+            (int)_gridColumnsNumeric.Value,
+            (int)_gridRowsNumeric.Value,
+            this,
+            FindForm() ?? (IWin32Window)this);
     }
 
     private void OnGridColumnsValueChanged(object? sender, EventArgs e)
@@ -306,181 +166,67 @@ public sealed partial class DashboardSettingsControl : UserControl
         OnChanged();
     }
 
-    private static int? PromptForCustomSize(IWin32Window owner, string label, int initial)
+    void IDashboardTileCommands.SetColumnSpan(DashboardTileType type, int span)
     {
-        const int minValue = 50;
-        const int maxValue = 5000;
-        var clamped = Math.Clamp(initial, minValue, maxValue);
-
-        using var form = new Form
+        if (!_placedTiles.TryGetValue(type, out var placed))
         {
-            Text = label,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            StartPosition = FormStartPosition.CenterParent,
-            MinimizeBox = false,
-            MaximizeBox = false,
-            ShowInTaskbar = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        };
+            return;
+        }
 
-        var layout = new TableLayoutPanel
-        {
-            ColumnCount = 2,
-            RowCount = 2,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new(12),
-        };
-
-        var promptLabel = new Label
-        {
-            Text = "Значение, px:",
-            AutoSize = true,
-            Anchor = AnchorStyles.Left,
-            Margin = new(0, 6, 8, 0),
-        };
-
-        var numeric = new NumericUpDown
-        {
-            Minimum = minValue,
-            Maximum = maxValue,
-            Increment = 10,
-            Value = clamped,
-            Width = 100,
-            Margin = new(0, 4, 0, 0),
-        };
-
-        var buttons = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.RightToLeft,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new(0, 8, 0, 0),
-        };
-
-        var cancelButton = new Button
-        {
-            Text = "Отмена",
-            DialogResult = DialogResult.Cancel,
-            AutoSize = true,
-        };
-
-        var okButton = new Button
-        {
-            Text = "ОК",
-            DialogResult = DialogResult.OK,
-            AutoSize = true,
-        };
-
-        buttons.Controls.Add(cancelButton);
-        buttons.Controls.Add(okButton);
-
-        layout.Controls.Add(promptLabel, 0, 0);
-        layout.Controls.Add(numeric, 1, 0);
-        layout.Controls.Add(buttons, 0, 1);
-        layout.SetColumnSpan(buttons, 2);
-
-        form.Controls.Add(layout);
-        form.AcceptButton = okButton;
-        form.CancelButton = cancelButton;
-
-        return form.ShowDialog(owner) == DialogResult.OK
-            ? (int)numeric.Value
-            : null;
+        placed.ColumnSpan = span;
+        RebuildGrid();
+        OnChanged();
     }
 
-    private ToolStripMenuItem BuildMaxSizeMenu(
-        string label,
-        IReadOnlyList<int> presets,
-        int? overrideValue,
-        int? typeDefault,
-        Action<int?> setValue)
+    void IDashboardTileCommands.SetRowSpan(DashboardTileType type, int span)
     {
-        var isExplicitAuto = overrideValue is <= 0;
-        var effective = isExplicitAuto ? null : overrideValue ?? typeDefault;
-
-        string headerText;
-
-        if (isExplicitAuto)
+        if (!_placedTiles.TryGetValue(type, out var placed))
         {
-            headerText = $"{label}: авто";
-        }
-        else if (effective.HasValue)
-        {
-            headerText = overrideValue.HasValue
-                ? $"{label}: {effective.Value}px"
-                : $"{label}: {effective.Value}px (по умолч.)";
-        }
-        else
-        {
-            headerText = $"{label}: авто (по умолч.)";
+            return;
         }
 
-        var menu = new ToolStripMenuItem(headerText);
+        placed.RowSpan = span;
+        RebuildGrid();
+        OnChanged();
+    }
 
-        var defaultLabel = typeDefault.HasValue
-            ? $"По умолчанию ({typeDefault.Value}px)"
-            : "По умолчанию (авто)";
-
-        var defaultItem = new ToolStripMenuItem(defaultLabel)
+    void IDashboardTileCommands.SetMaxWidth(DashboardTileType type, int? value)
+    {
+        if (!_placedTiles.TryGetValue(type, out var placed))
         {
-            Checked = !overrideValue.HasValue,
-        };
-
-        defaultItem.Click += (_, _) => setValue(null);
-        menu.DropDownItems.Add(defaultItem);
-
-        if (typeDefault.HasValue)
-        {
-            var autoItem = new ToolStripMenuItem("Авто")
-            {
-                Checked = isExplicitAuto,
-            };
-
-            autoItem.Click += (_, _) => setValue(0);
-            menu.DropDownItems.Add(autoItem);
+            return;
         }
 
-        menu.DropDownItems.Add(new ToolStripSeparator());
+        placed.MaxWidth = value;
+        OnChanged();
+    }
 
-        var isCustomValue = overrideValue is > 0 && !presets.Contains(overrideValue.Value);
-
-        foreach (var preset in presets)
+    void IDashboardTileCommands.SetMaxHeight(DashboardTileType type, int? value)
+    {
+        if (!_placedTiles.TryGetValue(type, out var placed))
         {
-            var value = preset;
-            var item = new ToolStripMenuItem($"{value}px")
-            {
-                Checked = overrideValue == value,
-            };
-
-            item.Click += (_, _) => setValue(value);
-            menu.DropDownItems.Add(item);
+            return;
         }
 
-        var customLabel = isCustomValue
-            ? $"Указать... ({overrideValue!.Value}px)"
-            : "Указать...";
+        placed.MaxHeight = value;
+        OnChanged();
+    }
 
-        var customItem = new ToolStripMenuItem(customLabel)
+    void IDashboardTileCommands.RemoveTile(DashboardTileType type)
+    {
+        if (!_placedTiles.Remove(type))
         {
-            Checked = isCustomValue,
-        };
+            return;
+        }
 
-        customItem.Click += (_, _) =>
-        {
-            var initial = overrideValue is > 0 ? overrideValue.Value : typeDefault ?? presets[0];
-            var custom = PromptForCustomSize(FindForm() ?? (IWin32Window)this, label, initial);
+        RebuildGrid();
+        OnChanged();
+    }
 
-            if (custom.HasValue)
-            {
-                setValue(custom.Value);
-            }
-        };
-
-        menu.DropDownItems.Add(customItem);
-
-        return menu;
+    private void ShowTileContextMenu(DashboardTileType type, Control anchor, Point location)
+    {
+        _tileContextMenu.Tag = type;
+        _tileContextMenu.Show(anchor, location);
     }
 
     private void BuildPalette()
@@ -504,7 +250,7 @@ public sealed partial class DashboardSettingsControl : UserControl
                     UseVisualStyleBackColor = true,
                 };
 
-                button.MouseDown += OnPaletteButtonMouseDown;
+                button.MouseDown += _dragDrop!.HandlePaletteMouseDown;
                 _paletteCards[type] = button;
                 _paletteFlowLayoutPanel.Controls.Add(button);
             }
@@ -545,18 +291,18 @@ public sealed partial class DashboardSettingsControl : UserControl
                 continue;
             }
 
-            var row = Math.Clamp(tile.Row, 0, rowCount - 1);
-            var column = Math.Clamp(tile.Column, 0, columnCount - 1);
-
-            _placedTiles[type] = new()
+            var placed = new PlacedTile
             {
-                Row = row,
-                Column = column,
-                ColumnSpan = Math.Clamp(tile.ColumnSpan, 1, columnCount - column),
-                RowSpan = Math.Clamp(tile.RowSpan, 1, rowCount - row),
+                Row = tile.Row,
+                Column = tile.Column,
+                ColumnSpan = tile.ColumnSpan,
+                RowSpan = tile.RowSpan,
                 MaxHeight = tile.MaxHeight,
                 MaxWidth = tile.MaxWidth,
             };
+
+            DashboardLayoutCalculator.ClampPlacement(placed, columnCount, rowCount);
+            _placedTiles[type] = placed;
         }
 
         RebuildGrid();
@@ -588,23 +334,12 @@ public sealed partial class DashboardSettingsControl : UserControl
                 _gridLayoutPanel.RowStyles.Add(new(SizeType.Percent, 100F / rowCount));
             }
 
-            var occupied = new bool[rowCount, columnCount];
-
             foreach (var (_, placed) in _placedTiles)
             {
-                placed.Row = Math.Clamp(placed.Row, 0, rowCount - 1);
-                placed.Column = Math.Clamp(placed.Column, 0, columnCount - 1);
-                placed.ColumnSpan = Math.Clamp(placed.ColumnSpan, 1, columnCount - placed.Column);
-                placed.RowSpan = Math.Clamp(placed.RowSpan, 1, rowCount - placed.Row);
-
-                for (var r = placed.Row; r < placed.Row + placed.RowSpan; r++)
-                {
-                    for (var c = placed.Column; c < placed.Column + placed.ColumnSpan; c++)
-                    {
-                        occupied[r, c] = true;
-                    }
-                }
+                DashboardLayoutCalculator.ClampPlacement(placed, columnCount, rowCount);
             }
+
+            var occupied = DashboardLayoutCalculator.BuildOccupancyMap(_placedTiles.Values, rowCount, columnCount);
 
             foreach (var (type, placed) in _placedTiles)
             {
@@ -662,8 +397,8 @@ public sealed partial class DashboardSettingsControl : UserControl
             Tag = new CellPosition(row, column),
         };
 
-        panel.DragEnter += OnCellDragEnter;
-        panel.DragDrop += OnCellDragDrop;
+        panel.DragEnter += _dragDrop!.HandleCellDragEnter;
+        panel.DragDrop += _dragDrop.HandleCellDragDrop;
         return panel;
     }
 
@@ -690,10 +425,10 @@ public sealed partial class DashboardSettingsControl : UserControl
 
         panel.Controls.Add(label);
 
-        panel.MouseDown += OnTilePanelMouseDown;
-        panel.DragEnter += OnCellDragEnter;
-        panel.DragDrop += OnCellDragDrop;
-        label.MouseDown += OnTilePanelMouseDown;
+        panel.MouseDown += _dragDrop!.HandleTileMouseDown;
+        panel.DragEnter += _dragDrop.HandleCellDragEnter;
+        panel.DragDrop += _dragDrop.HandleCellDragDrop;
+        label.MouseDown += _dragDrop.HandleTileMouseDown;
 
         return panel;
     }
@@ -716,80 +451,20 @@ public sealed partial class DashboardSettingsControl : UserControl
             return;
         }
 
-        if (_placedTiles.TryGetValue(type, out var existing))
+        if (!_placedTiles.TryGetValue(type, out var placed))
         {
-            existing.Row = row;
-            existing.Column = column;
-            existing.ColumnSpan = Math.Clamp(existing.ColumnSpan, 1, columnCount - column);
-            existing.RowSpan = Math.Clamp(existing.RowSpan, 1, rowCount - row);
-        }
-        else
-        {
-            _placedTiles[type] = new()
+            placed = new()
             {
-                Row = row,
-                Column = column,
                 ColumnSpan = 1,
                 RowSpan = 1,
             };
+
+            _placedTiles[type] = placed;
         }
 
-        RebuildGrid();
-        OnChanged();
-    }
-
-    private void SetTileColumnSpan(DashboardTileType type, int span)
-    {
-        if (!_placedTiles.TryGetValue(type, out var placed))
-        {
-            return;
-        }
-
-        placed.ColumnSpan = span;
-        RebuildGrid();
-        OnChanged();
-    }
-
-    private void SetTileRowSpan(DashboardTileType type, int span)
-    {
-        if (!_placedTiles.TryGetValue(type, out var placed))
-        {
-            return;
-        }
-
-        placed.RowSpan = span;
-        RebuildGrid();
-        OnChanged();
-    }
-
-    private void SetTileMaxHeight(DashboardTileType type, int? value)
-    {
-        if (!_placedTiles.TryGetValue(type, out var placed))
-        {
-            return;
-        }
-
-        placed.MaxHeight = value;
-        OnChanged();
-    }
-
-    private void SetTileMaxWidth(DashboardTileType type, int? value)
-    {
-        if (!_placedTiles.TryGetValue(type, out var placed))
-        {
-            return;
-        }
-
-        placed.MaxWidth = value;
-        OnChanged();
-    }
-
-    private void RemoveTile(DashboardTileType type)
-    {
-        if (!_placedTiles.Remove(type))
-        {
-            return;
-        }
+        placed.Row = row;
+        placed.Column = column;
+        DashboardLayoutCalculator.ClampPlacement(placed, columnCount, rowCount);
 
         RebuildGrid();
         OnChanged();
@@ -799,23 +474,4 @@ public sealed partial class DashboardSettingsControl : UserControl
     {
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
-
-    private sealed class PlacedTile
-    {
-        public int Row { get; set; }
-
-        public int Column { get; set; }
-
-        public int ColumnSpan { get; set; }
-
-        public int RowSpan { get; set; }
-
-        public int? MaxHeight { get; set; }
-
-        public int? MaxWidth { get; set; }
-    }
-
-    private sealed record CellPosition(int Row, int Column);
-
-    private sealed record TileDragPayload(DashboardTileType Type, bool FromGrid);
 }
