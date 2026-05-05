@@ -21,6 +21,8 @@
     <EmbeddedResource Include="Assets\obs.css" />
     <EmbeddedResource Include="Assets\obs.js" />
     <EmbeddedResource Include="Assets\icon.ico" />
+    <EmbeddedResource Include="Assets\oauth-success.html" />
+    <EmbeddedResource Include="Assets\oauth-error.html" />
   </ItemGroup>
 
   <ItemGroup>
