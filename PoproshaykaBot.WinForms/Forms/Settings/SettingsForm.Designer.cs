@@ -111,6 +111,7 @@ partial class SettingsForm
         _tabControl.SelectedIndex = 0;
         _tabControl.Size = new Size(711, 584);
         _tabControl.TabIndex = 13;
+        _tabControl.SelectedIndexChanged += OnTabControlSelectedIndexChanged;
         //
         // _generalTabPage
         //

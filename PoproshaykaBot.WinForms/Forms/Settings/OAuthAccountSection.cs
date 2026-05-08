@@ -32,6 +32,8 @@ public sealed partial class OAuthAccountSection : UserControl
     [Inject]
     public ITwitchOAuthService OAuthService { get; internal init; } = null!;
 
+    public Action<AppSettings>? FlushParentDraft { get; set; }
+
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public TwitchOAuthRole Role
@@ -117,6 +119,8 @@ public sealed partial class OAuthAccountSection : UserControl
             return;
         }
 
+        FlushParentDraft?.Invoke(_settings);
+
         var clientId = _settings.Twitch.ClientId;
         var clientSecret = _settings.Twitch.ClientSecret;
 
@@ -157,7 +161,7 @@ public sealed partial class OAuthAccountSection : UserControl
                 scopes = GetDefaultScopes();
             }
 
-            var accessToken = await OAuthService.StartOAuthFlowAsync(_role,
+            var result = await OAuthService.StartOAuthFlowToDraftAsync(_role,
                 clientId,
                 clientSecret,
                 scopes,
@@ -169,9 +173,20 @@ public sealed partial class OAuthAccountSection : UserControl
                 return;
             }
 
-            if (!string.IsNullOrEmpty(accessToken))
+            if (!string.IsNullOrEmpty(result.AccessToken))
             {
-                _authStatusLabel.Text = "Авторизация успешна!";
+                _draft.AccessToken = result.AccessToken;
+                _draft.RefreshToken = result.RefreshToken;
+                _draft.Login = result.Login;
+                _draft.UserId = result.UserId;
+                _draft.Scopes = result.Scopes;
+                _draft.AccessTokenExpiresAt = result.ExpiresInSeconds > 0
+                    ? DateTimeOffset.UtcNow.AddSeconds(result.ExpiresInSeconds)
+                    : null;
+
+                _scopesTextBox.Text = string.Join(" ", _draft.Scopes);
+
+                _authStatusLabel.Text = "Авторизация успешна! Не забудьте «Применить», чтобы сохранить токены.";
                 _authStatusLabel.ForeColor = Color.Green;
 
                 LoadTokenInformation();
@@ -272,6 +287,14 @@ public sealed partial class OAuthAccountSection : UserControl
         {
             await OAuthService.RefreshTokenAsync(_role, clientId, clientSecret, refreshToken);
 
+            var refreshedLive = AccountsStore.Load(_role);
+            _draft.AccessToken = refreshedLive.AccessToken;
+            _draft.RefreshToken = refreshedLive.RefreshToken;
+            _draft.Login = refreshedLive.Login;
+            _draft.UserId = refreshedLive.UserId;
+            _draft.Scopes = refreshedLive.Scopes;
+            _draft.AccessTokenExpiresAt = refreshedLive.AccessTokenExpiresAt;
+
             LoadTokenInformation();
             _tokenStatusValueLabel.Text = "Обновлен успешно";
             _tokenStatusValueLabel.ForeColor = Color.Green;
@@ -297,7 +320,7 @@ public sealed partial class OAuthAccountSection : UserControl
     private void OnClearTokensButtonClicked(object? sender, EventArgs e)
     {
         var roleName = _role == TwitchOAuthRole.Broadcaster ? "стримера" : "бота";
-        var result = MessageBox.Show($"Вы уверены, что хотите очистить сохранённые токены {roleName}?\n\nЭто потребует повторной авторизации при следующем подключении.",
+        var result = MessageBox.Show($"Вы уверены, что хотите очистить токены {roleName}?\n\nИзменения вступят в силу после нажатия «Применить».",
             "Подтверждение очистки токенов",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
@@ -307,10 +330,14 @@ public sealed partial class OAuthAccountSection : UserControl
             return;
         }
 
-        OAuthService.ClearTokens(_role);
+        _draft.AccessToken = string.Empty;
+        _draft.RefreshToken = string.Empty;
+        _draft.Login = string.Empty;
+        _draft.UserId = string.Empty;
+        _draft.AccessTokenExpiresAt = null;
 
         LoadTokenInformation();
-        _tokenStatusValueLabel.Text = "Токены очищены";
+        _tokenStatusValueLabel.Text = "Токены очищены (применятся после «Применить»)";
         _tokenStatusValueLabel.ForeColor = Color.Orange;
         _lastRefreshValueLabel.Text = "Неизвестно";
         _lastRefreshValueLabel.ForeColor = Color.Gray;
@@ -355,7 +382,7 @@ public sealed partial class OAuthAccountSection : UserControl
 
     private TwitchAccountSettings GetLiveAccount()
     {
-        return AccountsStore.Load(_role);
+        return _draft;
     }
 
     private string[] GetDefaultScopes()

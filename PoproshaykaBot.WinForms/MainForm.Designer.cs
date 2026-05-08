@@ -34,6 +34,9 @@ partial class MainForm
     {
         var resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
         _mainTableLayoutPanel = new TableLayoutPanel();
+        _onboardingBannerPanel = new Panel();
+        _onboardingBannerLabel = new Label();
+        _onboardingBannerButton = new Button();
         _mainToolStrip = new ClickThroughToolStrip();
         _connectToolStripButton = new ToolStripButton();
         _settingsToolStripButton = new ToolStripButton();
@@ -44,6 +47,7 @@ partial class MainForm
         _streamMonitoringStatusLabel = new ToolStripStatusLabel();
         _statusStrip = new StatusStrip();
         _mainTableLayoutPanel.SuspendLayout();
+        _onboardingBannerPanel.SuspendLayout();
         _mainToolStrip.SuspendLayout();
         _statusStrip.SuspendLayout();
         SuspendLayout();
@@ -52,16 +56,54 @@ partial class MainForm
         // 
         _mainTableLayoutPanel.ColumnCount = 1;
         _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Controls.Add(_mainToolStrip, 0, 0);
-        _mainTableLayoutPanel.Controls.Add(_dashboardControl, 0, 1);
+        _mainTableLayoutPanel.Controls.Add(_onboardingBannerPanel, 0, 0);
+        _mainTableLayoutPanel.Controls.Add(_mainToolStrip, 0, 1);
+        _mainTableLayoutPanel.Controls.Add(_dashboardControl, 0, 2);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
-        _mainTableLayoutPanel.RowCount = 2;
+        _mainTableLayoutPanel.RowCount = 3;
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle());
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         _mainTableLayoutPanel.Size = new Size(800, 562);
         _mainTableLayoutPanel.TabIndex = 0;
+        //
+        // _onboardingBannerPanel
+        //
+        _onboardingBannerPanel.BackColor = Color.LightYellow;
+        _onboardingBannerPanel.Controls.Add(_onboardingBannerLabel);
+        _onboardingBannerPanel.Controls.Add(_onboardingBannerButton);
+        _onboardingBannerPanel.Dock = DockStyle.Fill;
+        _onboardingBannerPanel.Margin = new Padding(0);
+        _onboardingBannerPanel.MinimumSize = new Size(0, 40);
+        _onboardingBannerPanel.Name = "_onboardingBannerPanel";
+        _onboardingBannerPanel.Padding = new Padding(10, 6, 10, 6);
+        _onboardingBannerPanel.Size = new Size(800, 40);
+        _onboardingBannerPanel.TabIndex = 0;
+        _onboardingBannerPanel.Visible = false;
+        //
+        // _onboardingBannerLabel
+        //
+        _onboardingBannerLabel.AutoSize = false;
+        _onboardingBannerLabel.Dock = DockStyle.Fill;
+        _onboardingBannerLabel.ForeColor = Color.DarkGoldenrod;
+        _onboardingBannerLabel.Name = "_onboardingBannerLabel";
+        _onboardingBannerLabel.Size = new Size(670, 28);
+        _onboardingBannerLabel.TabIndex = 0;
+        _onboardingBannerLabel.Text = "⚠ Подключение бота недоступно: не заполнены настройки авторизации.";
+        _onboardingBannerLabel.TextAlign = ContentAlignment.MiddleLeft;
+        //
+        // _onboardingBannerButton
+        //
+        _onboardingBannerButton.Dock = DockStyle.Right;
+        _onboardingBannerButton.Margin = new Padding(0);
+        _onboardingBannerButton.Name = "_onboardingBannerButton";
+        _onboardingBannerButton.Size = new Size(120, 28);
+        _onboardingBannerButton.TabIndex = 1;
+        _onboardingBannerButton.Text = "Настроить →";
+        _onboardingBannerButton.UseVisualStyleBackColor = true;
+        _onboardingBannerButton.Click += OnOnboardingBannerButtonClicked;
         // 
         // _mainToolStrip
         // 
@@ -158,6 +200,9 @@ partial class MainForm
         Name = "MainForm";
         Text = "Попрощайка Бот - Управление";
         _mainTableLayoutPanel.ResumeLayout(false);
+        _mainTableLayoutPanel.PerformLayout();
+        _onboardingBannerPanel.ResumeLayout(false);
+        _onboardingBannerPanel.PerformLayout();
         _mainToolStrip.ResumeLayout(false);
         _mainToolStrip.PerformLayout();
         _statusStrip.ResumeLayout(false);
@@ -167,6 +212,9 @@ partial class MainForm
     }
 
     private TableLayoutPanel _mainTableLayoutPanel;
+    private Panel _onboardingBannerPanel;
+    private Label _onboardingBannerLabel;
+    private Button _onboardingBannerButton;
     private ClickThroughToolStrip _mainToolStrip;
     private ToolStripButton _connectToolStripButton;
     private ToolStripButton _settingsToolStripButton;

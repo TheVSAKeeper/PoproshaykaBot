@@ -27,6 +27,17 @@ public sealed class TwitchOAuthService(
         return flow.StartOAuthFlowAsync(role, clientId, clientSecret, scopes, redirectUri, ct);
     }
 
+    public Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string[]? scopes = null,
+        string? redirectUri = null,
+        CancellationToken ct = default)
+    {
+        return flow.StartOAuthFlowToDraftAsync(role, clientId, clientSecret, scopes, redirectUri, ct);
+    }
+
     public void SetAuthResult(string code, string? state)
     {
         flow.SetAuthResult(code, state);

@@ -12,6 +12,14 @@ public interface ITwitchOAuthService
         string? redirectUri = null,
         CancellationToken ct = default);
 
+    Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string[]? scopes = null,
+        string? redirectUri = null,
+        CancellationToken ct = default);
+
     void SetAuthResult(string code, string? state);
 
     void SetAuthError(Exception exception);

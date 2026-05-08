@@ -287,7 +287,7 @@ public static class Program
         var redirectUri = settings.Twitch.RedirectUri;
         var serverPort = settings.Twitch.HttpServerPort;
 
-        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri))
+        if (!RedirectUriPortResolver.TryResolve(redirectUri, out var redirectPort))
         {
             Log.Error("Некорректный RedirectUri: {RedirectUri}", redirectUri);
             MessageBox.Show($"Некорректный RedirectUri: {redirectUri}\n\nПожалуйста, исправьте URI в настройках OAuth.",
@@ -296,16 +296,6 @@ public static class Program
                 MessageBoxIcon.Error);
 
             return false;
-        }
-
-        int redirectPort;
-        if (uri.Port == -1)
-        {
-            redirectPort = uri.Scheme == "https" ? 443 : 80;
-        }
-        else
-        {
-            redirectPort = uri.Port;
         }
 
         if (redirectPort == serverPort)

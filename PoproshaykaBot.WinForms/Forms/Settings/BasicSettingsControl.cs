@@ -25,6 +25,11 @@ public partial class BasicSettingsControl : UserControl
         settings.Channel = _channelTextBox.Text.Trim();
     }
 
+    public string GetChannel()
+    {
+        return _channelTextBox.Text.Trim();
+    }
+
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);

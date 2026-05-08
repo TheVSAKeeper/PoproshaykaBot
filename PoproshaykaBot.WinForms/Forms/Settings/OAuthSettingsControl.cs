@@ -16,12 +16,16 @@ public partial class OAuthSettingsControl : UserControl
         InitializeComponent();
         _botAccountSection.Role = TwitchOAuthRole.Bot;
         _broadcasterAccountSection.Role = TwitchOAuthRole.Broadcaster;
+        _botAccountSection.FlushParentDraft = FlushDraftFromUi;
+        _broadcasterAccountSection.FlushParentDraft = FlushDraftFromUi;
     }
 
     public event EventHandler? SettingChanged;
 
     [Inject]
     public ITwitchOAuthService OAuthService { get; internal init; } = null!;
+
+    public Action<AppSettings>? FlushDraft { get; set; }
 
     public void LoadSettings(AppSettings settings, TwitchAccountSettings botDraft, TwitchAccountSettings broadcasterDraft)
     {
@@ -37,7 +41,22 @@ public partial class OAuthSettingsControl : UserControl
         _botAccountSection.LoadSettings(settings, botDraft);
         _broadcasterAccountSection.LoadSettings(settings, broadcasterDraft);
 
+        RefreshChannelHint(settings.Twitch.Channel);
         UpdateRedirectUriEditState();
+    }
+
+    public void RefreshChannelHint(string? channel)
+    {
+        if (string.IsNullOrWhiteSpace(channel))
+        {
+            _channelHintLabel.Text = "⚠ Канал не задан — заполните его на вкладке «Основные», иначе авторизация стримера не пройдёт.";
+            _channelHintLabel.ForeColor = Color.Red;
+        }
+        else
+        {
+            _channelHintLabel.Text = $"Канал: {channel}";
+            _channelHintLabel.ForeColor = Color.Gray;
+        }
     }
 
     public void SaveSettings(AppSettings settings)
@@ -124,14 +143,25 @@ public partial class OAuthSettingsControl : UserControl
         viewButton.Text = textBox.UseSystemPasswordChar ? "👁" : "🙈";
     }
 
+    private void FlushDraftFromUi(AppSettings settings)
+    {
+        if (FlushDraft is { } external)
+        {
+            external(settings);
+            return;
+        }
+
+        SaveSettings(settings);
+    }
+
     private void SetPlaceholders()
     {
         _clientIdTextBox.PlaceholderText = string.IsNullOrWhiteSpace(DefaultSettings.ClientId)
-            ? "Введите Client ID"
+            ? "Скопируйте из консоли Twitch Dev"
             : DefaultSettings.ClientId;
 
         _clientSecretTextBox.PlaceholderText = string.IsNullOrWhiteSpace(DefaultSettings.ClientSecret)
-            ? "Введите Client Secret"
+            ? "Сгенерируйте в консоли Twitch Dev"
             : DefaultSettings.ClientSecret;
 
         _redirectUriTextBox.PlaceholderText = DefaultSettings.RedirectUri;

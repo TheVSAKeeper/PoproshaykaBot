@@ -38,6 +38,7 @@
             _testAuthSection = new TableLayoutPanel();
             _testAuthButton = new Button();
             _authStatusLabel = new Label();
+            _advancedSubPanel = new Panel();
             _tokenManagementSection = new TableLayoutPanel();
             _accessTokenLabel = new Label();
             _accessTokenPanel = new Panel();
@@ -60,6 +61,7 @@
             _scopesSection.SuspendLayout();
             _scopesPanel.SuspendLayout();
             _testAuthSection.SuspendLayout();
+            _advancedSubPanel.SuspendLayout();
             _tokenManagementSection.SuspendLayout();
             _accessTokenPanel.SuspendLayout();
             _refreshTokenPanel.SuspendLayout();
@@ -73,14 +75,12 @@
             _sectionLayout.ColumnCount = 1;
             _sectionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             _sectionLayout.Controls.Add(_sectionHeaderLabel, 0, 0);
-            _sectionLayout.Controls.Add(_scopesSection, 0, 1);
-            _sectionLayout.Controls.Add(_testAuthSection, 0, 2);
-            _sectionLayout.Controls.Add(_tokenManagementSection, 0, 3);
+            _sectionLayout.Controls.Add(_testAuthSection, 0, 1);
+            _sectionLayout.Controls.Add(_advancedSubPanel, 0, 2);
             _sectionLayout.Dock = DockStyle.Fill;
             _sectionLayout.Location = new Point(0, 0);
             _sectionLayout.Name = "_sectionLayout";
-            _sectionLayout.RowCount = 4;
-            _sectionLayout.RowStyles.Add(new RowStyle());
+            _sectionLayout.RowCount = 3;
             _sectionLayout.RowStyles.Add(new RowStyle());
             _sectionLayout.RowStyles.Add(new RowStyle());
             _sectionLayout.RowStyles.Add(new RowStyle());
@@ -109,8 +109,8 @@
             _scopesSection.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             _scopesSection.Controls.Add(_scopesLabel, 0, 0);
             _scopesSection.Controls.Add(_scopesPanel, 1, 0);
-            _scopesSection.Dock = DockStyle.Fill;
-            _scopesSection.Location = new Point(0, 20);
+            _scopesSection.Dock = DockStyle.Top;
+            _scopesSection.Location = new Point(0, 0);
             _scopesSection.Margin = new Padding(0, 0, 0, 8);
             _scopesSection.Name = "_scopesSection";
             _scopesSection.RowCount = 1;
@@ -199,6 +199,18 @@
             _authStatusLabel.TabIndex = 1;
             _authStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
             //
+            // _advancedSubPanel
+            //
+            _advancedSubPanel.AutoSize = true;
+            _advancedSubPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _advancedSubPanel.Controls.Add(_tokenManagementSection);
+            _advancedSubPanel.Controls.Add(_scopesSection);
+            _advancedSubPanel.Dock = DockStyle.Fill;
+            _advancedSubPanel.Margin = new Padding(0);
+            _advancedSubPanel.Name = "_advancedSubPanel";
+            _advancedSubPanel.Size = new Size(540, 180);
+            _advancedSubPanel.TabIndex = 4;
+            //
             // _tokenManagementSection
             //
             _tokenManagementSection.AutoSize = true;
@@ -219,8 +231,8 @@
             _tokenManagementSection.Controls.Add(_lastRefreshLabel, 0, 4);
             _tokenManagementSection.Controls.Add(_lastRefreshValueLabel, 1, 4);
             _tokenManagementSection.Controls.Add(_tokenButtonsPanel, 0, 5);
-            _tokenManagementSection.Dock = DockStyle.Fill;
-            _tokenManagementSection.Location = new Point(0, 100);
+            _tokenManagementSection.Dock = DockStyle.Top;
+            _tokenManagementSection.Location = new Point(0, 35);
             _tokenManagementSection.Margin = new Padding(0);
             _tokenManagementSection.Name = "_tokenManagementSection";
             _tokenManagementSection.RowCount = 6;
@@ -439,6 +451,8 @@
             _scopesPanel.PerformLayout();
             _testAuthSection.ResumeLayout(false);
             _testAuthSection.PerformLayout();
+            _advancedSubPanel.ResumeLayout(false);
+            _advancedSubPanel.PerformLayout();
             _tokenManagementSection.ResumeLayout(false);
             _tokenManagementSection.PerformLayout();
             _accessTokenPanel.ResumeLayout(false);
@@ -463,6 +477,7 @@
         private TableLayoutPanel _testAuthSection;
         private Button _testAuthButton;
         private Label _authStatusLabel;
+        private Panel _advancedSubPanel;
         private TableLayoutPanel _tokenManagementSection;
         private Label _accessTokenLabel;
         private Panel _accessTokenPanel;

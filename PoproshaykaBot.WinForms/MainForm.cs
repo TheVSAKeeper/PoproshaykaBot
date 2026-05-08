@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.WinForms.Forms.Settings;
 using PoproshaykaBot.WinForms.Forms.Users;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
@@ -20,6 +21,7 @@ public partial class MainForm : Form
     private readonly IEventBus _eventBus;
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly SettingsManager _settingsManager;
+    private readonly AccountsStore _accountsStore;
     private readonly DashboardLayoutStore _dashboardLayoutStore;
     private readonly BotConnectionManager _connectionManager;
     private readonly ILogger<MainForm> _logger;
@@ -38,6 +40,7 @@ public partial class MainForm : Form
         ChatHistoryManager chatHistoryManager,
         BotConnectionManager connectionManager,
         SettingsManager settingsManager,
+        AccountsStore accountsStore,
         DashboardLayoutStore dashboardLayoutStore,
         ILogger<MainForm> logger)
     {
@@ -46,6 +49,7 @@ public partial class MainForm : Form
         _chatHistoryManager = chatHistoryManager;
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
+        _accountsStore = accountsStore;
         _dashboardLayoutStore = dashboardLayoutStore;
         _logger = logger;
 
@@ -75,6 +79,7 @@ public partial class MainForm : Form
         _subs.DisposeOnClose(this);
 
         LoadSettings();
+        RefreshOnboardingBanner();
         _logger.LogInformation("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
@@ -154,7 +159,13 @@ public partial class MainForm : Form
     private void OnSettingsApplied(object? sender, EventArgs e)
     {
         LoadSettings(reloadDashboard: true);
+        RefreshOnboardingBanner();
         _logger.LogInformation("Настройки обновлены.");
+    }
+
+    private void OnOnboardingBannerButtonClicked(object? sender, EventArgs e)
+    {
+        OnSettingsButtonClicked(sender, e);
     }
 
     private void OnSettingsFormClosed(object? sender, FormClosedEventArgs e)
@@ -201,6 +212,47 @@ public partial class MainForm : Form
         return false;
     }
 
+    private void RefreshOnboardingBanner()
+    {
+        var twitch = _settingsManager.Current.Twitch;
+        var hasClientId = !string.IsNullOrWhiteSpace(twitch.ClientId);
+        var hasClientSecret = !string.IsNullOrWhiteSpace(twitch.ClientSecret);
+        var hasChannel = !string.IsNullOrWhiteSpace(twitch.Channel);
+        var hasBotToken = !string.IsNullOrWhiteSpace(_accountsStore.Load(TwitchOAuthRole.Bot).AccessToken);
+        var hasBroadcasterToken = !string.IsNullOrWhiteSpace(_accountsStore.Load(TwitchOAuthRole.Broadcaster).AccessToken);
+
+        var missing = new List<string>();
+
+        if (!hasClientId || !hasClientSecret)
+        {
+            missing.Add("Client ID/Secret");
+        }
+
+        if (!hasChannel)
+        {
+            missing.Add("канал");
+        }
+
+        if (!hasBotToken)
+        {
+            missing.Add("авторизация бота");
+        }
+
+        if (!hasBroadcasterToken)
+        {
+            missing.Add("авторизация стримера");
+        }
+
+        if (missing.Count == 0)
+        {
+            _onboardingBannerPanel.Visible = false;
+            return;
+        }
+
+        _onboardingBannerLabel.Text = $"⚠ Бот не готов к работе. Не настроено: {string.Join(", ", missing)}.";
+        _onboardingBannerPanel.Visible = true;
+    }
+
     private async Task ShutdownAndCloseAsync()
     {
         try
@@ -233,6 +285,7 @@ public partial class MainForm : Form
     {
         _currentPhase = phaseEvent.Phase;
         ApplyPhaseVisuals(phaseEvent.Phase);
+        RefreshOnboardingBanner();
 
         switch (phaseEvent.Phase)
         {

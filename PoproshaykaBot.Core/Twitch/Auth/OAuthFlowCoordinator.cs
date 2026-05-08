@@ -37,6 +37,93 @@ public sealed class OAuthFlowCoordinator(
         string? redirectUri,
         CancellationToken ct)
     {
+        var result = await StartOAuthFlowCoreAsync(role, clientId, clientSecret, scopes, redirectUri, ct);
+
+        accountWriter.UpdateSettings(role,
+            result.AccessToken,
+            result.RefreshToken,
+            result.Scopes,
+            result.Login,
+            result.UserId,
+            result.ExpiresInSeconds,
+            true);
+
+        return result.AccessToken;
+    }
+
+    public Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string[]? scopes,
+        string? redirectUri,
+        CancellationToken ct)
+    {
+        return StartOAuthFlowCoreAsync(role, clientId, clientSecret, scopes, redirectUri, ct);
+    }
+
+    public void SetAuthResult(string code, string? state)
+    {
+        logger.LogDebug("Получен callback авторизации (State: {State})", state);
+
+        if (string.IsNullOrEmpty(state))
+        {
+            logger.LogWarning("Callback без state-параметра — игнорируется");
+            return;
+        }
+
+        PendingAuth? pending;
+        lock (_pendingAuthsLock)
+        {
+            _pendingAuths.TryGetValue(state, out pending);
+        }
+
+        if (pending == null)
+        {
+            logger.LogWarning("Callback с неизвестным state '{State}' — возможна CSRF атака или просроченный flow", state);
+            return;
+        }
+
+        logger.LogInformation("Callback успешно сопоставлен с активным OAuth-потоком для роли {Role}", pending.Role);
+        pending.Tcs.TrySetResult(code);
+    }
+
+    public void SetAuthError(Exception exception)
+    {
+        logger.LogError(exception, "Получена ошибка в процессе обработки callback-ответа авторизации");
+
+        lock (_pendingAuthsLock)
+        {
+            foreach (var pending in _pendingAuths.Values)
+            {
+                pending.Tcs.TrySetException(exception);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        foreach (var semaphore in _authSemaphores.Values)
+        {
+            semaphore.Dispose();
+        }
+
+        _isDisposed = true;
+    }
+
+    private async Task<OAuthFlowResult> StartOAuthFlowCoreAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string[]? scopes,
+        string? redirectUri,
+        CancellationToken ct)
+    {
         logger.LogDebug("Начало процесса OAuth авторизации для роли {Role} (ClientId: {ClientId})", role, clientId);
 
         if (string.IsNullOrWhiteSpace(clientId))
@@ -120,12 +207,12 @@ public sealed class OAuthFlowCoordinator(
 
             statusReporter.Report(role, "Обмен кода на токен доступа...");
 
-            var accessToken = await ExchangeCodeForTokenAsync(role, clientId, clientSecret, authorizationCode, redirectUri, ct);
+            var result = await ExchangeCodeForTokenAsync(role, clientId, clientSecret, authorizationCode, redirectUri, ct);
 
             statusReporter.Report(role, "Авторизация завершена успешно!");
             logger.LogInformation("OAuth авторизация успешно завершена для роли {Role} (ClientId: {ClientId})", role, clientId);
 
-            return accessToken;
+            return result;
         }
         finally
         {
@@ -139,61 +226,7 @@ public sealed class OAuthFlowCoordinator(
         }
     }
 
-    public void SetAuthResult(string code, string? state)
-    {
-        logger.LogDebug("Получен callback авторизации (State: {State})", state);
-
-        if (string.IsNullOrEmpty(state))
-        {
-            logger.LogWarning("Callback без state-параметра — игнорируется");
-            return;
-        }
-
-        PendingAuth? pending;
-        lock (_pendingAuthsLock)
-        {
-            _pendingAuths.TryGetValue(state, out pending);
-        }
-
-        if (pending == null)
-        {
-            logger.LogWarning("Callback с неизвестным state '{State}' — возможна CSRF атака или просроченный flow", state);
-            return;
-        }
-
-        logger.LogInformation("Callback успешно сопоставлен с активным OAuth-потоком для роли {Role}", pending.Role);
-        pending.Tcs.TrySetResult(code);
-    }
-
-    public void SetAuthError(Exception exception)
-    {
-        logger.LogError(exception, "Получена ошибка в процессе обработки callback-ответа авторизации");
-
-        lock (_pendingAuthsLock)
-        {
-            foreach (var pending in _pendingAuths.Values)
-            {
-                pending.Tcs.TrySetException(exception);
-            }
-        }
-    }
-
-    public void Dispose()
-    {
-        if (_isDisposed)
-        {
-            return;
-        }
-
-        foreach (var semaphore in _authSemaphores.Values)
-        {
-            semaphore.Dispose();
-        }
-
-        _isDisposed = true;
-    }
-
-    private async Task<string> ExchangeCodeForTokenAsync(
+    private async Task<OAuthFlowResult> ExchangeCodeForTokenAsync(
         TwitchOAuthRole role,
         string clientId,
         string clientSecret,
@@ -220,16 +253,12 @@ public sealed class OAuthFlowCoordinator(
 
         OAuthRoleHelpers.VerifyLoginMatchesRole(role, validation, settingsManager, logger);
 
-        accountWriter.UpdateSettings(role,
-            tokenResponse.AccessToken,
+        return new(tokenResponse.AccessToken,
             tokenResponse.RefreshToken,
-            tokenResponse.Scope,
+            tokenResponse.Scope?.ToArray() ?? Array.Empty<string>(),
             validation.Login,
             validation.UserId,
-            tokenResponse.ExpiresIn,
-            true);
-
-        return tokenResponse.AccessToken;
+            tokenResponse.ExpiresIn);
     }
 
     private sealed record PendingAuth(TwitchOAuthRole Role, TaskCompletionSource<string> Tcs);
