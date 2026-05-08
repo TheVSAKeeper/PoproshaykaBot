@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Settings;
@@ -14,6 +15,7 @@ public static class SettingsServiceCollectionExtensions
         services.AddSingleton<RecentCategoriesStore>();
         services.AddSingleton<DashboardLayoutStore>();
         services.AddSingleton<ObsChatStore>();
+        services.AddSingleton<OnboardingChecklist>();
         return services;
     }
 }

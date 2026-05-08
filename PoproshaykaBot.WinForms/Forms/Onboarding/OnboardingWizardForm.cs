@@ -1,6 +1,4 @@
 ﻿using Microsoft.Extensions.Logging;
-using PoproshaykaBot.Core.Infrastructure.Events;
-using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -13,47 +11,36 @@ namespace PoproshaykaBot.WinForms.Forms.Onboarding;
 
 public partial class OnboardingWizardForm : Form
 {
-    private readonly SettingsManager _settingsManager;
-    private readonly AccountsStore _accountsStore;
     private readonly IControlFactory _controlFactory;
-    private readonly IEventBus _eventBus;
+    private readonly SettingsManager _settingsManager;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly ILogger<OnboardingWizardForm> _logger;
     private readonly OnboardingContext _context;
-    private readonly AppSettings _originalSettings;
     private readonly List<IOnboardingWizardPage> _pages = [];
+    private readonly int _originalHttpServerPort;
     private int _currentPageIndex = -1;
     private bool _initialized;
-    private bool _settingsCommittedToDisk;
-    private bool _completed;
-    private bool _revertScheduled;
+    private bool _rollbackPerformed;
 
     public OnboardingWizardForm(
         SettingsManager settingsManager,
         AccountsStore accountsStore,
         IControlFactory controlFactory,
-        IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
         ILogger<OnboardingWizardForm> logger)
     {
-        _settingsManager = settingsManager;
-        _accountsStore = accountsStore;
         _controlFactory = controlFactory;
-        _eventBus = eventBus;
+        _settingsManager = settingsManager;
         _kestrelHttpServer = kestrelHttpServer;
         _logger = logger;
 
-        _originalSettings = DeepClone(settingsManager.Current);
         _context = new(DeepClone(settingsManager.Current),
             DeepClone(accountsStore.LoadBot()),
             DeepClone(accountsStore.LoadBroadcaster()));
 
-        InitializeComponent();
-    }
+        _originalHttpServerPort = settingsManager.Current.Twitch.HttpServerPort;
 
-    public void NotifySettingsCommittedToDisk()
-    {
-        _settingsCommittedToDisk = true;
+        InitializeComponent();
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -75,39 +62,19 @@ public partial class OnboardingWizardForm : Form
     {
         base.OnFormClosing(e);
 
-        if (e.Cancel || _revertScheduled || _completed || !_settingsCommittedToDisk)
+        if (e.Cancel || _rollbackPerformed || DialogResult == DialogResult.OK)
         {
             return;
         }
 
-        if (DialogResult == DialogResult.OK)
+        if (_settingsManager.Current.Twitch.HttpServerPort == _originalHttpServerPort)
         {
+            _rollbackPerformed = true;
             return;
         }
 
-        _revertScheduled = true;
         e.Cancel = true;
-        _ = RevertAndCloseAsync();
-    }
-
-    private void OnSaveAccountsRequested(object? sender, EventArgs e)
-    {
-        try
-        {
-            _settingsManager.SaveSettings(_context.Settings);
-            _accountsStore.SaveAll(_context.BotAccount, _context.BroadcasterAccount);
-            _settingsCommittedToDisk = true;
-            _completed = true;
-
-            _ = _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
-            _ = _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Ошибка сохранения настроек wizard'а");
-            MessageBox.Show($"Не удалось сохранить настройки: {exception.Message}",
-                "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
+        _ = RollbackAndCloseAsync();
     }
 
     private async void OnNextButtonClicked(object? sender, EventArgs e)
@@ -170,6 +137,53 @@ public partial class OnboardingWizardForm : Form
         return JsonSerializer.Deserialize<T>(json) ?? new();
     }
 
+    private async Task RollbackAndCloseAsync()
+    {
+        await RollbackHttpServerPortAsync();
+
+        if (!IsDisposed)
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+        }
+    }
+
+    private async Task RollbackHttpServerPortAsync()
+    {
+        if (_rollbackPerformed)
+        {
+            return;
+        }
+
+        _rollbackPerformed = true;
+
+        var liveSettings = _settingsManager.Current;
+        var currentPort = liveSettings.Twitch.HttpServerPort;
+
+        if (currentPort == _originalHttpServerPort)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_kestrelHttpServer.IsRunning)
+            {
+                await _kestrelHttpServer.StopAsync();
+            }
+
+            liveSettings.Twitch.HttpServerPort = _originalHttpServerPort;
+
+            await _kestrelHttpServer.StartAsync();
+
+            _logger.LogInformation("HTTP сервер откачен на исходный порт {Port} после отмены мастера", _originalHttpServerPort);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Не удалось откатить HTTP сервер на порт {Port} после отмены мастера", _originalHttpServerPort);
+        }
+    }
+
     private void BuildPages()
     {
         _pages.Add(_controlFactory.Create<WelcomePage>());
@@ -184,42 +198,7 @@ public partial class OnboardingWizardForm : Form
         broadcasterAuth.Role = TwitchOAuthRole.Broadcaster;
         _pages.Add(broadcasterAuth);
 
-        var completion = _controlFactory.Create<CompletionPage>();
-        completion.SaveAccountsRequested += OnSaveAccountsRequested;
-        _pages.Add(completion);
-    }
-
-    private async Task RevertAndCloseAsync()
-    {
-        try
-        {
-            var originalPort = _originalSettings.Twitch.HttpServerPort;
-            var currentPort = _settingsManager.Current.Twitch.HttpServerPort;
-
-            _settingsManager.SaveSettings(_originalSettings);
-
-            if (originalPort != currentPort && _kestrelHttpServer.IsRunning)
-            {
-                try
-                {
-                    await _kestrelHttpServer.StopAsync();
-                    await _kestrelHttpServer.StartAsync();
-                }
-                catch (Exception kestrelEx)
-                {
-                    _logger.LogError(kestrelEx, "Не удалось вернуть HTTP сервер на прежний порт {Port}", originalPort);
-                }
-            }
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Ошибка отката изменений wizard'а");
-        }
-        finally
-        {
-            DialogResult = DialogResult.Cancel;
-            Close();
-        }
+        _pages.Add(_controlFactory.Create<CompletionPage>());
     }
 
     private void NavigateTo(int index)

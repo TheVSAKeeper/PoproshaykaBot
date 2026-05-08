@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
+using PoproshaykaBot.Core.Twitch.Onboarding;
 
 namespace PoproshaykaBot.Core.Twitch;
 
@@ -35,8 +36,10 @@ public static class TwitchServiceCollectionExtensions
         services.AddSingleton<OAuthFlowCoordinator>();
         services.AddSingleton<OAuthTokenRefresher>();
         services.AddSingleton<ITwitchOAuthService, TwitchOAuthService>();
+        services.AddSingleton<IClientCredentialsValidator, ClientCredentialsValidator>();
 
         services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
+        services.AddSingleton<IOnboardingChannelValidator, OnboardingChannelValidator>();
 
         return services;
     }

@@ -2,11 +2,12 @@
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
+using System.Net;
 using System.Net.Sockets;
 
 namespace PoproshaykaBot.WinForms.Forms.Onboarding.Pages;
 
-public sealed partial class HttpServerCheckPage : UserControl, IOnboardingWizardPage
+public sealed partial class HttpServerCheckPage : OnboardingPageBase
 {
     private OnboardingContext? _context;
     private bool _checkInProgress;
@@ -15,8 +16,6 @@ public sealed partial class HttpServerCheckPage : UserControl, IOnboardingWizard
     {
         InitializeComponent();
     }
-
-    public event EventHandler? CanAdvanceChanged;
 
     [Inject]
     public SettingsManager SettingsManager { get; internal init; } = null!;
@@ -27,20 +26,13 @@ public sealed partial class HttpServerCheckPage : UserControl, IOnboardingWizard
     [Inject]
     public ILogger<HttpServerCheckPage> Logger { get; internal init; } = null!;
 
-    public string PageTitle => "Проверка HTTP сервера";
+    public override string PageTitle => "Проверка HTTP сервера";
 
-    public bool CanAdvance { get; private set; }
-
-    public void OnEnter(OnboardingContext context)
+    public override void OnEnter(OnboardingContext context)
     {
         _context = context;
         SetCanAdvance(false);
         _ = RunCheckAsync();
-    }
-
-    public Task<bool> OnLeavingAsync(OnboardingContext context)
-    {
-        return Task.FromResult(CanAdvance);
     }
 
     private async void OnRetryButtonClicked(object? sender, EventArgs e)
@@ -48,18 +40,22 @@ public sealed partial class HttpServerCheckPage : UserControl, IOnboardingWizard
         await RunCheckAsync();
     }
 
-    private static async Task<bool> TryConnectAsync(int port)
+    private static bool TryBindPort(int port)
     {
+        TcpListener? listener = null;
         try
         {
-            using var client = new TcpClient();
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            await client.ConnectAsync("127.0.0.1", port, cts.Token);
-            return client.Connected;
+            listener = new(IPAddress.Loopback, port);
+            listener.Start();
+            return true;
         }
-        catch
+        catch (SocketException)
         {
             return false;
+        }
+        finally
+        {
+            listener?.Stop();
         }
     }
 
@@ -85,39 +81,48 @@ public sealed partial class HttpServerCheckPage : UserControl, IOnboardingWizard
             }
 
             _context.Settings.Twitch.HttpServerPort = port;
-            SettingsManager.SaveSettings(_context.Settings);
-            (FindForm() as OnboardingWizardForm)?.NotifySettingsCommittedToDisk();
 
-            ShowStatus($"Перезапуск HTTP сервера на порту {port}...", Color.Blue, "");
+            var livePort = SettingsManager.Current.Twitch.HttpServerPort;
 
-            try
+            if (KestrelHttpServer.IsRunning && livePort == port)
             {
-                if (KestrelHttpServer.IsRunning)
-                {
-                    await KestrelHttpServer.StopAsync();
-                }
+                ShowStatus($"HTTP сервер уже слушает порт {port}",
+                    Color.Green,
+                    "Можно переходить к авторизации.");
 
-                await KestrelHttpServer.StartAsync();
+                SetCanAdvance(true);
+                return;
             }
-            catch (Exception exception)
+
+            if (KestrelHttpServer.IsRunning)
             {
-                Logger.LogError(exception, "Не удалось перезапустить HTTP сервер на порту {Port}", port);
-                ShowStatus($"Не удалось запустить сервер на порту {port}",
+                ShowStatus($"Перезапуск HTTP сервера на порту {port}...", Color.Blue, "");
+            }
+            else
+            {
+                ShowStatus($"Запуск HTTP сервера на порту {port}...", Color.Blue, "");
+            }
+
+            await Task.Yield();
+
+            if (!KestrelHttpServer.IsRunning && !TryBindPort(port))
+            {
+                Logger.LogWarning("Порт {Port} недоступен для биндинга в onboarding", port);
+                ShowStatus($"Порт {port} занят другим приложением",
                     Color.Red,
-                    $"{exception.Message}\nПорт может быть занят другим приложением. Поменяйте Redirect URI или закройте конфликтующее приложение.");
+                    "Закройте конфликтующее приложение или измените Redirect URI на предыдущем шаге.");
 
                 _retryButton.Visible = true;
                 return;
             }
 
-            ShowStatus($"Проверка соединения с 127.0.0.1:{port}...", Color.Blue, "");
+            var startedSuccessfully = await TryRestartServerAsync(port, livePort);
 
-            var listening = await TryConnectAsync(port);
-            if (!listening)
+            if (!startedSuccessfully)
             {
-                ShowStatus($"Сервер не отвечает на порту {port}",
+                ShowStatus($"Не удалось запустить HTTP сервер на порту {port}",
                     Color.Red,
-                    "Сервер запущен, но соединение установить не удалось. Возможно, файервол блокирует loopback.");
+                    "Закройте конфликтующее приложение или измените Redirect URI на предыдущем шаге.");
 
                 _retryButton.Visible = true;
                 return;
@@ -135,21 +140,52 @@ public sealed partial class HttpServerCheckPage : UserControl, IOnboardingWizard
         }
     }
 
+    private async Task<bool> TryRestartServerAsync(int newPort, int previousLivePort)
+    {
+        var liveSettings = SettingsManager.Current;
+
+        try
+        {
+            if (KestrelHttpServer.IsRunning)
+            {
+                await KestrelHttpServer.StopAsync();
+            }
+
+            liveSettings.Twitch.HttpServerPort = newPort;
+
+            await KestrelHttpServer.StartAsync();
+
+            Logger.LogInformation("HTTP сервер перезапущен на порту {Port} в onboarding", newPort);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Ошибка запуска HTTP сервера на порту {Port} в onboarding", newPort);
+
+            liveSettings.Twitch.HttpServerPort = previousLivePort;
+
+            try
+            {
+                if (KestrelHttpServer.IsRunning)
+                {
+                    await KestrelHttpServer.StopAsync();
+                }
+
+                await KestrelHttpServer.StartAsync();
+            }
+            catch (Exception restoreException)
+            {
+                Logger.LogError(restoreException, "Не удалось восстановить HTTP сервер на старом порту {Port}", previousLivePort);
+            }
+
+            return false;
+        }
+    }
+
     private void ShowStatus(string status, Color color, string details)
     {
         _statusLabel.Text = status;
         _statusLabel.ForeColor = color;
         _detailsLabel.Text = details;
-    }
-
-    private void SetCanAdvance(bool value)
-    {
-        if (CanAdvance == value)
-        {
-            return;
-        }
-
-        CanAdvance = value;
-        CanAdvanceChanged?.Invoke(this, EventArgs.Empty);
     }
 }

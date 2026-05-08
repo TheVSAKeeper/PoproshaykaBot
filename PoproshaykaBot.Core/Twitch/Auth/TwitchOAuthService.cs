@@ -20,22 +20,26 @@ public sealed class TwitchOAuthService(
         TwitchOAuthRole role,
         string clientId,
         string clientSecret,
-        string[]? scopes = null,
-        string? redirectUri = null,
+        string[]? scopes,
+        string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel = true,
         CancellationToken ct = default)
     {
-        return flow.StartOAuthFlowAsync(role, clientId, clientSecret, scopes, redirectUri, ct);
+        return flow.StartOAuthFlowAsync(role, clientId, clientSecret, scopes, redirectUri, onAuthUrlReady, checkBroadcasterChannel, ct);
     }
 
     public Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
         TwitchOAuthRole role,
         string clientId,
         string clientSecret,
-        string[]? scopes = null,
-        string? redirectUri = null,
+        string[]? scopes,
+        string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel = true,
         CancellationToken ct = default)
     {
-        return flow.StartOAuthFlowToDraftAsync(role, clientId, clientSecret, scopes, redirectUri, ct);
+        return flow.StartOAuthFlowToDraftAsync(role, clientId, clientSecret, scopes, redirectUri, onAuthUrlReady, checkBroadcasterChannel, ct);
     }
 
     public void SetAuthResult(string code, string? state)

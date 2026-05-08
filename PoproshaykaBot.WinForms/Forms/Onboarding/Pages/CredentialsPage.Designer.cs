@@ -18,17 +18,23 @@ partial class CredentialsPage
 
     private void InitializeComponent()
     {
+        components = new System.ComponentModel.Container();
         _layout = new TableLayoutPanel();
         _channelLabel = new Label();
         _channelTextBox = new TextBox();
+        _autoDetectChannelCheckBox = new CheckBox();
+        _channelStatusLabel = new Label();
         _clientIdLabel = new Label();
         _clientIdTextBox = new TextBox();
         _clientSecretLabel = new Label();
         _clientSecretTextBox = new TextBox();
+        _clientStatusLabel = new Label();
         _redirectUriLabel = new Label();
         _redirectUriTextBox = new TextBox();
         _portHintLabel = new Label();
         _validationLabel = new Label();
+        _validationTimer = new System.Windows.Forms.Timer(components);
+        _channelValidationTimer = new System.Windows.Forms.Timer(components);
         _layout.SuspendLayout();
         SuspendLayout();
         //
@@ -39,22 +45,30 @@ partial class CredentialsPage
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _layout.Controls.Add(_channelLabel, 0, 0);
         _layout.Controls.Add(_channelTextBox, 1, 0);
-        _layout.Controls.Add(_clientIdLabel, 0, 1);
-        _layout.Controls.Add(_clientIdTextBox, 1, 1);
-        _layout.Controls.Add(_clientSecretLabel, 0, 2);
-        _layout.Controls.Add(_clientSecretTextBox, 1, 2);
-        _layout.Controls.Add(_redirectUriLabel, 0, 3);
-        _layout.Controls.Add(_redirectUriTextBox, 1, 3);
-        _layout.Controls.Add(_portHintLabel, 1, 4);
-        _layout.Controls.Add(_validationLabel, 0, 5);
+        _layout.Controls.Add(_autoDetectChannelCheckBox, 1, 1);
+        _layout.Controls.Add(_channelStatusLabel, 0, 2);
+        _layout.SetColumnSpan(_channelStatusLabel, 2);
+        _layout.Controls.Add(_clientIdLabel, 0, 3);
+        _layout.Controls.Add(_clientIdTextBox, 1, 3);
+        _layout.Controls.Add(_clientSecretLabel, 0, 4);
+        _layout.Controls.Add(_clientSecretTextBox, 1, 4);
+        _layout.Controls.Add(_clientStatusLabel, 0, 5);
+        _layout.SetColumnSpan(_clientStatusLabel, 2);
+        _layout.Controls.Add(_redirectUriLabel, 0, 6);
+        _layout.Controls.Add(_redirectUriTextBox, 1, 6);
+        _layout.Controls.Add(_portHintLabel, 1, 7);
+        _layout.Controls.Add(_validationLabel, 0, 8);
         _layout.SetColumnSpan(_validationLabel, 2);
         _layout.Dock = DockStyle.Fill;
         _layout.Name = "_layout";
         _layout.Padding = new Padding(20, 18, 20, 18);
-        _layout.RowCount = 7;
+        _layout.RowCount = 10;
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+        _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
         _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
-        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
+        _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
         _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
         _layout.RowStyles.Add(new RowStyle());
@@ -75,6 +89,28 @@ partial class CredentialsPage
         _channelTextBox.Name = "_channelTextBox";
         _channelTextBox.PlaceholderText = "название_канала";
         _channelTextBox.TextChanged += OnInputChanged;
+        //
+        // _autoDetectChannelCheckBox
+        //
+        _autoDetectChannelCheckBox.AutoSize = true;
+        _autoDetectChannelCheckBox.Anchor = AnchorStyles.Left;
+        _autoDetectChannelCheckBox.Checked = true;
+        _autoDetectChannelCheckBox.CheckState = CheckState.Checked;
+        _autoDetectChannelCheckBox.Margin = new Padding(0, 0, 0, 6);
+        _autoDetectChannelCheckBox.Name = "_autoDetectChannelCheckBox";
+        _autoDetectChannelCheckBox.Text = "Определить автоматически по аккаунту стримера";
+        _autoDetectChannelCheckBox.UseVisualStyleBackColor = true;
+        _autoDetectChannelCheckBox.CheckedChanged += OnAutoDetectChannelCheckedChanged;
+        //
+        // _channelStatusLabel
+        //
+        _channelStatusLabel.AutoSize = true;
+        _channelStatusLabel.Dock = DockStyle.Fill;
+        _channelStatusLabel.ForeColor = Color.Gray;
+        _channelStatusLabel.Margin = new Padding(0, 0, 0, 4);
+        _channelStatusLabel.Name = "_channelStatusLabel";
+        _channelStatusLabel.Text = "";
+        _channelStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
         // _clientIdLabel
         //
@@ -109,6 +145,16 @@ partial class CredentialsPage
         _clientSecretTextBox.PlaceholderText = "Сгенерируйте в консоли Twitch Dev";
         _clientSecretTextBox.UseSystemPasswordChar = true;
         _clientSecretTextBox.TextChanged += OnInputChanged;
+        //
+        // _clientStatusLabel
+        //
+        _clientStatusLabel.AutoSize = true;
+        _clientStatusLabel.Dock = DockStyle.Fill;
+        _clientStatusLabel.ForeColor = Color.Gray;
+        _clientStatusLabel.Margin = new Padding(0, 4, 0, 4);
+        _clientStatusLabel.Name = "_clientStatusLabel";
+        _clientStatusLabel.Text = "";
+        _clientStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
         // _redirectUriLabel
         //
@@ -145,6 +191,16 @@ partial class CredentialsPage
         _validationLabel.Text = "";
         _validationLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
+        // _validationTimer
+        //
+        _validationTimer.Interval = 800;
+        _validationTimer.Tick += OnValidationTimerTick;
+        //
+        // _channelValidationTimer
+        //
+        _channelValidationTimer.Interval = 800;
+        _channelValidationTimer.Tick += OnChannelValidationTimerTick;
+        //
         // CredentialsPage
         //
         AutoScaleDimensions = new SizeF(7F, 15F);
@@ -162,12 +218,17 @@ partial class CredentialsPage
     private TableLayoutPanel _layout;
     private Label _channelLabel;
     private TextBox _channelTextBox;
+    private CheckBox _autoDetectChannelCheckBox;
+    private Label _channelStatusLabel;
     private Label _clientIdLabel;
     private TextBox _clientIdTextBox;
     private Label _clientSecretLabel;
     private TextBox _clientSecretTextBox;
+    private Label _clientStatusLabel;
     private Label _redirectUriLabel;
     private TextBox _redirectUriTextBox;
     private Label _portHintLabel;
     private Label _validationLabel;
+    private System.Windows.Forms.Timer _validationTimer;
+    private System.Windows.Forms.Timer _channelValidationTimer;
 }

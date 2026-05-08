@@ -2,7 +2,7 @@
 
 namespace PoproshaykaBot.WinForms.Forms.Onboarding.Pages;
 
-public sealed partial class WelcomePage : UserControl, IOnboardingWizardPage
+public sealed partial class WelcomePage : OnboardingPageBase
 {
     private const string TwitchDevConsoleUrl = "https://dev.twitch.tv/console/apps";
 
@@ -11,23 +11,11 @@ public sealed partial class WelcomePage : UserControl, IOnboardingWizardPage
         InitializeComponent();
     }
 
-    public event EventHandler? CanAdvanceChanged
+    public override string PageTitle => "Добро пожаловать";
+
+    public override void OnEnter(OnboardingContext context)
     {
-        add { }
-        remove { }
-    }
-
-    public string PageTitle => "Добро пожаловать";
-
-    public bool CanAdvance => true;
-
-    public void OnEnter(OnboardingContext context)
-    {
-    }
-
-    public Task<bool> OnLeavingAsync(OnboardingContext context)
-    {
-        return Task.FromResult(true);
+        SetCanAdvance(true);
     }
 
     private void OnConsoleLinkClicked(object? sender, LinkLabelLinkClickedEventArgs e)

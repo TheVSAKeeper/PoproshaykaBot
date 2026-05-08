@@ -8,16 +8,20 @@ public interface ITwitchOAuthService
         TwitchOAuthRole role,
         string clientId,
         string clientSecret,
-        string[]? scopes = null,
-        string? redirectUri = null,
+        string[]? scopes,
+        string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel = true,
         CancellationToken ct = default);
 
     Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
         TwitchOAuthRole role,
         string clientId,
         string clientSecret,
-        string[]? scopes = null,
-        string? redirectUri = null,
+        string[]? scopes,
+        string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel = true,
         CancellationToken ct = default);
 
     void SetAuthResult(string code, string? state);

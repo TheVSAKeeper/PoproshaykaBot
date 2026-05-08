@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
-using System.Diagnostics;
 using System.Security.Cryptography;
 
 namespace PoproshaykaBot.Core.Twitch.Auth;
@@ -35,9 +34,11 @@ public sealed class OAuthFlowCoordinator(
         string clientSecret,
         string[]? scopes,
         string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel,
         CancellationToken ct)
     {
-        var result = await StartOAuthFlowCoreAsync(role, clientId, clientSecret, scopes, redirectUri, ct);
+        var result = await StartOAuthFlowCoreAsync(role, clientId, clientSecret, scopes, redirectUri, onAuthUrlReady, checkBroadcasterChannel, ct);
 
         accountWriter.UpdateSettings(role,
             result.AccessToken,
@@ -57,9 +58,11 @@ public sealed class OAuthFlowCoordinator(
         string clientSecret,
         string[]? scopes,
         string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel,
         CancellationToken ct)
     {
-        return StartOAuthFlowCoreAsync(role, clientId, clientSecret, scopes, redirectUri, ct);
+        return StartOAuthFlowCoreAsync(role, clientId, clientSecret, scopes, redirectUri, onAuthUrlReady, checkBroadcasterChannel, ct);
     }
 
     public void SetAuthResult(string code, string? state)
@@ -122,6 +125,8 @@ public sealed class OAuthFlowCoordinator(
         string clientSecret,
         string[]? scopes,
         string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel,
         CancellationToken ct)
     {
         logger.LogDebug("Начало процесса OAuth авторизации для роли {Role} (ClientId: {ClientId})", role, clientId);
@@ -135,6 +140,8 @@ public sealed class OAuthFlowCoordinator(
         {
             throw new ArgumentException("Секрет клиента не может быть пустым", nameof(clientSecret));
         }
+
+        ArgumentNullException.ThrowIfNull(onAuthUrlReady);
 
         var semaphore = _authSemaphores[role];
         await semaphore.WaitAsync(ct);
@@ -156,8 +163,6 @@ public sealed class OAuthFlowCoordinator(
 
             var scopeString = string.Join(" ", scopes);
 
-            statusReporter.Report(role, "Открытие браузера для авторизации...");
-
             var authUrl = "https://id.twitch.tv/oauth2/authorize"
                           + "?response_type=code"
                           + $"&client_id={Uri.EscapeDataString(clientId)}"
@@ -168,18 +173,12 @@ public sealed class OAuthFlowCoordinator(
 
             try
             {
-                using var process = Process.Start(new ProcessStartInfo
-                {
-                    FileName = authUrl,
-                    UseShellExecute = true,
-                });
-
-                logger.LogInformation("Браузер открыт для авторизации роли {Role} (ClientId: {ClientId})", role, clientId);
+                onAuthUrlReady(authUrl);
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                logger.LogError(ex, "Не удалось открыть браузер для авторизации (роль {Role})", role);
-                throw new InvalidOperationException($"Не удалось открыть браузер: {ex.Message}", ex);
+                logger.LogError(exception, "Ошибка передачи URL авторизации обработчику UI (роль {Role})", role);
+                throw;
             }
 
             statusReporter.Report(role, $"Ожидание авторизации пользователя ({authTimeout.TotalMinutes} мин)...");
@@ -207,7 +206,7 @@ public sealed class OAuthFlowCoordinator(
 
             statusReporter.Report(role, "Обмен кода на токен доступа...");
 
-            var result = await ExchangeCodeForTokenAsync(role, clientId, clientSecret, authorizationCode, redirectUri, ct);
+            var result = await ExchangeCodeForTokenAsync(role, clientId, clientSecret, authorizationCode, redirectUri, checkBroadcasterChannel, ct);
 
             statusReporter.Report(role, "Авторизация завершена успешно!");
             logger.LogInformation("OAuth авторизация успешно завершена для роли {Role} (ClientId: {ClientId})", role, clientId);
@@ -232,6 +231,7 @@ public sealed class OAuthFlowCoordinator(
         string clientSecret,
         string authorizationCode,
         string redirectUri,
+        bool checkBroadcasterChannel,
         CancellationToken ct)
     {
         var formData = new Dictionary<string, string>
@@ -251,7 +251,7 @@ public sealed class OAuthFlowCoordinator(
             throw new InvalidOperationException("Twitch вернул токен, но Validate-эндпойнт его не подтвердил.");
         }
 
-        OAuthRoleHelpers.VerifyLoginMatchesRole(role, validation, settingsManager, logger);
+        OAuthRoleHelpers.VerifyLoginMatchesRole(role, validation, settingsManager, logger, checkBroadcasterChannel);
 
         return new(tokenResponse.AccessToken,
             tokenResponse.RefreshToken,

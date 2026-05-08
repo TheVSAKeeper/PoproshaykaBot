@@ -5,10 +5,10 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.WinForms.Forms.Onboarding;
 using PoproshaykaBot.WinForms.Forms.Settings;
 using PoproshaykaBot.WinForms.Forms.Users;
@@ -22,9 +22,9 @@ public partial class MainForm : Form
     private readonly IEventBus _eventBus;
     private readonly ChatHistoryManager _chatHistoryManager;
     private readonly SettingsManager _settingsManager;
-    private readonly AccountsStore _accountsStore;
     private readonly DashboardLayoutStore _dashboardLayoutStore;
     private readonly BotConnectionManager _connectionManager;
+    private readonly OnboardingChecklist _onboardingChecklist;
     private readonly ILogger<MainForm> _logger;
     private readonly List<IDisposable> _subs = [];
 
@@ -41,8 +41,8 @@ public partial class MainForm : Form
         ChatHistoryManager chatHistoryManager,
         BotConnectionManager connectionManager,
         SettingsManager settingsManager,
-        AccountsStore accountsStore,
         DashboardLayoutStore dashboardLayoutStore,
+        OnboardingChecklist onboardingChecklist,
         ILogger<MainForm> logger)
     {
         _forms = forms;
@@ -50,8 +50,8 @@ public partial class MainForm : Form
         _chatHistoryManager = chatHistoryManager;
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
-        _accountsStore = accountsStore;
         _dashboardLayoutStore = dashboardLayoutStore;
+        _onboardingChecklist = onboardingChecklist;
         _logger = logger;
 
         InitializeComponent();
@@ -221,8 +221,7 @@ public partial class MainForm : Form
             return;
         }
 
-        var twitch = _settingsManager.Current.Twitch;
-        if (!string.IsNullOrWhiteSpace(twitch.ClientId))
+        if (!_onboardingChecklist.RequiresWizard)
         {
             return;
         }
@@ -240,34 +239,7 @@ public partial class MainForm : Form
 
     private void RefreshOnboardingBanner()
     {
-        var twitch = _settingsManager.Current.Twitch;
-        var hasClientId = !string.IsNullOrWhiteSpace(twitch.ClientId);
-        var hasClientSecret = !string.IsNullOrWhiteSpace(twitch.ClientSecret);
-        var hasChannel = !string.IsNullOrWhiteSpace(twitch.Channel);
-        var hasBotToken = !string.IsNullOrWhiteSpace(_accountsStore.Load(TwitchOAuthRole.Bot).AccessToken);
-        var hasBroadcasterToken = !string.IsNullOrWhiteSpace(_accountsStore.Load(TwitchOAuthRole.Broadcaster).AccessToken);
-
-        var missing = new List<string>();
-
-        if (!hasClientId || !hasClientSecret)
-        {
-            missing.Add("Client ID/Secret");
-        }
-
-        if (!hasChannel)
-        {
-            missing.Add("канал");
-        }
-
-        if (!hasBotToken)
-        {
-            missing.Add("авторизация бота");
-        }
-
-        if (!hasBroadcasterToken)
-        {
-            missing.Add("авторизация стримера");
-        }
+        var missing = _onboardingChecklist.GetMissingItems();
 
         if (missing.Count == 0)
         {

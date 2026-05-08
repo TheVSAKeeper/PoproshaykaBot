@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace PoproshaykaBot.WinForms.Forms.Settings;
 
@@ -166,7 +167,8 @@ public sealed partial class OAuthAccountSection : UserControl
                 clientSecret,
                 scopes,
                 string.IsNullOrWhiteSpace(redirectUri) ? null : redirectUri,
-                cts.Token);
+                OpenInDefaultBrowser,
+                ct: cts.Token);
 
             if (!ReferenceEquals(_authCts, cts))
             {
@@ -378,6 +380,15 @@ public sealed partial class OAuthAccountSection : UserControl
         catch (InvalidOperationException) when (IsDisposed)
         {
         }
+    }
+
+    private static void OpenInDefaultBrowser(string authUrl)
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = authUrl,
+            UseShellExecute = true,
+        });
     }
 
     private TwitchAccountSettings GetLiveAccount()
