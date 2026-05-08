@@ -135,10 +135,70 @@ jobs:
           pattern: release-*
           merge-multiple: true
 
+      - name: Compose release body
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BASE="https://github.com/${REPO}/releases/download/v${VERSION}"
+          AUTO_NOTES=$(gh api -X POST "repos/${REPO}/releases/generate-notes" \
+            -f tag_name="v${VERSION}" \
+            --jq '.body' || echo "")
+          cat > release_body.md <<EOF
+          ## 📥 Скачать
+
+          <table>
+            <thead>
+              <tr>
+                <th align="center">Вариант</th>
+                <th align="center">x64</th>
+                <th align="center">x86 <sub>(рекомендуется)</sub></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td align="center">
+                  <strong>🟢 Portable</strong><br/>
+                  <sub>не требует .NET</sub>
+                </td>
+                <td align="center">
+                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x64-portable.exe"><img src="https://img.shields.io/badge/⬇️_EXE-2ea043?style=for-the-badge" alt="Portable x64 EXE" /></a>
+                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x64-portable.zip"><img src="https://img.shields.io/badge/📦_ZIP-2ea043?style=for-the-badge" alt="Portable x64 ZIP" /></a>
+                </td>
+                <td align="center">
+                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x86-portable.exe"><img src="https://img.shields.io/badge/⬇️_EXE-2ea043?style=for-the-badge" alt="Portable x86 EXE" /></a>
+                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x86-portable.zip"><img src="https://img.shields.io/badge/📦_ZIP-2ea043?style=for-the-badge" alt="Portable x86 ZIP" /></a>
+                </td>
+              </tr>
+              <tr>
+                <td align="center">
+                  <strong>🔵 Framework-dependent</strong><br/>
+                  <sub>нужен <a href="https://dotnet.microsoft.com/download/dotnet/8.0">.NET 8 Desktop Runtime</a></sub>
+                </td>
+                <td align="center">
+                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x64.exe"><img src="https://img.shields.io/badge/⬇️_EXE-1f6feb?style=for-the-badge" alt="Framework-dependent x64 EXE" /></a>
+                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x64.zip"><img src="https://img.shields.io/badge/📦_ZIP-1f6feb?style=for-the-badge" alt="Framework-dependent x64 ZIP" /></a>
+                </td>
+                <td align="center">
+                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x86.exe"><img src="https://img.shields.io/badge/⬇️_EXE-1f6feb?style=for-the-badge" alt="Framework-dependent x86 EXE" /></a>
+                  <a href="${BASE}/PoproshaykaBot-v${VERSION}-x86.zip"><img src="https://img.shields.io/badge/📦_ZIP-1f6feb?style=for-the-badge" alt="Framework-dependent x86 ZIP" /></a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+
+          ---
+
+          EOF
+          printf '%s\n' "${AUTO_NOTES}" >> release_body.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.prepare.outputs.version }}
           name: PoproshaykaBot v${{ needs.prepare.outputs.version }}
           files: artifacts/*
-          generate_release_notes: true
+          body_path: release_body.md
