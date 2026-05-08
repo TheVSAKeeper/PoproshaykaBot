@@ -40,7 +40,7 @@ public static class AppPaths
 
     private static bool ResolvePortable()
     {
-        var assembly = typeof(AppPaths).Assembly;
+        var assembly = Assembly.GetEntryAssembly() ?? typeof(AppPaths).Assembly;
 
         var hasMetadata = assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()

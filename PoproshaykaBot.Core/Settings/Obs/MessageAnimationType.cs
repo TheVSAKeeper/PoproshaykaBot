@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.Core.Settings.Obs;
+﻿using System.Collections.Immutable;
+
+namespace PoproshaykaBot.Core.Settings.Obs;
 
 public static class MessageAnimationType
 {
@@ -47,9 +49,9 @@ public static class MessageAnimationType
         (ShrinkUp, "Свернуться вверх"),
     ];
 
-    public static readonly string[] EntryValues =
-        EntryAnimations.Select(animation => animation.Value).ToArray();
+    public static readonly ImmutableArray<string> EntryValues =
+        [..EntryAnimations.Select(animation => animation.Value)];
 
-    public static readonly string[] ExitValues =
-        ExitAnimations.Select(animation => animation.Value).ToArray();
+    public static readonly ImmutableArray<string> ExitValues =
+        [..ExitAnimations.Select(animation => animation.Value)];
 }

@@ -14,9 +14,11 @@ public sealed class UserRankService(SettingsManager settingsManager)
         }
 
         var ranks = Ranks;
-        foreach (var rank in ranks.Where(rank => messageCount >= (long)rank.MinMessages))
+        var match = ranks.FirstOrDefault(rank => messageCount >= (long)rank.MinMessages);
+
+        if (match is not null)
         {
-            return rank;
+            return match;
         }
 
         return ranks.Length > 0 ? ranks[^1] : new("♟", "ПЕШКА", 0, 3);

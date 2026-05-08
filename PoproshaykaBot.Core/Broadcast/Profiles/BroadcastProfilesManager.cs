@@ -13,6 +13,13 @@ public class BroadcastProfilesManager(
     TimeProvider timeProvider,
     ILogger<BroadcastProfilesManager> logger)
 {
+    private enum AdvanceOutcome
+    {
+        NotFound = 0,
+        RaceDetected = 1,
+        Advanced = 2,
+    }
+
     public virtual BroadcastProfile? FindByName(string name)
     {
         return profilesStore.Load()
@@ -94,41 +101,41 @@ public class BroadcastProfilesManager(
 
     public virtual bool AdvanceCurrentNumber(Guid id, int expectedCurrentNumber, int nextValue, DateTimeOffset advancedAt)
     {
-        var advanced = false;
-        var raceDetected = false;
-
-        profilesStore.Mutate(bp =>
+        var outcome = profilesStore.Mutate(bp =>
         {
             var stored = bp.Profiles.FirstOrDefault(p => p.Id == id);
 
             if (stored == null)
             {
-                return;
+                return AdvanceOutcome.NotFound;
             }
 
             if (stored.CurrentNumber != expectedCurrentNumber)
             {
-                raceDetected = true;
-                return;
+                return AdvanceOutcome.RaceDetected;
             }
 
             stored.CurrentNumber = nextValue;
             stored.LastAutoAdvanceAt = advancedAt;
-            advanced = true;
+            return AdvanceOutcome.Advanced;
         });
 
-        if (advanced)
+        switch (outcome)
         {
-            logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} → CurrentNumber={NextValue}",
-                id,
-                nextValue);
-        }
-        else if (raceDetected)
-        {
-            logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} изменён вручную, авто-инкремент отменён", id);
-        }
+            case AdvanceOutcome.Advanced:
+                logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} → CurrentNumber={NextValue}",
+                    id,
+                    nextValue);
 
-        return advanced;
+                return true;
+
+            case AdvanceOutcome.RaceDetected:
+                logger.LogDebug("AdvanceCurrentNumber: профиль Id={ProfileId} изменён вручную, авто-инкремент отменён", id);
+                return false;
+
+            default:
+                return false;
+        }
     }
 
     public IReadOnlyList<BroadcastProfile> GetAll()
@@ -174,16 +181,16 @@ public class BroadcastProfilesManager(
 
     public void Remove(Guid id)
     {
-        var removed = 0;
-
-        profilesStore.Mutate(bp =>
+        var removed = profilesStore.Mutate(bp =>
         {
-            removed = bp.Profiles.RemoveAll(p => p.Id == id);
+            var count = bp.Profiles.RemoveAll(p => p.Id == id);
 
             if (bp.LastAppliedProfileId == id)
             {
                 bp.LastAppliedProfileId = null;
             }
+
+            return count;
         });
 
         if (removed > 0)
