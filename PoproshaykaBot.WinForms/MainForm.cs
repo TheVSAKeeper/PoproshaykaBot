@@ -9,6 +9,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.WinForms.Forms.Onboarding;
 using PoproshaykaBot.WinForms.Forms.Settings;
 using PoproshaykaBot.WinForms.Forms.Users;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
@@ -79,6 +80,7 @@ public partial class MainForm : Form
         _subs.DisposeOnClose(this);
 
         LoadSettings();
+        OpenOnboardingWizardIfNeeded();
         RefreshOnboardingBanner();
         _logger.LogInformation("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
@@ -210,6 +212,30 @@ public partial class MainForm : Form
         }
 
         return false;
+    }
+
+    private void OpenOnboardingWizardIfNeeded()
+    {
+        if (Environment.GetCommandLineArgs().Any(a => string.Equals(a, "--ui-smoke", StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        var twitch = _settingsManager.Current.Twitch;
+        if (!string.IsNullOrWhiteSpace(twitch.ClientId))
+        {
+            return;
+        }
+
+        try
+        {
+            using var wizard = _forms.Create<OnboardingWizardForm>();
+            wizard.ShowDialog(this);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Ошибка отображения мастера первичной настройки");
+        }
     }
 
     private void RefreshOnboardingBanner()
