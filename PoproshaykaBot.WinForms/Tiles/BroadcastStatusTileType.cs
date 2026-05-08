@@ -1,5 +1,5 @@
-﻿using PoproshaykaBot.WinForms.Broadcast;
-using PoproshaykaBot.WinForms.Infrastructure.Di;
+﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Widgets;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 

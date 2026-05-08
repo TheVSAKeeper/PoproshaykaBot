@@ -1,0 +1,64 @@
+﻿{
+  "twitch": {
+    "channel": "bobito217",
+    "botUsername": "thebot_legacy",
+    "accessToken": "legacy-access",
+    "refreshToken": "legacy-refresh",
+    "scopes": [
+      "chat:read",
+      "chat:edit",
+      "channel:moderate"
+    ],
+    "storedScopes": [
+      "chat:read"
+    ],
+    "clientId": "legacy-client-id",
+    "redirectUri": "http://localhost:8080",
+    "messages": {
+      "welcomeEnabled": true,
+      "welcome": "Добро пожаловать, {username}! (legacy)"
+    },
+    "broadcastProfiles": {
+      "profiles": [],
+      "lastAppliedProfileId": null
+    },
+    "polls": {
+      "profiles": [],
+      "historyMaxItems": 500
+    },
+    "infrastructure": {
+      "chatHistoryMaxItems": 1000,
+      "recentCategories": [
+        {
+          "id": "509658",
+          "name": "Just Chatting"
+        }
+      ]
+    },
+    "obsChat": {
+      "maxMessages": 25,
+      "fontSize": 24
+    }
+  },
+  "ranks": {
+    "ranks": [
+      {
+        "icon": "★",
+        "name": "ТЕСТ",
+        "messageCount": 9999
+      }
+    ]
+  },
+  "ui": {
+    "showLogsPanel": true,
+    "showChatPanel": false,
+    "currentChatViewMode": 1,
+    "dashboard": {
+      "columnCount": 4
+    },
+    "mainWindow": {
+      "width": 1280,
+      "height": 720
+    }
+  }
+}

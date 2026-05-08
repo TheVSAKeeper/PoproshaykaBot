@@ -1,5 +1,6 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Settings;
+﻿using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Settings.Ui;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 
@@ -14,7 +15,7 @@ public sealed partial class DashboardControl : UserControl
     }
 
     [Inject]
-    public SettingsManager Settings { get; internal init; } = null!;
+    public DashboardLayoutStore LayoutStore { get; internal init; } = null!;
 
     [Inject]
     public IControlFactory ControlFactory { get; internal init; } = null!;
@@ -29,14 +30,12 @@ public sealed partial class DashboardControl : UserControl
             return;
         }
 
-        var settings = Settings.Current;
-        var layout = settings.Ui.Dashboard;
+        var layout = LayoutStore.LoadDashboard();
 
         if (layout == null || layout.Tiles.Count == 0)
         {
             layout = DashboardLayoutDefaults.Create();
-            settings.Ui.Dashboard = layout;
-            Settings.SaveSettings(settings);
+            LayoutStore.SaveDashboard(layout);
         }
 
         ApplyLayout(layout);
@@ -208,8 +207,7 @@ public sealed partial class DashboardControl : UserControl
             return;
         }
 
-        var settings = Settings.Current;
-        var layout = settings.Ui.Dashboard;
+        var layout = LayoutStore.LoadDashboard();
 
         var tile = layout?.Tiles.FirstOrDefault(t => string.Equals(t.TypeId, type.Id, StringComparison.Ordinal));
 
@@ -219,9 +217,9 @@ public sealed partial class DashboardControl : UserControl
         }
 
         tile.IsCollapsed = !host.IsCollapsed;
-        Settings.SaveSettings(settings);
+        LayoutStore.SaveDashboard(layout!);
 
-        ApplyLayout(layout);
+        ApplyLayout(layout!);
     }
 
     private void ApplyLayout(DashboardLayoutSettings layout)
@@ -229,6 +227,40 @@ public sealed partial class DashboardControl : UserControl
         var columnCount = Math.Clamp(layout.ColumnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
         var rowCount = Math.Clamp(layout.RowCount, DashboardLayoutDefaults.MinRowCount, DashboardLayoutDefaults.MaxRowCount);
 
+        var placements = BuildPlacements(layout, columnCount, rowCount);
+
+        var sampleHost = _hosts.Values.FirstOrDefault();
+        var collapsedHeight = sampleHost != null
+            ? sampleHost.HeaderHeight + sampleHost.Margin.Vertical + 2
+            : LogicalToDeviceUnits(44);
+
+        var collapsedColumnWidth = sampleHost != null
+            ? sampleHost.HeaderHeight + sampleHost.Margin.Horizontal + LogicalToDeviceUnits(16)
+            : LogicalToDeviceUnits(56);
+
+        var rowFixedHeights = ComputeRowFixedHeights(placements, rowCount, collapsedHeight);
+        var flexRowCount = rowFixedHeights.Count(height => height == null);
+        var percentPerFlexRow = flexRowCount > 0 ? 100F / flexRowCount : 100F / rowCount;
+
+        var columnFixedWidths = ComputeColumnFixedWidths(placements, columnCount, rowCount, collapsedColumnWidth);
+        var flexColumnCount = columnFixedWidths.Count(width => width == null);
+        var percentPerFlexColumn = flexColumnCount > 0 ? 100F / flexColumnCount : 100F / columnCount;
+
+        _tilesTableLayoutPanel.SuspendLayout();
+
+        try
+        {
+            ConfigureTableStyles(columnCount, rowCount, columnFixedWidths, rowFixedHeights, percentPerFlexColumn, percentPerFlexRow);
+            ApplyPlacements(placements);
+        }
+        finally
+        {
+            _tilesTableLayoutPanel.ResumeLayout();
+        }
+    }
+
+    private List<TilePlacement> BuildPlacements(DashboardLayoutSettings layout, int columnCount, int rowCount)
+    {
         var placements = new List<TilePlacement>();
         var seenTypes = new HashSet<DashboardTileType>();
 
@@ -252,63 +284,51 @@ public sealed partial class DashboardControl : UserControl
                 tile.IsCollapsed));
         }
 
-        var sampleHost = _hosts.Values.FirstOrDefault();
-        var collapsedHeight = sampleHost != null
-            ? sampleHost.HeaderHeight + sampleHost.Margin.Vertical + 2
-            : LogicalToDeviceUnits(44);
+        return placements;
+    }
 
-        var collapsedColumnWidth = sampleHost != null
-            ? sampleHost.HeaderHeight + sampleHost.Margin.Horizontal + LogicalToDeviceUnits(16)
-            : LogicalToDeviceUnits(56);
+    private void ConfigureTableStyles(
+        int columnCount,
+        int rowCount,
+        IReadOnlyList<int?> columnFixedWidths,
+        IReadOnlyList<int?> rowFixedHeights,
+        float percentPerFlexColumn,
+        float percentPerFlexRow)
+    {
+        _tilesTableLayoutPanel.ColumnStyles.Clear();
+        _tilesTableLayoutPanel.RowStyles.Clear();
+        _tilesTableLayoutPanel.ColumnCount = columnCount;
+        _tilesTableLayoutPanel.RowCount = rowCount;
 
-        var rowFixedHeights = ComputeRowFixedHeights(placements, rowCount, collapsedHeight);
-        var flexRowCount = rowFixedHeights.Count(height => height == null);
-        var percentPerFlexRow = flexRowCount > 0 ? 100F / flexRowCount : 100F / rowCount;
-
-        var columnFixedWidths = ComputeColumnFixedWidths(placements, columnCount, rowCount, collapsedColumnWidth);
-        var flexColumnCount = columnFixedWidths.Count(width => width == null);
-        var percentPerFlexColumn = flexColumnCount > 0 ? 100F / flexColumnCount : 100F / columnCount;
-
-        _tilesTableLayoutPanel.SuspendLayout();
-
-        try
+        for (var column = 0; column < columnCount; column++)
         {
-            _tilesTableLayoutPanel.ColumnStyles.Clear();
-            _tilesTableLayoutPanel.RowStyles.Clear();
-            _tilesTableLayoutPanel.ColumnCount = columnCount;
-            _tilesTableLayoutPanel.RowCount = rowCount;
-
-            for (var column = 0; column < columnCount; column++)
-            {
-                _tilesTableLayoutPanel.ColumnStyles.Add(columnFixedWidths[column] is { } fixedWidth
-                    ? new(SizeType.Absolute, fixedWidth)
-                    : new ColumnStyle(SizeType.Percent, percentPerFlexColumn));
-            }
-
-            for (var row = 0; row < rowCount; row++)
-            {
-                _tilesTableLayoutPanel.RowStyles.Add(rowFixedHeights[row] is { } fixedHeight
-                    ? new(SizeType.Absolute, fixedHeight)
-                    : new RowStyle(SizeType.Percent, percentPerFlexRow));
-            }
-
-            foreach (var host in _hosts.Values)
-            {
-                host.Visible = false;
-            }
-
-            foreach (var placement in placements)
-            {
-                _tilesTableLayoutPanel.SetCellPosition(placement.Host, new(placement.Column, placement.Row));
-                _tilesTableLayoutPanel.SetColumnSpan(placement.Host, placement.ColumnSpan);
-                _tilesTableLayoutPanel.SetRowSpan(placement.Host, placement.RowSpan);
-                placement.Host.SetCollapsed(placement.IsCollapsed);
-                placement.Host.Visible = true;
-            }
+            _tilesTableLayoutPanel.ColumnStyles.Add(columnFixedWidths[column] is { } fixedWidth
+                ? new(SizeType.Absolute, fixedWidth)
+                : new ColumnStyle(SizeType.Percent, percentPerFlexColumn));
         }
-        finally
+
+        for (var row = 0; row < rowCount; row++)
         {
-            _tilesTableLayoutPanel.ResumeLayout();
+            _tilesTableLayoutPanel.RowStyles.Add(rowFixedHeights[row] is { } fixedHeight
+                ? new(SizeType.Absolute, fixedHeight)
+                : new RowStyle(SizeType.Percent, percentPerFlexRow));
+        }
+    }
+
+    private void ApplyPlacements(IReadOnlyList<TilePlacement> placements)
+    {
+        foreach (var host in _hosts.Values)
+        {
+            host.Visible = false;
+        }
+
+        foreach (var placement in placements)
+        {
+            _tilesTableLayoutPanel.SetCellPosition(placement.Host, new(placement.Column, placement.Row));
+            _tilesTableLayoutPanel.SetColumnSpan(placement.Host, placement.ColumnSpan);
+            _tilesTableLayoutPanel.SetRowSpan(placement.Host, placement.RowSpan);
+            placement.Host.SetCollapsed(placement.IsCollapsed);
+            placement.Host.Visible = true;
         }
     }
 

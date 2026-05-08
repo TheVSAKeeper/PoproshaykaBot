@@ -1,4 +1,4 @@
-﻿using PoproshaykaBot.WinForms.Broadcast;
+﻿using PoproshaykaBot.WinForms.Forms.Broadcast;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Tiles;

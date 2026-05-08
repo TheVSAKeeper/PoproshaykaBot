@@ -1,27 +1,23 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using PoproshaykaBot.WinForms.Auth;
-using PoproshaykaBot.WinForms.Broadcast;
-using PoproshaykaBot.WinForms.Broadcast.Profiles;
-using PoproshaykaBot.WinForms.Chat;
-using PoproshaykaBot.WinForms.Chat.Commands;
-using PoproshaykaBot.WinForms.Infrastructure;
+using PoproshaykaBot.Core.Broadcast;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Infrastructure.Di;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Infrastructure.Logging;
+using PoproshaykaBot.Core.Polls;
+using PoproshaykaBot.Core.Server;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Migrations;
+using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Hosting;
-using PoproshaykaBot.WinForms.Infrastructure.Hosting.Components;
-using PoproshaykaBot.WinForms.Polls;
-using PoproshaykaBot.WinForms.Server;
-using PoproshaykaBot.WinForms.Settings;
-using PoproshaykaBot.WinForms.Statistics;
-using PoproshaykaBot.WinForms.Streaming;
-using PoproshaykaBot.WinForms.Tiles;
-using PoproshaykaBot.WinForms.Twitch;
-using PoproshaykaBot.WinForms.Twitch.Chat;
-using PoproshaykaBot.WinForms.Twitch.EventSub;
-using PoproshaykaBot.WinForms.Twitch.Helix;
-using PoproshaykaBot.WinForms.Users;
 using Serilog;
+using Serilog.Debugging;
+using Serilog.Events;
+using Serilog.Extensions.Logging;
 using System.Diagnostics;
 using Timer = System.Windows.Forms.Timer;
 
@@ -36,11 +32,16 @@ public static class Program
 
         const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
+        var uiLogSink = new UiLogSink();
+
+        SelfLog.Enable(message => Debug.WriteLine($"[Serilog] {message}"));
+
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .WriteTo.Console(outputTemplate: OutputTemplate)
             .WriteTo.Debug(outputTemplate: OutputTemplate)
             .WriteTo.File(AppPaths.Combine("logs", "bot_log_.txt"), rollingInterval: RollingInterval.Day, outputTemplate: OutputTemplate)
+            .WriteTo.Sink(uiLogSink, LogEventLevel.Information)
             .CreateLogger();
 
         try
@@ -53,121 +54,14 @@ public static class Program
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             ApplicationConfiguration.Initialize();
 
-            var memoryCheckTimer = new Timer();
-
-            const long ThresholdMb = 1024;
-            const long MemoryThreshold = 1024 * 1024 * ThresholdMb;
-            const int CheckIntervalMs = 1000;
-            const int KillDelayMs = 1000;
-
-            memoryCheckTimer.Interval = CheckIntervalMs;
-            memoryCheckTimer.Tick += (_, _) =>
-            {
-                var currentProcess = Process.GetCurrentProcess();
-                var memoryBytes = currentProcess.PrivateMemorySize64;
-
-                if (memoryBytes <= MemoryThreshold)
-                {
-                    return;
-                }
-
-                Log.Warning("Обнаружено аномальное потребление памяти: {MemoryBytes} байт", memoryBytes);
-                memoryCheckTimer.Stop();
-
-                Task.Run(async () =>
-                {
-                    await Task.Delay(KillDelayMs);
-                    Log.Fatal("Принудительное завершение процесса из-за утечки памяти");
-                    await Log.CloseAndFlushAsync();
-                    currentProcess.Kill();
-                });
-
-                var memoryMb = memoryBytes / (1024.0 * 1024.0);
-                var killDelaySeconds = KillDelayMs / 1000;
-                var secondsWord = GetRussianSecondsWord(killDelaySeconds);
-                var message =
-                    $"""
-                     Внимание! Обнаружено аномальное потребление ресурсов.
-
-                     Текущее использование: {memoryMb:F2} MB
-                     Установленный лимит: {ThresholdMb:F2} MB
-
-                     У вас есть {killDelaySeconds} {secondsWord}, чтобы прочитать это сообщение, затем процесс будет убит принудительно.
-                     """;
-
-                MessageBox.Show(message, "Критическая нагрузка на память", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                Environment.FailFast("Пользователь подтвердил закрытие при утечке памяти.");
-            };
+            var memoryCheckTimer = CreateMemoryWatchdogTimer();
 
             if (!isUiSmoke)
             {
                 memoryCheckTimer.Start();
             }
 
-            var services = new ServiceCollection();
-            ConfigureServices(services);
-
-            var serviceProvider = services.BuildServiceProvider();
-            var appLifetime = serviceProvider.GetRequiredService<AppLifetime>();
-            var appLifetimeStarted = false;
-            try
-            {
-                serviceProvider.ActivateEventSubscribers(typeof(Program).Assembly);
-
-                var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
-
-                var twitchSettings = settingsManager.Current.Twitch;
-                var httpServerEnabled = twitchSettings.HttpServerEnabled && !isUiSmoke;
-
-                if (isUiSmoke)
-                {
-                    Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
-                }
-
-                if (httpServerEnabled)
-                {
-                    var portValidationPassed = ValidateAndResolvePortConflict(settingsManager);
-
-                    if (portValidationPassed)
-                    {
-                        try
-                        {
-                            appLifetime.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-                            appLifetimeStarted = true;
-                            Log.Information("HTTP сервер успешно запущен");
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Error(ex, "Ошибка запуска HTTP сервера");
-                            MessageBox.Show($"Ошибка запуска HTTP сервера: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        }
-                    }
-                    else
-                    {
-                        Log.Warning("Не удалось разрешить конфликт портов. HTTP сервер не запущен");
-                        MessageBox.Show("Не удалось разрешить конфликт портов. HTTP сервер не запущен.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                }
-
-                var mainForm = serviceProvider.GetRequiredService<MainForm>();
-                Application.Run(mainForm);
-            }
-            finally
-            {
-                if (appLifetimeStarted)
-                {
-                    try
-                    {
-                        appLifetime.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error(ex, "Ошибка остановки AppLifetime");
-                    }
-                }
-
-                serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            }
+            RunApp(isUiSmoke, uiLogSink);
         }
         catch (Exception ex)
         {
@@ -180,151 +74,195 @@ public static class Program
         }
     }
 
-    private static void ConfigureServices(IServiceCollection services)
+    private static void RunApp(bool isUiSmoke, UiLogSink uiLogSink)
     {
-        services.AddLogging(builder =>
+        MigrateLegacySettingsLayout();
+
+        var services = new ServiceCollection();
+        ConfigureServices(services, uiLogSink);
+
+        var serviceProvider = services.BuildServiceProvider();
+        var appLifetime = serviceProvider.GetRequiredService<AppLifetime>();
+        var streamMonitoringHost = serviceProvider.GetRequiredService<StreamMonitoringHost>();
+        var appLifetimeStarted = false;
+        var streamMonitoringStarted = false;
+        try
         {
-            builder.ClearProviders();
-            builder.AddSerilog(dispose: true);
-        });
+            serviceProvider.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
 
-        services.AddHttpClient();
+            var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
+            appLifetimeStarted = StartHttpServerIfNeeded(isUiSmoke, settingsManager, appLifetime);
 
-        services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<InMemoryEventBus>();
-        services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
-        services.AddSingleton<UiEventDispatcher>();
-        services.AddSingleton<AppHost>();
-
-        services.AddSingleton<IControlFactory, ControlFactory>();
-        services.AddSingleton<IFormFactory, FormFactory>();
-
-        services.AddSingleton<IHostedComponent, StatisticsHostedComponent>();
-        services.AddSingleton<IHostedComponent, ChatDecorationsHostedComponent>();
-        services.AddSingleton<IHostedComponent, BroadcastSchedulerHostedComponent>();
-
-        services.AddEventSubscribers(typeof(Program).Assembly);
-
-        services.AddSingleton<SettingsManager>();
-
-        services.AddTransient<BotTwitchAuthHandler>();
-        services.AddTransient<BroadcasterTwitchAuthHandler>();
-
-        services.AddHttpClient(TwitchEndpoints.HelixBotClient, client =>
+            if (!isUiSmoke)
             {
-                client.BaseAddress = new(TwitchEndpoints.HelixBaseUrl);
-            })
-            .AddHttpMessageHandler<BotTwitchAuthHandler>();
+                streamMonitoringStarted = StartStreamMonitoring(streamMonitoringHost);
+            }
 
-        services.AddHttpClient(TwitchEndpoints.HelixBroadcasterClient, client =>
-            {
-                client.BaseAddress = new(TwitchEndpoints.HelixBaseUrl);
-            })
-            .AddHttpMessageHandler<BroadcasterTwitchAuthHandler>();
-
-        services.AddKeyedSingleton<ITwitchHelixClient, BotHelixClient>(TwitchEndpoints.HelixBotClient);
-        services.AddKeyedSingleton<ITwitchHelixClient, BroadcasterHelixClient>(TwitchEndpoints.HelixBroadcasterClient);
-
-        services.AddSingleton<EventSubChatMessageMapper>();
-        services.AddSingleton<ChatIngestionService>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChatIngestionService>());
-        services.AddSingleton<ChatSender>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChatSender>());
-
-        services.AddSingleton<StatisticsCollector>();
-        services.AddSingleton<TwitchOAuthService>();
-        services.AddSingleton<ChatHistoryManager>();
-        services.AddSingleton<SseService>();
-
-        services.AddSingleton<KestrelHttpServer>();
-        services.AddSingleton<AppLifetime>();
-        services.AddSingleton<IAppLifetimeComponent, KestrelHttpServerLifetimeAdapter>();
-
-        services.AddSingleton<ITwitchEventSubClient, TwitchEventSubClient>();
-        services.AddSingleton<EventSubConnectionHost>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<EventSubConnectionHost>());
-        services.AddSingleton<StreamStatusManager>();
-        services.AddSingleton<IStreamStatus>(sp => sp.GetRequiredService<StreamStatusManager>());
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<StreamStatusManager>());
-        services.AddSingleton<StreamStatusWatchdog>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<StreamStatusWatchdog>());
-        services.AddSingleton<ChatDecorationsProvider>();
-        services.AddSingleton<UserRankService>();
-        services.AddSingleton<UserMessagesManagementService>();
-
-        services.AddSingleton<TwitchChatMessenger>();
-        services.AddSingleton<IChatMessenger>(sp => sp.GetRequiredService<TwitchChatMessenger>());
-        services.AddSingleton<BroadcastScheduler>();
-
-        services.AddSingleton<ITwitchChannelsApi, TwitchChannelsApiAdapter>();
-        services.AddSingleton<ITwitchSearchApi, TwitchSearchApiAdapter>();
-        services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
-        services.AddSingleton<IBotUserIdProvider, BotUserIdProvider>();
-        services.AddSingleton<ChannelUpdateSubscriber>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChannelUpdateSubscriber>());
-        services.AddSingleton<IChannelUpdateConfirmation>(sp => sp.GetRequiredService<ChannelUpdateConfirmationService>());
-        services.AddSingleton<ChannelInformationApplier>();
-        services.AddSingleton<IChannelInformationApplier>(sp => sp.GetRequiredService<ChannelInformationApplier>());
-        services.AddSingleton<GameCategoryResolver>();
-        services.AddSingleton<IGameCategoryResolver>(sp => sp.GetRequiredService<GameCategoryResolver>());
-        services.AddSingleton<BroadcastProfilesManager>();
-
-        services.AddSingleton<PollProfilesManager>();
-        services.AddSingleton<PollSnapshotStore>();
-        services.AddSingleton<PollsAvailabilityService>();
-        services.AddSingleton<PollController>();
-        services.AddSingleton<IPollController>(sp => sp.GetRequiredService<PollController>());
-        services.AddSingleton<PollEventSubscriber>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<PollEventSubscriber>());
-        services.AddSingleton<PollHistoryStore>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<PollHistoryStore>());
-
-        services.AddSingleton<AudienceTracker>();
-
-        services.AddSingleton<IChatCommand, HelloCommand>();
-        services.AddSingleton<IChatCommand, DonateCommand>();
-        services.AddSingleton<IChatCommand, HowManyMessagesCommand>();
-        services.AddSingleton<IChatCommand, BotStatsCommand>();
-        services.AddSingleton<IChatCommand, TopUsersCommand>();
-        services.AddSingleton<IChatCommand, MyProfileCommand>();
-        services.AddSingleton<IChatCommand, ActiveUsersCommand>();
-        services.AddSingleton<IChatCommand, ByeCommand>();
-        services.AddSingleton<IChatCommand, StreamInfoCommand>();
-        services.AddSingleton<IChatCommand, TrumpCommand>();
-        services.AddSingleton<IChatCommand, RanksCommand>();
-        services.AddSingleton<IChatCommand, RankCommand>();
-        services.AddSingleton<IChatCommand, ProfileCommand>();
-        services.AddSingleton<IChatCommand, TitleCommand>();
-        services.AddSingleton<IChatCommand, GameCommand>();
-
-        services.AddSingleton<ChatCommandProcessor>(sp =>
+            var mainForm = serviceProvider.GetRequiredService<MainForm>();
+            Application.Run(mainForm);
+        }
+        finally
         {
-            var commands = sp.GetServices<IChatCommand>().ToList();
-            var processor = new ChatCommandProcessor(commands);
-            processor.Register(new HelpCommand(processor.GetAllCommands));
-            return processor;
-        });
+            if (streamMonitoringStarted)
+            {
+                StopStreamMonitoring(streamMonitoringHost);
+            }
 
-        services.AddSingleton<TwitchChatHandler>();
-        services.AddSingleton<IChannelProvider>(sp => sp.GetRequiredService<TwitchChatHandler>());
+            if (appLifetimeStarted)
+            {
+                StopAppLifetime(appLifetime);
+            }
 
-        services.AddSingleton<DashboardTileType, StreamInfoTileType>();
-        services.AddSingleton<DashboardTileType, BroadcastStatusTileType>();
-        services.AddSingleton<DashboardTileType, LogsTileType>();
-        services.AddSingleton<DashboardTileType, TwitchChatTileType>();
-        services.AddSingleton<DashboardTileType, ChatOverlayPreviewTileType>();
-        services.AddSingleton<DashboardTileType, BroadcastProfilesTileType>();
-        services.AddSingleton<DashboardTileType, PollsControlTileType>();
-        services.AddSingleton<IDashboardTileCatalog, DashboardTileCatalog>();
+            serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
 
-        services.AddSingleton<BotConnectionManager>();
-        services.AddSingleton<MainForm>();
+    private static void MigrateLegacySettingsLayout()
+    {
+        var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        var logger = loggerFactory.CreateLogger(nameof(LegacySettingsLayoutMigrator));
 
-        services.AddTransient<SettingsForm>();
-        services.AddTransient<UserStatisticsForm>();
-        services.AddTransient<BroadcastProfileEditDialog>();
-        services.AddTransient<PollFromProfileDialog>();
-        services.AddTransient<PollProfileEditDialog>();
+        try
+        {
+            LegacySettingsLayoutMigrator.Run(AppPaths.BaseDirectory, AppPaths.SettingsDirectory, logger);
+        }
+        catch (Exception exception)
+        {
+            Log.Error(exception, "Ошибка пред-миграции layout-а настроек");
+        }
+    }
+
+    private static bool StartStreamMonitoring(StreamMonitoringHost host)
+    {
+        try
+        {
+            host.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Log.Information("Стрим-мониторинг запущен независимо от подключения бота");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Ошибка запуска стрим-мониторинга");
+            return false;
+        }
+    }
+
+    private static void StopStreamMonitoring(StreamMonitoringHost host)
+    {
+        try
+        {
+            host.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Ошибка остановки стрим-мониторинга");
+        }
+    }
+
+    private static bool StartHttpServerIfNeeded(bool isUiSmoke, SettingsManager settingsManager, AppLifetime appLifetime)
+    {
+        if (isUiSmoke)
+        {
+            Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
+            return false;
+        }
+
+        if (!ValidateAndResolvePortConflict(settingsManager))
+        {
+            Log.Warning("Не удалось разрешить конфликт портов. HTTP сервер не запущен");
+            MessageBox.Show("Не удалось разрешить конфликт портов. HTTP сервер не запущен.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+
+        try
+        {
+            appLifetime.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Log.Information("HTTP сервер успешно запущен");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Ошибка запуска HTTP сервера");
+            MessageBox.Show($"Ошибка запуска HTTP сервера: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+    }
+
+    private static void StopAppLifetime(AppLifetime appLifetime)
+    {
+        try
+        {
+            appLifetime.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Ошибка остановки AppLifetime");
+        }
+    }
+
+    private static Timer CreateMemoryWatchdogTimer()
+    {
+        const long ThresholdMb = 1024;
+        const long MemoryThreshold = 1024 * 1024 * ThresholdMb;
+        const int CheckIntervalMs = 1000;
+        const int KillDelayMs = 1000;
+
+        var memoryCheckTimer = new Timer { Interval = CheckIntervalMs };
+        memoryCheckTimer.Tick += (_, _) =>
+        {
+            var currentProcess = Process.GetCurrentProcess();
+            var memoryBytes = currentProcess.PrivateMemorySize64;
+
+            if (memoryBytes <= MemoryThreshold)
+            {
+                return;
+            }
+
+            Log.Warning("Обнаружено аномальное потребление памяти: {MemoryBytes} байт", memoryBytes);
+            memoryCheckTimer.Stop();
+
+            Task.Run(async () =>
+            {
+                await Task.Delay(KillDelayMs);
+                Log.Fatal("Принудительное завершение процесса из-за утечки памяти");
+                await Log.CloseAndFlushAsync();
+                currentProcess.Kill();
+            });
+
+            var memoryMb = memoryBytes / (1024.0 * 1024.0);
+            var killDelaySeconds = KillDelayMs / 1000;
+            var secondsWord = GetRussianSecondsWord(killDelaySeconds);
+            var message =
+                $"""
+                 Внимание! Обнаружено аномальное потребление ресурсов.
+
+                 Текущее использование: {memoryMb:F2} MB
+                 Установленный лимит: {ThresholdMb:F2} MB
+
+                 У вас есть {killDelaySeconds} {secondsWord}, чтобы прочитать это сообщение, затем процесс будет убит принудительно.
+                 """;
+
+            MessageBox.Show(message, "Критическая нагрузка на память", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Environment.FailFast("Пользователь подтвердил закрытие при утечке памяти.");
+        };
+
+        return memoryCheckTimer;
+    }
+
+    private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)
+    {
+        services
+            .AddCoreInfrastructure(uiLogSink)
+            .AddStatistics()
+            .AddSettingsStores()
+            .AddTwitchClients()
+            .AddChatPipeline()
+            .AddStreamMonitoring()
+            .AddBroadcasting()
+            .AddPolls()
+            .AddHttpServer()
+            .AddDashboardTiles()
+            .AddForms();
     }
 
     private static string GetRussianSecondsWord(int seconds)

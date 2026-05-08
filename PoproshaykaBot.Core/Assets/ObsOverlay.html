@@ -1,0 +1,28 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title>PoproshaykaBot Chat Overlay</title>
+    <meta charset="utf-8">
+    <link href="/favicon.ico"
+          rel="icon"
+          type="image/x-icon" />
+    <link href="/assets/obs.css"
+          rel="stylesheet" />
+</head>
+<body>
+    <div aria-label="Чат стрима"
+         aria-live="polite"
+         aria-relevant="additions"
+         id="chat"
+         role="log"></div>
+    <button aria-live="polite"
+            hidden
+            id="new-messages-indicator"
+            type="button">
+        <span aria-hidden="true"
+              class="new-messages-indicator-arrow">↓</span>
+        <span class="new-messages-indicator-text">Новых сообщений: <span id="new-messages-indicator-count">0</span></span>
+    </button>
+    <script src="/assets/obs.js"></script>
+</body>
+</html>

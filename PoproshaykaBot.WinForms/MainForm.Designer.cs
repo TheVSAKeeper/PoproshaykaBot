@@ -41,6 +41,7 @@ partial class MainForm
         _dashboardControl = new DashboardControl();
         _connectionProgressBar = new ToolStripProgressBar();
         _connectionStatusLabel = new ToolStripStatusLabel();
+        _streamMonitoringStatusLabel = new ToolStripStatusLabel();
         _statusStrip = new StatusStrip();
         _mainTableLayoutPanel.SuspendLayout();
         _mainToolStrip.SuspendLayout();
@@ -119,17 +120,26 @@ partial class MainForm
         _connectionProgressBar.Size = new Size(100, 16);
         _connectionProgressBar.Style = ProgressBarStyle.Marquee;
         _connectionProgressBar.Visible = false;
-        // 
+        //
         // _connectionStatusLabel
-        // 
+        //
         _connectionStatusLabel.Name = "_connectionStatusLabel";
         _connectionStatusLabel.Size = new Size(0, 17);
         _connectionStatusLabel.Visible = false;
-        // 
+        //
+        // _streamMonitoringStatusLabel
+        //
+        _streamMonitoringStatusLabel.Name = "_streamMonitoringStatusLabel";
+        _streamMonitoringStatusLabel.Size = new Size(150, 17);
+        _streamMonitoringStatusLabel.Spring = true;
+        _streamMonitoringStatusLabel.TextAlign = ContentAlignment.MiddleRight;
+        _streamMonitoringStatusLabel.Text = "⚪ Стрим-мониторинг: ожидание";
+        _streamMonitoringStatusLabel.ToolTipText = "Состояние независимого подключения к EventSub WebSocket";
+        //
         // _statusStrip
-        // 
+        //
         _statusStrip.ImageScalingSize = new Size(36, 36);
-        _statusStrip.Items.AddRange(new ToolStripItem[] { _connectionStatusLabel, _connectionProgressBar });
+        _statusStrip.Items.AddRange(new ToolStripItem[] { _connectionStatusLabel, _connectionProgressBar, _streamMonitoringStatusLabel });
         _statusStrip.Location = new Point(0, 562);
         _statusStrip.Name = "_statusStrip";
         _statusStrip.Size = new Size(800, 22);
@@ -164,6 +174,7 @@ partial class MainForm
     private DashboardControl _dashboardControl;
     private ToolStripProgressBar _connectionProgressBar;
     private ToolStripStatusLabel _connectionStatusLabel;
+    private ToolStripStatusLabel _streamMonitoringStatusLabel;
     private StatusStrip _statusStrip;
 
     #endregion

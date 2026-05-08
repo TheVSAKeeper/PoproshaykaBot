@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <ApplicationIcon>..\PoproshaykaBot.Core\Assets\icon.ico</ApplicationIcon>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
     <ForceDesignerDpiUnaware>true</ForceDesignerDpiUnaware>
   </PropertyGroup>
@@ -19,24 +19,13 @@
     <SelfContained>false</SelfContained>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Content Include="icon.ico" />
-  </ItemGroup>
-
   <ItemGroup Condition="'$(PortableMode)' == 'true'">
     <AssemblyMetadata Include="PortableMode" Value="true" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
-    <InternalsVisibleTo Include="PoproshaykaBot.WinForms.Tests" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Assets\ObsOverlay.html" />
-    <EmbeddedResource Include="Assets\obs.css" />
-    <EmbeddedResource Include="Assets\obs.js" />
-    <EmbeddedResource Include="icon.ico" />
+    <InternalsVisibleTo Include="PoproshaykaBot.Core.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -54,6 +43,10 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PoproshaykaBot.Core\PoproshaykaBot.Core.csproj" />
   </ItemGroup>
 
 </Project>

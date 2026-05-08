@@ -1,7 +1,6 @@
-﻿using PoproshaykaBot.WinForms.Infrastructure.Di;
-using PoproshaykaBot.WinForms.Infrastructure.Events;
-using PoproshaykaBot.WinForms.Infrastructure.Events.Logging;
-using PoproshaykaBot.WinForms.Settings;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Tiles;
 
@@ -20,7 +19,7 @@ public sealed partial class ChatOverlayPreviewTileControl : UserControl, IDashbo
     public SettingsManager Settings { get; internal init; } = null!;
 
     [Inject]
-    public IEventBus Bus { get; internal init; } = null!;
+    public ILogger<ChatOverlayPreviewTileControl> Logger { get; internal init; } = null!;
 
     public IReadOnlyList<ToolStripItem> CreateHeaderItems()
     {
@@ -53,10 +52,17 @@ public sealed partial class ChatOverlayPreviewTileControl : UserControl, IDashbo
         }
 
         _initialized = true;
-        InitializeWebViewAsync();
+        _ = InitializeWebViewAsync();
     }
 
-    private async void InitializeWebViewAsync()
+    private void OnModeToggleChanged(object? sender, EventArgs e)
+    {
+        _previewMode = _modeToggleButton?.Checked ?? true;
+        ApplyModeButtonAppearance();
+        UpdateOverlayUrl();
+    }
+
+    private async Task InitializeWebViewAsync()
     {
         try
         {
@@ -70,15 +76,8 @@ public sealed partial class ChatOverlayPreviewTileControl : UserControl, IDashbo
             _fallbackLabel.Text = "Не удалось открыть OBS-превью чата. Подробности — в логах.";
             _fallbackLabel.BringToFront();
 
-            _ = Bus.PublishAsync(new BotLogEntry(BotLogLevel.Error, "Ui", $"Ошибка инициализации WebView2: {ex.Message}"));
+            Logger.LogError(ex, "Ошибка инициализации WebView2");
         }
-    }
-
-    private void OnModeToggleChanged(object? sender, EventArgs e)
-    {
-        _previewMode = _modeToggleButton?.Checked ?? true;
-        ApplyModeButtonAppearance();
-        UpdateOverlayUrl();
     }
 
     private void ApplyModeButtonAppearance()
