@@ -224,11 +224,6 @@ public partial class MainForm : Form
 
     private void OpenOnboardingWizardIfNeeded()
     {
-        if (Environment.GetCommandLineArgs().Any(a => string.Equals(a, "--ui-smoke", StringComparison.OrdinalIgnoreCase)))
-        {
-            return;
-        }
-
         if (!_onboardingChecklist.RequiresWizard)
         {
             return;

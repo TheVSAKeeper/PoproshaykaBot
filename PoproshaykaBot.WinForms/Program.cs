@@ -48,7 +48,7 @@ public static class Program
         {
             Log.Information("Запуск приложения...");
             Log.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}",
-                AppPaths.IsPortable ? "portable" : "AppData",
+                ResolveStorageMode(),
                 AppPaths.BaseDirectory);
 
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
@@ -198,6 +198,16 @@ public static class Program
         {
             Log.Error(ex, "Ошибка остановки AppLifetime");
         }
+    }
+
+    private static string ResolveStorageMode()
+    {
+        if (AppPaths.IsBaseDirectoryOverridden)
+        {
+            return "override";
+        }
+
+        return AppPaths.IsPortable ? "portable" : "AppData";
     }
 
     private static Timer CreateMemoryWatchdogTimer()
