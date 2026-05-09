@@ -66,41 +66,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
         _subs.DisposeOnClose(this);
     }
 
-    private void OnChatMessageReceived(ChatMessageReceived @event)
-    {
-        if (_context is null || _detectedBotStatus is not null)
-        {
-            return;
-        }
-
-        var botUserId = _context.BotAccount.UserId;
-        if (string.IsNullOrWhiteSpace(botUserId)
-            || !string.Equals(@event.UserId, botUserId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var status = DescribeBotStatus(@event.Status);
-        _detectedBotStatus = status;
-        _botStatusLabel.Text = $"Бот в чате как: {status}";
-        _botStatusLabel.ForeColor = Color.Green;
-    }
-
-    private static string DescribeBotStatus(UserStatus status)
-    {
-        if (status.HasFlag(UserStatus.Broadcaster))
-        {
-            return "владелец канала";
-        }
-
-        if (status.HasFlag(UserStatus.Moderator))
-        {
-            return "модератор";
-        }
-
-        return "обычный пользователь";
-    }
-
     private void OnChatTestButtonClicked(object? sender, EventArgs e)
     {
         RunChatTest();
@@ -132,6 +97,41 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
         }
+    }
+
+    private static string DescribeBotStatus(UserStatus status)
+    {
+        if (status.HasFlag(UserStatus.Broadcaster))
+        {
+            return "владелец канала";
+        }
+
+        if (status.HasFlag(UserStatus.Moderator))
+        {
+            return "модератор";
+        }
+
+        return "обычный пользователь";
+    }
+
+    private void OnChatMessageReceived(ChatMessageReceived @event)
+    {
+        if (_context is null || _detectedBotStatus is not null)
+        {
+            return;
+        }
+
+        var botUserId = _context.BotAccount.UserId;
+        if (string.IsNullOrWhiteSpace(botUserId)
+            || !string.Equals(@event.UserId, botUserId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var status = DescribeBotStatus(@event.Status);
+        _detectedBotStatus = status;
+        _botStatusLabel.Text = $"Бот в чате как: {status}";
+        _botStatusLabel.ForeColor = Color.Green;
     }
 
     private async Task InitializeWebViewAsync(string url)

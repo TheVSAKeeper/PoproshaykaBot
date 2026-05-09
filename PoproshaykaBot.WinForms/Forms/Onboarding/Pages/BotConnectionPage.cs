@@ -106,6 +106,17 @@ public sealed partial class BotConnectionPage : OnboardingPageBase
         TryStartConnection();
     }
 
+    private static string SafeFailureMessage(Exception exception)
+    {
+        return exception switch
+        {
+            OperationCanceledException => "Подключение отменено",
+            HttpRequestException => "Ошибка сети при подключении к Twitch",
+            InvalidOperationException invalid => invalid.Message,
+            _ => "Неизвестная ошибка подключения",
+        };
+    }
+
     private void OnPhaseChanged(BotLifecyclePhaseChanged @event)
     {
         _currentPhase = @event.Phase;
@@ -156,6 +167,7 @@ public sealed partial class BotConnectionPage : OnboardingPageBase
                 var channel = string.IsNullOrWhiteSpace(_joinedChannel)
                     ? _context?.Settings.Twitch.Channel ?? string.Empty
                     : _joinedChannel;
+
                 var channelText = string.IsNullOrWhiteSpace(channel) ? string.Empty : $" к чату @{channel}";
                 SetStatus($"✅ Бот подключён{channelText}", Color.Green, "Можно идти дальше.");
                 _retryButton.Visible = false;
@@ -200,16 +212,5 @@ public sealed partial class BotConnectionPage : OnboardingPageBase
         _statusLabel.Text = status;
         _statusLabel.ForeColor = color;
         _detailsLabel.Text = details;
-    }
-
-    private static string SafeFailureMessage(Exception exception)
-    {
-        return exception switch
-        {
-            OperationCanceledException => "Подключение отменено",
-            HttpRequestException => "Ошибка сети при подключении к Twitch",
-            InvalidOperationException invalid => invalid.Message,
-            _ => "Неизвестная ошибка подключения",
-        };
     }
 }

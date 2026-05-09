@@ -102,22 +102,6 @@ public partial class OnboardingWizardForm : Form
         _ = RollbackAndCloseAsync();
     }
 
-    private bool AccountsDifferFromOriginal()
-    {
-        var liveBot = _accountsStore.LoadBot();
-        var liveBroadcaster = _accountsStore.LoadBroadcaster();
-        return !AccountsEqual(liveBot, _originalBotAccount)
-               || !AccountsEqual(liveBroadcaster, _originalBroadcasterAccount);
-    }
-
-    private static bool AccountsEqual(TwitchAccountSettings left, TwitchAccountSettings right)
-    {
-        return string.Equals(left.AccessToken, right.AccessToken, StringComparison.Ordinal)
-               && string.Equals(left.RefreshToken, right.RefreshToken, StringComparison.Ordinal)
-               && string.Equals(left.Login, right.Login, StringComparison.Ordinal)
-               && string.Equals(left.UserId, right.UserId, StringComparison.Ordinal);
-    }
-
     private async void OnNextButtonClicked(object? sender, EventArgs e)
     {
         if (_currentPageIndex < 0 || _currentPageIndex >= _pages.Count)
@@ -172,10 +156,26 @@ public partial class OnboardingWizardForm : Form
         UpdateButtonStates();
     }
 
+    private static bool AccountsEqual(TwitchAccountSettings left, TwitchAccountSettings right)
+    {
+        return string.Equals(left.AccessToken, right.AccessToken, StringComparison.Ordinal)
+               && string.Equals(left.RefreshToken, right.RefreshToken, StringComparison.Ordinal)
+               && string.Equals(left.Login, right.Login, StringComparison.Ordinal)
+               && string.Equals(left.UserId, right.UserId, StringComparison.Ordinal);
+    }
+
     private static T DeepClone<T>(T source) where T : class, new()
     {
         var json = JsonSerializer.Serialize(source);
         return JsonSerializer.Deserialize<T>(json) ?? new();
+    }
+
+    private bool AccountsDifferFromOriginal()
+    {
+        var liveBot = _accountsStore.LoadBot();
+        var liveBroadcaster = _accountsStore.LoadBroadcaster();
+        return !AccountsEqual(liveBot, _originalBotAccount)
+               || !AccountsEqual(liveBroadcaster, _originalBroadcasterAccount);
     }
 
     private async Task RollbackAndCloseAsync()
