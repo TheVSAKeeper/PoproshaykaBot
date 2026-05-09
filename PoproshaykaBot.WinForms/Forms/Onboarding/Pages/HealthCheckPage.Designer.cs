@@ -29,6 +29,7 @@ partial class HealthCheckPage
         _overlayHeader = new Label();
         _overlayButton = new Button();
         _overlayUrlLabel = new Label();
+        _botStatusLabel = new Label();
         _previewHeader = new Label();
         _chatPreviewWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
         _previewFallbackLabel = new Label();
@@ -46,14 +47,16 @@ partial class HealthCheckPage
         _layout.Controls.Add(_intro, 0, 0);
         _layout.Controls.Add(_overlayPanel, 0, 1);
         _layout.Controls.Add(_chatTestPanel, 0, 2);
-        _layout.Controls.Add(_previewHeader, 0, 3);
-        _layout.Controls.Add(_chatPreviewWebView, 0, 4);
-        _layout.Controls.Add(_previewFallbackLabel, 0, 5);
-        _layout.Controls.Add(_hintLabel, 0, 6);
+        _layout.Controls.Add(_botStatusLabel, 0, 3);
+        _layout.Controls.Add(_previewHeader, 0, 4);
+        _layout.Controls.Add(_chatPreviewWebView, 0, 5);
+        _layout.Controls.Add(_previewFallbackLabel, 0, 6);
+        _layout.Controls.Add(_hintLabel, 0, 7);
         _layout.Dock = DockStyle.Fill;
         _layout.Name = "_layout";
         _layout.Padding = new Padding(20, 18, 20, 18);
-        _layout.RowCount = 7;
+        _layout.RowCount = 8;
+        _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
@@ -178,6 +181,16 @@ partial class HealthCheckPage
         _overlayButton.UseVisualStyleBackColor = true;
         _overlayButton.Click += OnOverlayButtonClicked;
         //
+        // _botStatusLabel
+        //
+        _botStatusLabel.AutoSize = true;
+        _botStatusLabel.Dock = DockStyle.Top;
+        _botStatusLabel.ForeColor = Color.Gray;
+        _botStatusLabel.Margin = new Padding(0, 0, 0, 12);
+        _botStatusLabel.Name = "_botStatusLabel";
+        _botStatusLabel.Text = "Бот в чате как: ожидание сообщения...";
+        _botStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
+        //
         // _previewHeader
         //
         _previewHeader.AutoSize = true;
@@ -248,6 +261,7 @@ partial class HealthCheckPage
     private Label _overlayHeader;
     private Button _overlayButton;
     private Label _overlayUrlLabel;
+    private Label _botStatusLabel;
     private Label _previewHeader;
     private Microsoft.Web.WebView2.WinForms.WebView2 _chatPreviewWebView;
     private Label _previewFallbackLabel;

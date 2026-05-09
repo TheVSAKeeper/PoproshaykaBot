@@ -1,5 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
-using PoproshaykaBot.Core.Twitch.Onboarding;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using System.Diagnostics;
 
@@ -7,22 +10,24 @@ namespace PoproshaykaBot.WinForms.Forms.Onboarding.Pages;
 
 public sealed partial class HealthCheckPage : OnboardingPageBase
 {
+    private readonly List<IDisposable> _subs = [];
+
     private OnboardingContext? _context;
-    private CancellationTokenSource? _chatTestCts;
-    private CancellationTokenSource? _previewCts;
-    private IAsyncDisposable? _chatPreviewSession;
-    private bool _previewStartRequested;
+    private bool _initialized;
     private bool _webViewNavigationRequested;
     private string? _currentWebViewUrl;
+    private string? _detectedBotStatus;
 
     public HealthCheckPage()
     {
         InitializeComponent();
-        Disposed += OnPageDisposed;
     }
 
     [Inject]
-    public IOnboardingHealthChecker HealthChecker { get; internal init; } = null!;
+    public IChatMessenger ChatMessenger { get; internal init; } = null!;
+
+    [Inject]
+    public IEventBus EventBus { get; internal init; } = null!;
 
     [Inject]
     public ILogger<HealthCheckPage> Logger { get; internal init; } = null!;
@@ -38,13 +43,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
         _overlayUrlLabel.Text = $"Адрес для Browser Source в OBS: {url}";
         ResetStatuses();
 
-        if (!_previewStartRequested)
-        {
-            _previewStartRequested = true;
-            _previewCts = new();
-            _ = StartChatPreviewAsync(_previewCts.Token);
-        }
-
         if (!_webViewNavigationRequested || !string.Equals(_currentWebViewUrl, url, StringComparison.Ordinal))
         {
             _webViewNavigationRequested = true;
@@ -53,27 +51,59 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
         }
     }
 
-    private void OnPageDisposed(object? sender, EventArgs e)
+    protected override void OnHandleCreated(EventArgs e)
     {
-        _chatTestCts?.Cancel();
-        _chatTestCts?.Dispose();
-        _chatTestCts = null;
+        base.OnHandleCreated(e);
 
-        _previewCts?.Cancel();
-        _previewCts?.Dispose();
-        _previewCts = null;
-
-        var session = _chatPreviewSession;
-        _chatPreviewSession = null;
-        if (session is not null)
+        if (_initialized || this.IsInDesignMode())
         {
-            _ = DisposePreviewSessionAsync(session);
+            return;
         }
+
+        _initialized = true;
+
+        _subs.Add(EventBus.SubscribeOnUi<ChatMessageReceived>(this, OnChatMessageReceived));
+        _subs.DisposeOnClose(this);
     }
 
-    private async void OnChatTestButtonClicked(object? sender, EventArgs e)
+    private void OnChatMessageReceived(ChatMessageReceived @event)
     {
-        await RunChatTestAsync();
+        if (_context is null || _detectedBotStatus is not null)
+        {
+            return;
+        }
+
+        var botUserId = _context.BotAccount.UserId;
+        if (string.IsNullOrWhiteSpace(botUserId)
+            || !string.Equals(@event.UserId, botUserId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var status = DescribeBotStatus(@event.Status);
+        _detectedBotStatus = status;
+        _botStatusLabel.Text = $"Бот в чате как: {status}";
+        _botStatusLabel.ForeColor = Color.Green;
+    }
+
+    private static string DescribeBotStatus(UserStatus status)
+    {
+        if (status.HasFlag(UserStatus.Broadcaster))
+        {
+            return "владелец канала";
+        }
+
+        if (status.HasFlag(UserStatus.Moderator))
+        {
+            return "модератор";
+        }
+
+        return "обычный пользователь";
+    }
+
+    private void OnChatTestButtonClicked(object? sender, EventArgs e)
+    {
+        RunChatTest();
     }
 
     private void OnOverlayButtonClicked(object? sender, EventArgs e)
@@ -101,74 +131,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
                 "OBS-оверлей",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
-        }
-    }
-
-    private static async Task DisposePreviewSessionAsync(IAsyncDisposable session)
-    {
-        try
-        {
-            await session.DisposeAsync();
-        }
-        catch
-        {
-        }
-    }
-
-    private async Task StartChatPreviewAsync(CancellationToken cancellationToken)
-    {
-        if (_context is null)
-        {
-            return;
-        }
-
-        var broadcasterId = _context.BroadcasterAccount.UserId;
-        var botId = _context.BotAccount.UserId;
-        var clientId = _context.Settings.Twitch.ClientId;
-        var token = _context.BotAccount.AccessToken;
-
-        if (string.IsNullOrWhiteSpace(broadcasterId)
-            || string.IsNullOrWhiteSpace(botId)
-            || string.IsNullOrWhiteSpace(clientId)
-            || string.IsNullOrWhiteSpace(token))
-        {
-            return;
-        }
-
-        try
-        {
-            var result = await HealthChecker.StartChatPreviewAsync(broadcasterId,
-                botId,
-                clientId,
-                token,
-                cancellationToken);
-
-            if (cancellationToken.IsCancellationRequested || IsDisposed)
-            {
-                if (result.Session is not null)
-                {
-                    await DisposePreviewSessionAsync(result.Session);
-                }
-
-                return;
-            }
-
-            if (result.Status == OnboardingChatPreviewStatus.Started && result.Session is not null)
-            {
-                _chatPreviewSession = result.Session;
-                Logger.LogDebug("Onboarding: подписка channel.chat.message для предпросмотра активна");
-            }
-            else
-            {
-                Logger.LogDebug("Onboarding: предпросмотр чата не запущен (статус {Status})", result.Status);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception exception)
-        {
-            Logger.LogDebug(exception, "Onboarding: исключение при запуске предпросмотра чата");
         }
     }
 
@@ -203,9 +165,15 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
     {
         _chatTestStatusLabel.Text = "Не выполнено";
         _chatTestStatusLabel.ForeColor = Color.Gray;
+
+        if (_detectedBotStatus is null)
+        {
+            _botStatusLabel.Text = "Бот в чате как: ожидание сообщения...";
+            _botStatusLabel.ForeColor = Color.Gray;
+        }
     }
 
-    private async Task RunChatTestAsync()
+    private void RunChatTest()
     {
         if (_context is null)
         {
@@ -220,76 +188,17 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
             return;
         }
 
-        var broadcasterId = _context.BroadcasterAccount.UserId;
-        var senderId = _context.BotAccount.UserId;
-        var clientId = _context.Settings.Twitch.ClientId;
-        var token = _context.BotAccount.AccessToken;
-
-        if (string.IsNullOrWhiteSpace(broadcasterId)
-            || string.IsNullOrWhiteSpace(senderId)
-            || string.IsNullOrWhiteSpace(token))
-        {
-            _chatTestStatusLabel.Text = "Сначала пройдите авторизацию бота и стримера.";
-            _chatTestStatusLabel.ForeColor = Color.DarkOrange;
-            return;
-        }
-
-        _chatTestCts?.Cancel();
-        _chatTestCts?.Dispose();
-        _chatTestCts = new();
-
-        _chatTestButton.Enabled = false;
-        _chatTestStatusLabel.Text = "Отправка...";
-        _chatTestStatusLabel.ForeColor = Color.Blue;
-
         try
         {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(_chatTestCts.Token);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(8));
-
-            var outcome = await HealthChecker.SendChatTestMessageAsync(broadcasterId,
-                senderId,
-                clientId,
-                token,
-                message,
-                timeoutCts.Token);
-
-            switch (outcome)
-            {
-                case ChatTestMessageOutcome.Sent:
-                    _chatTestStatusLabel.Text = "✓ Сообщение отправлено.";
-                    _chatTestStatusLabel.ForeColor = Color.Green;
-                    break;
-
-                case ChatTestMessageOutcome.Forbidden:
-                    _chatTestStatusLabel.Text = "✗ Twitch отклонил отправку. Проверьте scope user:write:chat и доступ бота к чату.";
-                    _chatTestStatusLabel.ForeColor = Color.DarkRed;
-                    break;
-
-                case ChatTestMessageOutcome.Skipped:
-                    _chatTestStatusLabel.Text = "Отправка пропущена.";
-                    _chatTestStatusLabel.ForeColor = Color.Gray;
-                    break;
-
-                default:
-                    _chatTestStatusLabel.Text = "Не удалось отправить (сетевая ошибка).";
-                    _chatTestStatusLabel.ForeColor = Color.DarkOrange;
-                    break;
-            }
+            ChatMessenger.Send(message);
+            _chatTestStatusLabel.Text = "✓ Сообщение поставлено в очередь отправки.";
+            _chatTestStatusLabel.ForeColor = Color.Green;
         }
         catch (Exception exception)
         {
-            Logger.LogDebug(exception, "Сбой отправки тестового сообщения в onboarding");
-            _chatTestStatusLabel.Text = "Не удалось отправить.";
-            _chatTestStatusLabel.ForeColor = Color.DarkOrange;
-        }
-        finally
-        {
-            if (!IsDisposed)
-            {
-                _chatTestButton.Enabled = true;
-            }
+            Logger.LogWarning(exception, "Сбой постановки тестового сообщения в очередь отправки");
+            _chatTestStatusLabel.Text = "✗ Не удалось поставить сообщение в очередь.";
+            _chatTestStatusLabel.ForeColor = Color.DarkRed;
         }
     }
-
 }
