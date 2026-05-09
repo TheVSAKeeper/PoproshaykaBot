@@ -19,6 +19,7 @@ public sealed class BotConnectionManager : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _connectionTask;
     private bool _disposed;
+    private BotLifecyclePhase _currentPhase = BotLifecyclePhase.Idle;
 
     public BotConnectionManager(
         ITwitchOAuthService tokenService,
@@ -39,6 +40,8 @@ public sealed class BotConnectionManager : IDisposable
     }
 
     public bool IsBusy => _connectionTask is { IsCompleted: false };
+
+    public BotLifecyclePhase CurrentPhase => _currentPhase;
 
     public void StartConnection()
     {
@@ -73,6 +76,7 @@ public sealed class BotConnectionManager : IDisposable
     {
         _logger.LogDebug("Инициализация процесса остановки бота (StopAsync)");
 
+        _currentPhase = BotLifecyclePhase.Disconnecting;
         await _eventBus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnecting));
 
         var progressReporter = new Progress<string>(ReportProgress);
@@ -185,6 +189,7 @@ public sealed class BotConnectionManager : IDisposable
 
     private void PublishPhase(BotLifecyclePhase phase, Exception? exception = null)
     {
+        _currentPhase = phase;
         _ = _eventBus.PublishAsync(new BotLifecyclePhaseChanged(phase, exception));
     }
 }

@@ -126,7 +126,7 @@ public sealed partial class CompletionPage : OnboardingPageBase
             await TryRestartHttpServerAsync(newPort);
         }
 
-        if (_autoConnectCheckBox.Checked)
+        if (_autoConnectCheckBox.Checked && BotConnectionManager.CurrentPhase != BotLifecyclePhase.Connected)
         {
             try
             {

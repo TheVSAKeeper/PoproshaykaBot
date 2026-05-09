@@ -1,4 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -13,12 +16,17 @@ public partial class OnboardingWizardForm : Form
 {
     private readonly IControlFactory _controlFactory;
     private readonly SettingsManager _settingsManager;
+    private readonly AccountsStore _accountsStore;
     private readonly KestrelHttpServer _kestrelHttpServer;
+    private readonly BotConnectionManager _botConnectionManager;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<OnboardingWizardForm> _logger;
     private readonly OnboardingContext _context;
     private readonly List<IOnboardingWizardPage> _pages = [];
     private readonly int _originalHttpServerPort;
     private readonly string _originalChannel;
+    private readonly TwitchAccountSettings _originalBotAccount;
+    private readonly TwitchAccountSettings _originalBroadcasterAccount;
     private int _currentPageIndex = -1;
     private bool _initialized;
     private bool _rollbackPerformed;
@@ -28,11 +36,16 @@ public partial class OnboardingWizardForm : Form
         AccountsStore accountsStore,
         IControlFactory controlFactory,
         KestrelHttpServer kestrelHttpServer,
+        BotConnectionManager botConnectionManager,
+        IEventBus eventBus,
         ILogger<OnboardingWizardForm> logger)
     {
         _controlFactory = controlFactory;
         _settingsManager = settingsManager;
+        _accountsStore = accountsStore;
         _kestrelHttpServer = kestrelHttpServer;
+        _botConnectionManager = botConnectionManager;
+        _eventBus = eventBus;
         _logger = logger;
 
         _context = new(DeepClone(settingsManager.Current),
@@ -41,6 +54,8 @@ public partial class OnboardingWizardForm : Form
 
         _originalHttpServerPort = settingsManager.Current.Twitch.HttpServerPort;
         _originalChannel = settingsManager.Current.Twitch.Channel;
+        _originalBotAccount = DeepClone(accountsStore.LoadBot());
+        _originalBroadcasterAccount = DeepClone(accountsStore.LoadBroadcaster());
 
         InitializeComponent();
     }
@@ -71,8 +86,13 @@ public partial class OnboardingWizardForm : Form
 
         var portChanged = _settingsManager.Current.Twitch.HttpServerPort != _originalHttpServerPort;
         var channelChanged = !string.Equals(_settingsManager.Current.Twitch.Channel, _originalChannel, StringComparison.Ordinal);
+        var accountsChanged = AccountsDifferFromOriginal();
+        var botRunning = _botConnectionManager.CurrentPhase
+            is BotLifecyclePhase.Connecting
+            or BotLifecyclePhase.Connected
+            or BotLifecyclePhase.Disconnecting;
 
-        if (!portChanged && !channelChanged)
+        if (!portChanged && !channelChanged && !accountsChanged && !botRunning)
         {
             _rollbackPerformed = true;
             return;
@@ -80,6 +100,22 @@ public partial class OnboardingWizardForm : Form
 
         e.Cancel = true;
         _ = RollbackAndCloseAsync();
+    }
+
+    private bool AccountsDifferFromOriginal()
+    {
+        var liveBot = _accountsStore.LoadBot();
+        var liveBroadcaster = _accountsStore.LoadBroadcaster();
+        return !AccountsEqual(liveBot, _originalBotAccount)
+               || !AccountsEqual(liveBroadcaster, _originalBroadcasterAccount);
+    }
+
+    private static bool AccountsEqual(TwitchAccountSettings left, TwitchAccountSettings right)
+    {
+        return string.Equals(left.AccessToken, right.AccessToken, StringComparison.Ordinal)
+               && string.Equals(left.RefreshToken, right.RefreshToken, StringComparison.Ordinal)
+               && string.Equals(left.Login, right.Login, StringComparison.Ordinal)
+               && string.Equals(left.UserId, right.UserId, StringComparison.Ordinal);
     }
 
     private async void OnNextButtonClicked(object? sender, EventArgs e)
@@ -144,13 +180,54 @@ public partial class OnboardingWizardForm : Form
 
     private async Task RollbackAndCloseAsync()
     {
+        await StopBotIfRunningAsync();
         RollbackChannel();
         await RollbackHttpServerPortAsync();
+        await RollbackAccountsAsync();
 
         if (!IsDisposed)
         {
             DialogResult = DialogResult.Cancel;
             Close();
+        }
+    }
+
+    private async Task StopBotIfRunningAsync()
+    {
+        var phase = _botConnectionManager.CurrentPhase;
+        if (phase is BotLifecyclePhase.Idle or BotLifecyclePhase.Disconnected)
+        {
+            return;
+        }
+
+        try
+        {
+            await _botConnectionManager.ShutdownAsync();
+            _logger.LogInformation("Бот остановлен после отмены мастера первичной настройки");
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Не удалось остановить бота при откате мастера");
+        }
+    }
+
+    private async Task RollbackAccountsAsync()
+    {
+        if (!AccountsDifferFromOriginal())
+        {
+            return;
+        }
+
+        try
+        {
+            _accountsStore.SaveAll(_originalBotAccount, _originalBroadcasterAccount);
+            await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
+            await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
+            _logger.LogInformation("Аккаунты Twitch откачены на исходные значения после отмены мастера");
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Не удалось восстановить аккаунты Twitch после отмены мастера");
         }
     }
 
@@ -216,6 +293,7 @@ public partial class OnboardingWizardForm : Form
         broadcasterAuth.Role = TwitchOAuthRole.Broadcaster;
         _pages.Add(broadcasterAuth);
 
+        _pages.Add(_controlFactory.Create<BotConnectionPage>());
         _pages.Add(_controlFactory.Create<HealthCheckPage>());
         _pages.Add(_controlFactory.Create<CompletionPage>());
     }
