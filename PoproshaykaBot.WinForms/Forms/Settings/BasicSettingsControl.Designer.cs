@@ -33,6 +33,8 @@
             _channelFlow = new FlowLayoutPanel();
             _channelTextBox = new TextBox();
             _channelResetButton = new Button();
+            _chatAccountLabel = new Label();
+            _chatAccountComboBox = new ComboBox();
             _basicTableLayout.SuspendLayout();
             _channelFlow.SuspendLayout();
             SuspendLayout();
@@ -44,10 +46,13 @@
             _basicTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             _basicTableLayout.Controls.Add(_channelLabel, 0, 0);
             _basicTableLayout.Controls.Add(_channelFlow, 1, 0);
+            _basicTableLayout.Controls.Add(_chatAccountLabel, 0, 1);
+            _basicTableLayout.Controls.Add(_chatAccountComboBox, 1, 1);
             _basicTableLayout.Dock = DockStyle.Fill;
             _basicTableLayout.Name = "_basicTableLayout";
             _basicTableLayout.Padding = new Padding(5);
-            _basicTableLayout.RowCount = 2;
+            _basicTableLayout.RowCount = 3;
+            _basicTableLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             _basicTableLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             _basicTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             _basicTableLayout.TabIndex = 0;
@@ -93,13 +98,32 @@
             _channelResetButton.UseVisualStyleBackColor = true;
             _channelResetButton.Click += OnChannelResetButtonClicked;
             //
+            // _chatAccountLabel
+            //
+            _chatAccountLabel.AutoSize = true;
+            _chatAccountLabel.Dock = DockStyle.Fill;
+            _chatAccountLabel.Margin = new Padding(0, 8, 6, 0);
+            _chatAccountLabel.Name = "_chatAccountLabel";
+            _chatAccountLabel.TabIndex = 2;
+            _chatAccountLabel.Text = "Чат-плитка от имени:";
+            _chatAccountLabel.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // _chatAccountComboBox
+            //
+            _chatAccountComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _chatAccountComboBox.Margin = new Padding(0, 6, 6, 0);
+            _chatAccountComboBox.MinimumSize = new Size(180, 0);
+            _chatAccountComboBox.Name = "_chatAccountComboBox";
+            _chatAccountComboBox.TabIndex = 3;
+            _chatAccountComboBox.SelectedIndexChanged += OnSettingChanged;
+            //
             // BasicSettingsControl
             //
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             Controls.Add(_basicTableLayout);
             Name = "BasicSettingsControl";
-            Size = new Size(548, 60);
+            Size = new Size(548, 100);
             _basicTableLayout.ResumeLayout(false);
             _basicTableLayout.PerformLayout();
             _channelFlow.ResumeLayout(false);
@@ -114,5 +138,7 @@
         private FlowLayoutPanel _channelFlow;
         private TextBox _channelTextBox;
         private Button _channelResetButton;
+        private Label _chatAccountLabel;
+        private ComboBox _chatAccountComboBox;
     }
 }

@@ -18,14 +18,18 @@ partial class AuthorizationPage
 
     private void InitializeComponent()
     {
+        components = new System.ComponentModel.Container();
         _layout = new TableLayoutPanel();
         _intro = new Label();
         _buttonsLayout = new TableLayoutPanel();
-        _copyLinkButton = new Button();
         _openBrowserButton = new Button();
+        _copyLinkButton = new Button();
+        _embeddedLoginButton = new Button();
         _cancelButton = new Button();
         _statusLabel = new Label();
         _resultLabel = new Label();
+        _toolTip = new ToolTip(components);
+        _buttonsHintLabel = new Label();
         _layout.SuspendLayout();
         _buttonsLayout.SuspendLayout();
         SuspendLayout();
@@ -36,13 +40,15 @@ partial class AuthorizationPage
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _layout.Controls.Add(_intro, 0, 0);
         _layout.Controls.Add(_buttonsLayout, 0, 1);
-        _layout.Controls.Add(_cancelButton, 0, 2);
-        _layout.Controls.Add(_statusLabel, 0, 3);
-        _layout.Controls.Add(_resultLabel, 0, 4);
+        _layout.Controls.Add(_buttonsHintLabel, 0, 2);
+        _layout.Controls.Add(_cancelButton, 0, 3);
+        _layout.Controls.Add(_statusLabel, 0, 4);
+        _layout.Controls.Add(_resultLabel, 0, 5);
         _layout.Dock = DockStyle.Fill;
         _layout.Name = "_layout";
         _layout.Padding = new Padding(20, 18, 20, 18);
-        _layout.RowCount = 6;
+        _layout.RowCount = 7;
+        _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
@@ -63,11 +69,13 @@ partial class AuthorizationPage
         //
         _buttonsLayout.AutoSize = true;
         _buttonsLayout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        _buttonsLayout.ColumnCount = 2;
+        _buttonsLayout.ColumnCount = 3;
+        _buttonsLayout.ColumnStyles.Add(new ColumnStyle());
         _buttonsLayout.ColumnStyles.Add(new ColumnStyle());
         _buttonsLayout.ColumnStyles.Add(new ColumnStyle());
         _buttonsLayout.Controls.Add(_openBrowserButton, 0, 0);
         _buttonsLayout.Controls.Add(_copyLinkButton, 1, 0);
+        _buttonsLayout.Controls.Add(_embeddedLoginButton, 2, 0);
         _buttonsLayout.Dock = DockStyle.Top;
         _buttonsLayout.Margin = new Padding(0, 0, 0, 8);
         _buttonsLayout.Name = "_buttonsLayout";
@@ -77,6 +85,7 @@ partial class AuthorizationPage
         // _openBrowserButton
         //
         _openBrowserButton.AutoSize = true;
+        _openBrowserButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
         _openBrowserButton.Margin = new Padding(0, 0, 8, 0);
         _openBrowserButton.MinimumSize = new Size(220, 30);
         _openBrowserButton.Name = "_openBrowserButton";
@@ -87,12 +96,33 @@ partial class AuthorizationPage
         // _copyLinkButton
         //
         _copyLinkButton.AutoSize = true;
-        _copyLinkButton.Margin = new Padding(0);
+        _copyLinkButton.Margin = new Padding(0, 0, 8, 0);
         _copyLinkButton.MinimumSize = new Size(180, 30);
         _copyLinkButton.Name = "_copyLinkButton";
         _copyLinkButton.Text = "⎘ Скопировать ссылку";
         _copyLinkButton.UseVisualStyleBackColor = true;
         _copyLinkButton.Click += OnCopyLinkButtonClicked;
+        //
+        // _embeddedLoginButton
+        //
+        _embeddedLoginButton.AutoSize = true;
+        _embeddedLoginButton.Margin = new Padding(0);
+        _embeddedLoginButton.MinimumSize = new Size(260, 30);
+        _embeddedLoginButton.Name = "_embeddedLoginButton";
+        _embeddedLoginButton.Text = "🍪 Войти + куки чат-плитки";
+        _embeddedLoginButton.UseVisualStyleBackColor = true;
+        _embeddedLoginButton.Click += OnEmbeddedLoginButtonClicked;
+        //
+        // _buttonsHintLabel
+        //
+        _buttonsHintLabel.AutoSize = true;
+        _buttonsHintLabel.Dock = DockStyle.Top;
+        _buttonsHintLabel.ForeColor = Color.Gray;
+        _buttonsHintLabel.Margin = new Padding(0, 0, 0, 10);
+        _buttonsHintLabel.MaximumSize = new Size(640, 0);
+        _buttonsHintLabel.Name = "_buttonsHintLabel";
+        _buttonsHintLabel.Text = "🍪 — нужно, только если хотите, чтобы чат-плитка на дашборде была залогинена этим аккаунтом (эмоты, бейджи, sub-only сообщения). Иначе достаточно «Открыть в браузере».";
+        _buttonsHintLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
         // _cancelButton
         //
@@ -131,6 +161,11 @@ partial class AuthorizationPage
         AutoScaleMode = AutoScaleMode.Font;
         Controls.Add(_layout);
         Name = "AuthorizationPage";
+        _toolTip.InitialDelay = 400;
+        _toolTip.ReshowDelay = 200;
+        _toolTip.SetToolTip(_openBrowserButton, "Открыть Twitch-логин в системном браузере");
+        _toolTip.SetToolTip(_copyLinkButton, "Скопировать ссылку для ручного открытия");
+        _toolTip.SetToolTip(_embeddedLoginButton, "Открыть Twitch-логин внутри окна и сохранить куки для чат-плитки");
         _layout.ResumeLayout(false);
         _layout.PerformLayout();
         _buttonsLayout.ResumeLayout(false);
@@ -146,7 +181,10 @@ partial class AuthorizationPage
     private TableLayoutPanel _buttonsLayout;
     private Button _openBrowserButton;
     private Button _copyLinkButton;
+    private Button _embeddedLoginButton;
+    private Label _buttonsHintLabel;
     private Button _cancelButton;
     private Label _statusLabel;
     private Label _resultLabel;
+    private ToolTip _toolTip;
 }

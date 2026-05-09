@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<PollFromProfileDialog>();
         services.AddTransient<PollProfileEditDialog>();
         services.AddTransient<OnboardingWizardForm>();
+        services.AddTransient<EmbeddedTwitchAuthDialog>();
         return services;
     }
 }

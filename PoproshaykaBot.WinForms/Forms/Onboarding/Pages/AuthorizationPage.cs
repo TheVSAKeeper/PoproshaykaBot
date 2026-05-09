@@ -30,6 +30,9 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
     [Inject]
     public SettingsManager SettingsManager { get; internal init; } = null!;
 
+    [Inject]
+    public IFormFactory FormFactory { get; internal init; } = null!;
+
     public TwitchOAuthRole Role
     {
         get => _role;
@@ -122,6 +125,48 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
         catch (InvalidOperationException) when (IsDisposed)
         {
         }
+    }
+
+    private void OnEmbeddedLoginButtonClicked(object? sender, EventArgs e)
+    {
+        if (_context == null || _authCts != null)
+        {
+            return;
+        }
+
+        var settings = _context.Settings.Twitch;
+        if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret))
+        {
+            _resultLabel.Text = "Не заполнены Client ID или Secret";
+            _resultLabel.ForeColor = Color.DarkRed;
+            return;
+        }
+
+        var scopes = _role == TwitchOAuthRole.Broadcaster ? BroadcasterDefaultScopes : BotDefaultScopes;
+        var redirectUri = string.IsNullOrWhiteSpace(settings.RedirectUri) ? null : settings.RedirectUri;
+        var checkBroadcasterChannel = _role != TwitchOAuthRole.Broadcaster || !_context.AutoDetectChannel;
+
+        using var dialog = FormFactory.Create<EmbeddedTwitchAuthDialog>();
+        dialog.Role = _role;
+        dialog.ClientId = settings.ClientId;
+        dialog.ClientSecret = settings.ClientSecret;
+        dialog.Scopes = scopes;
+        dialog.RedirectUri = redirectUri;
+        dialog.CheckBroadcasterChannel = checkBroadcasterChannel;
+
+        var result = dialog.ShowDialog(FindForm() ?? (IWin32Window)this);
+
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (result == DialogResult.OK && dialog.AuthResult is { } authResult)
+        {
+            ApplyAuthResult(authResult);
+        }
+
+        RefreshFromContext();
     }
 
     private void OnOpenBrowserButtonClicked(object? sender, EventArgs e)
@@ -274,23 +319,7 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
                 return;
             }
 
-            var account = GetAccount();
-            account.AccessToken = result.AccessToken;
-            account.RefreshToken = result.RefreshToken;
-            account.Login = result.Login;
-            account.UserId = result.UserId;
-            account.Scopes = result.Scopes;
-            account.AccessTokenExpiresAt = result.ExpiresInSeconds > 0
-                ? DateTimeOffset.UtcNow.AddSeconds(result.ExpiresInSeconds)
-                : null;
-
-            if (_role == TwitchOAuthRole.Broadcaster
-                && _context.AutoDetectChannel
-                && !string.IsNullOrWhiteSpace(result.Login))
-            {
-                _context.Settings.Twitch.Channel = result.Login;
-                SettingsManager.Current.Twitch.Channel = result.Login;
-            }
+            ApplyAuthResult(result);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
@@ -370,14 +399,44 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
 
         if (hasToken)
         {
-            _openBrowserButton.Text = "🔄 Сменить аккаунт через браузер";
-            _copyLinkButton.Text = "⎘ Скопировать ссылку для смены";
+            _openBrowserButton.Text = "🔄 Сменить через браузер";
+            _copyLinkButton.Text = "⎘ Ссылка для смены";
+            _embeddedLoginButton.Text = "🍪 Сменить + обновить куки";
         }
         else
         {
             _openBrowserButton.Text = "🌐 Открыть в браузере";
             _copyLinkButton.Text = "⎘ Скопировать ссылку";
+            _embeddedLoginButton.Text = "🍪 Войти + куки чат-плитки";
         }
+    }
+
+    private void ApplyAuthResult(OAuthFlowResult result)
+    {
+        if (_context == null)
+        {
+            return;
+        }
+
+        var account = GetAccount();
+        account.AccessToken = result.AccessToken;
+        account.RefreshToken = result.RefreshToken;
+        account.Login = result.Login;
+        account.UserId = result.UserId;
+        account.Scopes = result.Scopes;
+        account.AccessTokenExpiresAt = result.ExpiresInSeconds > 0
+            ? DateTimeOffset.UtcNow.AddSeconds(result.ExpiresInSeconds)
+            : null;
+
+        if (_role != TwitchOAuthRole.Broadcaster
+            || !_context.AutoDetectChannel
+            || string.IsNullOrWhiteSpace(result.Login))
+        {
+            return;
+        }
+
+        _context.Settings.Twitch.Channel = result.Login;
+        SettingsManager.Current.Twitch.Channel = result.Login;
     }
 
     private void RefreshFromContext()
@@ -394,8 +453,7 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
             if (_authCts == null)
             {
                 _statusLabel.Text = "Можно идти дальше или сменить аккаунт.";
-                _openBrowserButton.Text = "🔄 Сменить аккаунт через браузер";
-                _copyLinkButton.Text = "⎘ Скопировать ссылку для смены";
+                UpdateActionButtonsLabels();
             }
 
             SetCanAdvance(true);
@@ -408,8 +466,7 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
                 _resultLabel.ForeColor = Color.DarkRed;
                 _statusLabel.Text = "Откройте ссылку в браузере и подтвердите доступ.";
                 _statusLabel.ForeColor = Color.Gray;
-                _openBrowserButton.Text = "🌐 Открыть в браузере";
-                _copyLinkButton.Text = "⎘ Скопировать ссылку";
+                UpdateActionButtonsLabels();
             }
 
             SetCanAdvance(false);

@@ -73,6 +73,15 @@ public sealed partial class CompletionPage : OnboardingPageBase
             + Environment.NewLine
             + $"Аккаунт стримера: @{broadcasterLogin}";
 
+        if (context.Settings.Twitch.ChatDisplayAccount == TwitchOAuthRole.Broadcaster)
+        {
+            _chatAccountBroadcasterRadio.Checked = true;
+        }
+        else
+        {
+            _chatAccountBotRadio.Checked = true;
+        }
+
         SetCanAdvance(false);
         _hasCriticalIssue = false;
         _lastChannelCheckResult = ChannelValidationResult.Skipped;
@@ -146,6 +155,18 @@ public sealed partial class CompletionPage : OnboardingPageBase
         _validationCts?.Cancel();
         _validationCts?.Dispose();
         _validationCts = null;
+    }
+
+    private void OnChatAccountRadioChanged(object? sender, EventArgs e)
+    {
+        if (_context == null || sender is not RadioButton { Checked: true } radio)
+        {
+            return;
+        }
+
+        _context.Settings.Twitch.ChatDisplayAccount = radio == _chatAccountBroadcasterRadio
+            ? TwitchOAuthRole.Broadcaster
+            : TwitchOAuthRole.Bot;
     }
 
     private static ValidationLine ValidateScopes(string title, IReadOnlyCollection<string> actual, IReadOnlyList<string> required)

@@ -23,9 +23,15 @@ partial class CompletionPage
         _summaryLabel = new Label();
         _validationsHeaderLabel = new Label();
         _validationsListLabel = new Label();
+        _chatAccountGroupBox = new GroupBox();
+        _chatAccountLayout = new TableLayoutPanel();
+        _chatAccountBotRadio = new RadioButton();
+        _chatAccountBroadcasterRadio = new RadioButton();
         _autoConnectCheckBox = new CheckBox();
         _hintLabel = new Label();
         _layout.SuspendLayout();
+        _chatAccountGroupBox.SuspendLayout();
+        _chatAccountLayout.SuspendLayout();
         SuspendLayout();
         //
         // _layout
@@ -36,12 +42,14 @@ partial class CompletionPage
         _layout.Controls.Add(_summaryLabel, 0, 1);
         _layout.Controls.Add(_validationsHeaderLabel, 0, 2);
         _layout.Controls.Add(_validationsListLabel, 0, 3);
-        _layout.Controls.Add(_autoConnectCheckBox, 0, 4);
-        _layout.Controls.Add(_hintLabel, 0, 5);
+        _layout.Controls.Add(_chatAccountGroupBox, 0, 4);
+        _layout.Controls.Add(_autoConnectCheckBox, 0, 5);
+        _layout.Controls.Add(_hintLabel, 0, 6);
         _layout.Dock = DockStyle.Fill;
         _layout.Name = "_layout";
         _layout.Padding = new Padding(20, 18, 20, 18);
-        _layout.RowCount = 7;
+        _layout.RowCount = 8;
+        _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
@@ -89,6 +97,53 @@ partial class CompletionPage
         _validationsListLabel.Text = "";
         _validationsListLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
+        // _chatAccountGroupBox
+        //
+        _chatAccountGroupBox.AutoSize = true;
+        _chatAccountGroupBox.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        _chatAccountGroupBox.Controls.Add(_chatAccountLayout);
+        _chatAccountGroupBox.Dock = DockStyle.Top;
+        _chatAccountGroupBox.Margin = new Padding(0, 0, 0, 12);
+        _chatAccountGroupBox.Name = "_chatAccountGroupBox";
+        _chatAccountGroupBox.Padding = new Padding(8, 4, 8, 4);
+        _chatAccountGroupBox.TabStop = false;
+        _chatAccountGroupBox.Text = "Twitch-чат на дашборде ведётся от имени:";
+        //
+        // _chatAccountLayout
+        //
+        _chatAccountLayout.AutoSize = true;
+        _chatAccountLayout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        _chatAccountLayout.ColumnCount = 2;
+        _chatAccountLayout.ColumnStyles.Add(new ColumnStyle());
+        _chatAccountLayout.ColumnStyles.Add(new ColumnStyle());
+        _chatAccountLayout.Controls.Add(_chatAccountBotRadio, 0, 0);
+        _chatAccountLayout.Controls.Add(_chatAccountBroadcasterRadio, 1, 0);
+        _chatAccountLayout.Dock = DockStyle.Top;
+        _chatAccountLayout.Margin = new Padding(0);
+        _chatAccountLayout.Name = "_chatAccountLayout";
+        _chatAccountLayout.RowCount = 1;
+        _chatAccountLayout.RowStyles.Add(new RowStyle());
+        //
+        // _chatAccountBotRadio
+        //
+        _chatAccountBotRadio.AutoSize = true;
+        _chatAccountBotRadio.Checked = true;
+        _chatAccountBotRadio.Margin = new Padding(0, 0, 16, 0);
+        _chatAccountBotRadio.Name = "_chatAccountBotRadio";
+        _chatAccountBotRadio.TabStop = true;
+        _chatAccountBotRadio.Text = "бота";
+        _chatAccountBotRadio.UseVisualStyleBackColor = true;
+        _chatAccountBotRadio.CheckedChanged += OnChatAccountRadioChanged;
+        //
+        // _chatAccountBroadcasterRadio
+        //
+        _chatAccountBroadcasterRadio.AutoSize = true;
+        _chatAccountBroadcasterRadio.Margin = new Padding(0);
+        _chatAccountBroadcasterRadio.Name = "_chatAccountBroadcasterRadio";
+        _chatAccountBroadcasterRadio.Text = "стримера";
+        _chatAccountBroadcasterRadio.UseVisualStyleBackColor = true;
+        _chatAccountBroadcasterRadio.CheckedChanged += OnChatAccountRadioChanged;
+        //
         // _autoConnectCheckBox
         //
         _autoConnectCheckBox.AutoSize = true;
@@ -118,6 +173,10 @@ partial class CompletionPage
         Name = "CompletionPage";
         _layout.ResumeLayout(false);
         _layout.PerformLayout();
+        _chatAccountGroupBox.ResumeLayout(false);
+        _chatAccountGroupBox.PerformLayout();
+        _chatAccountLayout.ResumeLayout(false);
+        _chatAccountLayout.PerformLayout();
         ResumeLayout(false);
         PerformLayout();
     }
@@ -129,6 +188,10 @@ partial class CompletionPage
     private Label _summaryLabel;
     private Label _validationsHeaderLabel;
     private Label _validationsListLabel;
+    private GroupBox _chatAccountGroupBox;
+    private TableLayoutPanel _chatAccountLayout;
+    private RadioButton _chatAccountBotRadio;
+    private RadioButton _chatAccountBroadcasterRadio;
     private CheckBox _autoConnectCheckBox;
     private Label _hintLabel;
 }
