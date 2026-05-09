@@ -29,10 +29,14 @@ partial class HealthCheckPage
         _overlayHeader = new Label();
         _overlayButton = new Button();
         _overlayUrlLabel = new Label();
+        _previewHeader = new Label();
+        _chatPreviewWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
+        _previewFallbackLabel = new Label();
         _hintLabel = new Label();
         _layout.SuspendLayout();
         _chatTestPanel.SuspendLayout();
         _overlayPanel.SuspendLayout();
+        ((System.ComponentModel.ISupportInitialize)_chatPreviewWebView).BeginInit();
         SuspendLayout();
         //
         // _layout
@@ -42,16 +46,21 @@ partial class HealthCheckPage
         _layout.Controls.Add(_intro, 0, 0);
         _layout.Controls.Add(_overlayPanel, 0, 1);
         _layout.Controls.Add(_chatTestPanel, 0, 2);
-        _layout.Controls.Add(_hintLabel, 0, 3);
+        _layout.Controls.Add(_previewHeader, 0, 3);
+        _layout.Controls.Add(_chatPreviewWebView, 0, 4);
+        _layout.Controls.Add(_previewFallbackLabel, 0, 5);
+        _layout.Controls.Add(_hintLabel, 0, 6);
         _layout.Dock = DockStyle.Fill;
         _layout.Name = "_layout";
         _layout.Padding = new Padding(20, 18, 20, 18);
-        _layout.RowCount = 5;
+        _layout.RowCount = 7;
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        _layout.RowStyles.Add(new RowStyle());
+        _layout.RowStyles.Add(new RowStyle());
         //
         // _intro
         //
@@ -169,6 +178,37 @@ partial class HealthCheckPage
         _overlayButton.UseVisualStyleBackColor = true;
         _overlayButton.Click += OnOverlayButtonClicked;
         //
+        // _previewHeader
+        //
+        _previewHeader.AutoSize = true;
+        _previewHeader.Dock = DockStyle.Top;
+        _previewHeader.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+        _previewHeader.Margin = new Padding(0, 0, 0, 4);
+        _previewHeader.Name = "_previewHeader";
+        _previewHeader.Text = "👁 Предпросмотр чата";
+        _previewHeader.TextAlign = ContentAlignment.MiddleLeft;
+        //
+        // _chatPreviewWebView
+        //
+        _chatPreviewWebView.AllowExternalDrop = false;
+        _chatPreviewWebView.CreationProperties = null;
+        _chatPreviewWebView.DefaultBackgroundColor = Color.Black;
+        _chatPreviewWebView.Dock = DockStyle.Fill;
+        _chatPreviewWebView.Margin = new Padding(0, 0, 0, 6);
+        _chatPreviewWebView.Name = "_chatPreviewWebView";
+        _chatPreviewWebView.ZoomFactor = 1D;
+        //
+        // _previewFallbackLabel
+        //
+        _previewFallbackLabel.AutoSize = true;
+        _previewFallbackLabel.Dock = DockStyle.Top;
+        _previewFallbackLabel.ForeColor = Color.DarkOrange;
+        _previewFallbackLabel.Margin = new Padding(0, 0, 0, 6);
+        _previewFallbackLabel.Name = "_previewFallbackLabel";
+        _previewFallbackLabel.Text = "Не удалось инициализировать WebView2. Откройте предпросмотр в браузере.";
+        _previewFallbackLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _previewFallbackLabel.Visible = false;
+        //
         // _hintLabel
         //
         _hintLabel.AutoSize = true;
@@ -191,6 +231,7 @@ partial class HealthCheckPage
         _chatTestPanel.PerformLayout();
         _overlayPanel.ResumeLayout(false);
         _overlayPanel.PerformLayout();
+        ((System.ComponentModel.ISupportInitialize)_chatPreviewWebView).EndInit();
         ResumeLayout(false);
     }
 
@@ -207,5 +248,8 @@ partial class HealthCheckPage
     private Label _overlayHeader;
     private Button _overlayButton;
     private Label _overlayUrlLabel;
+    private Label _previewHeader;
+    private Microsoft.Web.WebView2.WinForms.WebView2 _chatPreviewWebView;
+    private Label _previewFallbackLabel;
     private Label _hintLabel;
 }
