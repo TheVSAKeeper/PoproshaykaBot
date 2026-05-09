@@ -99,9 +99,9 @@ partial class MainForm
         _onboardingBannerButton.Dock = DockStyle.Right;
         _onboardingBannerButton.Margin = new Padding(0);
         _onboardingBannerButton.Name = "_onboardingBannerButton";
-        _onboardingBannerButton.Size = new Size(120, 28);
+        _onboardingBannerButton.Size = new Size(160, 28);
         _onboardingBannerButton.TabIndex = 1;
-        _onboardingBannerButton.Text = "Настроить →";
+        _onboardingBannerButton.Text = "🧙 Открыть мастер →";
         _onboardingBannerButton.UseVisualStyleBackColor = true;
         _onboardingBannerButton.Click += OnOnboardingBannerButtonClicked;
         // 

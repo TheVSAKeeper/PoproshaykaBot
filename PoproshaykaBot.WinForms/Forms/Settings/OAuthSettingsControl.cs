@@ -20,6 +20,8 @@ public partial class OAuthSettingsControl : UserControl
         _broadcasterAccountSection.FlushParentDraft = FlushDraftFromUi;
     }
 
+    public event EventHandler? LaunchOnboardingRequested;
+
     public event EventHandler? SettingChanged;
 
     [Inject]
@@ -135,6 +137,11 @@ public partial class OAuthSettingsControl : UserControl
         {
             SettingChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private void OnLaunchOnboardingButtonClicked(object sender, EventArgs e)
+    {
+        LaunchOnboardingRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private static void ToggleSecretVisibility(TextBox textBox, Button viewButton)

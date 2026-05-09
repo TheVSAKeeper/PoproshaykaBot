@@ -21,8 +21,9 @@ partial class CompletionPage
         _layout = new TableLayoutPanel();
         _heading = new Label();
         _summaryLabel = new Label();
+        _validationsHeaderLabel = new Label();
+        _validationsListLabel = new Label();
         _autoConnectCheckBox = new CheckBox();
-        _warningLabel = new Label();
         _hintLabel = new Label();
         _layout.SuspendLayout();
         SuspendLayout();
@@ -33,13 +34,15 @@ partial class CompletionPage
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _layout.Controls.Add(_heading, 0, 0);
         _layout.Controls.Add(_summaryLabel, 0, 1);
-        _layout.Controls.Add(_autoConnectCheckBox, 0, 2);
-        _layout.Controls.Add(_warningLabel, 0, 3);
-        _layout.Controls.Add(_hintLabel, 0, 4);
+        _layout.Controls.Add(_validationsHeaderLabel, 0, 2);
+        _layout.Controls.Add(_validationsListLabel, 0, 3);
+        _layout.Controls.Add(_autoConnectCheckBox, 0, 4);
+        _layout.Controls.Add(_hintLabel, 0, 5);
         _layout.Dock = DockStyle.Fill;
         _layout.Name = "_layout";
         _layout.Padding = new Padding(20, 18, 20, 18);
-        _layout.RowCount = 6;
+        _layout.RowCount = 7;
+        _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
@@ -67,6 +70,25 @@ partial class CompletionPage
         _summaryLabel.Text = "";
         _summaryLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
+        // _validationsHeaderLabel
+        //
+        _validationsHeaderLabel.AutoSize = true;
+        _validationsHeaderLabel.Dock = DockStyle.Top;
+        _validationsHeaderLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+        _validationsHeaderLabel.Margin = new Padding(0, 0, 0, 4);
+        _validationsHeaderLabel.Name = "_validationsHeaderLabel";
+        _validationsHeaderLabel.Text = "Проверка готовности";
+        _validationsHeaderLabel.TextAlign = ContentAlignment.MiddleLeft;
+        //
+        // _validationsListLabel
+        //
+        _validationsListLabel.AutoSize = true;
+        _validationsListLabel.Dock = DockStyle.Top;
+        _validationsListLabel.Margin = new Padding(0, 0, 0, 12);
+        _validationsListLabel.Name = "_validationsListLabel";
+        _validationsListLabel.Text = "";
+        _validationsListLabel.TextAlign = ContentAlignment.MiddleLeft;
+        //
         // _autoConnectCheckBox
         //
         _autoConnectCheckBox.AutoSize = true;
@@ -77,17 +99,6 @@ partial class CompletionPage
         _autoConnectCheckBox.Name = "_autoConnectCheckBox";
         _autoConnectCheckBox.Text = "Подключить бота сразу после сохранения";
         _autoConnectCheckBox.UseVisualStyleBackColor = true;
-        //
-        // _warningLabel
-        //
-        _warningLabel.AutoSize = true;
-        _warningLabel.Dock = DockStyle.Top;
-        _warningLabel.ForeColor = Color.DarkOrange;
-        _warningLabel.Margin = new Padding(0, 0, 0, 12);
-        _warningLabel.Name = "_warningLabel";
-        _warningLabel.Text = "";
-        _warningLabel.TextAlign = ContentAlignment.MiddleLeft;
-        _warningLabel.Visible = false;
         //
         // _hintLabel
         //
@@ -116,7 +127,8 @@ partial class CompletionPage
     private TableLayoutPanel _layout;
     private Label _heading;
     private Label _summaryLabel;
+    private Label _validationsHeaderLabel;
+    private Label _validationsListLabel;
     private CheckBox _autoConnectCheckBox;
-    private Label _warningLabel;
     private Label _hintLabel;
 }

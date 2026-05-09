@@ -95,6 +95,8 @@ public partial class SettingsForm : Form
 
     public event EventHandler? SettingsApplied;
 
+    public bool LaunchOnboardingAfterClose { get; private set; }
+
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
@@ -112,6 +114,28 @@ public partial class SettingsForm : Form
         _initialized = true;
 
         LoadSettingsToControls();
+    }
+
+    private void OnOAuthLaunchOnboardingRequested(object? sender, EventArgs e)
+    {
+        if (_hasChanges)
+        {
+            var answer = MessageBox.Show(this,
+                "Несохранённые изменения будут потеряны. Запустить мастер настройки?",
+                "Запуск мастера",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+
+            if (answer != DialogResult.Yes)
+            {
+                return;
+            }
+        }
+
+        LaunchOnboardingAfterClose = true;
+        DialogResult = DialogResult.Cancel;
+        Close();
     }
 
     private void OnSettingChanged(object? sender, EventArgs e)

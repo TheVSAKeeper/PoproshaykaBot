@@ -31,6 +31,7 @@ public partial class MainForm : Form
     private BotLifecyclePhase _currentPhase = BotLifecyclePhase.Idle;
     private bool _shutdownStarted;
     private bool _initialized;
+    private bool _onboardingWizardOpen;
     private UserStatisticsForm? _userStatisticsForm;
     private SettingsForm? _settingsForm;
 
@@ -167,7 +168,7 @@ public partial class MainForm : Form
 
     private void OnOnboardingBannerButtonClicked(object? sender, EventArgs e)
     {
-        OnSettingsButtonClicked(sender, e);
+        OpenOnboardingWizard();
     }
 
     private void OnSettingsFormClosed(object? sender, FormClosedEventArgs e)
@@ -177,10 +178,17 @@ public partial class MainForm : Form
             return;
         }
 
+        var launchWizard = form.LaunchOnboardingAfterClose;
+
         form.SettingsApplied -= OnSettingsApplied;
         form.FormClosed -= OnSettingsFormClosed;
         form.Dispose();
         _settingsForm = null;
+
+        if (launchWizard)
+        {
+            BeginInvoke(OpenOnboardingWizard);
+        }
     }
 
     private void OnUserStatisticsButtonClicked(object? sender, EventArgs e)
@@ -226,6 +234,18 @@ public partial class MainForm : Form
             return;
         }
 
+        OpenOnboardingWizard();
+    }
+
+    private void OpenOnboardingWizard()
+    {
+        if (_onboardingWizardOpen)
+        {
+            return;
+        }
+
+        _onboardingWizardOpen = true;
+
         try
         {
             using var wizard = _forms.Create<OnboardingWizardForm>();
@@ -234,6 +254,11 @@ public partial class MainForm : Form
         catch (Exception exception)
         {
             _logger.LogError(exception, "Ошибка отображения мастера первичной настройки");
+        }
+        finally
+        {
+            _onboardingWizardOpen = false;
+            RefreshOnboardingBanner();
         }
     }
 

@@ -18,6 +18,7 @@ public partial class OnboardingWizardForm : Form
     private readonly OnboardingContext _context;
     private readonly List<IOnboardingWizardPage> _pages = [];
     private readonly int _originalHttpServerPort;
+    private readonly string _originalChannel;
     private int _currentPageIndex = -1;
     private bool _initialized;
     private bool _rollbackPerformed;
@@ -39,6 +40,7 @@ public partial class OnboardingWizardForm : Form
             DeepClone(accountsStore.LoadBroadcaster()));
 
         _originalHttpServerPort = settingsManager.Current.Twitch.HttpServerPort;
+        _originalChannel = settingsManager.Current.Twitch.Channel;
 
         InitializeComponent();
     }
@@ -67,7 +69,10 @@ public partial class OnboardingWizardForm : Form
             return;
         }
 
-        if (_settingsManager.Current.Twitch.HttpServerPort == _originalHttpServerPort)
+        var portChanged = _settingsManager.Current.Twitch.HttpServerPort != _originalHttpServerPort;
+        var channelChanged = !string.Equals(_settingsManager.Current.Twitch.Channel, _originalChannel, StringComparison.Ordinal);
+
+        if (!portChanged && !channelChanged)
         {
             _rollbackPerformed = true;
             return;
@@ -139,6 +144,7 @@ public partial class OnboardingWizardForm : Form
 
     private async Task RollbackAndCloseAsync()
     {
+        RollbackChannel();
         await RollbackHttpServerPortAsync();
 
         if (!IsDisposed)
@@ -146,6 +152,18 @@ public partial class OnboardingWizardForm : Form
             DialogResult = DialogResult.Cancel;
             Close();
         }
+    }
+
+    private void RollbackChannel()
+    {
+        var liveChannel = _settingsManager.Current.Twitch.Channel;
+        if (string.Equals(liveChannel, _originalChannel, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _settingsManager.Current.Twitch.Channel = _originalChannel;
+        _logger.LogInformation("Канал откачен на исходное значение «{Channel}» после отмены мастера", _originalChannel);
     }
 
     private async Task RollbackHttpServerPortAsync()
@@ -198,6 +216,7 @@ public partial class OnboardingWizardForm : Form
         broadcasterAuth.Role = TwitchOAuthRole.Broadcaster;
         _pages.Add(broadcasterAuth);
 
+        _pages.Add(_controlFactory.Create<HealthCheckPage>());
         _pages.Add(_controlFactory.Create<CompletionPage>());
     }
 

@@ -29,6 +29,7 @@
         private void InitializeComponent()
         {
             _oauthTableLayout = new TableLayoutPanel();
+            _launchWizardButton = new Button();
             _channelHintLabel = new Label();
             _oauthCredentialsSection = new TableLayoutPanel();
             _clientIdLabel = new Label();
@@ -68,16 +69,18 @@
             //
             _oauthTableLayout.ColumnCount = 1;
             _oauthTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            _oauthTableLayout.Controls.Add(_channelHintLabel, 0, 0);
-            _oauthTableLayout.Controls.Add(_oauthCredentialsSection, 0, 1);
-            _oauthTableLayout.Controls.Add(_accountsTabControl, 0, 2);
-            _oauthTableLayout.Controls.Add(_advancedPanel, 0, 3);
-            _oauthTableLayout.Controls.Add(_oauthInfoLabel, 0, 4);
+            _oauthTableLayout.Controls.Add(_launchWizardButton, 0, 0);
+            _oauthTableLayout.Controls.Add(_channelHintLabel, 0, 1);
+            _oauthTableLayout.Controls.Add(_oauthCredentialsSection, 0, 2);
+            _oauthTableLayout.Controls.Add(_accountsTabControl, 0, 3);
+            _oauthTableLayout.Controls.Add(_advancedPanel, 0, 4);
+            _oauthTableLayout.Controls.Add(_oauthInfoLabel, 0, 5);
             _oauthTableLayout.Dock = DockStyle.Fill;
             _oauthTableLayout.Location = new Point(0, 0);
             _oauthTableLayout.Name = "_oauthTableLayout";
             _oauthTableLayout.Padding = new Padding(5);
-            _oauthTableLayout.RowCount = 5;
+            _oauthTableLayout.RowCount = 6;
+            _oauthTableLayout.RowStyles.Add(new RowStyle());
             _oauthTableLayout.RowStyles.Add(new RowStyle());
             _oauthTableLayout.RowStyles.Add(new RowStyle());
             _oauthTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -85,6 +88,20 @@
             _oauthTableLayout.RowStyles.Add(new RowStyle());
             _oauthTableLayout.Size = new Size(560, 480);
             _oauthTableLayout.TabIndex = 0;
+            //
+            // _launchWizardButton
+            //
+            _launchWizardButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _launchWizardButton.AutoSize = true;
+            _launchWizardButton.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _launchWizardButton.Margin = new Padding(0, 0, 0, 8);
+            _launchWizardButton.MinimumSize = new Size(0, 28);
+            _launchWizardButton.Name = "_launchWizardButton";
+            _launchWizardButton.Padding = new Padding(8, 4, 8, 4);
+            _launchWizardButton.TabIndex = 99;
+            _launchWizardButton.Text = "🧙 Запустить мастер настройки";
+            _launchWizardButton.UseVisualStyleBackColor = true;
+            _launchWizardButton.Click += OnLaunchOnboardingButtonClicked;
             //
             // _channelHintLabel
             //
@@ -396,6 +413,7 @@
         #endregion
 
         private TableLayoutPanel _oauthTableLayout;
+        private Button _launchWizardButton;
         private Label _channelHintLabel;
         private TableLayoutPanel _oauthCredentialsSection;
         private Panel _clientIdPanel;

@@ -499,7 +499,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            _logger.LogError("Невозможно создать подписки EventSub: BroadcasterId недоступен");
+            _logger.LogWarning("Подписки EventSub пропущены — BroadcasterId недоступен (вероятно, нет токена бота). Подписки создадутся после авторизации.");
             return;
         }
 

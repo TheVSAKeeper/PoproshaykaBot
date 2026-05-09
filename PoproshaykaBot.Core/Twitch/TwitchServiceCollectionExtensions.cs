@@ -40,6 +40,7 @@ public static class TwitchServiceCollectionExtensions
 
         services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
         services.AddSingleton<IOnboardingChannelValidator, OnboardingChannelValidator>();
+        services.AddSingleton<IOnboardingHealthChecker, OnboardingHealthChecker>();
 
         return services;
     }

@@ -246,6 +246,7 @@ partial class SettingsForm
         _oauthSettingsControl.Size = new Size(593, 529);
         _oauthSettingsControl.TabIndex = 0;
         _oauthSettingsControl.SettingChanged += OnSettingChanged;
+        _oauthSettingsControl.LaunchOnboardingRequested += OnOAuthLaunchOnboardingRequested;
         // 
         // _obsChatTabPage
         // 

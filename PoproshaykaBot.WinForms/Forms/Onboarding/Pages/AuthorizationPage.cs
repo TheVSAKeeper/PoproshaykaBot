@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Twitch.Auth;
+﻿using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using System.Diagnostics;
@@ -25,6 +26,9 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
 
     [Inject]
     public ITwitchOAuthService OAuthService { get; internal init; } = null!;
+
+    [Inject]
+    public SettingsManager SettingsManager { get; internal init; } = null!;
 
     public TwitchOAuthRole Role
     {
@@ -285,6 +289,7 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
                 && !string.IsNullOrWhiteSpace(result.Login))
             {
                 _context.Settings.Twitch.Channel = result.Login;
+                SettingsManager.Current.Twitch.Channel = result.Login;
             }
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)

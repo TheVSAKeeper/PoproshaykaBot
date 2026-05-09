@@ -67,7 +67,7 @@ public sealed class ChannelUpdateSubscriber(
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            logger.LogError("ChannelUpdateSubscriber: не удалось определить broadcaster id для подписки channel.update");
+            logger.LogWarning("ChannelUpdateSubscriber: подписка channel.update пропущена — broadcaster id недоступен (вероятно, нет токена бота).");
             IsHealthy = false;
             return;
         }
@@ -143,7 +143,7 @@ public sealed class ChannelUpdateSubscriber(
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            logger.LogError("ChannelUpdateSubscriber: подписка {Type} отозвана, broadcaster id недоступен", SubscriptionType);
+            logger.LogWarning("ChannelUpdateSubscriber: подписка {Type} отозвана, восстановление пропущено — broadcaster id недоступен", SubscriptionType);
             return;
         }
 
