@@ -10,13 +10,6 @@ public interface IOnboardingHealthChecker
         string message,
         CancellationToken cancellationToken);
 
-    Task<ModeratorCheckOutcome> CheckBotIsModeratorAsync(
-        string broadcasterUserId,
-        string botUserId,
-        string clientId,
-        string broadcasterAccessToken,
-        CancellationToken cancellationToken);
-
     Task<OnboardingChatPreviewStartResult> StartChatPreviewAsync(
         string broadcasterUserId,
         string botUserId,
@@ -31,16 +24,6 @@ public enum ChatTestMessageOutcome
     Sent = 1,
     Forbidden = 2,
     Error = 3,
-}
-
-public enum ModeratorCheckOutcome
-{
-    Skipped = 0,
-    IsModerator = 1,
-    NotModerator = 2,
-    Error = 3,
-    MissingScope = 4,
-    OwnsChannel = 5,
 }
 
 public enum OnboardingChatPreviewStatus

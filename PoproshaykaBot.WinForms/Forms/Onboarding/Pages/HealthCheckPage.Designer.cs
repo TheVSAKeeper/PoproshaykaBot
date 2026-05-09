@@ -25,10 +25,6 @@ partial class HealthCheckPage
         _chatTestMessageTextBox = new TextBox();
         _chatTestButton = new Button();
         _chatTestStatusLabel = new Label();
-        _moderatorPanel = new TableLayoutPanel();
-        _moderatorHeader = new Label();
-        _moderatorButton = new Button();
-        _moderatorStatusLabel = new Label();
         _overlayPanel = new TableLayoutPanel();
         _overlayHeader = new Label();
         _overlayButton = new Button();
@@ -36,7 +32,6 @@ partial class HealthCheckPage
         _hintLabel = new Label();
         _layout.SuspendLayout();
         _chatTestPanel.SuspendLayout();
-        _moderatorPanel.SuspendLayout();
         _overlayPanel.SuspendLayout();
         SuspendLayout();
         //
@@ -47,13 +42,11 @@ partial class HealthCheckPage
         _layout.Controls.Add(_intro, 0, 0);
         _layout.Controls.Add(_overlayPanel, 0, 1);
         _layout.Controls.Add(_chatTestPanel, 0, 2);
-        _layout.Controls.Add(_moderatorPanel, 0, 3);
-        _layout.Controls.Add(_hintLabel, 0, 4);
+        _layout.Controls.Add(_hintLabel, 0, 3);
         _layout.Dock = DockStyle.Fill;
         _layout.Name = "_layout";
         _layout.Padding = new Padding(20, 18, 20, 18);
-        _layout.RowCount = 6;
-        _layout.RowStyles.Add(new RowStyle());
+        _layout.RowCount = 5;
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
         _layout.RowStyles.Add(new RowStyle());
@@ -129,53 +122,6 @@ partial class HealthCheckPage
         _chatTestStatusLabel.Text = "Не выполнено";
         _chatTestStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
-        // _moderatorPanel
-        //
-        _moderatorPanel.AutoSize = true;
-        _moderatorPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        _moderatorPanel.ColumnCount = 2;
-        _moderatorPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _moderatorPanel.ColumnStyles.Add(new ColumnStyle());
-        _moderatorPanel.Controls.Add(_moderatorHeader, 0, 0);
-        _moderatorPanel.Controls.Add(_moderatorStatusLabel, 0, 1);
-        _moderatorPanel.Controls.Add(_moderatorButton, 1, 1);
-        _moderatorPanel.Dock = DockStyle.Top;
-        _moderatorPanel.Margin = new Padding(0, 0, 0, 12);
-        _moderatorPanel.Name = "_moderatorPanel";
-        _moderatorPanel.RowCount = 2;
-        _moderatorPanel.RowStyles.Add(new RowStyle());
-        _moderatorPanel.RowStyles.Add(new RowStyle());
-        _moderatorPanel.SetColumnSpan(_moderatorHeader, 2);
-        //
-        // _moderatorHeader
-        //
-        _moderatorHeader.AutoSize = true;
-        _moderatorHeader.Dock = DockStyle.Top;
-        _moderatorHeader.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        _moderatorHeader.Margin = new Padding(0, 0, 0, 4);
-        _moderatorHeader.Name = "_moderatorHeader";
-        _moderatorHeader.Text = "🛡 Права модератора";
-        _moderatorHeader.TextAlign = ContentAlignment.MiddleLeft;
-        //
-        // _moderatorStatusLabel
-        //
-        _moderatorStatusLabel.AutoSize = true;
-        _moderatorStatusLabel.Dock = DockStyle.Fill;
-        _moderatorStatusLabel.ForeColor = Color.Gray;
-        _moderatorStatusLabel.Margin = new Padding(0, 4, 6, 0);
-        _moderatorStatusLabel.Name = "_moderatorStatusLabel";
-        _moderatorStatusLabel.Text = "Не проверено. Модератор позволяет боту обходить slow/sub-only режимы.";
-        _moderatorStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
-        //
-        // _moderatorButton
-        //
-        _moderatorButton.AutoSize = true;
-        _moderatorButton.MinimumSize = new Size(120, 28);
-        _moderatorButton.Name = "_moderatorButton";
-        _moderatorButton.Text = "Проверить";
-        _moderatorButton.UseVisualStyleBackColor = true;
-        _moderatorButton.Click += OnModeratorButtonClicked;
-        //
         // _overlayPanel
         //
         _overlayPanel.AutoSize = true;
@@ -243,8 +189,6 @@ partial class HealthCheckPage
         _layout.PerformLayout();
         _chatTestPanel.ResumeLayout(false);
         _chatTestPanel.PerformLayout();
-        _moderatorPanel.ResumeLayout(false);
-        _moderatorPanel.PerformLayout();
         _overlayPanel.ResumeLayout(false);
         _overlayPanel.PerformLayout();
         ResumeLayout(false);
@@ -259,10 +203,6 @@ partial class HealthCheckPage
     private TextBox _chatTestMessageTextBox;
     private Button _chatTestButton;
     private Label _chatTestStatusLabel;
-    private TableLayoutPanel _moderatorPanel;
-    private Label _moderatorHeader;
-    private Button _moderatorButton;
-    private Label _moderatorStatusLabel;
     private TableLayoutPanel _overlayPanel;
     private Label _overlayHeader;
     private Button _overlayButton;

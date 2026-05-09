@@ -9,7 +9,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
 {
     private OnboardingContext? _context;
     private CancellationTokenSource? _chatTestCts;
-    private CancellationTokenSource? _moderatorCts;
     private CancellationTokenSource? _previewCts;
     private IAsyncDisposable? _chatPreviewSession;
     private bool _previewStartRequested;
@@ -50,10 +49,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
         _chatTestCts?.Dispose();
         _chatTestCts = null;
 
-        _moderatorCts?.Cancel();
-        _moderatorCts?.Dispose();
-        _moderatorCts = null;
-
         _previewCts?.Cancel();
         _previewCts?.Dispose();
         _previewCts = null;
@@ -69,11 +64,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
     private async void OnChatTestButtonClicked(object? sender, EventArgs e)
     {
         await RunChatTestAsync();
-    }
-
-    private async void OnModeratorButtonClicked(object? sender, EventArgs e)
-    {
-        await RunModeratorCheckAsync();
     }
 
     private void OnOverlayButtonClicked(object? sender, EventArgs e)
@@ -176,8 +166,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
     {
         _chatTestStatusLabel.Text = "Не выполнено";
         _chatTestStatusLabel.ForeColor = Color.Gray;
-        _moderatorStatusLabel.Text = "Не проверено. Модератор позволяет боту обходить slow/sub-only режимы.";
-        _moderatorStatusLabel.ForeColor = Color.Gray;
     }
 
     private async Task RunChatTestAsync()
@@ -267,91 +255,4 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
         }
     }
 
-    private async Task RunModeratorCheckAsync()
-    {
-        if (_context is null)
-        {
-            return;
-        }
-
-        var broadcasterId = _context.BroadcasterAccount.UserId;
-        var botId = _context.BotAccount.UserId;
-        var clientId = _context.Settings.Twitch.ClientId;
-        var broadcasterToken = _context.BroadcasterAccount.AccessToken;
-
-        if (string.IsNullOrWhiteSpace(broadcasterId)
-            || string.IsNullOrWhiteSpace(botId)
-            || string.IsNullOrWhiteSpace(broadcasterToken))
-        {
-            _moderatorStatusLabel.Text = "Сначала пройдите авторизацию бота и стримера.";
-            _moderatorStatusLabel.ForeColor = Color.DarkOrange;
-            return;
-        }
-
-        _moderatorCts?.Cancel();
-        _moderatorCts?.Dispose();
-        _moderatorCts = new();
-
-        _moderatorButton.Enabled = false;
-        _moderatorStatusLabel.Text = "Проверка...";
-        _moderatorStatusLabel.ForeColor = Color.Blue;
-
-        try
-        {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(_moderatorCts.Token);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(8));
-
-            var outcome = await HealthChecker.CheckBotIsModeratorAsync(broadcasterId,
-                botId,
-                clientId,
-                broadcasterToken,
-                timeoutCts.Token);
-
-            switch (outcome)
-            {
-                case ModeratorCheckOutcome.IsModerator:
-                    _moderatorStatusLabel.Text = "✓ Бот — модератор канала.";
-                    _moderatorStatusLabel.ForeColor = Color.Green;
-                    break;
-
-                case ModeratorCheckOutcome.OwnsChannel:
-                    _moderatorStatusLabel.Text = "✓ Бот совпадает с владельцем канала — права модератора есть по умолчанию.";
-                    _moderatorStatusLabel.ForeColor = Color.Green;
-                    break;
-
-                case ModeratorCheckOutcome.NotModerator:
-                    _moderatorStatusLabel.Text = "⚠ Бот не модератор. Это не критично, но в slow/sub-only-режимах он будет ограничен.";
-                    _moderatorStatusLabel.ForeColor = Color.DarkOrange;
-                    break;
-
-                case ModeratorCheckOutcome.MissingScope:
-                    _moderatorStatusLabel.Text = "Проверка пропущена: нужен scope moderation:read у токена стримера. Это опционально — статус мода можно проверить вручную на twitch.tv.";
-                    _moderatorStatusLabel.ForeColor = Color.Gray;
-                    break;
-
-                case ModeratorCheckOutcome.Skipped:
-                    _moderatorStatusLabel.Text = "Проверка пропущена.";
-                    _moderatorStatusLabel.ForeColor = Color.Gray;
-                    break;
-
-                default:
-                    _moderatorStatusLabel.Text = "Не удалось проверить (сетевая ошибка).";
-                    _moderatorStatusLabel.ForeColor = Color.DarkOrange;
-                    break;
-            }
-        }
-        catch (Exception exception)
-        {
-            Logger.LogDebug(exception, "Сбой проверки прав модератора в onboarding");
-            _moderatorStatusLabel.Text = "Не удалось проверить.";
-            _moderatorStatusLabel.ForeColor = Color.DarkOrange;
-        }
-        finally
-        {
-            if (!IsDisposed)
-            {
-                _moderatorButton.Enabled = true;
-            }
-        }
-    }
 }

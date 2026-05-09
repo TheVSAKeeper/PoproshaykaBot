@@ -9,7 +9,6 @@ public static class TwitchScopes
     public const string ChannelManageBroadcast = "channel:manage:broadcast";
     public const string ChannelManagePolls = "channel:manage:polls";
     public const string ChannelReadPolls = "channel:read:polls";
-    public const string ModerationRead = "moderation:read";
 
     public static readonly IReadOnlyList<string> BotRequired =
     [
@@ -24,7 +23,6 @@ public static class TwitchScopes
         ChannelManageBroadcast,
         ChannelManagePolls,
         ChannelReadPolls,
-        ModerationRead,
     ];
 
     public static bool SetEquals(IEnumerable<string> left, IEnumerable<string> right)
