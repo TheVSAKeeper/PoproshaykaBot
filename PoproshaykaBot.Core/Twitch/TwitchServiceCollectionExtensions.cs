@@ -28,7 +28,8 @@ public static class TwitchServiceCollectionExtensions
         services.AddKeyedSingleton<ITwitchHelixClient, BotHelixClient>(TwitchEndpoints.HelixBotClient);
         services.AddKeyedSingleton<ITwitchHelixClient, BroadcasterHelixClient>(TwitchEndpoints.HelixBroadcasterClient);
 
-        services.AddSingleton<ITwitchEventSubClient, TwitchEventSubClient>();
+        services.AddKeyedSingleton<ITwitchEventSubClient, TwitchEventSubClient>(TwitchEndpoints.EventSubBotSession);
+        services.AddKeyedSingleton<ITwitchEventSubClient, TwitchEventSubClient>(TwitchEndpoints.EventSubBroadcasterSession);
 
         services.AddSingleton<OAuthStatusReporter>();
         services.AddSingleton<OAuthTokenClient>();

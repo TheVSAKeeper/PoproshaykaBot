@@ -33,6 +33,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private bool _disposed;
 
     public StreamStatusManager(
+        [FromKeyedServices(TwitchEndpoints.EventSubBotSession)]
         ITwitchEventSubClient eventSubClient,
         [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
         ITwitchHelixClient helix,

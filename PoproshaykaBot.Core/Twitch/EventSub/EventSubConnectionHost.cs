@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Reconnection;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Auth;
 
@@ -12,14 +13,15 @@ namespace PoproshaykaBot.Core.Twitch.EventSub;
 public sealed class EventSubConnectionHost :
     IStreamHostedComponent,
     IEventHandler<TwitchAuthorizationRefreshed>,
-    IEventSubscriber,
     IAsyncDisposable
 {
     private const int MaxReconnectAttempts = 5;
 
     private static readonly IProgress<string> NullProgress = new Progress<string>(_ => { });
 
+    private readonly TwitchOAuthRole _role;
     private readonly ITwitchEventSubClient _eventSubClient;
+    private readonly AccountsStore _accountsStore;
     private readonly IEventBus _eventBus;
     private readonly ILogger<EventSubConnectionHost> _logger;
     private readonly ExponentialBackoffPolicy _reconnectionPolicy = new(MaxReconnectAttempts);
@@ -32,11 +34,15 @@ public sealed class EventSubConnectionHost :
     private bool _disposed;
 
     public EventSubConnectionHost(
+        TwitchOAuthRole role,
         ITwitchEventSubClient eventSubClient,
+        AccountsStore accountsStore,
         IEventBus eventBus,
         ILogger<EventSubConnectionHost> logger)
     {
+        _role = role;
         _eventSubClient = eventSubClient;
+        _accountsStore = accountsStore;
         _eventBus = eventBus;
         _logger = logger;
 
@@ -45,43 +51,21 @@ public sealed class EventSubConnectionHost :
         _authSubscription = _eventBus.Subscribe(this);
     }
 
-    public string Name => "EventSub WebSocket";
+    public string Name => _role == TwitchOAuthRole.Bot
+        ? "EventSub WebSocket (бот)"
+        : "EventSub WebSocket (broadcaster)";
 
-    public int StartOrder => 275;
+    public int StartOrder => _role == TwitchOAuthRole.Bot ? 275 : 276;
 
     public async Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
-        CancellationTokenSource cts;
-
-        lock (_lockObj)
+        if (!HasAccessToken())
         {
-            if (_runCts is { IsCancellationRequested: false })
-            {
-                _logger.LogWarning("EventSubConnectionHost уже запущен");
-                return;
-            }
-
-            _runCts?.Dispose();
-            cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            _runCts = cts;
-            _stopRequested = false;
+            _logger.LogInformation("EventSub WebSocket ({Role}): запуск отложен — нет access-токена для роли. Ждём TwitchAuthorizationRefreshed.", _role);
+            return;
         }
 
-        _reconnectionPolicy.Reset();
-
-        await PublishStatusAsync(StreamMonitoringStatus.Connecting).ConfigureAwait(false);
-        _logger.LogInformation("Подключение к EventSub WebSocket...");
-
-        try
-        {
-            await _eventSubClient.StartAsync(cts.Token);
-            _logger.LogInformation("Соединение EventSub инициировано. Ожидание подтверждения подключения...");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка запуска EventSub WebSocket");
-            throw;
-        }
+        await StartInternalAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
@@ -102,31 +86,31 @@ public sealed class EventSubConnectionHost :
             cts.Dispose();
         }
 
-        _logger.LogInformation("Отключение от EventSub WebSocket...");
+        _logger.LogInformation("Отключение от EventSub WebSocket ({Role})...", _role);
         await PublishStatusAsync(StreamMonitoringStatus.Disconnected).ConfigureAwait(false);
 
         try
         {
             await _eventSubClient.StopAsync(cancellationToken);
-            _logger.LogInformation("EventSub WebSocket остановлен");
+            _logger.LogInformation("EventSub WebSocket ({Role}) остановлен", _role);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка остановки EventSub WebSocket");
+            _logger.LogError(ex, "Ошибка остановки EventSub WebSocket ({Role})", _role);
         }
     }
 
     public async Task HandleAsync(TwitchAuthorizationRefreshed @event, CancellationToken cancellationToken)
     {
-        if (@event.Role != TwitchOAuthRole.Bot)
+        if (@event.Role != _role)
         {
-            _logger.LogDebug("TwitchAuthorizationRefreshed для роли {Role} игнорируется EventSubConnectionHost (ожидался Bot)", @event.Role);
+            _logger.LogDebug("TwitchAuthorizationRefreshed для роли {Role} игнорируется EventSubConnectionHost ({HostRole})", @event.Role, _role);
             return;
         }
 
         if (_disposed)
         {
-            _logger.LogDebug("TwitchAuthorizationRefreshed получен после dispose — игнорируется");
+            _logger.LogDebug("TwitchAuthorizationRefreshed получен после dispose — игнорируется ({Role})", _role);
             return;
         }
 
@@ -138,15 +122,15 @@ public sealed class EventSubConnectionHost :
 
         if (isRunning)
         {
-            _logger.LogInformation("Перезапуск EventSub WebSocket после обновления авторизации бота");
+            _logger.LogInformation("Перезапуск EventSub WebSocket ({Role}) после обновления авторизации", _role);
             await StopAsync(NullProgress, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            _logger.LogInformation("Запуск EventSub WebSocket после получения авторизации бота");
+            _logger.LogInformation("Запуск EventSub WebSocket ({Role}) после получения авторизации", _role);
         }
 
-        await StartAsync(NullProgress, cancellationToken).ConfigureAwait(false);
+        await StartInternalAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
@@ -162,42 +146,44 @@ public sealed class EventSubConnectionHost :
         _eventSubClient.OnSessionWelcome -= OnSessionWelcomeAsync;
         _eventSubClient.OnDisconnected -= OnDisconnectedAsync;
 
+        CancellationTokenSource? runCts;
         lock (_lockObj)
         {
             _stopRequested = true;
             CancelAndResetReconnectToken();
+            runCts = _runCts;
+            _runCts = null;
         }
 
-        if (_runCts != null)
+        if (runCts != null)
         {
-            await _runCts.CancelAsync();
-            _runCts.Dispose();
-            _runCts = null;
+            await runCts.CancelAsync();
+            runCts.Dispose();
         }
     }
 
     private Task OnSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
         _reconnectionPolicy.Reset();
-        _logger.LogInformation("EventSub session welcome (SessionId: {SessionId}) — статус мониторинга: Connected", args.SessionId);
+        _logger.LogInformation("EventSub session welcome ({Role}, SessionId: {SessionId}) — статус мониторинга: Connected", _role, args.SessionId);
         return PublishStatusAsync(StreamMonitoringStatus.Connected);
     }
 
     private async Task OnDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken cancellationToken)
     {
-        _logger.LogWarning("EventSub WebSocket отключен. Причина: {Reason}. Disposed: {IsDisposed}, StopRequested: {IsStopRequested}",
-            args.Reason, _disposed, _stopRequested);
+        _logger.LogWarning("EventSub WebSocket ({Role}) отключен. Причина: {Reason}. Disposed: {IsDisposed}, StopRequested: {IsStopRequested}",
+            _role, args.Reason, _disposed, _stopRequested);
 
         if (_disposed || _stopRequested)
         {
-            _logger.LogDebug("Переподключение EventSub пропущено: disposed={IsDisposed}, stopRequested={IsStopRequested}", _disposed, _stopRequested);
+            _logger.LogDebug("Переподключение EventSub ({Role}) пропущено: disposed={IsDisposed}, stopRequested={IsStopRequested}", _role, _disposed, _stopRequested);
             return;
         }
 
         if (!_reconnectionPolicy.TryNextAttempt(out var delay))
         {
-            _logger.LogError("Превышено максимальное количество попыток переподключения ({MaxAttempts}). EventSub остановлен.",
-                _reconnectionPolicy.MaxAttempts);
+            _logger.LogError("Превышено максимальное количество попыток переподключения ({MaxAttempts}) для EventSub ({Role}). Остановлен.",
+                _reconnectionPolicy.MaxAttempts, _role);
 
             await PublishStatusAsync(StreamMonitoringStatus.Failed).ConfigureAwait(false);
 
@@ -212,8 +198,8 @@ public sealed class EventSubConnectionHost :
         var attempt = _reconnectionPolicy.CurrentAttempt;
         var maxAttempts = _reconnectionPolicy.MaxAttempts;
 
-        _logger.LogWarning("Попытка переподключения EventSub {Attempt}/{MaxAttempts} через {DelaySeconds} сек...",
-            attempt, maxAttempts, (int)delay.TotalSeconds);
+        _logger.LogWarning("Попытка переподключения EventSub ({Role}) {Attempt}/{MaxAttempts} через {DelaySeconds} сек...",
+            _role, attempt, maxAttempts, (int)delay.TotalSeconds);
 
         await PublishStatusAsync(StreamMonitoringStatus.Reconnecting, $"Попытка {attempt}/{maxAttempts}").ConfigureAwait(false);
 
@@ -222,7 +208,7 @@ public sealed class EventSubConnectionHost :
         {
             if (_runCts == null)
             {
-                _logger.LogDebug("Переподключение EventSub отменено: _runCts уже null (видимо, StopAsync прошёл одновременно)");
+                _logger.LogDebug("Переподключение EventSub ({Role}) отменено: _runCts уже null (видимо, StopAsync прошёл одновременно)", _role);
                 return;
             }
 
@@ -237,22 +223,70 @@ public sealed class EventSubConnectionHost :
         }
         catch (OperationCanceledException)
         {
-            _logger.LogDebug("Задержка перед переподключением EventSub отменена (попытка {Attempt}/{MaxAttempts})", attempt, maxAttempts);
+            _logger.LogDebug("Задержка перед переподключением EventSub ({Role}) отменена (попытка {Attempt}/{MaxAttempts})", _role, attempt, maxAttempts);
             return;
         }
 
         try
         {
             await _eventSubClient.StartAsync(token);
-            _logger.LogInformation("Переподключение EventSub WebSocket инициировано (попытка {Attempt})", attempt);
+            _logger.LogInformation("Переподключение EventSub WebSocket ({Role}) инициировано (попытка {Attempt})", _role, attempt);
         }
         catch (OperationCanceledException)
         {
-            _logger.LogDebug("Переподключение EventSub отменено (попытка {Attempt}/{MaxAttempts})", attempt, maxAttempts);
+            _logger.LogDebug("Переподключение EventSub ({Role}) отменено (попытка {Attempt}/{MaxAttempts})", _role, attempt, maxAttempts);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка переподключения EventSub (попытка {Attempt}/{MaxAttempts})", attempt, maxAttempts);
+            _logger.LogError(ex, "Ошибка переподключения EventSub ({Role}) (попытка {Attempt}/{MaxAttempts})", _role, attempt, maxAttempts);
+        }
+    }
+
+    private bool HasAccessToken()
+    {
+        try
+        {
+            return !string.IsNullOrEmpty(_accountsStore.Load(_role).AccessToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "EventSubConnectionHost ({Role}): не удалось прочитать AccountsStore — считаем, что токена нет", _role);
+            return false;
+        }
+    }
+
+    private async Task StartInternalAsync(CancellationToken cancellationToken)
+    {
+        CancellationTokenSource cts;
+
+        lock (_lockObj)
+        {
+            if (_runCts is { IsCancellationRequested: false })
+            {
+                _logger.LogWarning("EventSubConnectionHost ({Role}) уже запущен", _role);
+                return;
+            }
+
+            _runCts?.Dispose();
+            cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _runCts = cts;
+            _stopRequested = false;
+        }
+
+        _reconnectionPolicy.Reset();
+
+        await PublishStatusAsync(StreamMonitoringStatus.Connecting).ConfigureAwait(false);
+        _logger.LogInformation("Подключение к EventSub WebSocket ({Role})...", _role);
+
+        try
+        {
+            await _eventSubClient.StartAsync(cts.Token);
+            _logger.LogInformation("Соединение EventSub ({Role}) инициировано. Ожидание подтверждения подключения...", _role);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка запуска EventSub WebSocket ({Role})", _role);
+            throw;
         }
     }
 
@@ -270,6 +304,11 @@ public sealed class EventSubConnectionHost :
 
     private Task PublishStatusAsync(StreamMonitoringStatus status, string? detail = null)
     {
+        if (_role != TwitchOAuthRole.Bot)
+        {
+            return Task.CompletedTask;
+        }
+
         _logger.LogDebug("Публикация StreamMonitoringStatusChanged: {Status} ({Detail})", status, detail ?? "—");
         return _eventBus.PublishAsync(new StreamMonitoringStatusChanged(status, detail));
     }

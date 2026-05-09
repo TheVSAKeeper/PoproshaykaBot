@@ -11,6 +11,7 @@ using System.Net;
 namespace PoproshaykaBot.Core.Polls;
 
 public sealed class PollEventSubscriber(
+    [FromKeyedServices(TwitchEndpoints.EventSubBroadcasterSession)]
     ITwitchEventSubClient eventSubClient,
     [FromKeyedServices(TwitchEndpoints.HelixBroadcasterClient)]
     ITwitchHelixClient helix,

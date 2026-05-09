@@ -22,4 +22,6 @@ public static class TwitchEndpoints
     public const string HelixBotClient = "twitch-helix-bot";
     public const string HelixBroadcasterClient = "twitch-helix-broadcaster";
     public const string IdHttpClientName = "twitch-id";
+    public const string EventSubBotSession = "eventsub-bot";
+    public const string EventSubBroadcasterSession = "eventsub-broadcaster";
 }

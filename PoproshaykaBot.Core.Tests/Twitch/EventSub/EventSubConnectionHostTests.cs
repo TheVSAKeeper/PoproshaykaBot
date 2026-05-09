@@ -1,8 +1,10 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.EventSub;
 
 namespace PoproshaykaBot.Core.Tests.Twitch.EventSub;
@@ -18,7 +20,11 @@ public sealed class EventSubConnectionHostTests
         _statusEvents = [];
         _statusSubscription = _eventBus.Subscribe<StreamMonitoringStatusChanged>(e => _statusEvents.Add(e));
 
-        _host = new(_eventSubClient, _eventBus, NullLogger<EventSubConnectionHost>.Instance);
+        _accountsFilePath = Path.Combine(Path.GetTempPath(), $"accounts-{Guid.NewGuid():N}.json");
+        _accountsStore = new(NullLogger<AccountsStore>.Instance, _accountsFilePath);
+        SeedAccessToken(TwitchOAuthRole.Bot, "bot-token");
+
+        _host = new(TwitchOAuthRole.Bot, _eventSubClient, _accountsStore, _eventBus, NullLogger<EventSubConnectionHost>.Instance);
     }
 
     [TearDown]
@@ -26,6 +32,11 @@ public sealed class EventSubConnectionHostTests
     {
         _statusSubscription.Dispose();
         await _host.DisposeAsync();
+
+        if (File.Exists(_accountsFilePath))
+        {
+            File.Delete(_accountsFilePath);
+        }
     }
 
     private static readonly IProgress<string> NullProgress = new Progress<string>(_ => { });
@@ -34,7 +45,31 @@ public sealed class EventSubConnectionHostTests
     private InMemoryEventBus _eventBus = null!;
     private List<StreamMonitoringStatusChanged> _statusEvents = null!;
     private IDisposable _statusSubscription = null!;
+    private AccountsStore _accountsStore = null!;
+    private string _accountsFilePath = null!;
     private EventSubConnectionHost _host = null!;
+
+    private void SeedAccessToken(TwitchOAuthRole role, string token)
+    {
+        _accountsStore.Mutate(role, account =>
+        {
+            account.AccessToken = token;
+            account.AccessTokenExpiresAt = DateTime.UtcNow.AddHours(1);
+            if (account.Scopes.Length == 0)
+            {
+                account.Scopes = [..role == TwitchOAuthRole.Bot ? TwitchScopes.BotRequired : TwitchScopes.BroadcasterRequired];
+            }
+        });
+    }
+
+    private void ClearAccessToken(TwitchOAuthRole role)
+    {
+        _accountsStore.Mutate(role, account =>
+        {
+            account.AccessToken = string.Empty;
+            account.AccessTokenExpiresAt = null;
+        });
+    }
 
     [Test]
     public async Task TwitchAuthorizationRefreshed_BotRole_RestartsRunningWebSocket()
@@ -112,5 +147,38 @@ public sealed class EventSubConnectionHostTests
             CancellationToken.None);
 
         Assert.That(_statusEvents.Select(e => e.Status), Does.Contain(StreamMonitoringStatus.Reconnecting));
+    }
+
+    [Test]
+    public async Task StartAsync_WithoutAccessToken_DoesNotConnect()
+    {
+        ClearAccessToken(TwitchOAuthRole.Bot);
+        _eventSubClient.ClearReceivedCalls();
+        _statusEvents.Clear();
+
+        await _host.StartAsync(NullProgress, CancellationToken.None);
+
+        await _eventSubClient.DidNotReceive().StartAsync(Arg.Any<CancellationToken>());
+        Assert.That(_statusEvents, Is.Empty);
+    }
+
+    [Test]
+    public async Task BroadcasterRoleHost_DoesNotPublishStatus()
+    {
+        SeedAccessToken(TwitchOAuthRole.Broadcaster, "broadcaster-token");
+
+        var broadcasterClient = Substitute.For<ITwitchEventSubClient>();
+        await using var broadcasterHost = new EventSubConnectionHost(TwitchOAuthRole.Broadcaster,
+            broadcasterClient,
+            _accountsStore,
+            _eventBus,
+            NullLogger<EventSubConnectionHost>.Instance);
+
+        _statusEvents.Clear();
+
+        await broadcasterHost.StartAsync(NullProgress, CancellationToken.None);
+
+        await broadcasterClient.Received(1).StartAsync(Arg.Any<CancellationToken>());
+        Assert.That(_statusEvents, Is.Empty);
     }
 }

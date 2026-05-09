@@ -11,6 +11,7 @@ using System.Text.Json;
 namespace PoproshaykaBot.Core.Streaming;
 
 public sealed class ChannelUpdateSubscriber(
+    [FromKeyedServices(TwitchEndpoints.EventSubBroadcasterSession)]
     ITwitchEventSubClient eventSubClient,
     [FromKeyedServices(TwitchEndpoints.HelixBroadcasterClient)]
     ITwitchHelixClient helix,

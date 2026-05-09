@@ -11,6 +11,7 @@ using System.Net;
 namespace PoproshaykaBot.Core.Twitch.Chat;
 
 public sealed class ChatIngestionService(
+    [FromKeyedServices(TwitchEndpoints.EventSubBotSession)]
     ITwitchEventSubClient eventSubClient,
     [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
     ITwitchHelixClient helix,
