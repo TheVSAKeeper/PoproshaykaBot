@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
@@ -9,11 +10,15 @@ namespace PoproshaykaBot.WinForms.Forms.Users;
 
 public sealed partial class UserStatisticsForm : Form
 {
+    private const int ColumnMessages = 1;
+    private const int ColumnPoints = 2;
+
     private readonly IUserStatisticsRepository _userStatistics;
     private readonly StatisticsAutoSaver _statisticsAutoSaver;
     private readonly UserRankService _userRankService;
     private readonly UserMessagesManagementService _userMessagesManagementService;
     private readonly IChannelProvider _channelProvider;
+    private readonly SettingsManager _settingsManager;
 
     private List<UserStatistics> _allUsers = [];
     private bool _initialized;
@@ -23,13 +28,15 @@ public sealed partial class UserStatisticsForm : Form
         StatisticsAutoSaver statisticsAutoSaver,
         UserRankService userRankService,
         UserMessagesManagementService userMessagesManagementService,
-        IChannelProvider channelProvider)
+        IChannelProvider channelProvider,
+        SettingsManager settingsManager)
     {
         _userStatistics = userStatistics;
         _statisticsAutoSaver = statisticsAutoSaver;
         _userRankService = userRankService;
         _userMessagesManagementService = userMessagesManagementService;
         _channelProvider = channelProvider;
+        _settingsManager = settingsManager;
 
         InitializeComponent();
     }
@@ -54,6 +61,9 @@ public sealed partial class UserStatisticsForm : Form
         }
 
         _initialized = true;
+
+        listViewUsers.Tag = ColumnPoints;
+        listViewUsers.ListViewItemSorter = new ListViewItemComparer(ColumnPoints, SortOrder.Descending);
 
         UpdateDetails(null);
         UpdateActionState();
@@ -128,6 +138,39 @@ public sealed partial class UserStatisticsForm : Form
         textBoxFilter.Text = string.Empty;
     }
 
+    private void ButtonPointTermOnClick(object? sender, EventArgs e)
+    {
+        using var dialog = new PointTermDialog();
+        dialog.LoadFrom(_settingsManager.Current.Ranks.PointTerm);
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        var current = _settingsManager.Current;
+        var previousTerm = current.Ranks.PointTerm;
+        current.Ranks.PointTerm = dialog.BuildResult();
+
+        try
+        {
+            _settingsManager.SaveSettings(current);
+        }
+        catch (Exception exception)
+        {
+            current.Ranks.PointTerm = previousTerm;
+            MessageBox.Show($"💾 Не удалось сохранить названия: {exception.Message}", "💾 Ошибка сохранения", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        var selected = listViewUsers.SelectedItems.Count > 0
+            ? listViewUsers.SelectedItems[0].Tag as UserStatistics
+            : null;
+
+        UpdateDetails(selected);
+        UpdateActionState();
+    }
+
     private void listViewUsers_ColumnClick(object sender, ColumnClickEventArgs e)
     {
         var nextOrder = SortOrder.Ascending;
@@ -196,7 +239,7 @@ public sealed partial class UserStatisticsForm : Form
         {
             var amount = (ulong)-delta;
             var notification = _userMessagesManagementService.GetPunishmentNotification(user.Name, amount);
-            MessageBox.Show(notification, "🏴\u200D☠️ Наказание от СЕРЁГИ ПИРАТА! ⚔️", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(notification, "🏴‍☠️ Наказание от СЕРЁГИ ПИРАТА! ⚔️", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return _userMessagesManagementService.PunishUserAsync(user.UserId, user.Name, amount, _channelProvider.Channel);
         }
         else
@@ -246,13 +289,14 @@ public sealed partial class UserStatisticsForm : Form
 
         foreach (var user in filtered)
         {
-            var rank = _userRankService.GetRank(user.TotalMessageCount);
+            var rank = _userRankService.GetRank(user.Points);
             var item = new ListViewItem(user.Name)
             {
                 Tag = user,
             };
 
-            item.SubItems.Add(user.TotalMessageCount.ToString());
+            item.SubItems.Add(user.MessageCount.ToString());
+            item.SubItems.Add(user.Points.ToString());
             item.SubItems.Add($"{rank.Emoji} {rank.DisplayName}");
 
             listViewUsers.Items.Add(item);
@@ -271,14 +315,14 @@ public sealed partial class UserStatisticsForm : Form
     private void UpdateGlobalStats()
     {
         var totalUsers = _allUsers.Count;
-        var totalMessages = (long)_allUsers.Sum(u => (decimal)u.TotalMessageCount);
-        var totalWritten = (long)_allUsers.Sum(u => (decimal)u.MessageCount);
-        var totalBonus = (long)_allUsers.Sum(u => (decimal)u.BonusMessageCount);
-        var totalPenalty = (long)_allUsers.Sum(u => (decimal)u.ShtrafMessageCount);
+        var totalMessages = (long)_allUsers.Sum(u => (decimal)u.MessageCount);
+        var totalPoints = (long)_allUsers.Sum(u => (decimal)u.Points);
+        var totalBonus = (long)_allUsers.Sum(u => (decimal)u.BonusPoints);
+        var totalPenalty = (long)_allUsers.Sum(u => (decimal)u.PenaltyPoints);
 
         labelGlobalUsers.Text = $"👥 Пользователей: {totalUsers:N0}";
-        labelGlobalTotal.Text = $"💬 Всего сообщ: {totalMessages:N0}";
-        labelGlobalWritten.Text = $"✍️ Написано: {totalWritten:N0}";
+        labelGlobalMessages.Text = $"💬 Сообщений: {totalMessages:N0}";
+        labelGlobalPoints.Text = $"🏆 Баллов: {totalPoints:N0}";
         labelGlobalBonus.Text = $"🎁 Бонус: {totalBonus:N0} / 🚫 Штраф: {totalPenalty:N0}";
     }
 
@@ -286,12 +330,12 @@ public sealed partial class UserStatisticsForm : Form
     {
         labelUserId.Text = $"🆔 ID: {user?.UserId ?? "—"}";
         labelUserName.Text = $"👤 Имя: {user?.Name ?? "—"}";
-        labelMessageTotal.Text = $"💬 Всего: {user?.TotalMessageCount:N0}";
-        labelMessageWritten.Text = $"    ✍️ Написано: {user?.MessageCount:N0}";
-        labelMessageBonus.Text = $"    🎁 Бонус: {user?.BonusMessageCount:N0}";
-        labelMessagePenalty.Text = $"    🚫 Штраф: {user?.ShtrafMessageCount:N0}";
+        labelMessages.Text = $"💬 Сообщения: {user?.MessageCount:N0}";
+        labelPoints.Text = $"🏆 Баллы: {user?.Points:N0}";
+        labelBonus.Text = $"    🎁 Бонус: {user?.BonusPoints:N0}";
+        labelPenalty.Text = $"    🚫 Штраф: {user?.PenaltyPoints:N0}";
 
-        var rank = _userRankService.GetRank(user?.TotalMessageCount ?? 0);
+        var rank = _userRankService.GetRank(user?.Points ?? 0);
         labelChessPiece.Text = $"{rank.Emoji} {rank.DisplayName}";
     }
 
@@ -301,11 +345,14 @@ public sealed partial class UserStatisticsForm : Form
         var hasValue = numericIncrement.Value != 0;
         buttonAction.Enabled = hasSelection && hasValue;
 
-        buttonAction.Text = numericIncrement.Value switch
+        var term = _userRankService.PointTerm;
+        var count = (long)numericIncrement.Value;
+
+        buttonAction.Text = count switch
         {
-            > 0 => $"➕ Добавить {numericIncrement.Value} сообщений",
-            < 0 => $"➖ Убрать {-numericIncrement.Value} сообщений",
-            _ => "➕ Добавить сообщения",
+            > 0 => $"➕ Добавить {count} {term.ForCount(count)}",
+            < 0 => $"➖ Убрать {-count} {term.ForCount(count)}",
+            _ => "➕ Изменить баланс",
         };
     }
 
@@ -322,7 +369,9 @@ public sealed partial class UserStatisticsForm : Form
 
             int returnVal;
 
-            if (column == 1 && long.TryParse(textX, out var valX) && long.TryParse(textY, out var valY))
+            if (column is ColumnMessages or ColumnPoints
+                && long.TryParse(textX, out var valX)
+                && long.TryParse(textY, out var valY))
             {
                 returnVal = valX.CompareTo(valY);
             }

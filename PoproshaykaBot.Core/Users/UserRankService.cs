@@ -1,9 +1,11 @@
-﻿using PoproshaykaBot.Core.Settings;
+﻿using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Users;
 
 public sealed class UserRankService(SettingsManager settingsManager)
 {
+    public PointTerm PointTerm => settingsManager.Current.Ranks.PointTerm;
     private UserRank[] Ranks => [.. settingsManager.Current.Ranks.Ranks.OrderByDescending(x => x.MinMessages)];
 
     public UserRank GetRank(long messageCount)
@@ -28,5 +30,10 @@ public sealed class UserRankService(SettingsManager settingsManager)
     {
         var rank = GetRank(messageCount);
         return $"{rank.Emoji} {rank.DisplayName}";
+    }
+
+    public string FormatPoints(long count)
+    {
+        return $"{FormattingUtils.FormatNumber(count)} {PointTerm.ForCount(count)}";
     }
 }

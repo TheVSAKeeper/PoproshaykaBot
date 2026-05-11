@@ -134,18 +134,59 @@ public sealed class UserStatisticsRepositoryTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.True);
-            Assert.That(_repository.GetById("u1")!.BonusMessageCount, Is.EqualTo(5ul));
+            Assert.That(_repository.GetById("u1")!.BonusPoints, Is.EqualTo(5ul));
             Assert.That(_repository.HasChanges, Is.True);
         }
     }
 
     [Test]
-    public void IncrementShtrafMessages_AffectsShtrafCounter()
+    public void IncrementShtrafMessages_AffectsPenaltyCounter()
     {
         _repository.TrackMessage("u1", "Alice");
         _repository.IncrementShtrafMessages("u1", 7);
 
-        Assert.That(_repository.GetById("u1")!.ShtrafMessageCount, Is.EqualTo(7ul));
+        Assert.That(_repository.GetById("u1")!.PenaltyPoints, Is.EqualTo(7ul));
+    }
+
+    [Test]
+    public void Points_CombineMessagesBonusAndPenalty()
+    {
+        _repository.TrackMessage("u1", "Alice");
+        _repository.TrackMessage("u1", "Alice");
+        _repository.IncrementBonusMessages("u1", 10);
+        _repository.IncrementShtrafMessages("u1", 3);
+
+        var stats = _repository.GetById("u1")!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stats.MessageCount, Is.EqualTo(2ul));
+            Assert.That(stats.BonusPoints, Is.EqualTo(10ul));
+            Assert.That(stats.PenaltyPoints, Is.EqualTo(3ul));
+            Assert.That(stats.Points, Is.EqualTo(9));
+        }
+    }
+
+    [Test]
+    public void GetTop_ByMessagesMode_IgnoresBonusAndPenalty()
+    {
+        _repository.TrackMessage("u1", "Alice");
+
+        for (var i = 0; i < 5; i++)
+        {
+            _repository.TrackMessage("u2", "Bob");
+        }
+
+        _repository.IncrementBonusMessages("u1", 100);
+
+        var byMessages = _repository.GetTop(2, UserTopMode.Messages);
+        var byPoints = _repository.GetTop(2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(byMessages[0].UserId, Is.EqualTo("u2"), "Top by messages should rank user with more written messages first");
+            Assert.That(byPoints[0].UserId, Is.EqualTo("u1"), "Top by points should rank user with bonus first");
+        }
     }
 
     [Test]

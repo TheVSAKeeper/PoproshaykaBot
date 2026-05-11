@@ -1,9 +1,8 @@
 ﻿using PoproshaykaBot.Core.Statistics;
-using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class HowManyMessagesCommand(IUserStatisticsRepository statistics, UserRankService rankService) : IChatCommand
+public sealed class HowManyMessagesCommand(IUserStatisticsRepository statistics) : IChatCommand
 {
     public string Canonical => "сколькосообщений";
     public IReadOnlyCollection<string> Aliases => ["messages", "cc"];
@@ -35,10 +34,9 @@ public sealed class HowManyMessagesCommand(IUserStatisticsRepository statistics,
         }
 
         var userStats = statistics.GetById(targetUserId);
-        var messageCount = userStats?.TotalMessageCount ?? 0;
-        var rankDisplay = rankService.GetRankDisplay(messageCount);
+        var messageCount = (long?)userStats?.MessageCount ?? 0;
 
-        var text = $"{rankDisplay} | {targetDisplayName} {FormattingUtils.FormatNumber(messageCount)} сообщений";
+        var text = $"💬 {targetDisplayName} {FormattingUtils.FormatNumber(messageCount)} сообщений";
         return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
     }
 }

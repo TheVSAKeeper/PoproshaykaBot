@@ -35,7 +35,8 @@ public sealed class ModerationChatNotificationHandler :
             return Task.CompletedTask;
         }
 
-        var message = FormatMessage(messageSettings.PunishmentMessage, @event.UserName, @event.RemovedMessagesCount);
+        var pointTerm = _settingsManager.Current.Ranks.PointTerm;
+        var message = UserMessagesManagementService.FormatMessage(messageSettings.PunishmentMessage, @event.UserName, @event.RemovedMessagesCount, pointTerm);
         _messenger.Send(message);
 
         return Task.CompletedTask;
@@ -50,7 +51,8 @@ public sealed class ModerationChatNotificationHandler :
             return Task.CompletedTask;
         }
 
-        var message = FormatMessage(messageSettings.RewardMessage, @event.UserName, @event.AddedMessagesCount);
+        var pointTerm = _settingsManager.Current.Ranks.PointTerm;
+        var message = UserMessagesManagementService.FormatMessage(messageSettings.RewardMessage, @event.UserName, @event.AddedMessagesCount, pointTerm);
         _messenger.Send(message);
 
         return Task.CompletedTask;
@@ -60,13 +62,5 @@ public sealed class ModerationChatNotificationHandler :
     {
         _punishedSubscription.Dispose();
         _rewardedSubscription.Dispose();
-    }
-
-    private static string FormatMessage(string template, string userName, ulong count)
-    {
-        return MessageTemplate.For(template)
-            .With("username", userName)
-            .With("count", count.ToString())
-            .Render();
     }
 }

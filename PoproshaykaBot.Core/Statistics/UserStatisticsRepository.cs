@@ -88,12 +88,15 @@ public sealed class UserStatisticsRepository(ILogger<UserStatisticsRepository> l
         }
     }
 
-    public IReadOnlyList<UserStatistics> GetTop(int count)
+    public IReadOnlyList<UserStatistics> GetTop(int count, UserTopMode mode = UserTopMode.Points)
     {
         lock (_lock)
         {
-            return _users.Values
-                .OrderByDescending(x => x.TotalMessageCount)
+            IEnumerable<UserStatistics> ordered = mode == UserTopMode.Messages
+                ? _users.Values.OrderByDescending(x => x.MessageCount)
+                : _users.Values.OrderByDescending(x => x.Points);
+
+            return ordered
                 .Take(count)
                 .Select(u => u.Clone())
                 .ToList();
@@ -102,11 +105,11 @@ public sealed class UserStatisticsRepository(ILogger<UserStatisticsRepository> l
 
     public bool IncrementBonusMessages(string userId, ulong delta)
     {
-        var updated = AdjustMessages(userId, delta, (stats, d) => stats.BonusMessageCount += d);
+        var updated = AdjustPoints(userId, delta, (stats, d) => stats.BonusPoints += d);
 
         if (updated)
         {
-            logger.LogInformation("Пользователю {UserId} начислено {Delta} бонусных сообщений", userId, delta);
+            logger.LogInformation("Пользователю {UserId} начислено {Delta} бонусных баллов", userId, delta);
         }
 
         return updated;
@@ -114,11 +117,11 @@ public sealed class UserStatisticsRepository(ILogger<UserStatisticsRepository> l
 
     public bool IncrementShtrafMessages(string userId, ulong delta)
     {
-        var updated = AdjustMessages(userId, delta, (stats, d) => stats.ShtrafMessageCount += d);
+        var updated = AdjustPoints(userId, delta, (stats, d) => stats.PenaltyPoints += d);
 
         if (updated)
         {
-            logger.LogInformation("Пользователю {UserId} начислено {Delta} штрафных сообщений", userId, delta);
+            logger.LogInformation("Пользователю {UserId} начислено {Delta} штрафных баллов", userId, delta);
         }
 
         return updated;
@@ -159,7 +162,7 @@ public sealed class UserStatisticsRepository(ILogger<UserStatisticsRepository> l
         }
     }
 
-    private bool AdjustMessages(string userId, ulong delta, Action<UserStatistics, ulong> adjust)
+    private bool AdjustPoints(string userId, ulong delta, Action<UserStatistics, ulong> adjust)
     {
         if (string.IsNullOrWhiteSpace(userId))
         {
