@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Net;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Streaming;
@@ -87,6 +88,11 @@ public sealed class ChannelUpdateSubscriber(
             IsHealthy = true;
             logger.LogInformation("ChannelUpdateSubscriber: подписка на {Type} создана", SubscriptionType);
         }
+        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            IsHealthy = true;
+            logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", SubscriptionType);
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "ChannelUpdateSubscriber: не удалось подписаться на {Type} — смена title/game работать не будет", SubscriptionType);
@@ -161,6 +167,11 @@ public sealed class ChannelUpdateSubscriber(
 
             IsHealthy = true;
             logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} восстановлена после revocation", SubscriptionType);
+        }
+        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            IsHealthy = true;
+            logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем после revocation", SubscriptionType);
         }
         catch (Exception ex)
         {

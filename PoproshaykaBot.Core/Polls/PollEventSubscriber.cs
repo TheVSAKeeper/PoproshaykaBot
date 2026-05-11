@@ -19,7 +19,7 @@ public sealed class PollEventSubscriber(
     PollsAvailabilityService availability,
     IEventBus eventBus,
     ILogger<PollEventSubscriber> logger)
-    : IHostedComponent
+    : IStreamHostedComponent
 {
     private static readonly string[] SubscriptionTypes =
     [

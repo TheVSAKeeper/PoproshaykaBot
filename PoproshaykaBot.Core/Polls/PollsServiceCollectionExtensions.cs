@@ -13,7 +13,7 @@ public static class PollsServiceCollectionExtensions
         services.AddSingleton<PollController>();
         services.AddSingleton<IPollController>(sp => sp.GetRequiredService<PollController>());
         services.AddSingleton<PollEventSubscriber>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<PollEventSubscriber>());
+        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredService<PollEventSubscriber>());
         services.AddSingleton<PollHistoryStore>();
         services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<PollHistoryStore>());
         return services;

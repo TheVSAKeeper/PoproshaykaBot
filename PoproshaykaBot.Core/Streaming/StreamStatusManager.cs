@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Net;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Streaming;
@@ -262,6 +263,12 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private async Task OnRevocationAsync(EventSubRevocationArgs args, CancellationToken cancellationToken)
     {
+        if (args.SubscriptionType is not ("stream.online" or "stream.offline"))
+        {
+            _logger.LogDebug("Revocation {Type} не относится к StreamStatusManager — игнорируется", args.SubscriptionType);
+            return;
+        }
+
         _logger.LogWarning("EventSub revocation: id={Id}, type={Type}, status={Status}", args.SubscriptionId, args.SubscriptionType, args.Status);
 
         if (string.IsNullOrEmpty(_eventSubClient.SessionId))
@@ -292,6 +299,10 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 cancellationToken);
 
             _logger.LogInformation("Подписка {Type} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, newId);
+        }
+        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            _logger.LogInformation("Подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", args.SubscriptionType);
         }
         catch (OperationCanceledException)
         {
@@ -350,7 +361,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 _logger.LogInformation("Инициализация: статус стрима {OldStatus} → {NewStatus} для BroadcasterId {BroadcasterId}",
                     transition.Previous, newStatus, broadcasterId);
 
-                await PublishStatusTransitionAsync(newStatus, stream != null).ConfigureAwait(false);
+                var isCatchUp = transition.Previous == StreamStatus.Unknown;
+                await PublishStatusTransitionAsync(newStatus, isCatchUp).ConfigureAwait(false);
             }
             else
             {
@@ -475,7 +487,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         return newStatus switch
         {
             StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(channel, CurrentStream, isCatchUp)),
-            StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(channel)),
+            StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(channel, isCatchUp)),
             _ => Task.CompletedTask,
         };
     }
@@ -526,6 +538,13 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
                 _logger.LogInformation("Подписка '{Type}' создана. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}",
                     type, subscriptionId, sessionId);
+            }
+            catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+            {
+                subscriptionsCreated++;
+
+                _logger.LogInformation("Подписка '{Type}' уже существует для текущей EventSub-сессии — переиспользуем (SessionId: {SessionId})",
+                    type, sessionId);
             }
             catch (Exception ex)
             {

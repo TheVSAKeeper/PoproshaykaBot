@@ -9,6 +9,7 @@ using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.WinForms.Forms.Onboarding;
 using PoproshaykaBot.WinForms.Forms.Settings;
 using PoproshaykaBot.WinForms.Forms.Users;
@@ -34,6 +35,10 @@ public partial class MainForm : Form
     private bool _onboardingWizardOpen;
     private UserStatisticsForm? _userStatisticsForm;
     private SettingsForm? _settingsForm;
+    private StreamMonitoringStatus? _botMonitoringStatus;
+    private StreamMonitoringStatus? _broadcasterMonitoringStatus;
+    private string? _botMonitoringDetail;
+    private string? _broadcasterMonitoringDetail;
 
     public MainForm(
         IServiceProvider services,
@@ -222,6 +227,11 @@ public partial class MainForm : Form
         return false;
     }
 
+    private static string RoleLabel(TwitchOAuthRole role)
+    {
+        return role == TwitchOAuthRole.Bot ? "бот" : "broadcaster";
+    }
+
     private void OpenOnboardingWizardIfNeeded()
     {
         if (!_onboardingChecklist.RequiresWizard)
@@ -377,7 +387,28 @@ public partial class MainForm : Form
 
     private void OnStreamMonitoringStatusChanged(StreamMonitoringStatusChanged statusEvent)
     {
-        var (icon, label) = statusEvent.Status switch
+        switch (statusEvent.Role)
+        {
+            case TwitchOAuthRole.Bot:
+                _botMonitoringStatus = statusEvent.Status;
+                _botMonitoringDetail = statusEvent.Detail;
+                break;
+
+            case TwitchOAuthRole.Broadcaster:
+                _broadcasterMonitoringStatus = statusEvent.Status;
+                _broadcasterMonitoringDetail = statusEvent.Detail;
+                break;
+        }
+
+        var aggregate = StreamMonitoringStatusAggregator.SelectWorst(_botMonitoringStatus, _broadcasterMonitoringStatus);
+
+        if (aggregate is null)
+        {
+            return;
+        }
+
+        var (worstStatus, worstRole) = aggregate.Value;
+        var (icon, label) = worstStatus switch
         {
             StreamMonitoringStatus.Connecting => ("🟡", "подключение"),
             StreamMonitoringStatus.Connected => ("🟢", "работает"),
@@ -386,8 +417,12 @@ public partial class MainForm : Form
             _ => ("⚪", "остановлен"),
         };
 
-        var detail = string.IsNullOrWhiteSpace(statusEvent.Detail) ? string.Empty : $" ({statusEvent.Detail})";
-        _streamMonitoringStatusLabel.Text = $"{icon} Стрим-мониторинг: {label}{detail}";
+        var bothReported = _botMonitoringStatus.HasValue && _broadcasterMonitoringStatus.HasValue;
+        var asymmetric = bothReported && _botMonitoringStatus != _broadcasterMonitoringStatus;
+        var roleSuffix = asymmetric ? $", {RoleLabel(worstRole)}" : string.Empty;
+        var detailText = worstRole == TwitchOAuthRole.Bot ? _botMonitoringDetail : _broadcasterMonitoringDetail;
+        var detail = string.IsNullOrWhiteSpace(detailText) ? string.Empty : $" ({detailText})";
+        _streamMonitoringStatusLabel.Text = $"{icon} Стрим-мониторинг: {label}{roleSuffix}{detail}";
     }
 
     private void OnOpenUserStatistics()

@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Net;
 
 namespace PoproshaykaBot.Core.Tests.Streaming;
 
@@ -102,6 +103,30 @@ public sealed class ChannelUpdateSubscriberTests
                 Arg.Any<CancellationToken>());
 
         Assert.That(_subscriber.IsHealthy, Is.False);
+    }
+
+    [Test]
+    public async Task HandleSessionWelcome_WhenSubscriptionConflict_StaysHealthy_AfterFix()
+    {
+        _helix.CreateEventSubSubscriptionAsync("channel.update",
+                "2",
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HelixRequestException(HttpMethod.Post,
+                "helix/eventsub/subscriptions",
+                HttpStatusCode.Conflict,
+                "subscription already exists",
+                null));
+
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60),
+                CancellationToken.None);
+
+        Assert.That(_subscriber.IsHealthy, Is.True,
+            "409 при session_reconnect означает, что подписка уже создана от прежней сессии и перенесена Twitch'ом — IsHealthy должен остаться true");
     }
 
     [Test]

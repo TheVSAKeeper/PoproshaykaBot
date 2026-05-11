@@ -163,7 +163,7 @@ public sealed class EventSubConnectionHostTests
     }
 
     [Test]
-    public async Task BroadcasterRoleHost_DoesNotPublishStatus()
+    public async Task BroadcasterRoleHost_StartAsync_PublishesConnectingStatus_AfterFix()
     {
         SeedAccessToken(TwitchOAuthRole.Broadcaster, "broadcaster-token");
 
@@ -178,7 +178,59 @@ public sealed class EventSubConnectionHostTests
 
         await broadcasterHost.StartAsync(NullProgress, CancellationToken.None);
 
-        await broadcasterClient.Received(1).StartAsync(Arg.Any<CancellationToken>());
-        Assert.That(_statusEvents, Is.Empty);
+        Assert.That(_statusEvents.Select(e => e.Status), Does.Contain(StreamMonitoringStatus.Connecting),
+            "broadcaster-сессия — равноправный источник статуса; молчаливый отказ broadcaster-WS оставляет UI без сигнала и тихо ломает channel.update/channel.poll.*");
+    }
+
+    [Test]
+    public async Task BroadcasterRoleHost_StartAsync_PublishesStatusWithBroadcasterRole()
+    {
+        SeedAccessToken(TwitchOAuthRole.Broadcaster, "broadcaster-token");
+
+        var broadcasterClient = Substitute.For<ITwitchEventSubClient>();
+        await using var broadcasterHost = new EventSubConnectionHost(TwitchOAuthRole.Broadcaster,
+            broadcasterClient,
+            _accountsStore,
+            _eventBus,
+            NullLogger<EventSubConnectionHost>.Instance);
+
+        _statusEvents.Clear();
+
+        await broadcasterHost.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(_statusEvents, Is.Not.Empty);
+        Assert.That(_statusEvents, Has.All.With.Property(nameof(StreamMonitoringStatusChanged.Role)).EqualTo(TwitchOAuthRole.Broadcaster));
+    }
+
+    [Test]
+    public async Task BotRoleHost_PublishesStatusWithBotRole()
+    {
+        _statusEvents.Clear();
+
+        await _host.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(_statusEvents, Has.All.With.Property(nameof(StreamMonitoringStatusChanged.Role)).EqualTo(TwitchOAuthRole.Bot));
+    }
+
+    [Test]
+    public async Task BroadcasterRoleHost_Disconnect_PublishesReconnectingStatus_AfterFix()
+    {
+        SeedAccessToken(TwitchOAuthRole.Broadcaster, "broadcaster-token");
+
+        var broadcasterClient = Substitute.For<ITwitchEventSubClient>();
+        await using var broadcasterHost = new EventSubConnectionHost(TwitchOAuthRole.Broadcaster,
+            broadcasterClient,
+            _accountsStore,
+            _eventBus,
+            NullLogger<EventSubConnectionHost>.Instance);
+
+        await broadcasterHost.StartAsync(NullProgress, CancellationToken.None);
+        _statusEvents.Clear();
+
+        broadcasterClient.OnDisconnected += Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(new EventSubDisconnectedArgs("connection-lost"),
+            CancellationToken.None);
+
+        Assert.That(_statusEvents.Select(e => e.Status), Does.Contain(StreamMonitoringStatus.Reconnecting),
+            "обрыв broadcaster-WebSocket'а должен сигналиться в UI наравне с бот-сессией");
     }
 }

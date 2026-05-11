@@ -1,3 +1,3 @@
-namespace PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+﻿namespace PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 
-public sealed record StreamWentOffline(string Channel) : EventBase;
+public sealed record StreamWentOffline(string Channel, bool IsCatchUp = false) : EventBase;
