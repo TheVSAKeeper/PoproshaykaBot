@@ -335,6 +335,13 @@ public partial class ObsChatSettingsControl : UserControl
                || fontFamily.Contains('}');
     }
 
+    private static string GetColorDisplayText(Color color)
+    {
+        return color.A == 255
+            ? $"#{color.R:X2}{color.G:X2}{color.B:X2}"
+            : $"#{color.R:X2}{color.G:X2}{color.B:X2}{color.A:X2}";
+    }
+
     private void ResetNumeric(NumericUpDown control, int defaultValue)
     {
         control.Value = ObsChatRanges.Clamp(defaultValue, (int)control.Minimum, (int)control.Maximum);
@@ -469,10 +476,5 @@ public partial class ObsChatSettingsControl : UserControl
         _usernameColorButton.Text = GetColorDisplayText(_usernameColorButton.BackColor);
         _systemMessageColorButton.Text = GetColorDisplayText(_systemMessageColorButton.BackColor);
         _timestampColorButton.Text = GetColorDisplayText(_timestampColorButton.BackColor);
-    }
-
-    private string GetColorDisplayText(Color color)
-    {
-        return ColorTranslator.ToHtml(color);
     }
 }

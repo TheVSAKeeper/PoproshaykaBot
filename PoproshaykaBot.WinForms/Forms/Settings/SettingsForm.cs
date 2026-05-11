@@ -9,7 +9,6 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
-using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Forms.Settings;
 
@@ -52,12 +51,12 @@ public partial class SettingsForm : Form
         _kestrelHttpServer = kestrelHttpServer;
         _logger = logger;
 
-        _settings = DeepClone(settingsManager.Current);
-        _botDraft = DeepClone(accountsStore.LoadBot());
-        _broadcasterDraft = DeepClone(accountsStore.LoadBroadcaster());
-        _obsChatDraft = DeepClone(obsChatStore.Load());
-        _pollsDraft = DeepClone(pollsStore.Load());
-        _dashboardDraft = DeepCloneNullable(dashboardLayoutStore.LoadDashboard());
+        _settings = JsonStoreClone.DeepClone(settingsManager.Current);
+        _botDraft = JsonStoreClone.DeepClone(accountsStore.LoadBot());
+        _broadcasterDraft = JsonStoreClone.DeepClone(accountsStore.LoadBroadcaster());
+        _obsChatDraft = JsonStoreClone.DeepClone(obsChatStore.Load());
+        _pollsDraft = JsonStoreClone.DeepClone(pollsStore.Load());
+        _dashboardDraft = JsonStoreClone.DeepCloneNullable(dashboardLayoutStore.LoadDashboard());
 
         InitializeComponent();
 
@@ -196,23 +195,6 @@ public partial class SettingsForm : Form
         LoadSettingsToControls();
         _hasChanges = true;
         UpdateButtonStates();
-    }
-
-    private static T DeepClone<T>(T source) where T : class, new()
-    {
-        var json = JsonSerializer.Serialize(source);
-        return JsonSerializer.Deserialize<T>(json) ?? new();
-    }
-
-    private static T? DeepCloneNullable<T>(T? source) where T : class
-    {
-        if (source == null)
-        {
-            return null;
-        }
-
-        var json = JsonSerializer.Serialize(source);
-        return JsonSerializer.Deserialize<T>(json);
     }
 
     private void FlushDraftFromControls(AppSettings settings)

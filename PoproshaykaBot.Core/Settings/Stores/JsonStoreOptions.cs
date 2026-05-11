@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
 
-internal static class JsonStoreOptions
+public static class JsonStoreOptions
 {
     public static JsonSerializerOptions Default { get; } = new()
     {
