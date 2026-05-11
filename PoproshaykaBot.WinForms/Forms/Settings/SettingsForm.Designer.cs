@@ -135,7 +135,7 @@ partial class SettingsForm
         _generalTableLayout.Location = new Point(10, 10);
         _generalTableLayout.Name = "_generalTableLayout";
         _generalTableLayout.RowCount = 4;
-        _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70F));
+        _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 124F));
         _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100F));
         _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F));
         _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));

@@ -21,7 +21,7 @@ partial class AuthorizationPage
         components = new System.ComponentModel.Container();
         _layout = new TableLayoutPanel();
         _intro = new Label();
-        _buttonsLayout = new TableLayoutPanel();
+        _buttonsLayout = new FlowLayoutPanel();
         _openBrowserButton = new Button();
         _copyLinkButton = new Button();
         _embeddedLoginButton = new Button();
@@ -69,24 +69,20 @@ partial class AuthorizationPage
         //
         _buttonsLayout.AutoSize = true;
         _buttonsLayout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        _buttonsLayout.ColumnCount = 3;
-        _buttonsLayout.ColumnStyles.Add(new ColumnStyle());
-        _buttonsLayout.ColumnStyles.Add(new ColumnStyle());
-        _buttonsLayout.ColumnStyles.Add(new ColumnStyle());
-        _buttonsLayout.Controls.Add(_openBrowserButton, 0, 0);
-        _buttonsLayout.Controls.Add(_copyLinkButton, 1, 0);
-        _buttonsLayout.Controls.Add(_embeddedLoginButton, 2, 0);
+        _buttonsLayout.Controls.Add(_openBrowserButton);
+        _buttonsLayout.Controls.Add(_copyLinkButton);
+        _buttonsLayout.Controls.Add(_embeddedLoginButton);
         _buttonsLayout.Dock = DockStyle.Top;
+        _buttonsLayout.FlowDirection = FlowDirection.LeftToRight;
         _buttonsLayout.Margin = new Padding(0, 0, 0, 8);
         _buttonsLayout.Name = "_buttonsLayout";
-        _buttonsLayout.RowCount = 1;
-        _buttonsLayout.RowStyles.Add(new RowStyle());
+        _buttonsLayout.WrapContents = true;
         //
         // _openBrowserButton
         //
         _openBrowserButton.AutoSize = true;
         _openBrowserButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        _openBrowserButton.Margin = new Padding(0, 0, 8, 0);
+        _openBrowserButton.Margin = new Padding(0, 0, 8, 6);
         _openBrowserButton.MinimumSize = new Size(220, 30);
         _openBrowserButton.Name = "_openBrowserButton";
         _openBrowserButton.Text = "🌐 Открыть в браузере";
@@ -96,7 +92,7 @@ partial class AuthorizationPage
         // _copyLinkButton
         //
         _copyLinkButton.AutoSize = true;
-        _copyLinkButton.Margin = new Padding(0, 0, 8, 0);
+        _copyLinkButton.Margin = new Padding(0, 0, 8, 6);
         _copyLinkButton.MinimumSize = new Size(180, 30);
         _copyLinkButton.Name = "_copyLinkButton";
         _copyLinkButton.Text = "⎘ Скопировать ссылку";
@@ -106,7 +102,7 @@ partial class AuthorizationPage
         // _embeddedLoginButton
         //
         _embeddedLoginButton.AutoSize = true;
-        _embeddedLoginButton.Margin = new Padding(0);
+        _embeddedLoginButton.Margin = new Padding(0, 0, 0, 6);
         _embeddedLoginButton.MinimumSize = new Size(260, 30);
         _embeddedLoginButton.Name = "_embeddedLoginButton";
         _embeddedLoginButton.Text = "🍪 Войти + куки чат-плитки";
@@ -178,7 +174,7 @@ partial class AuthorizationPage
 
     private TableLayoutPanel _layout;
     private Label _intro;
-    private TableLayoutPanel _buttonsLayout;
+    private FlowLayoutPanel _buttonsLayout;
     private Button _openBrowserButton;
     private Button _copyLinkButton;
     private Button _embeddedLoginButton;
