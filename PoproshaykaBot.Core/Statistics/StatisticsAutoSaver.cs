@@ -19,6 +19,7 @@ public sealed class StatisticsAutoSaver(
     private CancellationTokenSource? _cts;
     private Task? _autoSaveTask;
     private bool _disposed;
+    private bool _loaded;
 
     public string Name => "Инициализация статистики...";
 
@@ -37,6 +38,7 @@ public sealed class StatisticsAutoSaver(
         try
         {
             await LoadAsync(cancellationToken).ConfigureAwait(false);
+            _loaded = true;
             botRepository.ResetStartTime();
 
             _cts = new();
@@ -76,6 +78,12 @@ public sealed class StatisticsAutoSaver(
         _periodicTimer?.Dispose();
         _periodicTimer = null;
         _autoSaveTask = null;
+
+        if (!_loaded)
+        {
+            logger.LogDebug("Остановка автосохранения без финального сохранения: загрузка статистики не выполнялась");
+            return;
+        }
 
         try
         {

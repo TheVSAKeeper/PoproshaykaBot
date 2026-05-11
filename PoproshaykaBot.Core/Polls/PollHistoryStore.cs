@@ -32,6 +32,7 @@ public sealed class PollHistoryStore(
     private readonly List<PollHistoryEntry> _entries = [];
     private readonly object _sync = new();
     private CancellationTokenSource? _backgroundCts;
+    private Task? _backgroundTask;
     private bool _loaded;
 
     public string Name => "История голосований";
@@ -149,21 +150,37 @@ public sealed class PollHistoryStore(
         _backgroundCts?.Dispose();
         _backgroundCts = new();
         var token = _backgroundCts.Token;
-        _ = Task.Run(() => BackfillAsync(token), CancellationToken.None);
+        _backgroundTask = Task.Run(() => BackfillAsync(token), CancellationToken.None);
 
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (_backgroundCts is not null)
         {
-            _backgroundCts.Cancel();
-            _backgroundCts.Dispose();
-            _backgroundCts = null;
+            await _backgroundCts.CancelAsync();
         }
 
-        return Task.CompletedTask;
+        if (_backgroundTask is not null)
+        {
+            try
+            {
+                await _backgroundTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "PollHistoryStore: фоновый бэкфилл завершился с ошибкой при остановке");
+            }
+
+            _backgroundTask = null;
+        }
+
+        _backgroundCts?.Dispose();
+        _backgroundCts = null;
     }
 
     private void EnsureLoaded()

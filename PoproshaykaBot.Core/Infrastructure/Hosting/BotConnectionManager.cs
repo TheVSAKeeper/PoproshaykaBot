@@ -7,7 +7,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 
 namespace PoproshaykaBot.Core.Infrastructure.Hosting;
 
-public sealed class BotConnectionManager : IDisposable
+public sealed class BotConnectionManager : IAsyncDisposable
 {
     private readonly ITwitchOAuthService _tokenService;
     private readonly SettingsManager _settingsManager;
@@ -19,6 +19,7 @@ public sealed class BotConnectionManager : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _connectionTask;
     private bool _disposed;
+    private bool _shutdownCompleted;
 
     public BotConnectionManager(
         ITwitchOAuthService tokenService,
@@ -97,6 +98,11 @@ public sealed class BotConnectionManager : IDisposable
 
     public async Task ShutdownAsync()
     {
+        if (_shutdownCompleted)
+        {
+            return;
+        }
+
         _logger.LogDebug("Инициализация полной остановки бота (ShutdownAsync)");
 
         CancelConnection();
@@ -116,18 +122,26 @@ public sealed class BotConnectionManager : IDisposable
         }
 
         await StopAsync();
+        _shutdownCompleted = true;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed)
         {
             return;
         }
 
-        _logger.LogDebug("Освобождение ресурсов BotConnectionManager (Dispose)");
+        _logger.LogDebug("Освобождение ресурсов BotConnectionManager (DisposeAsync)");
 
-        CancelConnection();
+        try
+        {
+            await ShutdownAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Ошибка во время финального ShutdownAsync в DisposeAsync");
+        }
 
         _cts?.Dispose();
         _disposed = true;
