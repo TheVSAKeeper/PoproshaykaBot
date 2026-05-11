@@ -14,8 +14,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
 
     private OnboardingContext? _context;
     private bool _initialized;
-    private bool _webViewNavigationRequested;
-    private string? _currentWebViewUrl;
     private string? _detectedBotStatus;
 
     public HealthCheckPage()
@@ -42,13 +40,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
         var url = $"http://localhost:{context.Settings.Twitch.HttpServerPort}/chat";
         _overlayUrlLabel.Text = $"Адрес для Browser Source в OBS: {url}";
         ResetStatuses();
-
-        if (!_webViewNavigationRequested || !string.Equals(_currentWebViewUrl, url, StringComparison.Ordinal))
-        {
-            _webViewNavigationRequested = true;
-            _currentWebViewUrl = url;
-            _ = InitializeWebViewAsync(url);
-        }
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -132,33 +123,6 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
         _detectedBotStatus = status;
         _botStatusLabel.Text = $"Бот в чате как: {status}";
         _botStatusLabel.ForeColor = Color.Green;
-    }
-
-    private async Task InitializeWebViewAsync(string url)
-    {
-        try
-        {
-            await _chatPreviewWebView.EnsureCoreWebView2Async(null);
-
-            if (IsDisposed || _chatPreviewWebView.IsDisposed)
-            {
-                return;
-            }
-
-            _chatPreviewWebView.CoreWebView2.Navigate(url);
-        }
-        catch (Exception exception)
-        {
-            Logger.LogWarning(exception, "Не удалось инициализировать WebView2 для предпросмотра чата");
-
-            if (IsDisposed)
-            {
-                return;
-            }
-
-            _chatPreviewWebView.Visible = false;
-            _previewFallbackLabel.Visible = true;
-        }
     }
 
     private void ResetStatuses()
