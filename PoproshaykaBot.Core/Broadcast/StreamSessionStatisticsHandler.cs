@@ -171,6 +171,11 @@ public sealed class StreamSessionStatisticsHandler :
 
     public async Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
     {
+        if (@event.IsCatchUp)
+        {
+            return;
+        }
+
         await StopSamplingLoopAsync().ConfigureAwait(false);
 
         DateTimeOffset? sessionStartedAt;

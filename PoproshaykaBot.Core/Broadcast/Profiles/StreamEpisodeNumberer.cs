@@ -111,6 +111,11 @@ public sealed class StreamEpisodeNumberer :
 
     public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
     {
+        if (@event.IsCatchUp)
+        {
+            return Task.CompletedTask;
+        }
+
         lock (_sync)
         {
             _lastOfflineAt = _timeProvider.GetUtcNow();
