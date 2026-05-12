@@ -173,9 +173,9 @@ public sealed class BroadcastScheduler(
                 logger.LogDebug("Ожидание завершения предыдущего цикла рассылки перед запуском нового");
                 await previousTask;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
-                logger.LogDebug("Предыдущий цикл рассылки был успешно отменен");
+                logger.LogDebug(ex, "Предыдущий цикл рассылки был успешно отменен");
             }
             catch (Exception ex)
             {
@@ -227,9 +227,9 @@ public sealed class BroadcastScheduler(
                 PublishStateChanged();
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            logger.LogDebug("Фоновый цикл рассылки штатно остановлен (сработал CancellationToken)");
+            logger.LogDebug(ex, "Фоновый цикл рассылки штатно остановлен (сработал CancellationToken)");
         }
         catch (Exception ex)
         {

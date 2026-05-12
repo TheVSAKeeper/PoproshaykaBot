@@ -42,12 +42,13 @@ public sealed class MyProfileCommand(IUserStatisticsRepository statistics, UserR
             return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(msg, context.MessageId));
         }
 
-        var messageCount = FormattingUtils.FormatNumber(userStats.TotalMessageCount);
+        var messages = FormattingUtils.FormatNumber((long)userStats.MessageCount);
+        var points = rankService.FormatPoints(userStats.Points);
         var firstSeen = FormattingUtils.FormatDateTime(userStats.FirstSeen);
         var lastSeen = FormattingUtils.FormatDateTime(userStats.LastSeen);
-        var rankDisplay = rankService.GetRankDisplay(userStats.TotalMessageCount);
+        var rankDisplay = rankService.GetRankDisplay(userStats.Points);
 
-        var text = $"👤 {targetDisplayName} {rankDisplay} | {messageCount} мсг | С нами с: {firstSeen} | В чате: {lastSeen}";
+        var text = $"👤 {targetDisplayName} {rankDisplay} | 💬 {messages} мсг | 🏆 {points} | С нами с: {firstSeen} | В чате: {lastSeen}";
         return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
     }
 }

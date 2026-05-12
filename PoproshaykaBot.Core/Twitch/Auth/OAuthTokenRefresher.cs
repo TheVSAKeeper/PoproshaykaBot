@@ -207,9 +207,9 @@ public sealed class OAuthTokenRefresher(
         {
             await eventBus.PublishAsync(new BotConnectionStatusUpdated(changeMsg), ct);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
         {
-            logger.LogDebug("Публикация BotConnectionStatusUpdated (scope mismatch, роль {Role}) отменена", role);
+            logger.LogDebug(ex, "Публикация BotConnectionStatusUpdated (scope mismatch, роль {Role}) отменена", role);
         }
         catch (Exception ex)
         {

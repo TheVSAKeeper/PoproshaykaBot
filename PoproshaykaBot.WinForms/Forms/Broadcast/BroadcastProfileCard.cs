@@ -4,25 +4,16 @@ using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Forms.Broadcast;
 
-public partial class BroadcastProfileCard : UserControl
+public sealed partial class BroadcastProfileCard : UserControl
 {
     private bool _initialized;
+    private Font? _nameFont;
+    private Font? _boldFont;
+    private Font? _titleFont;
 
     public BroadcastProfileCard()
     {
         InitializeComponent();
-
-        _applyMenuItem.Click += (_, e) => ApplyRequested?.Invoke(this, e);
-        _editMenuItem.Click += (_, e) => EditRequested?.Invoke(this, e);
-        _incrementNumberMenuItem.Click += (_, e) => IncrementNumberRequested?.Invoke(this, e);
-        _decrementNumberMenuItem.Click += (_, e) => DecrementNumberRequested?.Invoke(this, e);
-        _duplicateMenuItem.Click += (_, e) => DuplicateRequested?.Invoke(this, e);
-        _deleteMenuItem.Click += (_, e) => DeleteRequested?.Invoke(this, e);
-
-        DoubleClick += OnCardDoubleClick;
-        SubscribeDoubleClickRecursively(this);
-
-        _toolTip.SetToolTip(this, "Двойной клик — применить, ПКМ — действия");
     }
 
     public event EventHandler? ApplyRequested;
@@ -119,15 +110,60 @@ public partial class BroadcastProfileCard : UserControl
 
         _initialized = true;
 
-        _nameLabel.Font = new(Font.FontFamily, Font.SizeInPoints + 1, FontStyle.Bold);
-        _activeBadge.Font = new(Font, FontStyle.Bold);
-        _numberBadge.Font = new(Font, FontStyle.Bold);
-        _titleLabel.Font = new(Font, FontStyle.Italic);
+        _nameFont = new(Font.FontFamily, Font.Size + 1, FontStyle.Bold, Font.Unit, Font.GdiCharSet);
+        _boldFont = new(Font, FontStyle.Bold);
+        _titleFont = new(Font, FontStyle.Italic);
+
+        _nameLabel.Font = _nameFont;
+        _activeBadge.Font = _boldFont;
+        _numberBadge.Font = _boldFont;
+        _titleLabel.Font = _titleFont;
+
+        Disposed += OnDisposedReleaseFonts;
+
+        SubscribeDoubleClickRecursively(this);
+    }
+
+    private void OnDisposedReleaseFonts(object? sender, EventArgs e)
+    {
+        _nameFont?.Dispose();
+        _boldFont?.Dispose();
+        _titleFont?.Dispose();
     }
 
     private void OnCardDoubleClick(object? sender, EventArgs e)
     {
         ApplyRequested?.Invoke(this, e);
+    }
+
+    private void OnApplyMenuClicked(object? sender, EventArgs e)
+    {
+        ApplyRequested?.Invoke(this, e);
+    }
+
+    private void OnEditMenuClicked(object? sender, EventArgs e)
+    {
+        EditRequested?.Invoke(this, e);
+    }
+
+    private void OnIncrementNumberMenuClicked(object? sender, EventArgs e)
+    {
+        IncrementNumberRequested?.Invoke(this, e);
+    }
+
+    private void OnDecrementNumberMenuClicked(object? sender, EventArgs e)
+    {
+        DecrementNumberRequested?.Invoke(this, e);
+    }
+
+    private void OnDuplicateMenuClicked(object? sender, EventArgs e)
+    {
+        DuplicateRequested?.Invoke(this, e);
+    }
+
+    private void OnDeleteMenuClicked(object? sender, EventArgs e)
+    {
+        DeleteRequested?.Invoke(this, e);
     }
 
     private void SubscribeDoubleClickRecursively(Control parent)

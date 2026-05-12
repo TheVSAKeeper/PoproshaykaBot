@@ -97,6 +97,7 @@ public sealed class TwitchEventSubClient(ILogger<TwitchEventSubClient> logger) :
             }
             catch (OperationCanceledException)
             {
+                // expected on stop
             }
         }
 
@@ -234,6 +235,7 @@ public sealed class TwitchEventSubClient(ILogger<TwitchEventSubClient> logger) :
             }
             catch (OperationCanceledException)
             {
+                // keepalive monitor stopped with the session
             }
 
             if (ws.State == WebSocketState.Open)
@@ -244,6 +246,7 @@ public sealed class TwitchEventSubClient(ILogger<TwitchEventSubClient> logger) :
                 }
                 catch
                 {
+                    // best-effort close; ignore failures during shutdown
                 }
             }
         }
@@ -269,6 +272,7 @@ public sealed class TwitchEventSubClient(ILogger<TwitchEventSubClient> logger) :
                 }
                 catch
                 {
+                    // socket may already be broken; reconnect path will handle it
                 }
 
                 return;

@@ -47,7 +47,6 @@ public sealed class ChatIngestionServiceTests
             _helix,
             _broadcasterIdProvider,
             _botUserIdProvider,
-            new(),
             _settingsManager,
             _eventBus,
             NullLogger<ChatIngestionService>.Instance);

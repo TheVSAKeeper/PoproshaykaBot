@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace PoproshaykaBot.WinForms.Forms.Settings;
 
@@ -31,6 +32,8 @@ public sealed partial class OAuthAccountSection : UserControl
 
     [Inject]
     public ITwitchOAuthService OAuthService { get; internal init; } = null!;
+
+    public Action<AppSettings>? FlushParentDraft { get; set; }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -100,44 +103,15 @@ public sealed partial class OAuthAccountSection : UserControl
 
     private async void OnTestAuthButtonClicked(object? sender, EventArgs e)
     {
-        if (_authCts is { } pending)
+        if (await TryCancelPendingAuthAsync())
         {
-            _authCts = null;
-            try
-            {
-                await pending.CancelAsync();
-            }
-            catch
-            {
-            }
-
-            _authStatusLabel.Text = "Авторизация отменена";
-            _authStatusLabel.ForeColor = Color.Orange;
-            RestoreAuthButtonMode();
             return;
         }
 
-        var clientId = _settings.Twitch.ClientId;
-        var clientSecret = _settings.Twitch.ClientSecret;
+        FlushParentDraft?.Invoke(_settings);
 
-        if (string.IsNullOrWhiteSpace(clientId))
+        if (!ValidateAuthInputs(out var clientId, out var clientSecret))
         {
-            _authStatusLabel.Text = "Введите Client ID";
-            _authStatusLabel.ForeColor = Color.Red;
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(clientSecret))
-        {
-            _authStatusLabel.Text = "Введите Client Secret";
-            _authStatusLabel.ForeColor = Color.Red;
-            return;
-        }
-
-        if (_role == TwitchOAuthRole.Broadcaster && string.IsNullOrWhiteSpace(_settings.Twitch.Channel))
-        {
-            _authStatusLabel.Text = "Не задан Channel в настройках Twitch";
-            _authStatusLabel.ForeColor = Color.Red;
             return;
         }
 
@@ -149,37 +123,11 @@ public sealed partial class OAuthAccountSection : UserControl
 
         try
         {
-            var scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var redirectUri = _settings.Twitch.RedirectUri;
-
-            if (scopes.Length == 0)
-            {
-                scopes = GetDefaultScopes();
-            }
-
-            var accessToken = await OAuthService.StartOAuthFlowAsync(_role,
-                clientId,
-                clientSecret,
-                scopes,
-                string.IsNullOrWhiteSpace(redirectUri) ? null : redirectUri,
-                cts.Token);
-
-            if (!ReferenceEquals(_authCts, cts))
-            {
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(accessToken))
-            {
-                _authStatusLabel.Text = "Авторизация успешна!";
-                _authStatusLabel.ForeColor = Color.Green;
-
-                LoadTokenInformation();
-                SettingChanged?.Invoke(this, EventArgs.Empty);
-            }
+            await RunAuthFlowAsync(clientId, clientSecret, cts);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
+            // user cancelled the flow
         }
         catch (Exception exception) when (ReferenceEquals(_authCts, cts))
         {
@@ -188,6 +136,7 @@ public sealed partial class OAuthAccountSection : UserControl
         }
         catch
         {
+            // newer flow superseded this one; status will be set elsewhere
         }
         finally
         {
@@ -272,6 +221,14 @@ public sealed partial class OAuthAccountSection : UserControl
         {
             await OAuthService.RefreshTokenAsync(_role, clientId, clientSecret, refreshToken);
 
+            var refreshedLive = AccountsStore.Load(_role);
+            _draft.AccessToken = refreshedLive.AccessToken;
+            _draft.RefreshToken = refreshedLive.RefreshToken;
+            _draft.Login = refreshedLive.Login;
+            _draft.UserId = refreshedLive.UserId;
+            _draft.Scopes = refreshedLive.Scopes;
+            _draft.AccessTokenExpiresAt = refreshedLive.AccessTokenExpiresAt;
+
             LoadTokenInformation();
             _tokenStatusValueLabel.Text = "Обновлен успешно";
             _tokenStatusValueLabel.ForeColor = Color.Green;
@@ -297,7 +254,7 @@ public sealed partial class OAuthAccountSection : UserControl
     private void OnClearTokensButtonClicked(object? sender, EventArgs e)
     {
         var roleName = _role == TwitchOAuthRole.Broadcaster ? "стримера" : "бота";
-        var result = MessageBox.Show($"Вы уверены, что хотите очистить сохранённые токены {roleName}?\n\nЭто потребует повторной авторизации при следующем подключении.",
+        var result = MessageBox.Show($"Вы уверены, что хотите очистить токены {roleName}?\n\nИзменения вступят в силу после нажатия «Применить».",
             "Подтверждение очистки токенов",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
@@ -307,10 +264,14 @@ public sealed partial class OAuthAccountSection : UserControl
             return;
         }
 
-        OAuthService.ClearTokens(_role);
+        _draft.AccessToken = string.Empty;
+        _draft.RefreshToken = string.Empty;
+        _draft.Login = string.Empty;
+        _draft.UserId = string.Empty;
+        _draft.AccessTokenExpiresAt = null;
 
         LoadTokenInformation();
-        _tokenStatusValueLabel.Text = "Токены очищены";
+        _tokenStatusValueLabel.Text = "Токены очищены (применятся после «Применить»)";
         _tokenStatusValueLabel.ForeColor = Color.Orange;
         _lastRefreshValueLabel.Text = "Неизвестно";
         _lastRefreshValueLabel.ForeColor = Color.Gray;
@@ -347,15 +308,124 @@ public sealed partial class OAuthAccountSection : UserControl
         }
         catch (ObjectDisposedException)
         {
+            // section was disposed before status reached UI thread
         }
         catch (InvalidOperationException) when (IsDisposed)
         {
+            // handle destroyed
         }
+    }
+
+    private static void OpenInDefaultBrowser(string authUrl)
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = authUrl,
+            UseShellExecute = true,
+        });
+    }
+
+    private async Task<bool> TryCancelPendingAuthAsync()
+    {
+        if (_authCts is not { } pending)
+        {
+            return false;
+        }
+
+        _authCts = null;
+        try
+        {
+            await pending.CancelAsync();
+        }
+        catch
+        {
+            // cancel is best-effort
+        }
+
+        _authStatusLabel.Text = "Авторизация отменена";
+        _authStatusLabel.ForeColor = Color.Orange;
+        RestoreAuthButtonMode();
+        return true;
+    }
+
+    private bool ValidateAuthInputs(out string clientId, out string clientSecret)
+    {
+        clientId = _settings.Twitch.ClientId;
+        clientSecret = _settings.Twitch.ClientSecret;
+
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            _authStatusLabel.Text = "Введите Client ID";
+            _authStatusLabel.ForeColor = Color.Red;
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(clientSecret))
+        {
+            _authStatusLabel.Text = "Введите Client Secret";
+            _authStatusLabel.ForeColor = Color.Red;
+            return false;
+        }
+
+        if (_role == TwitchOAuthRole.Broadcaster && string.IsNullOrWhiteSpace(_settings.Twitch.Channel))
+        {
+            _authStatusLabel.Text = "Не задан Channel в настройках Twitch";
+            _authStatusLabel.ForeColor = Color.Red;
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task RunAuthFlowAsync(string clientId, string clientSecret, CancellationTokenSource cts)
+    {
+        var scopes = _scopesTextBox.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var redirectUri = _settings.Twitch.RedirectUri;
+
+        if (scopes.Length == 0)
+        {
+            scopes = GetDefaultScopes();
+        }
+
+        var result = await OAuthService.StartOAuthFlowToDraftAsync(_role,
+            clientId,
+            clientSecret,
+            scopes,
+            string.IsNullOrWhiteSpace(redirectUri) ? null : redirectUri,
+            OpenInDefaultBrowser,
+            ct: cts.Token);
+
+        if (!ReferenceEquals(_authCts, cts))
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(result.AccessToken))
+        {
+            return;
+        }
+
+        _draft.AccessToken = result.AccessToken;
+        _draft.RefreshToken = result.RefreshToken;
+        _draft.Login = result.Login;
+        _draft.UserId = result.UserId;
+        _draft.Scopes = result.Scopes;
+        _draft.AccessTokenExpiresAt = result.ExpiresInSeconds > 0
+            ? DateTimeOffset.UtcNow.AddSeconds(result.ExpiresInSeconds)
+            : null;
+
+        _scopesTextBox.Text = string.Join(" ", _draft.Scopes);
+
+        _authStatusLabel.Text = "Авторизация успешна! Не забудьте «Применить», чтобы сохранить токены.";
+        _authStatusLabel.ForeColor = Color.Green;
+
+        LoadTokenInformation();
+        SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private TwitchAccountSettings GetLiveAccount()
     {
-        return AccountsStore.Load(_role);
+        return _draft;
     }
 
     private string[] GetDefaultScopes()

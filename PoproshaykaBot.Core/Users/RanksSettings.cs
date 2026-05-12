@@ -2,6 +2,8 @@
 
 public sealed class RanksSettings
 {
+    public PointTerm PointTerm { get; set; } = new();
+
     public List<UserRank> Ranks { get; set; } =
     [
         new("♔", "КОРОЛЬ", 5000),

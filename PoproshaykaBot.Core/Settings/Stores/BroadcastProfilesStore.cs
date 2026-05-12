@@ -47,6 +47,22 @@ public class BroadcastProfilesStore
         }
     }
 
+    public virtual TResult Mutate<TResult>(Func<BroadcastProfilesSettings, TResult> mutator)
+    {
+        ArgumentNullException.ThrowIfNull(mutator);
+
+        lock (_syncLock)
+        {
+            var result = mutator(_state);
+            PersistInternal();
+
+            _logger?.LogDebug("BroadcastProfilesStore: применена мутация, состояние сохранено (профилей: {ProfileCount})",
+                _state.Profiles.Count);
+
+            return result;
+        }
+    }
+
     public virtual void Save(BroadcastProfilesSettings value)
     {
         ArgumentNullException.ThrowIfNull(value);

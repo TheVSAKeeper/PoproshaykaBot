@@ -1,7 +1,7 @@
-namespace PoproshaykaBot.Core.Infrastructure.Events.Moderation;
+﻿namespace PoproshaykaBot.Core.Infrastructure.Events.Moderation;
 
 public sealed record UserRewarded(
     string UserId,
     string UserName,
-    ulong AddedMessagesCount,
+    ulong AddedPoints,
     string? Channel) : EventBase;

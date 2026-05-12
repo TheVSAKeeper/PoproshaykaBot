@@ -39,8 +39,14 @@ internal static class OAuthRoleHelpers
         TwitchOAuthRole role,
         TokenValidationInfo validation,
         SettingsManager settingsManager,
-        ILogger logger)
+        ILogger logger,
+        bool checkBroadcasterChannel = true)
     {
+        if (!checkBroadcasterChannel && role == TwitchOAuthRole.Broadcaster)
+        {
+            return;
+        }
+
         var twitch = settingsManager.Current.Twitch;
         var expected = GetExpectedLogin(twitch, role);
 

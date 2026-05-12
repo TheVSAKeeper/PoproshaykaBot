@@ -66,11 +66,13 @@
             //
             _applyMenuItem.Name = "_applyMenuItem";
             _applyMenuItem.Text = "↻ Применить";
+            _applyMenuItem.Click += OnApplyMenuClicked;
             //
             // _editMenuItem
             //
             _editMenuItem.Name = "_editMenuItem";
             _editMenuItem.Text = "✎ Редактировать";
+            _editMenuItem.Click += OnEditMenuClicked;
             //
             // _numberMenuSeparator
             //
@@ -80,11 +82,13 @@
             //
             _incrementNumberMenuItem.Name = "_incrementNumberMenuItem";
             _incrementNumberMenuItem.Text = "▲ Номер +1";
+            _incrementNumberMenuItem.Click += OnIncrementNumberMenuClicked;
             //
             // _decrementNumberMenuItem
             //
             _decrementNumberMenuItem.Name = "_decrementNumberMenuItem";
             _decrementNumberMenuItem.Text = "▼ Номер −1";
+            _decrementNumberMenuItem.Click += OnDecrementNumberMenuClicked;
             //
             // _menuSeparator
             //
@@ -94,11 +98,13 @@
             //
             _duplicateMenuItem.Name = "_duplicateMenuItem";
             _duplicateMenuItem.Text = "⎘ Дублировать";
+            _duplicateMenuItem.Click += OnDuplicateMenuClicked;
             //
             // _deleteMenuItem
             //
             _deleteMenuItem.Name = "_deleteMenuItem";
             _deleteMenuItem.Text = "🗑 Удалить";
+            _deleteMenuItem.Click += OnDeleteMenuClicked;
             //
             // _mainLayout
             //
@@ -229,6 +235,8 @@
             MinimumSize = new Size(220, 0);
             Name = "BroadcastProfileCard";
             Padding = new Padding(6, 4, 6, 4);
+            DoubleClick += OnCardDoubleClick;
+            _toolTip.SetToolTip(this, "Двойной клик — применить, ПКМ — действия");
             _menu.ResumeLayout(false);
             _mainLayout.ResumeLayout(false);
             _mainLayout.PerformLayout();

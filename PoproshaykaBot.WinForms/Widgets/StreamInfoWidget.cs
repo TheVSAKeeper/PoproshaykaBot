@@ -85,7 +85,6 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
                 ClearInfoLabels("Стрим завершен");
                 break;
 
-            case StreamStatus.Unknown:
             default:
                 _statusIconLabel.Text = "⚪";
                 _statusTextLabel.Text = "НЕИЗВЕСТНО";

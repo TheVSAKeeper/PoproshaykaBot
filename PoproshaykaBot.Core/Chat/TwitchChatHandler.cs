@@ -155,7 +155,6 @@ public sealed class TwitchChatHandler :
                     _messenger.Reply(response.ReplyToMessageId ?? context.MessageId, response.Text);
                     break;
 
-                case DeliveryType.Normal:
                 default:
                     _messenger.Send(response.Text);
                     break;

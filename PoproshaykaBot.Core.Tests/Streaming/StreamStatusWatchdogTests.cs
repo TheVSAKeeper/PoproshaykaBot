@@ -24,6 +24,8 @@ public sealed class StreamStatusWatchdogTests
     {
         await _watchdog.StartAsync(NullProgress, CancellationToken.None);
         await _watchdog.StopAsync(NullProgress, CancellationToken.None);
+
+        Assert.Pass("Start/Stop completed without leaking the loop task");
     }
 
     [Test]

@@ -7,7 +7,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 
 namespace PoproshaykaBot.Core.Infrastructure.Hosting;
 
-public sealed class BotConnectionManager : IDisposable
+public sealed class BotConnectionManager : IAsyncDisposable
 {
     private readonly ITwitchOAuthService _tokenService;
     private readonly SettingsManager _settingsManager;
@@ -19,6 +19,7 @@ public sealed class BotConnectionManager : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _connectionTask;
     private bool _disposed;
+    private bool _shutdownCompleted;
 
     public BotConnectionManager(
         ITwitchOAuthService tokenService,
@@ -39,6 +40,8 @@ public sealed class BotConnectionManager : IDisposable
     }
 
     public bool IsBusy => _connectionTask is { IsCompleted: false };
+
+    public BotLifecyclePhase CurrentPhase { get; private set; } = BotLifecyclePhase.Idle;
 
     public void StartConnection()
     {
@@ -73,6 +76,7 @@ public sealed class BotConnectionManager : IDisposable
     {
         _logger.LogDebug("Инициализация процесса остановки бота (StopAsync)");
 
+        CurrentPhase = BotLifecyclePhase.Disconnecting;
         await _eventBus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnecting));
 
         var progressReporter = new Progress<string>(ReportProgress);
@@ -94,6 +98,11 @@ public sealed class BotConnectionManager : IDisposable
 
     public async Task ShutdownAsync()
     {
+        if (_shutdownCompleted)
+        {
+            return;
+        }
+
         _logger.LogDebug("Инициализация полной остановки бота (ShutdownAsync)");
 
         CancelConnection();
@@ -113,18 +122,26 @@ public sealed class BotConnectionManager : IDisposable
         }
 
         await StopAsync();
+        _shutdownCompleted = true;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed)
         {
             return;
         }
 
-        _logger.LogDebug("Освобождение ресурсов BotConnectionManager (Dispose)");
+        _logger.LogDebug("Освобождение ресурсов BotConnectionManager (DisposeAsync)");
 
-        CancelConnection();
+        try
+        {
+            await ShutdownAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Ошибка во время финального ShutdownAsync в DisposeAsync");
+        }
 
         _cts?.Dispose();
         _disposed = true;
@@ -164,9 +181,9 @@ public sealed class BotConnectionManager : IDisposable
             _logger.LogInformation("Процесс подключения бота успешно завершен (канал {Channel})", settings.Channel);
             PublishPhase(BotLifecyclePhase.Connected);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogWarning("Процесс подключения бота был отменен");
+            _logger.LogWarning(ex, "Процесс подключения бота был отменен");
             PublishPhase(BotLifecyclePhase.Cancelled);
         }
         catch (Exception exception)
@@ -185,6 +202,7 @@ public sealed class BotConnectionManager : IDisposable
 
     private void PublishPhase(BotLifecyclePhase phase, Exception? exception = null)
     {
+        CurrentPhase = phase;
         _ = _eventBus.PublishAsync(new BotLifecyclePhaseChanged(phase, exception));
     }
 }

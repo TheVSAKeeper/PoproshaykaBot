@@ -43,10 +43,10 @@ public sealed class BotStatisticsRepositoryTests
     }
 
     [Test]
-    public void ResetStartTime_ResetsAndMarksChanged()
+    public async Task ResetStartTime_ResetsAndMarksChanged()
     {
         var before = _repository.GetSnapshot().BotStartTime;
-        Thread.Sleep(5);
+        await Task.Delay(5);
 
         _repository.ResetStartTime();
 

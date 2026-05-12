@@ -47,6 +47,22 @@ public class PollsStore
         }
     }
 
+    public virtual TResult Mutate<TResult>(Func<PollsSettings, TResult> mutator)
+    {
+        ArgumentNullException.ThrowIfNull(mutator);
+
+        lock (_syncLock)
+        {
+            var result = mutator(_state);
+            PersistInternal();
+
+            _logger?.LogDebug("PollsStore: применена мутация, состояние сохранено (профилей: {ProfileCount})",
+                _state.Profiles.Count);
+
+            return result;
+        }
+    }
+
     public virtual void Save(PollsSettings value)
     {
         ArgumentNullException.ThrowIfNull(value);

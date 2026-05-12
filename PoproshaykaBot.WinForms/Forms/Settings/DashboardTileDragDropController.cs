@@ -11,7 +11,7 @@ internal sealed class DashboardTileDragDropController(
     Action<DashboardTileType, int, int> onPlaceOrMove,
     Action<DashboardTileType, Control, Point> onShowContextMenu)
 {
-    public void HandlePaletteMouseDown(object? sender, MouseEventArgs e)
+    public static void HandlePaletteMouseDown(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left)
         {
@@ -29,6 +29,14 @@ internal sealed class DashboardTileDragDropController(
         }
 
         button.DoDragDrop(new TileDragPayload(type, false), DragDropEffects.Copy);
+    }
+
+    public static void HandleCellDragEnter(object? sender, DragEventArgs e)
+    {
+        if (e.Data?.GetData(typeof(TileDragPayload)) is TileDragPayload payload)
+        {
+            e.Effect = payload.FromGrid ? DragDropEffects.Move : DragDropEffects.Copy;
+        }
     }
 
     public void HandleTileMouseDown(object? sender, MouseEventArgs e)
@@ -57,14 +65,6 @@ internal sealed class DashboardTileDragDropController(
         }
 
         owner.DoDragDrop(new TileDragPayload(type, true), DragDropEffects.Move);
-    }
-
-    public void HandleCellDragEnter(object? sender, DragEventArgs e)
-    {
-        if (e.Data?.GetData(typeof(TileDragPayload)) is TileDragPayload payload)
-        {
-            e.Effect = payload.FromGrid ? DragDropEffects.Move : DragDropEffects.Copy;
-        }
     }
 
     public void HandleCellDragDrop(object? sender, DragEventArgs e)

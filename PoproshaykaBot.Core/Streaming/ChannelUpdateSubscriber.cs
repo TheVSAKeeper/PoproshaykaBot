@@ -6,11 +6,13 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Net;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Streaming;
 
 public sealed class ChannelUpdateSubscriber(
+    [FromKeyedServices(TwitchEndpoints.EventSubBroadcasterSession)]
     ITwitchEventSubClient eventSubClient,
     [FromKeyedServices(TwitchEndpoints.HelixBroadcasterClient)]
     ITwitchHelixClient helix,
@@ -67,7 +69,7 @@ public sealed class ChannelUpdateSubscriber(
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            logger.LogError("ChannelUpdateSubscriber: не удалось определить broadcaster id для подписки channel.update");
+            logger.LogWarning("ChannelUpdateSubscriber: подписка channel.update пропущена — broadcaster id недоступен (вероятно, нет токена бота).");
             IsHealthy = false;
             return;
         }
@@ -85,6 +87,11 @@ public sealed class ChannelUpdateSubscriber(
 
             IsHealthy = true;
             logger.LogInformation("ChannelUpdateSubscriber: подписка на {Type} создана", SubscriptionType);
+        }
+        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            IsHealthy = true;
+            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", SubscriptionType);
         }
         catch (Exception ex)
         {
@@ -143,7 +150,7 @@ public sealed class ChannelUpdateSubscriber(
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            logger.LogError("ChannelUpdateSubscriber: подписка {Type} отозвана, broadcaster id недоступен", SubscriptionType);
+            logger.LogWarning("ChannelUpdateSubscriber: подписка {Type} отозвана, восстановление пропущено — broadcaster id недоступен", SubscriptionType);
             return;
         }
 
@@ -160,6 +167,11 @@ public sealed class ChannelUpdateSubscriber(
 
             IsHealthy = true;
             logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} восстановлена после revocation", SubscriptionType);
+        }
+        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            IsHealthy = true;
+            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем после revocation", SubscriptionType);
         }
         catch (Exception ex)
         {

@@ -12,7 +12,6 @@ public static class ChatServiceCollectionExtensions
 {
     public static IServiceCollection AddChatPipeline(this IServiceCollection services)
     {
-        services.AddSingleton<EventSubChatMessageMapper>();
         services.AddSingleton<ChatIngestionService>();
         services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChatIngestionService>());
         services.AddSingleton<ChatSender>();
@@ -21,7 +20,7 @@ public static class ChatServiceCollectionExtensions
         services.AddSingleton<ChatHistoryManager>();
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
-        services.AddSingleton<UserMessagesManagementService>();
+        services.AddSingleton<UserPointsManagementService>();
         services.AddSingleton<UserProfileImageProvider>();
 
         services.AddSingleton<TwitchChatMessenger>();

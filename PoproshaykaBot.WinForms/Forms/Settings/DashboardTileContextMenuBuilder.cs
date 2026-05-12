@@ -15,12 +15,12 @@ internal interface IDashboardTileCommands
     void RemoveTile(DashboardTileType type);
 }
 
-internal sealed class DashboardTileContextMenuBuilder
+internal static class DashboardTileContextMenuBuilder
 {
     private static readonly int[] MaxHeightPresets = [100, 150, 200, 250, 300, 400, 500];
     private static readonly int[] MaxWidthPresets = [200, 300, 400, 500, 600, 800];
 
-    public void Populate(
+    public static void Populate(
         ContextMenuStrip menu,
         DashboardTileType type,
         PlacedTile placed,

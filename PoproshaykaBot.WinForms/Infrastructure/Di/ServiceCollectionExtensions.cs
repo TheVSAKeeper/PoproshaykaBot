@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.WinForms.Forms.Broadcast;
+using PoproshaykaBot.WinForms.Forms.Onboarding;
 using PoproshaykaBot.WinForms.Forms.Polls;
 using PoproshaykaBot.WinForms.Forms.Settings;
 using PoproshaykaBot.WinForms.Forms.Users;
@@ -36,6 +37,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<BroadcastProfileEditDialog>();
         services.AddTransient<PollFromProfileDialog>();
         services.AddTransient<PollProfileEditDialog>();
+        services.AddTransient<OnboardingWizardForm>();
+        services.AddTransient<EmbeddedTwitchAuthDialog>();
         return services;
     }
 }

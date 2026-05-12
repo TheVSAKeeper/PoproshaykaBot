@@ -133,4 +133,40 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.Received(1).Stop();
         _messenger.Received(1).Send("Стрим закончился");
     }
+
+    [Test]
+    public async Task StreamWentOffline_WithIsCatchUpTrue_DoesNotSendStopMessage()
+    {
+        _scheduler.IsActive.Returns(true);
+
+        await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOffline(Channel, true), CancellationToken.None);
+
+        _scheduler.DidNotReceive().Stop();
+        _messenger.DidNotReceive().Send(Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task StreamWentOnline_WithIsCatchUpTrue_StartsSchedulerButDoesNotSendStartMessage()
+    {
+        _scheduler.IsActive.Returns(false);
+
+        await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(Channel, null, true), CancellationToken.None);
+
+        _scheduler.Received(1).Start(Channel);
+        _messenger.DidNotReceive().Send(Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task BotConnects_WhileStreamIsOnline_DoesNotSendStartMessage()
+    {
+        _scheduler.IsActive.Returns(false);
+        _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
+
+        await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
+
+        _scheduler.Received(1).Start(Channel);
+        _messenger.DidNotReceive().Send(Arg.Any<string>());
+    }
 }

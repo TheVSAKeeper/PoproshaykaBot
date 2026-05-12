@@ -335,6 +335,28 @@ public partial class ObsChatSettingsControl : UserControl
                || fontFamily.Contains('}');
     }
 
+    private static string GetColorDisplayText(Color color)
+    {
+        return color.A == 255
+            ? $"#{color.R:X2}{color.G:X2}{color.B:X2}"
+            : $"#{color.R:X2}{color.G:X2}{color.B:X2}{color.A:X2}";
+    }
+
+    private static string? ValidateFontFamily(string fontFamily)
+    {
+        if (string.IsNullOrWhiteSpace(fontFamily))
+        {
+            return null;
+        }
+
+        if (ContainsForbiddenFontFamilyChars(fontFamily))
+        {
+            return null;
+        }
+
+        return fontFamily;
+    }
+
     private void ResetNumeric(NumericUpDown control, int defaultValue)
     {
         control.Value = ObsChatRanges.Clamp(defaultValue, (int)control.Minimum, (int)control.Maximum);
@@ -432,21 +454,6 @@ public partial class ObsChatSettingsControl : UserControl
         Disposed += (_, _) => _fontFamilyErrorProvider.Dispose();
     }
 
-    private string? ValidateFontFamily(string fontFamily)
-    {
-        if (string.IsNullOrWhiteSpace(fontFamily))
-        {
-            return null;
-        }
-
-        if (ContainsForbiddenFontFamilyChars(fontFamily))
-        {
-            return null;
-        }
-
-        return fontFamily;
-    }
-
     private bool ShowColorPickerDialog(Button colorButton)
     {
         using var colorPickerDialog = new ColorPickerDialog();
@@ -469,10 +476,5 @@ public partial class ObsChatSettingsControl : UserControl
         _usernameColorButton.Text = GetColorDisplayText(_usernameColorButton.BackColor);
         _systemMessageColorButton.Text = GetColorDisplayText(_systemMessageColorButton.BackColor);
         _timestampColorButton.Text = GetColorDisplayText(_timestampColorButton.BackColor);
-    }
-
-    private string GetColorDisplayText(Color color)
-    {
-        return ColorTranslator.ToHtml(color);
     }
 }

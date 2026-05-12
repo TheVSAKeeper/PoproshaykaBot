@@ -11,12 +11,12 @@ using System.Net;
 namespace PoproshaykaBot.Core.Twitch.Chat;
 
 public sealed class ChatIngestionService(
+    [FromKeyedServices(TwitchEndpoints.EventSubBotSession)]
     ITwitchEventSubClient eventSubClient,
     [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
     IBotUserIdProvider botUserIdProvider,
-    EventSubChatMessageMapper mapper,
     SettingsManager settingsManager,
     IEventBus eventBus,
     ILogger<ChatIngestionService> logger)
@@ -115,7 +115,7 @@ public sealed class ChatIngestionService(
                 }
                 catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
                 {
-                    logger.LogInformation("ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии — переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
+                    logger.LogInformation(ex, "ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии — переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
                         broadcasterId, botId);
 
                     return;
@@ -144,7 +144,7 @@ public sealed class ChatIngestionService(
 
         try
         {
-            var chatMessage = mapper.Map(args.Payload);
+            var chatMessage = EventSubChatMessageMapper.Map(args.Payload);
             var timestamp = new DateTimeOffset(args.MessageTimestamp, TimeSpan.Zero);
             await eventBus.PublishAsync(new RawChatMessageReceived(chatMessage, timestamp), ct);
         }

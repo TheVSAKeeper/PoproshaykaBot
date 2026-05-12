@@ -72,6 +72,7 @@ public sealed class StreamStatusWatchdog : IStreamHostedComponent, IAsyncDisposa
             }
             catch (OperationCanceledException)
             {
+                // expected on stop
             }
             catch (Exception ex)
             {
@@ -106,6 +107,7 @@ public sealed class StreamStatusWatchdog : IStreamHostedComponent, IAsyncDisposa
             }
             catch
             {
+                // disposing — swallow any leftover failure
             }
         }
 
@@ -144,6 +146,7 @@ public sealed class StreamStatusWatchdog : IStreamHostedComponent, IAsyncDisposa
         }
         catch (OperationCanceledException)
         {
+            // expected on stop
         }
     }
 }

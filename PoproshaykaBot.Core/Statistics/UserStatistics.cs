@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace PoproshaykaBot.Core.Statistics;
 
@@ -7,11 +7,11 @@ public class UserStatistics
     public string UserId { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public ulong MessageCount { get; set; }
-    public ulong ShtrafMessageCount { get; set; }
-    public ulong BonusMessageCount { get; set; }
+    public ulong PenaltyPoints { get; set; }
+    public ulong BonusPoints { get; set; }
 
     [JsonIgnore]
-    public long TotalMessageCount => (long)MessageCount + (long)BonusMessageCount - (long)ShtrafMessageCount;
+    public long Points => (long)MessageCount + (long)BonusPoints - (long)PenaltyPoints;
 
     public DateTime FirstSeen { get; set; } = DateTime.UtcNow;
     public DateTime LastSeen { get; set; } = DateTime.UtcNow;
@@ -53,10 +53,28 @@ public class UserStatistics
             UserId = UserId,
             Name = Name,
             MessageCount = MessageCount,
-            ShtrafMessageCount = ShtrafMessageCount,
-            BonusMessageCount = BonusMessageCount,
+            PenaltyPoints = PenaltyPoints,
+            BonusPoints = BonusPoints,
             FirstSeen = FirstSeen,
             LastSeen = LastSeen,
         };
+    }
+
+    [JsonPropertyName("bonusMessageCount")]
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    internal ulong LegacyBonusMessageCount
+    {
+        get => 0;
+        set => BonusPoints = value;
+    }
+
+    [JsonPropertyName("shtrafMessageCount")]
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    internal ulong LegacyShtrafMessageCount
+    {
+        get => 0;
+        set => PenaltyPoints = value;
     }
 }

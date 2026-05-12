@@ -111,6 +111,7 @@ partial class SettingsForm
         _tabControl.SelectedIndex = 0;
         _tabControl.Size = new Size(711, 584);
         _tabControl.TabIndex = 13;
+        _tabControl.SelectedIndexChanged += OnTabControlSelectedIndexChanged;
         //
         // _generalTabPage
         //
@@ -134,7 +135,7 @@ partial class SettingsForm
         _generalTableLayout.Location = new Point(10, 10);
         _generalTableLayout.Name = "_generalTableLayout";
         _generalTableLayout.RowCount = 4;
-        _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70F));
+        _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 124F));
         _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100F));
         _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F));
         _generalTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -202,7 +203,6 @@ partial class SettingsForm
         _httpServerSettingsControl.Name = "_httpServerSettingsControl";
         _httpServerSettingsControl.Size = new Size(671, 278);
         _httpServerSettingsControl.TabIndex = 0;
-        _httpServerSettingsControl.SettingChanged += OnSettingChanged;
         //
         // _messagesTabPage
         // 
@@ -245,6 +245,7 @@ partial class SettingsForm
         _oauthSettingsControl.Size = new Size(593, 529);
         _oauthSettingsControl.TabIndex = 0;
         _oauthSettingsControl.SettingChanged += OnSettingChanged;
+        _oauthSettingsControl.LaunchOnboardingRequested += OnOAuthLaunchOnboardingRequested;
         // 
         // _obsChatTabPage
         // 
@@ -370,8 +371,7 @@ partial class SettingsForm
         _miscSettingsControl.Name = "_miscSettingsControl";
         _miscSettingsControl.Size = new Size(593, 529);
         _miscSettingsControl.TabIndex = 0;
-        _miscSettingsControl.SettingChanged += OnSettingChanged;
-        // 
+        //
         // _buttonPanel
         // 
         _buttonPanel.AutoSize = true;

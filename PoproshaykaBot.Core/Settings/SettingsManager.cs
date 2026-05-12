@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.Core.Settings.Migrations;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Users;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -66,6 +67,29 @@ public class SettingsManager
         return new();
     }
 
+    private void SanitizeRanks(AppSettings settings)
+    {
+        var ranks = settings.Ranks.Ranks;
+
+        if (ranks.Count == 0)
+        {
+            settings.Ranks.Ranks = new RanksSettings().Ranks;
+            _logger.LogWarning("Раздел ranks был пустой — восстановлены значения по умолчанию");
+            return;
+        }
+
+        var hasInvalid = ranks.Any(rank =>
+            string.IsNullOrEmpty(rank.Emoji) || string.IsNullOrEmpty(rank.Name));
+
+        if (!hasInvalid)
+        {
+            return;
+        }
+
+        settings.Ranks.Ranks = new RanksSettings().Ranks;
+        _logger.LogWarning("В разделе ranks обнаружены повреждённые записи (null emoji/name) — список рангов восстановлен из дефолтов");
+    }
+
     private AppSettings LoadSettingsInternal()
     {
         _logger.LogDebug("Начало загрузки настроек из {SettingsFilePath}", _settingsFilePath);
@@ -102,6 +126,8 @@ public class SettingsManager
             {
                 throw new InvalidOperationException("Не удалось десериализовать настройки (null)");
             }
+
+            SanitizeRanks(settings);
 
             _logger.LogInformation("Настройки приложения успешно загружены");
             return settings;

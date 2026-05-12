@@ -29,6 +29,8 @@
         private void InitializeComponent()
         {
             _oauthTableLayout = new TableLayoutPanel();
+            _launchWizardButton = new Button();
+            _channelHintLabel = new Label();
             _oauthCredentialsSection = new TableLayoutPanel();
             _clientIdLabel = new Label();
             _clientIdPanel = new Panel();
@@ -40,8 +42,9 @@
             _clientSecretTextBox = new TextBox();
             _clientSecretViewButton = new Button();
             _clientSecretResetButton = new Button();
+            _advancedPanel = new Panel();
             _redirectUriLabel = new Label();
-            _redirectUriPanel = new Panel();
+            _redirectUriRow = new Panel();
             _redirectUriTextBox = new TextBox();
             _redirectUriEditButton = new Button();
             _redirectUriResetButton = new Button();
@@ -55,7 +58,8 @@
             _oauthCredentialsSection.SuspendLayout();
             _clientIdPanel.SuspendLayout();
             _clientSecretPanel.SuspendLayout();
-            _redirectUriPanel.SuspendLayout();
+            _advancedPanel.SuspendLayout();
+            _redirectUriRow.SuspendLayout();
             _accountsTabControl.SuspendLayout();
             _botTabPage.SuspendLayout();
             _broadcasterTabPage.SuspendLayout();
@@ -65,19 +69,52 @@
             //
             _oauthTableLayout.ColumnCount = 1;
             _oauthTableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            _oauthTableLayout.Controls.Add(_oauthCredentialsSection, 0, 0);
-            _oauthTableLayout.Controls.Add(_accountsTabControl, 0, 1);
-            _oauthTableLayout.Controls.Add(_oauthInfoLabel, 0, 2);
+            _oauthTableLayout.Controls.Add(_launchWizardButton, 0, 0);
+            _oauthTableLayout.Controls.Add(_channelHintLabel, 0, 1);
+            _oauthTableLayout.Controls.Add(_oauthCredentialsSection, 0, 2);
+            _oauthTableLayout.Controls.Add(_accountsTabControl, 0, 3);
+            _oauthTableLayout.Controls.Add(_advancedPanel, 0, 4);
+            _oauthTableLayout.Controls.Add(_oauthInfoLabel, 0, 5);
             _oauthTableLayout.Dock = DockStyle.Fill;
             _oauthTableLayout.Location = new Point(0, 0);
             _oauthTableLayout.Name = "_oauthTableLayout";
             _oauthTableLayout.Padding = new Padding(5);
-            _oauthTableLayout.RowCount = 3;
+            _oauthTableLayout.RowCount = 6;
+            _oauthTableLayout.RowStyles.Add(new RowStyle());
+            _oauthTableLayout.RowStyles.Add(new RowStyle());
             _oauthTableLayout.RowStyles.Add(new RowStyle());
             _oauthTableLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             _oauthTableLayout.RowStyles.Add(new RowStyle());
+            _oauthTableLayout.RowStyles.Add(new RowStyle());
             _oauthTableLayout.Size = new Size(560, 480);
             _oauthTableLayout.TabIndex = 0;
+            //
+            // _launchWizardButton
+            //
+            _launchWizardButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _launchWizardButton.AutoSize = true;
+            _launchWizardButton.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _launchWizardButton.Margin = new Padding(0, 0, 0, 8);
+            _launchWizardButton.MinimumSize = new Size(0, 28);
+            _launchWizardButton.Name = "_launchWizardButton";
+            _launchWizardButton.Padding = new Padding(8, 4, 8, 4);
+            _launchWizardButton.TabIndex = 99;
+            _launchWizardButton.Text = "🧙 Запустить мастер настройки";
+            _launchWizardButton.UseVisualStyleBackColor = true;
+            _launchWizardButton.Click += OnLaunchOnboardingButtonClicked;
+            //
+            // _channelHintLabel
+            //
+            _channelHintLabel.AutoSize = true;
+            _channelHintLabel.Dock = DockStyle.Fill;
+            _channelHintLabel.ForeColor = Color.Gray;
+            _channelHintLabel.Margin = new Padding(0, 0, 0, 8);
+            _channelHintLabel.Name = "_channelHintLabel";
+            _channelHintLabel.Padding = new Padding(0);
+            _channelHintLabel.Size = new Size(550, 15);
+            _channelHintLabel.TabIndex = 0;
+            _channelHintLabel.Text = "Канал: —";
+            _channelHintLabel.TextAlign = ContentAlignment.MiddleLeft;
             //
             // _oauthCredentialsSection
             //
@@ -90,17 +127,14 @@
             _oauthCredentialsSection.Controls.Add(_clientIdPanel, 1, 0);
             _oauthCredentialsSection.Controls.Add(_clientSecretLabel, 0, 1);
             _oauthCredentialsSection.Controls.Add(_clientSecretPanel, 1, 1);
-            _oauthCredentialsSection.Controls.Add(_redirectUriLabel, 0, 2);
-            _oauthCredentialsSection.Controls.Add(_redirectUriPanel, 1, 2);
             _oauthCredentialsSection.Dock = DockStyle.Fill;
             _oauthCredentialsSection.Location = new Point(5, 5);
             _oauthCredentialsSection.Margin = new Padding(0, 0, 0, 10);
             _oauthCredentialsSection.Name = "_oauthCredentialsSection";
-            _oauthCredentialsSection.RowCount = 3;
+            _oauthCredentialsSection.RowCount = 2;
             _oauthCredentialsSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
             _oauthCredentialsSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
-            _oauthCredentialsSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
-            _oauthCredentialsSection.Size = new Size(550, 105);
+            _oauthCredentialsSection.Size = new Size(550, 70);
             _oauthCredentialsSection.TabIndex = 0;
             //
             // _clientIdLabel
@@ -213,46 +247,58 @@
             _clientSecretResetButton.UseVisualStyleBackColor = true;
             _clientSecretResetButton.Click += OnClientSecretResetButtonClicked;
             //
+            // _advancedPanel
+            //
+            _advancedPanel.AutoSize = true;
+            _advancedPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _advancedPanel.Controls.Add(_redirectUriRow);
+            _advancedPanel.Dock = DockStyle.Fill;
+            _advancedPanel.Margin = new Padding(0, 5, 0, 5);
+            _advancedPanel.Name = "_advancedPanel";
+            _advancedPanel.Size = new Size(550, 35);
+            _advancedPanel.TabIndex = 3;
+            //
+            // _redirectUriRow
+            //
+            _redirectUriRow.Controls.Add(_redirectUriTextBox);
+            _redirectUriRow.Controls.Add(_redirectUriEditButton);
+            _redirectUriRow.Controls.Add(_redirectUriResetButton);
+            _redirectUriRow.Controls.Add(_redirectUriLabel);
+            _redirectUriRow.Dock = DockStyle.Top;
+            _redirectUriRow.Location = new Point(0, 0);
+            _redirectUriRow.Name = "_redirectUriRow";
+            _redirectUriRow.Size = new Size(550, 30);
+            _redirectUriRow.TabIndex = 0;
+            //
             // _redirectUriLabel
             //
-            _redirectUriLabel.AutoSize = true;
-            _redirectUriLabel.Dock = DockStyle.Fill;
-            _redirectUriLabel.Location = new Point(3, 70);
+            _redirectUriLabel.AutoSize = false;
+            _redirectUriLabel.Dock = DockStyle.Left;
+            _redirectUriLabel.Location = new Point(0, 0);
             _redirectUriLabel.Name = "_redirectUriLabel";
-            _redirectUriLabel.Size = new Size(76, 35);
-            _redirectUriLabel.TabIndex = 6;
+            _redirectUriLabel.Size = new Size(85, 30);
+            _redirectUriLabel.TabIndex = 0;
             _redirectUriLabel.Text = "Redirect URI:";
             _redirectUriLabel.TextAlign = ContentAlignment.MiddleLeft;
-            //
-            // _redirectUriPanel
-            //
-            _redirectUriPanel.Controls.Add(_redirectUriTextBox);
-            _redirectUriPanel.Controls.Add(_redirectUriEditButton);
-            _redirectUriPanel.Controls.Add(_redirectUriResetButton);
-            _redirectUriPanel.Dock = DockStyle.Fill;
-            _redirectUriPanel.Location = new Point(85, 73);
-            _redirectUriPanel.Name = "_redirectUriPanel";
-            _redirectUriPanel.Size = new Size(462, 29);
-            _redirectUriPanel.TabIndex = 7;
             //
             // _redirectUriTextBox
             //
             _redirectUriTextBox.Dock = DockStyle.Fill;
-            _redirectUriTextBox.Location = new Point(0, 0);
+            _redirectUriTextBox.Location = new Point(85, 0);
             _redirectUriTextBox.Margin = new Padding(0, 0, 3, 0);
             _redirectUriTextBox.Name = "_redirectUriTextBox";
             _redirectUriTextBox.ReadOnly = true;
-            _redirectUriTextBox.Size = new Size(407, 23);
-            _redirectUriTextBox.TabIndex = 7;
+            _redirectUriTextBox.Size = new Size(405, 23);
+            _redirectUriTextBox.TabIndex = 1;
             _redirectUriTextBox.TextChanged += OnSettingChanged;
             //
             // _redirectUriEditButton
             //
             _redirectUriEditButton.Dock = DockStyle.Right;
-            _redirectUriEditButton.Location = new Point(407, 0);
+            _redirectUriEditButton.Location = new Point(490, 0);
             _redirectUriEditButton.Name = "_redirectUriEditButton";
-            _redirectUriEditButton.Size = new Size(30, 29);
-            _redirectUriEditButton.TabIndex = 8;
+            _redirectUriEditButton.Size = new Size(30, 30);
+            _redirectUriEditButton.TabIndex = 2;
             _redirectUriEditButton.Text = "✏";
             _redirectUriEditButton.UseVisualStyleBackColor = true;
             _redirectUriEditButton.Click += OnRedirectUriEditButtonClicked;
@@ -260,10 +306,10 @@
             // _redirectUriResetButton
             //
             _redirectUriResetButton.Dock = DockStyle.Right;
-            _redirectUriResetButton.Location = new Point(437, 0);
+            _redirectUriResetButton.Location = new Point(520, 0);
             _redirectUriResetButton.Name = "_redirectUriResetButton";
-            _redirectUriResetButton.Size = new Size(25, 29);
-            _redirectUriResetButton.TabIndex = 9;
+            _redirectUriResetButton.Size = new Size(25, 30);
+            _redirectUriResetButton.TabIndex = 3;
             _redirectUriResetButton.Text = "↺";
             _redirectUriResetButton.UseVisualStyleBackColor = true;
             _redirectUriResetButton.Click += OnRedirectUriResetButtonClicked;
@@ -352,8 +398,10 @@
             _clientIdPanel.PerformLayout();
             _clientSecretPanel.ResumeLayout(false);
             _clientSecretPanel.PerformLayout();
-            _redirectUriPanel.ResumeLayout(false);
-            _redirectUriPanel.PerformLayout();
+            _advancedPanel.ResumeLayout(false);
+            _advancedPanel.PerformLayout();
+            _redirectUriRow.ResumeLayout(false);
+            _redirectUriRow.PerformLayout();
             _accountsTabControl.ResumeLayout(false);
             _botTabPage.ResumeLayout(false);
             _botTabPage.PerformLayout();
@@ -365,10 +413,13 @@
         #endregion
 
         private TableLayoutPanel _oauthTableLayout;
+        private Button _launchWizardButton;
+        private Label _channelHintLabel;
         private TableLayoutPanel _oauthCredentialsSection;
         private Panel _clientIdPanel;
         private Panel _clientSecretPanel;
-        private Panel _redirectUriPanel;
+        private Panel _advancedPanel;
+        private Panel _redirectUriRow;
         private Label _clientIdLabel;
         private TextBox _clientIdTextBox;
         private Button _clientIdViewButton;

@@ -5,9 +5,12 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.WinForms.Forms.Onboarding;
 using PoproshaykaBot.WinForms.Forms.Settings;
 using PoproshaykaBot.WinForms.Forms.Users;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
@@ -22,14 +25,20 @@ public partial class MainForm : Form
     private readonly SettingsManager _settingsManager;
     private readonly DashboardLayoutStore _dashboardLayoutStore;
     private readonly BotConnectionManager _connectionManager;
+    private readonly OnboardingChecklist _onboardingChecklist;
     private readonly ILogger<MainForm> _logger;
     private readonly List<IDisposable> _subs = [];
 
     private BotLifecyclePhase _currentPhase = BotLifecyclePhase.Idle;
     private bool _shutdownStarted;
     private bool _initialized;
+    private bool _onboardingWizardOpen;
     private UserStatisticsForm? _userStatisticsForm;
     private SettingsForm? _settingsForm;
+    private StreamMonitoringStatus? _botMonitoringStatus;
+    private StreamMonitoringStatus? _broadcasterMonitoringStatus;
+    private string? _botMonitoringDetail;
+    private string? _broadcasterMonitoringDetail;
 
     public MainForm(
         IServiceProvider services,
@@ -39,6 +48,7 @@ public partial class MainForm : Form
         BotConnectionManager connectionManager,
         SettingsManager settingsManager,
         DashboardLayoutStore dashboardLayoutStore,
+        OnboardingChecklist onboardingChecklist,
         ILogger<MainForm> logger)
     {
         _forms = forms;
@@ -47,6 +57,7 @@ public partial class MainForm : Form
         _connectionManager = connectionManager;
         _settingsManager = settingsManager;
         _dashboardLayoutStore = dashboardLayoutStore;
+        _onboardingChecklist = onboardingChecklist;
         _logger = logger;
 
         InitializeComponent();
@@ -75,6 +86,8 @@ public partial class MainForm : Form
         _subs.DisposeOnClose(this);
 
         LoadSettings();
+        OpenOnboardingWizardIfNeeded();
+        RefreshOnboardingBanner();
         _logger.LogInformation("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
@@ -154,7 +167,13 @@ public partial class MainForm : Form
     private void OnSettingsApplied(object? sender, EventArgs e)
     {
         LoadSettings(reloadDashboard: true);
+        RefreshOnboardingBanner();
         _logger.LogInformation("Настройки обновлены.");
+    }
+
+    private void OnOnboardingBannerButtonClicked(object? sender, EventArgs e)
+    {
+        OpenOnboardingWizard();
     }
 
     private void OnSettingsFormClosed(object? sender, FormClosedEventArgs e)
@@ -164,10 +183,17 @@ public partial class MainForm : Form
             return;
         }
 
+        var launchWizard = form.LaunchOnboardingAfterClose;
+
         form.SettingsApplied -= OnSettingsApplied;
         form.FormClosed -= OnSettingsFormClosed;
         form.Dispose();
         _settingsForm = null;
+
+        if (launchWizard)
+        {
+            BeginInvoke(OpenOnboardingWizard);
+        }
     }
 
     private void OnUserStatisticsButtonClicked(object? sender, EventArgs e)
@@ -199,6 +225,60 @@ public partial class MainForm : Form
         }
 
         return false;
+    }
+
+    private static string RoleLabel(TwitchOAuthRole role)
+    {
+        return role == TwitchOAuthRole.Bot ? "бот" : "broadcaster";
+    }
+
+    private void OpenOnboardingWizardIfNeeded()
+    {
+        if (!_onboardingChecklist.RequiresWizard)
+        {
+            return;
+        }
+
+        OpenOnboardingWizard();
+    }
+
+    private void OpenOnboardingWizard()
+    {
+        if (_onboardingWizardOpen)
+        {
+            return;
+        }
+
+        _onboardingWizardOpen = true;
+
+        try
+        {
+            using var wizard = _forms.Create<OnboardingWizardForm>();
+            wizard.ShowDialog(this);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Ошибка отображения мастера первичной настройки");
+        }
+        finally
+        {
+            _onboardingWizardOpen = false;
+            RefreshOnboardingBanner();
+        }
+    }
+
+    private void RefreshOnboardingBanner()
+    {
+        var missing = _onboardingChecklist.GetMissingItems();
+
+        if (missing.Count == 0)
+        {
+            _onboardingBannerPanel.Visible = false;
+            return;
+        }
+
+        _onboardingBannerLabel.Text = $"⚠ Бот не готов к работе. Не настроено: {string.Join(", ", missing)}.";
+        _onboardingBannerPanel.Visible = true;
     }
 
     private async Task ShutdownAndCloseAsync()
@@ -233,6 +313,7 @@ public partial class MainForm : Form
     {
         _currentPhase = phaseEvent.Phase;
         ApplyPhaseVisuals(phaseEvent.Phase);
+        RefreshOnboardingBanner();
 
         switch (phaseEvent.Phase)
         {
@@ -306,7 +387,28 @@ public partial class MainForm : Form
 
     private void OnStreamMonitoringStatusChanged(StreamMonitoringStatusChanged statusEvent)
     {
-        var (icon, label) = statusEvent.Status switch
+        switch (statusEvent.Role)
+        {
+            case TwitchOAuthRole.Bot:
+                _botMonitoringStatus = statusEvent.Status;
+                _botMonitoringDetail = statusEvent.Detail;
+                break;
+
+            case TwitchOAuthRole.Broadcaster:
+                _broadcasterMonitoringStatus = statusEvent.Status;
+                _broadcasterMonitoringDetail = statusEvent.Detail;
+                break;
+        }
+
+        var aggregate = StreamMonitoringStatusAggregator.SelectWorst(_botMonitoringStatus, _broadcasterMonitoringStatus);
+
+        if (aggregate is null)
+        {
+            return;
+        }
+
+        var (worstStatus, worstRole) = aggregate.Value;
+        var (icon, label) = worstStatus switch
         {
             StreamMonitoringStatus.Connecting => ("🟡", "подключение"),
             StreamMonitoringStatus.Connected => ("🟢", "работает"),
@@ -315,8 +417,12 @@ public partial class MainForm : Form
             _ => ("⚪", "остановлен"),
         };
 
-        var detail = string.IsNullOrWhiteSpace(statusEvent.Detail) ? string.Empty : $" ({statusEvent.Detail})";
-        _streamMonitoringStatusLabel.Text = $"{icon} Стрим-мониторинг: {label}{detail}";
+        var bothReported = _botMonitoringStatus.HasValue && _broadcasterMonitoringStatus.HasValue;
+        var asymmetric = bothReported && _botMonitoringStatus != _broadcasterMonitoringStatus;
+        var roleSuffix = asymmetric ? $", {RoleLabel(worstRole)}" : string.Empty;
+        var detailText = worstRole == TwitchOAuthRole.Bot ? _botMonitoringDetail : _broadcasterMonitoringDetail;
+        var detail = string.IsNullOrWhiteSpace(detailText) ? string.Empty : $" ({detailText})";
+        _streamMonitoringStatusLabel.Text = $"{icon} Стрим-мониторинг: {label}{roleSuffix}{detail}";
     }
 
     private void OnOpenUserStatistics()

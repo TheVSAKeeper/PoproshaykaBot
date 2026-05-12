@@ -14,8 +14,6 @@ public partial class HttpServerSettingsControl : UserControl
         InitializeComponent();
     }
 
-    public event EventHandler? SettingChanged;
-
     [Inject]
     public KestrelHttpServer Server { get; internal init; } = null!;
 

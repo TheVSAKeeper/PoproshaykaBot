@@ -11,7 +11,7 @@ public static class DesignModeExtensions
 
         for (var current = control; current is not null; current = current.Parent)
         {
-            if (current.Site?.DesignMode == true)
+            if (current.Site?.DesignMode is true)
             {
                 return true;
             }

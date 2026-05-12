@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch;
@@ -81,6 +82,14 @@ public sealed class PollEventSubscriberTests
                     "existing-session",
                     Arg.Any<CancellationToken>());
         }
+    }
+
+    [Test]
+    public void PollEventSubscriber_ImplementsStreamHostedComponent_AfterFix()
+    {
+        Assert.That(typeof(PollEventSubscriber).GetInterfaces(),
+            Does.Contain(typeof(IStreamHostedComponent)),
+            "голосования принадлежат broadcaster-сессии — подписчик должен быть IStreamHostedComponent наравне с ChannelUpdateSubscriber, иначе IRC-дисконнект бота гасит channel.poll.*");
     }
 
     [Test]

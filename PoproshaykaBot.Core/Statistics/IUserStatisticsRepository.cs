@@ -12,11 +12,11 @@ public interface IUserStatisticsRepository
 
     IReadOnlyList<UserStatistics> GetAll();
 
-    IReadOnlyList<UserStatistics> GetTop(int count);
+    IReadOnlyList<UserStatistics> GetTop(int count, UserTopMode mode = UserTopMode.Points);
 
-    bool IncrementBonusMessages(string userId, ulong delta);
+    bool IncrementBonusPoints(string userId, ulong delta);
 
-    bool IncrementShtrafMessages(string userId, ulong delta);
+    bool IncrementPenaltyPoints(string userId, ulong delta);
 
     void ReplaceAll(IEnumerable<UserStatistics> users);
 

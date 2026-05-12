@@ -64,6 +64,7 @@ public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChan
             }
             catch (Exception)
             {
+                // farewell is best-effort; failure must not block shutdown
             }
         }
 

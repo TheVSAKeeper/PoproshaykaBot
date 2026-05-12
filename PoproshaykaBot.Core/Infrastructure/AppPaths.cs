@@ -4,15 +4,20 @@ namespace PoproshaykaBot.Core.Infrastructure;
 
 public static class AppPaths
 {
+    public const string BaseDirectoryEnvironmentVariable = "POPROSHAYKA_BASE_DIR";
+
     private const string PortableMetadataKey = "PortableMode";
     private const string PortableMarkerFileName = "portable.flag";
     private const string AppDataFolderName = "PoproshaykaBot";
     private const string SettingsFolderName = "settings";
 
+    private static readonly Lazy<string?> _baseDirectoryOverride = new(ResolveBaseDirectoryOverride);
     private static readonly Lazy<bool> _isPortable = new(ResolvePortable);
     private static readonly Lazy<string> _baseDirectory = new(ResolveBaseDirectory);
 
     public static bool IsPortable => _isPortable.Value;
+
+    public static bool IsBaseDirectoryOverridden => _baseDirectoryOverride.Value is not null;
 
     public static string BaseDirectory => _baseDirectory.Value;
 
@@ -38,9 +43,15 @@ public static class AppPaths
         return Path.Combine(BaseDirectory, SettingsFolderName, fileName);
     }
 
+    private static string? ResolveBaseDirectoryOverride()
+    {
+        var raw = Environment.GetEnvironmentVariable(BaseDirectoryEnvironmentVariable);
+        return string.IsNullOrWhiteSpace(raw) ? null : Path.GetFullPath(raw);
+    }
+
     private static bool ResolvePortable()
     {
-        var assembly = typeof(AppPaths).Assembly;
+        var assembly = Assembly.GetEntryAssembly() ?? typeof(AppPaths).Assembly;
 
         var hasMetadata = assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
@@ -59,6 +70,11 @@ public static class AppPaths
 
     private static string ResolveBaseDirectory()
     {
+        if (_baseDirectoryOverride.Value is { } overridePath)
+        {
+            return overridePath;
+        }
+
         if (IsPortable)
         {
             return GetExecutableDirectory();

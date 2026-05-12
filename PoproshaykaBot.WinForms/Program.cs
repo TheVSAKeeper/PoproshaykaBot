@@ -48,7 +48,7 @@ public static class Program
         {
             Log.Information("Запуск приложения...");
             Log.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}",
-                AppPaths.IsPortable ? "portable" : "AppData",
+                ResolveStorageMode(),
                 AppPaths.BaseDirectory);
 
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
@@ -200,6 +200,16 @@ public static class Program
         }
     }
 
+    private static string ResolveStorageMode()
+    {
+        if (AppPaths.IsBaseDirectoryOverridden)
+        {
+            return "override";
+        }
+
+        return AppPaths.IsPortable ? "portable" : "AppData";
+    }
+
     private static Timer CreateMemoryWatchdogTimer()
     {
         const long ThresholdMb = 1024;
@@ -287,7 +297,7 @@ public static class Program
         var redirectUri = settings.Twitch.RedirectUri;
         var serverPort = settings.Twitch.HttpServerPort;
 
-        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri))
+        if (!RedirectUriPortResolver.TryResolve(redirectUri, out var redirectPort))
         {
             Log.Error("Некорректный RedirectUri: {RedirectUri}", redirectUri);
             MessageBox.Show($"Некорректный RedirectUri: {redirectUri}\n\nПожалуйста, исправьте URI в настройках OAuth.",
@@ -296,16 +306,6 @@ public static class Program
                 MessageBoxIcon.Error);
 
             return false;
-        }
-
-        int redirectPort;
-        if (uri.Port == -1)
-        {
-            redirectPort = uri.Scheme == "https" ? 443 : 80;
-        }
-        else
-        {
-            redirectPort = uri.Port;
         }
 
         if (redirectPort == serverPort)

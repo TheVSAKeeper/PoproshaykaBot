@@ -96,7 +96,7 @@ partial class DashboardSettingsControl
         _gridColumnsNumeric.Size = new Size(60, 23);
         _gridColumnsNumeric.TabIndex = 1;
         _gridColumnsNumeric.Value = new decimal(new int[] { 4, 0, 0, 0 });
-        _gridColumnsNumeric.ValueChanged += OnGridColumnsValueChanged;
+        _gridColumnsNumeric.ValueChanged += OnGridSizeValueChanged;
         //
         // _gridRowsLabel
         //
@@ -117,7 +117,7 @@ partial class DashboardSettingsControl
         _gridRowsNumeric.Size = new Size(60, 23);
         _gridRowsNumeric.TabIndex = 3;
         _gridRowsNumeric.Value = new decimal(new int[] { 3, 0, 0, 0 });
-        _gridRowsNumeric.ValueChanged += OnGridRowsValueChanged;
+        _gridRowsNumeric.ValueChanged += OnGridSizeValueChanged;
         //
         // _resetLayoutButton
         //

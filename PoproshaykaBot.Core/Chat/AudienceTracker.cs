@@ -1,10 +1,12 @@
-using PoproshaykaBot.Core.Settings;
+﻿using PoproshaykaBot.Core.Settings;
 using System.Collections.Concurrent;
 
 namespace PoproshaykaBot.Core.Chat;
 
 public sealed class AudienceTracker(SettingsManager settingsManager)
 {
+    private const string UsernamePlaceholder = "username";
+
     private readonly ConcurrentDictionary<string, string> _userIdToDisplayName = new();
 
     public bool OnUserMessage(string userId, string displayName)
@@ -47,7 +49,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
             return null;
         }
 
-        return MessageTemplate.For(settings.Welcome).With("username", displayName).Render();
+        return MessageTemplate.For(settings.Welcome).With(UsernamePlaceholder, displayName).Render();
     }
 
     public string? CreateFarewell(string userId, string displayName)
@@ -66,7 +68,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
             return null;
         }
 
-        return MessageTemplate.For(settings.Farewell).With("username", displayName).Render();
+        return MessageTemplate.For(settings.Farewell).With(UsernamePlaceholder, displayName).Render();
     }
 
     public string? CreateCollectiveFarewell()
@@ -93,9 +95,9 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
             return template.With("usernames", list).Render();
         }
 
-        if (template.Contains("username"))
+        if (template.Contains(UsernamePlaceholder))
         {
-            return template.With("username", list).Render();
+            return template.With(UsernamePlaceholder, list).Render();
         }
 
         return template.Render();

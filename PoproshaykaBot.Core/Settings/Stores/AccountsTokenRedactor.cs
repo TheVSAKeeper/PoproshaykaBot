@@ -58,12 +58,9 @@ internal static class AccountsTokenRedactor
                 break;
 
             case JsonArray array:
-                foreach (var item in array)
+                foreach (var item in array.Where(i => i != null))
                 {
-                    if (item != null)
-                    {
-                        RedactRecursive(item);
-                    }
+                    RedactRecursive(item!);
                 }
 
                 break;

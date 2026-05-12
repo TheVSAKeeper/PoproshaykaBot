@@ -95,12 +95,12 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         _activeProfileId = Profiles.Load().LastAppliedProfileId;
         _actions = new(Manager, Applier, ChannelsApi, BroadcasterId, Forms, _status, this);
 
-        _cards.ApplyRequested += (_, card) => _ = _actions.ApplyAsync(card);
+        _cards.ApplyRequested += async (_, card) => await _actions.ApplyAsync(card);
         _cards.EditRequested += (_, card) => _actions.Edit(card);
         _cards.DuplicateRequested += (_, card) => _actions.Duplicate(card);
         _cards.DeleteRequested += (_, card) => _actions.Delete(card);
-        _cards.IncrementNumberRequested += (_, card) => _ = _actions.AdjustNumberAsync(card, +1);
-        _cards.DecrementNumberRequested += (_, card) => _ = _actions.AdjustNumberAsync(card, -1);
+        _cards.IncrementNumberRequested += async (_, card) => await _actions.AdjustNumberAsync(card, +1);
+        _cards.DecrementNumberRequested += async (_, card) => await _actions.AdjustNumberAsync(card, -1);
 
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfilesChanged>(this, _ => ReloadCards()));
         _subs.Add(Bus.SubscribeOnUi<BroadcastProfileApplied>(this, OnProfileApplied));
@@ -153,7 +153,7 @@ public partial class BroadcastProfilesPanel : UserControl, IDashboardTileHeaderP
         _status.Show($"✗ {@event.ErrorMessage}", true);
     }
 
-    private void OnChannelInformationPatched(ChannelInformationPatched @event)
+    private void OnChannelInformationPatched(ChannelInformationPatched _)
     {
         _cards.ClearInFlightStates();
         _status.Show("✓ Применено", false);

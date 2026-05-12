@@ -35,10 +35,11 @@ public sealed class RankCommand(IUserStatisticsRepository statistics, UserRankSe
         }
 
         var userStats = statistics.GetById(targetUserId);
-        var messageCount = userStats?.TotalMessageCount ?? 0;
-        var rankDisplay = rankService.GetRankDisplay(messageCount);
+        var points = userStats?.Points ?? 0;
+        var messages = (long?)userStats?.MessageCount ?? 0;
+        var rankDisplay = rankService.GetRankDisplay(points);
 
-        var text = $"{targetDisplayName}: {rankDisplay} ({FormattingUtils.FormatNumber(messageCount)} сообщений)";
+        var text = $"{targetDisplayName}: {rankDisplay} ({rankService.FormatPoints(points)} / {FormattingUtils.FormatNumber(messages)} сообщ.)";
         return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
     }
 }

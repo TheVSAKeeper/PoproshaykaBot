@@ -171,6 +171,11 @@ public sealed class StreamSessionStatisticsHandler :
 
     public async Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
     {
+        if (@event.IsCatchUp)
+        {
+            return;
+        }
+
         await StopSamplingLoopAsync().ConfigureAwait(false);
 
         DateTimeOffset? sessionStartedAt;
@@ -305,6 +310,7 @@ public sealed class StreamSessionStatisticsHandler :
             }
             catch (ObjectDisposedException)
             {
+                // already disposed — nothing to cancel
             }
         }
 
@@ -316,6 +322,7 @@ public sealed class StreamSessionStatisticsHandler :
             }
             catch (OperationCanceledException)
             {
+                // expected on stop
             }
             catch (Exception exception)
             {
@@ -339,6 +346,7 @@ public sealed class StreamSessionStatisticsHandler :
         }
         catch (OperationCanceledException)
         {
+            // expected when sampling loop is cancelled
         }
     }
 

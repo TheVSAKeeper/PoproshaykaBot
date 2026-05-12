@@ -7,13 +7,26 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Statistics;
 
-public sealed class StatisticsFileStore(ILogger<StatisticsFileStore> logger)
+public sealed class StatisticsFileStore
 {
     private const string UserStatisticsFileName = "users_statistics.json";
     private const string BotStatisticsFileName = "bot_statistics.json";
 
-    private readonly string _userStatisticsFilePath = Path.Combine(AppPaths.BaseDirectory, UserStatisticsFileName);
-    private readonly string _botStatisticsFilePath = Path.Combine(AppPaths.BaseDirectory, BotStatisticsFileName);
+    private readonly ILogger<StatisticsFileStore> _logger;
+    private readonly string _userStatisticsFilePath;
+    private readonly string _botStatisticsFilePath;
+
+    public StatisticsFileStore(ILogger<StatisticsFileStore> logger)
+        : this(logger, AppPaths.BaseDirectory)
+    {
+    }
+
+    internal StatisticsFileStore(ILogger<StatisticsFileStore> logger, string baseDirectory)
+    {
+        _logger = logger;
+        _userStatisticsFilePath = Path.Combine(baseDirectory, UserStatisticsFileName);
+        _botStatisticsFilePath = Path.Combine(baseDirectory, BotStatisticsFileName);
+    }
 
     public Task<List<UserStatistics>> LoadUsersAsync(CancellationToken cancellationToken = default)
     {
@@ -40,11 +53,11 @@ public sealed class StatisticsFileStore(ILogger<StatisticsFileStore> logger)
     private T? LoadFromFile<T>(string filePath, string entityName)
         where T : class
     {
-        logger.LogDebug("Загрузка статистики {EntityName} из файла {FilePath}", entityName, filePath);
+        _logger.LogDebug("Загрузка статистики {EntityName} из файла {FilePath}", entityName, filePath);
 
         if (!File.Exists(filePath))
         {
-            logger.LogWarning("Файл статистики {EntityName} не найден. Будут использованы значения по умолчанию", entityName);
+            _logger.LogWarning("Файл статистики {EntityName} не найден. Будут использованы значения по умолчанию", entityName);
             return null;
         }
 
@@ -55,15 +68,15 @@ public sealed class StatisticsFileStore(ILogger<StatisticsFileStore> logger)
 
             if (data == null)
             {
-                logger.LogWarning("Десериализация статистики {EntityName} вернула null", entityName);
+                _logger.LogWarning("Десериализация статистики {EntityName} вернула null", entityName);
             }
 
             return data;
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Ошибка чтения или десериализации файла статистики {EntityName}", entityName);
-            JsonStoreBackup.CreateBackup(filePath, "invalid", logger);
+            _logger.LogError(exception, "Ошибка чтения или десериализации файла статистики {EntityName}", entityName);
+            JsonStoreBackup.CreateBackup(filePath, "invalid", _logger);
             return null;
         }
     }
@@ -73,12 +86,12 @@ public sealed class StatisticsFileStore(ILogger<StatisticsFileStore> logger)
         try
         {
             var json = JsonSerializer.Serialize(data, JsonStoreOptions.Default);
-            AtomicFile.Save(targetFilePath, json, logger);
+            AtomicFile.Save(targetFilePath, json, _logger);
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Ошибка при записи статистики {EntityName} в файл", entityName);
-            throw;
+            _logger.LogError(exception, "Ошибка при записи статистики {EntityName} в файл {Path}", entityName, targetFilePath);
+            throw new InvalidOperationException($"Не удалось сохранить статистику ({entityName}) в {targetFilePath}", exception);
         }
     }
 }

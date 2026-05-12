@@ -87,6 +87,12 @@ public sealed class BotLifecycleAutomationHandler :
             return Task.CompletedTask;
         }
 
+        if (@event.IsCatchUp)
+        {
+            _logger.LogDebug("Авто-отключение пропущено: офлайн-снимок при подключении бота (catch-up), а не настоящий переход стрима в офлайн");
+            return Task.CompletedTask;
+        }
+
         if (_phase != BotLifecyclePhase.Connected)
         {
             _logger.LogDebug("Авто-отключение пропущено: текущая фаза {Phase}", _phase);

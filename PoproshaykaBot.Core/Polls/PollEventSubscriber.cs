@@ -11,6 +11,7 @@ using System.Net;
 namespace PoproshaykaBot.Core.Polls;
 
 public sealed class PollEventSubscriber(
+    [FromKeyedServices(TwitchEndpoints.EventSubBroadcasterSession)]
     ITwitchEventSubClient eventSubClient,
     [FromKeyedServices(TwitchEndpoints.HelixBroadcasterClient)]
     ITwitchHelixClient helix,
@@ -18,7 +19,7 @@ public sealed class PollEventSubscriber(
     PollsAvailabilityService availability,
     IEventBus eventBus,
     ILogger<PollEventSubscriber> logger)
-    : IHostedComponent
+    : IStreamHostedComponent
 {
     private static readonly string[] SubscriptionTypes =
     [
@@ -111,7 +112,7 @@ public sealed class PollEventSubscriber(
             }
             catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
             {
-                logger.LogInformation("PollEventSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", type);
+                logger.LogInformation(ex, "PollEventSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", type);
             }
             catch (Exception ex)
             {

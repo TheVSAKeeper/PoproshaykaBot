@@ -55,10 +55,10 @@ if (-not $OutputDir) {
     $OutputDir = Join-Path $repoRoot 'artifacts'
 }
 
-Write-Host "Версия: $Version"
-Write-Host "Архитектуры: $($Arch -join ', ')"
-Write-Host "Варианты: $($Variant -join ', ')"
-Write-Host "Выходная папка: $OutputDir"
+Write-Output "Версия: $Version"
+Write-Output "Архитектуры: $($Arch -join ', ')"
+Write-Output "Варианты: $($Variant -join ', ')"
+Write-Output "Выходная папка: $OutputDir"
 
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
@@ -74,7 +74,7 @@ function Invoke-DotnetPublish {
     )
 
     $variantDir = Join-Path $publishRoot $Variant
-    $args = @(
+    $publishArgs = @(
         'publish',
         '--configuration', 'Release',
         '--runtime', "win-$Arch",
@@ -85,21 +85,21 @@ function Invoke-DotnetPublish {
     )
 
     if ($Variant -eq 'portable') {
-        $args += @(
+        $publishArgs += @(
             '-p:IncludeNativeLibrariesForSelfExtract=true',
             '-p:PortableMode=true',
             '--self-contained'
         )
     }
     else {
-        $args += '--no-self-contained'
+        $publishArgs += '--no-self-contained'
     }
 
-    Write-Host ""
-    Write-Host "==> dotnet $($args -join ' ')"
+    Write-Output ""
+    Write-Output "==> dotnet $($publishArgs -join ' ')"
     Push-Location $projectDir
     try {
-        & dotnet @args
+        & dotnet @publishArgs
         if ($LASTEXITCODE -ne 0) {
             throw "dotnet publish завершился с кодом $LASTEXITCODE (arch=$Arch, variant=$Variant)."
         }
@@ -125,8 +125,8 @@ function Invoke-DotnetPublish {
     Move-Item -LiteralPath $sourceExe -Destination $exePath
     Compress-Archive -Path $exePath -DestinationPath $zipPath
 
-    Write-Host "  -> $exeName"
-    Write-Host "  -> $zipName"
+    Write-Output "  -> $exeName"
+    Write-Output "  -> $zipName"
 }
 
 foreach ($a in $Arch) {
@@ -139,5 +139,5 @@ if (Test-Path -LiteralPath $publishRoot) {
     Remove-Item -LiteralPath $publishRoot -Recurse -Force
 }
 
-Write-Host ""
-Write-Host "Готово. Артефакты в $OutputDir"
+Write-Output ""
+Write-Output "Готово. Артефакты в $OutputDir"

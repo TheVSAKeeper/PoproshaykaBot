@@ -19,6 +19,7 @@ public sealed class StatisticsAutoSaver(
     private CancellationTokenSource? _cts;
     private Task? _autoSaveTask;
     private bool _disposed;
+    private bool _loaded;
 
     public string Name => "Инициализация статистики...";
 
@@ -37,6 +38,7 @@ public sealed class StatisticsAutoSaver(
         try
         {
             await LoadAsync(cancellationToken).ConfigureAwait(false);
+            _loaded = true;
             botRepository.ResetStartTime();
 
             _cts = new();
@@ -67,15 +69,21 @@ public sealed class StatisticsAutoSaver(
             {
                 await _autoSaveTask.ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
-                logger.LogDebug("Задача автосохранения успешно отменена");
+                logger.LogDebug(ex, "Задача автосохранения успешно отменена");
             }
         }
 
         _periodicTimer?.Dispose();
         _periodicTimer = null;
         _autoSaveTask = null;
+
+        if (!_loaded)
+        {
+            logger.LogDebug("Остановка автосохранения без финального сохранения: загрузка статистики не выполнялась");
+            return;
+        }
 
         try
         {
@@ -144,9 +152,9 @@ public sealed class StatisticsAutoSaver(
                 await SaveAsync(false, ct).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            logger.LogDebug("Цикл автосохранения прерван (OperationCanceledException)");
+            logger.LogDebug(ex, "Цикл автосохранения прерван (OperationCanceledException)");
         }
         catch (Exception exception)
         {

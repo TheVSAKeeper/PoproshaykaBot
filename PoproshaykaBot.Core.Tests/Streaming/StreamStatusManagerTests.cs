@@ -1,11 +1,15 @@
-﻿using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using Microsoft.Extensions.Logging;
+using NSubstitute.ExceptionExtensions;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Tests.Polls;
+using PoproshaykaBot.Core.Tests.Server;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Net;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.Streaming;
@@ -266,6 +270,56 @@ public sealed class StreamStatusManagerTests
     }
 
     [Test]
+    public async Task InitializeFromApi_StreamAlreadyOffline_PublishesWithIsCatchUpTrue()
+    {
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>()).Returns((HelixStreamInfo?)null);
+
+        var receivedSignal = new TaskCompletionSource<StreamWentOffline>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOffline>(@event => receivedSignal.TrySetResult(@event));
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        var received = await receivedSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.That(received.IsCatchUp, Is.True,
+            "первичный офлайн-снимок не должен триггерить авто-отключение бота — это узнавание состояния, а не настоящий переход стрима в офлайн");
+    }
+
+    [Test]
+    public async Task StreamOfflineFromEventSub_PublishesStreamWentOffline_WithIsCatchUpFalse()
+    {
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>()).Returns(SampleStream());
+
+        var onlineSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(_ => onlineSignal.TrySetResult());
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await onlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var offlineSignal = new TaskCompletionSource<StreamWentOffline>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOffline>(@event => offlineSignal.TrySetResult(@event));
+
+        var offlineNotification = new EventSubNotificationArgs("stream.offline",
+            "1",
+            "msg-offline",
+            DateTime.UtcNow,
+            JsonSerializer.SerializeToElement(new { }));
+
+        _eventSubClient.OnNotification +=
+            Raise.Event<EventSubAsyncHandler<EventSubNotificationArgs>>(offlineNotification, CancellationToken.None);
+
+        var received = await offlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.That(received.IsCatchUp, Is.False,
+            "переход Online → Offline по живому EventSub-уведомлению — настоящий переход, авто-отключение должно сработать");
+    }
+
+    [Test]
     public async Task OnSessionWelcome_CreatesSubscriptionsBeforeFetchingInitialStatus()
     {
         var subscriptionsCreated = 0;
@@ -351,6 +405,69 @@ public sealed class StreamStatusManagerTests
             Assert.That(_manager.CurrentStream.GameId, Is.EqualTo("999"));
             Assert.That(_manager.CurrentStream.GameName, Is.EqualTo("Программирование"));
         }
+    }
+
+    [Test]
+    public async Task OnSessionWelcome_WhenSubscriptionConflict_DoesNotLogError_AfterFix()
+    {
+        var recordingLogger = new RecordingLogger<StreamStatusManager>();
+        await using var manager = new StreamStatusManager(_eventSubClient,
+            _helix,
+            _broadcasterIdProvider,
+            _settingsManager,
+            _eventBus,
+            _clock,
+            recordingLogger);
+
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HelixRequestException(HttpMethod.Post,
+                "helix/eventsub/subscriptions",
+                HttpStatusCode.Conflict,
+                "subscription already exists",
+                null));
+
+        var initSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                initSignal.TrySetResult();
+                return Task.FromResult<HelixStreamInfo?>(null);
+            });
+
+        await manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await initSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var errorEntries = recordingLogger.Entries.Where(e => e.Level == LogLevel.Error).ToArray();
+        Assert.That(errorEntries, Is.Empty,
+            $"409 Conflict при session_reconnect — нормальная ситуация (подписка уже создана и перенесена Twitch'ом), не должна логироваться как Error. Найдено: {string.Join(" | ", errorEntries.Select(e => e.Message))}");
+    }
+
+    [Test]
+    public async Task OnRevocation_ForUnrelatedSubscriptionType_DoesNotCallHelix_AfterFix()
+    {
+        _eventSubClient.SessionId.Returns("session-1");
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+        _helix.ClearReceivedCalls();
+
+        _eventSubClient.OnRevocation += Raise.Event<EventSubAsyncHandler<EventSubRevocationArgs>>(new EventSubRevocationArgs("sub-id", "channel.chat.message", "user_removed"),
+            CancellationToken.None);
+
+        await Task.Delay(50);
+
+        await _helix.DidNotReceive()
+            .CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Test]

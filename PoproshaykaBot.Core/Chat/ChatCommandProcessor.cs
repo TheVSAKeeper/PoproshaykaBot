@@ -31,12 +31,9 @@ public sealed class ChatCommandProcessor
     {
         _tokenToCommand[command.Canonical] = command;
 
-        foreach (var alias in command.Aliases)
+        foreach (var alias in command.Aliases.Where(a => !string.IsNullOrWhiteSpace(a)))
         {
-            if (!string.IsNullOrWhiteSpace(alias))
-            {
-                _tokenToCommand[alias] = command;
-            }
+            _tokenToCommand[alias] = command;
         }
     }
 

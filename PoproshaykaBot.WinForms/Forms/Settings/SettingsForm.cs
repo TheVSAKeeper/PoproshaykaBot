@@ -1,11 +1,14 @@
-﻿using PoproshaykaBot.Core.Polls;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Polls;
+using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
-using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Forms.Settings;
 
@@ -16,6 +19,9 @@ public partial class SettingsForm : Form
     private readonly ObsChatStore _obsChatStore;
     private readonly DashboardLayoutStore _dashboardLayoutStore;
     private readonly PollsStore _pollsStore;
+    private readonly IEventBus _eventBus;
+    private readonly KestrelHttpServer _kestrelHttpServer;
+    private readonly ILogger<SettingsForm> _logger;
     private readonly List<SettingsDraftSection> _sections;
     private AppSettings _settings;
     private TwitchAccountSettings _botDraft;
@@ -31,20 +37,26 @@ public partial class SettingsForm : Form
         AccountsStore accountsStore,
         ObsChatStore obsChatStore,
         DashboardLayoutStore dashboardLayoutStore,
-        PollsStore pollsStore)
+        PollsStore pollsStore,
+        IEventBus eventBus,
+        KestrelHttpServer kestrelHttpServer,
+        ILogger<SettingsForm> logger)
     {
         _settingsManager = settingsManager;
         _accountsStore = accountsStore;
         _obsChatStore = obsChatStore;
         _dashboardLayoutStore = dashboardLayoutStore;
         _pollsStore = pollsStore;
+        _eventBus = eventBus;
+        _kestrelHttpServer = kestrelHttpServer;
+        _logger = logger;
 
-        _settings = DeepClone(settingsManager.Current);
-        _botDraft = DeepClone(accountsStore.LoadBot());
-        _broadcasterDraft = DeepClone(accountsStore.LoadBroadcaster());
-        _obsChatDraft = DeepClone(obsChatStore.Load());
-        _pollsDraft = DeepClone(pollsStore.Load());
-        _dashboardDraft = DeepCloneNullable(dashboardLayoutStore.LoadDashboard());
+        _settings = JsonStoreClone.DeepClone(settingsManager.Current);
+        _botDraft = JsonStoreClone.DeepClone(accountsStore.LoadBot());
+        _broadcasterDraft = JsonStoreClone.DeepClone(accountsStore.LoadBroadcaster());
+        _obsChatDraft = JsonStoreClone.DeepClone(obsChatStore.Load());
+        _pollsDraft = JsonStoreClone.DeepClone(pollsStore.Load());
+        _dashboardDraft = JsonStoreClone.DeepCloneNullable(dashboardLayoutStore.LoadDashboard());
 
         InitializeComponent();
 
@@ -76,9 +88,13 @@ public partial class SettingsForm : Form
             new(() => _dashboardSettingsControl.LoadSettings(_dashboardDraft),
                 () => _dashboardDraft = _dashboardSettingsControl.SaveSettings()),
         ];
+
+        _oauthSettingsControl.FlushDraft = FlushDraftFromControls;
     }
 
     public event EventHandler? SettingsApplied;
+
+    public bool LaunchOnboardingAfterClose { get; private set; }
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -99,17 +115,47 @@ public partial class SettingsForm : Form
         LoadSettingsToControls();
     }
 
+    private void OnOAuthLaunchOnboardingRequested(object? sender, EventArgs e)
+    {
+        if (_hasChanges)
+        {
+            var answer = MessageBox.Show(this,
+                "Несохранённые изменения будут потеряны. Запустить мастер настройки?",
+                "Запуск мастера",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+
+            if (answer != DialogResult.Yes)
+            {
+                return;
+            }
+        }
+
+        LaunchOnboardingAfterClose = true;
+        DialogResult = DialogResult.Cancel;
+        Close();
+    }
+
     private void OnSettingChanged(object? sender, EventArgs e)
     {
         _hasChanges = true;
         UpdateButtonStates();
     }
 
-    private void OnOkButtonClicked(object sender, EventArgs e)
+    private void OnTabControlSelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (_tabControl.SelectedTab == _oauthTabPage)
+        {
+            _oauthSettingsControl.RefreshChannelHint(_basicSettingsControl.GetChannel());
+        }
+    }
+
+    private async void OnOkButtonClicked(object sender, EventArgs e)
     {
         if (_hasChanges)
         {
-            ApplySettings();
+            await ApplySettingsAsync();
         }
 
         DialogResult = DialogResult.OK;
@@ -122,9 +168,9 @@ public partial class SettingsForm : Form
         Close();
     }
 
-    private void OnApplyButtonClicked(object sender, EventArgs e)
+    private async void OnApplyButtonClicked(object sender, EventArgs e)
     {
-        ApplySettings();
+        await ApplySettingsAsync();
     }
 
     private void OnResetButtonClicked(object sender, EventArgs e)
@@ -151,21 +197,10 @@ public partial class SettingsForm : Form
         UpdateButtonStates();
     }
 
-    private static T DeepClone<T>(T source) where T : class, new()
+    private void FlushDraftFromControls(AppSettings settings)
     {
-        var json = JsonSerializer.Serialize(source);
-        return JsonSerializer.Deserialize<T>(json) ?? new();
-    }
-
-    private static T? DeepCloneNullable<T>(T? source) where T : class
-    {
-        if (source == null)
-        {
-            return null;
-        }
-
-        var json = JsonSerializer.Serialize(source);
-        return JsonSerializer.Deserialize<T>(json);
+        _basicSettingsControl.SaveSettings(settings.Twitch);
+        _oauthSettingsControl.SaveSettings(settings);
     }
 
     private void LoadSettingsToControls()
@@ -192,11 +227,21 @@ public partial class SettingsForm : Form
         _applyButton.Enabled = _hasChanges;
     }
 
-    private void ApplySettings()
+    private async Task ApplySettingsAsync()
     {
+        _applyButton.Enabled = false;
+        _okButton.Enabled = false;
+
         try
         {
             SaveSettingsFromControls();
+
+            var prevBotToken = _accountsStore.LoadBot().AccessToken;
+            var prevBroadcasterToken = _accountsStore.LoadBroadcaster().AccessToken;
+            var prevPort = _settingsManager.Current.Twitch.HttpServerPort;
+
+            ReconcileHttpServerPort();
+            var newPort = _settings.Twitch.HttpServerPort;
 
             _settingsManager.SaveSettings(_settings);
             _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
@@ -208,17 +253,94 @@ public partial class SettingsForm : Form
                 _dashboardLayoutStore.SaveDashboard(_dashboardDraft);
             }
 
+            if (!string.Equals(prevBotToken, _botDraft.AccessToken, StringComparison.Ordinal))
+            {
+                _ = _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
+            }
+
+            if (!string.Equals(prevBroadcasterToken, _broadcasterDraft.AccessToken, StringComparison.Ordinal))
+            {
+                _ = _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
+            }
+
+            var portChanged = newPort != prevPort;
+            var restartFailed = false;
+
+            if (portChanged && _kestrelHttpServer.IsRunning)
+            {
+                restartFailed = !await TryRestartHttpServerAsync(prevPort, newPort);
+            }
+
             _hasChanges = false;
-            UpdateButtonStates();
             SettingsApplied?.Invoke(this, EventArgs.Empty);
 
-            MessageBox.Show("Настройки успешно сохранены.", "Настройки",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (restartFailed)
+            {
+                return;
+            }
+
+            var info = portChanged
+                ? $"Настройки сохранены. HTTP сервер перезапущен на порту {newPort}."
+                : "Настройки успешно сохранены.";
+
+            MessageBox.Show(info, "Настройки", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Ошибка сохранения настроек");
             MessageBox.Show($"Ошибка сохранения настроек: {exception.Message}", "Ошибка",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _okButton.Enabled = true;
+            UpdateButtonStates();
+        }
+    }
+
+    private void ReconcileHttpServerPort()
+    {
+        if (!RedirectUriPortResolver.TryResolve(_settings.Twitch.RedirectUri, out var derivedPort))
+        {
+            _logger.LogWarning("Некорректный RedirectUri '{RedirectUri}' — порт HTTP сервера не обновлён",
+                _settings.Twitch.RedirectUri);
+
+            return;
+        }
+
+        if (_settings.Twitch.HttpServerPort == derivedPort)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Порт HTTP сервера обновлён с {OldPort} на {NewPort} в соответствии с RedirectUri",
+            _settings.Twitch.HttpServerPort, derivedPort);
+
+        _settings.Twitch.HttpServerPort = derivedPort;
+    }
+
+    private async Task<bool> TryRestartHttpServerAsync(int prevPort, int newPort)
+    {
+        try
+        {
+            _logger.LogInformation("Перезапуск HTTP сервера: порт {OldPort} → {NewPort}", prevPort, newPort);
+            await _kestrelHttpServer.StopAsync();
+            await _kestrelHttpServer.StartAsync();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Ошибка перезапуска HTTP сервера на порту {NewPort}", newPort);
+            MessageBox.Show($"""
+                             Не удалось перезапустить HTTP сервер на порту {newPort}: {exception.Message}
+
+                             Настройки сохранены. Перезапустите приложение, чтобы изменения вступили в силу.
+                             """,
+                "Ошибка перезапуска HTTP сервера",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+
+            return false;
         }
     }
 

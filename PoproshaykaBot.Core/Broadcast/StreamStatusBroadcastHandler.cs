@@ -19,7 +19,6 @@ public sealed class StreamStatusBroadcastHandler :
     private readonly IChatMessenger _messenger;
     private readonly IStreamStatus _streamStatus;
     private readonly SettingsManager _settingsManager;
-    private readonly IEventBus _eventBus;
     private readonly ILogger<StreamStatusBroadcastHandler> _logger;
     private readonly IDisposable _onlineSubscription;
     private readonly IDisposable _offlineSubscription;
@@ -39,12 +38,11 @@ public sealed class StreamStatusBroadcastHandler :
         _messenger = messenger;
         _streamStatus = streamStatus;
         _settingsManager = settingsManager;
-        _eventBus = eventBus;
         _logger = logger;
 
-        _onlineSubscription = _eventBus.Subscribe<StreamWentOnline>(this);
-        _offlineSubscription = _eventBus.Subscribe<StreamWentOffline>(this);
-        _phaseSubscription = _eventBus.Subscribe<BotLifecyclePhaseChanged>(this);
+        _onlineSubscription = eventBus.Subscribe<StreamWentOnline>(this);
+        _offlineSubscription = eventBus.Subscribe<StreamWentOffline>(this);
+        _phaseSubscription = eventBus.Subscribe<BotLifecyclePhaseChanged>(this);
     }
 
     public Task HandleAsync(BotLifecyclePhaseChanged @event, CancellationToken cancellationToken)
@@ -64,7 +62,7 @@ public sealed class StreamStatusBroadcastHandler :
             return Task.CompletedTask;
         }
 
-        return StartBroadcast(channel);
+        return StartBroadcast(channel, false);
     }
 
     public Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
@@ -77,7 +75,7 @@ public sealed class StreamStatusBroadcastHandler :
             return Task.CompletedTask;
         }
 
-        return StartBroadcast(@event.Channel);
+        return StartBroadcast(@event.Channel, !@event.IsCatchUp);
     }
 
     public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
@@ -86,6 +84,12 @@ public sealed class StreamStatusBroadcastHandler :
         var channel = @event.Channel;
 
         _logger.LogInformation("Обработка события стрима OFFLINE для канала {Channel}", channel);
+
+        if (@event.IsCatchUp)
+        {
+            _logger.LogDebug("Офлайн-снимок при подключении (catch-up) — рассылка не останавливается и стоп-сообщение не отправляется");
+            return Task.CompletedTask;
+        }
 
         if (!_botConnected)
         {
@@ -117,7 +121,7 @@ public sealed class StreamStatusBroadcastHandler :
         _phaseSubscription.Dispose();
     }
 
-    private Task StartBroadcast(string channel)
+    private Task StartBroadcast(string channel, bool sendNotification)
     {
         var settings = _settingsManager.Current.Twitch;
 
@@ -128,7 +132,8 @@ public sealed class StreamStatusBroadcastHandler :
             _logger.LogInformation("🔴 Стрим онлайн. Автоматически запускаю рассылку.");
         }
 
-        if (settings.AutoBroadcast.StreamStatusNotificationsEnabled
+        if (sendNotification
+            && settings.AutoBroadcast.StreamStatusNotificationsEnabled
             && !string.IsNullOrEmpty(settings.AutoBroadcast.StreamStartMessage))
         {
             _logger.LogDebug("Отправка уведомления о начале стрима в канал {Channel}", channel);

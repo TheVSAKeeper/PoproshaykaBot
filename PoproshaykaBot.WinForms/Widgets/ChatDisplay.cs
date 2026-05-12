@@ -2,6 +2,7 @@
 using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Tiles;
 using System.Diagnostics;
@@ -122,7 +123,7 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
             AutoToolTip = false,
             DisplayStyle = ToolStripItemDisplayStyle.Text,
             Text = "🗑",
-            ToolTipText = "Очистить куки и кэш (разлогинит бота)",
+            ToolTipText = "Очистить куки и кэш активного аккаунта (бот или стример — настраивается в первичной настройке)",
         };
 
         _resetSessionButton.Click += OnResetSessionClicked;
@@ -173,9 +174,11 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
         }
         catch (ObjectDisposedException)
         {
+            // control disposed before reload could be scheduled
         }
         catch (InvalidOperationException) when (IsDisposed)
         {
+            // handle destroyed
         }
     }
 
@@ -257,8 +260,9 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
             return;
         }
 
+        var account = Settings.Current.Twitch.ChatDisplayAccount == TwitchOAuthRole.Broadcaster ? "стримера" : "бота";
         var result = MessageBox.Show(this,
-            "Это разлогинит бота из Twitch-чата и очистит куки профиля. Продолжить?",
+            $"Это разлогинит {account} из Twitch-чата и очистит куки профиля. Продолжить?",
             "Сброс сессии Twitch",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning);
@@ -299,7 +303,7 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
     {
         try
         {
-            var userDataFolder = AppPaths.Combine("WebView2");
+            var userDataFolder = WebView2UserDataFolders.Resolve(Settings.Current.Twitch.ChatDisplayAccount);
 
             Directory.CreateDirectory(userDataFolder);
 

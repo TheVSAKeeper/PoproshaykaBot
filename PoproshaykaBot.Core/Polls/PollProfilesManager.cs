@@ -99,12 +99,7 @@ public class PollProfilesManager(
 
     public virtual void Remove(Guid id)
     {
-        var removed = 0;
-
-        pollsStore.Mutate(polls =>
-        {
-            removed = polls.Profiles.RemoveAll(p => p.Id == id);
-        });
+        var removed = pollsStore.Mutate(polls => polls.Profiles.RemoveAll(p => p.Id == id));
 
         if (removed > 0)
         {

@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
-using System.Diagnostics;
 using System.Security.Cryptography;
 
 namespace PoproshaykaBot.Core.Twitch.Auth;
@@ -35,108 +34,35 @@ public sealed class OAuthFlowCoordinator(
         string clientSecret,
         string[]? scopes,
         string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel,
         CancellationToken ct)
     {
-        logger.LogDebug("Начало процесса OAuth авторизации для роли {Role} (ClientId: {ClientId})", role, clientId);
+        var result = await StartOAuthFlowCoreAsync(role, clientId, clientSecret, scopes, redirectUri, onAuthUrlReady, checkBroadcasterChannel, ct);
 
-        if (string.IsNullOrWhiteSpace(clientId))
-        {
-            throw new ArgumentException("ID клиента не может быть пустым", nameof(clientId));
-        }
+        accountWriter.UpdateSettings(role,
+            result.AccessToken,
+            result.RefreshToken,
+            result.Scopes,
+            result.Login,
+            result.UserId,
+            result.ExpiresInSeconds,
+            true);
 
-        if (string.IsNullOrWhiteSpace(clientSecret))
-        {
-            throw new ArgumentException("Секрет клиента не может быть пустым", nameof(clientSecret));
-        }
+        return result.AccessToken;
+    }
 
-        var semaphore = _authSemaphores[role];
-        await semaphore.WaitAsync(ct);
-
-        var state = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
-        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        lock (_pendingAuthsLock)
-        {
-            _pendingAuths[state] = new(role, tcs);
-        }
-
-        try
-        {
-            var settings = settingsManager.Current.Twitch;
-            var authTimeout = AuthTimeout;
-            scopes ??= accountsStore.Load(role).Scopes;
-            redirectUri ??= settings.RedirectUri;
-
-            var scopeString = string.Join(" ", scopes);
-
-            statusReporter.Report(role, "Открытие браузера для авторизации...");
-
-            var authUrl = "https://id.twitch.tv/oauth2/authorize"
-                          + "?response_type=code"
-                          + $"&client_id={Uri.EscapeDataString(clientId)}"
-                          + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
-                          + $"&scope={Uri.EscapeDataString(scopeString)}"
-                          + $"&state={Uri.EscapeDataString(state)}"
-                          + "&force_verify=true";
-
-            try
-            {
-                using var process = Process.Start(new ProcessStartInfo
-                {
-                    FileName = authUrl,
-                    UseShellExecute = true,
-                });
-
-                logger.LogInformation("Браузер открыт для авторизации роли {Role} (ClientId: {ClientId})", role, clientId);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Не удалось открыть браузер для авторизации (роль {Role})", role);
-                throw new InvalidOperationException($"Не удалось открыть браузер: {ex.Message}", ex);
-            }
-
-            statusReporter.Report(role, $"Ожидание авторизации пользователя ({authTimeout.TotalMinutes} мин)...");
-
-            string authorizationCode;
-            try
-            {
-                authorizationCode = await tcs.Task.WaitAsync(authTimeout, ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                logger.LogInformation("OAuth-поток отменён пользователем для роли {Role}", role);
-                throw;
-            }
-            catch (TimeoutException ex)
-            {
-                logger.LogWarning(ex, "Истекло время ожидания авторизации для роли {Role}", role);
-                throw new OperationCanceledException($"Время ожидания авторизации истекло ({authTimeout.TotalMinutes} мин)", ex);
-            }
-
-            if (string.IsNullOrEmpty(authorizationCode))
-            {
-                throw new InvalidOperationException("Не удалось получить код авторизации");
-            }
-
-            statusReporter.Report(role, "Обмен кода на токен доступа...");
-
-            var accessToken = await ExchangeCodeForTokenAsync(role, clientId, clientSecret, authorizationCode, redirectUri, ct);
-
-            statusReporter.Report(role, "Авторизация завершена успешно!");
-            logger.LogInformation("OAuth авторизация успешно завершена для роли {Role} (ClientId: {ClientId})", role, clientId);
-
-            return accessToken;
-        }
-        finally
-        {
-            lock (_pendingAuthsLock)
-            {
-                _pendingAuths.Remove(state);
-            }
-
-            tcs.TrySetCanceled(ct);
-            semaphore.Release();
-        }
+    public Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string[]? scopes,
+        string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel,
+        CancellationToken ct)
+    {
+        return StartOAuthFlowCoreAsync(role, clientId, clientSecret, scopes, redirectUri, onAuthUrlReady, checkBroadcasterChannel, ct);
     }
 
     public void SetAuthResult(string code, string? state)
@@ -193,12 +119,119 @@ public sealed class OAuthFlowCoordinator(
         _isDisposed = true;
     }
 
-    private async Task<string> ExchangeCodeForTokenAsync(
+    private async Task<OAuthFlowResult> StartOAuthFlowCoreAsync(
+        TwitchOAuthRole role,
+        string clientId,
+        string clientSecret,
+        string[]? scopes,
+        string? redirectUri,
+        Action<string> onAuthUrlReady,
+        bool checkBroadcasterChannel,
+        CancellationToken ct)
+    {
+        logger.LogDebug("Начало процесса OAuth авторизации для роли {Role} (ClientId: {ClientId})", role, clientId);
+
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            throw new ArgumentException("ID клиента не может быть пустым", nameof(clientId));
+        }
+
+        if (string.IsNullOrWhiteSpace(clientSecret))
+        {
+            throw new ArgumentException("Секрет клиента не может быть пустым", nameof(clientSecret));
+        }
+
+        ArgumentNullException.ThrowIfNull(onAuthUrlReady);
+
+        var semaphore = _authSemaphores[role];
+        await semaphore.WaitAsync(ct);
+
+        var state = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        lock (_pendingAuthsLock)
+        {
+            _pendingAuths[state] = new(role, tcs);
+        }
+
+        try
+        {
+            var settings = settingsManager.Current.Twitch;
+            var authTimeout = AuthTimeout;
+            scopes ??= accountsStore.Load(role).Scopes;
+            redirectUri ??= settings.RedirectUri;
+
+            var scopeString = string.Join(" ", scopes);
+
+            var authUrl = "https://id.twitch.tv/oauth2/authorize"
+                          + "?response_type=code"
+                          + $"&client_id={Uri.EscapeDataString(clientId)}"
+                          + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
+                          + $"&scope={Uri.EscapeDataString(scopeString)}"
+                          + $"&state={Uri.EscapeDataString(state)}"
+                          + "&force_verify=true";
+
+            try
+            {
+                onAuthUrlReady(authUrl);
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(exception, "Ошибка передачи URL авторизации обработчику UI (роль {Role})", role);
+                throw new InvalidOperationException($"Не удалось передать URL авторизации UI (роль {role})", exception);
+            }
+
+            statusReporter.Report(role, $"Ожидание авторизации пользователя ({authTimeout.TotalMinutes} мин)...");
+
+            string authorizationCode;
+            try
+            {
+                authorizationCode = await tcs.Task.WaitAsync(authTimeout, ct);
+            }
+            catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
+            {
+                logger.LogInformation(ex, "OAuth-поток отменён пользователем для роли {Role}", role);
+                throw;
+            }
+            catch (TimeoutException ex)
+            {
+                logger.LogWarning(ex, "Истекло время ожидания авторизации для роли {Role}", role);
+                throw new OperationCanceledException($"Время ожидания авторизации истекло ({authTimeout.TotalMinutes} мин)", ex);
+            }
+
+            if (string.IsNullOrEmpty(authorizationCode))
+            {
+                throw new InvalidOperationException("Не удалось получить код авторизации");
+            }
+
+            statusReporter.Report(role, "Обмен кода на токен доступа...");
+
+            var result = await ExchangeCodeForTokenAsync(role, clientId, clientSecret, authorizationCode, redirectUri, checkBroadcasterChannel, ct);
+
+            statusReporter.Report(role, "Авторизация завершена успешно!");
+            logger.LogInformation("OAuth авторизация успешно завершена для роли {Role} (ClientId: {ClientId})", role, clientId);
+
+            return result;
+        }
+        finally
+        {
+            lock (_pendingAuthsLock)
+            {
+                _pendingAuths.Remove(state);
+            }
+
+            tcs.TrySetCanceled(ct);
+            semaphore.Release();
+        }
+    }
+
+    private async Task<OAuthFlowResult> ExchangeCodeForTokenAsync(
         TwitchOAuthRole role,
         string clientId,
         string clientSecret,
         string authorizationCode,
         string redirectUri,
+        bool checkBroadcasterChannel,
         CancellationToken ct)
     {
         var formData = new Dictionary<string, string>
@@ -218,18 +251,14 @@ public sealed class OAuthFlowCoordinator(
             throw new InvalidOperationException("Twitch вернул токен, но Validate-эндпойнт его не подтвердил.");
         }
 
-        OAuthRoleHelpers.VerifyLoginMatchesRole(role, validation, settingsManager, logger);
+        OAuthRoleHelpers.VerifyLoginMatchesRole(role, validation, settingsManager, logger, checkBroadcasterChannel);
 
-        accountWriter.UpdateSettings(role,
-            tokenResponse.AccessToken,
+        return new(tokenResponse.AccessToken,
             tokenResponse.RefreshToken,
-            tokenResponse.Scope,
+            tokenResponse.Scope?.ToArray() ?? Array.Empty<string>(),
             validation.Login,
             validation.UserId,
-            tokenResponse.ExpiresIn,
-            true);
-
-        return tokenResponse.AccessToken;
+            tokenResponse.ExpiresIn);
     }
 
     private sealed record PendingAuth(TwitchOAuthRole Role, TaskCompletionSource<string> Tcs);

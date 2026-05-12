@@ -1,4 +1,4 @@
-name: Tests
+﻿name: Tests
 
 on:
   push:
@@ -26,11 +26,11 @@ jobs:
           cache-dependency-path: "**/packages.lock.json"
 
       - name: Restore
-        run: dotnet restore PoproshaykaBot.WinForms.Tests/PoproshaykaBot.WinForms.Tests.csproj
+        run: dotnet restore PoproshaykaBot.Core.Tests/PoproshaykaBot.Core.Tests.csproj
 
       - name: Test (unit)
         run: >
-          dotnet test PoproshaykaBot.WinForms.Tests/PoproshaykaBot.WinForms.Tests.csproj
+          dotnet test PoproshaykaBot.Core.Tests/PoproshaykaBot.Core.Tests.csproj
           --configuration Release
           --no-restore
           --logger "trx;LogFileName=unit-tests.trx"
@@ -70,12 +70,12 @@ jobs:
 
       - name: Build UI tests
         run: >
-          dotnet build PoproshaykaBot.WinForms.UiTests/PoproshaykaBot.WinForms.UiTests.csproj
+          dotnet build PoproshaykaBot.WinForms.Tests/PoproshaykaBot.WinForms.Tests.csproj
           --configuration Release
 
       - name: Run UI tests
         run: >
-          dotnet test PoproshaykaBot.WinForms.UiTests/PoproshaykaBot.WinForms.UiTests.csproj
+          dotnet test PoproshaykaBot.WinForms.Tests/PoproshaykaBot.WinForms.Tests.csproj
           --configuration Release
           --no-build
           --logger "trx;LogFileName=ui-tests.trx"

@@ -1,7 +1,7 @@
-namespace PoproshaykaBot.Core.Infrastructure.Events.Moderation;
+﻿namespace PoproshaykaBot.Core.Infrastructure.Events.Moderation;
 
 public sealed record UserPunished(
     string UserId,
     string UserName,
-    ulong RemovedMessagesCount,
+    ulong RemovedPoints,
     string? Channel) : EventBase;
