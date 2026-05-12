@@ -121,9 +121,11 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
         }
         catch (ObjectDisposedException)
         {
+            // page torn down
         }
         catch (InvalidOperationException) when (IsDisposed)
         {
+            // handle destroyed during the callback
         }
     }
 
@@ -217,6 +219,7 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
             }
             catch
             {
+                // cancel is best-effort
             }
         }
     }
@@ -234,9 +237,11 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
         }
         catch (ObjectDisposedException)
         {
+            // page torn down
         }
         catch (InvalidOperationException) when (IsDisposed)
         {
+            // handle destroyed
         }
     }
 

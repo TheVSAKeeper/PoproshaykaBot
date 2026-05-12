@@ -174,9 +174,11 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
         }
         catch (ObjectDisposedException)
         {
+            // control disposed before reload could be scheduled
         }
         catch (InvalidOperationException) when (IsDisposed)
         {
+            // handle destroyed
         }
     }
 

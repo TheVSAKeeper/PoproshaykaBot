@@ -19,7 +19,6 @@ public sealed class StreamStatusBroadcastHandler :
     private readonly IChatMessenger _messenger;
     private readonly IStreamStatus _streamStatus;
     private readonly SettingsManager _settingsManager;
-    private readonly IEventBus _eventBus;
     private readonly ILogger<StreamStatusBroadcastHandler> _logger;
     private readonly IDisposable _onlineSubscription;
     private readonly IDisposable _offlineSubscription;
@@ -39,12 +38,11 @@ public sealed class StreamStatusBroadcastHandler :
         _messenger = messenger;
         _streamStatus = streamStatus;
         _settingsManager = settingsManager;
-        _eventBus = eventBus;
         _logger = logger;
 
-        _onlineSubscription = _eventBus.Subscribe<StreamWentOnline>(this);
-        _offlineSubscription = _eventBus.Subscribe<StreamWentOffline>(this);
-        _phaseSubscription = _eventBus.Subscribe<BotLifecyclePhaseChanged>(this);
+        _onlineSubscription = eventBus.Subscribe<StreamWentOnline>(this);
+        _offlineSubscription = eventBus.Subscribe<StreamWentOffline>(this);
+        _phaseSubscription = eventBus.Subscribe<BotLifecyclePhaseChanged>(this);
     }
 
     public Task HandleAsync(BotLifecyclePhaseChanged @event, CancellationToken cancellationToken)

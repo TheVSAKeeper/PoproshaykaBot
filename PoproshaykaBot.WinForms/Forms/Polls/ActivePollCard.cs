@@ -71,12 +71,7 @@ public partial class ActivePollCard : UserControl
                 }
 
             case PollSnapshotStatus.Completed:
-                _footerLabel.Text = snapshot.LeaderIsTie
-                    ? $"✓ завершено (ничья) • {snapshot.TotalVotes} голос."
-                    : snapshot.Leader != null
-                        ? $"✓ завершено: «{snapshot.Leader.Title}» • {snapshot.TotalVotes} голос."
-                        : $"✓ завершено • {snapshot.TotalVotes} голос.";
-
+                _footerLabel.Text = FormatCompletedFooter(snapshot);
                 _footerLabel.ForeColor = Color.SeaGreen;
                 break;
 
@@ -105,6 +100,21 @@ public partial class ActivePollCard : UserControl
     private void OnStopButtonClick(object? sender, EventArgs e)
     {
         StopRequested?.Invoke(this, e);
+    }
+
+    private static string FormatCompletedFooter(PollSnapshot snapshot)
+    {
+        if (snapshot.LeaderIsTie)
+        {
+            return $"✓ завершено (ничья) • {snapshot.TotalVotes} голос.";
+        }
+
+        if (snapshot.Leader != null)
+        {
+            return $"✓ завершено: «{snapshot.Leader.Title}» • {snapshot.TotalVotes} голос.";
+        }
+
+        return $"✓ завершено • {snapshot.TotalVotes} голос.";
     }
 
     private void RebuildChoicesPanel(int count)

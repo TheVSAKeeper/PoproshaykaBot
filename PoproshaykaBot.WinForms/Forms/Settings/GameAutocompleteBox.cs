@@ -67,9 +67,11 @@ public sealed partial class GameAutocompleteBox : UserControl
         }
         catch (ObjectDisposedException)
         {
+            // control was disposed before suggestions returned
         }
         catch (OperationCanceledException)
         {
+            // newer query superseded this one
         }
     }
 

@@ -16,9 +16,8 @@ public static class RedirectUriPortResolver
             return false;
         }
 
-        port = uri.Port == -1
-            ? uri.Scheme == "https" ? 443 : 80
-            : uri.Port;
+        var schemeDefaultPort = uri.Scheme == "https" ? 443 : 80;
+        port = uri.Port == -1 ? schemeDefaultPort : uri.Port;
 
         return true;
     }

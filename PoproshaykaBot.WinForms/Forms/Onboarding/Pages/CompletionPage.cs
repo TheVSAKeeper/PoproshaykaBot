@@ -218,6 +218,26 @@ public sealed partial class CompletionPage : OnboardingPageBase
         return $"{prefix} {line.Title}: {line.Detail}";
     }
 
+    private static Color SelectValidationColor(bool anyFailure, bool anyWarning, bool anyPending)
+    {
+        if (anyFailure)
+        {
+            return Color.DarkRed;
+        }
+
+        if (anyWarning)
+        {
+            return Color.DarkOrange;
+        }
+
+        if (anyPending)
+        {
+            return Color.DarkGray;
+        }
+
+        return Color.DarkGreen;
+    }
+
     private async Task RunValidationsAsync(CancellationToken cancellationToken)
     {
         try
@@ -226,6 +246,7 @@ public sealed partial class CompletionPage : OnboardingPageBase
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // page navigated away mid-validation
         }
         catch (Exception exception)
         {
@@ -342,13 +363,7 @@ public sealed partial class CompletionPage : OnboardingPageBase
         var anyPending = lines.Any(l => l.Status == ValidationStatus.Pending);
 
         _validationsListLabel.Text = string.Join(Environment.NewLine, lines.Select(FormatLine));
-        _validationsListLabel.ForeColor = anyFailure
-            ? Color.DarkRed
-            : anyWarning
-                ? Color.DarkOrange
-                : anyPending
-                    ? Color.DarkGray
-                    : Color.DarkGreen;
+        _validationsListLabel.ForeColor = SelectValidationColor(anyFailure, anyWarning, anyPending);
     }
 
     private bool ConfirmIgnoreChannelNotFound(OnboardingContext context)

@@ -10,7 +10,6 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
     private readonly Dictionary<DashboardTileType, Button> _paletteCards = [];
     private readonly Dictionary<DashboardTileType, PlacedTile> _placedTiles = [];
     private readonly Dictionary<DashboardTileType, Panel> _tilePanels = [];
-    private readonly DashboardTileContextMenuBuilder _contextMenuBuilder = new();
     private DashboardTileDragDropController? _dragDrop;
     private DashboardLayoutSettings? _pendingLayout;
     private bool _initialized;
@@ -122,7 +121,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
             return;
         }
 
-        _contextMenuBuilder.Populate(_tileContextMenu,
+        DashboardTileContextMenuBuilder.Populate(_tileContextMenu,
             type,
             placed,
             (int)_gridColumnsNumeric.Value,
@@ -131,18 +130,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
             FindForm() ?? (IWin32Window)this);
     }
 
-    private void OnGridColumnsValueChanged(object? sender, EventArgs e)
-    {
-        if (_suppressEvents)
-        {
-            return;
-        }
-
-        RebuildGrid();
-        OnChanged();
-    }
-
-    private void OnGridRowsValueChanged(object? sender, EventArgs e)
+    private void OnGridSizeValueChanged(object? sender, EventArgs e)
     {
         if (_suppressEvents)
         {
@@ -250,7 +238,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
                     UseVisualStyleBackColor = true,
                 };
 
-                button.MouseDown += _dragDrop!.HandlePaletteMouseDown;
+                button.MouseDown += DashboardTileDragDropController.HandlePaletteMouseDown;
                 _paletteCards[type] = button;
                 _paletteFlowLayoutPanel.Controls.Add(button);
             }
@@ -397,8 +385,8 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
             Tag = new CellPosition(row, column),
         };
 
-        panel.DragEnter += _dragDrop!.HandleCellDragEnter;
-        panel.DragDrop += _dragDrop.HandleCellDragDrop;
+        panel.DragEnter += DashboardTileDragDropController.HandleCellDragEnter;
+        panel.DragDrop += _dragDrop!.HandleCellDragDrop;
         return panel;
     }
 
@@ -426,7 +414,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
         panel.Controls.Add(label);
 
         panel.MouseDown += _dragDrop!.HandleTileMouseDown;
-        panel.DragEnter += _dragDrop.HandleCellDragEnter;
+        panel.DragEnter += DashboardTileDragDropController.HandleCellDragEnter;
         panel.DragDrop += _dragDrop.HandleCellDragDrop;
         label.MouseDown += _dragDrop.HandleTileMouseDown;
 

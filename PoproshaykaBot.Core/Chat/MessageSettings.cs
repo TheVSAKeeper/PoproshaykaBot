@@ -2,6 +2,8 @@
 
 public sealed class MessageSettings
 {
+    private const string PirateFlag = "\U0001F3F4\u200D\u2620\uFE0F";
+
     public bool WelcomeEnabled { get; set; } = false;
 
     public string Welcome { get; set; } = "Добро пожаловать в чат, {username}! 👋";
@@ -20,9 +22,9 @@ public sealed class MessageSettings
 
     public bool PunishmentEnabled { get; set; } = true;
 
-    public string PunishmentMessage { get; set; } = "🏴‍☠️ ВНИМАНИЕ! Пользователь @{username} был лично наказан СЕРЁГОЙ ПИРАТОМ! ⚔️ Убрано {points} из статистики. 💀 #пиратская_справедливость";
+    public string PunishmentMessage { get; set; } = $"{PirateFlag} ВНИМАНИЕ! Пользователь @{{username}} был лично наказан СЕРЁГОЙ ПИРАТОМ! ⚔️ Убрано {{points}} из статистики. 💀 #пиратская_справедливость";
 
-    public string PunishmentNotification { get; set; } = "🏴‍☠️ Пользователя {username} лично наказал СЕРЁГА ПИРАТ! ⚔️ Убрано {points}. 💀";
+    public string PunishmentNotification { get; set; } = $"{PirateFlag} Пользователя {{username}} лично наказал СЕРЁГА ПИРАТ! ⚔️ Убрано {{points}}. 💀";
 
     public bool RewardEnabled { get; set; } = false;
 

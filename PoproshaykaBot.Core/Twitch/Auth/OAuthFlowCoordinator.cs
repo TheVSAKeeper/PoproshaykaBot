@@ -178,7 +178,7 @@ public sealed class OAuthFlowCoordinator(
             catch (Exception exception)
             {
                 logger.LogError(exception, "Ошибка передачи URL авторизации обработчику UI (роль {Role})", role);
-                throw;
+                throw new InvalidOperationException($"Не удалось передать URL авторизации UI (роль {role})", exception);
             }
 
             statusReporter.Report(role, $"Ожидание авторизации пользователя ({authTimeout.TotalMinutes} мин)...");
@@ -188,9 +188,9 @@ public sealed class OAuthFlowCoordinator(
             {
                 authorizationCode = await tcs.Task.WaitAsync(authTimeout, ct);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
             {
-                logger.LogInformation("OAuth-поток отменён пользователем для роли {Role}", role);
+                logger.LogInformation(ex, "OAuth-поток отменён пользователем для роли {Role}", role);
                 throw;
             }
             catch (TimeoutException ex)

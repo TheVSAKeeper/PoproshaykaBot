@@ -68,7 +68,7 @@ public sealed class ObsChatThreePointSyncTests
 
     private static string[] ExtractStringArrayLiteral(string jsSource, string variableName)
     {
-        var pattern = $@"const\s+{Regex.Escape(variableName)}\s*=\s*\[(?<body>[^\]]*)\]";
+        var pattern = $@"const\s+{Regex.Escape(variableName)}\s*=\s*(?:new\s+Set\s*\()?\s*\[(?<body>[^\]]*)\]";
         var match = Regex.Match(jsSource, pattern);
 
         if (!match.Success)

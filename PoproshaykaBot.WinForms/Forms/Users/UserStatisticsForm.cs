@@ -239,7 +239,7 @@ public sealed partial class UserStatisticsForm : Form
         {
             var amount = (ulong)-delta;
             var notification = _userMessagesManagementService.GetPunishmentNotification(user.Name, amount);
-            MessageBox.Show(notification, "🏴‍☠️ Наказание от СЕРЁГИ ПИРАТА! ⚔️", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(notification, "\U0001F3F4\u200D\u2620\uFE0F Наказание от СЕРЁГИ ПИРАТА! ⚔️", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return _userMessagesManagementService.PunishUserAsync(user.UserId, user.Name, amount, _channelProvider.Channel);
         }
         else

@@ -181,9 +181,9 @@ public sealed class BotConnectionManager : IAsyncDisposable
             _logger.LogInformation("Процесс подключения бота успешно завершен (канал {Channel})", settings.Channel);
             PublishPhase(BotLifecyclePhase.Connected);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogWarning("Процесс подключения бота был отменен");
+            _logger.LogWarning(ex, "Процесс подключения бота был отменен");
             PublishPhase(BotLifecyclePhase.Cancelled);
         }
         catch (Exception exception)

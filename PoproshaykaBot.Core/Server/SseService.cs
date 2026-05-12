@@ -103,6 +103,7 @@ public sealed class SseService : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            // expected during shutdown
         }
 
         var pipelines = _registry.DrainAll();
@@ -119,6 +120,7 @@ public sealed class SseService : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            // expected during shutdown
         }
     }
 
@@ -258,9 +260,9 @@ public sealed class SseService : IAsyncDisposable
                 Enqueue(SseEnvelope.Comment("keep-alive"));
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogDebug("Цикл keep-alive остановлен штатно");
+            _logger.LogDebug(ex, "Цикл keep-alive остановлен штатно");
         }
         catch (Exception ex)
         {
@@ -296,9 +298,9 @@ public sealed class SseService : IAsyncDisposable
                 BroadcastBuffer(buffer);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogDebug("Цикл рассылки SSE остановлен штатно");
+            _logger.LogDebug(ex, "Цикл рассылки SSE остановлен штатно");
         }
         catch (Exception ex)
         {
@@ -315,11 +317,11 @@ public sealed class SseService : IAsyncDisposable
             return;
         }
 
-        foreach (var pipeline in snapshot)
+        foreach (var channel in snapshot.Select(pipeline => pipeline.Channel))
         {
-            var willDrop = pipeline.Channel.Reader.Count >= _options.ClientChannelCapacity;
+            var willDrop = channel.Reader.Count >= _options.ClientChannelCapacity;
 
-            if (!pipeline.Channel.Writer.TryWrite(buffer))
+            if (!channel.Writer.TryWrite(buffer))
             {
                 continue;
             }
@@ -364,6 +366,7 @@ public sealed class SseService : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            // client cancelled or shutdown
         }
         catch (Exception ex)
         {

@@ -26,6 +26,7 @@ public sealed partial class WelcomePage : OnboardingPageBase
         }
         catch
         {
+            // user can copy the URL manually if shell exec fails
         }
     }
 }

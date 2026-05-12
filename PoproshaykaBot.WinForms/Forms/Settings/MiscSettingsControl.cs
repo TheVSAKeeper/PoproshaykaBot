@@ -20,8 +20,6 @@ public partial class MiscSettingsControl : UserControl
         InitializeComponent();
     }
 
-    public event EventHandler? SettingChanged;
-
     [Inject]
     public SettingsManager SettingsManager { get; internal init; } = null!;
 
@@ -36,6 +34,14 @@ public partial class MiscSettingsControl : UserControl
     public void SaveSettings(AppSettings settings)
     {
         // Сохранять нечего, см. LoadSettings.
+    }
+
+    private static void OnAboutButtonClicked(object sender, EventArgs e)
+    {
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Неизвестно";
+        var aboutText = $"PoproshaykaBot\n\nВерсия: {version}\n\nTwitch бот для стримеров";
+
+        MessageBox.Show(aboutText, "О программе", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void OnOpenSettingsFolderButtonClicked(object sender, EventArgs e)
@@ -87,14 +93,6 @@ public partial class MiscSettingsControl : UserControl
             MessageBox.Show($"Ошибка сброса настроек: {exception.Message}", "Ошибка",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-    }
-
-    private void OnAboutButtonClicked(object sender, EventArgs e)
-    {
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Неизвестно";
-        var aboutText = $"PoproshaykaBot\n\nВерсия: {version}\n\nTwitch бот для стримеров";
-
-        MessageBox.Show(aboutText, "О программе", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void OnImportBroadcastProfilesButtonClicked(object sender, EventArgs e)

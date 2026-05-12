@@ -249,8 +249,12 @@ public sealed partial class CredentialsPage : OnboardingPageBase
         var previousCts = _clientValidationCts;
         _clientValidationCts = new();
         var token = _clientValidationCts.Token;
-        previousCts?.Cancel();
-        previousCts?.Dispose();
+
+        if (previousCts is not null)
+        {
+            await previousCts.CancelAsync();
+            previousCts.Dispose();
+        }
 
         _clientStatusLabel.Text = "Проверка Client ID и Secret...";
         _clientStatusLabel.ForeColor = Color.Blue;
@@ -361,8 +365,12 @@ public sealed partial class CredentialsPage : OnboardingPageBase
         var previousCts = _channelValidationCts;
         _channelValidationCts = new();
         var token = _channelValidationCts.Token;
-        await previousCts?.CancelAsync();
-        previousCts?.Dispose();
+
+        if (previousCts is not null)
+        {
+            await previousCts.CancelAsync();
+            previousCts.Dispose();
+        }
 
         var statusLabel = _channelStatusLabel;
         statusLabel.Text = "Проверка канала...";
@@ -412,7 +420,6 @@ public sealed partial class CredentialsPage : OnboardingPageBase
                 statusLabel.ForeColor = Color.DarkRed;
                 break;
 
-            case ChannelValidationResult.Skipped:
             default:
                 statusLabel.Text = "Не удалось проверить канал";
                 statusLabel.ForeColor = Color.Gray;

@@ -72,9 +72,9 @@ public sealed class ChatSender(
             await task.WaitAsync(drainCts.Token);
             logger.LogInformation("ChatSender: все сообщения отправлены");
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException timeoutEx)
         {
-            logger.LogWarning("ChatSender: не все сообщения успели отправиться (timeout), принудительная остановка");
+            logger.LogWarning(timeoutEx, "ChatSender: не все сообщения успели отправиться (timeout), принудительная остановка");
 
             if (_cts != null)
             {
@@ -87,6 +87,7 @@ public sealed class ChatSender(
             }
             catch (OperationCanceledException)
             {
+                // expected on forced stop
             }
             catch (Exception ex)
             {
@@ -179,6 +180,7 @@ public sealed class ChatSender(
         }
         catch (OperationCanceledException)
         {
+            // warmup is best-effort
         }
         catch (Exception ex)
         {
@@ -214,6 +216,7 @@ public sealed class ChatSender(
         }
         catch (OperationCanceledException)
         {
+            // expected on stop
         }
     }
 
@@ -264,7 +267,7 @@ public sealed class ChatSender(
         }
         catch (HelixMessageDroppedException ex)
         {
-            logger.LogWarning("Сообщение отклонено Twitch: {Code} {Reason}", ex.ReasonCode, ex.ReasonMessage);
+            logger.LogWarning(ex, "Сообщение отклонено Twitch: {Code} {Reason}", ex.ReasonCode, ex.ReasonMessage);
             return SendOutcome.Done;
         }
         catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
@@ -273,7 +276,7 @@ public sealed class ChatSender(
         }
         catch (HelixRequestException ex)
         {
-            logger.LogError("ChatSender: ошибка Helix {Status} при отправке сообщения", (int)ex.StatusCode);
+            logger.LogError(ex, "ChatSender: ошибка Helix {Status} при отправке сообщения", (int)ex.StatusCode);
             return SendOutcome.Done;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

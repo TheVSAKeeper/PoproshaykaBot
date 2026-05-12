@@ -171,19 +171,18 @@ public sealed class EventSubConnectionHost :
 
     private async Task OnDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken cancellationToken)
     {
-        _logger.LogWarning("EventSub WebSocket ({Role}) отключен. Причина: {Reason}. Disposed: {IsDisposed}, StopRequested: {IsStopRequested}",
-            _role, args.Reason, _disposed, _stopRequested);
-
         if (_disposed || _stopRequested)
         {
-            _logger.LogDebug("Переподключение EventSub ({Role}) пропущено: disposed={IsDisposed}, stopRequested={IsStopRequested}", _role, _disposed, _stopRequested);
+            _logger.LogDebug("EventSub WebSocket ({Role}) отключен ({Reason}); переподключение пропущено: disposed={IsDisposed}, stopRequested={IsStopRequested}",
+                _role, args.Reason, _disposed, _stopRequested);
+
             return;
         }
 
         if (!_reconnectionPolicy.TryNextAttempt(out var delay))
         {
-            _logger.LogError("Превышено максимальное количество попыток переподключения ({MaxAttempts}) для EventSub ({Role}). Остановлен.",
-                _reconnectionPolicy.MaxAttempts, _role);
+            _logger.LogError("EventSub WebSocket ({Role}) отключен ({Reason}); превышено максимальное количество попыток переподключения ({MaxAttempts}). Остановлен.",
+                _role, args.Reason, _reconnectionPolicy.MaxAttempts);
 
             await PublishStatusAsync(StreamMonitoringStatus.Failed).ConfigureAwait(false);
 
@@ -198,8 +197,8 @@ public sealed class EventSubConnectionHost :
         var attempt = _reconnectionPolicy.CurrentAttempt;
         var maxAttempts = _reconnectionPolicy.MaxAttempts;
 
-        _logger.LogWarning("Попытка переподключения EventSub ({Role}) {Attempt}/{MaxAttempts} через {DelaySeconds} сек...",
-            _role, attempt, maxAttempts, (int)delay.TotalSeconds);
+        _logger.LogWarning("EventSub WebSocket ({Role}) отключен ({Reason}); попытка переподключения {Attempt}/{MaxAttempts} через {DelaySeconds} сек...",
+            _role, args.Reason, attempt, maxAttempts, (int)delay.TotalSeconds);
 
         await PublishStatusAsync(StreamMonitoringStatus.Reconnecting, $"Попытка {attempt}/{maxAttempts}").ConfigureAwait(false);
 
@@ -221,9 +220,9 @@ public sealed class EventSubConnectionHost :
         {
             await Task.Delay(delay, token);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogDebug("Задержка перед переподключением EventSub ({Role}) отменена (попытка {Attempt}/{MaxAttempts})", _role, attempt, maxAttempts);
+            _logger.LogDebug(ex, "Задержка перед переподключением EventSub ({Role}) отменена (попытка {Attempt}/{MaxAttempts})", _role, attempt, maxAttempts);
             return;
         }
 
@@ -232,9 +231,9 @@ public sealed class EventSubConnectionHost :
             await _eventSubClient.StartAsync(token);
             _logger.LogInformation("Переподключение EventSub WebSocket ({Role}) инициировано (попытка {Attempt})", _role, attempt);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogDebug("Переподключение EventSub ({Role}) отменено (попытка {Attempt}/{MaxAttempts})", _role, attempt, maxAttempts);
+            _logger.LogDebug(ex, "Переподключение EventSub ({Role}) отменено (попытка {Attempt}/{MaxAttempts})", _role, attempt, maxAttempts);
         }
         catch (Exception ex)
         {
@@ -286,7 +285,7 @@ public sealed class EventSubConnectionHost :
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка запуска EventSub WebSocket ({Role})", _role);
-            throw;
+            throw new InvalidOperationException($"Не удалось запустить EventSub WebSocket ({_role})", ex);
         }
     }
 

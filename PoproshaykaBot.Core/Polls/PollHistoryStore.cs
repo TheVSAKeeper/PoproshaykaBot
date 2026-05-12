@@ -170,6 +170,7 @@ public sealed class PollHistoryStore(
             }
             catch (OperationCanceledException)
             {
+                // expected on stop
             }
             catch (Exception exception)
             {

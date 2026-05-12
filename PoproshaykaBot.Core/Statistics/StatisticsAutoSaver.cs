@@ -69,9 +69,9 @@ public sealed class StatisticsAutoSaver(
             {
                 await _autoSaveTask.ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
-                logger.LogDebug("Задача автосохранения успешно отменена");
+                logger.LogDebug(ex, "Задача автосохранения успешно отменена");
             }
         }
 
@@ -152,9 +152,9 @@ public sealed class StatisticsAutoSaver(
                 await SaveAsync(false, ct).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            logger.LogDebug("Цикл автосохранения прерван (OperationCanceledException)");
+            logger.LogDebug(ex, "Цикл автосохранения прерван (OperationCanceledException)");
         }
         catch (Exception exception)
         {

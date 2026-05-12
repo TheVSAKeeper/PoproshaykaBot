@@ -44,6 +44,7 @@ internal sealed class StreamMetadataRetryLoop(
             }
             catch (ObjectDisposedException)
             {
+                // already disposed
             }
         }
 
@@ -55,6 +56,7 @@ internal sealed class StreamMetadataRetryLoop(
             }
             catch (OperationCanceledException)
             {
+                // expected on cancellation
             }
             catch (Exception ex)
             {
@@ -84,6 +86,7 @@ internal sealed class StreamMetadataRetryLoop(
             }
             catch
             {
+                // disposing — swallow any leftover failure
             }
         }
 
@@ -122,9 +125,9 @@ internal sealed class StreamMetadataRetryLoop(
                 await Task.Delay(TimeSpan.FromSeconds(delaySeconds), loopToken).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            logger.LogDebug("Опрос метаданных стрима отменён (новый stream.online или остановка менеджера)");
+            logger.LogDebug(ex, "Опрос метаданных стрима отменён (новый stream.online или остановка менеджера)");
         }
         catch (Exception ex)
         {

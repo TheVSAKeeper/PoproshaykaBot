@@ -34,6 +34,7 @@ internal sealed class SseEndpoint(SseService sseService) : IEndpointMapper
             }
             catch (OperationCanceledException)
             {
+                // client disconnected or app stopping
             }
             finally
             {

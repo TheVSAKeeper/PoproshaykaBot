@@ -28,10 +28,10 @@ public sealed class KestrelHttpServer(
             return;
         }
 
+        var port = settingsManager.Current.Twitch.HttpServerPort;
+
         try
         {
-            var port = settingsManager.Current.Twitch.HttpServerPort;
-
             var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
             {
                 Args = [],
@@ -80,8 +80,8 @@ public sealed class KestrelHttpServer(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка запуска HTTP сервера");
-            throw;
+            logger.LogError(ex, "Ошибка запуска HTTP сервера на порту {Port}", port);
+            throw new InvalidOperationException($"Не удалось запустить HTTP-сервер на порту {port}", ex);
         }
     }
 

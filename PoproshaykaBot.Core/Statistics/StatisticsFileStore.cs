@@ -90,8 +90,8 @@ public sealed class StatisticsFileStore
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Ошибка при записи статистики {EntityName} в файл", entityName);
-            throw;
+            _logger.LogError(exception, "Ошибка при записи статистики {EntityName} в файл {Path}", entityName, targetFilePath);
+            throw new InvalidOperationException($"Не удалось сохранить статистику ({entityName}) в {targetFilePath}", exception);
         }
     }
 }

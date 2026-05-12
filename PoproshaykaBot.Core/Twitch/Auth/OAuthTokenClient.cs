@@ -159,7 +159,7 @@ internal sealed record OAuthErrorResponse(
     [property: JsonPropertyName("message")]
     string? Message);
 
-internal sealed class OAuthRefreshRejectedException(int httpStatus, string? errorCode)
+public sealed class OAuthRefreshRejectedException(int httpStatus, string? errorCode)
     : Exception($"OAuth refresh отвергнут сервером (HTTP {httpStatus}, code={errorCode ?? "—"})")
 {
     public int HttpStatus { get; } = httpStatus;

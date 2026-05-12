@@ -73,6 +73,17 @@ public partial class EmbeddedTwitchAuthDialog : Form
         _ = InitializeAndStartAsync();
     }
 
+    private static void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        if (sender is not CoreWebView2 core)
+        {
+            return;
+        }
+
+        e.NewWindow = core;
+        e.Handled = true;
+    }
+
     private void OnOAuthStatusChanged(TwitchOAuthRole role, string message)
     {
         if (role != Role || IsDisposed || Disposing || !IsHandleCreated)
@@ -86,9 +97,11 @@ public partial class EmbeddedTwitchAuthDialog : Form
         }
         catch (ObjectDisposedException)
         {
+            // dialog is being torn down; status update is moot
         }
         catch (InvalidOperationException) when (IsDisposed)
         {
+            // handle was destroyed between the check above and BeginInvoke
         }
     }
 
@@ -102,15 +115,6 @@ public partial class EmbeddedTwitchAuthDialog : Form
 
         DialogResult = DialogResult.Cancel;
         Close();
-    }
-
-    private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
-    {
-        if (sender is CoreWebView2 core)
-        {
-            e.NewWindow = core;
-            e.Handled = true;
-        }
     }
 
     private void OnFallbackLinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
@@ -145,6 +149,7 @@ public partial class EmbeddedTwitchAuthDialog : Form
             }
             catch (ObjectDisposedException)
             {
+                // cts already disposed elsewhere
             }
         }
     }
@@ -157,6 +162,7 @@ public partial class EmbeddedTwitchAuthDialog : Form
         }
         catch (ObjectDisposedException)
         {
+            // race with disposal
         }
     }
 
@@ -284,9 +290,11 @@ public partial class EmbeddedTwitchAuthDialog : Form
         }
         catch (ObjectDisposedException)
         {
+            // dialog teardown raced with navigation
         }
         catch (InvalidOperationException) when (IsDisposed)
         {
+            // handle was destroyed
         }
     }
 
@@ -337,9 +345,11 @@ public partial class EmbeddedTwitchAuthDialog : Form
         }
         catch (ObjectDisposedException)
         {
+            // already disposed
         }
         catch (InvalidOperationException) when (IsDisposed)
         {
+            // handle destroyed
         }
     }
 }

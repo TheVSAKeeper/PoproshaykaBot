@@ -342,6 +342,21 @@ public partial class ObsChatSettingsControl : UserControl
             : $"#{color.R:X2}{color.G:X2}{color.B:X2}{color.A:X2}";
     }
 
+    private static string? ValidateFontFamily(string fontFamily)
+    {
+        if (string.IsNullOrWhiteSpace(fontFamily))
+        {
+            return null;
+        }
+
+        if (ContainsForbiddenFontFamilyChars(fontFamily))
+        {
+            return null;
+        }
+
+        return fontFamily;
+    }
+
     private void ResetNumeric(NumericUpDown control, int defaultValue)
     {
         control.Value = ObsChatRanges.Clamp(defaultValue, (int)control.Minimum, (int)control.Maximum);
@@ -437,21 +452,6 @@ public partial class ObsChatSettingsControl : UserControl
 
         _fontFamilyTextBox.TextChanged += OnFontFamilyTextChanged;
         Disposed += (_, _) => _fontFamilyErrorProvider.Dispose();
-    }
-
-    private string? ValidateFontFamily(string fontFamily)
-    {
-        if (string.IsNullOrWhiteSpace(fontFamily))
-        {
-            return null;
-        }
-
-        if (ContainsForbiddenFontFamilyChars(fontFamily))
-        {
-            return null;
-        }
-
-        return fontFamily;
     }
 
     private bool ShowColorPickerDialog(Button colorButton)

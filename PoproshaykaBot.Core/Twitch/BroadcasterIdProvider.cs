@@ -40,9 +40,9 @@ public sealed class BroadcasterIdProvider(
             {
                 user = await helix.GetUserByLoginAsync(channel, cancellationToken);
             }
-            catch (TwitchAuthorizationMissingException)
+            catch (TwitchAuthorizationMissingException ex)
             {
-                logger.LogDebug("Broadcaster id не получен для канала {Channel}: токен Bot отсутствует. Ожидание авторизации.", channel);
+                logger.LogDebug(ex, "Broadcaster id не получен для канала {Channel}: токен Bot отсутствует. Ожидание авторизации.", channel);
                 return null;
             }
 

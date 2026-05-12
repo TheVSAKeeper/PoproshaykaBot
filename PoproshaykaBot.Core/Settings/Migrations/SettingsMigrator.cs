@@ -7,6 +7,9 @@ namespace PoproshaykaBot.Core.Settings.Migrations;
 
 public static class SettingsMigrator
 {
+    private const string BotAccountKey = "botAccount";
+    private const string BroadcasterAccountKey = "broadcasterAccount";
+
     public static bool TryMigrate(JsonObject root, ILogger? logger = null, string? baseDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -34,83 +37,85 @@ public static class SettingsMigrator
 
         if (root["twitch"] is JsonObject twitch)
         {
-            // accounts.json
-            var botAccount = twitch["botAccount"] as JsonObject;
-            var broadcasterAccount = twitch["broadcasterAccount"] as JsonObject;
-
-            if (botAccount != null || broadcasterAccount != null)
-            {
-                var accountsTarget = Path.Combine(baseDirectory, "accounts.json");
-                var dto = new JsonObject
-                {
-                    ["botAccount"] = botAccount?.DeepClone() ?? new JsonObject(),
-                    ["broadcasterAccount"] = broadcasterAccount?.DeepClone() ?? new JsonObject(),
-                };
-
-                if (TryWriteSplit(accountsTarget,
-                        dto.ToJsonString(JsonStoreOptions.Default),
-                        "accounts.json",
-                        logger,
-                        AccountsTokenRedactor.Redact))
-                {
-                    if (twitch.Remove("botAccount"))
-                    {
-                        changed = true;
-                    }
-
-                    if (twitch.Remove("broadcasterAccount"))
-                    {
-                        changed = true;
-                    }
-                }
-            }
-
+            changed |= SplitAccounts(twitch, baseDirectory, logger);
             changed |= TrySplitObject(twitch, "broadcastProfiles", baseDirectory, "broadcast-profiles.json", logger);
             changed |= TrySplitObject(twitch, "polls", baseDirectory, "polls.json", logger);
-
-            // recent-categories.json (под infrastructure)
-            if (twitch["infrastructure"] is JsonObject infrastructure
-                && infrastructure["recentCategories"] is JsonArray recentCategories)
-            {
-                var target = Path.Combine(baseDirectory, "recent-categories.json");
-                var dto = new JsonObject
-                {
-                    ["items"] = recentCategories.DeepClone(),
-                };
-
-                if (TryWriteSplit(target, dto.ToJsonString(JsonStoreOptions.Default), "recent-categories.json", logger))
-                {
-                    if (infrastructure.Remove("recentCategories"))
-                    {
-                        changed = true;
-                    }
-                }
-            }
-
+            changed |= SplitRecentCategories(twitch, baseDirectory, logger);
             changed |= TrySplitObject(twitch, "obsChat", baseDirectory, "obs-chat.json", logger);
         }
 
-        // dashboard-layout.json
-        if (root["ui"] is JsonObject ui
-            && (ui.ContainsKey("dashboard") || ui.ContainsKey("mainWindow")))
-        {
-            var target = Path.Combine(baseDirectory, "dashboard-layout.json");
-            var dto = new JsonObject
-            {
-                ["dashboard"] = ui["dashboard"]?.DeepClone(),
-                ["mainWindow"] = ui["mainWindow"]?.DeepClone(),
-            };
-
-            if (TryWriteSplit(target, dto.ToJsonString(JsonStoreOptions.Default), "dashboard-layout.json", logger))
-            {
-                if (root.Remove("ui"))
-                {
-                    changed = true;
-                }
-            }
-        }
+        changed |= SplitDashboardLayout(root, baseDirectory, logger);
 
         return changed;
+    }
+
+    private static bool SplitAccounts(JsonObject twitch, string baseDirectory, ILogger? logger)
+    {
+        var botAccount = twitch[BotAccountKey] as JsonObject;
+        var broadcasterAccount = twitch[BroadcasterAccountKey] as JsonObject;
+
+        if (botAccount == null && broadcasterAccount == null)
+        {
+            return false;
+        }
+
+        var accountsTarget = Path.Combine(baseDirectory, "accounts.json");
+        var dto = new JsonObject
+        {
+            [BotAccountKey] = botAccount?.DeepClone() ?? new JsonObject(),
+            [BroadcasterAccountKey] = broadcasterAccount?.DeepClone() ?? new JsonObject(),
+        };
+
+        if (!TryWriteSplit(accountsTarget,
+                dto.ToJsonString(JsonStoreOptions.Default),
+                "accounts.json",
+                logger,
+                AccountsTokenRedactor.Redact))
+        {
+            return false;
+        }
+
+        var changed = false;
+        changed |= twitch.Remove(BotAccountKey);
+        changed |= twitch.Remove(BroadcasterAccountKey);
+        return changed;
+    }
+
+    private static bool SplitRecentCategories(JsonObject twitch, string baseDirectory, ILogger? logger)
+    {
+        if (twitch["infrastructure"] is not JsonObject infrastructure
+            || infrastructure["recentCategories"] is not JsonArray recentCategories)
+        {
+            return false;
+        }
+
+        var target = Path.Combine(baseDirectory, "recent-categories.json");
+        var dto = new JsonObject
+        {
+            ["items"] = recentCategories.DeepClone(),
+        };
+
+        return TryWriteSplit(target, dto.ToJsonString(JsonStoreOptions.Default), "recent-categories.json", logger)
+               && infrastructure.Remove("recentCategories");
+    }
+
+    private static bool SplitDashboardLayout(JsonObject root, string baseDirectory, ILogger? logger)
+    {
+        if (root["ui"] is not JsonObject ui
+            || !ui.ContainsKey("dashboard") && !ui.ContainsKey("mainWindow"))
+        {
+            return false;
+        }
+
+        var target = Path.Combine(baseDirectory, "dashboard-layout.json");
+        var dto = new JsonObject
+        {
+            ["dashboard"] = ui["dashboard"]?.DeepClone(),
+            ["mainWindow"] = ui["mainWindow"]?.DeepClone(),
+        };
+
+        return TryWriteSplit(target, dto.ToJsonString(JsonStoreOptions.Default), "dashboard-layout.json", logger)
+               && root.Remove("ui");
     }
 
     private static bool TrySplitObject(JsonObject parent, string key, string baseDirectory, string targetFileName, ILogger? logger)
@@ -166,7 +171,7 @@ public static class SettingsMigrator
     {
         var changed = false;
 
-        var botAccount = EnsureObject(twitch, "botAccount");
+        var botAccount = EnsureObject(twitch, BotAccountKey);
 
         changed |= MoveStringIfMissing(twitch, "botUsername", botAccount, "login", logger, "botUsername → botAccount.login");
         changed |= RemoveIfPresent(twitch, "accessToken", logger, "twitch.accessToken удалён (требуется новый набор прав)");
@@ -174,9 +179,9 @@ public static class SettingsMigrator
         changed |= RemoveIfPresent(twitch, "storedScopes", logger, "twitch.storedScopes удалён (требуется новый набор прав)");
         changed |= RemoveIfPresent(twitch, "scopes", logger, "twitch.scopes удалён (требуется новый набор прав)");
 
-        if (botAccount.Count == 0 && twitch["botAccount"] is JsonObject existing && ReferenceEquals(existing, botAccount))
+        if (botAccount.Count == 0 && twitch[BotAccountKey] is JsonObject existing && ReferenceEquals(existing, botAccount))
         {
-            twitch.Remove("botAccount");
+            twitch.Remove(BotAccountKey);
         }
 
         return changed;

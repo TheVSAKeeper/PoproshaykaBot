@@ -91,7 +91,7 @@ public sealed class ChannelUpdateSubscriber(
         catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
             IsHealthy = true;
-            logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", SubscriptionType);
+            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", SubscriptionType);
         }
         catch (Exception ex)
         {
@@ -171,7 +171,7 @@ public sealed class ChannelUpdateSubscriber(
         catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
             IsHealthy = true;
-            logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем после revocation", SubscriptionType);
+            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем после revocation", SubscriptionType);
         }
         catch (Exception ex)
         {

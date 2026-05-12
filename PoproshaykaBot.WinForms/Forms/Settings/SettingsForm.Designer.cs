@@ -203,7 +203,6 @@ partial class SettingsForm
         _httpServerSettingsControl.Name = "_httpServerSettingsControl";
         _httpServerSettingsControl.Size = new Size(671, 278);
         _httpServerSettingsControl.TabIndex = 0;
-        _httpServerSettingsControl.SettingChanged += OnSettingChanged;
         //
         // _messagesTabPage
         // 
@@ -372,8 +371,7 @@ partial class SettingsForm
         _miscSettingsControl.Name = "_miscSettingsControl";
         _miscSettingsControl.Size = new Size(593, 529);
         _miscSettingsControl.TabIndex = 0;
-        _miscSettingsControl.SettingChanged += OnSettingChanged;
-        // 
+        //
         // _buttonPanel
         // 
         _buttonPanel.AutoSize = true;

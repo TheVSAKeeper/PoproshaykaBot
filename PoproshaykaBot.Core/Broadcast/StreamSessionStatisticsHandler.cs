@@ -310,6 +310,7 @@ public sealed class StreamSessionStatisticsHandler :
             }
             catch (ObjectDisposedException)
             {
+                // already disposed — nothing to cancel
             }
         }
 
@@ -321,6 +322,7 @@ public sealed class StreamSessionStatisticsHandler :
             }
             catch (OperationCanceledException)
             {
+                // expected on stop
             }
             catch (Exception exception)
             {
@@ -344,6 +346,7 @@ public sealed class StreamSessionStatisticsHandler :
         }
         catch (OperationCanceledException)
         {
+            // expected when sampling loop is cancelled
         }
     }
 

@@ -6,7 +6,7 @@
     let showTimestamp = true;
     let enableAnimations = true;
 
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = new URLSearchParams(globalThis.location.search);
     const isPreview = urlParams.get('preview') === 'true';
 
     let showUserTypeBorders = true;
@@ -46,27 +46,28 @@
 
     function readAvatarFromStorage(userId) {
         try {
-            const raw = window.localStorage.getItem(avatarStorageKeyPrefix + userId);
+            const raw = globalThis.localStorage.getItem(avatarStorageKeyPrefix + userId);
             if (!raw) return null;
             const parsed = JSON.parse(raw);
             if (!parsed || typeof parsed.exp !== 'number' || Date.now() > parsed.exp) {
-                window.localStorage.removeItem(avatarStorageKeyPrefix + userId);
+                globalThis.localStorage.removeItem(avatarStorageKeyPrefix + userId);
                 return null;
             }
             return parsed.url || null;
         } catch (e) {
+            console.debug('Не удалось прочитать аватар из localStorage', e);
             return null;
         }
     }
 
     function writeAvatarToStorage(userId, url) {
         try {
-            window.localStorage.setItem(
+            globalThis.localStorage.setItem(
                 avatarStorageKeyPrefix + userId,
                 JSON.stringify({ url: url || '', exp: Date.now() + avatarStorageTtlMs })
             );
         } catch (e) {
-            // localStorage может быть отключён или переполнен — молча пропускаем
+            console.debug('localStorage недоступен или переполнен', e);
         }
     }
 
@@ -94,7 +95,7 @@
                     return null;
                 }
                 return response.json().then(payload => {
-                    const url = payload && payload.url || null;
+                    const url = payload?.url ?? null;
                     if (url) writeAvatarToStorage(userId, url);
                     return url;
                 });
@@ -260,10 +261,10 @@
         return classes;
     }
 
-    const validEntryAnimations = ['no-animation', 'slide-in-right', 'slide-in-left', 'fade-in-up', 'bounce-in'];
+    const validEntryAnimations = new Set(['no-animation', 'slide-in-right', 'slide-in-left', 'fade-in-up', 'bounce-in']);
 
     function sanitizeEntryAnimation(value, fallback) {
-        return validEntryAnimations.includes(value) ? value : fallback;
+        return validEntryAnimations.has(value) ? value : fallback;
     }
 
     function getAnimationType(userStatus, messageType, isFirstTime = false) {
@@ -320,7 +321,7 @@
                     '| По клиентам:',
                     payload.clientCount);
             } catch (e) {
-                console.warn('Сервер сбросил сообщения SSE (детали недоступны).');
+                console.warn('Сервер сбросил сообщения SSE (детали недоступны).', e);
             }
         });
 
@@ -329,18 +330,16 @@
         };
     }
 
-    const validExitAnimations = ['fade-out', 'slide-out-left', 'slide-out-right', 'scale-down', 'shrink-up'];
+    const validExitAnimations = new Set(['fade-out', 'slide-out-left', 'slide-out-right', 'scale-down', 'shrink-up']);
 
     function fadeOutMessage(messageDiv) {
         if (!enableMessageFadeOut) return;
         if (messageDiv.dataset.fading === 'true') return;
         messageDiv.dataset.fading = 'true';
 
-        if (fadeOutAnimationType === 'no-animation' || !validExitAnimations.includes(fadeOutAnimationType)) {
+        if (fadeOutAnimationType === 'no-animation' || !validExitAnimations.has(fadeOutAnimationType)) {
             setTimeout(() => {
-                if (messageDiv.parentNode) {
-                    messageDiv.parentNode.removeChild(messageDiv);
-                }
+                messageDiv.remove();
             }, 100);
             return;
         }
@@ -348,9 +347,7 @@
         messageDiv.dataset.exitAnim = fadeOutAnimationType;
 
         setTimeout(() => {
-            if (messageDiv.parentNode) {
-                messageDiv.parentNode.removeChild(messageDiv);
-            }
+            messageDiv.remove();
         }, fadeOutDuration);
     }
 
@@ -389,8 +386,7 @@
 
     function applyEntryAnimation(messageDiv, message, isHistoryMessage) {
         if (isHistoryMessage || !enableAnimations) {
-            messageDiv.classList.add('no-animation');
-            messageDiv.classList.add('entry-done');
+            messageDiv.classList.add('no-animation', 'entry-done');
             return;
         }
 
@@ -519,8 +515,8 @@
             const removed = chatContainer.firstChild;
             if (removed) {
                 cancelFadeOut(removed);
+                removed.remove();
             }
-            chatContainer.removeChild(chatContainer.firstChild);
         }
 
         if (isHistoryMessage) {
@@ -604,11 +600,11 @@
 
     function escapeAttr(value) {
         return String(value ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+            .replaceAll('&', '&amp;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;');
     }
 
     function escapeHtml(text, preserveImgTags = false) {
@@ -619,22 +615,22 @@
                 return `__IMG_PLACEHOLDER_${imgTags.length - 1}__`;
             });
 
-            text = text.replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/\"/g, '&quot;')
-                .replace(/'/g, '&#039;');
+            text = text.replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
 
-            text = text.replace(/__IMG_PLACEHOLDER_(\d+)__/g, (match, index) => imgTags[parseInt(index)]);
+            text = text.replace(/__IMG_PLACEHOLDER_(\d+)__/g, (match, index) => imgTags[Number.parseInt(index, 10)]);
 
             return text;
         }
 
-        return text.replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\"/g, '&quot;')
-            .replace(/'/g, '&#039;');
+        return text.replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
     }
 
     const cssVariableMap = [

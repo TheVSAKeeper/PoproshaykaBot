@@ -198,7 +198,6 @@ public sealed partial class BotConnectionPage : OnboardingPageBase
                 SetCanAdvance(false);
                 break;
 
-            case BotLifecyclePhase.Idle:
             default:
                 SetStatus("Готовимся к подключению...", Color.Blue, _lastStatusMessage);
                 _retryButton.Visible = false;

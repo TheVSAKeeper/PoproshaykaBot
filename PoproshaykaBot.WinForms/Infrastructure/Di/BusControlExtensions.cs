@@ -30,9 +30,11 @@ public static class BusControlExtensions
             }
             catch (ObjectDisposedException)
             {
+                // host disposed between guard check and handler call
             }
             catch (InvalidOperationException) when (host.IsDisposed)
             {
+                // handle destroyed
             }
         });
     }
@@ -66,9 +68,11 @@ public static class BusControlExtensions
         }
         catch (ObjectDisposedException)
         {
+            // host disposed between guard check and handler call
         }
         catch (InvalidOperationException) when (host.IsDisposed)
         {
+            // handle destroyed
         }
     }
 }

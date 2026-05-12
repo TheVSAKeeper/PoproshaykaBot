@@ -211,15 +211,14 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
                     return;
 
-                case OfflineProbeAction.NotOnline:
                 default:
                     _logger.LogDebug("Live-snapshot: статус Offline подтверждён для BroadcasterId {BroadcasterId}", broadcasterId);
                     return;
             }
         }
-        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (_disposeCts.IsCancellationRequested)
         {
-            _logger.LogDebug("Live-snapshot отменён: StreamStatusManager уничтожается");
+            _logger.LogDebug(ex, "Live-snapshot отменён: StreamStatusManager уничтожается");
         }
         catch (Exception ex)
         {
@@ -242,11 +241,11 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         switch (args.SubscriptionType)
         {
             case "stream.online":
-                await HandleStreamOnlineAsync(args.Payload, cancellationToken);
+                await HandleStreamOnlineAsync(args.Payload);
                 break;
 
             case "stream.offline":
-                await HandleStreamOfflineAsync(cancellationToken);
+                await HandleStreamOfflineAsync();
                 break;
 
             default:
@@ -302,11 +301,11 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         }
         catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
-            _logger.LogInformation("Подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", args.SubscriptionType);
+            _logger.LogInformation(ex, "Подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", args.SubscriptionType);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogDebug("Восстановление подписки {Type} отменено", args.SubscriptionType);
+            _logger.LogDebug(ex, "Восстановление подписки {Type} отменено", args.SubscriptionType);
             throw;
         }
         catch (Exception ex)
@@ -373,9 +372,9 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 ? "Начальный статус: онлайн (по данным API)"
                 : "Начальный статус: офлайн (по данным API)");
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (token.IsCancellationRequested)
         {
-            _logger.LogDebug("Инициализация по API отменена (cancellationToken: {CallerCancelled}, dispose: {DisposeCancelled})",
+            _logger.LogDebug(ex, "Инициализация по API отменена (cancellationToken: {CallerCancelled}, dispose: {DisposeCancelled})",
                 cancellationToken.IsCancellationRequested, _disposeCts.IsCancellationRequested);
         }
         catch (Exception ex)
@@ -397,7 +396,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         }
     }
 
-    private async Task HandleStreamOnlineAsync(JsonElement payload, CancellationToken cancellationToken)
+    private async Task HandleStreamOnlineAsync(JsonElement payload)
     {
         var data = payload.Deserialize<EventSubStreamOnlinePayloadDto>(WebJsonOptions);
 
@@ -415,7 +414,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         await _metadataRetryLoop.RestartAsync(runToken).ConfigureAwait(false);
     }
 
-    private async Task HandleStreamOfflineAsync(CancellationToken cancellationToken)
+    private async Task HandleStreamOfflineAsync()
     {
         _logger.LogInformation("Стрим завершен (EventSub)");
 
@@ -543,7 +542,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             {
                 subscriptionsCreated++;
 
-                _logger.LogInformation("Подписка '{Type}' уже существует для текущей EventSub-сессии — переиспользуем (SessionId: {SessionId})",
+                _logger.LogInformation(ex, "Подписка '{Type}' уже существует для текущей EventSub-сессии — переиспользуем (SessionId: {SessionId})",
                     type, sessionId);
             }
             catch (Exception ex)

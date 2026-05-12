@@ -134,10 +134,6 @@ body::-webkit-scrollbar {
     background: rgba(255, 255, 255, 0.06);
 }
 
-.message-text {
-    margin-top: 3px;
-}
-
 .message.no-animation {
     animation: none !important;
 }
@@ -288,6 +284,7 @@ body::-webkit-scrollbar {
 
 .message-text {
     line-height: var(--line-height);
+    margin-top: 3px;
     color: var(--chat-text-color);
     text-shadow: var(--text-shadow);
 }

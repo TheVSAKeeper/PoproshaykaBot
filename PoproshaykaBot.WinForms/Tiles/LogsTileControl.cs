@@ -65,9 +65,11 @@ public sealed partial class LogsTileControl : UserControl
             }
             catch (ObjectDisposedException)
             {
+                // tile control disposed before log entry was rendered
             }
             catch (InvalidOperationException)
             {
+                // handle destroyed during BeginInvoke
             }
 
             return;

@@ -3,9 +3,9 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Twitch.Chat;
 
-public sealed class EventSubChatMessageMapper
+public static class EventSubChatMessageMapper
 {
-    public ChatMessage Map(JsonElement payload)
+    public static ChatMessage Map(JsonElement payload)
     {
         if (!payload.TryGetProperty("event", out var evt))
         {
