@@ -103,7 +103,7 @@ public sealed class UserStatisticsRepository(ILogger<UserStatisticsRepository> l
         }
     }
 
-    public bool IncrementBonusMessages(string userId, ulong delta)
+    public bool IncrementBonusPoints(string userId, ulong delta)
     {
         var updated = AdjustPoints(userId, delta, (stats, d) => stats.BonusPoints += d);
 
@@ -115,7 +115,7 @@ public sealed class UserStatisticsRepository(ILogger<UserStatisticsRepository> l
         return updated;
     }
 
-    public bool IncrementShtrafMessages(string userId, ulong delta)
+    public bool IncrementPenaltyPoints(string userId, ulong delta)
     {
         var updated = AdjustPoints(userId, delta, (stats, d) => stats.PenaltyPoints += d);
 

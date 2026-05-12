@@ -16,7 +16,7 @@ public sealed partial class UserStatisticsForm : Form
     private readonly IUserStatisticsRepository _userStatistics;
     private readonly StatisticsAutoSaver _statisticsAutoSaver;
     private readonly UserRankService _userRankService;
-    private readonly UserMessagesManagementService _userMessagesManagementService;
+    private readonly UserPointsManagementService _userMessagesManagementService;
     private readonly IChannelProvider _channelProvider;
     private readonly SettingsManager _settingsManager;
 
@@ -27,7 +27,7 @@ public sealed partial class UserStatisticsForm : Form
         IUserStatisticsRepository userStatistics,
         StatisticsAutoSaver statisticsAutoSaver,
         UserRankService userRankService,
-        UserMessagesManagementService userMessagesManagementService,
+        UserPointsManagementService userMessagesManagementService,
         IChannelProvider channelProvider,
         SettingsManager settingsManager)
     {

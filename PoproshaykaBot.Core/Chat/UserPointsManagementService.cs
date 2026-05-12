@@ -7,7 +7,7 @@ using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat;
 
-public sealed class UserMessagesManagementService(
+public sealed class UserPointsManagementService(
     IUserStatisticsRepository userStatistics,
     SettingsManager settingsManager,
     IEventBus eventBus)
@@ -15,23 +15,23 @@ public sealed class UserMessagesManagementService(
     public async Task<bool> PunishUserAsync(
         string userId,
         string userName,
-        ulong removedMessagesCount,
+        ulong removedPoints,
         string? channel,
         CancellationToken cancellationToken = default)
     {
-        if (removedMessagesCount == 0)
+        if (removedPoints == 0)
         {
             return false;
         }
 
-        var updated = userStatistics.IncrementShtrafMessages(userId, removedMessagesCount);
+        var updated = userStatistics.IncrementPenaltyPoints(userId, removedPoints);
 
         if (!updated)
         {
             return false;
         }
 
-        await eventBus.PublishAsync(new UserPunished(userId, userName, removedMessagesCount, channel), cancellationToken);
+        await eventBus.PublishAsync(new UserPunished(userId, userName, removedPoints, channel), cancellationToken);
 
         return true;
     }
@@ -39,39 +39,39 @@ public sealed class UserMessagesManagementService(
     public async Task<bool> RewardUserAsync(
         string userId,
         string userName,
-        ulong addedMessagesCount,
+        ulong addedPoints,
         string? channel,
         CancellationToken cancellationToken = default)
     {
-        if (addedMessagesCount == 0)
+        if (addedPoints == 0)
         {
             return false;
         }
 
-        var updated = userStatistics.IncrementBonusMessages(userId, addedMessagesCount);
+        var updated = userStatistics.IncrementBonusPoints(userId, addedPoints);
 
         if (!updated)
         {
             return false;
         }
 
-        await eventBus.PublishAsync(new UserRewarded(userId, userName, addedMessagesCount, channel), cancellationToken);
+        await eventBus.PublishAsync(new UserRewarded(userId, userName, addedPoints, channel), cancellationToken);
 
         return true;
     }
 
-    public string GetPunishmentNotification(string userName, ulong removedMessagesCount)
+    public string GetPunishmentNotification(string userName, ulong removedPoints)
     {
         var messageSettings = settingsManager.Current.Twitch.Messages;
         var pointTerm = settingsManager.Current.Ranks.PointTerm;
-        return FormatMessage(messageSettings.PunishmentNotification, userName, removedMessagesCount, pointTerm);
+        return FormatMessage(messageSettings.PunishmentNotification, userName, removedPoints, pointTerm);
     }
 
-    public string GetRewardNotification(string userName, ulong addedMessagesCount)
+    public string GetRewardNotification(string userName, ulong addedPoints)
     {
         var messageSettings = settingsManager.Current.Twitch.Messages;
         var pointTerm = settingsManager.Current.Ranks.PointTerm;
-        return FormatMessage(messageSettings.RewardNotification, userName, addedMessagesCount, pointTerm);
+        return FormatMessage(messageSettings.RewardNotification, userName, addedPoints, pointTerm);
     }
 
     internal static string FormatMessage(string template, string userName, ulong count, PointTerm pointTerm)

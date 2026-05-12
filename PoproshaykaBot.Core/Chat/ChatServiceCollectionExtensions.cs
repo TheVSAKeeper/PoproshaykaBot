@@ -21,7 +21,7 @@ public static class ChatServiceCollectionExtensions
         services.AddSingleton<ChatHistoryManager>();
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
-        services.AddSingleton<UserMessagesManagementService>();
+        services.AddSingleton<UserPointsManagementService>();
         services.AddSingleton<UserProfileImageProvider>();
 
         services.AddSingleton<TwitchChatMessenger>();

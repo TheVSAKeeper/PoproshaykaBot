@@ -112,9 +112,9 @@ public sealed class UserStatisticsRepositoryTests
     }
 
     [Test]
-    public void IncrementBonusMessages_UnknownUser_ReturnsFalse()
+    public void IncrementBonusPoints_UnknownUser_ReturnsFalse()
     {
-        var result = _repository.IncrementBonusMessages("nope", 10);
+        var result = _repository.IncrementBonusPoints("nope", 10);
 
         using (Assert.EnterMultipleScope())
         {
@@ -124,12 +124,12 @@ public sealed class UserStatisticsRepositoryTests
     }
 
     [Test]
-    public void IncrementBonusMessages_KnownUser_UpdatesAndMarksChanged()
+    public void IncrementBonusPoints_KnownUser_UpdatesAndMarksChanged()
     {
         _repository.TrackMessage("u1", "Alice");
         _repository.CreateSnapshotAndMarkSaved();
 
-        var result = _repository.IncrementBonusMessages("u1", 5);
+        var result = _repository.IncrementBonusPoints("u1", 5);
 
         using (Assert.EnterMultipleScope())
         {
@@ -140,10 +140,10 @@ public sealed class UserStatisticsRepositoryTests
     }
 
     [Test]
-    public void IncrementShtrafMessages_AffectsPenaltyCounter()
+    public void IncrementPenaltyPoints_AffectsPenaltyCounter()
     {
         _repository.TrackMessage("u1", "Alice");
-        _repository.IncrementShtrafMessages("u1", 7);
+        _repository.IncrementPenaltyPoints("u1", 7);
 
         Assert.That(_repository.GetById("u1")!.PenaltyPoints, Is.EqualTo(7ul));
     }
@@ -153,8 +153,8 @@ public sealed class UserStatisticsRepositoryTests
     {
         _repository.TrackMessage("u1", "Alice");
         _repository.TrackMessage("u1", "Alice");
-        _repository.IncrementBonusMessages("u1", 10);
-        _repository.IncrementShtrafMessages("u1", 3);
+        _repository.IncrementBonusPoints("u1", 10);
+        _repository.IncrementPenaltyPoints("u1", 3);
 
         var stats = _repository.GetById("u1")!;
 
@@ -177,7 +177,7 @@ public sealed class UserStatisticsRepositoryTests
             _repository.TrackMessage("u2", "Bob");
         }
 
-        _repository.IncrementBonusMessages("u1", 100);
+        _repository.IncrementBonusPoints("u1", 100);
 
         var byMessages = _repository.GetTop(2, UserTopMode.Messages);
         var byPoints = _repository.GetTop(2);
@@ -190,12 +190,12 @@ public sealed class UserStatisticsRepositoryTests
     }
 
     [Test]
-    public void IncrementBonusMessages_ZeroDelta_DoesNothing()
+    public void IncrementBonusPoints_ZeroDelta_DoesNothing()
     {
         _repository.TrackMessage("u1", "Alice");
         _repository.CreateSnapshotAndMarkSaved();
 
-        var result = _repository.IncrementBonusMessages("u1", 0);
+        var result = _repository.IncrementBonusPoints("u1", 0);
 
         using (Assert.EnterMultipleScope())
         {
