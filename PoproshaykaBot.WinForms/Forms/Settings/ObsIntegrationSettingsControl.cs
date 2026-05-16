@@ -8,6 +8,8 @@ namespace PoproshaykaBot.WinForms.Forms.Settings;
 
 public sealed partial class ObsIntegrationSettingsControl : UserControl
 {
+    private const string AutoMicrophoneSelectionText = "Авто";
+
     private bool _initialized;
     private bool _loading;
     private int _httpServerPort = 8080;
@@ -40,6 +42,12 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
             _portNumeric.Value = ClampToNumeric(settings.Port, _portNumeric);
             _passwordTextBox.Text = settings.Password;
             _sceneComboBox.Text = settings.SceneName;
+            PopulateMicrophoneComboBox(string.IsNullOrWhiteSpace(settings.DashboardMicrophoneName)
+                    ? []
+                    : [settings.DashboardMicrophoneName.Trim()],
+                settings.DashboardMicrophoneName);
+
+            _volumeMeterDelayNumeric.Value = ClampToNumeric(settings.DashboardVolumeMeterDelayMs, _volumeMeterDelayNumeric);
             _sourceNameTextBox.Text = settings.SourceName;
             _widthNumeric.Value = ClampToNumeric(settings.Width, _widthNumeric);
             _heightNumeric.Value = ClampToNumeric(settings.Height, _heightNumeric);
@@ -65,6 +73,8 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         settings.Port = (int)_portNumeric.Value;
         settings.Password = _passwordTextBox.Text;
         settings.SceneName = _sceneComboBox.Text.Trim();
+        settings.DashboardMicrophoneName = ReadMicrophoneInputNameFromControl();
+        settings.DashboardVolumeMeterDelayMs = (int)_volumeMeterDelayNumeric.Value;
         settings.SourceName = string.IsNullOrWhiteSpace(_sourceNameTextBox.Text)
             ? "PoproshaykaBot Chat"
             : _sourceNameTextBox.Text.Trim();
@@ -135,8 +145,8 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         StartObsOperation(async ct =>
         {
             var settings = ReadSettingsFromControls();
-            await LoadScenesFromObsAsync(settings, ct);
-            SetStatus("● Список сцен обновлён", Color.Green);
+            await LoadObsListsFromObsAsync(settings, ct);
+            SetStatus("● Списки OBS обновлены", Color.Green);
         });
     }
 
@@ -198,6 +208,11 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         };
     }
 
+    private static string ToMicrophoneSelectionText(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? AutoMicrophoneSelectionText : value.Trim();
+    }
+
     private async Task ConnectAndLoadScenesAsync(
         ObsIntegrationSettings settings,
         string successAction,
@@ -213,7 +228,7 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
 
         var version = string.IsNullOrWhiteSpace(snapshot.ObsVersion) ? "версия не определена" : snapshot.ObsVersion;
         SetStatus($"● {successAction}: OBS {version}", Color.Green);
-        await LoadScenesFromObsAsync(settings, cancellationToken);
+        await LoadObsListsFromObsAsync(settings, cancellationToken);
     }
 
     private void StartObsOperation(Func<CancellationToken, Task> operation)
@@ -241,17 +256,16 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         }
     }
 
-    private async Task LoadScenesFromObsAsync(ObsIntegrationSettings settings, CancellationToken cancellationToken)
+    private async Task LoadObsListsFromObsAsync(ObsIntegrationSettings settings, CancellationToken cancellationToken)
     {
-        var current = _sceneComboBox.Text;
         var scenes = await ObsIntegration.ListScenesAsync(settings, cancellationToken);
+        var inputNames = await ObsIntegration.ListInputNamesAsync(settings, cancellationToken);
 
         _loading = true;
         try
         {
-            _sceneComboBox.Items.Clear();
-            _sceneComboBox.Items.AddRange(scenes.Cast<object>().ToArray());
-            _sceneComboBox.Text = string.IsNullOrWhiteSpace(current) && scenes.Count > 0 ? scenes[0] : current;
+            PopulateSceneComboBox(scenes);
+            PopulateMicrophoneComboBox(inputNames);
         }
         finally
         {
@@ -264,6 +278,36 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         var settings = new ObsIntegrationSettings();
         SaveSettings(settings);
         return settings;
+    }
+
+    private void PopulateSceneComboBox(IReadOnlyList<string> scenes)
+    {
+        var current = _sceneComboBox.Text;
+
+        _sceneComboBox.Items.Clear();
+        _sceneComboBox.Items.AddRange(scenes.Cast<object>().ToArray());
+        _sceneComboBox.Text = string.IsNullOrWhiteSpace(current) && scenes.Count > 0 ? scenes[0] : current;
+    }
+
+    private void PopulateMicrophoneComboBox(IReadOnlyList<string> inputNames)
+    {
+        PopulateMicrophoneComboBox(inputNames, ReadMicrophoneInputNameFromControl());
+    }
+
+    private void PopulateMicrophoneComboBox(IReadOnlyList<string> inputNames, string selectedInputName)
+    {
+        _microphoneComboBox.Items.Clear();
+        _microphoneComboBox.Items.Add(AutoMicrophoneSelectionText);
+        _microphoneComboBox.Items.AddRange(inputNames.Cast<object>().ToArray());
+        _microphoneComboBox.Text = ToMicrophoneSelectionText(selectedInputName);
+    }
+
+    private string ReadMicrophoneInputNameFromControl()
+    {
+        var value = _microphoneComboBox.Text.Trim();
+        return string.Equals(value, AutoMicrophoneSelectionText, StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : value;
     }
 
     private void ToggleActionButtons(bool enabled)

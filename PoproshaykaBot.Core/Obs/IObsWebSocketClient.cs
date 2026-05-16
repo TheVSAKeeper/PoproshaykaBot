@@ -4,6 +4,8 @@ namespace PoproshaykaBot.Core.Obs;
 
 public interface IObsWebSocketClient : IAsyncDisposable
 {
+    event EventHandler<ObsWebSocketEventArgs>? EventReceived;
+
     bool IsConnected { get; }
 
     Task<ObsConnectionSnapshot> ConnectAsync(ObsConnectionOptions options, CancellationToken cancellationToken);

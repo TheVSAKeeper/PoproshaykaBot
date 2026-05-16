@@ -16,6 +16,10 @@ public sealed class ObsIntegrationSettings
 
     public string SceneName { get; set; } = string.Empty;
 
+    public string DashboardMicrophoneName { get; set; } = string.Empty;
+
+    public int DashboardVolumeMeterDelayMs { get; set; } = 120;
+
     public string SourceName { get; set; } = "PoproshaykaBot Chat";
 
     public int Width { get; set; } = 1920;

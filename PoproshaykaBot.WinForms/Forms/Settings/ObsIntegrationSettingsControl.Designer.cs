@@ -41,6 +41,10 @@ partial class ObsIntegrationSettingsControl
         _passwordTextBox = new TextBox();
         _sceneLabel = new Label();
         _sceneComboBox = new ComboBox();
+        _microphoneLabel = new Label();
+        _microphoneComboBox = new ComboBox();
+        _volumeMeterDelayLabel = new Label();
+        _volumeMeterDelayNumeric = new NumericUpDown();
         _sourceNameLabel = new Label();
         _sourceNameTextBox = new TextBox();
         _sizeLabel = new Label();
@@ -60,6 +64,7 @@ partial class ObsIntegrationSettingsControl
         _rootLayout.SuspendLayout();
         _formLayout.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)_portNumeric).BeginInit();
+        ((System.ComponentModel.ISupportInitialize)_volumeMeterDelayNumeric).BeginInit();
         _sizeFlowPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)_widthNumeric).BeginInit();
         ((System.ComponentModel.ISupportInitialize)_heightNumeric).BeginInit();
@@ -84,7 +89,7 @@ partial class ObsIntegrationSettingsControl
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
-        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 256F));
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 320F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -140,16 +145,22 @@ partial class ObsIntegrationSettingsControl
         _formLayout.Controls.Add(_passwordTextBox, 1, 2);
         _formLayout.Controls.Add(_sceneLabel, 0, 3);
         _formLayout.Controls.Add(_sceneComboBox, 1, 3);
-        _formLayout.Controls.Add(_sourceNameLabel, 0, 4);
-        _formLayout.Controls.Add(_sourceNameTextBox, 1, 4);
-        _formLayout.Controls.Add(_sizeLabel, 0, 5);
-        _formLayout.Controls.Add(_sizeFlowPanel, 1, 5);
-        _formLayout.Controls.Add(_overlayUrlLabel, 0, 6);
-        _formLayout.Controls.Add(_overlayUrlTextBox, 1, 6);
+        _formLayout.Controls.Add(_microphoneLabel, 0, 4);
+        _formLayout.Controls.Add(_microphoneComboBox, 1, 4);
+        _formLayout.Controls.Add(_volumeMeterDelayLabel, 0, 5);
+        _formLayout.Controls.Add(_volumeMeterDelayNumeric, 1, 5);
+        _formLayout.Controls.Add(_sourceNameLabel, 0, 6);
+        _formLayout.Controls.Add(_sourceNameTextBox, 1, 6);
+        _formLayout.Controls.Add(_sizeLabel, 0, 7);
+        _formLayout.Controls.Add(_sizeFlowPanel, 1, 7);
+        _formLayout.Controls.Add(_overlayUrlLabel, 0, 8);
+        _formLayout.Controls.Add(_overlayUrlTextBox, 1, 8);
         _formLayout.Dock = DockStyle.Fill;
         _formLayout.Location = new Point(7, 91);
         _formLayout.Name = "_formLayout";
-        _formLayout.RowCount = 8;
+        _formLayout.RowCount = 10;
+        _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
+        _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
@@ -158,7 +169,7 @@ partial class ObsIntegrationSettingsControl
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _formLayout.Size = new Size(586, 250);
+        _formLayout.Size = new Size(586, 314);
         _formLayout.TabIndex = 3;
         //
         // _hostLabel
@@ -256,38 +267,88 @@ partial class ObsIntegrationSettingsControl
         _sceneComboBox.SelectedIndexChanged += OnSettingChanged;
         _sceneComboBox.TextChanged += OnSettingChanged;
         //
+        // _microphoneLabel
+        //
+        _microphoneLabel.AutoSize = true;
+        _microphoneLabel.Dock = DockStyle.Fill;
+        _microphoneLabel.Location = new Point(0, 128);
+        _microphoneLabel.Margin = new Padding(0, 0, 6, 4);
+        _microphoneLabel.Name = "_microphoneLabel";
+        _microphoneLabel.Size = new Size(144, 28);
+        _microphoneLabel.TabIndex = 8;
+        _microphoneLabel.Text = "Микрофон виджета:";
+        _microphoneLabel.TextAlign = ContentAlignment.MiddleLeft;
+        //
+        // _microphoneComboBox
+        //
+        _microphoneComboBox.Dock = DockStyle.Fill;
+        _microphoneComboBox.FormattingEnabled = true;
+        _microphoneComboBox.Location = new Point(150, 131);
+        _microphoneComboBox.Margin = new Padding(0, 3, 0, 4);
+        _microphoneComboBox.Name = "_microphoneComboBox";
+        _microphoneComboBox.Size = new Size(436, 23);
+        _microphoneComboBox.TabIndex = 9;
+        _microphoneComboBox.SelectedIndexChanged += OnSettingChanged;
+        _microphoneComboBox.TextChanged += OnSettingChanged;
+        //
+        // _volumeMeterDelayLabel
+        //
+        _volumeMeterDelayLabel.AutoSize = true;
+        _volumeMeterDelayLabel.Dock = DockStyle.Fill;
+        _volumeMeterDelayLabel.Location = new Point(0, 160);
+        _volumeMeterDelayLabel.Margin = new Padding(0, 0, 6, 4);
+        _volumeMeterDelayLabel.Name = "_volumeMeterDelayLabel";
+        _volumeMeterDelayLabel.Size = new Size(144, 28);
+        _volumeMeterDelayLabel.TabIndex = 10;
+        _volumeMeterDelayLabel.Text = "Задержка шкалы, мс:";
+        _volumeMeterDelayLabel.TextAlign = ContentAlignment.MiddleLeft;
+        //
+        // _volumeMeterDelayNumeric
+        //
+        _volumeMeterDelayNumeric.Dock = DockStyle.Left;
+        _volumeMeterDelayNumeric.Increment = new decimal(new int[] { 10, 0, 0, 0 });
+        _volumeMeterDelayNumeric.Location = new Point(150, 163);
+        _volumeMeterDelayNumeric.Margin = new Padding(0, 3, 0, 4);
+        _volumeMeterDelayNumeric.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
+        _volumeMeterDelayNumeric.Minimum = new decimal(new int[] { 30, 0, 0, 0 });
+        _volumeMeterDelayNumeric.Name = "_volumeMeterDelayNumeric";
+        _volumeMeterDelayNumeric.Size = new Size(100, 23);
+        _volumeMeterDelayNumeric.TabIndex = 11;
+        _volumeMeterDelayNumeric.Value = new decimal(new int[] { 120, 0, 0, 0 });
+        _volumeMeterDelayNumeric.ValueChanged += OnSettingChanged;
+        //
         // _sourceNameLabel
         //
         _sourceNameLabel.AutoSize = true;
         _sourceNameLabel.Dock = DockStyle.Fill;
-        _sourceNameLabel.Location = new Point(0, 128);
+        _sourceNameLabel.Location = new Point(0, 192);
         _sourceNameLabel.Margin = new Padding(0, 0, 6, 4);
         _sourceNameLabel.Name = "_sourceNameLabel";
         _sourceNameLabel.Size = new Size(144, 28);
-        _sourceNameLabel.TabIndex = 8;
+        _sourceNameLabel.TabIndex = 12;
         _sourceNameLabel.Text = "Источник:";
         _sourceNameLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
         // _sourceNameTextBox
         //
         _sourceNameTextBox.Dock = DockStyle.Fill;
-        _sourceNameTextBox.Location = new Point(150, 131);
+        _sourceNameTextBox.Location = new Point(150, 195);
         _sourceNameTextBox.Margin = new Padding(0, 3, 0, 4);
         _sourceNameTextBox.Name = "_sourceNameTextBox";
         _sourceNameTextBox.PlaceholderText = "PoproshaykaBot Chat";
         _sourceNameTextBox.Size = new Size(436, 23);
-        _sourceNameTextBox.TabIndex = 9;
+        _sourceNameTextBox.TabIndex = 13;
         _sourceNameTextBox.TextChanged += OnSettingChanged;
         //
         // _sizeLabel
         //
         _sizeLabel.AutoSize = true;
         _sizeLabel.Dock = DockStyle.Fill;
-        _sizeLabel.Location = new Point(0, 160);
+        _sizeLabel.Location = new Point(0, 224);
         _sizeLabel.Margin = new Padding(0, 0, 6, 4);
         _sizeLabel.Name = "_sizeLabel";
         _sizeLabel.Size = new Size(144, 28);
-        _sizeLabel.TabIndex = 10;
+        _sizeLabel.TabIndex = 14;
         _sizeLabel.Text = "Размер:";
         _sizeLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
@@ -297,11 +358,11 @@ partial class ObsIntegrationSettingsControl
         _sizeFlowPanel.Controls.Add(_sizeSeparatorLabel);
         _sizeFlowPanel.Controls.Add(_heightNumeric);
         _sizeFlowPanel.Dock = DockStyle.Fill;
-        _sizeFlowPanel.Location = new Point(150, 160);
+        _sizeFlowPanel.Location = new Point(150, 224);
         _sizeFlowPanel.Margin = new Padding(0, 0, 0, 4);
         _sizeFlowPanel.Name = "_sizeFlowPanel";
         _sizeFlowPanel.Size = new Size(436, 28);
-        _sizeFlowPanel.TabIndex = 11;
+        _sizeFlowPanel.TabIndex = 15;
         //
         // _widthNumeric
         //
@@ -341,30 +402,30 @@ partial class ObsIntegrationSettingsControl
         //
         _overlayUrlLabel.AutoSize = true;
         _overlayUrlLabel.Dock = DockStyle.Fill;
-        _overlayUrlLabel.Location = new Point(0, 192);
+        _overlayUrlLabel.Location = new Point(0, 256);
         _overlayUrlLabel.Margin = new Padding(0, 0, 6, 4);
         _overlayUrlLabel.Name = "_overlayUrlLabel";
         _overlayUrlLabel.Size = new Size(144, 28);
-        _overlayUrlLabel.TabIndex = 12;
+        _overlayUrlLabel.TabIndex = 16;
         _overlayUrlLabel.Text = "URL оверлея:";
         _overlayUrlLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
         // _overlayUrlTextBox
         //
         _overlayUrlTextBox.Dock = DockStyle.Fill;
-        _overlayUrlTextBox.Location = new Point(150, 195);
+        _overlayUrlTextBox.Location = new Point(150, 259);
         _overlayUrlTextBox.Margin = new Padding(0, 3, 0, 4);
         _overlayUrlTextBox.Name = "_overlayUrlTextBox";
         _overlayUrlTextBox.ReadOnly = true;
         _overlayUrlTextBox.Size = new Size(436, 23);
-        _overlayUrlTextBox.TabIndex = 13;
+        _overlayUrlTextBox.TabIndex = 17;
         //
         // _statusLabel
         //
         _statusLabel.AutoEllipsis = true;
         _statusLabel.Dock = DockStyle.Fill;
         _statusLabel.ForeColor = Color.Gray;
-        _statusLabel.Location = new Point(7, 344);
+        _statusLabel.Location = new Point(7, 408);
         _statusLabel.Name = "_statusLabel";
         _statusLabel.Size = new Size(586, 30);
         _statusLabel.TabIndex = 4;
@@ -379,7 +440,7 @@ partial class ObsIntegrationSettingsControl
         _buttonPanel.Controls.Add(_provisionButton);
         _buttonPanel.Controls.Add(_copyUrlButton);
         _buttonPanel.Dock = DockStyle.Fill;
-        _buttonPanel.Location = new Point(7, 377);
+        _buttonPanel.Location = new Point(7, 441);
         _buttonPanel.Name = "_buttonPanel";
         _buttonPanel.Size = new Size(586, 28);
         _buttonPanel.TabIndex = 5;
@@ -413,7 +474,7 @@ partial class ObsIntegrationSettingsControl
         _loadScenesButton.Name = "_loadScenesButton";
         _loadScenesButton.Size = new Size(105, 27);
         _loadScenesButton.TabIndex = 2;
-        _loadScenesButton.Text = "Сцены";
+        _loadScenesButton.Text = "Списки";
         _loadScenesButton.UseVisualStyleBackColor = true;
         _loadScenesButton.Click += OnLoadScenesButtonClicked;
         //
@@ -451,6 +512,7 @@ partial class ObsIntegrationSettingsControl
         _formLayout.ResumeLayout(false);
         _formLayout.PerformLayout();
         ((System.ComponentModel.ISupportInitialize)_portNumeric).EndInit();
+        ((System.ComponentModel.ISupportInitialize)_volumeMeterDelayNumeric).EndInit();
         _sizeFlowPanel.ResumeLayout(false);
         _sizeFlowPanel.PerformLayout();
         ((System.ComponentModel.ISupportInitialize)_widthNumeric).EndInit();
@@ -474,6 +536,10 @@ partial class ObsIntegrationSettingsControl
     private TextBox _passwordTextBox;
     private Label _sceneLabel;
     private ComboBox _sceneComboBox;
+    private Label _microphoneLabel;
+    private ComboBox _microphoneComboBox;
+    private Label _volumeMeterDelayLabel;
+    private NumericUpDown _volumeMeterDelayNumeric;
     private Label _sourceNameLabel;
     private TextBox _sourceNameTextBox;
     private Label _sizeLabel;

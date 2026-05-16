@@ -97,16 +97,159 @@ public sealed class ObsIntegrationServiceTests
         }
     }
 
+    [Test]
+    public async Task GetDashboardSnapshotAsyncReturnsObsSummaryAndMicrophoneStateAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetCurrentProgramScene", """{"currentProgramSceneName":"Main"}""");
+        _client.EnqueueResponse("GetStreamStatus", """{"outputActive":true}""");
+        _client.EnqueueResponse("GetRecordStatus", """{"outputActive":false}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {
+                                                      "inputName": "Desktop Audio",
+                                                      "inputKind": "wasapi_output_capture",
+                                                      "unversionedInputKind": "wasapi_output_capture"
+                                                    },
+                                                    {
+                                                      "inputName": "Mic/Aux",
+                                                      "inputKind": "wasapi_input_capture",
+                                                      "unversionedInputKind": "wasapi_input_capture"
+                                                    }
+                                                  ]
+                                                }
+                                                """);
+
+        _client.EnqueueResponse("GetInputMute", """{"inputMuted":true}""");
+        _client.EnqueueResponse("GetInputVolume", """{"inputVolumeDb":-12.5,"inputVolumeMul":0.42}""");
+
+        var snapshot = await _service.GetDashboardSnapshotAsync(new()
+        {
+            Enabled = true,
+        }, true, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(snapshot.IsConnected, Is.True);
+            Assert.That(snapshot.CurrentSceneName, Is.EqualTo("Main"));
+            Assert.That(snapshot.IsStreaming, Is.True);
+            Assert.That(snapshot.IsRecording, Is.False);
+            Assert.That(snapshot.Microphone, Is.Not.Null);
+            Assert.That(snapshot.Microphone!.Name, Is.EqualTo("Mic/Aux"));
+            Assert.That(snapshot.Microphone.IsMuted, Is.True);
+            Assert.That(snapshot.Microphone.VolumeDecibels, Is.EqualTo(-12.5).Within(0.01));
+        }
+
+        var muteRequest = _client.Requests.Single(r =>
+            string.Equals(r.RequestType, "GetInputMute", StringComparison.Ordinal));
+
+        Assert.That(muteRequest.RequestData!.Value.GetProperty("inputName").GetString(), Is.EqualTo("Mic/Aux"));
+    }
+
+    [Test]
+    public async Task GetDashboardSnapshotAsyncUsesConfiguredMicrophoneInputNameAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetCurrentProgramScene", """{"currentProgramSceneName":"Main"}""");
+        _client.EnqueueResponse("GetStreamStatus", """{"outputActive":false}""");
+        _client.EnqueueResponse("GetRecordStatus", """{"outputActive":false}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {
+                                                      "inputName": "Mic/Aux",
+                                                      "inputKind": "wasapi_input_capture",
+                                                      "unversionedInputKind": "wasapi_input_capture"
+                                                    },
+                                                    {
+                                                      "inputName": "Line In",
+                                                      "inputKind": "wasapi_output_capture",
+                                                      "unversionedInputKind": "wasapi_output_capture"
+                                                    }
+                                                  ]
+                                                }
+                                                """);
+
+        _client.EnqueueResponse("GetInputMute", """{"inputMuted":false}""");
+        _client.EnqueueResponse("GetInputVolume", """{"inputVolumeDb":-6.0,"inputVolumeMul":0.7}""");
+
+        var snapshot = await _service.GetDashboardSnapshotAsync(new()
+        {
+            Enabled = true,
+            DashboardMicrophoneName = "Line In",
+        }, true, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(snapshot.Microphone, Is.Not.Null);
+            Assert.That(snapshot.Microphone!.Name, Is.EqualTo("Line In"));
+            Assert.That(snapshot.Microphone.IsMuted, Is.False);
+            Assert.That(snapshot.Microphone.VolumeDecibels, Is.EqualTo(-6.0).Within(0.01));
+        }
+
+        var muteRequest = _client.Requests.Single(r =>
+            string.Equals(r.RequestType, "GetInputMute", StringComparison.Ordinal));
+
+        Assert.That(muteRequest.RequestData!.Value.GetProperty("inputName").GetString(), Is.EqualTo("Line In"));
+    }
+
+    [Test]
+    public async Task GetDashboardSnapshotAsyncDoesNotConnectWhenConnectIsNotRequestedAsync()
+    {
+        var snapshot = await _service.GetDashboardSnapshotAsync(new()
+        {
+            Enabled = true,
+        }, false, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(snapshot.IsConnected, Is.False);
+            Assert.That(_client.ConnectCount, Is.Zero);
+            Assert.That(_client.Requests, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task ListInputNamesAsyncReturnsInputNamesFromObsAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {"inputName": "Mic/Aux", "inputKind": "wasapi_input_capture"},
+                                                    {"inputName": "Desktop Audio", "inputKind": "wasapi_output_capture"}
+                                                  ]
+                                                }
+                                                """);
+
+        var inputNames = await _service.ListInputNamesAsync(new()
+        {
+            Enabled = true,
+        }, CancellationToken.None);
+
+        Assert.That(inputNames, Is.EqualTo(new[] { "Desktop Audio", "Mic/Aux" }));
+    }
+
     private sealed class FakeObsWebSocketClient : IObsWebSocketClient
     {
         private readonly Dictionary<string, Queue<JsonElement?>> _responses = new(StringComparer.Ordinal);
 
+        public event EventHandler<ObsWebSocketEventArgs>? EventReceived
+        {
+            add { }
+            remove { }
+        }
+
         public bool IsConnected { get; private set; }
+
+        public int ConnectCount { get; private set; }
 
         public List<RequestRecord> Requests { get; } = [];
 
         public Task<ObsConnectionSnapshot> ConnectAsync(ObsConnectionOptions options, CancellationToken cancellationToken)
         {
+            ConnectCount++;
             IsConnected = true;
             return Task.FromResult(new ObsConnectionSnapshot(true, "31.0.0", "5.5.2", null));
         }

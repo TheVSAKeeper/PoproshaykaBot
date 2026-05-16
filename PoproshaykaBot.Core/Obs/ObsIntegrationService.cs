@@ -13,6 +13,7 @@ public sealed class ObsIntegrationService(
     : IDisposable
 {
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(5);
+    private static readonly string[] MicrophoneNameMarkers = ["mic", "microphone", "микрофон", "микро"];
 
     private static readonly Action<ILogger, string, string, string, string, Exception?> LogBrowserSourceProvisioned =
         LoggerMessage.Define<string, string, string, string>(LogLevel.Information,
@@ -85,6 +86,85 @@ public sealed class ObsIntegrationService(
 
             var sceneList = await GetSceneListAsync(cts.Token).ConfigureAwait(false);
             return sceneList.Select(scene => scene.Name).ToArray();
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<string>> ListInputNamesAsync(ObsIntegrationSettings settings, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            using var cts = CreateTimeoutToken(cancellationToken);
+            await EnsureConnectedAsync(settings, cts.Token).ConfigureAwait(false);
+
+            var inputs = await GetInputListAsync(cts.Token).ConfigureAwait(false);
+            return
+            [
+                .. inputs
+                    .Select(input => input.Name)
+                    .Order(StringComparer.OrdinalIgnoreCase),
+            ];
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<ObsDashboardSnapshot> GetDashboardSnapshotAsync(
+        ObsIntegrationSettings settings,
+        bool connectIfNeeded,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (!settings.Enabled)
+        {
+            return ObsDashboardSnapshot.Disabled();
+        }
+
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            using var cts = CreateTimeoutToken(cancellationToken);
+            var connection = await EnsureDashboardConnectionAsync(settings, connectIfNeeded, cts.Token)
+                .ConfigureAwait(false);
+
+            if (!connection.IsConnected)
+            {
+                return ObsDashboardSnapshot.Unavailable(connection);
+            }
+
+            try
+            {
+                var sceneName = await GetCurrentProgramSceneNameAsync(cts.Token).ConfigureAwait(false);
+                var isStreaming = await GetOutputActiveAsync("GetStreamStatus", cts.Token).ConfigureAwait(false);
+                var isRecording = await GetOutputActiveAsync("GetRecordStatus", cts.Token).ConfigureAwait(false);
+                var microphone = await GetMicrophoneSnapshotAsync(settings.DashboardMicrophoneName, cts.Token)
+                    .ConfigureAwait(false);
+
+                return new(connection,
+                    sceneName,
+                    isStreaming,
+                    isRecording,
+                    microphone,
+                    DateTimeOffset.Now);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                var safeMessage = ToSafeMessage(exception);
+                CurrentStatus = ObsConnectionSnapshot.Disconnected(safeMessage);
+                logger.LogWarning(exception, "Не удалось обновить сводку OBS: {Message}", safeMessage);
+                return ObsDashboardSnapshot.Unavailable(CurrentStatus);
+            }
         }
         finally
         {
@@ -188,6 +268,40 @@ public sealed class ObsIntegrationService(
         return element.TryGetProperty(propertyName, out var value) ? value.GetString() : null;
     }
 
+    private static bool? GetOptionalBool(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? value.GetBoolean()
+            : null;
+    }
+
+    private static double? GetOptionalDouble(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Number
+            ? value.GetDouble()
+            : null;
+    }
+
+    private static bool IsMicrophoneInputKind(string kind)
+    {
+        return kind.Equals("wasapi_input_capture", StringComparison.OrdinalIgnoreCase)
+               || kind.Equals("coreaudio_input_capture", StringComparison.OrdinalIgnoreCase)
+               || kind.Equals("alsa_input_capture", StringComparison.OrdinalIgnoreCase)
+               || kind.Equals("pulse_input_capture", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int GetMicrophoneCandidateScore(ObsInputInfo input)
+    {
+        var score = IsMicrophoneInputKind(input.UnversionedKind) ? 100 : 0;
+
+        if (MicrophoneNameMarkers.Any(marker => input.Name.Contains(marker, StringComparison.OrdinalIgnoreCase)))
+        {
+            score += 50;
+        }
+
+        return score;
+    }
+
     private async Task<bool> CreateOrUpdateBrowserSourceAsync(
         string sourceName,
         string sceneName,
@@ -242,6 +356,119 @@ public sealed class ObsIntegrationService(
 
         var snapshot = await client.ConnectAsync(CreateOptions(settings), cancellationToken).ConfigureAwait(false);
         CurrentStatus = await RefreshVersionSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ObsConnectionSnapshot> EnsureDashboardConnectionAsync(
+        ObsIntegrationSettings settings,
+        bool connectIfNeeded,
+        CancellationToken cancellationToken)
+    {
+        if (client.IsConnected)
+        {
+            if (!CurrentStatus.IsConnected)
+            {
+                CurrentStatus = new(true, CurrentStatus.ObsVersion, CurrentStatus.ObsWebSocketVersion, null);
+            }
+
+            CurrentStatus = await RefreshVersionSnapshotAsync(CurrentStatus, cancellationToken).ConfigureAwait(false);
+            return CurrentStatus;
+        }
+
+        if (!connectIfNeeded)
+        {
+            if (CurrentStatus.IsConnected)
+            {
+                CurrentStatus = ObsConnectionSnapshot.Disconnected();
+            }
+
+            return CurrentStatus;
+        }
+
+        try
+        {
+            var snapshot = await client.ConnectAsync(CreateOptions(settings), cancellationToken).ConfigureAwait(false);
+            CurrentStatus = await RefreshVersionSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            return CurrentStatus;
+        }
+        catch (Exception exception)
+        {
+            var safeMessage = ToSafeMessage(exception);
+            CurrentStatus = ObsConnectionSnapshot.Disconnected(safeMessage);
+            logger.LogWarning(exception, "Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+            return CurrentStatus;
+        }
+    }
+
+    private async Task<string?> GetCurrentProgramSceneNameAsync(CancellationToken cancellationToken)
+    {
+        var response = await client.SendRequestAsync("GetCurrentProgramScene", null, cancellationToken)
+            .ConfigureAwait(false);
+
+        return response is null
+            ? null
+            : GetOptionalString(response.Value, "currentProgramSceneName");
+    }
+
+    private async Task<bool?> GetOutputActiveAsync(string requestType, CancellationToken cancellationToken)
+    {
+        var response = await client.SendRequestAsync(requestType, null, cancellationToken).ConfigureAwait(false);
+        return response is null ? null : GetOptionalBool(response.Value, "outputActive");
+    }
+
+    private async Task<ObsMicrophoneSnapshot?> GetMicrophoneSnapshotAsync(
+        string configuredMicrophoneName,
+        CancellationToken cancellationToken)
+    {
+        var inputs = await GetInputListAsync(cancellationToken).ConfigureAwait(false);
+        ObsInputInfo? microphone;
+
+        if (string.IsNullOrWhiteSpace(configuredMicrophoneName))
+        {
+            microphone = inputs
+                .Select(input => new { Input = input, Score = GetMicrophoneCandidateScore(input) })
+                .Where(candidate => candidate.Score > 0)
+                .OrderByDescending(candidate => candidate.Score)
+                .ThenBy(candidate => candidate.Input.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(candidate => candidate.Input)
+                .FirstOrDefault();
+        }
+        else
+        {
+            var microphoneName = configuredMicrophoneName.Trim();
+            microphone = inputs.FirstOrDefault(input =>
+                string.Equals(input.Name, microphoneName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (microphone is null)
+        {
+            return null;
+        }
+
+        return await GetMicrophoneSnapshotAsync(microphone, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ObsMicrophoneSnapshot> GetMicrophoneSnapshotAsync(
+        ObsInputInfo microphone,
+        CancellationToken cancellationToken)
+    {
+        var muteResponse = await client.SendRequestAsync("GetInputMute",
+                new { inputName = microphone.Name },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var volumeResponse = await client.SendRequestAsync("GetInputVolume",
+                new { inputName = microphone.Name },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var muted = muteResponse is not null
+                    && (GetOptionalBool(muteResponse.Value, "inputMuted") ?? false);
+
+        return new(microphone.Name,
+            microphone.UnversionedKind,
+            muted,
+            volumeResponse is null ? null : GetOptionalDouble(volumeResponse.Value, "inputVolumeDb"),
+            volumeResponse is null ? null : GetOptionalDouble(volumeResponse.Value, "inputVolumeMul"));
     }
 
     private async Task<ObsConnectionSnapshot> RefreshVersionSnapshotAsync(
@@ -338,8 +565,10 @@ public sealed class ObsIntegrationService(
         while (inputEnumerator.MoveNext())
         {
             var input = inputEnumerator.Current;
+            var inputKind = GetRequiredString(input, "inputKind");
             result.Add(new(GetRequiredString(input, "inputName"),
-                GetRequiredString(input, "inputKind")));
+                inputKind,
+                GetOptionalString(input, "unversionedInputKind") ?? inputKind));
         }
 
         return result;
@@ -396,5 +625,5 @@ public sealed class ObsIntegrationService(
 
     private sealed record ObsSceneInfo(string Name);
 
-    private sealed record ObsInputInfo(string Name, string Kind);
+    private sealed record ObsInputInfo(string Name, string Kind, string UnversionedKind);
 }

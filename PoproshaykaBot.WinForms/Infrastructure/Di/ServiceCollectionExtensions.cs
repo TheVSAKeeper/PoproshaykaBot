@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDashboardTiles(this IServiceCollection services)
     {
         services.AddSingleton<DashboardTileType, StreamInfoTileType>();
+        services.AddSingleton<DashboardTileType, ObsInfoTileType>();
         services.AddSingleton<DashboardTileType, BroadcastStatusTileType>();
         services.AddSingleton<DashboardTileType, LogsTileType>();
         services.AddSingleton<DashboardTileType, TwitchChatTileType>();

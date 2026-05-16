@@ -9,12 +9,21 @@ namespace PoproshaykaBot.Core.Obs;
 
 public sealed class ObsWebSocketClient(ILogger<ObsWebSocketClient> logger) : IObsWebSocketClient
 {
+    private const string InputVolumeMetersEventType = "InputVolumeMeters";
+
     private const int OpHello = 0;
     private const int OpIdentify = 1;
     private const int OpIdentified = 2;
     private const int OpEvent = 5;
     private const int OpRequest = 6;
     private const int OpRequestResponse = 7;
+    private const int EventSubscriptionScenes = 1 << 2;
+    private const int EventSubscriptionInputs = 1 << 3;
+    private const int EventSubscriptionOutputs = 1 << 6;
+    private const int EventSubscriptionInputVolumeMeters = 1 << 16;
+
+    private const int DashboardEventSubscriptions =
+        EventSubscriptionScenes | EventSubscriptionInputs | EventSubscriptionOutputs | EventSubscriptionInputVolumeMeters;
 
     private static readonly Action<ILogger, string, int, Exception?> LogConnecting =
         LoggerMessage.Define<string, int>(LogLevel.Information,
@@ -43,6 +52,8 @@ public sealed class ObsWebSocketClient(ILogger<ObsWebSocketClient> logger) : IOb
     private ClientWebSocket? _socket;
     private CancellationTokenSource? _receiveCts;
     private Task? _receiveTask;
+
+    public event EventHandler<ObsWebSocketEventArgs>? EventReceived;
 
     public bool IsConnected
     {
@@ -185,7 +196,7 @@ public sealed class ObsWebSocketClient(ILogger<ObsWebSocketClient> logger) : IOb
     {
         if (!helloData.TryGetProperty("authentication", out var authentication))
         {
-            return new { rpcVersion, eventSubscriptions = 0 };
+            return new { rpcVersion, eventSubscriptions = DashboardEventSubscriptions };
         }
 
         if (string.IsNullOrWhiteSpace(password))
@@ -197,7 +208,7 @@ public sealed class ObsWebSocketClient(ILogger<ObsWebSocketClient> logger) : IOb
         var salt = authentication.GetProperty("salt").GetString() ?? string.Empty;
         var auth = CreateAuthenticationString(password, salt, challenge);
 
-        return new { rpcVersion, authentication = auth, eventSubscriptions = 0 };
+        return new { rpcVersion, authentication = auth, eventSubscriptions = DashboardEventSubscriptions };
     }
 
     private static string CreateAuthenticationString(string password, string salt, string challenge)
@@ -342,12 +353,42 @@ public sealed class ObsWebSocketClient(ILogger<ObsWebSocketClient> logger) : IOb
                 break;
 
             case OpEvent:
-                LogObsEvent(logger, GetOptionalString(root.GetProperty("d"), "eventType") ?? string.Empty, null);
+                DispatchEvent(root.GetProperty("d"));
                 break;
 
             default:
                 LogIgnoredMessage(logger, op, null);
                 break;
+        }
+    }
+
+    private void DispatchEvent(JsonElement data)
+    {
+        var eventType = GetOptionalString(data, "eventType") ?? string.Empty;
+        if (!string.Equals(eventType, InputVolumeMetersEventType, StringComparison.Ordinal))
+        {
+            LogObsEvent(logger, eventType, null);
+        }
+
+        var handler = EventReceived;
+        if (handler is null)
+        {
+            return;
+        }
+
+        var evt = new ObsWebSocketEventArgs(eventType,
+            data.TryGetProperty("eventIntent", out var eventIntent) && eventIntent.ValueKind == JsonValueKind.Number
+                ? eventIntent.GetInt32()
+                : 0,
+            data.TryGetProperty("eventData", out var eventData) ? eventData.Clone() : null);
+
+        try
+        {
+            handler(this, evt);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "OBS WebSocket: ошибка обработки события {EventType}", eventType);
         }
     }
 
