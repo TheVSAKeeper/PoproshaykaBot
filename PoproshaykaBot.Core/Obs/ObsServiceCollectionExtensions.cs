@@ -9,7 +9,9 @@ public static class ObsServiceCollectionExtensions
     {
         services.AddSingleton<IObsWebSocketClient, ObsWebSocketClient>();
         services.AddSingleton<ObsIntegrationService>();
+        services.AddSingleton<IObsSceneController>(sp => sp.GetRequiredService<ObsIntegrationService>());
         services.AddSingleton<IAppLifetimeComponent, ObsIntegrationLifetimeAdapter>();
+        services.AddSingleton<IAppLifetimeComponent, ObsSceneEventBridge>();
 
         return services;
     }

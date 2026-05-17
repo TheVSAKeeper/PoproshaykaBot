@@ -38,6 +38,8 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
             _enabledCheckBox.Checked = settings.Enabled;
             _autoConnectCheckBox.Checked = settings.AutoConnect;
             _autoProvisionCheckBox.Checked = settings.AutoProvisionBrowserSource;
+            _syncSceneOnProfileCheckBox.Checked = settings.ApplySceneOnProfile;
+            _syncProfileOnSceneCheckBox.Checked = settings.ApplyProfileOnScene;
             _hostTextBox.Text = settings.Host;
             _portNumeric.Value = ClampToNumeric(settings.Port, _portNumeric);
             _passwordTextBox.Text = settings.Password;
@@ -69,6 +71,8 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         settings.Enabled = _enabledCheckBox.Checked;
         settings.AutoConnect = _autoConnectCheckBox.Checked;
         settings.AutoProvisionBrowserSource = _autoProvisionCheckBox.Checked;
+        settings.ApplySceneOnProfile = _syncSceneOnProfileCheckBox.Checked;
+        settings.ApplyProfileOnScene = _syncProfileOnSceneCheckBox.Checked;
         settings.Host = string.IsNullOrWhiteSpace(_hostTextBox.Text) ? "127.0.0.1" : _hostTextBox.Text.Trim();
         settings.Port = (int)_portNumeric.Value;
         settings.Password = _passwordTextBox.Text;
@@ -323,6 +327,8 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
     {
         _autoConnectCheckBox.Enabled = _enabledCheckBox.Checked;
         _autoProvisionCheckBox.Enabled = _enabledCheckBox.Checked;
+        _syncSceneOnProfileCheckBox.Enabled = _enabledCheckBox.Checked;
+        _syncProfileOnSceneCheckBox.Enabled = _enabledCheckBox.Checked;
         _reconnectButton.Enabled = _enabledCheckBox.Checked;
         _provisionButton.Enabled = _enabledCheckBox.Checked;
     }

@@ -32,6 +32,8 @@ partial class ObsIntegrationSettingsControl
         _enabledCheckBox = new CheckBox();
         _autoConnectCheckBox = new CheckBox();
         _autoProvisionCheckBox = new CheckBox();
+        _syncSceneOnProfileCheckBox = new CheckBox();
+        _syncProfileOnSceneCheckBox = new CheckBox();
         _formLayout = new TableLayoutPanel();
         _hostLabel = new Label();
         _hostTextBox = new TextBox();
@@ -78,14 +80,18 @@ partial class ObsIntegrationSettingsControl
         _rootLayout.Controls.Add(_enabledCheckBox, 0, 0);
         _rootLayout.Controls.Add(_autoConnectCheckBox, 0, 1);
         _rootLayout.Controls.Add(_autoProvisionCheckBox, 0, 2);
-        _rootLayout.Controls.Add(_formLayout, 0, 3);
-        _rootLayout.Controls.Add(_statusLabel, 0, 4);
-        _rootLayout.Controls.Add(_buttonPanel, 0, 5);
+        _rootLayout.Controls.Add(_syncSceneOnProfileCheckBox, 0, 3);
+        _rootLayout.Controls.Add(_syncProfileOnSceneCheckBox, 0, 4);
+        _rootLayout.Controls.Add(_formLayout, 0, 5);
+        _rootLayout.Controls.Add(_statusLabel, 0, 6);
+        _rootLayout.Controls.Add(_buttonPanel, 0, 7);
         _rootLayout.Dock = DockStyle.Fill;
         _rootLayout.Location = new Point(0, 0);
         _rootLayout.Name = "_rootLayout";
         _rootLayout.Padding = new Padding(4, 4, 4, 4);
-        _rootLayout.RowCount = 7;
+        _rootLayout.RowCount = 9;
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
@@ -93,7 +99,7 @@ partial class ObsIntegrationSettingsControl
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _rootLayout.Size = new Size(600, 480);
+        _rootLayout.Size = new Size(600, 536);
         _rootLayout.TabIndex = 0;
         //
         // _enabledCheckBox
@@ -131,6 +137,30 @@ partial class ObsIntegrationSettingsControl
         _autoProvisionCheckBox.Text = "Автоматически создавать или обновлять Browser Source";
         _autoProvisionCheckBox.UseVisualStyleBackColor = true;
         _autoProvisionCheckBox.CheckedChanged += OnSettingChanged;
+        //
+        // _syncSceneOnProfileCheckBox
+        //
+        _syncSceneOnProfileCheckBox.AutoSize = true;
+        _syncSceneOnProfileCheckBox.Dock = DockStyle.Fill;
+        _syncSceneOnProfileCheckBox.Location = new Point(7, 91);
+        _syncSceneOnProfileCheckBox.Name = "_syncSceneOnProfileCheckBox";
+        _syncSceneOnProfileCheckBox.Size = new Size(586, 22);
+        _syncSceneOnProfileCheckBox.TabIndex = 3;
+        _syncSceneOnProfileCheckBox.Text = "Переключать сцену OBS при смене профиля";
+        _syncSceneOnProfileCheckBox.UseVisualStyleBackColor = true;
+        _syncSceneOnProfileCheckBox.CheckedChanged += OnSettingChanged;
+        //
+        // _syncProfileOnSceneCheckBox
+        //
+        _syncProfileOnSceneCheckBox.AutoSize = true;
+        _syncProfileOnSceneCheckBox.Dock = DockStyle.Fill;
+        _syncProfileOnSceneCheckBox.Location = new Point(7, 119);
+        _syncProfileOnSceneCheckBox.Name = "_syncProfileOnSceneCheckBox";
+        _syncProfileOnSceneCheckBox.Size = new Size(586, 22);
+        _syncProfileOnSceneCheckBox.TabIndex = 4;
+        _syncProfileOnSceneCheckBox.Text = "Применять профиль при смене сцены OBS";
+        _syncProfileOnSceneCheckBox.UseVisualStyleBackColor = true;
+        _syncProfileOnSceneCheckBox.CheckedChanged += OnSettingChanged;
         //
         // _formLayout
         //
@@ -170,7 +200,7 @@ partial class ObsIntegrationSettingsControl
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         _formLayout.Size = new Size(586, 314);
-        _formLayout.TabIndex = 3;
+        _formLayout.TabIndex = 5;
         //
         // _hostLabel
         //
@@ -428,7 +458,7 @@ partial class ObsIntegrationSettingsControl
         _statusLabel.Location = new Point(7, 408);
         _statusLabel.Name = "_statusLabel";
         _statusLabel.Size = new Size(586, 30);
-        _statusLabel.TabIndex = 4;
+        _statusLabel.TabIndex = 6;
         _statusLabel.Text = "● Не проверено";
         _statusLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
@@ -443,7 +473,7 @@ partial class ObsIntegrationSettingsControl
         _buttonPanel.Location = new Point(7, 441);
         _buttonPanel.Name = "_buttonPanel";
         _buttonPanel.Size = new Size(586, 28);
-        _buttonPanel.TabIndex = 5;
+        _buttonPanel.TabIndex = 7;
         //
         // _testConnectionButton
         //
@@ -506,7 +536,7 @@ partial class ObsIntegrationSettingsControl
         AutoScaleMode = AutoScaleMode.Font;
         Controls.Add(_rootLayout);
         Name = "ObsIntegrationSettingsControl";
-        Size = new Size(600, 480);
+        Size = new Size(600, 536);
         _rootLayout.ResumeLayout(false);
         _rootLayout.PerformLayout();
         _formLayout.ResumeLayout(false);
@@ -527,6 +557,8 @@ partial class ObsIntegrationSettingsControl
     private CheckBox _enabledCheckBox;
     private CheckBox _autoConnectCheckBox;
     private CheckBox _autoProvisionCheckBox;
+    private CheckBox _syncSceneOnProfileCheckBox;
+    private CheckBox _syncProfileOnSceneCheckBox;
     private TableLayoutPanel _formLayout;
     private Label _hostLabel;
     private TextBox _hostTextBox;

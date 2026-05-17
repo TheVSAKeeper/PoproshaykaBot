@@ -10,7 +10,7 @@ public sealed class ObsIntegrationService(
     IObsWebSocketClient client,
     SettingsManager settingsManager,
     ILogger<ObsIntegrationService> logger)
-    : IDisposable
+    : IDisposable, IObsSceneController
 {
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(5);
     private static readonly string[] MicrophoneNameMarkers = ["mic", "microphone", "микрофон", "микро"];
@@ -28,6 +28,8 @@ public sealed class ObsIntegrationService(
     private readonly SemaphoreSlim _operationGate = new(1, 1);
 
     public ObsConnectionSnapshot CurrentStatus { get; private set; } = ObsConnectionSnapshot.Disconnected();
+
+    public bool IsConnected => client.IsConnected;
 
     public async Task<ObsConnectionSnapshot> ConnectAsync(ObsIntegrationSettings settings, CancellationToken cancellationToken)
     {
@@ -211,6 +213,49 @@ public sealed class ObsIntegrationService(
                 null);
 
             return new(created, sceneName, sourceName, overlayUrl);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<string?> GetCurrentSceneAsync(CancellationToken cancellationToken)
+    {
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            if (!client.IsConnected)
+            {
+                return null;
+            }
+
+            using var cts = CreateTimeoutToken(cancellationToken);
+            return await GetCurrentProgramSceneNameAsync(cts.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task SetCurrentSceneAsync(string sceneName, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sceneName);
+
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            if (!client.IsConnected)
+            {
+                throw new InvalidOperationException("OBS не подключён");
+            }
+
+            using var cts = CreateTimeoutToken(cancellationToken);
+            await client.SendRequestAsync("SetCurrentProgramScene", new { sceneName }, cts.Token)
+                .ConfigureAwait(false);
         }
         finally
         {
