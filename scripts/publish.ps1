@@ -81,6 +81,7 @@ function Invoke-DotnetPublish {
         '--output', $variantDir,
         '-p:PublishSingleFile=true',
         '-p:PublishReadyToRun=true',
+        '-p:UpdatableBuild=true',
         "-p:Version=$Version"
     )
 
@@ -129,10 +130,38 @@ function Invoke-DotnetPublish {
     Write-Output "  -> $zipName"
 }
 
+function Write-ReleaseMetadata {
+    param(
+        [string]$Arch
+    )
+
+    $exes = @(Get-ChildItem -LiteralPath $OutputDir -Filter "PoproshaykaBot-v$Version-$Arch*.exe")
+    if ($exes.Count -eq 0) {
+        return
+    }
+
+    $sumsPath = Join-Path $OutputDir "SHA256SUMS-$Arch.txt"
+    $lines = foreach ($exe in $exes) {
+        $hash = (Get-FileHash -LiteralPath $exe.FullName -Algorithm SHA256).Hash.ToLower()
+        "$hash  $($exe.Name)"
+    }
+    Set-Content -LiteralPath $sumsPath -Value $lines -Encoding ascii
+
+    $csprojPath = Join-Path $projectDir 'PoproshaykaBot.WinForms.csproj'
+    $tfm = (Select-String -LiteralPath $csprojPath -Pattern '<TargetFramework>(.*?)</TargetFramework>').Matches[0].Groups[1].Value
+    $runtimePath = Join-Path $OutputDir "RUNTIME-$Arch.txt"
+    Set-Content -LiteralPath $runtimePath -Value $tfm -Encoding ascii -NoNewline
+
+    Write-Output "  -> SHA256SUMS-$Arch.txt"
+    Write-Output "  -> RUNTIME-$Arch.txt"
+}
+
 foreach ($a in $Arch) {
     foreach ($v in $Variant) {
         Invoke-DotnetPublish -Arch $a -Variant $v
     }
+
+    Write-ReleaseMetadata -Arch $a
 }
 
 if (Test-Path -LiteralPath $publishRoot) {

@@ -14,6 +14,7 @@ using PoproshaykaBot.Core.Settings.Migrations;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
+using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using Serilog;
 using Serilog.Debugging;
@@ -30,6 +31,7 @@ public static class Program
     private static void Main(string[] args)
     {
         var isUiSmoke = args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
+        var isFinalizeUpdate = args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
 
         const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
@@ -52,10 +54,15 @@ public static class Program
                 ResolveStorageMode(),
                 AppPaths.BaseDirectory);
 
+            if (isFinalizeUpdate)
+            {
+                FinalizeUpdate();
+            }
+
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             ApplicationConfiguration.Initialize();
 
-            var memoryCheckTimer = CreateMemoryWatchdogTimer();
+            using var memoryCheckTimer = CreateMemoryWatchdogTimer();
 
             if (!isUiSmoke)
             {
@@ -115,6 +122,55 @@ public static class Program
             }
 
             serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+
+            if (!isUiSmoke)
+            {
+                ApplyPendingUpdate();
+            }
+        }
+    }
+
+    private static void FinalizeUpdate()
+    {
+        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        var logger = loggerFactory.CreateLogger(nameof(UpdateFinalizer));
+
+        try
+        {
+            var executablePath = Environment.ProcessPath;
+
+            if (string.IsNullOrEmpty(executablePath))
+            {
+                return;
+            }
+
+            UpdateFinalizer.Run(UpdatePaths.StagingDirectory(executablePath), executablePath, logger);
+        }
+        catch (Exception exception)
+        {
+            Log.Error(exception, "Ошибка очистки после обновления");
+        }
+    }
+
+    private static void ApplyPendingUpdate()
+    {
+        var executablePath = Environment.ProcessPath;
+
+        if (string.IsNullOrEmpty(executablePath))
+        {
+            return;
+        }
+
+        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        var logger = loggerFactory.CreateLogger(nameof(UpdateApplier));
+
+        try
+        {
+            UpdateApplier.TryApplyPending(UpdatePaths.StagingDirectory(executablePath), executablePath, logger);
+        }
+        catch (Exception exception)
+        {
+            Log.Error(exception, "Ошибка применения запланированного обновления");
         }
     }
 
@@ -273,6 +329,7 @@ public static class Program
             .AddPolls()
             .AddHttpServer()
             .AddObsIntegration()
+            .AddSelfUpdate()
             .AddDashboardTiles()
             .AddForms();
     }

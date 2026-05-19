@@ -85,6 +85,7 @@ jobs:
           --output .\publish\framework-dependent
           -p:PublishSingleFile=true
           -p:PublishReadyToRun=true
+          -p:UpdatableBuild=true
           -p:Version=${{ needs.prepare.outputs.version }}
           --no-self-contained
 
@@ -98,6 +99,7 @@ jobs:
           -p:PublishReadyToRun=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:PortableMode=true
+          -p:UpdatableBuild=true
           -p:Version=${{ needs.prepare.outputs.version }}
           --self-contained
 
@@ -113,6 +115,12 @@ jobs:
           Move-Item -Path ".\publish\portable\PoproshaykaBot-v$version-$arch-portable.exe" -Destination ".\artifacts\"
           Compress-Archive -Path ".\artifacts\PoproshaykaBot-v$version-$arch.exe" -DestinationPath ".\artifacts\PoproshaykaBot-v$version-$arch.zip"
           Compress-Archive -Path ".\artifacts\PoproshaykaBot-v$version-$arch-portable.exe" -DestinationPath ".\artifacts\PoproshaykaBot-v$version-$arch-portable.zip"
+          Get-ChildItem ".\artifacts\*.exe" | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
+          } | Set-Content ".\artifacts\SHA256SUMS-$arch.txt" -Encoding ascii
+          $tfm = (Select-String -Path ".\PoproshaykaBot.WinForms.csproj" -Pattern '<TargetFramework>(.*?)</TargetFramework>').Matches[0].Groups[1].Value
+          Set-Content ".\artifacts\RUNTIME-$arch.txt" -Value $tfm -Encoding ascii -NoNewline
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

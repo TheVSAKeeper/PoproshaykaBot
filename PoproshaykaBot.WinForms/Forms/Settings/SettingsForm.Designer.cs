@@ -57,6 +57,8 @@ partial class SettingsForm
         _dashboardSettingsControl = new DashboardSettingsControl();
         _miscTabPage = new TabPage();
         _miscSettingsControl = new MiscSettingsControl();
+        _updateTabPage = new TabPage();
+        _updateSettingsControl = new UpdateSettingsControl();
         _buttonPanel = new FlowLayoutPanel();
         _resetButton = new Button();
         _okButton = new Button();
@@ -78,6 +80,7 @@ partial class SettingsForm
         _pollsTabPage.SuspendLayout();
         _dashboardTabPage.SuspendLayout();
         _miscTabPage.SuspendLayout();
+        _updateTabPage.SuspendLayout();
         _buttonPanel.SuspendLayout();
         SuspendLayout();
         // 
@@ -109,6 +112,7 @@ partial class SettingsForm
         _tabControl.Controls.Add(_pollsTabPage);
         _tabControl.Controls.Add(_dashboardTabPage);
         _tabControl.Controls.Add(_miscTabPage);
+        _tabControl.Controls.Add(_updateTabPage);
         _tabControl.Dock = DockStyle.Fill;
         _tabControl.Location = new Point(15, 15);
         _tabControl.Name = "_tabControl";
@@ -397,8 +401,29 @@ partial class SettingsForm
         _miscSettingsControl.Size = new Size(593, 529);
         _miscSettingsControl.TabIndex = 0;
         //
+        // _updateTabPage
+        //
+        _updateTabPage.Controls.Add(_updateSettingsControl);
+        _updateTabPage.Location = new Point(4, 24);
+        _updateTabPage.Name = "_updateTabPage";
+        _updateTabPage.Padding = new Padding(10, 10, 10, 10);
+        _updateTabPage.Size = new Size(613, 549);
+        _updateTabPage.TabIndex = 12;
+        _updateTabPage.Text = "Обновления";
+        _updateTabPage.UseVisualStyleBackColor = true;
+        //
+        // _updateSettingsControl
+        //
+        _updateSettingsControl.Dock = DockStyle.Fill;
+        _updateSettingsControl.Location = new Point(10, 10);
+        _updateSettingsControl.Margin = new Padding(6, 7, 6, 7);
+        _updateSettingsControl.Name = "_updateSettingsControl";
+        _updateSettingsControl.Size = new Size(593, 529);
+        _updateSettingsControl.TabIndex = 0;
+        _updateSettingsControl.SettingChanged += OnSettingChanged;
+        //
         // _buttonPanel
-        // 
+        //
         _buttonPanel.AutoSize = true;
         _buttonPanel.Controls.Add(_resetButton);
         _buttonPanel.Controls.Add(_okButton);
@@ -490,6 +515,7 @@ partial class SettingsForm
         _pollsTabPage.ResumeLayout(false);
         _dashboardTabPage.ResumeLayout(false);
         _miscTabPage.ResumeLayout(false);
+        _updateTabPage.ResumeLayout(false);
         _buttonPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
@@ -520,6 +546,8 @@ partial class SettingsForm
     private AutoBroadcastSettingsControl _autoBroadcastSettingsControl;
     private BotLifecycleAutomationSettingsControl _botLifecycleAutomationSettingsControl;
     private MiscSettingsControl _miscSettingsControl;
+    private TabPage _updateTabPage;
+    private UpdateSettingsControl _updateSettingsControl;
     private TabPage _pollsTabPage;
     private PollsSettingsControl _pollsSettingsControl;
     private TabPage _dashboardTabPage;
