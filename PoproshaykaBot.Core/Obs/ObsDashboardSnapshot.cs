@@ -5,7 +5,7 @@ public sealed record ObsDashboardSnapshot(
     string? CurrentSceneName,
     bool? IsStreaming,
     bool? IsRecording,
-    ObsMicrophoneSnapshot? Microphone,
+    IReadOnlyList<ObsAudioSourceSnapshot> AudioSources,
     DateTimeOffset UpdatedAt)
 {
     public bool IsConnected => Connection.IsConnected;
@@ -17,6 +17,6 @@ public sealed record ObsDashboardSnapshot(
 
     public static ObsDashboardSnapshot Unavailable(ObsConnectionSnapshot connection)
     {
-        return new(connection, null, null, null, null, DateTimeOffset.Now);
+        return new(connection, null, null, null, [], DateTimeOffset.Now);
     }
 }

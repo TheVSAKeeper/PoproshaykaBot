@@ -28,6 +28,7 @@ partial class ObsIntegrationSettingsControl
     /// </summary>
     private void InitializeComponent()
     {
+        components = new System.ComponentModel.Container();
         _rootLayout = new TableLayoutPanel();
         _enabledCheckBox = new CheckBox();
         _autoConnectCheckBox = new CheckBox();
@@ -43,8 +44,8 @@ partial class ObsIntegrationSettingsControl
         _passwordTextBox = new TextBox();
         _sceneLabel = new Label();
         _sceneComboBox = new ComboBox();
-        _microphoneLabel = new Label();
-        _microphoneComboBox = new ComboBox();
+        _sourcesLabel = new Label();
+        _sourcesCheckedListBox = new CheckedListBox();
         _volumeMeterDelayLabel = new Label();
         _volumeMeterDelayNumeric = new NumericUpDown();
         _sourceNameLabel = new Label();
@@ -63,6 +64,7 @@ partial class ObsIntegrationSettingsControl
         _loadScenesButton = new Button();
         _provisionButton = new Button();
         _copyUrlButton = new Button();
+        _hintToolTip = new ToolTip(components);
         _rootLayout.SuspendLayout();
         _formLayout.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)_portNumeric).BeginInit();
@@ -95,11 +97,11 @@ partial class ObsIntegrationSettingsControl
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
-        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 320F));
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 398F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _rootLayout.Size = new Size(600, 536);
+        _rootLayout.Size = new Size(600, 614);
         _rootLayout.TabIndex = 0;
         //
         // _enabledCheckBox
@@ -175,8 +177,8 @@ partial class ObsIntegrationSettingsControl
         _formLayout.Controls.Add(_passwordTextBox, 1, 2);
         _formLayout.Controls.Add(_sceneLabel, 0, 3);
         _formLayout.Controls.Add(_sceneComboBox, 1, 3);
-        _formLayout.Controls.Add(_microphoneLabel, 0, 4);
-        _formLayout.Controls.Add(_microphoneComboBox, 1, 4);
+        _formLayout.Controls.Add(_sourcesLabel, 0, 4);
+        _formLayout.Controls.Add(_sourcesCheckedListBox, 1, 4);
         _formLayout.Controls.Add(_volumeMeterDelayLabel, 0, 5);
         _formLayout.Controls.Add(_volumeMeterDelayNumeric, 1, 5);
         _formLayout.Controls.Add(_sourceNameLabel, 0, 6);
@@ -193,13 +195,13 @@ partial class ObsIntegrationSettingsControl
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
-        _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
+        _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _formLayout.Size = new Size(586, 314);
+        _formLayout.Size = new Size(586, 392);
         _formLayout.TabIndex = 5;
         //
         // _hostLabel
@@ -297,29 +299,35 @@ partial class ObsIntegrationSettingsControl
         _sceneComboBox.SelectedIndexChanged += OnSettingChanged;
         _sceneComboBox.TextChanged += OnSettingChanged;
         //
-        // _microphoneLabel
+        // _sourcesLabel
         //
-        _microphoneLabel.AutoSize = true;
-        _microphoneLabel.Dock = DockStyle.Fill;
-        _microphoneLabel.Location = new Point(0, 128);
-        _microphoneLabel.Margin = new Padding(0, 0, 6, 4);
-        _microphoneLabel.Name = "_microphoneLabel";
-        _microphoneLabel.Size = new Size(144, 28);
-        _microphoneLabel.TabIndex = 8;
-        _microphoneLabel.Text = "Микрофон виджета:";
-        _microphoneLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _sourcesLabel.AutoSize = true;
+        _sourcesLabel.Dock = DockStyle.Fill;
+        _sourcesLabel.Location = new Point(0, 128);
+        _sourcesLabel.Margin = new Padding(0, 0, 6, 4);
+        _sourcesLabel.Name = "_sourcesLabel";
+        _sourcesLabel.Size = new Size(144, 106);
+        _sourcesLabel.TabIndex = 8;
+        _sourcesLabel.Text = "Источники виджета:";
+        _sourcesLabel.TextAlign = ContentAlignment.TopLeft;
         //
-        // _microphoneComboBox
+        // _sourcesCheckedListBox
         //
-        _microphoneComboBox.Dock = DockStyle.Fill;
-        _microphoneComboBox.FormattingEnabled = true;
-        _microphoneComboBox.Location = new Point(150, 131);
-        _microphoneComboBox.Margin = new Padding(0, 3, 0, 4);
-        _microphoneComboBox.Name = "_microphoneComboBox";
-        _microphoneComboBox.Size = new Size(436, 23);
-        _microphoneComboBox.TabIndex = 9;
-        _microphoneComboBox.SelectedIndexChanged += OnSettingChanged;
-        _microphoneComboBox.TextChanged += OnSettingChanged;
+        _sourcesCheckedListBox.CheckOnClick = true;
+        _sourcesCheckedListBox.Dock = DockStyle.Fill;
+        _sourcesCheckedListBox.FormattingEnabled = true;
+        _sourcesCheckedListBox.IntegralHeight = false;
+        _sourcesCheckedListBox.Location = new Point(150, 131);
+        _sourcesCheckedListBox.Margin = new Padding(0, 3, 0, 4);
+        _sourcesCheckedListBox.Name = "_sourcesCheckedListBox";
+        _sourcesCheckedListBox.Size = new Size(436, 99);
+        _sourcesCheckedListBox.TabIndex = 9;
+        _sourcesCheckedListBox.ItemCheck += OnSettingChanged;
+        //
+        // _hintToolTip
+        //
+        _hintToolTip.SetToolTip(_sourcesCheckedListBox,
+            "Отметьте аудио-источники OBS для виджета. Пусто = авто-определение микрофона.");
         //
         // _volumeMeterDelayLabel
         //
@@ -455,7 +463,7 @@ partial class ObsIntegrationSettingsControl
         _statusLabel.AutoEllipsis = true;
         _statusLabel.Dock = DockStyle.Fill;
         _statusLabel.ForeColor = Color.Gray;
-        _statusLabel.Location = new Point(7, 408);
+        _statusLabel.Location = new Point(7, 486);
         _statusLabel.Name = "_statusLabel";
         _statusLabel.Size = new Size(586, 30);
         _statusLabel.TabIndex = 6;
@@ -470,7 +478,7 @@ partial class ObsIntegrationSettingsControl
         _buttonPanel.Controls.Add(_provisionButton);
         _buttonPanel.Controls.Add(_copyUrlButton);
         _buttonPanel.Dock = DockStyle.Fill;
-        _buttonPanel.Location = new Point(7, 441);
+        _buttonPanel.Location = new Point(7, 519);
         _buttonPanel.Name = "_buttonPanel";
         _buttonPanel.Size = new Size(586, 28);
         _buttonPanel.TabIndex = 7;
@@ -536,7 +544,7 @@ partial class ObsIntegrationSettingsControl
         AutoScaleMode = AutoScaleMode.Font;
         Controls.Add(_rootLayout);
         Name = "ObsIntegrationSettingsControl";
-        Size = new Size(600, 536);
+        Size = new Size(600, 614);
         _rootLayout.ResumeLayout(false);
         _rootLayout.PerformLayout();
         _formLayout.ResumeLayout(false);
@@ -568,8 +576,9 @@ partial class ObsIntegrationSettingsControl
     private TextBox _passwordTextBox;
     private Label _sceneLabel;
     private ComboBox _sceneComboBox;
-    private Label _microphoneLabel;
-    private ComboBox _microphoneComboBox;
+    private Label _sourcesLabel;
+    private CheckedListBox _sourcesCheckedListBox;
+    private ToolTip _hintToolTip;
     private Label _volumeMeterDelayLabel;
     private NumericUpDown _volumeMeterDelayNumeric;
     private Label _sourceNameLabel;

@@ -150,14 +150,14 @@ public sealed class ObsIntegrationService(
                 var sceneName = await GetCurrentProgramSceneNameAsync(cts.Token).ConfigureAwait(false);
                 var isStreaming = await GetOutputActiveAsync("GetStreamStatus", cts.Token).ConfigureAwait(false);
                 var isRecording = await GetOutputActiveAsync("GetRecordStatus", cts.Token).ConfigureAwait(false);
-                var microphone = await GetMicrophoneSnapshotAsync(settings.DashboardMicrophoneName, cts.Token)
+                var audioSources = await GetAudioSourceSnapshotsAsync(settings, cts.Token)
                     .ConfigureAwait(false);
 
                 return new(connection,
                     sceneName,
                     isStreaming,
                     isRecording,
-                    microphone,
+                    audioSources,
                     DateTimeOffset.Now);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
@@ -460,57 +460,67 @@ public sealed class ObsIntegrationService(
         return response is null ? null : GetOptionalBool(response.Value, "outputActive");
     }
 
-    private async Task<ObsMicrophoneSnapshot?> GetMicrophoneSnapshotAsync(
-        string configuredMicrophoneName,
+    private async Task<IReadOnlyList<ObsAudioSourceSnapshot>> GetAudioSourceSnapshotsAsync(
+        ObsIntegrationSettings settings,
         CancellationToken cancellationToken)
     {
         var inputs = await GetInputListAsync(cancellationToken).ConfigureAwait(false);
-        ObsInputInfo? microphone;
+        var configuredNames = settings.GetDashboardSourceNames();
 
-        if (string.IsNullOrWhiteSpace(configuredMicrophoneName))
+        if (configuredNames.Count == 0)
         {
-            microphone = inputs
+            var autoMicrophone = inputs
                 .Select(input => new { Input = input, Score = GetMicrophoneCandidateScore(input) })
                 .Where(candidate => candidate.Score > 0)
                 .OrderByDescending(candidate => candidate.Score)
                 .ThenBy(candidate => candidate.Input.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(candidate => candidate.Input)
                 .FirstOrDefault();
-        }
-        else
-        {
-            var microphoneName = configuredMicrophoneName.Trim();
-            microphone = inputs.FirstOrDefault(input =>
-                string.Equals(input.Name, microphoneName, StringComparison.OrdinalIgnoreCase));
+
+            if (autoMicrophone is null)
+            {
+                return [];
+            }
+
+            return [await GetAudioSourceSnapshotAsync(autoMicrophone, cancellationToken).ConfigureAwait(false)];
         }
 
-        if (microphone is null)
+        var result = new List<ObsAudioSourceSnapshot>();
+        foreach (var configuredName in configuredNames)
         {
-            return null;
+            var input = inputs.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, configuredName, StringComparison.OrdinalIgnoreCase));
+
+            if (input is null)
+            {
+                continue;
+            }
+
+            result.Add(await GetAudioSourceSnapshotAsync(input, cancellationToken).ConfigureAwait(false));
         }
 
-        return await GetMicrophoneSnapshotAsync(microphone, cancellationToken).ConfigureAwait(false);
+        return result;
     }
 
-    private async Task<ObsMicrophoneSnapshot> GetMicrophoneSnapshotAsync(
-        ObsInputInfo microphone,
+    private async Task<ObsAudioSourceSnapshot> GetAudioSourceSnapshotAsync(
+        ObsInputInfo input,
         CancellationToken cancellationToken)
     {
         var muteResponse = await client.SendRequestAsync("GetInputMute",
-                new { inputName = microphone.Name },
+                new { inputName = input.Name },
                 cancellationToken)
             .ConfigureAwait(false);
 
         var volumeResponse = await client.SendRequestAsync("GetInputVolume",
-                new { inputName = microphone.Name },
+                new { inputName = input.Name },
                 cancellationToken)
             .ConfigureAwait(false);
 
         var muted = muteResponse is not null
                     && (GetOptionalBool(muteResponse.Value, "inputMuted") ?? false);
 
-        return new(microphone.Name,
-            microphone.UnversionedKind,
+        return new(input.Name,
+            input.UnversionedKind,
             muted,
             volumeResponse is null ? null : GetOptionalDouble(volumeResponse.Value, "inputVolumeDb"),
             volumeResponse is null ? null : GetOptionalDouble(volumeResponse.Value, "inputVolumeMul"));

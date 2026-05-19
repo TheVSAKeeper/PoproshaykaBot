@@ -135,10 +135,10 @@ public sealed class ObsIntegrationServiceTests
             Assert.That(snapshot.CurrentSceneName, Is.EqualTo("Main"));
             Assert.That(snapshot.IsStreaming, Is.True);
             Assert.That(snapshot.IsRecording, Is.False);
-            Assert.That(snapshot.Microphone, Is.Not.Null);
-            Assert.That(snapshot.Microphone!.Name, Is.EqualTo("Mic/Aux"));
-            Assert.That(snapshot.Microphone.IsMuted, Is.True);
-            Assert.That(snapshot.Microphone.VolumeDecibels, Is.EqualTo(-12.5).Within(0.01));
+            Assert.That(snapshot.AudioSources, Has.Count.EqualTo(1));
+            Assert.That(snapshot.AudioSources[0].Name, Is.EqualTo("Mic/Aux"));
+            Assert.That(snapshot.AudioSources[0].IsMuted, Is.True);
+            Assert.That(snapshot.AudioSources[0].VolumeDecibels, Is.EqualTo(-12.5).Within(0.01));
         }
 
         var muteRequest = _client.Requests.Single(r =>
@@ -182,16 +182,70 @@ public sealed class ObsIntegrationServiceTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(snapshot.Microphone, Is.Not.Null);
-            Assert.That(snapshot.Microphone!.Name, Is.EqualTo("Line In"));
-            Assert.That(snapshot.Microphone.IsMuted, Is.False);
-            Assert.That(snapshot.Microphone.VolumeDecibels, Is.EqualTo(-6.0).Within(0.01));
+            Assert.That(snapshot.AudioSources, Has.Count.EqualTo(1));
+            Assert.That(snapshot.AudioSources[0].Name, Is.EqualTo("Line In"));
+            Assert.That(snapshot.AudioSources[0].IsMuted, Is.False);
+            Assert.That(snapshot.AudioSources[0].VolumeDecibels, Is.EqualTo(-6.0).Within(0.01));
         }
 
         var muteRequest = _client.Requests.Single(r =>
             string.Equals(r.RequestType, "GetInputMute", StringComparison.Ordinal));
 
         Assert.That(muteRequest.RequestData!.Value.GetProperty("inputName").GetString(), Is.EqualTo("Line In"));
+    }
+
+    [Test]
+    public async Task GetDashboardSnapshotAsyncReturnsAllConfiguredAudioSourcesInOrderAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetCurrentProgramScene", """{"currentProgramSceneName":"Main"}""");
+        _client.EnqueueResponse("GetStreamStatus", """{"outputActive":false}""");
+        _client.EnqueueResponse("GetRecordStatus", """{"outputActive":false}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {
+                                                      "inputName": "Mic/Aux",
+                                                      "inputKind": "wasapi_input_capture",
+                                                      "unversionedInputKind": "wasapi_input_capture"
+                                                    },
+                                                    {
+                                                      "inputName": "Desktop Audio",
+                                                      "inputKind": "wasapi_output_capture",
+                                                      "unversionedInputKind": "wasapi_output_capture"
+                                                    }
+                                                  ]
+                                                }
+                                                """);
+
+        _client.EnqueueResponse("GetInputMute", """{"inputMuted":false}""");
+        _client.EnqueueResponse("GetInputVolume", """{"inputVolumeDb":-3.0,"inputVolumeMul":0.8}""");
+        _client.EnqueueResponse("GetInputMute", """{"inputMuted":true}""");
+        _client.EnqueueResponse("GetInputVolume", """{"inputVolumeDb":-18.0,"inputVolumeMul":0.1}""");
+
+        var snapshot = await _service.GetDashboardSnapshotAsync(new()
+        {
+            Enabled = true,
+            DashboardSourceNames = ["Desktop Audio", "Mic/Aux"],
+        }, true, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(snapshot.AudioSources, Has.Count.EqualTo(2));
+            Assert.That(snapshot.AudioSources[0].Name, Is.EqualTo("Desktop Audio"));
+            Assert.That(snapshot.AudioSources[0].IsMuted, Is.False);
+            Assert.That(snapshot.AudioSources[0].VolumeDecibels, Is.EqualTo(-3.0).Within(0.01));
+            Assert.That(snapshot.AudioSources[1].Name, Is.EqualTo("Mic/Aux"));
+            Assert.That(snapshot.AudioSources[1].IsMuted, Is.True);
+            Assert.That(snapshot.AudioSources[1].VolumeDecibels, Is.EqualTo(-18.0).Within(0.01));
+        }
+
+        var muteInputNames = _client.Requests
+            .Where(request => string.Equals(request.RequestType, "GetInputMute", StringComparison.Ordinal))
+            .Select(request => request.RequestData!.Value.GetProperty("inputName").GetString())
+            .ToArray();
+
+        Assert.That(muteInputNames, Is.EqualTo(new[] { "Desktop Audio", "Mic/Aux" }));
     }
 
     [Test]

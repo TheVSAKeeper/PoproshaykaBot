@@ -8,8 +8,6 @@ namespace PoproshaykaBot.WinForms.Forms.Settings;
 
 public sealed partial class ObsIntegrationSettingsControl : UserControl
 {
-    private const string AutoMicrophoneSelectionText = "Авто";
-
     private bool _initialized;
     private bool _loading;
     private int _httpServerPort = 8080;
@@ -44,10 +42,7 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
             _portNumeric.Value = ClampToNumeric(settings.Port, _portNumeric);
             _passwordTextBox.Text = settings.Password;
             _sceneComboBox.Text = settings.SceneName;
-            PopulateMicrophoneComboBox(string.IsNullOrWhiteSpace(settings.DashboardMicrophoneName)
-                    ? []
-                    : [settings.DashboardMicrophoneName.Trim()],
-                settings.DashboardMicrophoneName);
+            PopulateSourcesCheckedList([], settings.GetDashboardSourceNames());
 
             _volumeMeterDelayNumeric.Value = ClampToNumeric(settings.DashboardVolumeMeterDelayMs, _volumeMeterDelayNumeric);
             _sourceNameTextBox.Text = settings.SourceName;
@@ -77,7 +72,8 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         settings.Port = (int)_portNumeric.Value;
         settings.Password = _passwordTextBox.Text;
         settings.SceneName = _sceneComboBox.Text.Trim();
-        settings.DashboardMicrophoneName = ReadMicrophoneInputNameFromControl();
+        settings.DashboardSourceNames = ReadSourceNamesFromControl();
+        settings.DashboardMicrophoneName = string.Empty;
         settings.DashboardVolumeMeterDelayMs = (int)_volumeMeterDelayNumeric.Value;
         settings.SourceName = string.IsNullOrWhiteSpace(_sourceNameTextBox.Text)
             ? "PoproshaykaBot Chat"
@@ -212,11 +208,6 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         };
     }
 
-    private static string ToMicrophoneSelectionText(string value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? AutoMicrophoneSelectionText : value.Trim();
-    }
-
     private async Task ConnectAndLoadScenesAsync(
         ObsIntegrationSettings settings,
         string successAction,
@@ -269,7 +260,7 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         try
         {
             PopulateSceneComboBox(scenes);
-            PopulateMicrophoneComboBox(inputNames);
+            PopulateSourcesCheckedList(inputNames, ReadSourceNamesFromControl());
         }
         finally
         {
@@ -293,25 +284,48 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         _sceneComboBox.Text = string.IsNullOrWhiteSpace(current) && scenes.Count > 0 ? scenes[0] : current;
     }
 
-    private void PopulateMicrophoneComboBox(IReadOnlyList<string> inputNames)
+    private void PopulateSourcesCheckedList(IReadOnlyList<string> inputNames, IReadOnlyList<string> selectedNames)
     {
-        PopulateMicrophoneComboBox(inputNames, ReadMicrophoneInputNameFromControl());
+        var selected = selectedNames
+            .Select(name => name?.Trim() ?? string.Empty)
+            .Where(name => name.Length > 0)
+            .ToList();
+
+        var items = inputNames
+            .Select(name => name?.Trim() ?? string.Empty)
+            .Where(name => name.Length > 0)
+            .Concat(selected)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        _sourcesCheckedListBox.BeginUpdate();
+        try
+        {
+            _sourcesCheckedListBox.Items.Clear();
+
+            foreach (var item in items)
+            {
+                var isChecked = selected.Exists(name =>
+                    string.Equals(name, item, StringComparison.OrdinalIgnoreCase));
+
+                _sourcesCheckedListBox.Items.Add(item, isChecked);
+            }
+        }
+        finally
+        {
+            _sourcesCheckedListBox.EndUpdate();
+        }
     }
 
-    private void PopulateMicrophoneComboBox(IReadOnlyList<string> inputNames, string selectedInputName)
+    private List<string> ReadSourceNamesFromControl()
     {
-        _microphoneComboBox.Items.Clear();
-        _microphoneComboBox.Items.Add(AutoMicrophoneSelectionText);
-        _microphoneComboBox.Items.AddRange(inputNames.Cast<object>().ToArray());
-        _microphoneComboBox.Text = ToMicrophoneSelectionText(selectedInputName);
-    }
-
-    private string ReadMicrophoneInputNameFromControl()
-    {
-        var value = _microphoneComboBox.Text.Trim();
-        return string.Equals(value, AutoMicrophoneSelectionText, StringComparison.OrdinalIgnoreCase)
-            ? string.Empty
-            : value;
+        return _sourcesCheckedListBox.CheckedItems
+            .Cast<string>()
+            .Select(name => name.Trim())
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private void ToggleActionButtons(bool enabled)

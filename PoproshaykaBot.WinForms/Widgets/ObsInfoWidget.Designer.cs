@@ -23,15 +23,13 @@ sealed partial class ObsInfoWidget
         _outputsTableLayoutPanel = new TableLayoutPanel();
         _streamingLabel = new Label();
         _recordingLabel = new Label();
-        _microphoneStateLabel = new Label();
-        _volumeMeterPanel = new Panel();
-        _volumeMeterFillPanel = new Panel();
-        _microphoneLabel = new Label();
+        _sourcesScrollPanel = new Panel();
+        _sourcesLayoutPanel = new TableLayoutPanel();
         _refreshTimer = new System.Windows.Forms.Timer(components);
         _volumeMeterTimer = new System.Windows.Forms.Timer(components);
         _mainTableLayoutPanel.SuspendLayout();
         _outputsTableLayoutPanel.SuspendLayout();
-        _volumeMeterPanel.SuspendLayout();
+        _sourcesScrollPanel.SuspendLayout();
         SuspendLayout();
         //
         // _mainTableLayoutPanel
@@ -40,19 +38,14 @@ sealed partial class ObsInfoWidget
         _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _mainTableLayoutPanel.Controls.Add(_sceneLabel, 0, 0);
         _mainTableLayoutPanel.Controls.Add(_outputsTableLayoutPanel, 0, 1);
-        _mainTableLayoutPanel.Controls.Add(_microphoneStateLabel, 0, 2);
-        _mainTableLayoutPanel.Controls.Add(_volumeMeterPanel, 0, 3);
-        _mainTableLayoutPanel.Controls.Add(_microphoneLabel, 0, 4);
+        _mainTableLayoutPanel.Controls.Add(_sourcesScrollPanel, 0, 2);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
         _mainTableLayoutPanel.Padding = new Padding(3);
-        _mainTableLayoutPanel.RowCount = 6;
+        _mainTableLayoutPanel.RowCount = 3;
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         _mainTableLayoutPanel.Size = new Size(320, 160);
         _mainTableLayoutPanel.TabIndex = 0;
@@ -104,54 +97,30 @@ sealed partial class ObsInfoWidget
         _recordingLabel.Text = "Запись: —";
         _recordingLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
-        // _microphoneStateLabel
+        // _sourcesScrollPanel
         //
-        _microphoneStateLabel.AutoEllipsis = true;
-        _microphoneStateLabel.BackColor = Color.Gray;
-        _microphoneStateLabel.Dock = DockStyle.Fill;
-        _microphoneStateLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        _microphoneStateLabel.ForeColor = Color.White;
-        _microphoneStateLabel.Location = new Point(6, 62);
-        _microphoneStateLabel.Margin = new Padding(3, 3, 3, 3);
-        _microphoneStateLabel.Name = "_microphoneStateLabel";
-        _microphoneStateLabel.Size = new Size(308, 36);
-        _microphoneStateLabel.TabIndex = 2;
-        _microphoneStateLabel.Text = "МИКРОФОН —";
-        _microphoneStateLabel.TextAlign = ContentAlignment.MiddleCenter;
+        _sourcesScrollPanel.AutoScroll = true;
+        _sourcesScrollPanel.Controls.Add(_sourcesLayoutPanel);
+        _sourcesScrollPanel.Dock = DockStyle.Fill;
+        _sourcesScrollPanel.Location = new Point(6, 62);
+        _sourcesScrollPanel.Margin = new Padding(3, 3, 3, 3);
+        _sourcesScrollPanel.Name = "_sourcesScrollPanel";
+        _sourcesScrollPanel.Size = new Size(308, 92);
+        _sourcesScrollPanel.TabIndex = 2;
         //
-        // _volumeMeterPanel
+        // _sourcesLayoutPanel
         //
-        _volumeMeterPanel.BackColor = Color.Gainsboro;
-        _volumeMeterPanel.BorderStyle = BorderStyle.FixedSingle;
-        _volumeMeterPanel.Controls.Add(_volumeMeterFillPanel);
-        _volumeMeterPanel.Dock = DockStyle.Fill;
-        _volumeMeterPanel.Location = new Point(6, 104);
-        _volumeMeterPanel.Margin = new Padding(3, 3, 3, 3);
-        _volumeMeterPanel.Name = "_volumeMeterPanel";
-        _volumeMeterPanel.Size = new Size(308, 16);
-        _volumeMeterPanel.TabIndex = 3;
-        _volumeMeterPanel.Resize += OnVolumeMeterPanelResize;
-        //
-        // _volumeMeterFillPanel
-        //
-        _volumeMeterFillPanel.BackColor = Color.SeaGreen;
-        _volumeMeterFillPanel.Dock = DockStyle.Left;
-        _volumeMeterFillPanel.Location = new Point(0, 0);
-        _volumeMeterFillPanel.Name = "_volumeMeterFillPanel";
-        _volumeMeterFillPanel.Size = new Size(0, 14);
-        _volumeMeterFillPanel.TabIndex = 0;
-        //
-        // _microphoneLabel
-        //
-        _microphoneLabel.AutoEllipsis = true;
-        _microphoneLabel.Dock = DockStyle.Fill;
-        _microphoneLabel.ForeColor = Color.DimGray;
-        _microphoneLabel.Location = new Point(6, 123);
-        _microphoneLabel.Name = "_microphoneLabel";
-        _microphoneLabel.Size = new Size(308, 34);
-        _microphoneLabel.TabIndex = 4;
-        _microphoneLabel.Text = "Микрофон: —";
-        _microphoneLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _sourcesLayoutPanel.AutoSize = true;
+        _sourcesLayoutPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        _sourcesLayoutPanel.ColumnCount = 1;
+        _sourcesLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        _sourcesLayoutPanel.Dock = DockStyle.Top;
+        _sourcesLayoutPanel.Location = new Point(0, 0);
+        _sourcesLayoutPanel.Margin = new Padding(0);
+        _sourcesLayoutPanel.Name = "_sourcesLayoutPanel";
+        _sourcesLayoutPanel.RowCount = 0;
+        _sourcesLayoutPanel.Size = new Size(308, 0);
+        _sourcesLayoutPanel.TabIndex = 0;
         //
         // _refreshTimer
         //
@@ -172,7 +141,8 @@ sealed partial class ObsInfoWidget
         Size = new Size(320, 160);
         _mainTableLayoutPanel.ResumeLayout(false);
         _outputsTableLayoutPanel.ResumeLayout(false);
-        _volumeMeterPanel.ResumeLayout(false);
+        _sourcesScrollPanel.ResumeLayout(false);
+        _sourcesScrollPanel.PerformLayout();
         ResumeLayout(false);
     }
 
@@ -181,10 +151,8 @@ sealed partial class ObsInfoWidget
     private Label _sceneLabel;
     private Label _streamingLabel;
     private Label _recordingLabel;
-    private Label _microphoneStateLabel;
-    private Panel _volumeMeterPanel;
-    private Panel _volumeMeterFillPanel;
-    private Label _microphoneLabel;
+    private Panel _sourcesScrollPanel;
+    private TableLayoutPanel _sourcesLayoutPanel;
     private System.Windows.Forms.Timer _refreshTimer;
     private System.Windows.Forms.Timer _volumeMeterTimer;
 }

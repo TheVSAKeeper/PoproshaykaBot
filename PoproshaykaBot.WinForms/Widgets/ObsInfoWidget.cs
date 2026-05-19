@@ -20,17 +20,16 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
 
     private readonly List<IDisposable> _subs = [];
     private readonly object _volumeMeterLock = new();
+
+    private readonly Dictionary<string, (double Level, DateTimeOffset UpdatedAt)> _volumeTargets =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private ObsIntegrationSettings _settings = new();
     private CancellationTokenSource? _refreshCts;
     private DateTimeOffset _lastAutoConnectAttempt = DateTimeOffset.MinValue;
-    private DateTimeOffset _lastVolumeMeterEventAt = DateTimeOffset.MinValue;
     private bool _initialized;
     private bool _refreshing;
     private bool _refreshQueued;
-    private string? _activeMicrophoneName;
-    private bool? _currentMicrophoneMuted;
-    private double _targetVolumeMeterLevel;
-    private double _currentVolumeMeterLevel;
     private ToolStripLabel? _connectionStatusLabel;
     private ToolStripButton? _refreshButton;
 
@@ -114,41 +113,44 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         _ = RefreshSnapshotAsync(connectIfNeeded: ShouldTryAutoConnect());
     }
 
-    private void OnVolumeMeterPanelResize(object? sender, EventArgs e)
-    {
-        ApplyVolumeMeterLevel(_currentVolumeMeterLevel);
-    }
-
     private void OnVolumeMeterTimerTick(object? sender, EventArgs e)
     {
-        var target = ReadVolumeMeterTarget();
-        if (target <= 0D && _currentVolumeMeterLevel <= 0D)
+        if (_sourcesLayoutPanel.Controls.Count == 0)
         {
             return;
         }
 
         var delayMs = ResolveVolumeMeterDelayMs();
-        var alpha = Math.Clamp((double)_volumeMeterTimer.Interval / delayMs, 0.02D, 1D);
 
-        if (target > _currentVolumeMeterLevel)
+        foreach (var meter in _sourcesLayoutPanel.Controls.OfType<ObsSourceMeter>())
         {
-            alpha = Math.Clamp(alpha * 1.8D, 0.02D, 1D);
-        }
+            var target = ReadRowTarget(meter.SourceName, meter.Muted, meter.Found, delayMs);
+            if (target <= 0D && meter.CurrentLevel <= 0D)
+            {
+                continue;
+            }
 
-        var nextLevel = _currentVolumeMeterLevel + (target - _currentVolumeMeterLevel) * alpha;
-        if (Math.Abs(nextLevel - target) < 0.003D)
-        {
-            nextLevel = target;
-        }
+            var alpha = Math.Clamp((double)_volumeMeterTimer.Interval / delayMs, 0.02D, 1D);
+            if (target > meter.CurrentLevel)
+            {
+                alpha = Math.Clamp(alpha * 1.8D, 0.02D, 1D);
+            }
 
-        ApplyVolumeMeterLevel(nextLevel);
+            var nextLevel = meter.CurrentLevel + (target - meter.CurrentLevel) * alpha;
+            if (Math.Abs(nextLevel - target) < 0.003D)
+            {
+                nextLevel = target;
+            }
+
+            meter.ApplyVolumeMeterLevel(nextLevel);
+        }
     }
 
     private void OnObsEventReceived(object? sender, ObsWebSocketEventArgs evt)
     {
         if (string.Equals(evt.EventType, "InputVolumeMeters", StringComparison.Ordinal))
         {
-            TryUpdateVolumeMeterFromObsEvent(evt);
+            UpdateVolumeTargetsFromObsEvent(evt);
             return;
         }
 
@@ -158,96 +160,6 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         }
 
         ScheduleRefreshFromObsEvent();
-    }
-
-    private static bool TryGetVolumeMeterLevel(JsonElement eventData, string inputName, out double level)
-    {
-        level = 0;
-
-        if (!eventData.TryGetProperty("inputs", out var inputs) || inputs.ValueKind != JsonValueKind.Array)
-        {
-            return false;
-        }
-
-        using var inputEnumerator = inputs.EnumerateArray();
-        while (inputEnumerator.MoveNext())
-        {
-            var input = inputEnumerator.Current;
-            if (!string.Equals(GetOptionalString(input, "inputName"), inputName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (input.TryGetProperty("inputLevelsMul", out var levelsMul)
-                && TryGetMaxNumber(levelsMul, out var maxMultiplier))
-            {
-                level = Math.Clamp(maxMultiplier, 0D, 1D);
-                return true;
-            }
-
-            if (input.TryGetProperty("inputLevelsDb", out var levelsDb)
-                && TryGetMaxNumber(levelsDb, out var maxDecibels))
-            {
-                level = NormalizeDecibelsToMeter(maxDecibels);
-                return true;
-            }
-
-            return false;
-        }
-
-        return false;
-    }
-
-    private static bool TryGetMaxNumber(JsonElement element, out double max)
-    {
-        max = double.NegativeInfinity;
-
-        if (element.ValueKind == JsonValueKind.Number)
-        {
-            max = element.GetDouble();
-            return true;
-        }
-
-        if (element.ValueKind != JsonValueKind.Array)
-        {
-            return false;
-        }
-
-        var found = false;
-        using var childEnumerator = element.EnumerateArray();
-        while (childEnumerator.MoveNext())
-        {
-            var child = childEnumerator.Current;
-            if (!TryGetMaxNumber(child, out var childMax))
-            {
-                continue;
-            }
-
-            max = Math.Max(max, childMax);
-            found = true;
-        }
-
-        return found;
-    }
-
-    private static double NormalizeDecibelsToMeter(double decibels)
-    {
-        return Math.Clamp((decibels + 60D) / 60D, 0D, 1D);
-    }
-
-    private static Color ResolveVolumeMeterColor(double normalized)
-    {
-        if (normalized >= 0.9D)
-        {
-            return Color.Firebrick;
-        }
-
-        if (normalized >= 0.68D)
-        {
-            return Color.DarkOrange;
-        }
-
-        return Color.SeaGreen;
     }
 
     private static string ToDisplayValue(string? value)
@@ -294,13 +206,118 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         };
     }
 
+    private static bool TryGetMaxNumber(JsonElement element, out double max)
+    {
+        max = double.NegativeInfinity;
+
+        if (element.ValueKind == JsonValueKind.Number)
+        {
+            max = element.GetDouble();
+            return true;
+        }
+
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        var found = false;
+        using var childEnumerator = element.EnumerateArray();
+        while (childEnumerator.MoveNext())
+        {
+            var child = childEnumerator.Current;
+            if (!TryGetMaxNumber(child, out var childMax))
+            {
+                continue;
+            }
+
+            max = Math.Max(max, childMax);
+            found = true;
+        }
+
+        return found;
+    }
+
+    private static bool TryGetInputLevel(JsonElement input, out double level)
+    {
+        level = 0;
+
+        if (input.TryGetProperty("inputLevelsMul", out var levelsMul)
+            && TryGetMaxNumber(levelsMul, out var maxMultiplier))
+        {
+            level = Math.Clamp(maxMultiplier, 0D, 1D);
+            return true;
+        }
+
+        if (input.TryGetProperty("inputLevelsDb", out var levelsDb)
+            && TryGetMaxNumber(levelsDb, out var maxDecibels))
+        {
+            level = NormalizeDecibelsToMeter(maxDecibels);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static double NormalizeDecibelsToMeter(double decibels)
+    {
+        return Math.Clamp((decibels + 60D) / 60D, 0D, 1D);
+    }
+
     private void OnObsIntegrationSettingsChanged(ObsIntegrationSettingsChangedEvent evt)
     {
         _settings = evt.Settings;
         _lastAutoConnectAttempt = DateTimeOffset.MinValue;
-        ResetVolumeMeterLevel();
+        ClearRows();
         ApplyCurrentConnectionState();
         _ = RefreshSnapshotAsync(connectIfNeeded: ShouldTryAutoConnect());
+    }
+
+    private void UpdateVolumeTargetsFromObsEvent(ObsWebSocketEventArgs evt)
+    {
+        if (evt.EventData is not { } eventData
+            || !eventData.TryGetProperty("inputs", out var inputs)
+            || inputs.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.Now;
+
+        lock (_volumeMeterLock)
+        {
+            using var inputEnumerator = inputs.EnumerateArray();
+            while (inputEnumerator.MoveNext())
+            {
+                var input = inputEnumerator.Current;
+                var inputName = GetOptionalString(input, "inputName");
+                if (string.IsNullOrWhiteSpace(inputName) || !TryGetInputLevel(input, out var level))
+                {
+                    continue;
+                }
+
+                _volumeTargets[inputName] = (level, now);
+            }
+        }
+    }
+
+    private double ReadRowTarget(string name, bool muted, bool found, int delayMs)
+    {
+        if (!found || muted || string.IsNullOrWhiteSpace(name))
+        {
+            return 0D;
+        }
+
+        lock (_volumeMeterLock)
+        {
+            if (!_volumeTargets.TryGetValue(name, out var target))
+            {
+                return 0D;
+            }
+
+            var staleAfter = TimeSpan.FromMilliseconds(delayMs * 3D);
+            return DateTimeOffset.Now - target.UpdatedAt > staleAfter ? 0D : target.Level;
+        }
     }
 
     private async Task RefreshSnapshotAsync(bool connectIfNeeded)
@@ -418,7 +435,125 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         _recordingLabel.Text = $"Запись: {FormatActiveState(snapshot.IsRecording)}";
         _recordingLabel.ForeColor = ResolveActiveColor(snapshot.IsRecording);
 
-        ApplyMicrophone(snapshot.Microphone, _settings.DashboardMicrophoneName);
+        ApplyAudioSources(snapshot.AudioSources);
+    }
+
+    private void ApplyAudioSources(IReadOnlyList<ObsAudioSourceSnapshot> audioSources)
+    {
+        var configured = _settings.GetDashboardSourceNames();
+        var orderedNames = configured.Count > 0
+            ? configured.ToList()
+            : audioSources.Select(source => source.Name).ToList();
+
+        EnsureRows(orderedNames);
+
+        foreach (var meter in _sourcesLayoutPanel.Controls.OfType<ObsSourceMeter>())
+        {
+            var snapshot = audioSources.FirstOrDefault(source =>
+                string.Equals(source.Name, meter.SourceName, StringComparison.OrdinalIgnoreCase));
+
+            if (snapshot is null)
+            {
+                meter.Found = false;
+                meter.Muted = false;
+                meter.ShowMissing(meter.SourceName);
+                continue;
+            }
+
+            meter.Found = true;
+            meter.Muted = snapshot.IsMuted;
+
+            if (snapshot.IsMuted)
+            {
+                meter.ShowMuted(snapshot.Name, snapshot.VolumeDecibels);
+            }
+            else
+            {
+                meter.ShowActive(snapshot.Name, snapshot.VolumeDecibels);
+            }
+        }
+    }
+
+    private void EnsureRows(IReadOnlyList<string> orderedNames)
+    {
+        var currentNames = _sourcesLayoutPanel.Controls
+            .OfType<ObsSourceMeter>()
+            .Select(meter => meter.SourceName);
+
+        if (currentNames.SequenceEqual(orderedNames, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _sourcesLayoutPanel.SuspendLayout();
+
+        try
+        {
+            foreach (var child in _sourcesLayoutPanel.Controls.Cast<Control>().ToList())
+            {
+                child.Dispose();
+            }
+
+            _sourcesLayoutPanel.Controls.Clear();
+            _sourcesLayoutPanel.RowStyles.Clear();
+
+            if (orderedNames.Count == 0)
+            {
+                _sourcesLayoutPanel.RowCount = 1;
+                _sourcesLayoutPanel.RowStyles.Add(new(SizeType.Absolute, 0F));
+                return;
+            }
+
+            _sourcesLayoutPanel.RowCount = orderedNames.Count;
+
+            for (var index = 0; index < orderedNames.Count; index++)
+            {
+                var meter = new ObsSourceMeter
+                {
+                    SourceName = orderedNames[index],
+                    Dock = DockStyle.Top,
+                };
+
+                _sourcesLayoutPanel.RowStyles.Add(new(SizeType.AutoSize));
+                _sourcesLayoutPanel.Controls.Add(meter, 0, index);
+            }
+        }
+        finally
+        {
+            _sourcesLayoutPanel.ResumeLayout(true);
+        }
+
+        lock (_volumeMeterLock)
+        {
+            _volumeTargets.Clear();
+        }
+    }
+
+    private void ClearRows()
+    {
+        _sourcesLayoutPanel.SuspendLayout();
+
+        try
+        {
+            foreach (var child in _sourcesLayoutPanel.Controls.Cast<Control>().ToList())
+            {
+                child.Dispose();
+            }
+
+            _sourcesLayoutPanel.Controls.Clear();
+            _sourcesLayoutPanel.RowStyles.Clear();
+            _sourcesLayoutPanel.RowCount = 1;
+            _sourcesLayoutPanel.RowStyles.Add(new(SizeType.Absolute, 0F));
+        }
+        finally
+        {
+            _sourcesLayoutPanel.ResumeLayout(true);
+        }
+
+        lock (_volumeMeterLock)
+        {
+            _volumeTargets.Clear();
+        }
     }
 
     private void ApplyDisabledState()
@@ -436,47 +571,6 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         ResetDetails("—");
     }
 
-    private void ApplyMicrophone(ObsMicrophoneSnapshot? microphone, string configuredMicrophoneName)
-    {
-        if (microphone is null)
-        {
-            _activeMicrophoneName = null;
-            _currentMicrophoneMuted = null;
-            SetMicrophoneState("МИКРОФОН НЕ НАЙДЕН",
-                Color.DarkOrange,
-                Color.Black);
-
-            ResetVolumeMeterLevel();
-            _microphoneLabel.Text = string.IsNullOrWhiteSpace(configuredMicrophoneName)
-                ? "Микрофон: не найден"
-                : $"Микрофон: {configuredMicrophoneName.Trim()} не найден";
-
-            _microphoneLabel.ForeColor = Color.Orange;
-            return;
-        }
-
-        _activeMicrophoneName = microphone.Name;
-        _currentMicrophoneMuted = microphone.IsMuted;
-        SetMicrophoneState(microphone.IsMuted ? "МИКРОФОН ВЫКЛЮЧЕН" : "МИКРОФОН ВКЛЮЧЕН",
-            microphone.IsMuted ? Color.Firebrick : Color.SeaGreen,
-            Color.White);
-
-        if (microphone.IsMuted)
-        {
-            ResetVolumeMeterLevel();
-        }
-
-        var volume = microphone.VolumeDecibels.HasValue
-            ? $" · {microphone.VolumeDecibels.Value:0.#} дБ"
-            : string.Empty;
-
-        _microphoneLabel.Text = microphone.IsMuted
-            ? $"Микрофон: выключен · {microphone.Name}{volume}"
-            : $"Микрофон: включен · {microphone.Name}{volume}";
-
-        _microphoneLabel.ForeColor = microphone.IsMuted ? Color.Red : Color.Green;
-    }
-
     private void ResetDetails(string value)
     {
         _sceneLabel.Text = $"Сцена: {value}";
@@ -484,12 +578,7 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         _streamingLabel.ForeColor = Color.DimGray;
         _recordingLabel.Text = $"Запись: {value}";
         _recordingLabel.ForeColor = Color.DimGray;
-        _activeMicrophoneName = null;
-        _currentMicrophoneMuted = null;
-        SetMicrophoneState("МИКРОФОН —", Color.Gray, Color.White);
-        ResetVolumeMeterLevel();
-        _microphoneLabel.Text = $"Микрофон: {value}";
-        _microphoneLabel.ForeColor = Color.DimGray;
+        ClearRows();
     }
 
     private void UpdateConnectionHeader(string text, Color color, string toolTipText)
@@ -502,90 +591,6 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         _connectionStatusLabel.Text = text;
         _connectionStatusLabel.ForeColor = color;
         _connectionStatusLabel.ToolTipText = toolTipText;
-    }
-
-    private void SetMicrophoneState(string text, Color backColor, Color foreColor)
-    {
-        _microphoneStateLabel.Text = text;
-        _microphoneStateLabel.BackColor = backColor;
-        _microphoneStateLabel.ForeColor = foreColor;
-    }
-
-    private void TryUpdateVolumeMeterFromObsEvent(ObsWebSocketEventArgs evt)
-    {
-        if (_currentMicrophoneMuted == true)
-        {
-            SetVolumeMeterTarget(0);
-            return;
-        }
-
-        if (evt.EventData is not { } eventData)
-        {
-            return;
-        }
-
-        var microphoneName = ResolveVolumeMeterInputName();
-        if (string.IsNullOrWhiteSpace(microphoneName))
-        {
-            return;
-        }
-
-        if (!TryGetVolumeMeterLevel(eventData, microphoneName, out var level))
-        {
-            return;
-        }
-
-        SetVolumeMeterTarget(level);
-    }
-
-    private string? ResolveVolumeMeterInputName()
-    {
-        return string.IsNullOrWhiteSpace(_settings.DashboardMicrophoneName)
-            ? _activeMicrophoneName
-            : _settings.DashboardMicrophoneName.Trim();
-    }
-
-    private double ReadVolumeMeterTarget()
-    {
-        lock (_volumeMeterLock)
-        {
-            var delayMs = ResolveVolumeMeterDelayMs();
-            var staleAfter = TimeSpan.FromMilliseconds(delayMs * 3D);
-            return _lastVolumeMeterEventAt == DateTimeOffset.MinValue
-                   || DateTimeOffset.Now - _lastVolumeMeterEventAt > staleAfter
-                ? 0D
-                : _targetVolumeMeterLevel;
-        }
-    }
-
-    private void SetVolumeMeterTarget(double level)
-    {
-        lock (_volumeMeterLock)
-        {
-            _targetVolumeMeterLevel = Math.Clamp(level, 0D, 1D);
-            _lastVolumeMeterEventAt = DateTimeOffset.Now;
-        }
-    }
-
-    private void ResetVolumeMeterLevel()
-    {
-        lock (_volumeMeterLock)
-        {
-            _targetVolumeMeterLevel = 0D;
-            _lastVolumeMeterEventAt = DateTimeOffset.MinValue;
-        }
-
-        ApplyVolumeMeterLevel(0);
-    }
-
-    private void ApplyVolumeMeterLevel(double level)
-    {
-        var normalized = Math.Clamp(level, 0D, 1D);
-        _currentVolumeMeterLevel = normalized;
-        var width = (int)Math.Round(_volumeMeterPanel.ClientSize.Width * normalized);
-
-        _volumeMeterFillPanel.Width = Math.Max(0, width);
-        _volumeMeterFillPanel.BackColor = ResolveVolumeMeterColor(normalized);
     }
 
     private int ResolveVolumeMeterDelayMs()

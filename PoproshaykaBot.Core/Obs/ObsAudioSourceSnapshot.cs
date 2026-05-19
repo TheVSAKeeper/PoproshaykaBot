@@ -1,6 +1,6 @@
 ﻿namespace PoproshaykaBot.Core.Obs;
 
-public sealed record ObsMicrophoneSnapshot(
+public sealed record ObsAudioSourceSnapshot(
     string Name,
     string Kind,
     bool IsMuted,
