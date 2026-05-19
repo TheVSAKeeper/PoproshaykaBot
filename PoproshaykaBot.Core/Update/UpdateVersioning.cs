@@ -47,6 +47,16 @@ public static class UpdateVersioning
         };
     }
 
+    public static string ChecksumsAssetName(string architectureMoniker)
+    {
+        return string.Create(CultureInfo.InvariantCulture, $"SHA256SUMS-{architectureMoniker}.txt");
+    }
+
+    public static string RuntimeAssetName(string architectureMoniker)
+    {
+        return string.Create(CultureInfo.InvariantCulture, $"RUNTIME-{architectureMoniker}.txt");
+    }
+
     public static ReleaseAsset? SelectAsset(ReleaseInfo release, string architectureMoniker, UpdateKind kind)
     {
         ArgumentNullException.ThrowIfNull(release);

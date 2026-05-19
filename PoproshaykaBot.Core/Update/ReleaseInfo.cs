@@ -6,4 +6,10 @@ public sealed record ReleaseInfo(
     string Body,
     bool Prerelease,
     bool Draft,
-    IReadOnlyList<ReleaseAsset> Assets);
+    IReadOnlyList<ReleaseAsset> Assets)
+{
+    public bool HasAsset(string name)
+    {
+        return Assets.Any(asset => asset.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    }
+}

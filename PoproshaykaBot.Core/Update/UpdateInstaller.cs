@@ -98,7 +98,7 @@ public sealed class UpdateInstaller(
 
     private static string BuildChecksumsUrl(string assetUrl, string architectureMoniker)
     {
-        return BuildSiblingUrl(assetUrl, "SHA256SUMS-" + architectureMoniker + ".txt");
+        return BuildSiblingUrl(assetUrl, UpdateVersioning.ChecksumsAssetName(architectureMoniker));
     }
 
     private static string BuildSiblingUrl(string assetUrl, string fileName)
@@ -168,7 +168,8 @@ public sealed class UpdateInstaller(
             return;
         }
 
-        var url = BuildSiblingUrl(candidate.Asset.DownloadUrl, "RUNTIME-" + environment.ArchitectureMoniker + ".txt");
+        var url = BuildSiblingUrl(candidate.Asset.DownloadUrl,
+            UpdateVersioning.RuntimeAssetName(environment.ArchitectureMoniker));
 
         string runtimeText;
 

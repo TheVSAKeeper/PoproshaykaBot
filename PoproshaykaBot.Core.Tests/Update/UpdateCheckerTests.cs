@@ -5,16 +5,33 @@ namespace PoproshaykaBot.Core.Tests.Update;
 [TestFixture]
 public sealed class UpdateCheckerTests
 {
+    private static ReleaseAsset Asset(string name)
+    {
+        return new(name, "https://example/download/" + name, 100, "application/octet-stream");
+    }
+
     private static ReleaseInfo Release(
         string tag = "v3.1.0.7",
         bool prerelease = false,
         bool draft = false,
-        string assetName = "PoproshaykaBot-v3.1.0.7-x64-portable.exe")
+        string assetName = "PoproshaykaBot-v3.1.0.7-x64-portable.exe",
+        string arch = "x64",
+        bool includeChecksums = true,
+        bool includeRuntime = true)
     {
-        return new(tag, "https://example/notes", "body", prerelease, draft,
-        [
-            new(assetName, "https://example/download/" + assetName, 100, "application/octet-stream"),
-        ]);
+        var assets = new List<ReleaseAsset> { Asset(assetName) };
+
+        if (includeChecksums)
+        {
+            assets.Add(Asset("SHA256SUMS-" + arch + ".txt"));
+        }
+
+        if (includeRuntime)
+        {
+            assets.Add(Asset("RUNTIME-" + arch + ".txt"));
+        }
+
+        return new(tag, "https://example/notes", "body", prerelease, draft, assets);
     }
 
     private static UpdateChecker CreateChecker(
@@ -95,6 +112,8 @@ public sealed class UpdateCheckerTests
             [
                 new("PoproshaykaBot-v3.1.0.7-x64-portable.exe", "p", 1, "application/octet-stream"),
                 new("PoproshaykaBot-v3.1.0.7-x64.exe", "f", 2, "application/octet-stream"),
+                new("SHA256SUMS-x64.txt", "s", 3, "text/plain"),
+                new("RUNTIME-x64.txt", "r", 4, "text/plain"),
             ]));
 
         var candidate = await CreateChecker(client, kind: UpdateKind.FrameworkDependent)
@@ -127,5 +146,41 @@ public sealed class UpdateCheckerTests
         var candidate = await CreateChecker(client, arch: "x64").CheckAsync(null, CancellationToken.None);
 
         Assert.That(candidate, Is.Null);
+    }
+
+    [Test]
+    public async Task CheckAsync_ReturnsNull_WhenChecksumsAssetMissing()
+    {
+        var client = Substitute.For<IGitHubReleaseClient>();
+        client.GetLatestReleaseAsync(Arg.Any<CancellationToken>()).Returns(Release(includeChecksums: false));
+
+        var candidate = await CreateChecker(client).CheckAsync(null, CancellationToken.None);
+
+        Assert.That(candidate, Is.Null);
+    }
+
+    [Test]
+    public async Task CheckAsync_ReturnsNull_WhenRuntimeAssetMissing_ForFrameworkDependent()
+    {
+        var client = Substitute.For<IGitHubReleaseClient>();
+        client
+            .GetLatestReleaseAsync(Arg.Any<CancellationToken>())
+            .Returns(Release(assetName: "PoproshaykaBot-v3.1.0.7-x64.exe", includeRuntime: false));
+
+        var candidate = await CreateChecker(client, kind: UpdateKind.FrameworkDependent)
+            .CheckAsync(null, CancellationToken.None);
+
+        Assert.That(candidate, Is.Null);
+    }
+
+    [Test]
+    public async Task CheckAsync_Portable_DoesNotRequireRuntimeAsset()
+    {
+        var client = Substitute.For<IGitHubReleaseClient>();
+        client.GetLatestReleaseAsync(Arg.Any<CancellationToken>()).Returns(Release(includeRuntime: false));
+
+        var candidate = await CreateChecker(client).CheckAsync(null, CancellationToken.None);
+
+        Assert.That(candidate, Is.Not.Null);
     }
 }

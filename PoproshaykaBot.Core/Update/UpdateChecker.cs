@@ -53,9 +53,46 @@ public sealed class UpdateChecker(
             return null;
         }
 
+        if (!HasRequiredVerificationAssets(release))
+        {
+            return null;
+        }
+
         logger.LogInformation("Доступно обновление: {Latest} (текущая {Current})",
             latestText, environment.CurrentVersion);
 
         return new(latest, release.TagName, asset, release.HtmlUrl);
+    }
+
+    private bool HasRequiredVerificationAssets(ReleaseInfo release)
+    {
+        var checksumsName = UpdateVersioning.ChecksumsAssetName(environment.ArchitectureMoniker);
+
+        if (!release.HasAsset(checksumsName))
+        {
+            logger.LogWarning("Релиз {Tag} не содержит файл контрольных сумм {Asset}, автоматическое обновление невозможно. "
+                              + "Обновите программу вручную: {Url}",
+                release.TagName, checksumsName, release.HtmlUrl);
+
+            return false;
+        }
+
+        if (environment.Kind != UpdateKind.FrameworkDependent)
+        {
+            return true;
+        }
+
+        var runtimeName = UpdateVersioning.RuntimeAssetName(environment.ArchitectureMoniker);
+
+        if (!release.HasAsset(runtimeName))
+        {
+            logger.LogWarning("Релиз {Tag} не содержит файл {Asset} для проверки совместимости .NET, "
+                              + "автоматическое обновление невозможно. Обновите программу вручную: {Url}",
+                release.TagName, runtimeName, release.HtmlUrl);
+
+            return false;
+        }
+
+        return true;
     }
 }
