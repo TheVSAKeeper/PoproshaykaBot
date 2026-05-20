@@ -148,15 +148,18 @@ public sealed class ObsIntegrationService(
             try
             {
                 var sceneName = await GetCurrentProgramSceneNameAsync(cts.Token).ConfigureAwait(false);
-                var isStreaming = await GetOutputActiveAsync("GetStreamStatus", cts.Token).ConfigureAwait(false);
-                var isRecording = await GetOutputActiveAsync("GetRecordStatus", cts.Token).ConfigureAwait(false);
+                var streamStatus = await GetStreamStatusAsync(cts.Token).ConfigureAwait(false);
+                var recordStatus = await GetRecordStatusAsync(cts.Token).ConfigureAwait(false);
                 var audioSources = await GetAudioSourceSnapshotsAsync(settings, cts.Token)
                     .ConfigureAwait(false);
 
                 return new(connection,
                     sceneName,
-                    isStreaming,
-                    isRecording,
+                    streamStatus.Active,
+                    streamStatus.Timecode,
+                    recordStatus.Active,
+                    recordStatus.Paused,
+                    recordStatus.Timecode,
                     audioSources,
                     DateTimeOffset.Now);
             }
@@ -454,10 +457,32 @@ public sealed class ObsIntegrationService(
             : GetOptionalString(response.Value, "currentProgramSceneName");
     }
 
-    private async Task<bool?> GetOutputActiveAsync(string requestType, CancellationToken cancellationToken)
+    private async Task<(bool? Active, string? Timecode)> GetStreamStatusAsync(CancellationToken cancellationToken)
     {
-        var response = await client.SendRequestAsync(requestType, null, cancellationToken).ConfigureAwait(false);
-        return response is null ? null : GetOptionalBool(response.Value, "outputActive");
+        var response = await client.SendRequestAsync("GetStreamStatus", null, cancellationToken).ConfigureAwait(false);
+        if (response is null)
+        {
+            return (null, null);
+        }
+
+        var data = response.Value;
+        return (GetOptionalBool(data, "outputActive"),
+            GetOptionalString(data, "outputTimecode"));
+    }
+
+    private async Task<(bool? Active, bool? Paused, string? Timecode)> GetRecordStatusAsync(
+        CancellationToken cancellationToken)
+    {
+        var response = await client.SendRequestAsync("GetRecordStatus", null, cancellationToken).ConfigureAwait(false);
+        if (response is null)
+        {
+            return (null, null, null);
+        }
+
+        var data = response.Value;
+        return (GetOptionalBool(data, "outputActive"),
+            GetOptionalBool(data, "outputPaused"),
+            GetOptionalString(data, "outputTimecode"));
     }
 
     private async Task<IReadOnlyList<ObsAudioSourceSnapshot>> GetAudioSourceSnapshotsAsync(

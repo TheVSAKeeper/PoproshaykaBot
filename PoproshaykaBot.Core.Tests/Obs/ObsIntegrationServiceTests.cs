@@ -148,6 +148,30 @@ public sealed class ObsIntegrationServiceTests
     }
 
     [Test]
+    public async Task GetDashboardSnapshotAsyncReportsStreamAndPausedRecordingTimecodesAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetCurrentProgramScene", """{"currentProgramSceneName":"Main"}""");
+        _client.EnqueueResponse("GetStreamStatus", """{"outputActive":true,"outputTimecode":"01:23:45.000"}""");
+        _client.EnqueueResponse("GetRecordStatus", """{"outputActive":true,"outputPaused":true,"outputTimecode":"00:12:34.500"}""");
+        _client.EnqueueResponse("GetInputList", """{"inputs":[]}""");
+
+        var snapshot = await _service.GetDashboardSnapshotAsync(new()
+        {
+            Enabled = true,
+        }, true, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(snapshot.IsStreaming, Is.True);
+            Assert.That(snapshot.StreamTimecode, Is.EqualTo("01:23:45.000"));
+            Assert.That(snapshot.IsRecording, Is.True);
+            Assert.That(snapshot.IsRecordingPaused, Is.True);
+            Assert.That(snapshot.RecordTimecode, Is.EqualTo("00:12:34.500"));
+        }
+    }
+
+    [Test]
     public async Task GetDashboardSnapshotAsyncUsesConfiguredMicrophoneInputNameAsync()
     {
         _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");

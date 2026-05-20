@@ -186,26 +186,6 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
             or "InputRemoved";
     }
 
-    private static string FormatActiveState(bool? active)
-    {
-        return active switch
-        {
-            true => "идёт",
-            false => "нет",
-            _ => "—",
-        };
-    }
-
-    private static Color ResolveActiveColor(bool? active)
-    {
-        return active switch
-        {
-            true => Color.Green,
-            false => Color.DimGray,
-            _ => Color.Orange,
-        };
-    }
-
     private static bool TryGetMaxNumber(JsonElement element, out double max)
     {
         max = double.NegativeInfinity;
@@ -430,10 +410,8 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         UpdateConnectionHeader("● OBS подключён", Color.Green, "OBS WebSocket подключён");
 
         _sceneLabel.Text = $"Сцена: {ToDisplayValue(snapshot.CurrentSceneName)}";
-        _streamingLabel.Text = $"Эфир: {FormatActiveState(snapshot.IsStreaming)}";
-        _streamingLabel.ForeColor = ResolveActiveColor(snapshot.IsStreaming);
-        _recordingLabel.Text = $"Запись: {FormatActiveState(snapshot.IsRecording)}";
-        _recordingLabel.ForeColor = ResolveActiveColor(snapshot.IsRecording);
+        _streamStatusCard.Show("Эфир", snapshot.IsStreaming, null, snapshot.StreamTimecode);
+        _recordStatusCard.Show("Запись", snapshot.IsRecording, snapshot.IsRecordingPaused, snapshot.RecordTimecode);
 
         ApplyAudioSources(snapshot.AudioSources);
     }
@@ -574,10 +552,8 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
     private void ResetDetails(string value)
     {
         _sceneLabel.Text = $"Сцена: {value}";
-        _streamingLabel.Text = $"Эфир: {value}";
-        _streamingLabel.ForeColor = Color.DimGray;
-        _recordingLabel.Text = $"Запись: {value}";
-        _recordingLabel.ForeColor = Color.DimGray;
+        _streamStatusCard.Show("Эфир", null, null, null);
+        _recordStatusCard.Show("Запись", null, null, null);
         ClearRows();
     }
 
