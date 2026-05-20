@@ -22,6 +22,11 @@ public sealed class StatisticsTrackingHandler : IEventHandler<ChatMessageReceive
 
     public Task HandleAsync(ChatMessageReceived @event, CancellationToken cancellationToken)
     {
+        if (@event.IsBot)
+        {
+            return Task.CompletedTask;
+        }
+
         _userStatistics.TrackMessage(@event.UserId, @event.Username);
         _botStatistics.IncrementMessagesProcessed();
         return Task.CompletedTask;

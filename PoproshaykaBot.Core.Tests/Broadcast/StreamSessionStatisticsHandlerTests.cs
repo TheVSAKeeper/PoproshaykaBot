@@ -81,10 +81,10 @@ public sealed class StreamSessionStatisticsHandlerTests
         });
     }
 
-    private static ChatMessageReceived Chat(string userId, string displayName)
+    private static ChatMessageReceived Chat(string userId, string displayName, bool isBot = false)
     {
         return new(Channel, Guid.NewGuid().ToString("N"), userId, displayName.ToLowerInvariant(), displayName,
-            "сообщение", UserStatus.None, false, new());
+            "сообщение", UserStatus.None, false, new(), isBot);
     }
 
     [Test]
@@ -161,5 +161,28 @@ public sealed class StreamSessionStatisticsHandlerTests
         await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
 
         Assert.That(_captured, Is.Null);
+    }
+
+    [Test]
+    public async Task ChatMessageReceived_FromBot_DoesNotCountTowardSession()
+    {
+        await _handler.HandleAsync(Online(), CancellationToken.None);
+
+        await _handler.HandleAsync(Chat("u1", "Alice"), CancellationToken.None);
+        await _handler.HandleAsync(Chat("bot", "MyBot", true), CancellationToken.None);
+        await _handler.HandleAsync(Chat("bot", "MyBot", true), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddHours(1);
+
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+
+        Assert.That(_captured, Is.Not.Null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_captured!.MessageCount, Is.EqualTo(1));
+            Assert.That(_captured.ChatterCount, Is.EqualTo(1));
+            Assert.That(_captured.Chatters.Select(c => c.DisplayName), Is.EqualTo(new[] { "Alice" }));
+        }
     }
 }

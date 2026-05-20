@@ -104,6 +104,11 @@ public sealed class StreamSessionStatisticsHandler :
 
     public Task HandleAsync(ChatMessageReceived @event, CancellationToken cancellationToken)
     {
+        if (@event.IsBot)
+        {
+            return Task.CompletedTask;
+        }
+
         lock (_stateLock)
         {
             if (_sessionStartedAt == null)

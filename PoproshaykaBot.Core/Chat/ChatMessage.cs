@@ -12,6 +12,7 @@ public sealed record ChatMessage(
     bool IsBroadcaster,
     bool IsModerator,
     bool IsVip,
-    bool IsSubscriber);
+    bool IsSubscriber,
+    bool IsBot = false);
 
 public sealed record EmoteOccurrence(string EmoteId, string Name, int StartIndex, int EndIndex);

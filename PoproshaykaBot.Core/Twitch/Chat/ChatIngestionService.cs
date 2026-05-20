@@ -144,7 +144,8 @@ public sealed class ChatIngestionService(
 
         try
         {
-            var chatMessage = EventSubChatMessageMapper.Map(args.Payload);
+            var botId = await botUserIdProvider.GetAsync(ct);
+            var chatMessage = EventSubChatMessageMapper.Map(args.Payload, botId);
             var timestamp = new DateTimeOffset(args.MessageTimestamp, TimeSpan.Zero);
             await eventBus.PublishAsync(new RawChatMessageReceived(chatMessage, timestamp), ct);
         }

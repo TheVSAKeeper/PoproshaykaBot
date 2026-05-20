@@ -112,9 +112,7 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
             return;
         }
 
-        var botUserId = _context.BotAccount.UserId;
-        if (string.IsNullOrWhiteSpace(botUserId)
-            || !string.Equals(@event.UserId, botUserId, StringComparison.Ordinal))
+        if (!@event.IsBot)
         {
             return;
         }
