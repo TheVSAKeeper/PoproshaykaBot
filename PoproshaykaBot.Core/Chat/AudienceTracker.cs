@@ -9,6 +9,8 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
 
     private readonly ConcurrentDictionary<string, string> _userIdToDisplayName = new();
 
+    public int ActiveUserCount => _userIdToDisplayName.Count;
+
     public bool OnUserMessage(string userId, string displayName)
     {
         if (string.IsNullOrWhiteSpace(userId))
