@@ -24,6 +24,9 @@
     <EmbeddedResource Include="Assets\oauth-success.html" />
     <EmbeddedResource Include="Assets\oauth-error.html" />
     <EmbeddedResource Include="Assets\animations-demo.html" />
+    <EmbeddedResource Include="Assets\animations-demo.css" />
+    <EmbeddedResource Include="Assets\animations-demo.js" />
+    <EmbeddedResource Include="Assets\animations-demo-config.js" />
   </ItemGroup>
 
   <ItemGroup>
