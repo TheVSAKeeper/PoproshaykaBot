@@ -127,6 +127,7 @@
             _firstTimeUserMessageAnimationLabel = new Label();
             _firstTimeUserMessageAnimationComboBox = new ComboBox();
             _firstTimeUserMessageAnimationResetButton = new Button();
+            _openAnimationsDemoButton = new Button();
             _mainTabControl.SuspendLayout();
 
 
@@ -817,6 +818,8 @@
             _animationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationLabel, 0, 10);
             _animationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationComboBox, 1, 10);
             _animationsTableLayout.Controls.Add(_firstTimeUserMessageAnimationResetButton, 2, 10);
+            _animationsTableLayout.Controls.Add(_openAnimationsDemoButton, 0, 11);
+            _animationsTableLayout.SetColumnSpan(_openAnimationsDemoButton, 3);
             _animationsTableLayout.Dock = DockStyle.Fill;
             _animationsTableLayout.Location = new Point(3, 3);
             _animationsTableLayout.Name = "_animationsTableLayout";
@@ -1440,8 +1443,20 @@
             _firstTimeUserMessageAnimationResetButton.UseVisualStyleBackColor = true;
             _firstTimeUserMessageAnimationResetButton.Click += OnFirstTimeUserMessageAnimationResetButtonClicked;
             //
+            // _openAnimationsDemoButton
+            //
+            _openAnimationsDemoButton.AutoSize = true;
+            _openAnimationsDemoButton.Anchor = AnchorStyles.Left;
+            _openAnimationsDemoButton.Margin = new Padding(0, 10, 0, 0);
+            _openAnimationsDemoButton.MinimumSize = new Size(220, 30);
+            _openAnimationsDemoButton.Name = "_openAnimationsDemoButton";
+            _openAnimationsDemoButton.TabIndex = 15;
+            _openAnimationsDemoButton.Text = "🎬 Открыть демо анимаций в браузере";
+            _openAnimationsDemoButton.UseVisualStyleBackColor = true;
+            _openAnimationsDemoButton.Click += OnOpenAnimationsDemoButtonClicked;
+            //
             // ObsChatSettingsControl
-            // 
+            //
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             Controls.Add(_mainTabControl);
@@ -1577,5 +1592,6 @@
         private Label _firstTimeUserMessageAnimationLabel;
         private ComboBox _firstTimeUserMessageAnimationComboBox;
         private Button _firstTimeUserMessageAnimationResetButton;
+        private Button _openAnimationsDemoButton;
     }
 }

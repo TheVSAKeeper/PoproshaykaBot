@@ -23,6 +23,7 @@
     <EmbeddedResource Include="Assets\icon.ico" />
     <EmbeddedResource Include="Assets\oauth-success.html" />
     <EmbeddedResource Include="Assets\oauth-error.html" />
+    <EmbeddedResource Include="Assets\animations-demo.html" />
   </ItemGroup>
 
   <ItemGroup>

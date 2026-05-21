@@ -18,7 +18,7 @@ public sealed class ObsChatSettingsControlColorTests
             TextColor = Color.FromArgb(255, 255, 255, 255),
         };
 
-        Assert.DoesNotThrow(() => control.LoadSettings(settings));
+        Assert.DoesNotThrow(() => control.LoadSettings(settings, 8080));
     }
 
     [Test]
@@ -34,7 +34,7 @@ public sealed class ObsChatSettingsControlColorTests
             TimestampColor = Color.FromArgb(255, 153, 153, 153),
         };
 
-        control.LoadSettings(saved);
+        control.LoadSettings(saved, 8080);
         var written = new ObsChatSettings();
         control.SaveSettings(written);
 
@@ -54,7 +54,7 @@ public sealed class ObsChatSettingsControlColorTests
         using var control = new ObsChatSettingsControl();
         var defaults = new ObsChatSettings();
 
-        Assert.DoesNotThrow(() => control.LoadSettings(defaults));
+        Assert.DoesNotThrow(() => control.LoadSettings(defaults, 8080));
 
         var saved = new ObsChatSettings();
         control.SaveSettings(saved);
@@ -72,7 +72,7 @@ public sealed class ObsChatSettingsControlColorTests
             TextColor = Color.FromArgb(255, 255, 255, 255),
         };
 
-        control.LoadSettings(settings);
+        control.LoadSettings(settings, 8080);
 
         var button = (Button)typeof(ObsChatSettingsControl)
             .GetField("_backgroundColorButton", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -91,7 +91,7 @@ public sealed class ObsChatSettingsControlColorTests
             BackgroundColor = Color.FromArgb(255, 18, 52, 86),
         };
 
-        control.LoadSettings(settings);
+        control.LoadSettings(settings, 8080);
 
         var button = (Button)typeof(ObsChatSettingsControl)
             .GetField("_backgroundColorButton", BindingFlags.NonPublic | BindingFlags.Instance)!

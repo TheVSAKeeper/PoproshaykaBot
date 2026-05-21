@@ -1,0 +1,698 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title>Демо анимаций - PoproshaykaBot</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="/favicon.ico" rel="icon" type="image/x-icon">
+    <link href="/assets/obs.css" rel="stylesheet">
+    <style>
+        :root {
+            --demo-bg: #0e0e10;
+            --demo-card-bg: #18181b;
+            --demo-card-border: #2a2a2d;
+            --demo-accent: #bf94ff;
+            --demo-accent-strong: #9146ff;
+            --demo-text: #efeff1;
+            --demo-text-muted: #9b9b9d;
+        }
+
+        html, body {
+            background: var(--demo-bg);
+            color: var(--demo-text);
+            height: auto;
+            overflow: auto;
+            scrollbar-width: thin;
+        }
+
+        body.demo-body {
+            font-family: "Inter", "Segoe UI", "Noto Sans", Arial, sans-serif;
+            margin: 0;
+            padding: 32px 24px 64px;
+            min-height: 100vh;
+        }
+
+        .demo-body h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0 0 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .demo-body header p {
+            color: var(--demo-text-muted);
+            font-size: 14px;
+            margin: 0 0 28px;
+            line-height: 1.5;
+        }
+
+        .demo-body h2 {
+            font-size: 18px;
+            margin: 36px 0 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--demo-card-border);
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .demo-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--demo-card-bg);
+            border: 1px solid var(--demo-card-border);
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .demo-toolbar-label {
+            font-size: 13px;
+            color: var(--demo-text-muted);
+            margin-right: 4px;
+        }
+
+        .demo-role-button {
+            background: transparent;
+            border: 1px solid var(--demo-card-border);
+            color: var(--demo-text);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.15s ease;
+        }
+
+        .demo-role-button:hover {
+            border-color: var(--demo-accent-strong);
+            background: rgba(145, 70, 255, 0.1);
+        }
+
+        .demo-role-button.active {
+            border-color: var(--demo-accent-strong);
+            background: rgba(145, 70, 255, 0.2);
+            color: var(--demo-accent);
+        }
+
+        .demo-loop-toggle {
+            margin-left: auto;
+        }
+
+        .demo-loop-toggle::before {
+            content: "🔁";
+            margin-right: 6px;
+        }
+
+        .demo-loop-toggle.active::before {
+            content: "✓";
+        }
+
+        .demo-interval-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--demo-text-muted);
+        }
+
+        .demo-interval-group #loop-interval-value {
+            color: var(--demo-text);
+            font-weight: 600;
+            min-width: 32px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .demo-interval-slider {
+            width: 110px;
+            accent-color: var(--demo-accent-strong);
+            cursor: pointer;
+        }
+
+        .demo-play-all {
+            background: var(--demo-accent-strong);
+            color: #fff;
+            border: 0;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .demo-play-all:hover {
+            background: #7a36e5;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+        }
+
+        .demo-card {
+            background: var(--demo-card-bg);
+            border: 1px solid var(--demo-card-border);
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: border-color 0.2s ease;
+        }
+
+        .demo-card:hover {
+            border-color: var(--demo-accent-strong);
+        }
+
+        .demo-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+        }
+
+        .demo-card-label {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .demo-card-value {
+            background: var(--demo-bg);
+            color: var(--demo-accent);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+            cursor: pointer;
+            user-select: all;
+            border: 1px solid transparent;
+            transition: all 0.15s ease;
+        }
+
+        .demo-card-value:hover {
+            border-color: var(--demo-accent-strong);
+        }
+
+        .demo-stage {
+            min-height: 64px;
+            background: var(--demo-bg);
+            border-radius: 4px;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .demo-stage .message {
+            width: 100%;
+            margin: 0;
+        }
+
+        .copy-notice {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--demo-accent-strong);
+            color: #fff;
+            padding: 8px 18px;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            pointer-events: none;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+            font-size: 13px;
+        }
+
+        .copy-notice.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-4px);
+        }
+    </style>
+</head>
+<body class="demo-body">
+<header>
+    <h1>Демо анимаций чата</h1>
+    <p>
+        Кликните по карточке, чтобы перезапустить анимацию.
+        Кликните по значению (вроде <code>pop-in</code>) - оно скопируется в буфер обмена.
+        Чтобы сменить роль пользователя на демонстрации, используйте переключатель ниже.
+    </p>
+</header>
+
+<div class="demo-toolbar">
+    <span class="demo-toolbar-label">Роль:</span>
+    <button class="demo-role-button" data-role="" type="button">Пользователь</button>
+    <button class="demo-role-button active" data-role="broadcaster" type="button">Стример</button>
+    <button class="demo-role-button" data-role="moderator" type="button">Модератор</button>
+    <button class="demo-role-button" data-role="vip" type="button">VIP</button>
+    <button class="demo-role-button" data-role="subscriber" type="button">Сабскрайбер</button>
+    <button class="demo-role-button" data-role="first-time" type="button">Новичок</button>
+    <button aria-pressed="false" class="demo-role-button demo-loop-toggle" id="loop-toggle" type="button">Зациклить</button>
+    <span class="demo-interval-group">
+        <label for="loop-interval">Каждые</label>
+        <input class="demo-interval-slider" id="loop-interval" max="10000" min="500" step="250" type="range" value="3500">
+        <span id="loop-interval-value">3.5</span>
+        <span>сек</span>
+    </span>
+    <button class="demo-play-all" id="play-all" type="button">▶ Проиграть всё</button>
+</div>
+
+<section>
+    <h2>Появление (entry)</h2>
+    <div class="demo-grid" id="entry-grid"></div>
+</section>
+
+<section>
+    <h2>Исчезание (exit)</h2>
+    <div class="demo-grid" id="exit-grid"></div>
+</section>
+
+<div aria-live="polite" class="copy-notice" id="copy-notice"></div>
+
+<script>
+(function () {
+    'use strict';
+
+    const entryAnimations = [
+        { value: 'no-animation',     label: 'Без анимации' },
+        { value: 'slide-in-right',   label: 'Скольжение справа' },
+        { value: 'slide-in-left',    label: 'Скольжение слева' },
+        { value: 'fade-in-up',       label: 'Затухание сверху' },
+        { value: 'bounce-in',        label: 'Прыжок' },
+        { value: 'pop-in',           label: 'Поп-ап с упругостью' },
+        { value: 'rubber-band',      label: 'Резиновая лента' },
+        { value: 'tada',             label: 'Та-да!' },
+        { value: 'zoom-blur-in',     label: 'Кинонаезд с размытием' },
+        { value: 'neon-pulse-in',    label: 'Неоновая вспышка' },
+        { value: 'materialize',      label: 'Материализация' },
+        { value: 'glitch-in',        label: 'Глитч' },
+        { value: 'power-up',         label: 'Усиление снизу' },
+        { value: 'slam-in',          label: 'Удар сверху' },
+        { value: 'notification-bell', label: 'Звон уведомления' },
+        { value: 'hologram',         label: 'Голограмма' },
+        { value: 'flip-in-x',        label: 'Переворот по горизонтали' },
+        { value: 'roll-in',          label: 'Вкатывание' },
+        { value: 'coin-flip',        label: 'Подброс монеты' },
+        { value: 'swoop-in',         label: 'Налёт по диагонали' },
+    ];
+
+    const exitAnimations = [
+        { value: 'fade-out',         label: 'Исчезновение' },
+        { value: 'slide-out-left',   label: 'Выскользнуть влево' },
+        { value: 'slide-out-right',  label: 'Выскользнуть вправо' },
+        { value: 'scale-down',       label: 'Уменьшение' },
+        { value: 'shrink-up',        label: 'Свернуться вверх' },
+        { value: 'dissolve',         label: 'Растворение в пыль' },
+        { value: 'slide-out-up',     label: 'Выскользнуть вверх' },
+        { value: 'slide-out-down',   label: 'Выскользнуть вниз' },
+        { value: 'rotate-out',       label: 'Поворот с уходом' },
+        { value: 'pixelate-out',     label: 'Пикселизация' },
+    ];
+
+    const sampleTexts3 = [
+        'Серёга Пират ЖЁСТКО вышел в рейд с одним пистолетом.',
+        'Чат, это не лаги - это Тарков проверяет характер.',
+        'Залутал болт, гайку и минус самооценку.',
+        'План был тихий, но Серёга Пират нажал W.',
+        'Тарков дал, Тарков забрал, Тарков посмеялся.',
+        'Лучший момент стрима: я почти дошёл до выхода.',
+        'Килла посмотрел на меня - я посмотрел на экран загрузки.',
+        'Это не кемпер, это тактический мыслитель в кустах.',
+        'Пошёл за квестом, вернулся с психологической травмой.',
+        'Серёга Пират ЖЁСТКО объяснил, почему броня не нужна.',
+        'Услышал шаги - это были мои надежды на выживание.',
+        'Флешка нашлась ровно после того, как я перестал её искать.',
+        'Вышел на Завод, загрузился обратно в меню.',
+        'Подписался, поставил плюс, забрал страховку.',
+        'Чат, я не умер - я сделал быстрый ребаланс инвентаря.',
+        'Серёга Пират бы сказал: “идём по красоте”, и нажал бы на мину.',
+        'Лут жирный, руки потные, выход где-то в другой вселенной.',
+        'Это просто огонь! Особенно когда граната отскочила обратно.',
+        'Пиратский рейд: зашёл бедным, вышел легендой… в схрон.',
+        'Дикие сегодня добрые: сразу отправляют домой.',
+        'Нашёл выход, но Тарков нашёл меня первым.',
+        'Серёга Пират ЖЁСТКО залутал банку тушёнки и смысл жизни.',
+        'USEC, BEAR, а я просто человек с ножом и мечтой.',
+        'Граната была учебная. Учила смирению.',
+        'Тарков - игра, где даже ящик смотрит на тебя с подозрением.',
+        'Дошёл до экстракта, но экстракт не дошёл до меня.',
+        'Лучший сейв дня: я сохранил спокойствие. Лут - нет.',
+        'Чат, это был не миссплей, это авторский контент.',
+        'Не помер 40 раз на резерве, а схрон разгрузил.',
+    ];
+
+    const sampleTexts = [
+        'мб на выход тогда, велью уже забрали',
+        'поч не мхлр? план же в тупую и работает',
+        'чо ты пикаешь так, тебя любой чвк сотрёт',
+        'не регает, неткод подводит',
+        'держим газ, пока рейд сам себя не закрыл',
+        'зря бегаешь так по карте, ща хуже будет',
+        'у тебя выход под рукой, ес вдруг пригодится',
+        'не велью оделся, не набит квест',
+        'ток не стой афк, до тебя пули и так не долетают',
+        'мб лучше лечь в куст и подумать о жизни',
+        'смысла мало выходить в прицеле, если не знаешь где тип',
+        'пикнул отвратительно, но зато уверенно',
+        'можно через awsd выглянуть и сразу назад, а не принимать судьбу лицом',
+        'зачем ты выходишь на перезарядке?',
+        'угол твой, но голова уже не твоя',
+        'по звуку он справа, по таркову он в душе',
+        'прицел уводит, из-за этого промахиваешься много',
+        'фонарь больше тебя слепит, чем врага',
+        'теплак кал, но идея смешная',
+        'дым + теплак, и можно изображать мыслительный процесс',
+        'какие актуальные задачи на рейд?',
+        'базовый минимум выполнен, смываемся в унитаз',
+        'короткий квест, всего надо потерять нервную систему',
+        'ебаный квест, но пройти всё равно придётся',
+        'сюжетка разблокалась, теперь можно страдать официально',
+        'разгрузка нужна по квестику какому-то',
+        'спавн под квест, значит ща будет не спавн, а цирк',
+        'мб на таможню, проходную зону покемпим?',
+        'на выход сесть и ждать - тоже геймплей',
+        'прост пустой рейд, зато морально стабильный',
+        'стату пули глянь, если интересно',
+        'свд кал, но в руках уверенного человека всё равно кал',
+        'дефолт пристрелка 50 метров, даже калиматор не виноват',
+        'настильность у пули подводит',
+        'все пули летят в прицел, просто прицел живёт отдельно',
+        'мхлр тебе на квест принёс, а ты нос воротишь',
+        'а поч не болт? чисто для страдания',
+        'магазин проверь, а то опять будет театр одного патрона',
+        'сетап найс, только стрелять им кто будет?',
+        'броня есть, уверенности нету',
+        'ты выжал максимум из этого рейда, ты красавчик',
+        'у тебя были все шансы, чуть-чуть не пошло',
+        'а был бы там я',
+        'получай нахуй, ебаная перила',
+        'на нахуй, ебаный камень',
+        'показательная распрыжка, показать что дохуя чо можешь',
+        'и сразу после неё прыгнуть в стену',
+        'прыжок страха или смелости?',
+        'чо ты в пвп забыл',
+        'как тебе лейт пвп таркова?',
+        'держим газ',
+        'WWW держим газ',
+        'киберспортивный расклад пошёл',
+        'велью ноль, зато сдеанонился',
+        'на нахуй, получай рундук',
+        'не натурально роль снайпера отыгрываешь',
+        'мб не терпи, без меня',
+        'чо мне заняться нечем, я негатив пвп не хочу',
+        'в пве можем зайти потестить',
+        'нафик те фигурки, в пве нету престижей',
+        'вот бы радарчик, да. пока кемпим на выходе, айда накодим',
+        'там не баг, там архитектурная боль',
+        'неткод парашный, но звучит как фича',
+        'опять кто-то пересчитывает весь список ради одного токена',
+        'лайфчекер нужен, а не вот это всё',
+        'упёрлось в сеть, поэтому долго конеш работало',
+        'можно было кешировать, но зачем, если можно страдать',
+        'system io moment',
+        'ооп отменяем, переходим на статики, тупа быстрее',
+        'дизайн - на твоих руках',
+        'мб на выход?',
+        'поч не мхлр?',
+        'чо за пик?',
+        'не регает',
+        'держим газ',
+        'нету велью',
+        'пули кал',
+        'теплак кал',
+        'квест душит',
+        'рейд пустой',
+        'чвк не простят',
+        'угол плохой',
+        'зря вышел',
+        'неткод подводит',
+        'пве момент',
+        'пвп негатив',
+        'выход рядом',
+        'сетап странный',
+        'пик отвратительный',
+        'но идея смешная',
+        'запрограммировать шрифт ✔✔✔',
+        'попытаться ✔✔✔',
+        'прыгнуть на месте✔✔✔',
+        'взорвать облако✔✔✔',
+        'дать гранате физику резинового мяча✔✔✔',
+        'захуярить стену✔✔✔',
+        'сохранить паштет✔✔✔',
+        'нахуй паштет✔✔✔',
+        'задымить себе прострел✔✔✔',
+        'прыгнуть от пизды (галочка)',
+        'захуярь землю нахуй (галочка)',
+        'сделать круг вокруг тачки (галочка)',
+        'показательная распрыжка, показать что дохуя чо можешь (галочка)',
+    ];
+
+    let currentRole = 'broadcaster';
+
+    const entryGrid = document.getElementById('entry-grid');
+    const exitGrid = document.getElementById('exit-grid');
+    const copyNotice = document.getElementById('copy-notice');
+
+    const sampleMessages = [
+        ...sampleTexts3.map(function (text) { return { author: 'Серёга Пират', text: text }; }),
+        ...sampleTexts.map(function (text) { return { author: 'qp_illson', text: text }; }),
+    ];
+
+    function pickSampleMessage() {
+        return sampleMessages[Math.floor(Math.random() * sampleMessages.length)];
+    }
+
+    function buildMessage(role) {
+        const pick = pickSampleMessage();
+
+        const div = document.createElement('div');
+        div.className = 'message no-animation';
+
+        if (role === 'first-time') {
+            div.classList.add('first-time');
+        } else if (role) {
+            div.classList.add(role);
+        }
+
+        const content = document.createElement('div');
+        content.className = 'message-content';
+
+        const headerEl = document.createElement('div');
+        headerEl.className = 'message-header';
+
+        const timestamp = document.createElement('time');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = new Date().toLocaleTimeString();
+        headerEl.appendChild(timestamp);
+
+        const username = document.createElement('span');
+        username.className = role && role !== 'first-time'
+            ? `username ${role}`
+            : 'username';
+        username.textContent = pick.author;
+        headerEl.appendChild(username);
+
+        content.appendChild(headerEl);
+
+        const body = document.createElement('div');
+        body.className = 'message-text';
+        body.textContent = pick.text;
+        content.appendChild(body);
+
+        div.appendChild(content);
+        return div;
+    }
+
+    function buildCard(animation, kind) {
+        const card = document.createElement('article');
+        card.className = 'demo-card';
+        card.dataset.kind = kind;
+        card.dataset.animation = animation.value;
+
+        const header = document.createElement('header');
+        header.className = 'demo-card-header';
+
+        const label = document.createElement('span');
+        label.className = 'demo-card-label';
+        label.textContent = animation.label;
+        header.appendChild(label);
+
+        const value = document.createElement('code');
+        value.className = 'demo-card-value';
+        value.textContent = animation.value;
+        value.title = 'Кликните, чтобы скопировать';
+        value.addEventListener('click', function (event) {
+            event.stopPropagation();
+            copyToClipboard(animation.value);
+        });
+        header.appendChild(value);
+
+        card.appendChild(header);
+
+        const stage = document.createElement('div');
+        stage.className = 'demo-stage';
+        stage.appendChild(buildMessage(currentRole));
+        card.appendChild(stage);
+
+        card.addEventListener('click', function () {
+            playCard(card);
+        });
+
+        return card;
+    }
+
+    function playCard(card) {
+        const stage = card.querySelector('.demo-stage');
+        const kind = card.dataset.kind;
+        const animationValue = card.dataset.animation;
+
+        const fresh = buildMessage(currentRole);
+        stage.replaceChildren(fresh);
+
+        void fresh.offsetWidth;
+
+        if (kind === 'entry') {
+            if (animationValue === 'no-animation') {
+                return;
+            }
+            fresh.classList.remove('no-animation');
+            fresh.classList.add(animationValue);
+        } else {
+            fresh.classList.remove('no-animation');
+            requestAnimationFrame(function () {
+                fresh.dataset.exitAnim = animationValue;
+            });
+        }
+    }
+
+    function renderAll() {
+        entryGrid.replaceChildren();
+        for (const animation of entryAnimations) {
+            entryGrid.appendChild(buildCard(animation, 'entry'));
+        }
+
+        exitGrid.replaceChildren();
+        for (const animation of exitAnimations) {
+            exitGrid.appendChild(buildCard(animation, 'exit'));
+        }
+    }
+
+    function playAll() {
+        const cards = document.querySelectorAll('.demo-card');
+        let delay = 0;
+        cards.forEach(function (card) {
+            setTimeout(function () { playCard(card); }, delay);
+            delay += 80;
+        });
+    }
+
+    function copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+                showCopyNotice(text);
+            }).catch(function () {
+                fallbackCopy(text);
+            });
+        } else {
+            fallbackCopy(text);
+        }
+    }
+
+    function fallbackCopy(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            showCopyNotice(text);
+        } catch (e) {
+            console.warn('Не удалось скопировать имя анимации.', e);
+        }
+        document.body.removeChild(textarea);
+    }
+
+    let copyNoticeTimer = null;
+    function showCopyNotice(text) {
+        copyNotice.textContent = 'Скопировано: ' + text;
+        copyNotice.classList.add('visible');
+        if (copyNoticeTimer !== null) {
+            clearTimeout(copyNoticeTimer);
+        }
+        copyNoticeTimer = setTimeout(function () {
+            copyNotice.classList.remove('visible');
+        }, 1600);
+    }
+
+    document.querySelectorAll('.demo-role-button').forEach(function (button) {
+        button.addEventListener('click', function () {
+            currentRole = button.dataset.role || '';
+            document.querySelectorAll('.demo-role-button').forEach(function (other) {
+                other.classList.toggle('active', other === button);
+            });
+            renderAll();
+        });
+    });
+
+    document.getElementById('play-all').addEventListener('click', playAll);
+
+    const loopToggle = document.getElementById('loop-toggle');
+    const loopIntervalSlider = document.getElementById('loop-interval');
+    const loopIntervalValueLabel = document.getElementById('loop-interval-value');
+    let loopIntervalMs = parseInt(loopIntervalSlider.value, 10);
+    let loopTimer = null;
+
+    function formatSeconds(ms) {
+        const seconds = ms / 1000;
+        return ms % 1000 === 0
+            ? seconds.toFixed(0)
+            : seconds.toFixed(1);
+    }
+
+    function setLoopActive(active) {
+        if (active) {
+            if (loopTimer !== null) return;
+            loopToggle.classList.add('active');
+            loopToggle.setAttribute('aria-pressed', 'true');
+            loopToggle.textContent = 'Цикл активен';
+            playAll();
+            loopTimer = setInterval(playAll, loopIntervalMs);
+        } else {
+            if (loopTimer === null) return;
+            clearInterval(loopTimer);
+            loopTimer = null;
+            loopToggle.classList.remove('active');
+            loopToggle.setAttribute('aria-pressed', 'false');
+            loopToggle.textContent = 'Зациклить';
+        }
+    }
+
+    loopToggle.addEventListener('click', function () {
+        setLoopActive(loopTimer === null);
+    });
+
+    loopIntervalSlider.addEventListener('input', function () {
+        loopIntervalMs = parseInt(loopIntervalSlider.value, 10);
+        loopIntervalValueLabel.textContent = formatSeconds(loopIntervalMs);
+        if (loopTimer !== null) {
+            clearInterval(loopTimer);
+            loopTimer = setInterval(playAll, loopIntervalMs);
+        }
+    });
+
+    loopIntervalValueLabel.textContent = formatSeconds(loopIntervalMs);
+
+    renderAll();
+
+    setTimeout(playAll, 400);
+}());
+</script>
+</body>
+</html>

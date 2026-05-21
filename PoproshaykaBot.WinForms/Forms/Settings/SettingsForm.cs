@@ -86,7 +86,7 @@ public partial class SettingsForm : Form
                 }),
             new(() => _oauthSettingsControl.LoadSettings(_settings, _botDraft, _broadcasterDraft),
                 () => _oauthSettingsControl.SaveSettings(_settings)),
-            new(() => _obsChatSettingsControl.LoadSettings(_obsChatDraft),
+            new(() => _obsChatSettingsControl.LoadSettings(_obsChatDraft, _settings.Twitch.HttpServerPort),
                 () => _obsChatSettingsControl.SaveSettings(_obsChatDraft)),
             new(() => _obsIntegrationSettingsControl.LoadSettings(_obsIntegrationDraft, _settings.Twitch.HttpServerPort),
                 () => _obsIntegrationSettingsControl.SaveSettings(_obsIntegrationDraft)),

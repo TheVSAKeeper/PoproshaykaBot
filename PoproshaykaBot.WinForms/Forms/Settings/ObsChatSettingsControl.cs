@@ -1,5 +1,7 @@
 ﻿using Cyotek.Windows.Forms;
 using PoproshaykaBot.Core.Settings.Obs;
+using System.Diagnostics;
+using System.Globalization;
 
 namespace PoproshaykaBot.WinForms.Forms.Settings;
 
@@ -8,6 +10,8 @@ public partial class ObsChatSettingsControl : UserControl
     private static readonly ObsChatSettings DefaultSettings = new();
 
     private readonly ErrorProvider _fontFamilyErrorProvider = new();
+
+    private int _httpServerPort;
 
     public ObsChatSettingsControl()
     {
@@ -20,8 +24,10 @@ public partial class ObsChatSettingsControl : UserControl
 
     public event EventHandler? SettingChanged;
 
-    public void LoadSettings(ObsChatSettings settings)
+    public void LoadSettings(ObsChatSettings settings, int httpServerPort)
     {
+        _httpServerPort = httpServerPort;
+
         _backgroundColorButton.BackColor = settings.BackgroundColor;
         _textColorButton.BackColor = settings.TextColor;
         _usernameColorButton.BackColor = settings.UsernameColor;
@@ -260,6 +266,37 @@ public partial class ObsChatSettingsControl : UserControl
     private void OnFirstTimeUserMessageAnimationResetButtonClicked(object sender, EventArgs e)
     {
         ResetAnimation(_firstTimeUserMessageAnimationComboBox, DefaultSettings.FirstTimeUserMessageAnimation, MessageAnimationType.EntryAnimations);
+    }
+
+    private void OnOpenAnimationsDemoButtonClicked(object sender, EventArgs e)
+    {
+        if (_httpServerPort <= 0)
+        {
+            MessageBox.Show(this,
+                "Не удалось определить порт HTTP-сервера. Проверьте настройки на вкладке «HTTP сервер».",
+                "Демо анимаций",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        var url = string.Format(CultureInfo.InvariantCulture,
+            "http://localhost:{0}/animations-demo",
+            _httpServerPort);
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this,
+                $"Не удалось открыть демо в браузере.\n\n{exception.Message}",
+                "Демо анимаций",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
 
     private void OnBackgroundColorButtonClicked(object sender, EventArgs e)

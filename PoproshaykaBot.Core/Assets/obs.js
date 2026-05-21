@@ -261,7 +261,28 @@
         return classes;
     }
 
-    const validEntryAnimations = new Set(['no-animation', 'slide-in-right', 'slide-in-left', 'fade-in-up', 'bounce-in']);
+    const validEntryAnimations = new Set([
+        'no-animation',
+        'slide-in-right',
+        'slide-in-left',
+        'fade-in-up',
+        'bounce-in',
+        'pop-in',
+        'rubber-band',
+        'tada',
+        'zoom-blur-in',
+        'neon-pulse-in',
+        'materialize',
+        'glitch-in',
+        'power-up',
+        'slam-in',
+        'notification-bell',
+        'hologram',
+        'flip-in-x',
+        'roll-in',
+        'coin-flip',
+        'swoop-in',
+    ]);
 
     function sanitizeEntryAnimation(value, fallback) {
         return validEntryAnimations.has(value) ? value : fallback;
@@ -330,7 +351,18 @@
         };
     }
 
-    const validExitAnimations = new Set(['fade-out', 'slide-out-left', 'slide-out-right', 'scale-down', 'shrink-up']);
+    const validExitAnimations = new Set([
+        'fade-out',
+        'slide-out-left',
+        'slide-out-right',
+        'scale-down',
+        'shrink-up',
+        'dissolve',
+        'slide-out-up',
+        'slide-out-down',
+        'rotate-out',
+        'pixelate-out',
+    ]);
 
     function fadeOutMessage(messageDiv) {
         if (!enableMessageFadeOut) return;
