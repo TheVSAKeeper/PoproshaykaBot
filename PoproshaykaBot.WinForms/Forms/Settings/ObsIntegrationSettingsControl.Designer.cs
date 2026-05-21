@@ -33,6 +33,7 @@ partial class ObsIntegrationSettingsControl
         _enabledCheckBox = new CheckBox();
         _autoConnectCheckBox = new CheckBox();
         _autoProvisionCheckBox = new CheckBox();
+        _refreshOnStreamStartCheckBox = new CheckBox();
         _syncSceneOnProfileCheckBox = new CheckBox();
         _syncProfileOnSceneCheckBox = new CheckBox();
         _formLayout = new TableLayoutPanel();
@@ -46,6 +47,8 @@ partial class ObsIntegrationSettingsControl
         _sceneComboBox = new ComboBox();
         _sourcesLabel = new Label();
         _sourcesCheckedListBox = new CheckedListBox();
+        _chatRefreshSourcesLabel = new Label();
+        _chatRefreshSourcesCheckedListBox = new CheckedListBox();
         _volumeMeterDelayLabel = new Label();
         _volumeMeterDelayNumeric = new NumericUpDown();
         _sourceNameLabel = new Label();
@@ -63,6 +66,7 @@ partial class ObsIntegrationSettingsControl
         _reconnectButton = new Button();
         _loadScenesButton = new Button();
         _provisionButton = new Button();
+        _refreshChatNowButton = new Button();
         _copyUrlButton = new Button();
         _hintToolTip = new ToolTip(components);
         _rootLayout.SuspendLayout();
@@ -82,26 +86,28 @@ partial class ObsIntegrationSettingsControl
         _rootLayout.Controls.Add(_enabledCheckBox, 0, 0);
         _rootLayout.Controls.Add(_autoConnectCheckBox, 0, 1);
         _rootLayout.Controls.Add(_autoProvisionCheckBox, 0, 2);
-        _rootLayout.Controls.Add(_syncSceneOnProfileCheckBox, 0, 3);
-        _rootLayout.Controls.Add(_syncProfileOnSceneCheckBox, 0, 4);
-        _rootLayout.Controls.Add(_formLayout, 0, 5);
-        _rootLayout.Controls.Add(_statusLabel, 0, 6);
-        _rootLayout.Controls.Add(_buttonPanel, 0, 7);
+        _rootLayout.Controls.Add(_refreshOnStreamStartCheckBox, 0, 3);
+        _rootLayout.Controls.Add(_syncSceneOnProfileCheckBox, 0, 4);
+        _rootLayout.Controls.Add(_syncProfileOnSceneCheckBox, 0, 5);
+        _rootLayout.Controls.Add(_formLayout, 0, 6);
+        _rootLayout.Controls.Add(_statusLabel, 0, 7);
+        _rootLayout.Controls.Add(_buttonPanel, 0, 8);
         _rootLayout.Dock = DockStyle.Fill;
         _rootLayout.Location = new Point(0, 0);
         _rootLayout.Name = "_rootLayout";
         _rootLayout.Padding = new Padding(4, 4, 4, 4);
-        _rootLayout.RowCount = 9;
+        _rootLayout.RowCount = 10;
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
-        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 398F));
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 488F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _rootLayout.Size = new Size(600, 614);
+        _rootLayout.Size = new Size(600, 732);
         _rootLayout.TabIndex = 0;
         //
         // _enabledCheckBox
@@ -140,14 +146,26 @@ partial class ObsIntegrationSettingsControl
         _autoProvisionCheckBox.UseVisualStyleBackColor = true;
         _autoProvisionCheckBox.CheckedChanged += OnSettingChanged;
         //
+        // _refreshOnStreamStartCheckBox
+        //
+        _refreshOnStreamStartCheckBox.AutoSize = true;
+        _refreshOnStreamStartCheckBox.Dock = DockStyle.Fill;
+        _refreshOnStreamStartCheckBox.Location = new Point(7, 91);
+        _refreshOnStreamStartCheckBox.Name = "_refreshOnStreamStartCheckBox";
+        _refreshOnStreamStartCheckBox.Size = new Size(586, 22);
+        _refreshOnStreamStartCheckBox.TabIndex = 3;
+        _refreshOnStreamStartCheckBox.Text = "Жёстко обновлять чат-источники при старте эфира в OBS";
+        _refreshOnStreamStartCheckBox.UseVisualStyleBackColor = true;
+        _refreshOnStreamStartCheckBox.CheckedChanged += OnSettingChanged;
+        //
         // _syncSceneOnProfileCheckBox
         //
         _syncSceneOnProfileCheckBox.AutoSize = true;
         _syncSceneOnProfileCheckBox.Dock = DockStyle.Fill;
-        _syncSceneOnProfileCheckBox.Location = new Point(7, 91);
+        _syncSceneOnProfileCheckBox.Location = new Point(7, 119);
         _syncSceneOnProfileCheckBox.Name = "_syncSceneOnProfileCheckBox";
         _syncSceneOnProfileCheckBox.Size = new Size(586, 22);
-        _syncSceneOnProfileCheckBox.TabIndex = 3;
+        _syncSceneOnProfileCheckBox.TabIndex = 4;
         _syncSceneOnProfileCheckBox.Text = "Переключать сцену OBS при смене профиля";
         _syncSceneOnProfileCheckBox.UseVisualStyleBackColor = true;
         _syncSceneOnProfileCheckBox.CheckedChanged += OnSettingChanged;
@@ -156,10 +174,10 @@ partial class ObsIntegrationSettingsControl
         //
         _syncProfileOnSceneCheckBox.AutoSize = true;
         _syncProfileOnSceneCheckBox.Dock = DockStyle.Fill;
-        _syncProfileOnSceneCheckBox.Location = new Point(7, 119);
+        _syncProfileOnSceneCheckBox.Location = new Point(7, 147);
         _syncProfileOnSceneCheckBox.Name = "_syncProfileOnSceneCheckBox";
         _syncProfileOnSceneCheckBox.Size = new Size(586, 22);
-        _syncProfileOnSceneCheckBox.TabIndex = 4;
+        _syncProfileOnSceneCheckBox.TabIndex = 5;
         _syncProfileOnSceneCheckBox.Text = "Применять профиль при смене сцены OBS";
         _syncProfileOnSceneCheckBox.UseVisualStyleBackColor = true;
         _syncProfileOnSceneCheckBox.CheckedChanged += OnSettingChanged;
@@ -187,10 +205,12 @@ partial class ObsIntegrationSettingsControl
         _formLayout.Controls.Add(_sizeFlowPanel, 1, 7);
         _formLayout.Controls.Add(_overlayUrlLabel, 0, 8);
         _formLayout.Controls.Add(_overlayUrlTextBox, 1, 8);
+        _formLayout.Controls.Add(_chatRefreshSourcesLabel, 0, 9);
+        _formLayout.Controls.Add(_chatRefreshSourcesCheckedListBox, 1, 9);
         _formLayout.Dock = DockStyle.Fill;
-        _formLayout.Location = new Point(7, 91);
+        _formLayout.Location = new Point(7, 175);
         _formLayout.Name = "_formLayout";
-        _formLayout.RowCount = 10;
+        _formLayout.RowCount = 11;
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
@@ -200,9 +220,10 @@ partial class ObsIntegrationSettingsControl
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
+        _formLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90F));
         _formLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _formLayout.Size = new Size(586, 392);
-        _formLayout.TabIndex = 5;
+        _formLayout.Size = new Size(586, 482);
+        _formLayout.TabIndex = 6;
         //
         // _hostLabel
         //
@@ -458,15 +479,42 @@ partial class ObsIntegrationSettingsControl
         _overlayUrlTextBox.Size = new Size(436, 23);
         _overlayUrlTextBox.TabIndex = 17;
         //
+        // _chatRefreshSourcesLabel
+        //
+        _chatRefreshSourcesLabel.AutoSize = true;
+        _chatRefreshSourcesLabel.Dock = DockStyle.Fill;
+        _chatRefreshSourcesLabel.Location = new Point(0, 288);
+        _chatRefreshSourcesLabel.Margin = new Padding(0, 0, 6, 4);
+        _chatRefreshSourcesLabel.Name = "_chatRefreshSourcesLabel";
+        _chatRefreshSourcesLabel.Size = new Size(144, 86);
+        _chatRefreshSourcesLabel.TabIndex = 18;
+        _chatRefreshSourcesLabel.Text = "Чат-источники для refresh:";
+        _chatRefreshSourcesLabel.TextAlign = ContentAlignment.TopLeft;
+        //
+        // _chatRefreshSourcesCheckedListBox
+        //
+        _chatRefreshSourcesCheckedListBox.CheckOnClick = true;
+        _chatRefreshSourcesCheckedListBox.Dock = DockStyle.Fill;
+        _chatRefreshSourcesCheckedListBox.FormattingEnabled = true;
+        _chatRefreshSourcesCheckedListBox.IntegralHeight = false;
+        _chatRefreshSourcesCheckedListBox.Location = new Point(150, 291);
+        _chatRefreshSourcesCheckedListBox.Margin = new Padding(0, 3, 0, 4);
+        _chatRefreshSourcesCheckedListBox.Name = "_chatRefreshSourcesCheckedListBox";
+        _chatRefreshSourcesCheckedListBox.Size = new Size(436, 79);
+        _chatRefreshSourcesCheckedListBox.TabIndex = 19;
+        _chatRefreshSourcesCheckedListBox.ItemCheck += OnSettingChanged;
+        _hintToolTip.SetToolTip(_chatRefreshSourcesCheckedListBox,
+            "Выберите Browser Source-источники чата для жёсткого refresh. Пусто = использовать поле \"Источник\".");
+        //
         // _statusLabel
         //
         _statusLabel.AutoEllipsis = true;
         _statusLabel.Dock = DockStyle.Fill;
         _statusLabel.ForeColor = Color.Gray;
-        _statusLabel.Location = new Point(7, 486);
+        _statusLabel.Location = new Point(7, 660);
         _statusLabel.Name = "_statusLabel";
         _statusLabel.Size = new Size(586, 30);
-        _statusLabel.TabIndex = 6;
+        _statusLabel.TabIndex = 7;
         _statusLabel.Text = "● Не проверено";
         _statusLabel.TextAlign = ContentAlignment.MiddleLeft;
         //
@@ -476,12 +524,13 @@ partial class ObsIntegrationSettingsControl
         _buttonPanel.Controls.Add(_reconnectButton);
         _buttonPanel.Controls.Add(_loadScenesButton);
         _buttonPanel.Controls.Add(_provisionButton);
+        _buttonPanel.Controls.Add(_refreshChatNowButton);
         _buttonPanel.Controls.Add(_copyUrlButton);
         _buttonPanel.Dock = DockStyle.Fill;
-        _buttonPanel.Location = new Point(7, 519);
+        _buttonPanel.Location = new Point(7, 693);
         _buttonPanel.Name = "_buttonPanel";
         _buttonPanel.Size = new Size(586, 28);
-        _buttonPanel.TabIndex = 7;
+        _buttonPanel.TabIndex = 8;
         //
         // _testConnectionButton
         //
@@ -527,13 +576,24 @@ partial class ObsIntegrationSettingsControl
         _provisionButton.UseVisualStyleBackColor = true;
         _provisionButton.Click += OnProvisionButtonClicked;
         //
+        // _refreshChatNowButton
+        //
+        _refreshChatNowButton.Location = new Point(474, 0);
+        _refreshChatNowButton.Margin = new Padding(0, 0, 3, 0);
+        _refreshChatNowButton.Name = "_refreshChatNowButton";
+        _refreshChatNowButton.Size = new Size(140, 27);
+        _refreshChatNowButton.TabIndex = 4;
+        _refreshChatNowButton.Text = "Обновить чат сейчас";
+        _refreshChatNowButton.UseVisualStyleBackColor = true;
+        _refreshChatNowButton.Click += OnRefreshChatNowButtonClicked;
+        //
         // _copyUrlButton
         //
-        _copyUrlButton.Location = new Point(474, 0);
+        _copyUrlButton.Location = new Point(617, 0);
         _copyUrlButton.Margin = new Padding(0, 0, 3, 0);
         _copyUrlButton.Name = "_copyUrlButton";
         _copyUrlButton.Size = new Size(110, 27);
-        _copyUrlButton.TabIndex = 4;
+        _copyUrlButton.TabIndex = 5;
         _copyUrlButton.Text = "Копировать URL";
         _copyUrlButton.UseVisualStyleBackColor = true;
         _copyUrlButton.Click += OnCopyUrlButtonClicked;
@@ -544,7 +604,7 @@ partial class ObsIntegrationSettingsControl
         AutoScaleMode = AutoScaleMode.Font;
         Controls.Add(_rootLayout);
         Name = "ObsIntegrationSettingsControl";
-        Size = new Size(600, 614);
+        Size = new Size(600, 732);
         _rootLayout.ResumeLayout(false);
         _rootLayout.PerformLayout();
         _formLayout.ResumeLayout(false);
@@ -565,6 +625,7 @@ partial class ObsIntegrationSettingsControl
     private CheckBox _enabledCheckBox;
     private CheckBox _autoConnectCheckBox;
     private CheckBox _autoProvisionCheckBox;
+    private CheckBox _refreshOnStreamStartCheckBox;
     private CheckBox _syncSceneOnProfileCheckBox;
     private CheckBox _syncProfileOnSceneCheckBox;
     private TableLayoutPanel _formLayout;
@@ -578,6 +639,8 @@ partial class ObsIntegrationSettingsControl
     private ComboBox _sceneComboBox;
     private Label _sourcesLabel;
     private CheckedListBox _sourcesCheckedListBox;
+    private Label _chatRefreshSourcesLabel;
+    private CheckedListBox _chatRefreshSourcesCheckedListBox;
     private ToolTip _hintToolTip;
     private Label _volumeMeterDelayLabel;
     private NumericUpDown _volumeMeterDelayNumeric;
@@ -596,5 +659,6 @@ partial class ObsIntegrationSettingsControl
     private Button _reconnectButton;
     private Button _loadScenesButton;
     private Button _provisionButton;
+    private Button _refreshChatNowButton;
     private Button _copyUrlButton;
 }

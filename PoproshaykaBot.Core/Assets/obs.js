@@ -768,6 +768,37 @@
         console.log('Настройки чата обновлены:', settings);
     }
 
+    const reloadBannerLifetimeMs = 5000;
+    const reloadBannerFadeMs = 600;
+
+    function showReloadBanner() {
+        const now = new Date();
+
+        const banner = document.createElement('div');
+        banner.classList.add('message', 'reload-banner', 'no-animation', 'entry-done');
+        banner.style.transition = 'opacity ' + reloadBannerFadeMs + 'ms ease';
+
+        const timeElement = document.createElement('time');
+        timeElement.className = 'timestamp';
+        timeElement.dateTime = now.toISOString();
+        timeElement.textContent = now.toLocaleTimeString();
+
+        const text = document.createElement('span');
+        text.className = 'system-message';
+        text.textContent = '🔁 Чат-источник перезагружен';
+
+        banner.appendChild(timeElement);
+        banner.appendChild(text);
+        chatContainer.appendChild(banner);
+
+        requestAnimationFrame(() => smoothScrollToBottom(true));
+
+        setTimeout(() => {
+            banner.style.opacity = '0';
+            setTimeout(() => banner.remove(), reloadBannerFadeMs);
+        }, reloadBannerLifetimeMs);
+    }
+
     function initOverlay() {
         fetch('/api/chat-settings')
             .then(response => response.json())
@@ -776,7 +807,10 @@
             .then(response => response.json())
             .then(messages => messages.forEach(message => addMessage(message, true)))
             .catch(error => console.error('Ошибка инициализации оверлея:', error))
-            .finally(() => initEventSource());
+            .finally(() => {
+                showReloadBanner();
+                initEventSource();
+            });
     }
 
     initOverlay();

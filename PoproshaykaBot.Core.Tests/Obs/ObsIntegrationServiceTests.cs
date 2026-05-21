@@ -289,6 +289,93 @@ public sealed class ObsIntegrationServiceTests
     }
 
     [Test]
+    public async Task RefreshConfiguredChatSourcesAsyncSendsRefreshForEachConfiguredSourceAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+
+        var refreshed = await _service.RefreshConfiguredChatSourcesAsync(new()
+        {
+            Enabled = true,
+            ChatRefreshSources = ["Chat Overlay", "Secondary Chat"],
+        }, CancellationToken.None);
+
+        Assert.That(refreshed, Is.EqualTo(2));
+
+        var refreshRequests = _client.Requests
+            .Where(request => string.Equals(request.RequestType, "PressInputPropertiesButton", StringComparison.Ordinal))
+            .Select(request => request.RequestData!.Value.GetProperty("inputName").GetString())
+            .ToArray();
+
+        Assert.That(refreshRequests, Is.EqualTo(["Chat Overlay", "Secondary Chat"]));
+
+        var firstButton = _client.Requests
+            .First(request => string.Equals(request.RequestType, "PressInputPropertiesButton", StringComparison.Ordinal))
+            .RequestData!.Value.GetProperty("propertyName")
+            .GetString();
+
+        Assert.That(firstButton, Is.EqualTo("refreshnocache"));
+    }
+
+    [Test]
+    public async Task RefreshConfiguredChatSourcesAsyncFallsBackToSourceNameWhenListEmptyAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+
+        var refreshed = await _service.RefreshConfiguredChatSourcesAsync(new()
+        {
+            Enabled = true,
+            SourceName = "PoproshaykaBot Chat",
+        }, CancellationToken.None);
+
+        Assert.That(refreshed, Is.EqualTo(1));
+
+        var refreshRequest = _client.Requests.Single(request =>
+            string.Equals(request.RequestType, "PressInputPropertiesButton", StringComparison.Ordinal));
+
+        Assert.That(refreshRequest.RequestData!.Value.GetProperty("inputName").GetString(),
+            Is.EqualTo("PoproshaykaBot Chat"));
+    }
+
+    [Test]
+    public async Task RefreshConfiguredChatSourcesAsyncReturnsZeroWhenNoSourcesAndNoFallbackAsync()
+    {
+        var refreshed = await _service.RefreshConfiguredChatSourcesAsync(new()
+        {
+            Enabled = true,
+            SourceName = string.Empty,
+        }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(refreshed, Is.Zero);
+            Assert.That(_client.ConnectCount, Is.Zero);
+            Assert.That(_client.Requests, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task ListBrowserSourceNamesAsyncReturnsOnlyBrowserSourceInputsAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {"inputName": "Mic/Aux", "inputKind": "wasapi_input_capture", "unversionedInputKind": "wasapi_input_capture"},
+                                                    {"inputName": "Chat Overlay", "inputKind": "browser_source", "unversionedInputKind": "browser_source"},
+                                                    {"inputName": "Donations", "inputKind": "browser_source_v2", "unversionedInputKind": "browser_source"}
+                                                  ]
+                                                }
+                                                """);
+
+        var names = await _service.ListBrowserSourceNamesAsync(new()
+        {
+            Enabled = true,
+        }, CancellationToken.None);
+
+        Assert.That(names, Is.EqualTo(["Chat Overlay", "Donations"]));
+    }
+
+    [Test]
     public async Task ListInputNamesAsyncReturnsInputNamesFromObsAsync()
     {
         _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");

@@ -12,6 +12,7 @@ public static class ObsServiceCollectionExtensions
         services.AddSingleton<IObsSceneController>(sp => sp.GetRequiredService<ObsIntegrationService>());
         services.AddSingleton<IAppLifetimeComponent, ObsIntegrationLifetimeAdapter>();
         services.AddSingleton<IAppLifetimeComponent, ObsSceneEventBridge>();
+        services.AddSingleton<IAppLifetimeComponent, ObsStreamStartChatRefresher>();
 
         return services;
     }

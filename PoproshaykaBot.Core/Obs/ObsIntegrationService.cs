@@ -25,6 +25,16 @@ public sealed class ObsIntegrationService(
             new(2, nameof(LogBrowserSourceRefreshFailed)),
             "Не удалось обновить Browser Source {SourceName} через refreshnocache");
 
+    private static readonly Action<ILogger, string, Exception?> LogChatSourceRefreshed =
+        LoggerMessage.Define<string>(LogLevel.Information,
+            new(3, nameof(LogChatSourceRefreshed)),
+            "Browser Source {SourceName}: выполнен жёсткий refresh (refreshnocache)");
+
+    private static readonly Action<ILogger, string, Exception?> LogChatSourceRefreshRejected =
+        LoggerMessage.Define<string>(LogLevel.Warning,
+            new(4, nameof(LogChatSourceRefreshRejected)),
+            "OBS отклонил жёсткий refresh для источника {SourceName}: возможно, источник не Browser Source или не существует");
+
     private readonly SemaphoreSlim _operationGate = new(1, 1);
 
     public ObsConnectionSnapshot CurrentStatus { get; private set; } = ObsConnectionSnapshot.Disconnected();
@@ -113,6 +123,79 @@ public sealed class ObsIntegrationService(
                     .Select(input => input.Name)
                     .Order(StringComparer.OrdinalIgnoreCase),
             ];
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<string>> ListBrowserSourceNamesAsync(ObsIntegrationSettings settings, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            using var cts = CreateTimeoutToken(cancellationToken);
+            await EnsureConnectedAsync(settings, cts.Token).ConfigureAwait(false);
+
+            var inputs = await GetInputListAsync(cts.Token).ConfigureAwait(false);
+            return
+            [
+                .. inputs
+                    .Where(input => string.Equals(input.Kind, "browser_source", StringComparison.OrdinalIgnoreCase)
+                                    || string.Equals(input.UnversionedKind, "browser_source", StringComparison.OrdinalIgnoreCase))
+                    .Select(input => input.Name)
+                    .Order(StringComparer.OrdinalIgnoreCase),
+            ];
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<int> RefreshConfiguredChatSourcesAsync(
+        ObsIntegrationSettings settings,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var sourceNames = settings.GetChatRefreshSourceNames();
+        if (sourceNames.Count == 0)
+        {
+            return 0;
+        }
+
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            using var cts = CreateTimeoutToken(cancellationToken);
+            await EnsureConnectedAsync(settings, cts.Token).ConfigureAwait(false);
+
+            var refreshed = 0;
+            foreach (var sourceName in sourceNames)
+            {
+                try
+                {
+                    await client.SendRequestAsync("PressInputPropertiesButton",
+                            new { inputName = sourceName, propertyName = "refreshnocache" },
+                            cts.Token)
+                        .ConfigureAwait(false);
+
+                    LogChatSourceRefreshed(logger, sourceName, null);
+                    refreshed++;
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    LogChatSourceRefreshRejected(logger, sourceName, exception);
+                }
+            }
+
+            return refreshed;
         }
         finally
         {

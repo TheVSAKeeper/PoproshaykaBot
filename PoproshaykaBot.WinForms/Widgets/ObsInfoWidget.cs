@@ -33,6 +33,7 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
     private bool _refreshQueued;
     private ToolStripLabel? _connectionStatusLabel;
     private ToolStripButton? _refreshButton;
+    private ToolStripButton? _refreshChatSourcesButton;
 
     public ObsInfoWidget()
     {
@@ -74,7 +75,17 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         };
 
         _refreshButton.Click += OnRefreshClick;
-        return [_connectionStatusLabel, _refreshButton];
+
+        _refreshChatSourcesButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "🔁",
+            ToolTipText = "Жёстко обновить чат-источники OBS (refreshnocache)",
+        };
+
+        _refreshChatSourcesButton.Click += OnRefreshChatSourcesClick;
+        return [_connectionStatusLabel, _refreshButton, _refreshChatSourcesButton];
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -110,6 +121,11 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
     private void OnRefreshClick(object? sender, EventArgs e)
     {
         _ = RefreshSnapshotAsync(connectIfNeeded: true);
+    }
+
+    private void OnRefreshChatSourcesClick(object? sender, EventArgs e)
+    {
+        _ = RefreshChatSourcesAsync();
     }
 
     private void OnRefreshTimerTick(object? sender, EventArgs e)
@@ -295,6 +311,112 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
     private static double NormalizeDecibelsToMeter(double decibels)
     {
         return Math.Clamp((decibels + 60D) / 60D, 0D, 1D);
+    }
+
+    private async Task RefreshChatSourcesAsync()
+    {
+        if (_refreshChatSourcesButton is null || IsDisposed)
+        {
+            return;
+        }
+
+        _refreshChatSourcesButton.Enabled = false;
+
+        var configuredCount = _settings.GetChatRefreshSourceNames().Count;
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            var refreshed = await ObsIntegration.RefreshConfiguredChatSourcesAsync(_settings, cts.Token);
+
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            if (configuredCount == 0)
+            {
+                ShowChatRefreshToast("🔁 источники не настроены", Color.DarkOrange);
+                Logger.LogInformation("Чат-источники для refresh не настроены");
+            }
+            else if (refreshed == 0)
+            {
+                ShowChatRefreshToast($"🔁 ни один из {configuredCount} не обновлён", Color.DarkRed);
+                Logger.LogWarning("Ручной refresh: OBS отклонил все {Count} запросов — проверьте имена источников", configuredCount);
+            }
+            else if (refreshed < configuredCount)
+            {
+                ShowChatRefreshToast($"🔁 обновлено {refreshed}/{configuredCount}", Color.DarkOrange);
+            }
+            else
+            {
+                ShowChatRefreshToast($"🔁 обновлено: {refreshed}", Color.DarkGreen);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            ShowChatRefreshToast("🔁 таймаут", Color.DarkRed);
+            Logger.LogWarning("Ручной refresh чат-источников OBS: превышено время ожидания");
+        }
+        catch (Exception exception)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            ShowChatRefreshToast("🔁 ошибка", Color.DarkRed);
+            Logger.LogWarning(exception, "Не удалось обновить чат-источники OBS вручную");
+        }
+        finally
+        {
+            if (!IsDisposed && _refreshChatSourcesButton is not null)
+            {
+                _refreshChatSourcesButton.Enabled = true;
+            }
+        }
+    }
+
+    private void ShowChatRefreshToast(string text, Color color)
+    {
+        if (_connectionStatusLabel is null || IsDisposed)
+        {
+            return;
+        }
+
+        var previousText = _connectionStatusLabel.Text;
+        var previousColor = _connectionStatusLabel.ForeColor;
+        var previousTooltip = _connectionStatusLabel.ToolTipText;
+
+        _connectionStatusLabel.Text = text;
+        _connectionStatusLabel.ForeColor = color;
+        _connectionStatusLabel.ToolTipText = text;
+
+        _ = RestoreConnectionLabelAfterDelayAsync(previousText, previousColor, previousTooltip);
+    }
+
+    private async Task RestoreConnectionLabelAfterDelayAsync(string previousText, Color previousColor, string previousTooltip)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(4));
+
+        if (IsDisposed || _connectionStatusLabel is null)
+        {
+            return;
+        }
+
+        ApplyCurrentConnectionState();
+
+        if (_connectionStatusLabel.Text == previousText)
+        {
+            return;
+        }
+
+        _connectionStatusLabel.ToolTipText = previousTooltip;
     }
 
     private void OnObsIntegrationSettingsChanged(ObsIntegrationSettingsChangedEvent evt)
