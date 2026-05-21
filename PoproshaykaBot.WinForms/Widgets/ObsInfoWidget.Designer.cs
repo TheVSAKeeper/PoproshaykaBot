@@ -45,9 +45,9 @@ sealed partial class ObsInfoWidget
         _mainTableLayoutPanel.Padding = new Padding(3);
         _mainTableLayoutPanel.RowCount = 3;
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));
-        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80F));
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 160F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Size = new Size(320, 210);
+        _mainTableLayoutPanel.Size = new Size(320, 290);
         _mainTableLayoutPanel.TabIndex = 0;
         //
         // _sceneLabel
@@ -74,7 +74,7 @@ sealed partial class ObsInfoWidget
         _outputsTableLayoutPanel.Name = "_outputsTableLayoutPanel";
         _outputsTableLayoutPanel.RowCount = 1;
         _outputsTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _outputsTableLayoutPanel.Size = new Size(314, 80);
+        _outputsTableLayoutPanel.Size = new Size(314, 160);
         _outputsTableLayoutPanel.TabIndex = 1;
         //
         // _streamStatusCard
@@ -83,7 +83,7 @@ sealed partial class ObsInfoWidget
         _streamStatusCard.Location = new Point(0, 0);
         _streamStatusCard.Margin = new Padding(0, 0, 3, 0);
         _streamStatusCard.Name = "_streamStatusCard";
-        _streamStatusCard.Size = new Size(154, 80);
+        _streamStatusCard.Size = new Size(154, 160);
         _streamStatusCard.TabIndex = 0;
         //
         // _recordStatusCard
@@ -92,7 +92,7 @@ sealed partial class ObsInfoWidget
         _recordStatusCard.Location = new Point(160, 0);
         _recordStatusCard.Margin = new Padding(3, 0, 0, 0);
         _recordStatusCard.Name = "_recordStatusCard";
-        _recordStatusCard.Size = new Size(154, 80);
+        _recordStatusCard.Size = new Size(154, 160);
         _recordStatusCard.TabIndex = 1;
         //
         // _sourcesScrollPanel
@@ -100,7 +100,7 @@ sealed partial class ObsInfoWidget
         _sourcesScrollPanel.AutoScroll = true;
         _sourcesScrollPanel.Controls.Add(_sourcesLayoutPanel);
         _sourcesScrollPanel.Dock = DockStyle.Fill;
-        _sourcesScrollPanel.Location = new Point(6, 112);
+        _sourcesScrollPanel.Location = new Point(6, 192);
         _sourcesScrollPanel.Margin = new Padding(3, 3, 3, 3);
         _sourcesScrollPanel.Name = "_sourcesScrollPanel";
         _sourcesScrollPanel.Size = new Size(308, 92);
@@ -136,7 +136,7 @@ sealed partial class ObsInfoWidget
         AutoScaleMode = AutoScaleMode.Font;
         Controls.Add(_mainTableLayoutPanel);
         Name = "ObsInfoWidget";
-        Size = new Size(320, 210);
+        Size = new Size(320, 290);
         _mainTableLayoutPanel.ResumeLayout(false);
         _outputsTableLayoutPanel.ResumeLayout(false);
         _sourcesScrollPanel.ResumeLayout(false);

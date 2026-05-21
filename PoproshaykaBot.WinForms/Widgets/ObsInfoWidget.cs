@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Tiles;
+using System.Globalization;
 using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Widgets;
@@ -93,6 +94,9 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         _initialized = true;
         _settings = Store.Load();
 
+        _streamStatusCard.Configure(ObsOutputCardKind.Stream);
+        _recordStatusCard.Configure(ObsOutputCardKind.Record);
+
         _subs.Add(Bus.SubscribeOnUi<ObsIntegrationSettingsChangedEvent>(this, OnObsIntegrationSettingsChanged));
         ObsClient.EventReceived += OnObsEventReceived;
         _subs.Add(new Subscription(() => ObsClient.EventReceived -= OnObsEventReceived));
@@ -165,6 +169,55 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
     private static string ToDisplayValue(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? "—" : value;
+    }
+
+    private static (string Text, ObsCardChipTone Tone)? FormatStreamHealth(
+        bool? active,
+        double? congestion,
+        long? skippedFrames,
+        long? totalFrames)
+    {
+        if (active != true)
+        {
+            return null;
+        }
+
+        if (skippedFrames is > 0 && totalFrames is > 0)
+        {
+            var ratio = (double)skippedFrames.Value / totalFrames.Value;
+            if (ratio >= 0.001D)
+            {
+                return (string.Create(CultureInfo.InvariantCulture,
+                    $"дропы · {skippedFrames.Value} ({ratio * 100D:0.0}%)"), ObsCardChipTone.Bad);
+            }
+        }
+
+        if (congestion is > 0.05D)
+        {
+            return (string.Create(CultureInfo.InvariantCulture,
+                $"сеть · {congestion.Value * 100D:0}%"), ObsCardChipTone.Warn);
+        }
+
+        return ("стабильно", ObsCardChipTone.Ok);
+    }
+
+    private static string? FormatRecordBytes(bool? active, long? bytes)
+    {
+        if (active != true || bytes is null or <= 0)
+        {
+            return null;
+        }
+
+        var value = bytes.Value;
+        return value switch
+        {
+            >= 1L << 30 => string.Create(CultureInfo.InvariantCulture,
+                $"{value / (double)(1L << 30):0.##} ГБ"),
+            >= 1L << 20 => string.Create(CultureInfo.InvariantCulture,
+                $"{value / (double)(1L << 20):0.#} МБ"),
+            _ => string.Create(CultureInfo.InvariantCulture,
+                $"{value / 1024D:0} КБ"),
+        };
     }
 
     private static string? GetOptionalString(JsonElement element, string propertyName)
@@ -410,8 +463,23 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         UpdateConnectionHeader("● OBS подключён", Color.Green, "OBS WebSocket подключён");
 
         _sceneLabel.Text = $"Сцена: {ToDisplayValue(snapshot.CurrentSceneName)}";
-        _streamStatusCard.Show("Эфир", snapshot.IsStreaming, null, snapshot.StreamTimecode);
-        _recordStatusCard.Show("Запись", snapshot.IsRecording, snapshot.IsRecordingPaused, snapshot.RecordTimecode);
+
+        var streamHealth = FormatStreamHealth(snapshot.IsStreaming,
+            snapshot.StreamCongestion,
+            snapshot.StreamSkippedFrames,
+            snapshot.StreamTotalFrames);
+
+        _streamStatusCard.ApplySnapshot(snapshot.IsStreaming,
+            null,
+            snapshot.StreamTimecode,
+            null,
+            streamHealth?.Text,
+            streamHealth?.Tone ?? ObsCardChipTone.Neutral);
+
+        _recordStatusCard.ApplySnapshot(snapshot.IsRecording,
+            snapshot.IsRecordingPaused,
+            snapshot.RecordTimecode,
+            FormatRecordBytes(snapshot.IsRecording, snapshot.RecordBytes));
 
         ApplyAudioSources(snapshot.AudioSources);
     }
@@ -537,7 +605,10 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
     private void ApplyDisabledState()
     {
         UpdateConnectionHeader("○ OBS выкл.", Color.Gray, "OBS интеграция отключена в настройках");
-        ResetDetails("—");
+        _sceneLabel.Text = "Сцена: —";
+        _streamStatusCard.ApplyUnknown();
+        _recordStatusCard.ApplyUnknown();
+        ClearRows();
     }
 
     private void ApplyUnavailableState(string? message)
@@ -546,14 +617,9 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
             Color.Red,
             string.IsNullOrWhiteSpace(message) ? "OBS WebSocket не подключён" : $"OBS WebSocket не подключён: {message}");
 
-        ResetDetails("—");
-    }
-
-    private void ResetDetails(string value)
-    {
-        _sceneLabel.Text = $"Сцена: {value}";
-        _streamStatusCard.Show("Эфир", null, null, null);
-        _recordStatusCard.Show("Запись", null, null, null);
+        _sceneLabel.Text = "Сцена: —";
+        _streamStatusCard.ApplyUnavailable(message);
+        _recordStatusCard.ApplyUnavailable(message);
         ClearRows();
     }
 

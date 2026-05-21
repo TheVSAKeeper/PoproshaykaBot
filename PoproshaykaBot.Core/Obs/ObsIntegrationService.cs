@@ -157,9 +157,13 @@ public sealed class ObsIntegrationService(
                     sceneName,
                     streamStatus.Active,
                     streamStatus.Timecode,
+                    streamStatus.Congestion,
+                    streamStatus.SkippedFrames,
+                    streamStatus.TotalFrames,
                     recordStatus.Active,
                     recordStatus.Paused,
                     recordStatus.Timecode,
+                    recordStatus.Bytes,
                     audioSources,
                     DateTimeOffset.Now);
             }
@@ -266,6 +270,31 @@ public sealed class ObsIntegrationService(
         }
     }
 
+    public Task StartStreamAsync(CancellationToken cancellationToken)
+    {
+        return InvokeOutputRequestAsync("StartStream", cancellationToken);
+    }
+
+    public Task StopStreamAsync(CancellationToken cancellationToken)
+    {
+        return InvokeOutputRequestAsync("StopStream", cancellationToken);
+    }
+
+    public Task StartRecordAsync(CancellationToken cancellationToken)
+    {
+        return InvokeOutputRequestAsync("StartRecord", cancellationToken);
+    }
+
+    public Task StopRecordAsync(CancellationToken cancellationToken)
+    {
+        return InvokeOutputRequestAsync("StopRecord", cancellationToken);
+    }
+
+    public Task ToggleRecordPauseAsync(CancellationToken cancellationToken)
+    {
+        return InvokeOutputRequestAsync("ToggleRecordPause", cancellationToken);
+    }
+
     public void Dispose()
     {
         _operationGate.Dispose();
@@ -330,6 +359,15 @@ public sealed class ObsIntegrationService(
             : null;
     }
 
+    private static long? GetOptionalLong(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var value)
+               && value.ValueKind == JsonValueKind.Number
+               && value.TryGetInt64(out var parsed)
+            ? parsed
+            : null;
+    }
+
     private static bool IsMicrophoneInputKind(string kind)
     {
         return kind.Equals("wasapi_input_capture", StringComparison.OrdinalIgnoreCase)
@@ -348,6 +386,26 @@ public sealed class ObsIntegrationService(
         }
 
         return score;
+    }
+
+    private async Task InvokeOutputRequestAsync(string requestType, CancellationToken cancellationToken)
+    {
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            if (!client.IsConnected)
+            {
+                throw new InvalidOperationException("OBS не подключён");
+            }
+
+            using var cts = CreateTimeoutToken(cancellationToken);
+            await client.SendRequestAsync(requestType, null, cts.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
     }
 
     private async Task<bool> CreateOrUpdateBrowserSourceAsync(
@@ -457,32 +515,35 @@ public sealed class ObsIntegrationService(
             : GetOptionalString(response.Value, "currentProgramSceneName");
     }
 
-    private async Task<(bool? Active, string? Timecode)> GetStreamStatusAsync(CancellationToken cancellationToken)
+    private async Task<StreamStatusFields> GetStreamStatusAsync(CancellationToken cancellationToken)
     {
         var response = await client.SendRequestAsync("GetStreamStatus", null, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
-            return (null, null);
+            return new(null, null, null, null, null);
         }
 
         var data = response.Value;
-        return (GetOptionalBool(data, "outputActive"),
-            GetOptionalString(data, "outputTimecode"));
+        return new(GetOptionalBool(data, "outputActive"),
+            GetOptionalString(data, "outputTimecode"),
+            GetOptionalDouble(data, "outputCongestion"),
+            GetOptionalLong(data, "outputSkippedFrames"),
+            GetOptionalLong(data, "outputTotalFrames"));
     }
 
-    private async Task<(bool? Active, bool? Paused, string? Timecode)> GetRecordStatusAsync(
-        CancellationToken cancellationToken)
+    private async Task<RecordStatusFields> GetRecordStatusAsync(CancellationToken cancellationToken)
     {
         var response = await client.SendRequestAsync("GetRecordStatus", null, cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
-            return (null, null, null);
+            return new(null, null, null, null);
         }
 
         var data = response.Value;
-        return (GetOptionalBool(data, "outputActive"),
+        return new(GetOptionalBool(data, "outputActive"),
             GetOptionalBool(data, "outputPaused"),
-            GetOptionalString(data, "outputTimecode"));
+            GetOptionalString(data, "outputTimecode"),
+            GetOptionalLong(data, "outputBytes"));
     }
 
     private async Task<IReadOnlyList<ObsAudioSourceSnapshot>> GetAudioSourceSnapshotsAsync(
@@ -706,4 +767,17 @@ public sealed class ObsIntegrationService(
     private sealed record ObsSceneInfo(string Name);
 
     private sealed record ObsInputInfo(string Name, string Kind, string UnversionedKind);
+
+    private sealed record StreamStatusFields(
+        bool? Active,
+        string? Timecode,
+        double? Congestion,
+        long? SkippedFrames,
+        long? TotalFrames);
+
+    private sealed record RecordStatusFields(
+        bool? Active,
+        bool? Paused,
+        string? Timecode,
+        long? Bytes);
 }
