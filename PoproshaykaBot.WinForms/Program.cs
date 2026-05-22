@@ -21,6 +21,8 @@ using Serilog.Debugging;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using Timer = System.Windows.Forms.Timer;
 
 namespace PoproshaykaBot.WinForms;
@@ -47,9 +49,30 @@ public static class Program
             .WriteTo.Sink(uiLogSink, LogEventLevel.Information)
             .CreateLogger();
 
+        Mutex? singleInstanceMutex = null;
+
         try
         {
             Log.Information("Запуск приложения...");
+
+            singleInstanceMutex = AcquireSingleInstanceLock(isFinalizeUpdate);
+
+            if (singleInstanceMutex is null)
+            {
+                Log.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
+
+                if (!isUiSmoke)
+                {
+                    MessageBox.Show(
+                        "PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
+                        "Приложение уже запущено",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+
+                return;
+            }
+
             Log.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}",
                 ResolveStorageMode(),
                 AppPaths.BaseDirectory);
@@ -79,6 +102,7 @@ public static class Program
         {
             Log.Information("Завершение работы приложения");
             Log.CloseAndFlush();
+            singleInstanceMutex?.Dispose();
         }
     }
 
@@ -265,6 +289,26 @@ public static class Program
         }
 
         return AppPaths.IsPortable ? "portable" : "AppData";
+    }
+
+    private static Mutex? AcquireSingleInstanceLock(bool isFinalizeUpdate)
+    {
+        var mutex = new Mutex(true, BuildSingleInstanceMutexName(), out var createdNew);
+
+        if (createdNew || isFinalizeUpdate)
+        {
+            return mutex;
+        }
+
+        mutex.Dispose();
+        return null;
+    }
+
+    private static string BuildSingleInstanceMutexName()
+    {
+        var key = AppPaths.BaseDirectory.ToLowerInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
+        return $"Local\\PoproshaykaBot-{hash[..16]}";
     }
 
     private static Timer CreateMemoryWatchdogTimer()
