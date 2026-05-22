@@ -3,6 +3,7 @@ using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Tiles;
 using System.Diagnostics;
@@ -305,9 +306,7 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
         {
             var userDataFolder = WebView2UserDataFolders.Resolve(Settings.Current.Twitch.ChatDisplayAccount);
 
-            Directory.CreateDirectory(userDataFolder);
-
-            var env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            var env = await WebView2EnvironmentFactory.CreateAsync(userDataFolder, Logger);
             await _webView.EnsureCoreWebView2Async(env);
 
             if (IsDisposed || Disposing)
