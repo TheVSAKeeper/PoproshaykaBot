@@ -167,6 +167,10 @@ public partial class SettingsForm : Form
         {
             _oauthSettingsControl.RefreshChannelHint(_basicSettingsControl.GetChannel());
         }
+        else if (_tabControl.SelectedTab == _obsIntegrationTabPage)
+        {
+            _obsIntegrationSettingsControl.RunAutoConnectionCheck();
+        }
     }
 
     private async void OnOkButtonClicked(object sender, EventArgs e)
