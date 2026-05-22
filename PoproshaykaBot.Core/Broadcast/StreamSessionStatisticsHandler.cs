@@ -40,14 +40,9 @@ public sealed class StreamSessionStatisticsHandler :
 
     private readonly object _stateLock = new();
     private readonly Dictionary<string, ChatterTally> _chatters = new(StringComparer.Ordinal);
+    private readonly List<SegmentTally> _segments = [];
     private string? _channel;
     private DateTimeOffset? _sessionStartedAt;
-    private long _messageCount;
-    private int _peakViewers;
-    private long _viewerSamplesSum;
-    private int _viewerSamplesCount;
-    private string? _lastTitle;
-    private string? _lastGame;
 
     private CancellationTokenSource? _samplingCts;
     private Task? _samplingTask;
@@ -106,18 +101,13 @@ public sealed class StreamSessionStatisticsHandler :
         lock (_stateLock)
         {
             _channel = channel;
+            _chatters.Clear();
+            _segments.Clear();
 
             if (resume)
             {
                 _sessionStartedAt = existingDraft!.StartedAt;
-                _messageCount = existingDraft.MessageCount;
-                _peakViewers = Math.Max(existingDraft.PeakViewers, initialViewers);
-                _viewerSamplesSum = existingDraft.ViewerSamplesSum;
-                _viewerSamplesCount = existingDraft.ViewerSamplesCount;
-                _lastTitle = initialTitle ?? existingDraft.Title;
-                _lastGame = initialGame ?? existingDraft.Game;
-
-                _chatters.Clear();
+                _segments.AddRange(RestoreSegments(existingDraft));
 
                 foreach (var chatter in existingDraft.Chatters)
                 {
@@ -127,17 +117,28 @@ public sealed class StreamSessionStatisticsHandler :
                         MessageCount = chatter.MessageCount,
                     };
                 }
+
+                ApplyMetadata(initialTitle, initialGame);
+
+                var current = _segments[^1];
+
+                if (initialViewers > current.PeakViewers)
+                {
+                    current.PeakViewers = initialViewers;
+                }
             }
             else
             {
                 _sessionStartedAt = startedAt;
-                _messageCount = 0;
-                _chatters.Clear();
-                _peakViewers = initialViewers;
-                _viewerSamplesSum = initialViewers;
-                _viewerSamplesCount = initialViewers > 0 ? 1 : 0;
-                _lastTitle = initialTitle;
-                _lastGame = initialGame;
+                _segments.Add(new()
+                {
+                    StartedAt = startedAt,
+                    Title = initialTitle,
+                    Game = initialGame,
+                    PeakViewers = initialViewers,
+                    ViewerSamplesSum = initialViewers,
+                    ViewerSamplesCount = initialViewers > 0 ? 1 : 0,
+                });
             }
         }
 
@@ -174,7 +175,7 @@ public sealed class StreamSessionStatisticsHandler :
                 return Task.CompletedTask;
             }
 
-            _messageCount++;
+            _segments[^1].MessageCount++;
 
             if (!string.IsNullOrEmpty(@event.UserId))
             {
@@ -207,15 +208,7 @@ public sealed class StreamSessionStatisticsHandler :
                 return Task.CompletedTask;
             }
 
-            if (!string.IsNullOrEmpty(@event.Title))
-            {
-                _lastTitle = @event.Title;
-            }
-
-            if (!string.IsNullOrEmpty(@event.GameName))
-            {
-                _lastGame = @event.GameName;
-            }
+            ApplyMetadata(@event.Title, @event.GameName);
         }
 
         return Task.CompletedTask;
@@ -230,19 +223,13 @@ public sealed class StreamSessionStatisticsHandler :
                 return Task.CompletedTask;
             }
 
-            if (!string.IsNullOrEmpty(@event.Stream.Title))
-            {
-                _lastTitle = @event.Stream.Title;
-            }
+            ApplyMetadata(@event.Stream.Title, @event.Stream.GameName);
 
-            if (!string.IsNullOrEmpty(@event.Stream.GameName))
-            {
-                _lastGame = @event.Stream.GameName;
-            }
+            var current = _segments[^1];
 
-            if (@event.Stream.ViewerCount > _peakViewers)
+            if (@event.Stream.ViewerCount > current.PeakViewers)
             {
-                _peakViewers = @event.Stream.ViewerCount;
+                current.PeakViewers = @event.Stream.ViewerCount;
             }
         }
 
@@ -259,15 +246,16 @@ public sealed class StreamSessionStatisticsHandler :
 
         await StopSamplingLoopAsync().ConfigureAwait(false);
 
-        var session = TakeMemorySession();
+        var endedAt = _timeProvider.GetUtcNow();
+        var record = TakeMemorySession(@event.Channel, endedAt);
 
-        if (session == null)
+        if (record == null)
         {
             var orphan = _activeSessionStore.Load();
 
             if (orphan != null && IsUsableDraft(orphan))
             {
-                await FinalizeDraftAsync(orphan, _timeProvider.GetUtcNow(), "черновик без активной сессии в памяти", cancellationToken)
+                await FinalizeDraftAsync(orphan, endedAt, "черновик без активной сессии в памяти", cancellationToken)
                     .ConfigureAwait(false);
             }
             else
@@ -279,39 +267,20 @@ public sealed class StreamSessionStatisticsHandler :
             return;
         }
 
-        var endedAt = _timeProvider.GetUtcNow();
-        var duration = endedAt - session.StartedAt;
-
-        if (duration < TimeSpan.Zero)
-        {
-            duration = TimeSpan.Zero;
-        }
-
-        var record = new StreamSessionRecord
-        {
-            Channel = @event.Channel,
-            StartedAt = session.StartedAt,
-            EndedAt = endedAt,
-            Title = session.Title,
-            Game = session.Game,
-            MessageCount = session.MessageCount,
-            ChatterCount = session.ChatterCount,
-            PeakViewers = session.PeakViewers,
-            AverageViewers = session.AverageViewers,
-            Chatters = session.Chatters,
-        };
-
         await _eventBus.PublishAsync(new StreamSessionCompleted(record), cancellationToken).ConfigureAwait(false);
 
         _activeSessionStore.Delete();
 
-        _logger.LogInformation("Сессия стрима канала {Channel} завершена и сохранена: длительность {Duration}, сообщений {Messages}, чаттеров {Chatters}, пик {Peak}, средний {Avg}",
+        var duration = record.Duration;
+
+        _logger.LogInformation("Сессия стрима канала {Channel} завершена и сохранена: длительность {Duration}, сегментов {Segments}, сообщений {Messages}, чаттеров {Chatters}, пик {Peak}, средний {Avg}",
             @event.Channel,
             duration,
-            session.MessageCount,
-            session.ChatterCount,
-            session.PeakViewers,
-            session.AverageViewers);
+            record.Segments.Count,
+            record.MessageCount,
+            record.ChatterCount,
+            record.PeakViewers,
+            record.AverageViewers);
 
         var settings = _settingsManager.Current.Twitch.AutoBroadcast;
 
@@ -323,23 +292,23 @@ public sealed class StreamSessionStatisticsHandler :
 
         var message = MessageTemplate.For(settings.StreamEndStatsMessage)
             .With("duration", FormattingUtils.FormatTimeSpan(duration))
-            .With("messages", FormattingUtils.FormatNumber(session.MessageCount))
-            .With("chatters", FormattingUtils.FormatNumber(session.ChatterCount))
-            .With("peakViewers", FormattingUtils.FormatNumber(session.PeakViewers))
-            .With("avgViewers", FormattingUtils.FormatNumber(session.AverageViewers))
-            .With("title", session.Title ?? MissingValuePlaceholder)
-            .With("game", session.Game ?? MissingValuePlaceholder)
+            .With("messages", FormattingUtils.FormatNumber(record.MessageCount))
+            .With("chatters", FormattingUtils.FormatNumber(record.ChatterCount))
+            .With("peakViewers", FormattingUtils.FormatNumber(record.PeakViewers))
+            .With("avgViewers", FormattingUtils.FormatNumber(record.AverageViewers))
+            .With("title", record.Title ?? MissingValuePlaceholder)
+            .With("game", record.Game ?? MissingValuePlaceholder)
             .With("channel", @event.Channel)
             .Render();
 
         _logger.LogInformation("Отправка итоговой статистики стрима для канала {Channel}: длительность {Duration}, сообщений {Messages}, активных зрителей {Chatters}, пик {Peak}, средний {Avg}, игра \"{Game}\"",
             @event.Channel,
             duration,
-            session.MessageCount,
-            session.ChatterCount,
-            session.PeakViewers,
-            session.AverageViewers,
-            session.Game);
+            record.MessageCount,
+            record.ChatterCount,
+            record.PeakViewers,
+            record.AverageViewers,
+            record.Game);
 
         _messenger.Send(message);
     }
@@ -400,11 +369,112 @@ public sealed class StreamSessionStatisticsHandler :
             .ToList();
     }
 
+    private static int AverageViewers(long samplesSum, int samplesCount)
+    {
+        return samplesCount > 0
+            ? (int)Math.Round((double)samplesSum / samplesCount, MidpointRounding.AwayFromZero)
+            : 0;
+    }
+
+    private static List<SegmentTally> RestoreSegments(ActiveStreamSession draft)
+    {
+        if (draft.Segments.Count > 0)
+        {
+            return draft.Segments
+                .Select(segment => new SegmentTally
+                {
+                    StartedAt = segment.StartedAt,
+                    EndedAt = segment.EndedAt,
+                    Title = segment.Title,
+                    Game = segment.Game,
+                    MessageCount = segment.MessageCount,
+                    PeakViewers = segment.PeakViewers,
+                    ViewerSamplesSum = segment.ViewerSamplesSum,
+                    ViewerSamplesCount = segment.ViewerSamplesCount,
+                })
+                .ToList();
+        }
+
+        return
+        [
+            new()
+            {
+                StartedAt = draft.StartedAt,
+                Title = draft.Title,
+                Game = draft.Game,
+                MessageCount = draft.MessageCount,
+                PeakViewers = draft.PeakViewers,
+                ViewerSamplesSum = draft.ViewerSamplesSum,
+                ViewerSamplesCount = draft.ViewerSamplesCount,
+            },
+        ];
+    }
+
+    private static StreamSessionRecord BuildRecord(
+        string channel,
+        DateTimeOffset startedAt,
+        DateTimeOffset endedAt,
+        int chatterCount,
+        List<StreamSessionChatter> chatters,
+        IReadOnlyList<SegmentTally> segments)
+    {
+        var normalizedEnd = endedAt < startedAt ? startedAt : endedAt;
+
+        var resultSegments = new List<StreamSessionSegment>(segments.Count);
+        long totalMessages = 0;
+        var peakViewers = 0;
+        long viewerSamplesSum = 0;
+        var viewerSamplesCount = 0;
+
+        foreach (var segment in segments)
+        {
+            var segmentEnd = segment.EndedAt ?? normalizedEnd;
+
+            if (segmentEnd < segment.StartedAt)
+            {
+                segmentEnd = segment.StartedAt;
+            }
+
+            resultSegments.Add(new()
+            {
+                StartedAt = segment.StartedAt,
+                EndedAt = segmentEnd,
+                Title = segment.Title,
+                Game = segment.Game,
+                MessageCount = segment.MessageCount,
+                PeakViewers = segment.PeakViewers,
+                AverageViewers = AverageViewers(segment.ViewerSamplesSum, segment.ViewerSamplesCount),
+            });
+
+            totalMessages += segment.MessageCount;
+            peakViewers = Math.Max(peakViewers, segment.PeakViewers);
+            viewerSamplesSum += segment.ViewerSamplesSum;
+            viewerSamplesCount += segment.ViewerSamplesCount;
+        }
+
+        var lastSegment = segments.Count > 0 ? segments[^1] : null;
+
+        return new()
+        {
+            Channel = channel,
+            StartedAt = startedAt,
+            EndedAt = normalizedEnd,
+            Title = lastSegment?.Title,
+            Game = lastSegment?.Game,
+            MessageCount = totalMessages,
+            ChatterCount = chatterCount,
+            PeakViewers = peakViewers,
+            AverageViewers = AverageViewers(viewerSamplesSum, viewerSamplesCount),
+            Chatters = chatters,
+            Segments = resultSegments,
+        };
+    }
+
     private static StreamSessionRecord ToRecord(ActiveStreamSession draft, DateTimeOffset endedAt)
     {
-        var averageViewers = draft.ViewerSamplesCount > 0
-            ? (int)Math.Round((double)draft.ViewerSamplesSum / draft.ViewerSamplesCount, MidpointRounding.AwayFromZero)
-            : 0;
+        var segments = RestoreSegments(draft);
+
+        segments[^1].EndedAt ??= endedAt;
 
         var chatters = SortChatters(draft.Chatters.Select(chatter => new StreamSessionChatter
         {
@@ -413,19 +483,43 @@ public sealed class StreamSessionStatisticsHandler :
             MessageCount = chatter.MessageCount,
         }));
 
-        return new()
+        return BuildRecord(draft.Channel, draft.StartedAt, endedAt, draft.Chatters.Count, chatters, segments);
+    }
+
+    private void ApplyMetadata(string? title, string? game)
+    {
+        var current = _segments[^1];
+
+        if (!string.IsNullOrEmpty(game))
         {
-            Channel = draft.Channel,
-            StartedAt = draft.StartedAt,
-            EndedAt = endedAt < draft.StartedAt ? draft.StartedAt : endedAt,
-            Title = draft.Title,
-            Game = draft.Game,
-            MessageCount = draft.MessageCount,
-            ChatterCount = draft.Chatters.Count,
-            PeakViewers = draft.PeakViewers,
-            AverageViewers = averageViewers,
-            Chatters = chatters,
-        };
+            if (string.IsNullOrEmpty(current.Game))
+            {
+                current.Game = game;
+            }
+            else if (!string.Equals(current.Game, game, StringComparison.OrdinalIgnoreCase))
+            {
+                var now = _timeProvider.GetUtcNow();
+                current.EndedAt = now;
+
+                current = new()
+                {
+                    StartedAt = now,
+                    Title = current.Title,
+                    Game = game,
+                };
+
+                _segments.Add(current);
+
+                _logger.LogInformation("Категория стрима изменена на \"{Game}\" — открыт новый сегмент статистики (всего сегментов: {Count})",
+                    game,
+                    _segments.Count);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(title))
+        {
+            current.Title = title;
+        }
     }
 
     private DateTimeOffset ResolveStartedAt(StreamWentOnline @event)
@@ -469,15 +563,16 @@ public sealed class StreamSessionStatisticsHandler :
         await _eventBus.PublishAsync(new StreamSessionCompleted(record), cancellationToken).ConfigureAwait(false);
         _activeSessionStore.Delete();
 
-        _logger.LogInformation("Восстановлена сессия стрима из черновика ({Reason}): канал {Channel}, сообщений {Messages}, чаттеров {Chatters}, длительность {Duration}",
+        _logger.LogInformation("Восстановлена сессия стрима из черновика ({Reason}): канал {Channel}, сообщений {Messages}, чаттеров {Chatters}, сегментов {Segments}, длительность {Duration}",
             reason,
             record.Channel,
             record.MessageCount,
             record.ChatterCount,
+            record.Segments.Count,
             record.Duration);
     }
 
-    private MemorySession? TakeMemorySession()
+    private StreamSessionRecord? TakeMemorySession(string channel, DateTimeOffset endedAt)
     {
         lock (_stateLock)
         {
@@ -486,9 +581,10 @@ public sealed class StreamSessionStatisticsHandler :
                 return null;
             }
 
-            var averageViewers = _viewerSamplesCount > 0
-                ? (int)Math.Round((double)_viewerSamplesSum / _viewerSamplesCount, MidpointRounding.AwayFromZero)
-                : 0;
+            if (_segments[^1].EndedAt == null)
+            {
+                _segments[^1].EndedAt = endedAt;
+            }
 
             var chatters = SortChatters(_chatters.Select(pair => new StreamSessionChatter
             {
@@ -497,26 +593,14 @@ public sealed class StreamSessionStatisticsHandler :
                 MessageCount = pair.Value.MessageCount,
             }));
 
-            var result = new MemorySession(_sessionStartedAt.Value,
-                _messageCount,
-                _chatters.Count,
-                _peakViewers,
-                averageViewers,
-                _lastTitle,
-                _lastGame,
-                chatters);
+            var record = BuildRecord(channel, _sessionStartedAt.Value, endedAt, _chatters.Count, chatters, _segments);
 
             _channel = null;
             _sessionStartedAt = null;
-            _messageCount = 0;
             _chatters.Clear();
-            _peakViewers = 0;
-            _viewerSamplesSum = 0;
-            _viewerSamplesCount = 0;
-            _lastTitle = null;
-            _lastGame = null;
+            _segments.Clear();
 
-            return result;
+            return record;
         }
     }
 
@@ -529,17 +613,33 @@ public sealed class StreamSessionStatisticsHandler :
                 return null;
             }
 
+            var segments = _segments
+                .Select(segment => new ActiveStreamSessionSegment
+                {
+                    StartedAt = segment.StartedAt,
+                    EndedAt = segment.EndedAt,
+                    Title = segment.Title,
+                    Game = segment.Game,
+                    MessageCount = segment.MessageCount,
+                    PeakViewers = segment.PeakViewers,
+                    ViewerSamplesSum = segment.ViewerSamplesSum,
+                    ViewerSamplesCount = segment.ViewerSamplesCount,
+                })
+                .ToList();
+
+            var lastSegment = _segments[^1];
+
             return new()
             {
                 Channel = _channel,
                 StartedAt = _sessionStartedAt.Value,
                 UpdatedAt = _timeProvider.GetUtcNow(),
-                MessageCount = _messageCount,
-                PeakViewers = _peakViewers,
-                ViewerSamplesSum = _viewerSamplesSum,
-                ViewerSamplesCount = _viewerSamplesCount,
-                Title = _lastTitle,
-                Game = _lastGame,
+                MessageCount = _segments.Sum(segment => segment.MessageCount),
+                PeakViewers = _segments.Max(segment => segment.PeakViewers),
+                ViewerSamplesSum = _segments.Sum(segment => segment.ViewerSamplesSum),
+                ViewerSamplesCount = _segments.Sum(segment => segment.ViewerSamplesCount),
+                Title = lastSegment.Title,
+                Game = lastSegment.Game,
                 Chatters = _chatters
                     .Select(pair => new ActiveStreamSessionChatter
                     {
@@ -548,6 +648,7 @@ public sealed class StreamSessionStatisticsHandler :
                         MessageCount = pair.Value.MessageCount,
                     })
                     .ToList(),
+                Segments = segments,
             };
         }
     }
@@ -592,7 +693,6 @@ public sealed class StreamSessionStatisticsHandler :
         {
             cts = _samplingCts;
             task = _samplingTask;
-            _samplingCts?.Dispose();
             _samplingCts = null;
             _samplingTask = null;
         }
@@ -662,35 +762,31 @@ public sealed class StreamSessionStatisticsHandler :
                 return;
             }
 
-            if (snapshot.ViewerCount > _peakViewers)
+            ApplyMetadata(snapshot.Title, snapshot.GameName);
+
+            var current = _segments[^1];
+
+            if (snapshot.ViewerCount > current.PeakViewers)
             {
-                _peakViewers = snapshot.ViewerCount;
+                current.PeakViewers = snapshot.ViewerCount;
             }
 
-            _viewerSamplesSum += snapshot.ViewerCount;
-            _viewerSamplesCount++;
-
-            if (!string.IsNullOrEmpty(snapshot.Title))
-            {
-                _lastTitle = snapshot.Title;
-            }
-
-            if (!string.IsNullOrEmpty(snapshot.GameName))
-            {
-                _lastGame = snapshot.GameName;
-            }
+            current.ViewerSamplesSum += snapshot.ViewerCount;
+            current.ViewerSamplesCount++;
         }
     }
 
-    private sealed record MemorySession(
-        DateTimeOffset StartedAt,
-        long MessageCount,
-        int ChatterCount,
-        int PeakViewers,
-        int AverageViewers,
-        string? Title,
-        string? Game,
-        List<StreamSessionChatter> Chatters);
+    private sealed class SegmentTally
+    {
+        public DateTimeOffset StartedAt { get; set; }
+        public DateTimeOffset? EndedAt { get; set; }
+        public string? Title { get; set; }
+        public string? Game { get; set; }
+        public long MessageCount { get; set; }
+        public int PeakViewers { get; set; }
+        public long ViewerSamplesSum { get; set; }
+        public int ViewerSamplesCount { get; set; }
+    }
 
     private sealed class ChatterTally
     {

@@ -16,6 +16,27 @@ public sealed class StreamSessionRecord
     public int AverageViewers { get; set; }
     public List<StreamSessionChatter> Chatters { get; set; } = [];
 
+    public List<StreamSessionSegment> Segments { get; set; } = [];
+
     [JsonIgnore]
     public TimeSpan Duration => EndedAt > StartedAt ? EndedAt - StartedAt : TimeSpan.Zero;
+
+    public void EnsureSegments()
+    {
+        if (Segments.Count > 0)
+        {
+            return;
+        }
+
+        Segments.Add(new()
+        {
+            StartedAt = StartedAt,
+            EndedAt = EndedAt > StartedAt ? EndedAt : StartedAt,
+            Title = Title,
+            Game = Game,
+            MessageCount = MessageCount,
+            PeakViewers = PeakViewers,
+            AverageViewers = AverageViewers,
+        });
+    }
 }

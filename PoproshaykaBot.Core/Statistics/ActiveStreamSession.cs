@@ -21,4 +21,6 @@ public sealed class ActiveStreamSession
     public string? Game { get; set; }
 
     public List<ActiveStreamSessionChatter> Chatters { get; set; } = [];
+
+    public List<ActiveStreamSessionSegment> Segments { get; set; } = [];
 }

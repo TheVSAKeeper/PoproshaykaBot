@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.Core.Statistics;
+﻿using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics;
+using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.Statistics;
 
@@ -96,6 +98,28 @@ public sealed class StreamSessionHistoryStoreTests
             Assert.That(sessions.Select(s => s.Channel), Is.EquivalentTo(["chan-a", "chan-b"]));
             Assert.That(sessions[0].Chatters.Select(c => c.DisplayName), Is.EqualTo(["Alice", "Bob"]));
             Assert.That(sessions[1].MessageCount, Is.EqualTo(20));
+        }
+    }
+
+    [Test]
+    public void Load_RecordWithoutSegments_BackfillsSingleSegmentFromFlatFields()
+    {
+        var legacy = Record("legacy", 50);
+        legacy.Segments.Clear();
+
+        var history = new StreamSessionHistory { Sessions = [legacy] };
+        File.WriteAllText(_tempFile, JsonSerializer.Serialize(history, JsonStoreOptions.Default));
+
+        var store = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, _tempFile);
+        var session = store.Load().Sessions.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session.Segments, Has.Count.EqualTo(1));
+            Assert.That(session.Segments[0].Game, Is.EqualTo("Игра"));
+            Assert.That(session.Segments[0].MessageCount, Is.EqualTo(50));
+            Assert.That(session.Segments[0].StartedAt, Is.EqualTo(session.StartedAt));
+            Assert.That(session.Segments[0].EndedAt, Is.EqualTo(session.EndedAt));
         }
     }
 

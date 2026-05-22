@@ -389,4 +389,171 @@ public sealed class StreamSessionStatisticsHandlerTests
             _messenger.DidNotReceive().Send(Arg.Any<string>());
         }
     }
+
+    [Test]
+    public async Task ChannelUpdated_MidStream_SplitsSessionIntoSegmentsWithSeparateMetrics()
+    {
+        await _handler.HandleAsync(Online(), CancellationToken.None);
+
+        await _handler.HandleAsync(Chat("u1", "Alice"), CancellationToken.None);
+        await _handler.HandleAsync(Chat("u2", "Bob"), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddHours(1);
+        await _handler.HandleAsync(new ChannelUpdated("Новый заголовок", "ru", "999", "Другая игра", []), CancellationToken.None);
+
+        await _handler.HandleAsync(Chat("u3", "Carol"), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddHours(2);
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+
+        Assert.That(_captured, Has.Count.EqualTo(1));
+
+        var record = _captured[0];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record.Segments, Has.Count.EqualTo(2));
+            Assert.That(record.MessageCount, Is.EqualTo(3));
+            Assert.That(record.Game, Is.EqualTo("Другая игра"));
+            Assert.That(record.Title, Is.EqualTo("Новый заголовок"));
+
+            Assert.That(record.Segments[0].Game, Is.EqualTo("Игра"));
+            Assert.That(record.Segments[0].Title, Is.EqualTo("Заголовок"));
+            Assert.That(record.Segments[0].MessageCount, Is.EqualTo(2));
+            Assert.That(record.Segments[0].StartedAt, Is.EqualTo(StreamStart));
+            Assert.That(record.Segments[0].EndedAt, Is.EqualTo(StreamStart.AddHours(1)));
+
+            Assert.That(record.Segments[1].Game, Is.EqualTo("Другая игра"));
+            Assert.That(record.Segments[1].Title, Is.EqualTo("Новый заголовок"));
+            Assert.That(record.Segments[1].MessageCount, Is.EqualTo(1));
+            Assert.That(record.Segments[1].StartedAt, Is.EqualTo(StreamStart.AddHours(1)));
+            Assert.That(record.Segments[1].EndedAt, Is.EqualTo(StreamStart.AddHours(2)));
+        }
+    }
+
+    [Test]
+    public async Task ChannelUpdated_SameGame_UpdatesTitleWithoutSplitting()
+    {
+        await _handler.HandleAsync(Online(), CancellationToken.None);
+        await _handler.HandleAsync(Chat("u1", "Alice"), CancellationToken.None);
+
+        await _handler.HandleAsync(new ChannelUpdated("Новый заголовок", "ru", "1", "Игра", []), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddHours(1);
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+
+        var record = _captured[0];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record.Segments, Has.Count.EqualTo(1));
+            Assert.That(record.Segments[0].Game, Is.EqualTo("Игра"));
+            Assert.That(record.Segments[0].Title, Is.EqualTo("Новый заголовок"));
+        }
+    }
+
+    [Test]
+    public async Task StreamMetadataResolved_ResolvesInitiallyUnknownGame_WithoutSplitting()
+    {
+        var onlineWithoutGame = new StreamWentOnline(Channel, new()
+        {
+            StartedAt = StreamStartUtc,
+            ViewerCount = 5,
+            Title = "Заголовок",
+        });
+
+        await _handler.HandleAsync(onlineWithoutGame, CancellationToken.None);
+
+        await _handler.HandleAsync(new StreamMetadataResolved(Channel, new() { Title = "Заголовок", GameName = "Игра", ViewerCount = 5 }),
+            CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddHours(1);
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+
+        var record = _captured[0];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record.Segments, Has.Count.EqualTo(1));
+            Assert.That(record.Segments[0].Game, Is.EqualTo("Игра"));
+        }
+    }
+
+    [Test]
+    public async Task StreamWentOnline_CatchUp_GameChangedWhileOffline_OpensNewSegment()
+    {
+        SeedDraft(StreamStart, StreamStart.AddHours(1), 10, ("u1", "Alice", 10));
+
+        _timeProvider.UtcNow = StreamStart.AddHours(1);
+        await _handler.HandleAsync(OnlineCatchUp(), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddHours(2);
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+
+        var record = _captured[0];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record.Segments, Has.Count.EqualTo(2));
+            Assert.That(record.Segments[0].Game, Is.EqualTo("Черновая игра"));
+            Assert.That(record.Segments[0].MessageCount, Is.EqualTo(10));
+            Assert.That(record.Segments[1].Game, Is.EqualTo("Игра"));
+        }
+    }
+
+    [Test]
+    public async Task DisposeAndResume_WithMidStreamCategoryChange_PreservesSegments()
+    {
+        await _handler.HandleAsync(Online(), CancellationToken.None);
+        await _handler.HandleAsync(Chat("u1", "Alice"), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddHours(1);
+        await _handler.HandleAsync(new ChannelUpdated("Второй заголовок", "ru", "55", "Вторая игра", []), CancellationToken.None);
+        await _handler.HandleAsync(Chat("u2", "Bob"), CancellationToken.None);
+        await _handler.HandleAsync(Chat("u3", "Carol"), CancellationToken.None);
+
+        await _handler.DisposeAsync();
+
+        var resumed = new StreamSessionStatisticsHandler(_messenger,
+            _streamStatus,
+            _settingsManager,
+            _timeProvider,
+            _eventBus,
+            _store,
+            NullLogger<StreamSessionStatisticsHandler>.Instance);
+
+        try
+        {
+            var resumeOnline = new StreamWentOnline(Channel, new()
+            {
+                StartedAt = StreamStartUtc,
+                ViewerCount = 10,
+                Title = "Второй заголовок",
+                GameName = "Вторая игра",
+            }, true);
+
+            await resumed.HandleAsync(resumeOnline, CancellationToken.None);
+
+            _timeProvider.UtcNow = StreamStart.AddHours(3);
+            await resumed.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+        }
+        finally
+        {
+            await resumed.DisposeAsync();
+        }
+
+        Assert.That(_captured, Has.Count.EqualTo(1));
+
+        var record = _captured[0];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record.Segments, Has.Count.EqualTo(2));
+            Assert.That(record.Segments[0].Game, Is.EqualTo("Игра"));
+            Assert.That(record.Segments[0].MessageCount, Is.EqualTo(1));
+            Assert.That(record.Segments[1].Game, Is.EqualTo("Вторая игра"));
+            Assert.That(record.Segments[1].MessageCount, Is.EqualTo(2));
+            Assert.That(record.MessageCount, Is.EqualTo(3));
+        }
+    }
 }
