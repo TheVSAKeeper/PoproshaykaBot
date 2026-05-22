@@ -188,11 +188,6 @@ public sealed class OAuthFlowCoordinator(
             {
                 authorizationCode = await tcs.Task.WaitAsync(authTimeout, ct);
             }
-            catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
-            {
-                logger.LogInformation(ex, "OAuth-поток отменён пользователем для роли {Role}", role);
-                throw;
-            }
             catch (TimeoutException ex)
             {
                 logger.LogWarning(ex, "Истекло время ожидания авторизации для роли {Role}", role);
