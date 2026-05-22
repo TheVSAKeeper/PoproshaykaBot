@@ -322,12 +322,8 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
                 _gridLayoutPanel.RowStyles.Add(new(SizeType.Percent, 100F / rowCount));
             }
 
-            foreach (var (_, placed) in _placedTiles)
-            {
-                DashboardLayoutCalculator.ClampPlacement(placed, columnCount, rowCount);
-            }
-
-            var occupied = DashboardLayoutCalculator.BuildOccupancyMap(_placedTiles.Values, rowCount, columnCount);
+            var (occupied, unplaceable) = DashboardLayoutCalculator.ResolveLayout(_placedTiles.Values, rowCount, columnCount);
+            RemoveUnplaceableTiles(unplaceable);
 
             foreach (var (type, placed) in _placedTiles)
             {
@@ -358,6 +354,26 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
         }
 
         UpdatePaletteEnabled();
+    }
+
+    private void RemoveUnplaceableTiles(IReadOnlyList<PlacedTile> unplaceable)
+    {
+        if (unplaceable.Count == 0)
+        {
+            return;
+        }
+
+        var lost = unplaceable.ToHashSet();
+
+        var lostTypes = _placedTiles
+            .Where(pair => lost.Contains(pair.Value))
+            .Select(pair => pair.Key)
+            .ToList();
+
+        foreach (var type in lostTypes)
+        {
+            _placedTiles.Remove(type);
+        }
     }
 
     private void DisposeGridControls()
