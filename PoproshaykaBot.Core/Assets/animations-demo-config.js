@@ -90,7 +90,28 @@
     }
 
     function settingsEqual(a, b) {
-        return JSON.stringify(a) === JSON.stringify(b);
+        if (a === b) return true;
+        if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+            return a === b;
+        }
+        const aArray = Array.isArray(a);
+        const bArray = Array.isArray(b);
+        if (aArray !== bArray) return false;
+        if (aArray) {
+            if (a.length !== b.length) return false;
+            for (let i = 0; i < a.length; i++) {
+                if (!settingsEqual(a[i], b[i])) return false;
+            }
+            return true;
+        }
+        const keysA = Object.keys(a);
+        const keysB = Object.keys(b);
+        if (keysA.length !== keysB.length) return false;
+        for (const key of keysA) {
+            if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+            if (!settingsEqual(a[key], b[key])) return false;
+        }
+        return true;
     }
 
     function readDraftFromStorage() {
@@ -475,6 +496,7 @@
         bindAll();
         refreshControlsFromSettings();
         applySettings();
+        observeStageRebuilds();
         renderDirtyBanner();
         subscribeToSse();
     }
@@ -489,6 +511,16 @@
         refreshControlsFromSettings();
         applySettings();
         setStatus('Настройки обновлены сервером.', 'ok');
+    }
+
+    function observeStageRebuilds() {
+        if (typeof MutationObserver === 'undefined') return;
+        const grids = ['entry-grid', 'exit-grid']
+            .map(id => document.getElementById(id))
+            .filter(grid => grid !== null);
+        if (grids.length === 0) return;
+        const observer = new MutationObserver(() => applySettings());
+        grids.forEach(grid => observer.observe(grid, { childList: true, subtree: true }));
     }
 
     function subscribeToSse() {

@@ -10,6 +10,7 @@ using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
+using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Forms.Settings;
 
@@ -30,6 +31,7 @@ public partial class SettingsForm : Form
     private TwitchAccountSettings _botDraft;
     private TwitchAccountSettings _broadcasterDraft;
     private ObsChatSettings _obsChatDraft;
+    private string _obsChatBaselineJson;
     private ObsIntegrationSettings _obsIntegrationDraft;
     private PollsSettings _pollsDraft;
     private UpdateSettings _updateDraft;
@@ -64,6 +66,7 @@ public partial class SettingsForm : Form
         _botDraft = JsonStoreClone.DeepClone(accountsStore.LoadBot());
         _broadcasterDraft = JsonStoreClone.DeepClone(accountsStore.LoadBroadcaster());
         _obsChatDraft = JsonStoreClone.DeepClone(obsChatStore.Load());
+        _obsChatBaselineJson = SerializeObsChat(_obsChatDraft);
         _obsIntegrationDraft = JsonStoreClone.DeepClone(obsIntegrationStore.Load());
         _pollsDraft = JsonStoreClone.DeepClone(pollsStore.Load());
         _updateDraft = JsonStoreClone.DeepClone(updateStore.Load());
@@ -214,6 +217,11 @@ public partial class SettingsForm : Form
         UpdateButtonStates();
     }
 
+    private static string SerializeObsChat(ObsChatSettings settings)
+    {
+        return JsonSerializer.Serialize(settings, JsonStoreOptions.Default);
+    }
+
     private void FlushDraftFromControls(AppSettings settings)
     {
         _basicSettingsControl.SaveSettings(settings.Twitch);
@@ -239,6 +247,40 @@ public partial class SettingsForm : Form
         }
     }
 
+    private void SaveObsChatDraftWithConflictCheck()
+    {
+        var current = _obsChatStore.Load();
+        var currentJson = SerializeObsChat(current);
+
+        if (!string.Equals(currentJson, _obsChatBaselineJson, StringComparison.Ordinal))
+        {
+            var answer = MessageBox.Show(this,
+                """
+                Настройки чат-оверлея были изменены извне (например, через демо-страницу) уже после открытия этого окна.
+
+                Перезаписать их значениями из этого окна?
+
+                «Да» — применить значения из этого окна.
+                «Нет» — оставить внешние изменения, не трогая вкладку «OBS Чат».
+                """,
+                "Конфликт настроек чат-оверлея",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (answer != DialogResult.Yes)
+            {
+                _obsChatDraft = JsonStoreClone.DeepClone(current);
+                _obsChatSettingsControl.LoadSettings(_obsChatDraft, _settings.Twitch.HttpServerPort);
+                _obsChatBaselineJson = currentJson;
+                return;
+            }
+        }
+
+        _obsChatStore.Save(_obsChatDraft);
+        _obsChatBaselineJson = SerializeObsChat(_obsChatDraft);
+    }
+
     private void UpdateButtonStates()
     {
         _applyButton.Enabled = _hasChanges;
@@ -262,7 +304,7 @@ public partial class SettingsForm : Form
 
             _settingsManager.SaveSettings(_settings);
             _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
-            _obsChatStore.Save(_obsChatDraft);
+            SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
             _pollsStore.Save(_pollsDraft);
             _updateStore.Save(_updateDraft);

@@ -214,14 +214,8 @@
 
     function buildFakeAvatar(author) {
         const span = document.createElement('span');
-        span.className = 'avatar avatar-loaded';
+        span.className = 'avatar avatar-loaded demo-avatar-fallback';
         span.style.background = 'hsl(' + hashCodeToHue(author) + ', 55%, 45%)';
-        span.style.color = '#fff';
-        span.style.display = 'inline-flex';
-        span.style.alignItems = 'center';
-        span.style.justifyContent = 'center';
-        span.style.fontWeight = '700';
-        span.style.fontSize = 'calc(var(--avatar-size, 32px) * 0.45)';
         span.textContent = (author || '?').trim().charAt(0).toUpperCase();
 
         const login = displayNameToLogin[author];

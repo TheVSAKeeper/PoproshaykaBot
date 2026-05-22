@@ -202,6 +202,15 @@ body.demo-body {
     margin: 0;
 }
 
+.demo-avatar-fallback {
+    font-size: calc(var(--avatar-size, 32px) * 0.45);
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
 .copy-notice {
     font-size: 13px;
     position: fixed;
