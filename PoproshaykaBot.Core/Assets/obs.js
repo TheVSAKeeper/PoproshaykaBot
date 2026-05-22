@@ -261,7 +261,28 @@
         return classes;
     }
 
-    const validEntryAnimations = new Set(['no-animation', 'slide-in-right', 'slide-in-left', 'fade-in-up', 'bounce-in']);
+    const validEntryAnimations = new Set([
+        'no-animation',
+        'slide-in-right',
+        'slide-in-left',
+        'fade-in-up',
+        'bounce-in',
+        'pop-in',
+        'rubber-band',
+        'tada',
+        'zoom-blur-in',
+        'neon-pulse-in',
+        'materialize',
+        'glitch-in',
+        'power-up',
+        'slam-in',
+        'notification-bell',
+        'hologram',
+        'flip-in-x',
+        'roll-in',
+        'coin-flip',
+        'swoop-in',
+    ]);
 
     function sanitizeEntryAnimation(value, fallback) {
         return validEntryAnimations.has(value) ? value : fallback;
@@ -330,7 +351,18 @@
         };
     }
 
-    const validExitAnimations = new Set(['fade-out', 'slide-out-left', 'slide-out-right', 'scale-down', 'shrink-up']);
+    const validExitAnimations = new Set([
+        'fade-out',
+        'slide-out-left',
+        'slide-out-right',
+        'scale-down',
+        'shrink-up',
+        'dissolve',
+        'slide-out-up',
+        'slide-out-down',
+        'rotate-out',
+        'pixelate-out',
+    ]);
 
     function fadeOutMessage(messageDiv) {
         if (!enableMessageFadeOut) return;
@@ -768,6 +800,37 @@
         console.log('Настройки чата обновлены:', settings);
     }
 
+    const reloadBannerLifetimeMs = 5000;
+    const reloadBannerFadeMs = 600;
+
+    function showReloadBanner() {
+        const now = new Date();
+
+        const banner = document.createElement('div');
+        banner.classList.add('message', 'reload-banner', 'no-animation', 'entry-done');
+        banner.style.transition = 'opacity ' + reloadBannerFadeMs + 'ms ease';
+
+        const timeElement = document.createElement('time');
+        timeElement.className = 'timestamp';
+        timeElement.dateTime = now.toISOString();
+        timeElement.textContent = now.toLocaleTimeString();
+
+        const text = document.createElement('span');
+        text.className = 'system-message';
+        text.textContent = '🔁 Чат-источник перезагружен';
+
+        banner.appendChild(timeElement);
+        banner.appendChild(text);
+        chatContainer.appendChild(banner);
+
+        requestAnimationFrame(() => smoothScrollToBottom(true));
+
+        setTimeout(() => {
+            banner.style.opacity = '0';
+            setTimeout(() => banner.remove(), reloadBannerFadeMs);
+        }, reloadBannerLifetimeMs);
+    }
+
     function initOverlay() {
         fetch('/api/chat-settings')
             .then(response => response.json())
@@ -776,7 +839,10 @@
             .then(response => response.json())
             .then(messages => messages.forEach(message => addMessage(message, true)))
             .catch(error => console.error('Ошибка инициализации оверлея:', error))
-            .finally(() => initEventSource());
+            .finally(() => {
+                showReloadBanner();
+                initEventSource();
+            });
     }
 
     initOverlay();

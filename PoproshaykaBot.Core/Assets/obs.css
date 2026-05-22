@@ -231,6 +231,115 @@ body::-webkit-scrollbar {
     }
 }
 
+/* === Juicy entry animations === */
+
+@keyframes popIn {
+    0%   { transform: scale(0.3) rotate(-5deg); opacity: 0; }
+    60%  { transform: scale(1.1) rotate(2deg);  opacity: 1; }
+    80%  { transform: scale(0.95) rotate(-1deg); }
+    100% { transform: scale(1) rotate(0);       opacity: 1; }
+}
+
+@keyframes rubberBand {
+    0%   { transform: scale(1); opacity: 0; }
+    30%  { transform: scaleX(1.25) scaleY(0.75); opacity: 1; }
+    40%  { transform: scaleX(0.75) scaleY(1.25); }
+    50%  { transform: scaleX(1.15) scaleY(0.85); }
+    65%  { transform: scaleX(0.95) scaleY(1.05); }
+    75%  { transform: scaleX(1.05) scaleY(0.95); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes tada {
+    0%   { transform: scale(0.9) rotate(0deg); opacity: 0; }
+    10%, 20% { transform: scale(0.9) rotate(-3deg); opacity: 1; }
+    30%, 50%, 70%, 90% { transform: scale(1.1) rotate(3deg); }
+    40%, 60%, 80% { transform: scale(1.1) rotate(-3deg); }
+    100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@keyframes zoomBlurIn {
+    0%   { transform: scale(1.4); filter: blur(12px); opacity: 0; }
+    60%  { transform: scale(1.05); filter: blur(2px); opacity: 1; }
+    100% { transform: scale(1); filter: blur(0); opacity: 1; }
+}
+
+@keyframes neonPulseIn {
+    0%   { transform: translateX(20px); opacity: 0; box-shadow: var(--shadow-small), 0 0 0 rgba(145, 70, 255, 0); }
+    50%  { transform: translateX(-4px); opacity: 1; box-shadow: var(--shadow-small), 0 0 24px rgba(145, 70, 255, 0.85); }
+    100% { transform: translateX(0); opacity: 1; box-shadow: var(--shadow-small), 0 0 8px rgba(145, 70, 255, 0.3); }
+}
+
+@keyframes materialize {
+    0%   { opacity: 0; filter: blur(20px); transform: scale(0.95); }
+    60%  { opacity: 1; filter: blur(4px); }
+    100% { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+
+@keyframes glitchIn {
+    0%   { transform: translate(0); opacity: 0; }
+    10%  { transform: translate(-3px, 2px); opacity: 1; text-shadow: 2px 0 #ff0080, -2px 0 #00ffff; }
+    20%  { transform: translate(3px, -2px); text-shadow: -2px 0 #ff0080, 2px 0 #00ffff; }
+    30%  { transform: translate(-2px, 1px); text-shadow: 1px 0 #ff0080, -1px 0 #00ffff; }
+    45%  { transform: translate(2px, -1px); text-shadow: -1px 0 #ff0080, 1px 0 #00ffff; }
+    60%  { transform: translate(-1px, 0); text-shadow: none; }
+    100% { transform: translate(0); opacity: 1; text-shadow: var(--text-shadow); }
+}
+
+@keyframes powerUp {
+    0%   { transform: translateY(30px) scaleY(0.3); opacity: 0; box-shadow: var(--shadow-small), 0 0 0 rgba(81, 207, 102, 0); }
+    50%  { transform: translateY(8px) scaleY(1.05); opacity: 1; box-shadow: var(--shadow-small), 0 -8px 24px rgba(81, 207, 102, 0.6); }
+    100% { transform: translateY(0) scaleY(1); opacity: 1; box-shadow: var(--shadow-small), 0 0 8px rgba(81, 207, 102, 0.3); }
+}
+
+@keyframes slamIn {
+    0%   { transform: translateY(-60px) scale(1.3); opacity: 0; filter: blur(4px); }
+    40%  { transform: translateY(8px) scale(0.95); opacity: 1; filter: blur(0); }
+    55%  { transform: translateY(-6px) scale(1.03); }
+    70%  { transform: translateY(3px) scale(0.98); }
+    85%  { transform: translateY(-1px) scale(1.01); }
+    100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes notificationBell {
+    0%   { transform: rotate(0); opacity: 0; }
+    20%  { transform: rotate(-6deg); opacity: 1; }
+    40%  { transform: rotate(5deg); }
+    60%  { transform: rotate(-3deg); }
+    80%  { transform: rotate(2deg); }
+    100% { transform: rotate(0); opacity: 1; }
+}
+
+@keyframes hologram {
+    0%   { transform: translateY(12px); opacity: 0; filter: brightness(2) saturate(2); }
+    35%  { transform: translateY(0); opacity: 0.85; filter: brightness(1.3) saturate(1.5); }
+    100% { transform: translateY(0); opacity: 1; filter: brightness(1) saturate(1); }
+}
+
+@keyframes flipInX {
+    0%   { transform: perspective(420px) rotateX(90deg); opacity: 0; }
+    50%  { transform: perspective(420px) rotateX(-15deg); opacity: 1; }
+    75%  { transform: perspective(420px) rotateX(8deg); }
+    100% { transform: perspective(420px) rotateX(0); opacity: 1; }
+}
+
+@keyframes rollIn {
+    0%   { transform: translateX(-100%) rotate(-120deg); opacity: 0; }
+    100% { transform: translateX(0) rotate(0); opacity: 1; }
+}
+
+@keyframes coinFlip {
+    0%   { transform: perspective(600px) rotateY(0) scale(0.85); opacity: 0; }
+    50%  { transform: perspective(600px) rotateY(180deg) scale(0.7); opacity: 1; }
+    100% { transform: perspective(600px) rotateY(360deg) scale(1); opacity: 1; }
+}
+
+@keyframes swoopIn {
+    0%   { transform: translate(40px, 20px) skewX(-12deg); opacity: 0; }
+    60%  { transform: translate(-6px, -3px) skewX(3deg); opacity: 1; }
+    100% { transform: translate(0, 0) skewX(0); opacity: 1; }
+}
+
 @keyframes pulse {
     0%, 100% {
         box-shadow: var(--shadow-small), 0 0 10px rgba(255, 107, 107, 0.3);
@@ -265,6 +374,82 @@ body::-webkit-scrollbar {
 
 .message.bounce-in {
     animation: bounceIn var(--chat-animation-duration) ease-out;
+}
+
+.message.pop-in {
+    transform-origin: left center;
+    animation: popIn calc(var(--chat-animation-duration) * 1.6) cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.message.rubber-band {
+    transform-origin: left center;
+    animation: rubberBand calc(var(--chat-animation-duration) * 1.8) ease-out both;
+}
+
+.message.tada {
+    transform-origin: left center;
+    animation: tada calc(var(--chat-animation-duration) * 2.4) ease-out both;
+}
+
+.message.zoom-blur-in {
+    will-change: transform, opacity, filter;
+    animation: zoomBlurIn calc(var(--chat-animation-duration) * 1.4) ease-out both;
+}
+
+.message.neon-pulse-in {
+    will-change: transform, opacity, box-shadow;
+    animation: neonPulseIn calc(var(--chat-animation-duration) * 1.6) ease-out both;
+}
+
+.message.materialize {
+    will-change: opacity, filter, transform;
+    animation: materialize calc(var(--chat-animation-duration) * 1.5) ease-out both;
+}
+
+.message.glitch-in {
+    will-change: transform, opacity;
+    animation: glitchIn calc(var(--chat-animation-duration) * 1.6) steps(8, end) both;
+}
+
+.message.power-up {
+    transform-origin: bottom center;
+    will-change: transform, opacity, box-shadow;
+    animation: powerUp calc(var(--chat-animation-duration) * 1.4) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.message.slam-in {
+    will-change: transform, opacity, filter;
+    animation: slamIn calc(var(--chat-animation-duration) * 1.8) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.message.notification-bell {
+    transform-origin: top center;
+    animation: notificationBell calc(var(--chat-animation-duration) * 1.5) ease-out both;
+}
+
+.message.hologram {
+    will-change: opacity, filter, transform;
+    animation: hologram calc(var(--chat-animation-duration) * 1.6) ease-out both;
+}
+
+.message.flip-in-x {
+    transform-origin: center top;
+    backface-visibility: hidden;
+    animation: flipInX calc(var(--chat-animation-duration) * 1.5) ease-out both;
+}
+
+.message.roll-in {
+    transform-origin: left center;
+    animation: rollIn calc(var(--chat-animation-duration) * 1.4) ease-out both;
+}
+
+.message.coin-flip {
+    backface-visibility: hidden;
+    animation: coinFlip calc(var(--chat-animation-duration) * 1.8) ease-in-out both;
+}
+
+.message.swoop-in {
+    animation: swoopIn calc(var(--chat-animation-duration) * 1.3) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .username {
@@ -509,6 +694,96 @@ body::-webkit-scrollbar {
     }
 }
 
+@keyframes dissolve {
+    0% {
+        opacity: 1;
+        filter: blur(0) brightness(1);
+        max-height: 100px;
+        margin: var(--chat-margin);
+        padding: var(--chat-padding);
+    }
+    100% {
+        opacity: 0;
+        filter: blur(12px) brightness(1.3);
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+}
+
+@keyframes slideOutUp {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+        max-height: 100px;
+        margin: var(--chat-margin);
+        padding: var(--chat-padding);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-100%);
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+}
+
+@keyframes slideOutDown {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+        max-height: 100px;
+        margin: var(--chat-margin);
+        padding: var(--chat-padding);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(80%);
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+}
+
+@keyframes rotateOut {
+    0% {
+        opacity: 1;
+        transform: rotate(0) scale(1);
+        max-height: 100px;
+        margin: var(--chat-margin);
+        padding: var(--chat-padding);
+    }
+    100% {
+        opacity: 0;
+        transform: rotate(60deg) scale(0.4);
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+}
+
+@keyframes pixelateOut {
+    0% {
+        opacity: 1;
+        filter: contrast(1) blur(0);
+        max-height: 100px;
+        margin: var(--chat-margin);
+        padding: var(--chat-padding);
+    }
+    100% {
+        opacity: 0;
+        filter: contrast(4) blur(6px);
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+}
+
 .message[data-exit-anim="fade-out"] {
     animation: fadeOutMessage var(--fade-out-duration) ease-out forwards !important;
 }
@@ -527,6 +802,26 @@ body::-webkit-scrollbar {
 
 .message[data-exit-anim="shrink-up"] {
     animation: shrinkUp var(--fade-out-duration) ease-out forwards !important;
+}
+
+.message[data-exit-anim="dissolve"] {
+    animation: dissolve var(--fade-out-duration) ease-out forwards !important;
+}
+
+.message[data-exit-anim="slide-out-up"] {
+    animation: slideOutUp var(--fade-out-duration) ease-out forwards !important;
+}
+
+.message[data-exit-anim="slide-out-down"] {
+    animation: slideOutDown var(--fade-out-duration) ease-out forwards !important;
+}
+
+.message[data-exit-anim="rotate-out"] {
+    animation: rotateOut var(--fade-out-duration) ease-out forwards !important;
+}
+
+.message[data-exit-anim="pixelate-out"] {
+    animation: pixelateOut var(--fade-out-duration) ease-out forwards !important;
 }
 
 .message.no-timestamp .timestamp {
@@ -635,4 +930,23 @@ body::-webkit-scrollbar {
 .new-messages-indicator-arrow {
     font-size: 14px;
     line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .message,
+    .message::before,
+    .message::after,
+    .message .emote,
+    .message .avatar,
+    .message .username,
+    #new-messages-indicator {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        animation-delay: 0ms !important;
+        transition-duration: 1ms !important;
+    }
+
+    .emote.animated {
+        animation: none !important;
+    }
 }

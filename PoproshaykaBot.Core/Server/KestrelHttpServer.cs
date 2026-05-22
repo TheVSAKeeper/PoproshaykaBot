@@ -39,22 +39,12 @@ public sealed class KestrelHttpServer(
 
             builder.Services.AddSingleton(loggerFactory);
 
-            builder.Services.AddCors(options =>
-            {
-                options.AddDefaultPolicy(policy =>
-                    policy.AllowAnyOrigin()
-                        .AllowAnyHeader()
-                        .AllowAnyMethod());
-            });
-
             builder.WebHost.ConfigureKestrel(options =>
             {
                 options.ListenLocalhost(port);
             });
 
             _app = builder.Build();
-
-            _app.UseCors();
 
             _app.Use(async (ctx, next) =>
             {

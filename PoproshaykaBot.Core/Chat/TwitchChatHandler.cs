@@ -82,7 +82,8 @@ public sealed class TwitchChatHandler :
 
         var settings = _settingsManager.Current.Twitch;
 
-        var isFirstSeen = _audienceTracker.OnUserMessage(chatMessage.UserId, chatMessage.DisplayName);
+        var isFirstSeen = !chatMessage.IsBot
+                          && _audienceTracker.OnUserMessage(chatMessage.UserId, chatMessage.DisplayName);
 
         var status = GetUserStatusFlags(chatMessage);
 
@@ -97,7 +98,7 @@ public sealed class TwitchChatHandler :
             UserId = chatMessage.UserId,
             DisplayName = chatMessage.DisplayName,
             Message = chatMessage.Message,
-            MessageType = ChatMessageType.UserMessage,
+            MessageType = chatMessage.IsBot ? ChatMessageType.BotResponse : ChatMessageType.UserMessage,
             Status = status,
             IsFirstTime = isFirstSeen,
 
@@ -114,7 +115,14 @@ public sealed class TwitchChatHandler :
             chatMessage.Message,
             status,
             isFirstSeen,
-            historyEntry), cancellationToken);
+            historyEntry,
+            chatMessage.IsBot), cancellationToken);
+
+        if (chatMessage.IsBot)
+        {
+            _logger.LogDebug("[Бот, эхо] {DisplayName}: {Message}", chatMessage.DisplayName, chatMessage.Message);
+            return;
+        }
 
         var context = new CommandContext
         {

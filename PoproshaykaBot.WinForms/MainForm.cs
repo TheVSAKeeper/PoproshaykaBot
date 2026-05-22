@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Infrastructure.Events.Update;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Onboarding;
@@ -10,6 +11,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.WinForms.Forms.Onboarding;
 using PoproshaykaBot.WinForms.Forms.Settings;
 using PoproshaykaBot.WinForms.Forms.StreamHistory;
@@ -27,6 +29,7 @@ public partial class MainForm : Form
     private readonly DashboardLayoutStore _dashboardLayoutStore;
     private readonly BotConnectionManager _connectionManager;
     private readonly OnboardingChecklist _onboardingChecklist;
+    private readonly IUpdateCoordinator _updateCoordinator;
     private readonly ILogger<MainForm> _logger;
     private readonly List<IDisposable> _subs = [];
 
@@ -51,6 +54,7 @@ public partial class MainForm : Form
         SettingsManager settingsManager,
         DashboardLayoutStore dashboardLayoutStore,
         OnboardingChecklist onboardingChecklist,
+        IUpdateCoordinator updateCoordinator,
         ILogger<MainForm> logger)
     {
         _forms = forms;
@@ -60,6 +64,7 @@ public partial class MainForm : Form
         _settingsManager = settingsManager;
         _dashboardLayoutStore = dashboardLayoutStore;
         _onboardingChecklist = onboardingChecklist;
+        _updateCoordinator = updateCoordinator;
         _logger = logger;
 
         InitializeComponent();
@@ -85,11 +90,13 @@ public partial class MainForm : Form
         _subs.Add(_eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(this, statusEvent => OnBotConnectionProgress(statusEvent.Message)));
         _subs.Add(_eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(this, OnBotLifecyclePhaseChanged));
         _subs.Add(_eventBus.SubscribeOnUi<StreamMonitoringStatusChanged>(this, OnStreamMonitoringStatusChanged));
+        _subs.Add(_eventBus.SubscribeOnUi<UpdateAvailable>(this, _ => RefreshUpdateBanner()));
         _subs.DisposeOnClose(this);
 
         LoadSettings();
         OpenOnboardingWizardIfNeeded();
         RefreshOnboardingBanner();
+        RefreshUpdateBanner();
         _logger.LogInformation("Приложение запущено. Нажмите 'Подключить бота' для начала работы.");
 
         KeyPreview = true;
@@ -212,6 +219,68 @@ public partial class MainForm : Form
         OnOpenStreamHistory();
     }
 
+    private async void OnUpdateBannerUpdateButtonClicked(object? sender, EventArgs e)
+    {
+        var candidate = _updateCoordinator.LatestCandidate;
+
+        if (candidate is null)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(this,
+            $"Загрузить и установить версию {candidate.Version}?\n\nПриложение перезапустится автоматически.",
+            "Установка обновления",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (answer != DialogResult.Yes)
+        {
+            return;
+        }
+
+        _updateBannerUpdateButton.Enabled = false;
+        _updateBannerSkipButton.Enabled = false;
+
+        var progress = new Progress<int>(percent =>
+            _updateBannerLabel.Text = $"Загрузка обновления {candidate.Version}… {percent}%");
+
+        try
+        {
+            await _updateCoordinator.PrepareAsync(candidate, progress, CancellationToken.None);
+            _logger.LogInformation("Обновление {Version} загружено, приложение перезапустится", candidate.Version);
+            Application.Exit();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Ошибка загрузки обновления");
+
+            MessageBox.Show(this,
+                $"Не удалось установить обновление: {exception.Message}",
+                "Ошибка обновления",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+
+            _updateBannerUpdateButton.Enabled = true;
+            _updateBannerSkipButton.Enabled = true;
+            RefreshUpdateBanner();
+        }
+    }
+
+    private void OnUpdateBannerSkipButtonClicked(object? sender, EventArgs e)
+    {
+        var candidate = _updateCoordinator.LatestCandidate;
+
+        if (candidate is null)
+        {
+            return;
+        }
+
+        _updateCoordinator.SkipVersion(candidate.Version.ToString());
+        _updateBannerPanel.Visible = false;
+        _logger.LogInformation("Версия {Version} пропущена", candidate.Version);
+    }
+
     private static string GetDisplayVersion()
     {
         var version = Application.ProductVersion;
@@ -290,6 +359,20 @@ public partial class MainForm : Form
 
         _onboardingBannerLabel.Text = $"⚠ Бот не готов к работе. Не настроено: {string.Join(", ", missing)}.";
         _onboardingBannerPanel.Visible = true;
+    }
+
+    private void RefreshUpdateBanner()
+    {
+        var candidate = _updateCoordinator.LatestCandidate;
+
+        if (candidate is null || !_updateCoordinator.IsUpdatable)
+        {
+            _updateBannerPanel.Visible = false;
+            return;
+        }
+
+        _updateBannerLabel.Text = $"🔄 Доступна новая версия {candidate.Version} (установлена {_updateCoordinator.CurrentVersion}).";
+        _updateBannerPanel.Visible = true;
     }
 
     private async Task ShutdownAndCloseAsync()

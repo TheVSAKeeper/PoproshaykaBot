@@ -8,8 +8,6 @@ namespace PoproshaykaBot.WinForms.Forms.Settings;
 
 public sealed partial class ObsIntegrationSettingsControl : UserControl
 {
-    private const string AutoMicrophoneSelectionText = "Авто";
-
     private bool _initialized;
     private bool _loading;
     private int _httpServerPort = 8080;
@@ -38,16 +36,15 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
             _enabledCheckBox.Checked = settings.Enabled;
             _autoConnectCheckBox.Checked = settings.AutoConnect;
             _autoProvisionCheckBox.Checked = settings.AutoProvisionBrowserSource;
+            _refreshOnStreamStartCheckBox.Checked = settings.RefreshChatSourcesOnStreamStart;
             _syncSceneOnProfileCheckBox.Checked = settings.ApplySceneOnProfile;
             _syncProfileOnSceneCheckBox.Checked = settings.ApplyProfileOnScene;
             _hostTextBox.Text = settings.Host;
             _portNumeric.Value = ClampToNumeric(settings.Port, _portNumeric);
             _passwordTextBox.Text = settings.Password;
             _sceneComboBox.Text = settings.SceneName;
-            PopulateMicrophoneComboBox(string.IsNullOrWhiteSpace(settings.DashboardMicrophoneName)
-                    ? []
-                    : [settings.DashboardMicrophoneName.Trim()],
-                settings.DashboardMicrophoneName);
+            PopulateSourcesCheckedList([], settings.GetDashboardSourceNames());
+            PopulateChatRefreshSourcesCheckedList([], settings.ChatRefreshSources);
 
             _volumeMeterDelayNumeric.Value = ClampToNumeric(settings.DashboardVolumeMeterDelayMs, _volumeMeterDelayNumeric);
             _sourceNameTextBox.Text = settings.SourceName;
@@ -71,13 +68,15 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         settings.Enabled = _enabledCheckBox.Checked;
         settings.AutoConnect = _autoConnectCheckBox.Checked;
         settings.AutoProvisionBrowserSource = _autoProvisionCheckBox.Checked;
+        settings.RefreshChatSourcesOnStreamStart = _refreshOnStreamStartCheckBox.Checked;
         settings.ApplySceneOnProfile = _syncSceneOnProfileCheckBox.Checked;
         settings.ApplyProfileOnScene = _syncProfileOnSceneCheckBox.Checked;
         settings.Host = string.IsNullOrWhiteSpace(_hostTextBox.Text) ? "127.0.0.1" : _hostTextBox.Text.Trim();
         settings.Port = (int)_portNumeric.Value;
         settings.Password = _passwordTextBox.Text;
         settings.SceneName = _sceneComboBox.Text.Trim();
-        settings.DashboardMicrophoneName = ReadMicrophoneInputNameFromControl();
+        settings.DashboardSourceNames = ReadSourceNamesFromControl();
+        settings.DashboardMicrophoneName = string.Empty;
         settings.DashboardVolumeMeterDelayMs = (int)_volumeMeterDelayNumeric.Value;
         settings.SourceName = string.IsNullOrWhiteSpace(_sourceNameTextBox.Text)
             ? "PoproshaykaBot Chat"
@@ -85,6 +84,7 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
 
         settings.Width = (int)_widthNumeric.Value;
         settings.Height = (int)_heightNumeric.Value;
+        settings.ChatRefreshSources = ReadChatRefreshSourceNamesFromControl();
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -178,6 +178,20 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         });
     }
 
+    private void OnRefreshChatNowButtonClicked(object? sender, EventArgs e)
+    {
+        StartObsOperation(async ct =>
+        {
+            var settings = ReadSettingsFromControls();
+            var refreshed = await ObsIntegration.RefreshConfiguredChatSourcesAsync(settings, ct);
+
+            SetStatus(refreshed > 0
+                    ? $"● Обновлено чат-источников: {refreshed}"
+                    : "● Нет настроенных чат-источников",
+                refreshed > 0 ? Color.Green : Color.DarkOrange);
+        });
+    }
+
     private void OnCopyUrlButtonClicked(object? sender, EventArgs e)
     {
         try
@@ -210,11 +224,6 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
             InvalidOperationException invalidOperation => invalidOperation.Message,
             _ => "операция не выполнена",
         };
-    }
-
-    private static string ToMicrophoneSelectionText(string value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? AutoMicrophoneSelectionText : value.Trim();
     }
 
     private async Task ConnectAndLoadScenesAsync(
@@ -264,12 +273,14 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
     {
         var scenes = await ObsIntegration.ListScenesAsync(settings, cancellationToken);
         var inputNames = await ObsIntegration.ListInputNamesAsync(settings, cancellationToken);
+        var browserSourceNames = await ObsIntegration.ListBrowserSourceNamesAsync(settings, cancellationToken);
 
         _loading = true;
         try
         {
             PopulateSceneComboBox(scenes);
-            PopulateMicrophoneComboBox(inputNames);
+            PopulateSourcesCheckedList(inputNames, ReadSourceNamesFromControl());
+            PopulateChatRefreshSourcesCheckedList(browserSourceNames, ReadChatRefreshSourceNamesFromControl());
         }
         finally
         {
@@ -293,25 +304,92 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         _sceneComboBox.Text = string.IsNullOrWhiteSpace(current) && scenes.Count > 0 ? scenes[0] : current;
     }
 
-    private void PopulateMicrophoneComboBox(IReadOnlyList<string> inputNames)
+    private void PopulateSourcesCheckedList(IReadOnlyList<string> inputNames, IReadOnlyList<string> selectedNames)
     {
-        PopulateMicrophoneComboBox(inputNames, ReadMicrophoneInputNameFromControl());
+        var selected = selectedNames
+            .Select(name => name?.Trim() ?? string.Empty)
+            .Where(name => name.Length > 0)
+            .ToList();
+
+        var items = inputNames
+            .Select(name => name?.Trim() ?? string.Empty)
+            .Where(name => name.Length > 0)
+            .Concat(selected)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        _sourcesCheckedListBox.BeginUpdate();
+        try
+        {
+            _sourcesCheckedListBox.Items.Clear();
+
+            foreach (var item in items)
+            {
+                var isChecked = selected.Exists(name =>
+                    string.Equals(name, item, StringComparison.OrdinalIgnoreCase));
+
+                _sourcesCheckedListBox.Items.Add(item, isChecked);
+            }
+        }
+        finally
+        {
+            _sourcesCheckedListBox.EndUpdate();
+        }
     }
 
-    private void PopulateMicrophoneComboBox(IReadOnlyList<string> inputNames, string selectedInputName)
+    private List<string> ReadSourceNamesFromControl()
     {
-        _microphoneComboBox.Items.Clear();
-        _microphoneComboBox.Items.Add(AutoMicrophoneSelectionText);
-        _microphoneComboBox.Items.AddRange(inputNames.Cast<object>().ToArray());
-        _microphoneComboBox.Text = ToMicrophoneSelectionText(selectedInputName);
+        return _sourcesCheckedListBox.CheckedItems
+            .Cast<string>()
+            .Select(name => name.Trim())
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
-    private string ReadMicrophoneInputNameFromControl()
+    private void PopulateChatRefreshSourcesCheckedList(IReadOnlyList<string> browserSourceNames, IReadOnlyList<string> selectedNames)
     {
-        var value = _microphoneComboBox.Text.Trim();
-        return string.Equals(value, AutoMicrophoneSelectionText, StringComparison.OrdinalIgnoreCase)
-            ? string.Empty
-            : value;
+        var selected = selectedNames
+            .Select(name => name?.Trim() ?? string.Empty)
+            .Where(name => name.Length > 0)
+            .ToList();
+
+        var items = browserSourceNames
+            .Select(name => name?.Trim() ?? string.Empty)
+            .Where(name => name.Length > 0)
+            .Concat(selected)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        _chatRefreshSourcesCheckedListBox.BeginUpdate();
+        try
+        {
+            _chatRefreshSourcesCheckedListBox.Items.Clear();
+
+            foreach (var item in items)
+            {
+                var isChecked = selected.Exists(name =>
+                    string.Equals(name, item, StringComparison.OrdinalIgnoreCase));
+
+                _chatRefreshSourcesCheckedListBox.Items.Add(item, isChecked);
+            }
+        }
+        finally
+        {
+            _chatRefreshSourcesCheckedListBox.EndUpdate();
+        }
+    }
+
+    private List<string> ReadChatRefreshSourceNamesFromControl()
+    {
+        return _chatRefreshSourcesCheckedListBox.CheckedItems
+            .Cast<string>()
+            .Select(name => name.Trim())
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private void ToggleActionButtons(bool enabled)
@@ -320,6 +398,7 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         _reconnectButton.Enabled = enabled && _enabledCheckBox.Checked;
         _loadScenesButton.Enabled = enabled;
         _provisionButton.Enabled = enabled && _enabledCheckBox.Checked;
+        _refreshChatNowButton.Enabled = enabled && _enabledCheckBox.Checked;
         _copyUrlButton.Enabled = enabled;
     }
 
@@ -327,10 +406,12 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
     {
         _autoConnectCheckBox.Enabled = _enabledCheckBox.Checked;
         _autoProvisionCheckBox.Enabled = _enabledCheckBox.Checked;
+        _refreshOnStreamStartCheckBox.Enabled = _enabledCheckBox.Checked;
         _syncSceneOnProfileCheckBox.Enabled = _enabledCheckBox.Checked;
         _syncProfileOnSceneCheckBox.Enabled = _enabledCheckBox.Checked;
         _reconnectButton.Enabled = _enabledCheckBox.Checked;
         _provisionButton.Enabled = _enabledCheckBox.Checked;
+        _refreshChatNowButton.Enabled = _enabledCheckBox.Checked;
     }
 
     private void UpdateOverlayUrl()

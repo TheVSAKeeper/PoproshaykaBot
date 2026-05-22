@@ -22,6 +22,8 @@ public sealed class ObsIntegrationSettings
 
     public string DashboardMicrophoneName { get; set; } = string.Empty;
 
+    public List<string> DashboardSourceNames { get; set; } = [];
+
     public int DashboardVolumeMeterDelayMs { get; set; } = 120;
 
     public string SourceName { get; set; } = "PoproshaykaBot Chat";
@@ -29,4 +31,40 @@ public sealed class ObsIntegrationSettings
     public int Width { get; set; } = 1920;
 
     public int Height { get; set; } = 1080;
+
+    public List<string> ChatRefreshSources { get; set; } = [];
+
+    public bool RefreshChatSourcesOnStreamStart { get; set; }
+
+    public IReadOnlyList<string> GetDashboardSourceNames()
+    {
+        if (DashboardSourceNames.Count > 0)
+        {
+            return DashboardSourceNames
+                .Select(name => name?.Trim() ?? string.Empty)
+                .Where(name => name.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        return string.IsNullOrWhiteSpace(DashboardMicrophoneName)
+            ? []
+            : [DashboardMicrophoneName.Trim()];
+    }
+
+    public IReadOnlyList<string> GetChatRefreshSourceNames()
+    {
+        if (ChatRefreshSources.Count > 0)
+        {
+            return ChatRefreshSources
+                .Select(name => name?.Trim() ?? string.Empty)
+                .Where(name => name.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        return string.IsNullOrWhiteSpace(SourceName)
+            ? []
+            : [SourceName.Trim()];
+    }
 }

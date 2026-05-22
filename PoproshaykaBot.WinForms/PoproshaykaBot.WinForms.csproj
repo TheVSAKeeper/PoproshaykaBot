@@ -19,8 +19,20 @@
     <SelfContained>false</SelfContained>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <GitHubRepository>MaxNagibator/PoproshaykaBot</GitHubRepository>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="GitHubRepository" Value="$(GitHubRepository)" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(PortableMode)' == 'true'">
     <AssemblyMetadata Include="PortableMode" Value="true" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UpdatableBuild)' == 'true'">
+    <AssemblyMetadata Include="UpdatableBuild" Value="true" />
   </ItemGroup>
 
   <ItemGroup>

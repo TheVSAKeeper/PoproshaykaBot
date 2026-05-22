@@ -7,8 +7,10 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
+using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
+using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Forms.Settings;
 
@@ -20,6 +22,7 @@ public partial class SettingsForm : Form
     private readonly ObsIntegrationStore _obsIntegrationStore;
     private readonly DashboardLayoutStore _dashboardLayoutStore;
     private readonly PollsStore _pollsStore;
+    private readonly UpdateStore _updateStore;
     private readonly IEventBus _eventBus;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly ILogger<SettingsForm> _logger;
@@ -28,8 +31,10 @@ public partial class SettingsForm : Form
     private TwitchAccountSettings _botDraft;
     private TwitchAccountSettings _broadcasterDraft;
     private ObsChatSettings _obsChatDraft;
+    private string _obsChatBaselineJson;
     private ObsIntegrationSettings _obsIntegrationDraft;
     private PollsSettings _pollsDraft;
+    private UpdateSettings _updateDraft;
     private DashboardLayoutSettings? _dashboardDraft;
     private bool _initialized;
     private bool _hasChanges;
@@ -41,6 +46,7 @@ public partial class SettingsForm : Form
         ObsIntegrationStore obsIntegrationStore,
         DashboardLayoutStore dashboardLayoutStore,
         PollsStore pollsStore,
+        UpdateStore updateStore,
         IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
         ILogger<SettingsForm> logger)
@@ -51,6 +57,7 @@ public partial class SettingsForm : Form
         _obsIntegrationStore = obsIntegrationStore;
         _dashboardLayoutStore = dashboardLayoutStore;
         _pollsStore = pollsStore;
+        _updateStore = updateStore;
         _eventBus = eventBus;
         _kestrelHttpServer = kestrelHttpServer;
         _logger = logger;
@@ -59,8 +66,10 @@ public partial class SettingsForm : Form
         _botDraft = JsonStoreClone.DeepClone(accountsStore.LoadBot());
         _broadcasterDraft = JsonStoreClone.DeepClone(accountsStore.LoadBroadcaster());
         _obsChatDraft = JsonStoreClone.DeepClone(obsChatStore.Load());
+        _obsChatBaselineJson = SerializeObsChat(_obsChatDraft);
         _obsIntegrationDraft = JsonStoreClone.DeepClone(obsIntegrationStore.Load());
         _pollsDraft = JsonStoreClone.DeepClone(pollsStore.Load());
+        _updateDraft = JsonStoreClone.DeepClone(updateStore.Load());
         _dashboardDraft = JsonStoreClone.DeepCloneNullable(dashboardLayoutStore.LoadDashboard());
 
         InitializeComponent();
@@ -80,7 +89,7 @@ public partial class SettingsForm : Form
                 }),
             new(() => _oauthSettingsControl.LoadSettings(_settings, _botDraft, _broadcasterDraft),
                 () => _oauthSettingsControl.SaveSettings(_settings)),
-            new(() => _obsChatSettingsControl.LoadSettings(_obsChatDraft),
+            new(() => _obsChatSettingsControl.LoadSettings(_obsChatDraft, _settings.Twitch.HttpServerPort),
                 () => _obsChatSettingsControl.SaveSettings(_obsChatDraft)),
             new(() => _obsIntegrationSettingsControl.LoadSettings(_obsIntegrationDraft, _settings.Twitch.HttpServerPort),
                 () => _obsIntegrationSettingsControl.SaveSettings(_obsIntegrationDraft)),
@@ -92,6 +101,8 @@ public partial class SettingsForm : Form
                 () => _miscSettingsControl.SaveSettings(_settings)),
             new(() => _pollsSettingsControl.LoadSettings(_pollsDraft),
                 () => _pollsSettingsControl.SaveSettings(_pollsDraft)),
+            new(() => _updateSettingsControl.LoadSettings(_updateDraft),
+                () => _updateSettingsControl.SaveSettings(_updateDraft)),
             new(() => _dashboardSettingsControl.LoadSettings(_dashboardDraft),
                 () => _dashboardDraft = _dashboardSettingsControl.SaveSettings()),
         ];
@@ -198,11 +209,17 @@ public partial class SettingsForm : Form
         _obsChatDraft = new();
         _obsIntegrationDraft = new();
         _pollsDraft = new();
+        _updateDraft = new();
         _dashboardDraft = null;
 
         LoadSettingsToControls();
         _hasChanges = true;
         UpdateButtonStates();
+    }
+
+    private static string SerializeObsChat(ObsChatSettings settings)
+    {
+        return JsonSerializer.Serialize(settings, JsonStoreOptions.Default);
     }
 
     private void FlushDraftFromControls(AppSettings settings)
@@ -230,6 +247,40 @@ public partial class SettingsForm : Form
         }
     }
 
+    private void SaveObsChatDraftWithConflictCheck()
+    {
+        var current = _obsChatStore.Load();
+        var currentJson = SerializeObsChat(current);
+
+        if (!string.Equals(currentJson, _obsChatBaselineJson, StringComparison.Ordinal))
+        {
+            var answer = MessageBox.Show(this,
+                """
+                Настройки чат-оверлея были изменены извне (например, через демо-страницу) уже после открытия этого окна.
+
+                Перезаписать их значениями из этого окна?
+
+                «Да» — применить значения из этого окна.
+                «Нет» — оставить внешние изменения, не трогая вкладку «OBS Чат».
+                """,
+                "Конфликт настроек чат-оверлея",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (answer != DialogResult.Yes)
+            {
+                _obsChatDraft = JsonStoreClone.DeepClone(current);
+                _obsChatSettingsControl.LoadSettings(_obsChatDraft, _settings.Twitch.HttpServerPort);
+                _obsChatBaselineJson = currentJson;
+                return;
+            }
+        }
+
+        _obsChatStore.Save(_obsChatDraft);
+        _obsChatBaselineJson = SerializeObsChat(_obsChatDraft);
+    }
+
     private void UpdateButtonStates()
     {
         _applyButton.Enabled = _hasChanges;
@@ -253,9 +304,10 @@ public partial class SettingsForm : Form
 
             _settingsManager.SaveSettings(_settings);
             _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
-            _obsChatStore.Save(_obsChatDraft);
+            SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
             _pollsStore.Save(_pollsDraft);
+            _updateStore.Save(_updateDraft);
 
             if (_dashboardDraft != null)
             {

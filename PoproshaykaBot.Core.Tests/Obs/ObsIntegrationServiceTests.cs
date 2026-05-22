@@ -135,16 +135,40 @@ public sealed class ObsIntegrationServiceTests
             Assert.That(snapshot.CurrentSceneName, Is.EqualTo("Main"));
             Assert.That(snapshot.IsStreaming, Is.True);
             Assert.That(snapshot.IsRecording, Is.False);
-            Assert.That(snapshot.Microphone, Is.Not.Null);
-            Assert.That(snapshot.Microphone!.Name, Is.EqualTo("Mic/Aux"));
-            Assert.That(snapshot.Microphone.IsMuted, Is.True);
-            Assert.That(snapshot.Microphone.VolumeDecibels, Is.EqualTo(-12.5).Within(0.01));
+            Assert.That(snapshot.AudioSources, Has.Count.EqualTo(1));
+            Assert.That(snapshot.AudioSources[0].Name, Is.EqualTo("Mic/Aux"));
+            Assert.That(snapshot.AudioSources[0].IsMuted, Is.True);
+            Assert.That(snapshot.AudioSources[0].VolumeDecibels, Is.EqualTo(-12.5).Within(0.01));
         }
 
         var muteRequest = _client.Requests.Single(r =>
             string.Equals(r.RequestType, "GetInputMute", StringComparison.Ordinal));
 
         Assert.That(muteRequest.RequestData!.Value.GetProperty("inputName").GetString(), Is.EqualTo("Mic/Aux"));
+    }
+
+    [Test]
+    public async Task GetDashboardSnapshotAsyncReportsStreamAndPausedRecordingTimecodesAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetCurrentProgramScene", """{"currentProgramSceneName":"Main"}""");
+        _client.EnqueueResponse("GetStreamStatus", """{"outputActive":true,"outputTimecode":"01:23:45.000"}""");
+        _client.EnqueueResponse("GetRecordStatus", """{"outputActive":true,"outputPaused":true,"outputTimecode":"00:12:34.500"}""");
+        _client.EnqueueResponse("GetInputList", """{"inputs":[]}""");
+
+        var snapshot = await _service.GetDashboardSnapshotAsync(new()
+        {
+            Enabled = true,
+        }, true, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(snapshot.IsStreaming, Is.True);
+            Assert.That(snapshot.StreamTimecode, Is.EqualTo("01:23:45.000"));
+            Assert.That(snapshot.IsRecording, Is.True);
+            Assert.That(snapshot.IsRecordingPaused, Is.True);
+            Assert.That(snapshot.RecordTimecode, Is.EqualTo("00:12:34.500"));
+        }
     }
 
     [Test]
@@ -182,16 +206,70 @@ public sealed class ObsIntegrationServiceTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(snapshot.Microphone, Is.Not.Null);
-            Assert.That(snapshot.Microphone!.Name, Is.EqualTo("Line In"));
-            Assert.That(snapshot.Microphone.IsMuted, Is.False);
-            Assert.That(snapshot.Microphone.VolumeDecibels, Is.EqualTo(-6.0).Within(0.01));
+            Assert.That(snapshot.AudioSources, Has.Count.EqualTo(1));
+            Assert.That(snapshot.AudioSources[0].Name, Is.EqualTo("Line In"));
+            Assert.That(snapshot.AudioSources[0].IsMuted, Is.False);
+            Assert.That(snapshot.AudioSources[0].VolumeDecibels, Is.EqualTo(-6.0).Within(0.01));
         }
 
         var muteRequest = _client.Requests.Single(r =>
             string.Equals(r.RequestType, "GetInputMute", StringComparison.Ordinal));
 
         Assert.That(muteRequest.RequestData!.Value.GetProperty("inputName").GetString(), Is.EqualTo("Line In"));
+    }
+
+    [Test]
+    public async Task GetDashboardSnapshotAsyncReturnsAllConfiguredAudioSourcesInOrderAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetCurrentProgramScene", """{"currentProgramSceneName":"Main"}""");
+        _client.EnqueueResponse("GetStreamStatus", """{"outputActive":false}""");
+        _client.EnqueueResponse("GetRecordStatus", """{"outputActive":false}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {
+                                                      "inputName": "Mic/Aux",
+                                                      "inputKind": "wasapi_input_capture",
+                                                      "unversionedInputKind": "wasapi_input_capture"
+                                                    },
+                                                    {
+                                                      "inputName": "Desktop Audio",
+                                                      "inputKind": "wasapi_output_capture",
+                                                      "unversionedInputKind": "wasapi_output_capture"
+                                                    }
+                                                  ]
+                                                }
+                                                """);
+
+        _client.EnqueueResponse("GetInputMute", """{"inputMuted":false}""");
+        _client.EnqueueResponse("GetInputVolume", """{"inputVolumeDb":-3.0,"inputVolumeMul":0.8}""");
+        _client.EnqueueResponse("GetInputMute", """{"inputMuted":true}""");
+        _client.EnqueueResponse("GetInputVolume", """{"inputVolumeDb":-18.0,"inputVolumeMul":0.1}""");
+
+        var snapshot = await _service.GetDashboardSnapshotAsync(new()
+        {
+            Enabled = true,
+            DashboardSourceNames = ["Desktop Audio", "Mic/Aux"],
+        }, true, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(snapshot.AudioSources, Has.Count.EqualTo(2));
+            Assert.That(snapshot.AudioSources[0].Name, Is.EqualTo("Desktop Audio"));
+            Assert.That(snapshot.AudioSources[0].IsMuted, Is.False);
+            Assert.That(snapshot.AudioSources[0].VolumeDecibels, Is.EqualTo(-3.0).Within(0.01));
+            Assert.That(snapshot.AudioSources[1].Name, Is.EqualTo("Mic/Aux"));
+            Assert.That(snapshot.AudioSources[1].IsMuted, Is.True);
+            Assert.That(snapshot.AudioSources[1].VolumeDecibels, Is.EqualTo(-18.0).Within(0.01));
+        }
+
+        var muteInputNames = _client.Requests
+            .Where(request => string.Equals(request.RequestType, "GetInputMute", StringComparison.Ordinal))
+            .Select(request => request.RequestData!.Value.GetProperty("inputName").GetString())
+            .ToArray();
+
+        Assert.That(muteInputNames, Is.EqualTo(new[] { "Desktop Audio", "Mic/Aux" }));
     }
 
     [Test]
@@ -208,6 +286,93 @@ public sealed class ObsIntegrationServiceTests
             Assert.That(_client.ConnectCount, Is.Zero);
             Assert.That(_client.Requests, Is.Empty);
         }
+    }
+
+    [Test]
+    public async Task RefreshConfiguredChatSourcesAsyncSendsRefreshForEachConfiguredSourceAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+
+        var refreshed = await _service.RefreshConfiguredChatSourcesAsync(new()
+        {
+            Enabled = true,
+            ChatRefreshSources = ["Chat Overlay", "Secondary Chat"],
+        }, CancellationToken.None);
+
+        Assert.That(refreshed, Is.EqualTo(2));
+
+        var refreshRequests = _client.Requests
+            .Where(request => string.Equals(request.RequestType, "PressInputPropertiesButton", StringComparison.Ordinal))
+            .Select(request => request.RequestData!.Value.GetProperty("inputName").GetString())
+            .ToArray();
+
+        Assert.That(refreshRequests, Is.EqualTo(["Chat Overlay", "Secondary Chat"]));
+
+        var firstButton = _client.Requests
+            .First(request => string.Equals(request.RequestType, "PressInputPropertiesButton", StringComparison.Ordinal))
+            .RequestData!.Value.GetProperty("propertyName")
+            .GetString();
+
+        Assert.That(firstButton, Is.EqualTo("refreshnocache"));
+    }
+
+    [Test]
+    public async Task RefreshConfiguredChatSourcesAsyncFallsBackToSourceNameWhenListEmptyAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+
+        var refreshed = await _service.RefreshConfiguredChatSourcesAsync(new()
+        {
+            Enabled = true,
+            SourceName = "PoproshaykaBot Chat",
+        }, CancellationToken.None);
+
+        Assert.That(refreshed, Is.EqualTo(1));
+
+        var refreshRequest = _client.Requests.Single(request =>
+            string.Equals(request.RequestType, "PressInputPropertiesButton", StringComparison.Ordinal));
+
+        Assert.That(refreshRequest.RequestData!.Value.GetProperty("inputName").GetString(),
+            Is.EqualTo("PoproshaykaBot Chat"));
+    }
+
+    [Test]
+    public async Task RefreshConfiguredChatSourcesAsyncReturnsZeroWhenNoSourcesAndNoFallbackAsync()
+    {
+        var refreshed = await _service.RefreshConfiguredChatSourcesAsync(new()
+        {
+            Enabled = true,
+            SourceName = string.Empty,
+        }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(refreshed, Is.Zero);
+            Assert.That(_client.ConnectCount, Is.Zero);
+            Assert.That(_client.Requests, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task ListBrowserSourceNamesAsyncReturnsOnlyBrowserSourceInputsAsync()
+    {
+        _client.EnqueueResponse("GetVersion", """{"obsVersion":"31.0.0","obsWebSocketVersion":"5.5.2"}""");
+        _client.EnqueueResponse("GetInputList", """
+                                                {
+                                                  "inputs": [
+                                                    {"inputName": "Mic/Aux", "inputKind": "wasapi_input_capture", "unversionedInputKind": "wasapi_input_capture"},
+                                                    {"inputName": "Chat Overlay", "inputKind": "browser_source", "unversionedInputKind": "browser_source"},
+                                                    {"inputName": "Donations", "inputKind": "browser_source_v2", "unversionedInputKind": "browser_source"}
+                                                  ]
+                                                }
+                                                """);
+
+        var names = await _service.ListBrowserSourceNamesAsync(new()
+        {
+            Enabled = true,
+        }, CancellationToken.None);
+
+        Assert.That(names, Is.EqualTo(["Chat Overlay", "Donations"]));
     }
 
     [Test]

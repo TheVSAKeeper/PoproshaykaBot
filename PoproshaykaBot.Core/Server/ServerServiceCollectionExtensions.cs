@@ -29,6 +29,7 @@ public static class ServerServiceCollectionExtensions
         services.AddSingleton<IEndpointMapper, SseEndpoint>();
         services.AddSingleton<IEndpointMapper, ChatHistoryEndpoint>();
         services.AddSingleton<IEndpointMapper, ChatSettingsEndpoint>();
+        services.AddSingleton<IEndpointMapper, AnimationsEndpoint>();
         services.AddSingleton<IEndpointMapper, AvatarEndpoint>();
         services.AddSingleton<IEndpointMapper, StaticAssetsEndpoint>();
 

@@ -28,6 +28,25 @@ public static class ChatServiceCollectionExtensions
 
         services.AddSingleton<AudienceTracker>();
 
+        RegisterChatCommands(services);
+
+        services.AddSingleton<ChatCommandProcessor>(sp =>
+        {
+            var commands = sp.GetServices<IChatCommand>().ToList();
+            var logger = sp.GetRequiredService<ILogger<ChatCommandProcessor>>();
+            var processor = new ChatCommandProcessor(commands, logger);
+            processor.Register(new HelpCommand(processor.GetAllCommands));
+            return processor;
+        });
+
+        services.AddSingleton<TwitchChatHandler>();
+        services.AddSingleton<IChannelProvider>(sp => sp.GetRequiredService<TwitchChatHandler>());
+
+        return services;
+    }
+
+    private static void RegisterChatCommands(IServiceCollection services)
+    {
         services.AddSingleton<IChatCommand, HelloCommand>();
         services.AddSingleton<IChatCommand, DonateCommand>();
         services.AddSingleton<IChatCommand, HowManyMessagesCommand>();
@@ -43,19 +62,10 @@ public static class ChatServiceCollectionExtensions
         services.AddSingleton<IChatCommand, ProfileCommand>();
         services.AddSingleton<IChatCommand, TitleCommand>();
         services.AddSingleton<IChatCommand, GameCommand>();
-
-        services.AddSingleton<ChatCommandProcessor>(sp =>
-        {
-            var commands = sp.GetServices<IChatCommand>().ToList();
-            var logger = sp.GetRequiredService<ILogger<ChatCommandProcessor>>();
-            var processor = new ChatCommandProcessor(commands, logger);
-            processor.Register(new HelpCommand(processor.GetAllCommands));
-            return processor;
-        });
-
-        services.AddSingleton<TwitchChatHandler>();
-        services.AddSingleton<IChannelProvider>(sp => sp.GetRequiredService<TwitchChatHandler>());
-
-        return services;
+        services.AddSingleton<IChatCommand, LastStreamCommand>();
+        services.AddSingleton<IChatCommand, StreamsCountCommand>();
+        services.AddSingleton<IChatCommand, PeakStreamCommand>();
+        services.AddSingleton<IChatCommand, IWasThereCommand>();
+        services.AddSingleton<IChatCommand, TopStreamsCommand>();
     }
 }

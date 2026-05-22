@@ -34,6 +34,11 @@ partial class MainForm
     {
         var resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
         _mainTableLayoutPanel = new TableLayoutPanel();
+        _updateBannerPanel = new Panel();
+        _updateBannerLabel = new Label();
+        _updateBannerButtonsPanel = new FlowLayoutPanel();
+        _updateBannerUpdateButton = new Button();
+        _updateBannerSkipButton = new Button();
         _onboardingBannerPanel = new Panel();
         _onboardingBannerLabel = new Label();
         _onboardingBannerButton = new Button();
@@ -48,6 +53,8 @@ partial class MainForm
         _streamMonitoringStatusLabel = new ToolStripStatusLabel();
         _statusStrip = new StatusStrip();
         _mainTableLayoutPanel.SuspendLayout();
+        _updateBannerPanel.SuspendLayout();
+        _updateBannerButtonsPanel.SuspendLayout();
         _onboardingBannerPanel.SuspendLayout();
         _mainToolStrip.SuspendLayout();
         _statusStrip.SuspendLayout();
@@ -57,18 +64,78 @@ partial class MainForm
         // 
         _mainTableLayoutPanel.ColumnCount = 1;
         _mainTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _mainTableLayoutPanel.Controls.Add(_onboardingBannerPanel, 0, 0);
-        _mainTableLayoutPanel.Controls.Add(_mainToolStrip, 0, 1);
-        _mainTableLayoutPanel.Controls.Add(_dashboardControl, 0, 2);
+        _mainTableLayoutPanel.Controls.Add(_updateBannerPanel, 0, 0);
+        _mainTableLayoutPanel.Controls.Add(_onboardingBannerPanel, 0, 1);
+        _mainTableLayoutPanel.Controls.Add(_mainToolStrip, 0, 2);
+        _mainTableLayoutPanel.Controls.Add(_dashboardControl, 0, 3);
         _mainTableLayoutPanel.Dock = DockStyle.Fill;
         _mainTableLayoutPanel.Location = new Point(0, 0);
         _mainTableLayoutPanel.Name = "_mainTableLayoutPanel";
-        _mainTableLayoutPanel.RowCount = 3;
+        _mainTableLayoutPanel.RowCount = 4;
+        _mainTableLayoutPanel.RowStyles.Add(new RowStyle());
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle());
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
         _mainTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         _mainTableLayoutPanel.Size = new Size(800, 562);
         _mainTableLayoutPanel.TabIndex = 0;
+        //
+        // _updateBannerPanel
+        //
+        _updateBannerPanel.BackColor = Color.LightYellow;
+        _updateBannerPanel.Controls.Add(_updateBannerLabel);
+        _updateBannerPanel.Controls.Add(_updateBannerButtonsPanel);
+        _updateBannerPanel.Dock = DockStyle.Fill;
+        _updateBannerPanel.Margin = new Padding(0);
+        _updateBannerPanel.MinimumSize = new Size(0, 40);
+        _updateBannerPanel.Name = "_updateBannerPanel";
+        _updateBannerPanel.Padding = new Padding(10, 6, 10, 6);
+        _updateBannerPanel.Size = new Size(800, 40);
+        _updateBannerPanel.TabIndex = 0;
+        _updateBannerPanel.Visible = false;
+        //
+        // _updateBannerLabel
+        //
+        _updateBannerLabel.AutoSize = false;
+        _updateBannerLabel.Dock = DockStyle.Fill;
+        _updateBannerLabel.ForeColor = Color.DarkGoldenrod;
+        _updateBannerLabel.Name = "_updateBannerLabel";
+        _updateBannerLabel.Size = new Size(620, 28);
+        _updateBannerLabel.TabIndex = 0;
+        _updateBannerLabel.Text = "🔄 Доступна новая версия.";
+        _updateBannerLabel.TextAlign = ContentAlignment.MiddleLeft;
+        //
+        // _updateBannerButtonsPanel
+        //
+        _updateBannerButtonsPanel.AutoSize = true;
+        _updateBannerButtonsPanel.Controls.Add(_updateBannerUpdateButton);
+        _updateBannerButtonsPanel.Controls.Add(_updateBannerSkipButton);
+        _updateBannerButtonsPanel.Dock = DockStyle.Right;
+        _updateBannerButtonsPanel.FlowDirection = FlowDirection.RightToLeft;
+        _updateBannerButtonsPanel.Margin = new Padding(0);
+        _updateBannerButtonsPanel.Name = "_updateBannerButtonsPanel";
+        _updateBannerButtonsPanel.Size = new Size(210, 28);
+        _updateBannerButtonsPanel.TabIndex = 1;
+        _updateBannerButtonsPanel.WrapContents = false;
+        //
+        // _updateBannerUpdateButton
+        //
+        _updateBannerUpdateButton.AutoSize = true;
+        _updateBannerUpdateButton.Name = "_updateBannerUpdateButton";
+        _updateBannerUpdateButton.Size = new Size(110, 28);
+        _updateBannerUpdateButton.TabIndex = 0;
+        _updateBannerUpdateButton.Text = "⬇️ Обновить";
+        _updateBannerUpdateButton.UseVisualStyleBackColor = true;
+        _updateBannerUpdateButton.Click += OnUpdateBannerUpdateButtonClicked;
+        //
+        // _updateBannerSkipButton
+        //
+        _updateBannerSkipButton.AutoSize = true;
+        _updateBannerSkipButton.Name = "_updateBannerSkipButton";
+        _updateBannerSkipButton.Size = new Size(95, 28);
+        _updateBannerSkipButton.TabIndex = 1;
+        _updateBannerSkipButton.Text = "Пропустить";
+        _updateBannerSkipButton.UseVisualStyleBackColor = true;
+        _updateBannerSkipButton.Click += OnUpdateBannerSkipButtonClicked;
         //
         // _onboardingBannerPanel
         //
@@ -211,6 +278,9 @@ partial class MainForm
         Text = "Попрощайка Бот - Управление";
         _mainTableLayoutPanel.ResumeLayout(false);
         _mainTableLayoutPanel.PerformLayout();
+        _updateBannerPanel.ResumeLayout(false);
+        _updateBannerButtonsPanel.ResumeLayout(false);
+        _updateBannerButtonsPanel.PerformLayout();
         _onboardingBannerPanel.ResumeLayout(false);
         _onboardingBannerPanel.PerformLayout();
         _mainToolStrip.ResumeLayout(false);
@@ -222,6 +292,11 @@ partial class MainForm
     }
 
     private TableLayoutPanel _mainTableLayoutPanel;
+    private Panel _updateBannerPanel;
+    private Label _updateBannerLabel;
+    private FlowLayoutPanel _updateBannerButtonsPanel;
+    private Button _updateBannerUpdateButton;
+    private Button _updateBannerSkipButton;
     private Panel _onboardingBannerPanel;
     private Label _onboardingBannerLabel;
     private Button _onboardingBannerButton;

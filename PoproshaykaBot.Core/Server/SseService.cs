@@ -213,6 +213,21 @@ public sealed class SseService : IAsyncDisposable
         }
     }
 
+    public void NotifyChatSettingsChangedRaw(ObsChatSettings settings)
+    {
+        _logger.LogDebug("Подготовка raw-уведомления об изменении настроек чата");
+
+        try
+        {
+            var json = JsonSerializer.Serialize(settings, ServerJsonOptions.WithColors);
+            Enqueue(new("chat_settings_changed_raw", json));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка подготовки raw-уведомления о настройках чата");
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         _logger.LogDebug("Освобождение ресурсов сервиса SSE (DisposeAsync)");

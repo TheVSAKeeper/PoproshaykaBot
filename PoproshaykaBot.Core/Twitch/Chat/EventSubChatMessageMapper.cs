@@ -5,7 +5,7 @@ namespace PoproshaykaBot.Core.Twitch.Chat;
 
 public static class EventSubChatMessageMapper
 {
-    public static ChatMessage Map(JsonElement payload)
+    public static ChatMessage Map(JsonElement payload, string? botUserId = null)
     {
         if (!payload.TryGetProperty("event", out var evt))
         {
@@ -26,6 +26,10 @@ public static class EventSubChatMessageMapper
         var (badges, isBroadcaster, isModerator, isVip, isSubscriber) = ExtractBadges(evt);
         var emotes = ExtractEmotes(evt);
 
+        var isBot = !string.IsNullOrEmpty(botUserId)
+                    && !string.IsNullOrEmpty(userId)
+                    && string.Equals(userId, botUserId, StringComparison.Ordinal);
+
         return new(channel,
             messageId,
             userId,
@@ -37,7 +41,8 @@ public static class EventSubChatMessageMapper
             isBroadcaster,
             isModerator,
             isVip,
-            isSubscriber);
+            isSubscriber,
+            isBot);
     }
 
     private static (IReadOnlyList<(string SetId, string BadgeId)> Badges,

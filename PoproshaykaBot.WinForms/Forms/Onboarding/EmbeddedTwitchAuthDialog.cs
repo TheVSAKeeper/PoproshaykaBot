@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using System.Diagnostics;
 
@@ -184,9 +185,8 @@ public partial class EmbeddedTwitchAuthDialog : Form
         try
         {
             var udf = WebView2UserDataFolders.Resolve(Role);
-            Directory.CreateDirectory(udf);
 
-            var environment = await CoreWebView2Environment.CreateAsync(null, udf);
+            var environment = await WebView2EnvironmentFactory.CreateAsync(udf, _logger);
             await _webView.EnsureCoreWebView2Async(environment);
 
             if (IsDisposed || Disposing)

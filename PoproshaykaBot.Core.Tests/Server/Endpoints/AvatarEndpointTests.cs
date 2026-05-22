@@ -15,7 +15,7 @@ public sealed class AvatarEndpointTests
                 services.AddRouting();
                 services.AddSingleton(new UserProfileImageProvider(rootProvider, NullLogger<UserProfileImageProvider>.Instance));
             },
-            sp => new AvatarEndpoint(sp.GetRequiredService<UserProfileImageProvider>()));
+            sp => new AvatarEndpoint(sp.GetRequiredService<UserProfileImageProvider>(), sp));
     }
 
     [Test]

@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms.Tiles;
@@ -66,7 +68,9 @@ public sealed partial class ChatOverlayPreviewTileControl : UserControl, IDashbo
     {
         try
         {
-            await _webView.EnsureCoreWebView2Async(null);
+            var userDataFolder = WebView2UserDataFolders.ResolveOverlayPreview();
+            var environment = await WebView2EnvironmentFactory.CreateAsync(userDataFolder, Logger);
+            await _webView.EnsureCoreWebView2Async(environment);
             UpdateOverlayUrl();
         }
         catch (Exception ex)
