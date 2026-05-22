@@ -158,7 +158,9 @@
     ];
 
     function pickSampleMessage() {
-        return sampleMessages[Math.floor(Math.random() * sampleMessages.length)];
+        const buffer = new Uint32Array(1);
+        crypto.getRandomValues(buffer);
+        return sampleMessages[buffer[0] % sampleMessages.length];
     }
 
     function hashCodeToHue(text) {

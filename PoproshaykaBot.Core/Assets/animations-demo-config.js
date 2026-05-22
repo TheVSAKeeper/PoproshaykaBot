@@ -80,7 +80,7 @@
     }
 
     function colorToCss(color) {
-        const a = (color.a / 255).toFixed(3).replace(/\.?0+$/, '') || '0';
+        const a = String(Number((color.a / 255).toFixed(3)));
         return 'rgba(' + color.r + ', ' + color.g + ', ' + color.b + ', ' + a + ')';
     }
 
