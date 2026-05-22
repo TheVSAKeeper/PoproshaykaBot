@@ -525,3 +525,40 @@ body.demo-body.drawer-open {
 .demo-config-status.error {
     color: #ff6b6b;
 }
+
+.demo-config-dirty {
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 6px 16px;
+    color: #f5c542;
+    border-bottom: 1px solid var(--demo-card-border);
+    background: rgba(245, 197, 66, 0.08);
+}
+
+.demo-config-dirty[hidden] {
+    display: none;
+}
+
+.demo-config-error {
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 10px 16px;
+    color: #ff6b6b;
+    border-bottom: 1px solid #5a1a1a;
+    background: rgba(255, 107, 107, 0.08);
+}
+
+.demo-config-error[hidden] {
+    display: none;
+}
+
+.demo-empty {
+    font-size: 13px;
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--demo-text-muted);
+    border: 1px dashed var(--demo-card-border);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.18);
+    grid-column: 1 / -1;
+}

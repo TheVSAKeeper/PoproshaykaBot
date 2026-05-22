@@ -101,8 +101,9 @@
             </button>
         </div>
         <div class="demo-config-actions">
-            <button id="config-reset"
-                    type="button">↺ Сбросить
+            <button id="config-revert"
+                    title="Отбросить локальный черновик и подгрузить актуальные настройки с сервера"
+                    type="button">↺ С сервера
             </button>
             <button class="primary"
                     id="config-push"
@@ -113,11 +114,23 @@
         <div aria-live="polite"
              class="demo-config-status"
              id="config-status"></div>
+        <div aria-live="polite"
+             class="demo-config-dirty"
+             hidden
+             id="config-dirty"></div>
+        <div class="demo-config-error"
+             hidden
+             id="config-error"></div>
         <div class="demo-config-body">
 
             <p class="demo-config-hint">
-                Изменения сразу применяются ко всем сообщениям на странице. Кнопка ↑ отправит настройки в OBS через POST
-                <code>/api/chat-settings</code> — живой оверлей обновится через SSE.
+                Источник правды — сервер бота. При загрузке тянутся актуальные значения, диапазоны слайдеров и список
+                анимаций
+                из <code>/api/chat-settings/raw</code>, <code>/api/chat-settings/schema</code> и
+                <code>/api/animations</code>.
+                Локальные правки помечаются как черновик и сохраняются между перезагрузками. Кнопка ↑ POST-ит в
+                <code>/api/chat-settings</code> и приходит обратно через SSE (<code>chat_settings_changed_raw</code>),
+                синхронизируя все открытые вкладки.
             </p>
 
             <details open>
@@ -136,9 +149,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Размер</span>
-                        <input data-max="72"
-                               data-min="8"
-                               id="cfg-fontSize"
+                        <input id="cfg-fontSize"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="px"
@@ -158,9 +169,7 @@
                 <div class="demo-config-section">
                     <div class="demo-field">
                         <span class="demo-field-label">Padding</span>
-                        <input data-max="50"
-                               data-min="0"
-                               id="cfg-padding"
+                        <input id="cfg-padding"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="px"
@@ -168,9 +177,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Margin</span>
-                        <input data-max="50"
-                               data-min="0"
-                               id="cfg-margin"
+                        <input id="cfg-margin"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="px"
@@ -178,9 +185,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Скругление</span>
-                        <input data-max="50"
-                               data-min="0"
-                               id="cfg-borderRadius"
+                        <input id="cfg-borderRadius"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="px"
@@ -194,9 +199,7 @@
                 <div class="demo-config-section">
                     <div class="demo-field">
                         <span class="demo-field-label">Максимум сообщений</span>
-                        <input data-max="200"
-                               data-min="10"
-                               id="cfg-maxMessages"
+                        <input id="cfg-maxMessages"
                                type="range">
                         <span class="demo-field-value"
                               id="cfg-maxMessages-value"></span>
@@ -209,9 +212,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Размер эмоутов</span>
-                        <input data-max="128"
-                               data-min="16"
-                               id="cfg-emoteSizePixels"
+                        <input id="cfg-emoteSizePixels"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="px"
@@ -219,9 +220,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Размер бейджей</span>
-                        <input data-max="72"
-                               data-min="12"
-                               id="cfg-badgeSizePixels"
+                        <input id="cfg-badgeSizePixels"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="px"
@@ -241,9 +240,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Размер аватарки</span>
-                        <input data-max="96"
-                               data-min="16"
-                               id="cfg-userAvatarSizePixels"
+                        <input id="cfg-userAvatarSizePixels"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="px"
@@ -299,10 +296,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Длительность скролла</span>
-                        <input data-max="2000"
-                               data-min="0"
-                               data-step="50"
-                               id="cfg-scrollAnimationDuration"
+                        <input id="cfg-scrollAnimationDuration"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="ms"
@@ -316,10 +310,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Порог автоскролла</span>
-                        <input data-max="1000"
-                               data-min="0"
-                               data-step="10"
-                               id="cfg-scrollToBottomThreshold"
+                        <input id="cfg-scrollToBottomThreshold"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="px"
@@ -327,10 +318,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Пауза после ручного скролла</span>
-                        <input data-max="30000"
-                               data-min="0"
-                               data-step="100"
-                               id="cfg-scrollPauseAfterUserMs"
+                        <input id="cfg-scrollPauseAfterUserMs"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="ms"
@@ -350,10 +338,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Длительность</span>
-                        <input data-max="2000"
-                               data-min="100"
-                               data-step="50"
-                               id="cfg-animationDuration"
+                        <input id="cfg-animationDuration"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="ms"
@@ -398,10 +383,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Время жизни</span>
-                        <input data-max="3600"
-                               data-min="1"
-                               data-step="1"
-                               id="cfg-messageLifetimeSeconds"
+                        <input id="cfg-messageLifetimeSeconds"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="s"
@@ -414,10 +396,7 @@
                     </div>
                     <div class="demo-field">
                         <span class="demo-field-label">Длительность ухода</span>
-                        <input data-max="10000"
-                               data-min="100"
-                               data-step="50"
-                               id="cfg-fadeOutAnimationDurationMs"
+                        <input id="cfg-fadeOutAnimationDurationMs"
                                type="range">
                         <span class="demo-field-value"
                               data-suffix="ms"

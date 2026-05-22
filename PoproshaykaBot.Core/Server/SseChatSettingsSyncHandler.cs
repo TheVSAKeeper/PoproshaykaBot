@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 
 namespace PoproshaykaBot.Core.Server;
@@ -17,6 +17,7 @@ public sealed class SseChatSettingsSyncHandler : IEventHandler<ChatSettingsChang
     public Task HandleAsync(ChatSettingsChangedEvent @event, CancellationToken cancellationToken)
     {
         _sseService.NotifyChatSettingsChanged(@event.Settings);
+        _sseService.NotifyChatSettingsChangedRaw(@event.Settings);
         return Task.CompletedTask;
     }
 

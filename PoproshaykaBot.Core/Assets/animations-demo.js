@@ -1,41 +1,8 @@
 ﻿(function () {
     'use strict';
 
-    const entryAnimations = [
-        { value: 'no-animation', label: 'Без анимации' },
-        { value: 'slide-in-right', label: 'Скольжение справа' },
-        { value: 'slide-in-left', label: 'Скольжение слева' },
-        { value: 'fade-in-up', label: 'Затухание сверху' },
-        { value: 'bounce-in', label: 'Прыжок' },
-        { value: 'pop-in', label: 'Поп-ап с упругостью' },
-        { value: 'rubber-band', label: 'Резиновая лента' },
-        { value: 'tada', label: 'Та-да!' },
-        { value: 'zoom-blur-in', label: 'Кинонаезд с размытием' },
-        { value: 'neon-pulse-in', label: 'Неоновая вспышка' },
-        { value: 'materialize', label: 'Материализация' },
-        { value: 'glitch-in', label: 'Глитч' },
-        { value: 'power-up', label: 'Усиление снизу' },
-        { value: 'slam-in', label: 'Удар сверху' },
-        { value: 'notification-bell', label: 'Звон уведомления' },
-        { value: 'hologram', label: 'Голограмма' },
-        { value: 'flip-in-x', label: 'Переворот по горизонтали' },
-        { value: 'roll-in', label: 'Вкатывание' },
-        { value: 'coin-flip', label: 'Подброс монеты' },
-        { value: 'swoop-in', label: 'Налёт по диагонали' },
-    ];
-
-    const exitAnimations = [
-        { value: 'fade-out', label: 'Исчезновение' },
-        { value: 'slide-out-left', label: 'Выскользнуть влево' },
-        { value: 'slide-out-right', label: 'Выскользнуть вправо' },
-        { value: 'scale-down', label: 'Уменьшение' },
-        { value: 'shrink-up', label: 'Свернуться вверх' },
-        { value: 'dissolve', label: 'Растворение в пыль' },
-        { value: 'slide-out-up', label: 'Выскользнуть вверх' },
-        { value: 'slide-out-down', label: 'Выскользнуть вниз' },
-        { value: 'rotate-out', label: 'Поворот с уходом' },
-        { value: 'pixelate-out', label: 'Пикселизация' },
-    ];
+    let entryAnimations = [];
+    let exitAnimations = [];
 
     const sampleTexts3 = [
         'Серёга Пират ЖЁСТКО вышел в рейд с одним пистолетом.',
@@ -500,7 +467,30 @@
 
     loopIntervalValueLabel.textContent = formatSeconds(loopIntervalMs);
 
-    renderAll();
+    function renderError(message) {
+        const stub = function () {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'demo-empty';
+            wrapper.textContent = message;
+            return wrapper;
+        };
+        entryGrid.replaceChildren(stub());
+        exitGrid.replaceChildren(stub());
+    }
 
-    setTimeout(playAll, 400);
+    fetch('/api/animations')
+        .then(response => {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+        })
+        .then(payload => {
+            entryAnimations = payload.entry || [];
+            exitAnimations = (payload.exit || []).filter(opt => opt.value !== 'no-animation');
+            renderAll();
+            setTimeout(playAll, 400);
+        })
+        .catch(error => {
+            console.error('Не удалось загрузить /api/animations:', error);
+            renderError('Не удалось загрузить список анимаций с сервера: ' + (error && error.message ? error.message : error));
+        });
 }());

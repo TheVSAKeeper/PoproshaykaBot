@@ -1,48 +1,7 @@
 ﻿(function () {
     'use strict';
 
-    const STORAGE_KEY = 'poproshaykabot.demo.chatSettings.v1';
-
-    const defaults = {
-        backgroundColor: { a: 179, r: 0, g: 0, b: 0 },
-        textColor: { a: 255, r: 255, g: 255, b: 255 },
-        usernameColor: { a: 255, r: 145, g: 70, b: 255 },
-        systemMessageColor: { a: 255, r: 255, g: 204, b: 0 },
-        timestampColor: { a: 255, r: 153, g: 153, b: 153 },
-        fontFamily: '"Motiva Sans", "Inter", "Noto Sans", Arial, sans-serif',
-        fontSize: 14,
-        fontBold: false,
-        padding: 5,
-        margin: 5,
-        borderRadius: 5,
-        animationDuration: 300,
-        enableAnimations: true,
-        maxMessages: 50,
-        showTimestamp: true,
-        emoteSizePixels: 28,
-        badgeSizePixels: 18,
-        showUserAvatars: false,
-        userAvatarSizePixels: 32,
-        showUserTypeBorders: true,
-        highlightFirstTimeUsers: true,
-        highlightMentions: true,
-        enableMessageShadows: true,
-        enableSpecialEffects: true,
-        enableSmoothScroll: true,
-        scrollAnimationDuration: 300,
-        autoScrollEnabled: true,
-        scrollToBottomThreshold: 100,
-        scrollPauseAfterUserMs: 3000,
-        userMessageAnimation: 'slide-in-right',
-        botMessageAnimation: 'fade-in-up',
-        systemMessageAnimation: 'fade-in-up',
-        broadcasterMessageAnimation: 'slide-in-left',
-        firstTimeUserMessageAnimation: 'bounce-in',
-        enableMessageFadeOut: true,
-        messageLifetimeSeconds: 30,
-        fadeOutAnimationType: 'fade-out',
-        fadeOutAnimationDurationMs: 1000,
-    };
+    const STORAGE_KEY = 'poproshaykabot.demo.chatSettings.v2';
 
     const colorFields = [
         { key: 'backgroundColor', label: 'Фон сообщения' },
@@ -82,103 +41,42 @@
 
     const fontWeightVar = '--chat-font-weight';
 
-    const entryAnimList = [
-        ['no-animation', 'Без анимации'],
-        ['slide-in-right', 'Скольжение справа'],
-        ['slide-in-left', 'Скольжение слева'],
-        ['fade-in-up', 'Затухание сверху'],
-        ['bounce-in', 'Прыжок'],
-        ['pop-in', 'Поп-ап с упругостью'],
-        ['rubber-band', 'Резиновая лента'],
-        ['tada', 'Та-да!'],
-        ['zoom-blur-in', 'Кинонаезд с размытием'],
-        ['neon-pulse-in', 'Неоновая вспышка'],
-        ['materialize', 'Материализация'],
-        ['glitch-in', 'Глитч'],
-        ['power-up', 'Усиление снизу'],
-        ['slam-in', 'Удар сверху'],
-        ['notification-bell', 'Звон уведомления'],
-        ['hologram', 'Голограмма'],
-        ['flip-in-x', 'Переворот по горизонтали'],
-        ['roll-in', 'Вкатывание'],
-        ['coin-flip', 'Подброс монеты'],
-        ['swoop-in', 'Налёт по диагонали'],
+    const rangeFields = [
+        ['cfg-fontSize', 'fontSize'],
+        ['cfg-padding', 'padding'],
+        ['cfg-margin', 'margin'],
+        ['cfg-borderRadius', 'borderRadius'],
+        ['cfg-maxMessages', 'maxMessages'],
+        ['cfg-emoteSizePixels', 'emoteSizePixels'],
+        ['cfg-badgeSizePixels', 'badgeSizePixels'],
+        ['cfg-userAvatarSizePixels', 'userAvatarSizePixels'],
+        ['cfg-scrollAnimationDuration', 'scrollAnimationDuration'],
+        ['cfg-scrollToBottomThreshold', 'scrollToBottomThreshold'],
+        ['cfg-scrollPauseAfterUserMs', 'scrollPauseAfterUserMs'],
+        ['cfg-animationDuration', 'animationDuration'],
+        ['cfg-messageLifetimeSeconds', 'messageLifetimeSeconds'],
+        ['cfg-fadeOutAnimationDurationMs', 'fadeOutAnimationDurationMs'],
     ];
 
-    const exitAnimList = [
-        ['no-animation', 'Без анимации'],
-        ['fade-out', 'Исчезновение'],
-        ['slide-out-left', 'Выскользнуть влево'],
-        ['slide-out-right', 'Выскользнуть вправо'],
-        ['scale-down', 'Уменьшение'],
-        ['shrink-up', 'Свернуться вверх'],
-        ['dissolve', 'Растворение в пыль'],
-        ['slide-out-up', 'Выскользнуть вверх'],
-        ['slide-out-down', 'Выскользнуть вниз'],
-        ['rotate-out', 'Поворот с уходом'],
-        ['pixelate-out', 'Пикселизация'],
-    ];
+    let settings = null;
+    let serverSnapshot = null;
+    let schema = null;
+    let animations = null;
+    let isDirty = false;
+    let bootstrapFailed = false;
+
+    const drawer = document.getElementById('config-drawer');
+    const toggleButton = document.getElementById('config-toggle');
+    const closeButton = document.getElementById('config-close');
+    const revertButton = document.getElementById('config-revert');
+    const pushButton = document.getElementById('config-push');
+    const colorsContainer = document.getElementById('config-colors');
+    const statusEl = document.getElementById('config-status');
+    const dirtyEl = document.getElementById('config-dirty');
+    const errorEl = document.getElementById('config-error');
 
     function deepClone(value) {
         return JSON.parse(JSON.stringify(value));
-    }
-
-    function normalizeColor(raw) {
-        if (!raw) return null;
-        if (typeof raw === 'string') {
-            const hex = raw.startsWith('#') ? raw.slice(1) : raw;
-            if (hex.length === 6) {
-                return {
-                    a: 255,
-                    r: parseInt(hex.slice(0, 2), 16),
-                    g: parseInt(hex.slice(2, 4), 16),
-                    b: parseInt(hex.slice(4, 6), 16),
-                };
-            }
-            if (hex.length === 8) {
-                return {
-                    a: parseInt(hex.slice(0, 2), 16),
-                    r: parseInt(hex.slice(2, 4), 16),
-                    g: parseInt(hex.slice(4, 6), 16),
-                    b: parseInt(hex.slice(6, 8), 16),
-                };
-            }
-            return null;
-        }
-        if (typeof raw === 'object') {
-            const clamp = (v, d) => {
-                const n = Number(v);
-                return Number.isFinite(n) ? Math.max(0, Math.min(255, Math.round(n))) : d;
-            };
-            return {
-                a: clamp(raw.a !== undefined ? raw.a : raw.A, 255),
-                r: clamp(raw.r !== undefined ? raw.r : raw.R, 0),
-                g: clamp(raw.g !== undefined ? raw.g : raw.G, 0),
-                b: clamp(raw.b !== undefined ? raw.b : raw.B, 0),
-            };
-        }
-        return null;
-    }
-
-    function mergeWithDefaults(incoming) {
-        const result = deepClone(defaults);
-        if (!incoming || typeof incoming !== 'object') return result;
-        Object.keys(result).forEach(key => {
-            if (incoming[key] === undefined || incoming[key] === null) return;
-            const def = result[key];
-            if (def && typeof def === 'object' && 'a' in def) {
-                const c = normalizeColor(incoming[key]);
-                if (c) result[key] = c;
-            } else if (typeof def === 'boolean') {
-                result[key] = Boolean(incoming[key]);
-            } else if (typeof def === 'number') {
-                const n = Number(incoming[key]);
-                if (Number.isFinite(n)) result[key] = Math.round(n);
-            } else {
-                result[key] = String(incoming[key]);
-            }
-        });
-        return result;
     }
 
     function colorToCss(color) {
@@ -191,30 +89,81 @@
         return '#' + hex(color.r) + hex(color.g) + hex(color.b);
     }
 
-    function loadSettings() {
+    function settingsEqual(a, b) {
+        return JSON.stringify(a) === JSON.stringify(b);
+    }
+
+    function readDraftFromStorage() {
         try {
             const raw = globalThis.localStorage.getItem(STORAGE_KEY);
-            if (!raw) return deepClone(defaults);
-            return mergeWithDefaults(JSON.parse(raw));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object' || !parsed.draft) return null;
+            return parsed.draft;
         } catch (e) {
-            console.warn('Не удалось прочитать настройки демо из localStorage:', e);
-            return deepClone(defaults);
+            console.warn('Не удалось прочитать черновик из localStorage:', e);
+            return null;
         }
     }
 
-    function saveSettings() {
+    function writeDraftToStorage() {
         try {
-            globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+            globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify({ draft: settings }));
         } catch (e) {
-            console.warn('Не удалось сохранить настройки демо в localStorage:', e);
+            console.warn('Не удалось сохранить черновик в localStorage:', e);
         }
     }
 
-    const settings = loadSettings();
+    function clearDraftStorage() {
+        try {
+            globalThis.localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {
+            console.warn('Не удалось очистить черновик в localStorage:', e);
+        }
+    }
+
+    function markDirty() {
+        isDirty = true;
+        writeDraftToStorage();
+        renderDirtyBanner();
+    }
+
+    function markClean(newServerSnapshot) {
+        isDirty = false;
+        serverSnapshot = deepClone(newServerSnapshot);
+        clearDraftStorage();
+        renderDirtyBanner();
+    }
+
+    function renderDirtyBanner() {
+        if (!dirtyEl) return;
+        if (isDirty) {
+            dirtyEl.hidden = false;
+            dirtyEl.textContent = '● Черновик не отправлен в OBS. Нажмите «Применить к OBS» или «С сервера», чтобы отбросить.';
+        } else {
+            dirtyEl.hidden = true;
+            dirtyEl.textContent = '';
+        }
+    }
+
+    function showError(message) {
+        if (!errorEl) return;
+        errorEl.hidden = false;
+        errorEl.textContent = message;
+    }
+
+    function clearError() {
+        if (!errorEl) return;
+        errorEl.hidden = true;
+        errorEl.textContent = '';
+    }
 
     function applySettings() {
+        if (!settings) return;
+
         const root = document.documentElement;
         Object.keys(cssVarMap).forEach(key => {
+            if (settings[key] === undefined || settings[key] === null) return;
             const entry = cssVarMap[key];
             root.style.setProperty(entry[0], entry[1](settings[key]));
         });
@@ -231,14 +180,6 @@
             });
         });
     }
-
-    const drawer = document.getElementById('config-drawer');
-    const toggleButton = document.getElementById('config-toggle');
-    const closeButton = document.getElementById('config-close');
-    const resetButton = document.getElementById('config-reset');
-    const pushButton = document.getElementById('config-push');
-    const colorsContainer = document.getElementById('config-colors');
-    const statusEl = document.getElementById('config-status');
 
     function buildColorControls() {
         colorsContainer.replaceChildren();
@@ -274,6 +215,7 @@
 
             const sync = () => {
                 const current = settings[key];
+                if (!current) return;
                 const hex = colorToHex(current);
                 if (colorInput.value.toLowerCase() !== hex) colorInput.value = hex;
                 if (alphaInput.value !== String(current.a)) alphaInput.value = String(current.a);
@@ -304,14 +246,31 @@
 
     function populateAnimationSelects() {
         document.querySelectorAll('select[data-kind]').forEach(sel => {
-            const list = sel.dataset.kind === 'exit' ? exitAnimList : entryAnimList;
+            const list = sel.dataset.kind === 'exit' ? animations.exit : animations.entry;
             sel.replaceChildren();
-            list.forEach(pair => {
-                const opt = document.createElement('option');
-                opt.value = pair[0];
-                opt.textContent = pair[1];
-                sel.appendChild(opt);
+            list.forEach(opt => {
+                const node = document.createElement('option');
+                node.value = opt.value;
+                node.textContent = opt.label;
+                sel.appendChild(node);
             });
+        });
+    }
+
+    function applySchemaToSliders() {
+        rangeFields.forEach(pair => {
+            const id = pair[0];
+            const settingKey = pair[1];
+            const el = document.getElementById(id);
+            if (!el) return;
+            const range = schema[settingKey];
+            if (!range) {
+                console.warn('Схема не содержит диапазона для', settingKey);
+                return;
+            }
+            el.min = String(range.min);
+            el.max = String(range.max);
+            el.step = String(range.step);
         });
     }
 
@@ -320,9 +279,6 @@
         if (!el) return;
 
         if (kind === 'range' || kind === 'number') {
-            if (el.dataset.min !== undefined) el.min = el.dataset.min;
-            if (el.dataset.max !== undefined) el.max = el.dataset.max;
-            if (el.dataset.step !== undefined) el.step = el.dataset.step;
             el.value = String(settings[settingKey]);
             const valueLabel = document.getElementById(id + '-value');
             const suffix = valueLabel ? valueLabel.dataset.suffix || '' : '';
@@ -397,34 +353,40 @@
 
     function refreshControlsFromSettings() {
         Object.keys(settings).forEach(key => {
-            const def = defaults[key];
-            const isColor = def && typeof def === 'object' && 'a' in def;
+            const value = settings[key];
+            const isColor = value && typeof value === 'object' && 'a' in value;
             if (isColor) {
                 const colorInput = document.getElementById('cfg-' + key);
                 const alphaInput = document.getElementById('cfg-' + key + '-alpha');
                 const swatch = document.getElementById('cfg-' + key + '-swatch');
-                if (colorInput) colorInput.value = colorToHex(settings[key]);
-                if (alphaInput) alphaInput.value = String(settings[key].a);
-                if (swatch) swatch.style.setProperty('--swatch-color', colorToCss(settings[key]));
+                if (colorInput) colorInput.value = colorToHex(value);
+                if (alphaInput) alphaInput.value = String(value.a);
+                if (swatch) swatch.style.setProperty('--swatch-color', colorToCss(value));
                 return;
             }
             const el = document.getElementById('cfg-' + key);
             if (!el) return;
             if (el.type === 'checkbox') {
-                el.checked = Boolean(settings[key]);
+                el.checked = Boolean(value);
             } else if (el.type === 'range' || el.type === 'number') {
-                el.value = String(settings[key]);
+                el.value = String(value);
                 const lbl = document.getElementById(el.id + '-value');
-                if (lbl) lbl.textContent = settings[key] + (lbl.dataset.suffix || '');
+                if (lbl) lbl.textContent = value + (lbl.dataset.suffix || '');
             } else {
-                el.value = String(settings[key]);
+                el.value = String(value);
             }
         });
     }
 
     function onChange() {
         applySettings();
-        saveSettings();
+        if (!settingsEqual(settings, serverSnapshot)) {
+            markDirty();
+        } else {
+            isDirty = false;
+            clearDraftStorage();
+            renderDirtyBanner();
+        }
     }
 
     function setDrawerOpen(open) {
@@ -443,17 +405,137 @@
         }
     }
 
+    function setStatus(text, kind) {
+        statusEl.textContent = text;
+        statusEl.classList.remove('ok', 'error');
+        if (kind) statusEl.classList.add(kind);
+    }
+
+    async function loadFromServer() {
+        const response = await fetch('/api/chat-settings/raw');
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ' для /api/chat-settings/raw');
+        }
+        return response.json();
+    }
+
+    async function loadSchema() {
+        const response = await fetch('/api/chat-settings/schema');
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ' для /api/chat-settings/schema');
+        }
+        return response.json();
+    }
+
+    async function loadAnimations() {
+        const response = await fetch('/api/animations');
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ' для /api/animations');
+        }
+        return response.json();
+    }
+
+    function disableDrawer() {
+        if (pushButton) pushButton.disabled = true;
+        if (revertButton) revertButton.disabled = true;
+    }
+
+    async function bootstrap() {
+        try {
+            const [rawValues, rangesSchema, animationsList] = await Promise.all([
+                loadFromServer(),
+                loadSchema(),
+                loadAnimations(),
+            ]);
+            serverSnapshot = rawValues;
+            schema = rangesSchema;
+            animations = animationsList;
+        } catch (e) {
+            console.error('Bootstrap демки провалился:', e);
+            showError('Не удалось загрузить настройки с сервера: ' + (e && e.message ? e.message : e)
+                + '. Контролы заблокированы — запустите бота или проверьте порт HTTP-сервера.');
+            bootstrapFailed = true;
+            disableDrawer();
+            return;
+        }
+
+        const draft = readDraftFromStorage();
+        if (draft && typeof draft === 'object') {
+            settings = Object.assign({}, serverSnapshot, draft);
+            if (!settingsEqual(settings, serverSnapshot)) {
+                isDirty = true;
+            }
+        } else {
+            settings = deepClone(serverSnapshot);
+        }
+
+        populateAnimationSelects();
+        applySchemaToSliders();
+        buildColorControls();
+        bindAll();
+        refreshControlsFromSettings();
+        applySettings();
+        renderDirtyBanner();
+        subscribeToSse();
+    }
+
+    function rebuildAfterServerUpdate(newSnapshot) {
+        serverSnapshot = deepClone(newSnapshot);
+        if (isDirty) {
+            setStatus('Сервер прислал новые настройки — ваш черновик сохранён. Кнопка ↺ загрузит обновлённую версию.', 'ok');
+            return;
+        }
+        settings = deepClone(newSnapshot);
+        refreshControlsFromSettings();
+        applySettings();
+        setStatus('Настройки обновлены сервером.', 'ok');
+    }
+
+    function subscribeToSse() {
+        if (typeof EventSource === 'undefined') return;
+        try {
+            const source = new EventSource('/events');
+            source.addEventListener('chat_settings_changed_raw', function (event) {
+                try {
+                    const payload = JSON.parse(event.data);
+                    rebuildAfterServerUpdate(payload);
+                } catch (e) {
+                    console.warn('Не удалось разобрать chat_settings_changed_raw:', e);
+                }
+            });
+            source.onerror = function () {
+            };
+        } catch (e) {
+            console.warn('SSE недоступен:', e);
+        }
+    }
+
     toggleButton.addEventListener('click', () => setDrawerOpen(!drawer.classList.contains('open')));
     closeButton.addEventListener('click', () => setDrawerOpen(false));
 
-    resetButton.addEventListener('click', () => {
-        Object.assign(settings, deepClone(defaults));
-        onChange();
-        refreshControlsFromSettings();
-        setStatus('Сброшено к умолчаниям.', 'ok');
+    revertButton.addEventListener('click', async () => {
+        if (bootstrapFailed) return;
+        const previousLabel = revertButton.textContent;
+        revertButton.disabled = true;
+        revertButton.textContent = '… загрузка';
+        setStatus('Загрузка с сервера…', '');
+        try {
+            const fresh = await loadFromServer();
+            settings = deepClone(fresh);
+            markClean(fresh);
+            refreshControlsFromSettings();
+            applySettings();
+            setStatus('Загружено с сервера.', 'ok');
+        } catch (e) {
+            setStatus('Не удалось загрузить с сервера: ' + (e && e.message ? e.message : e), 'error');
+        } finally {
+            revertButton.disabled = false;
+            revertButton.textContent = previousLabel;
+        }
     });
 
     pushButton.addEventListener('click', async () => {
+        if (bootstrapFailed) return;
         const previousLabel = pushButton.textContent;
         pushButton.disabled = true;
         pushButton.textContent = '… отправка';
@@ -474,6 +556,7 @@
                 setStatus('Ошибка ' + response.status + detail, 'error');
                 return;
             }
+            markClean(settings);
             setStatus('Применено к OBS — оверлей чата обновлён через SSE.', 'ok');
         } catch (e) {
             setStatus('Сеть недоступна или бот не запущен: ' + e.message, 'error');
@@ -483,15 +566,5 @@
         }
     });
 
-    function setStatus(text, kind) {
-        statusEl.textContent = text;
-        statusEl.classList.remove('ok', 'error');
-        if (kind) statusEl.classList.add(kind);
-    }
-
-    populateAnimationSelects();
-    buildColorControls();
-    bindAll();
-    refreshControlsFromSettings();
-    applySettings();
+    bootstrap();
 }());

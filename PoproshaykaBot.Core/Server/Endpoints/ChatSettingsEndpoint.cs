@@ -20,6 +20,17 @@ internal sealed class ChatSettingsEndpoint(ObsChatStore obsChatStore, ILogger<Ch
             return Results.Json(cssSettings, ServerJsonOptions.Default);
         });
 
+        endpoints.MapGet("/api/chat-settings/raw", () =>
+        {
+            var settings = obsChatStore.Load();
+            return Results.Json(settings, ServerJsonOptions.WithColors);
+        });
+
+        endpoints.MapGet("/api/chat-settings/schema", () =>
+        {
+            return Results.Json(ObsChatRangesSchema.All, ServerJsonOptions.Default);
+        });
+
         endpoints.MapPost("/api/chat-settings", async (HttpRequest request, CancellationToken cancellationToken) =>
         {
             ObsChatSettings? incoming;
