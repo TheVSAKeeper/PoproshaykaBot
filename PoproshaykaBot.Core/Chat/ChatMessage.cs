@@ -13,6 +13,7 @@ public sealed record ChatMessage(
     bool IsModerator,
     bool IsVip,
     bool IsSubscriber,
-    bool IsBot = false);
+    bool IsBot = false,
+    string Color = "");
 
 public sealed record EmoteOccurrence(string EmoteId, string Name, int StartIndex, int EndIndex);

@@ -17,6 +17,7 @@ public static class DtoMapper
             messageType = chatMessage.MessageType.ToString(),
             isFirstTime = chatMessage.IsFirstTime,
             status = chatMessage.Status,
+            color = chatMessage.Color,
             emotes = chatMessage.Emotes.Select(e => new
                 {
                     id = e.Id,

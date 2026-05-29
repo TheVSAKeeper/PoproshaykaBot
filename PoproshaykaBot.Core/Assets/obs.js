@@ -370,17 +370,13 @@
         messageDiv.dataset.fading = 'true';
 
         if (fadeOutAnimationType === 'no-animation' || !validExitAnimations.has(fadeOutAnimationType)) {
-            setTimeout(() => {
-                messageDiv.remove();
-            }, 100);
+            setTimeout(() => messageDiv.remove(), 100);
             return;
         }
 
         messageDiv.dataset.exitAnim = fadeOutAnimationType;
 
-        setTimeout(() => {
-            messageDiv.remove();
-        }, fadeOutDuration);
+        setTimeout(() => messageDiv.remove(), fadeOutDuration);
     }
 
     function cancelFadeOut(messageDiv) {
@@ -510,7 +506,9 @@
             const avatarHtml = renderAvatarPlaceholder(message.userId);
 
             const usernameClasses = ['username', ...userTypeClasses].join(' ');
-            const usernameHtml = `<span class="${usernameClasses}">${escapeHtml(message.displayName || message.username || '')}</span>`;
+            const usernameColor = sanitizeUsernameColor(message.color);
+            const usernameStyle = usernameColor ? ` style="color: ${usernameColor}"` : '';
+            const usernameHtml = `<span class="${usernameClasses}"${usernameStyle}>${escapeHtml(message.displayName || message.username || '')}</span>`;
 
             const headerHtml = `
             <div class="message-header">
@@ -628,6 +626,14 @@
         if (!isHighlightMentions) return text;
 
         return text.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+    }
+
+    const usernameColorPattern = /^#[0-9a-fA-F]{6}$/;
+
+    function sanitizeUsernameColor(value) {
+        if (typeof value !== 'string') return '';
+        const trimmed = value.trim();
+        return usernameColorPattern.test(trimmed) ? trimmed : '';
     }
 
     function escapeAttr(value) {

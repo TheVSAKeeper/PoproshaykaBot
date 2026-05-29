@@ -101,6 +101,7 @@ public sealed class TwitchChatHandler :
             MessageType = chatMessage.IsBot ? ChatMessageType.BotResponse : ChatMessageType.UserMessage,
             Status = status,
             IsFirstTime = isFirstSeen,
+            Color = chatMessage.Color,
 
             Emotes = _chatDecorations.ExtractEmotes(chatMessage, _obsChatStore.Load().EmoteSizePixels),
             Badges = badgesKvp,

@@ -62,4 +62,27 @@ public sealed class DtoMapperTests
             Assert.That(root.GetProperty("isFirstTime").GetBoolean(), Is.True);
         }
     }
+
+    [Test]
+    public void ToServerMessage_IncludesUsernameColor()
+    {
+        var data = new ChatMessageData
+        {
+            Timestamp = DateTime.UtcNow,
+            DisplayName = "alice",
+            Message = "hi",
+            MessageType = ChatMessageType.UserMessage,
+            Color = "#FF7F50",
+        };
+
+        var dto = DtoMapper.ToServerMessage(data);
+        var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        });
+
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.That(doc.RootElement.GetProperty("color").GetString(), Is.EqualTo("#FF7F50"));
+    }
 }
