@@ -41,7 +41,9 @@ public class StreamSessionHistoryStore
 
         lock (_syncLock)
         {
-            _state.Sessions.Add(JsonStoreClone.DeepClone(record));
+            var stored = JsonStoreClone.DeepClone(record);
+            stored.EnsureSegments();
+            _state.Sessions.Add(stored);
             PersistInternal();
 
             _logger?.LogInformation("StreamSessionHistoryStore: добавлена сессия {SessionId} (всего сессий: {SessionCount})",
@@ -67,7 +69,14 @@ public class StreamSessionHistoryStore
         try
         {
             var json = File.ReadAllText(_filePath);
-            return JsonSerializer.Deserialize<StreamSessionHistory>(json, JsonStoreOptions.Default) ?? new();
+            var history = JsonSerializer.Deserialize<StreamSessionHistory>(json, JsonStoreOptions.Default) ?? new();
+
+            foreach (var session in history.Sessions)
+            {
+                session.EnsureSegments();
+            }
+
+            return history;
         }
         catch (Exception exception)
         {

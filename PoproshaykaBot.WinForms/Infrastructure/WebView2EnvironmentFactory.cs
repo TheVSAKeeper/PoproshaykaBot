@@ -15,13 +15,17 @@ public static class WebView2EnvironmentFactory
 
         Directory.CreateDirectory(userDataFolder);
 
-        for (var attempt = 1; attempt < MaxAttempts; attempt++)
+        var attempt = 0;
+
+        while (true)
         {
+            attempt++;
+
             try
             {
                 return await CoreWebView2Environment.CreateAsync(null, userDataFolder).ConfigureAwait(true);
             }
-            catch (Exception exception) when (exception is not WebView2RuntimeNotFoundException)
+            catch (Exception exception) when (attempt < MaxAttempts && exception is not WebView2RuntimeNotFoundException)
             {
                 if (logger.IsEnabled(LogLevel.Debug))
                 {
@@ -33,7 +37,5 @@ public static class WebView2EnvironmentFactory
                 await Task.Delay(RetryDelayMs).ConfigureAwait(true);
             }
         }
-
-        return await CoreWebView2Environment.CreateAsync(null, userDataFolder).ConfigureAwait(true);
     }
 }

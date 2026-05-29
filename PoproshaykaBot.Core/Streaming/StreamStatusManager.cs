@@ -303,12 +303,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         {
             _logger.LogInformation(ex, "Подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", args.SubscriptionType);
         }
-        catch (OperationCanceledException ex)
-        {
-            _logger.LogDebug(ex, "Восстановление подписки {Type} отменено", args.SubscriptionType);
-            throw;
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Не удалось восстановить подписку {Type} после revocation: {Reason}",
                 args.SubscriptionType, StreamingErrorMessages.SafeMessage(ex));

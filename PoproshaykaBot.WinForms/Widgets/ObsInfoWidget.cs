@@ -353,7 +353,7 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
                 ShowChatRefreshToast($"🔁 обновлено: {refreshed}", Color.DarkGreen);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException exception)
         {
             if (IsDisposed)
             {
@@ -361,7 +361,7 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
             }
 
             ShowChatRefreshToast("🔁 таймаут", Color.DarkRed);
-            Logger.LogWarning("Ручной refresh чат-источников OBS: превышено время ожидания");
+            Logger.LogWarning(exception, "Ручной refresh чат-источников OBS: превышено время ожидания");
         }
         catch (Exception exception)
         {
@@ -390,17 +390,16 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         }
 
         var previousText = _connectionStatusLabel.Text;
-        var previousColor = _connectionStatusLabel.ForeColor;
         var previousTooltip = _connectionStatusLabel.ToolTipText;
 
         _connectionStatusLabel.Text = text;
         _connectionStatusLabel.ForeColor = color;
         _connectionStatusLabel.ToolTipText = text;
 
-        _ = RestoreConnectionLabelAfterDelayAsync(previousText, previousColor, previousTooltip);
+        _ = RestoreConnectionLabelAfterDelayAsync(previousText, previousTooltip);
     }
 
-    private async Task RestoreConnectionLabelAfterDelayAsync(string previousText, Color previousColor, string previousTooltip)
+    private async Task RestoreConnectionLabelAfterDelayAsync(string previousText, string previousTooltip)
     {
         await Task.Delay(TimeSpan.FromSeconds(4));
 

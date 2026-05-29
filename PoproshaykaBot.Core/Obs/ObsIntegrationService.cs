@@ -15,6 +15,8 @@ public sealed class ObsIntegrationService(
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(5);
     private static readonly string[] MicrophoneNameMarkers = ["mic", "microphone", "микрофон", "микро"];
 
+    private const string BrowserSourceInputKind = "browser_source";
+
     private static readonly Action<ILogger, string, string, string, string, Exception?> LogBrowserSourceProvisioned =
         LoggerMessage.Define<string, string, string, string>(LogLevel.Information,
             new(1, nameof(LogBrowserSourceProvisioned)),
@@ -145,8 +147,8 @@ public sealed class ObsIntegrationService(
             return
             [
                 .. inputs
-                    .Where(input => string.Equals(input.Kind, "browser_source", StringComparison.OrdinalIgnoreCase)
-                                    || string.Equals(input.UnversionedKind, "browser_source", StringComparison.OrdinalIgnoreCase))
+                    .Where(input => string.Equals(input.Kind, BrowserSourceInputKind, StringComparison.OrdinalIgnoreCase)
+                                    || string.Equals(input.UnversionedKind, BrowserSourceInputKind, StringComparison.OrdinalIgnoreCase))
                     .Select(input => input.Name)
                     .Order(StringComparer.OrdinalIgnoreCase),
             ];
@@ -508,7 +510,7 @@ public sealed class ObsIntegrationService(
                     {
                         sceneName,
                         inputName = sourceName,
-                        inputKind = "browser_source",
+                        inputKind = BrowserSourceInputKind,
                         inputSettings = browserSettings,
                         sceneItemEnabled = true,
                     },
@@ -518,7 +520,7 @@ public sealed class ObsIntegrationService(
             return true;
         }
 
-        if (!string.Equals(existing.Kind, "browser_source", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(existing.Kind, BrowserSourceInputKind, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException($"Источник OBS \"{sourceName}\" уже существует, но это не Browser Source.");
         }
@@ -811,7 +813,7 @@ public sealed class ObsIntegrationService(
         while (kindEnumerator.MoveNext())
         {
             var kind = kindEnumerator.Current;
-            if (!string.Equals(kind.GetString(), "browser_source", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(kind.GetString(), BrowserSourceInputKind, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }

@@ -166,7 +166,7 @@
     function hashCodeToHue(text) {
         let hash = 0;
         for (let i = 0; i < text.length; i++) {
-            hash = hash * 31 + text.charCodeAt(i) | 0;
+            hash = Math.imul(hash, 31) + text.codePointAt(i);
         }
         return Math.abs(hash) % 360;
     }
@@ -180,7 +180,7 @@
     const pendingAvatarTargets = new Map();
 
     function applyAvatarImage(span, url) {
-        const safe = String(url).replace(/"/g, '\\"');
+        const safe = String(url).replaceAll('"', String.raw`\"`);
         span.style.backgroundImage = 'url("' + safe + '")';
         span.style.backgroundSize = 'cover';
         span.style.backgroundPosition = 'center';
@@ -197,7 +197,7 @@
                 return response.ok ? response.json() : null;
             })
             .then(function (payload) {
-                return payload && payload.url ? payload.url : null;
+                return payload?.url ? payload.url : null;
             })
             .catch(function () {
                 return null;
@@ -324,7 +324,8 @@
         const fresh = buildMessage(currentRole);
         stage.replaceChildren(fresh);
 
-        void fresh.offsetWidth;
+        // Принудительный reflow, чтобы перезапуск CSS-анимации гарантированно сработал.
+        fresh.getBoundingClientRect();
 
         if (kind === 'entry') {
             if (animationValue === 'no-animation') {
@@ -364,32 +365,13 @@
     }
 
     function copyToClipboard(text) {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(function () {
+        navigator.clipboard.writeText(text)
+            .then(function () {
                 showCopyNotice(text);
-            }).catch(function () {
-                fallbackCopy(text);
+            })
+            .catch(function (error) {
+                console.warn('Не удалось скопировать имя анимации.', error);
             });
-        } else {
-            fallbackCopy(text);
-        }
-    }
-
-    function fallbackCopy(text) {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.setAttribute('readonly', '');
-        textarea.style.position = 'absolute';
-        textarea.style.left = '-9999px';
-        document.body.appendChild(textarea);
-        textarea.select();
-        try {
-            document.execCommand('copy');
-            showCopyNotice(text);
-        } catch (e) {
-            console.warn('Не удалось скопировать имя анимации.', e);
-        }
-        document.body.removeChild(textarea);
     }
 
     let copyNoticeTimer = null;
@@ -420,7 +402,7 @@
     const loopToggle = document.getElementById('loop-toggle');
     const loopIntervalSlider = document.getElementById('loop-interval');
     const loopIntervalValueLabel = document.getElementById('loop-interval-value');
-    let loopIntervalMs = parseInt(loopIntervalSlider.value, 10);
+    let loopIntervalMs = Number.parseInt(loopIntervalSlider.value, 10);
     let loopTimer = null;
 
     function formatSeconds(ms) {
@@ -453,7 +435,7 @@
     });
 
     loopIntervalSlider.addEventListener('input', function () {
-        loopIntervalMs = parseInt(loopIntervalSlider.value, 10);
+        loopIntervalMs = Number.parseInt(loopIntervalSlider.value, 10);
         loopIntervalValueLabel.textContent = formatSeconds(loopIntervalMs);
         if (loopTimer !== null) {
             clearInterval(loopTimer);
@@ -487,6 +469,6 @@
         })
         .catch(error => {
             console.error('Не удалось загрузить /api/animations:', error);
-            renderError('Не удалось загрузить список анимаций с сервера: ' + (error && error.message ? error.message : error));
+            renderError('Не удалось загрузить список анимаций с сервера: ' + (error?.message ? error.message : error));
         });
 }());

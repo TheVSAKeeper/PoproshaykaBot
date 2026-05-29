@@ -65,7 +65,7 @@ public static class ChatServiceCollectionExtensions
         services.AddSingleton<IChatCommand, LastStreamCommand>();
         services.AddSingleton<IChatCommand, StreamsCountCommand>();
         services.AddSingleton<IChatCommand, PeakStreamCommand>();
-        services.AddSingleton<IChatCommand, IWasThereCommand>();
+        services.AddSingleton<IChatCommand, WasThereCommand>();
         services.AddSingleton<IChatCommand, TopStreamsCommand>();
     }
 }

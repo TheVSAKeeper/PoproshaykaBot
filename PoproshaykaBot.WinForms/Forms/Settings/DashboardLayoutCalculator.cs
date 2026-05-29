@@ -25,21 +25,91 @@ internal static class DashboardLayoutCalculator
         placed.RowSpan = Math.Clamp(placed.RowSpan, 1, rowCount - placed.Row);
     }
 
-    public static bool[,] BuildOccupancyMap(IEnumerable<PlacedTile> placedTiles, int rowCount, int columnCount)
+    public static (bool[,] Occupied, IReadOnlyList<PlacedTile> Unplaceable) ResolveLayout(
+        IEnumerable<PlacedTile> placedTiles,
+        int rowCount,
+        int columnCount)
     {
         var occupied = new bool[rowCount, columnCount];
+        var unplaceable = new List<PlacedTile>();
 
-        foreach (var placed in placedTiles)
+        var ordered = placedTiles
+            .OrderBy(tile => tile.Row)
+            .ThenBy(tile => tile.Column)
+            .ToList();
+
+        foreach (var placed in ordered)
         {
-            for (var r = placed.Row; r < placed.Row + placed.RowSpan; r++)
+            ClampPlacement(placed, columnCount, rowCount);
+
+            if (TryReserve(occupied, placed.Row, placed.Column, placed.RowSpan, placed.ColumnSpan, rowCount, columnCount))
             {
-                for (var c = placed.Column; c < placed.Column + placed.ColumnSpan; c++)
+                continue;
+            }
+
+            if (!TryRelocate(occupied, placed, rowCount, columnCount))
+            {
+                unplaceable.Add(placed);
+            }
+        }
+
+        return (occupied, unplaceable);
+    }
+
+    private static bool TryRelocate(bool[,] occupied, PlacedTile placed, int rowCount, int columnCount)
+    {
+        return TryPlaceWithSpan(occupied, placed, placed.RowSpan, placed.ColumnSpan, rowCount, columnCount)
+               || TryPlaceWithSpan(occupied, placed, 1, 1, rowCount, columnCount);
+    }
+
+    private static bool TryPlaceWithSpan(bool[,] occupied, PlacedTile placed, int rowSpan, int columnSpan, int rowCount, int columnCount)
+    {
+        for (var row = 0; row <= rowCount - rowSpan; row++)
+        {
+            for (var column = 0; column <= columnCount - columnSpan; column++)
+            {
+                if (!TryReserve(occupied, row, column, rowSpan, columnSpan, rowCount, columnCount))
                 {
-                    occupied[r, c] = true;
+                    continue;
+                }
+
+                placed.Row = row;
+                placed.Column = column;
+                placed.RowSpan = rowSpan;
+                placed.ColumnSpan = columnSpan;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryReserve(bool[,] occupied, int row, int column, int rowSpan, int columnSpan, int rowCount, int columnCount)
+    {
+        if (row < 0 || column < 0 || row + rowSpan > rowCount || column + columnSpan > columnCount)
+        {
+            return false;
+        }
+
+        for (var r = row; r < row + rowSpan; r++)
+        {
+            for (var c = column; c < column + columnSpan; c++)
+            {
+                if (occupied[r, c])
+                {
+                    return false;
                 }
             }
         }
 
-        return occupied;
+        for (var r = row; r < row + rowSpan; r++)
+        {
+            for (var c = column; c < column + columnSpan; c++)
+            {
+                occupied[r, c] = true;
+            }
+        }
+
+        return true;
     }
 }

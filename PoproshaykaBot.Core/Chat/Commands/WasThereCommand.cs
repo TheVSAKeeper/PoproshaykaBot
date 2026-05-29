@@ -2,7 +2,7 @@
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class IWasThereCommand(StreamSessionHistoryStore historyStore) : IChatCommand
+public sealed class WasThereCommand(StreamSessionHistoryStore historyStore) : IChatCommand
 {
     public string Canonical => "ятамбыл";
     public IReadOnlyCollection<string> Aliases => ["iwasthere", "attended"];

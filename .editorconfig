@@ -245,92 +245,29 @@ resharper_object_creation_when_type_not_evident = target_typed
 resharper_prefer_explicit_discard_declaration = false
 resharper_wrap_object_and_collection_initializer_style = chop_always
 
-# CA1515: Рассмотрите возможность сделать общедоступные типы внутренними
-dotnet_diagnostic.ca1515.severity = none
+dotnet_diagnostic.CA1062.severity = silent
+dotnet_diagnostic.CS1591.severity = silent
+dotnet_diagnostic.S6967.severity = silent
 
-# CA1062: Проверить аргументы или открытые методы
-dotnet_diagnostic.ca1062.severity = none
+dotnet_diagnostic.CA1848.severity = silent
 
-# IDE0058: Значение выражения никогда не используется
-dotnet_diagnostic.ide0058.severity = none
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.MA0004.severity = none
 
-# CA2007: Попробуйте вызвать ConfigureAwait для ожидаемой задачи
-dotnet_diagnostic.ca2007.severity = none
+dotnet_diagnostic.CA1305.severity = silent
+dotnet_diagnostic.MA0011.severity = silent
+dotnet_diagnostic.CA1308.severity = silent
+dotnet_diagnostic.S6562.severity = silent
 
-# S6967: ModelState.IsValid should be called in controller actions
-dotnet_diagnostic.s6967.severity = none
+dotnet_diagnostic.CA5394.severity = silent
 
-# CA1034: Вложенные типы не должны быть видимыми
-dotnet_diagnostic.ca1034.severity = none
+dotnet_diagnostic.IDE0058.severity = none
+dotnet_diagnostic.IDE0046.severity = silent
+dotnet_diagnostic.IDE0100.severity = silent
+dotnet_diagnostic.IDE0270.severity = suggestion
 
-# CA1054: Параметры, напоминающие URI, не должны быть строками
-dotnet_diagnostic.ca1054.severity = none
-
-# IDE0046: Преобразовать в условное выражение
-dotnet_diagnostic.ide0046.severity = silent
-
-# CA1305: Укажите IFormatProvider
-dotnet_diagnostic.ca1305.severity = silent
-
-# CA1002: Не предоставляйте универсальные списки
-dotnet_diagnostic.ca1002.severity = silent
-
-# CA2227: Свойства коллекций должны быть доступны только для чтения
-dotnet_diagnostic.ca2227.severity = silent
-
-# CA1819: Свойства не должны возвращать массивы
-dotnet_diagnostic.ca1819.severity = silent
-
-# S1135: Track uses of "TODO" tags
-dotnet_diagnostic.s1135.severity = silent
-
-# S1125: Boolean literals should not be redundant
-dotnet_diagnostic.s1125.severity = none
-
-# IDE0100: Удалите лишнее равенство.
-dotnet_diagnostic.ide0100.severity = silent
-
-# S6562: Always set the "DateTimeKind" when creating new "DateTime" instances
-dotnet_diagnostic.s6562.severity = silent
-
-# CA1008: Перечисления должны иметь нулевое значение
-dotnet_diagnostic.ca1008.severity = silent
-
-# IDE0270: Используйте выражение объединения
-dotnet_diagnostic.ide0270.severity = silent
-
-# CA1308: Нормализуйте строки до прописных букв
-dotnet_diagnostic.ca1308.severity = silent
-
-# S2325: Methods and properties that don't access instance data should be static
-dotnet_diagnostic.s2325.severity = suggestion
-
-# CA1822: Пометьте члены как статические
-dotnet_diagnostic.ca1822.severity = suggestion
-
-# S3626: Jump statements should not be redundant
-dotnet_diagnostic.s3626.severity = silent
-
-# CA1848: Использовать делегаты LoggerMessage
-dotnet_diagnostic.ca1848.severity = silent
-
-# CA1031: Не перехватывать исключения общих типов
-dotnet_diagnostic.ca1031.severity = suggestion
-
-# S3971: "GC.SuppressFinalize" should not be called
-dotnet_diagnostic.s3971.severity = suggestion
-
-# S2139: Exceptions should be either logged or rethrown but not both
-dotnet_diagnostic.s2139.severity = suggestion
-
-# CA5394: Не используйте небезопасные генераторы случайных чисел.
-dotnet_diagnostic.ca5394.severity = silent
-
-# CA2000: Ликвидировать объекты перед потерей области
-dotnet_diagnostic.ca2000.severity = suggestion
-
-#CA1724: Имена типов не должны совпадать с пространствами имен
-dotnet_diagnostic.ca1724.severity = none
-
-# CS1591: Отсутствует комментарий XML для открытого видимого типа или члена
-dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1031.severity = suggestion
+dotnet_diagnostic.S2139.severity = suggestion
+dotnet_diagnostic.CA1822.severity = suggestion
+dotnet_diagnostic.S2325.severity = suggestion
+dotnet_diagnostic.S1135.severity = silent

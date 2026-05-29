@@ -30,6 +30,13 @@ sealed partial class StreamHistoryForm
     private Label labelMessages;
     private Label labelChatters;
     private Label labelViewers;
+    private Label labelSegmentsHeader;
+    private ListView listViewSegments;
+    private ColumnHeader columnHeaderSegmentGame;
+    private ColumnHeader columnHeaderSegmentDuration;
+    private ColumnHeader columnHeaderSegmentMessages;
+    private ColumnHeader columnHeaderSegmentPeak;
+    private ColumnHeader columnHeaderSegmentAverage;
     private Label labelChattersHeader;
     private ListView listViewChatters;
     private ColumnHeader columnHeaderChatterName;
@@ -77,6 +84,13 @@ sealed partial class StreamHistoryForm
         labelChatters = new Label();
         labelViewers = new Label();
         labelChattersHeader = new Label();
+        labelSegmentsHeader = new Label();
+        listViewSegments = new ListView();
+        columnHeaderSegmentGame = new ColumnHeader();
+        columnHeaderSegmentDuration = new ColumnHeader();
+        columnHeaderSegmentMessages = new ColumnHeader();
+        columnHeaderSegmentPeak = new ColumnHeader();
+        columnHeaderSegmentAverage = new ColumnHeader();
         listViewChatters = new ListView();
         columnHeaderChatterName = new ColumnHeader();
         columnHeaderChatterMessages = new ColumnHeader();
@@ -215,14 +229,16 @@ sealed partial class StreamHistoryForm
         tableLayoutPanelDetails.Controls.Add(labelMessages, 0, 5);
         tableLayoutPanelDetails.Controls.Add(labelChatters, 0, 6);
         tableLayoutPanelDetails.Controls.Add(labelViewers, 0, 7);
-        tableLayoutPanelDetails.Controls.Add(labelChattersHeader, 0, 8);
-        tableLayoutPanelDetails.Controls.Add(listViewChatters, 0, 9);
+        tableLayoutPanelDetails.Controls.Add(labelSegmentsHeader, 0, 8);
+        tableLayoutPanelDetails.Controls.Add(listViewSegments, 0, 9);
+        tableLayoutPanelDetails.Controls.Add(labelChattersHeader, 0, 10);
+        tableLayoutPanelDetails.Controls.Add(listViewChatters, 0, 11);
         tableLayoutPanelDetails.Dock = DockStyle.Fill;
         tableLayoutPanelDetails.Font = new Font("Segoe UI", 9F);
         tableLayoutPanelDetails.Location = new Point(3, 19);
         tableLayoutPanelDetails.Name = "tableLayoutPanelDetails";
         tableLayoutPanelDetails.Padding = new Padding(4);
-        tableLayoutPanelDetails.RowCount = 10;
+        tableLayoutPanelDetails.RowCount = 12;
         tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
         tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
         tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
@@ -232,7 +248,9 @@ sealed partial class StreamHistoryForm
         tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
         tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
         tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
-        tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
+        tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+        tableLayoutPanelDetails.RowStyles.Add(new RowStyle(SizeType.Percent, 65F));
         tableLayoutPanelDetails.Size = new Size(342, 448);
         tableLayoutPanelDetails.TabIndex = 0;
         //
@@ -318,14 +336,67 @@ sealed partial class StreamHistoryForm
         labelViewers.Text = "👁 Зрители: пик — / средн. —";
         labelViewers.TextAlign = ContentAlignment.MiddleLeft;
         //
+        // labelSegmentsHeader
+        //
+        labelSegmentsHeader.Dock = DockStyle.Fill;
+        labelSegmentsHeader.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+        labelSegmentsHeader.Location = new Point(7, 196);
+        labelSegmentsHeader.Name = "labelSegmentsHeader";
+        labelSegmentsHeader.Size = new Size(328, 30);
+        labelSegmentsHeader.TabIndex = 8;
+        labelSegmentsHeader.Text = "🎮 Категории стрима";
+        labelSegmentsHeader.TextAlign = ContentAlignment.MiddleLeft;
+        //
+        // listViewSegments
+        //
+        listViewSegments.Columns.AddRange(new ColumnHeader[] { columnHeaderSegmentGame, columnHeaderSegmentDuration, columnHeaderSegmentMessages, columnHeaderSegmentPeak, columnHeaderSegmentAverage });
+        listViewSegments.Dock = DockStyle.Fill;
+        listViewSegments.FullRowSelect = true;
+        listViewSegments.GridLines = true;
+        listViewSegments.Location = new Point(7, 229);
+        listViewSegments.MultiSelect = false;
+        listViewSegments.Name = "listViewSegments";
+        listViewSegments.Size = new Size(328, 70);
+        listViewSegments.TabIndex = 9;
+        listViewSegments.UseCompatibleStateImageBehavior = false;
+        listViewSegments.View = View.Details;
+        //
+        // columnHeaderSegmentGame
+        //
+        columnHeaderSegmentGame.Text = "Категория";
+        columnHeaderSegmentGame.Width = 115;
+        //
+        // columnHeaderSegmentDuration
+        //
+        columnHeaderSegmentDuration.Text = "Длит.";
+        columnHeaderSegmentDuration.Width = 60;
+        //
+        // columnHeaderSegmentMessages
+        //
+        columnHeaderSegmentMessages.Text = "Сообщ.";
+        columnHeaderSegmentMessages.TextAlign = HorizontalAlignment.Right;
+        columnHeaderSegmentMessages.Width = 62;
+        //
+        // columnHeaderSegmentPeak
+        //
+        columnHeaderSegmentPeak.Text = "Пик";
+        columnHeaderSegmentPeak.TextAlign = HorizontalAlignment.Right;
+        columnHeaderSegmentPeak.Width = 45;
+        //
+        // columnHeaderSegmentAverage
+        //
+        columnHeaderSegmentAverage.Text = "Средн.";
+        columnHeaderSegmentAverage.TextAlign = HorizontalAlignment.Right;
+        columnHeaderSegmentAverage.Width = 52;
+        //
         // labelChattersHeader
         //
         labelChattersHeader.Dock = DockStyle.Fill;
         labelChattersHeader.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        labelChattersHeader.Location = new Point(7, 196);
+        labelChattersHeader.Location = new Point(7, 302);
         labelChattersHeader.Name = "labelChattersHeader";
         labelChattersHeader.Size = new Size(328, 30);
-        labelChattersHeader.TabIndex = 8;
+        labelChattersHeader.TabIndex = 10;
         labelChattersHeader.Text = "👥 Чаттеры";
         labelChattersHeader.TextAlign = ContentAlignment.MiddleLeft;
         //
@@ -335,11 +406,11 @@ sealed partial class StreamHistoryForm
         listViewChatters.Dock = DockStyle.Fill;
         listViewChatters.FullRowSelect = true;
         listViewChatters.GridLines = true;
-        listViewChatters.Location = new Point(7, 229);
+        listViewChatters.Location = new Point(7, 335);
         listViewChatters.MultiSelect = false;
         listViewChatters.Name = "listViewChatters";
-        listViewChatters.Size = new Size(328, 215);
-        listViewChatters.TabIndex = 9;
+        listViewChatters.Size = new Size(328, 109);
+        listViewChatters.TabIndex = 11;
         listViewChatters.UseCompatibleStateImageBehavior = false;
         listViewChatters.View = View.Details;
         //

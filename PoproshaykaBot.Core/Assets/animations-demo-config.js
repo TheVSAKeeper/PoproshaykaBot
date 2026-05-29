@@ -76,7 +76,7 @@
     const errorEl = document.getElementById('config-error');
 
     function deepClone(value) {
-        return JSON.parse(JSON.stringify(value));
+        return structuredClone(value);
     }
 
     function colorToCss(color) {
@@ -89,6 +89,25 @@
         return '#' + hex(color.r) + hex(color.g) + hex(color.b);
     }
 
+    function arraysEqual(a, b) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (!settingsEqual(a[i], b[i])) return false;
+        }
+        return true;
+    }
+
+    function objectsEqual(a, b) {
+        const keysA = Object.keys(a);
+        const keysB = Object.keys(b);
+        if (keysA.length !== keysB.length) return false;
+        for (const key of keysA) {
+            if (!Object.hasOwn(b, key)) return false;
+            if (!settingsEqual(a[key], b[key])) return false;
+        }
+        return true;
+    }
+
     function settingsEqual(a, b) {
         if (a === b) return true;
         if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
@@ -97,21 +116,7 @@
         const aArray = Array.isArray(a);
         const bArray = Array.isArray(b);
         if (aArray !== bArray) return false;
-        if (aArray) {
-            if (a.length !== b.length) return false;
-            for (let i = 0; i < a.length; i++) {
-                if (!settingsEqual(a[i], b[i])) return false;
-            }
-            return true;
-        }
-        const keysA = Object.keys(a);
-        const keysB = Object.keys(b);
-        if (keysA.length !== keysB.length) return false;
-        for (const key of keysA) {
-            if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
-            if (!settingsEqual(a[key], b[key])) return false;
-        }
-        return true;
+        return aArray ? arraysEqual(a, b) : objectsEqual(a, b);
     }
 
     function readDraftFromStorage() {
@@ -171,12 +176,6 @@
         if (!errorEl) return;
         errorEl.hidden = false;
         errorEl.textContent = message;
-    }
-
-    function clearError() {
-        if (!errorEl) return;
-        errorEl.hidden = true;
-        errorEl.textContent = '';
     }
 
     function applySettings() {
@@ -247,16 +246,16 @@
                 const hex = colorInput.value.slice(1);
                 settings[key] = {
                     a: settings[key].a,
-                    r: parseInt(hex.slice(0, 2), 16),
-                    g: parseInt(hex.slice(2, 4), 16),
-                    b: parseInt(hex.slice(4, 6), 16),
+                    r: Number.parseInt(hex.slice(0, 2), 16),
+                    g: Number.parseInt(hex.slice(2, 4), 16),
+                    b: Number.parseInt(hex.slice(4, 6), 16),
                 };
                 onChange();
                 sync();
             });
 
             alphaInput.addEventListener('input', () => {
-                settings[key] = Object.assign({}, settings[key], { a: parseInt(alphaInput.value, 10) });
+                settings[key] = { ...settings[key], a: Number.parseInt(alphaInput.value, 10) };
                 onChange();
                 sync();
             });
@@ -401,12 +400,12 @@
 
     function onChange() {
         applySettings();
-        if (!settingsEqual(settings, serverSnapshot)) {
-            markDirty();
-        } else {
+        if (settingsEqual(settings, serverSnapshot)) {
             isDirty = false;
             clearDraftStorage();
             renderDirtyBanner();
+        } else {
+            markDirty();
         }
     }
 
@@ -473,7 +472,7 @@
             animations = animationsList;
         } catch (e) {
             console.error('Bootstrap демки провалился:', e);
-            showError('Не удалось загрузить настройки с сервера: ' + (e && e.message ? e.message : e)
+            showError('Не удалось загрузить настройки с сервера: ' + (e?.message ? e.message : e)
                 + '. Контролы заблокированы — запустите бота или проверьте порт HTTP-сервера.');
             bootstrapFailed = true;
             disableDrawer();
@@ -482,7 +481,7 @@
 
         const draft = readDraftFromStorage();
         if (draft && typeof draft === 'object') {
-            settings = Object.assign({}, serverSnapshot, draft);
+            settings = { ...serverSnapshot, ...draft };
             if (!settingsEqual(settings, serverSnapshot)) {
                 isDirty = true;
             }
@@ -559,7 +558,7 @@
             applySettings();
             setStatus('Загружено с сервера.', 'ok');
         } catch (e) {
-            setStatus('Не удалось загрузить с сервера: ' + (e && e.message ? e.message : e), 'error');
+            setStatus('Не удалось загрузить с сервера: ' + (e?.message ? e.message : e), 'error');
         } finally {
             revertButton.disabled = false;
             revertButton.textContent = previousLabel;
@@ -583,7 +582,8 @@
                 try {
                     const err = await response.json();
                     detail = err && (err.error || err.details) ? ': ' + (err.error || err.details) : '';
-                } catch (_) { /* ignore */
+                } catch (jsonError) {
+                    console.debug('Не удалось разобрать тело ошибки ответа:', jsonError);
                 }
                 setStatus('Ошибка ' + response.status + detail, 'error');
                 return;

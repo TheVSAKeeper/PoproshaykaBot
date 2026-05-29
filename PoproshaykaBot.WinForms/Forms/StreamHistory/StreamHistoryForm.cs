@@ -86,6 +86,16 @@ public sealed partial class StreamHistoryForm : Form
         return string.IsNullOrWhiteSpace(value) ? MissingValuePlaceholder : value;
     }
 
+    private static string FormatGameColumn(StreamSessionRecord session)
+    {
+        var game = string.IsNullOrEmpty(session.Game) ? MissingValuePlaceholder : session.Game;
+        var extraSegments = session.Segments.Count - 1;
+
+        return extraSegments > 0
+            ? string.Create(CultureInfo.InvariantCulture, $"{game} (+{extraSegments})")
+            : game;
+    }
+
     private static string FormatNumber(long value)
     {
         return value.ToString("N0", RussianCulture);
@@ -130,7 +140,7 @@ public sealed partial class StreamHistoryForm : Form
             };
 
             item.SubItems.Add(FormatDuration(session.Duration));
-            item.SubItems.Add(string.IsNullOrEmpty(session.Game) ? MissingValuePlaceholder : session.Game);
+            item.SubItems.Add(FormatGameColumn(session));
             item.SubItems.Add(session.MessageCount.ToString(CultureInfo.CurrentCulture));
             item.SubItems.Add(session.ChatterCount.ToString(CultureInfo.CurrentCulture));
             item.SubItems.Add(session.PeakViewers.ToString(CultureInfo.CurrentCulture));
@@ -177,6 +187,28 @@ public sealed partial class StreamHistoryForm : Form
         labelViewers.Text = session != null
             ? $"👁 Зрители: пик {FormatNumber(session.PeakViewers)} / средн. {FormatNumber(session.AverageViewers)}"
             : "👁 Зрители: пик — / средн. —";
+
+        listViewSegments.BeginUpdate();
+        listViewSegments.Items.Clear();
+
+        if (session != null)
+        {
+            foreach (var segment in session.Segments)
+            {
+                var segmentItem = new ListViewItem(NotEmptyOrPlaceholder(segment.Game))
+                {
+                    Tag = segment,
+                };
+
+                segmentItem.SubItems.Add(FormatDuration(segment.Duration));
+                segmentItem.SubItems.Add(FormatNumber(segment.MessageCount));
+                segmentItem.SubItems.Add(FormatNumber(segment.PeakViewers));
+                segmentItem.SubItems.Add(FormatNumber(segment.AverageViewers));
+                listViewSegments.Items.Add(segmentItem);
+            }
+        }
+
+        listViewSegments.EndUpdate();
 
         listViewChatters.BeginUpdate();
         listViewChatters.Items.Clear();

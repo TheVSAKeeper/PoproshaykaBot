@@ -10,6 +10,7 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
 {
     private bool _initialized;
     private bool _loading;
+    private bool _autoCheckStarted;
     private int _httpServerPort = 8080;
 
     public ObsIntegrationSettingsControl()
@@ -85,6 +86,23 @@ public sealed partial class ObsIntegrationSettingsControl : UserControl
         settings.Width = (int)_widthNumeric.Value;
         settings.Height = (int)_heightNumeric.Value;
         settings.ChatRefreshSources = ReadChatRefreshSourceNamesFromControl();
+    }
+
+    public void RunAutoConnectionCheck()
+    {
+        if (_autoCheckStarted)
+        {
+            return;
+        }
+
+        _autoCheckStarted = true;
+
+        SetStatus("● Проверка подключения...", Color.Blue);
+        StartObsOperation(async ct =>
+        {
+            var settings = ReadSettingsFromControls();
+            await ConnectAndLoadScenesAsync(settings, "Подключен", ct);
+        });
     }
 
     protected override void OnHandleCreated(EventArgs e)
