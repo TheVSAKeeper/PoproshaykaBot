@@ -29,6 +29,10 @@ namespace PoproshaykaBot.WinForms;
 
 public static class Program
 {
+    private const int ShutdownSoftDeadlineSeconds = 8;
+
+    private const int ShutdownHardDeadlineSeconds = 12;
+
     [STAThread]
     private static void Main(string[] args)
     {
@@ -63,8 +67,7 @@ public static class Program
 
                 if (!isUiSmoke)
                 {
-                    MessageBox.Show(
-                        "PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
+                    MessageBox.Show("PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
                         "Приложение уже запущено",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
@@ -135,23 +138,39 @@ public static class Program
         }
         finally
         {
-            if (streamMonitoringStarted)
-            {
-                StopStreamMonitoring(streamMonitoringHost);
-            }
-
-            if (appLifetimeStarted)
-            {
-                StopAppLifetime(appLifetime);
-            }
-
-            serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            StopAllComponents(serviceProvider, appLifetime, streamMonitoringHost, appLifetimeStarted, streamMonitoringStarted, isUiSmoke);
 
             if (!isUiSmoke)
             {
                 ApplyPendingUpdate();
             }
         }
+    }
+
+    private static void StopAllComponents(
+        ServiceProvider serviceProvider,
+        AppLifetime appLifetime,
+        StreamMonitoringHost streamMonitoringHost,
+        bool appLifetimeStarted,
+        bool streamMonitoringStarted,
+        bool isUiSmoke)
+    {
+        using var shutdownWatchdog = isUiSmoke ? null : CreateShutdownWatchdog();
+
+        using var shutdownTimeout = isUiSmoke ? null : new CancellationTokenSource(TimeSpan.FromSeconds(ShutdownSoftDeadlineSeconds));
+        var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
+
+        if (streamMonitoringStarted)
+        {
+            StopStreamMonitoring(streamMonitoringHost, shutdownToken);
+        }
+
+        if (appLifetimeStarted)
+        {
+            StopAppLifetime(appLifetime, shutdownToken);
+        }
+
+        serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     private static void FinalizeUpdate()
@@ -228,11 +247,15 @@ public static class Program
         }
     }
 
-    private static void StopStreamMonitoring(StreamMonitoringHost host)
+    private static void StopStreamMonitoring(StreamMonitoringHost host, CancellationToken cancellationToken)
     {
         try
         {
-            host.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+            host.StopAsync(cancellationToken).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Warning("Остановка стрим-мониторинга прервана по таймауту завершения");
         }
         catch (Exception ex)
         {
@@ -269,11 +292,15 @@ public static class Program
         }
     }
 
-    private static void StopAppLifetime(AppLifetime appLifetime)
+    private static void StopAppLifetime(AppLifetime appLifetime, CancellationToken cancellationToken)
     {
         try
         {
-            appLifetime.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+            appLifetime.StopAsync(cancellationToken).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Warning("Остановка AppLifetime прервана по таймауту завершения");
         }
         catch (Exception ex)
         {
@@ -354,10 +381,22 @@ public static class Program
                  """;
 
             MessageBox.Show(message, "Критическая нагрузка на память", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            Environment.FailFast("Пользователь подтвердил закрытие при утечке памяти.");
         };
 
         return memoryCheckTimer;
+    }
+
+    private static IDisposable CreateShutdownWatchdog()
+    {
+        return new System.Threading.Timer(_ =>
+            {
+                Log.Fatal("Завершение работы превысило лимит {Seconds} c — принудительное завершение процесса", ShutdownHardDeadlineSeconds);
+                Log.CloseAndFlush();
+                Process.GetCurrentProcess().Kill();
+            },
+            null,
+            TimeSpan.FromSeconds(ShutdownHardDeadlineSeconds),
+            Timeout.InfiniteTimeSpan);
     }
 
     private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)

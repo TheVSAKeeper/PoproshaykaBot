@@ -9,6 +9,9 @@ namespace PoproshaykaBot.Core.Infrastructure.Hosting;
 
 public sealed class BotConnectionManager : IAsyncDisposable
 {
+    private static readonly TimeSpan GracefulStopTimeout = TimeSpan.FromSeconds(60);
+
+    private static readonly TimeSpan ForcedStopTimeout = TimeSpan.FromSeconds(6);
     private readonly ITwitchOAuthService _tokenService;
     private readonly SettingsManager _settingsManager;
     private readonly TwitchChatHandler _twitchChatHandler;
@@ -16,7 +19,11 @@ public sealed class BotConnectionManager : IAsyncDisposable
     private readonly IEventBus _eventBus;
     private readonly ILogger<BotConnectionManager> _logger;
 
+    private readonly SemaphoreSlim _stopGate = new(1, 1);
+    private readonly object _stopSync = new();
+
     private CancellationTokenSource? _cts;
+    private CancellationTokenSource? _activeStopCts;
     private Task? _connectionTask;
     private bool _disposed;
     private bool _shutdownCompleted;
@@ -72,38 +79,77 @@ public sealed class BotConnectionManager : IAsyncDisposable
         _cts.Cancel();
     }
 
-    public async Task StopAsync()
+    public async Task StopAsync(BotStopMode mode = BotStopMode.Graceful)
     {
-        _logger.LogDebug("Инициализация процесса остановки бота (StopAsync)");
+        if (mode == BotStopMode.Forced)
+        {
+            lock (_stopSync)
+            {
+                _activeStopCts?.Cancel();
+            }
+        }
 
-        CurrentPhase = BotLifecyclePhase.Disconnecting;
-        await _eventBus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnecting));
-
-        var progressReporter = new Progress<string>(ReportProgress);
+        await _stopGate.WaitAsync().ConfigureAwait(false);
 
         try
         {
-            await _appHost.StopAsync(progressReporter, CancellationToken.None);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Произошла ошибка при остановке компонентов AppHost");
-            ReportProgress($"Ошибка остановки компонентов: {exception.Message}");
-        }
+            _logger.LogDebug("Инициализация процесса остановки бота (StopAsync, режим {Mode})", mode);
 
-        _twitchChatHandler.Reset();
-        _logger.LogInformation("Бот успешно остановлен");
-        PublishPhase(BotLifecyclePhase.Disconnected);
+            CurrentPhase = BotLifecyclePhase.Disconnecting;
+            await _eventBus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnecting));
+
+            var progressReporter = new Progress<string>(ReportProgress);
+            var stopTimeout = mode == BotStopMode.Forced ? ForcedStopTimeout : GracefulStopTimeout;
+
+            try
+            {
+                using var stopCts = new CancellationTokenSource(stopTimeout);
+
+                lock (_stopSync)
+                {
+                    _activeStopCts?.Dispose();
+                    _activeStopCts = stopCts;
+                }
+
+                await _appHost.StopAsync(progressReporter, stopCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Остановка компонентов AppHost прервана по таймауту {Timeout} c (режим {Mode})", stopTimeout.TotalSeconds, mode);
+                ReportProgress("Остановка компонентов прервана по таймауту");
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Произошла ошибка при остановке компонентов AppHost");
+                ReportProgress($"Ошибка остановки компонентов: {exception.Message}");
+            }
+            finally
+            {
+                lock (_stopSync)
+                {
+                    _activeStopCts?.Dispose();
+                    _activeStopCts = null;
+                }
+            }
+
+            _twitchChatHandler.Reset();
+            _logger.LogInformation("Бот успешно остановлен");
+            PublishPhase(BotLifecyclePhase.Disconnected);
+        }
+        finally
+        {
+            _stopGate.Release();
+        }
     }
 
-    public async Task ShutdownAsync()
+    public async Task ShutdownAsync(BotStopMode mode = BotStopMode.Graceful)
     {
         if (_shutdownCompleted)
         {
             return;
         }
 
-        _logger.LogDebug("Инициализация полной остановки бота (ShutdownAsync)");
+        _logger.LogDebug("Инициализация полной остановки бота (ShutdownAsync, режим {Mode})", mode);
 
         CancelConnection();
 
@@ -121,7 +167,7 @@ public sealed class BotConnectionManager : IAsyncDisposable
             }
         }
 
-        await StopAsync();
+        await StopAsync(mode);
         _shutdownCompleted = true;
     }
 
@@ -136,7 +182,7 @@ public sealed class BotConnectionManager : IAsyncDisposable
 
         try
         {
-            await ShutdownAsync().ConfigureAwait(false);
+            await ShutdownAsync(BotStopMode.Forced).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -144,6 +190,7 @@ public sealed class BotConnectionManager : IAsyncDisposable
         }
 
         _cts?.Dispose();
+        _stopGate.Dispose();
         _disposed = true;
     }
 

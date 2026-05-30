@@ -45,6 +45,8 @@ public sealed class ObsWebSocketClient(ILogger<ObsWebSocketClient> logger) : IOb
             new(4, nameof(LogIgnoredMessage)),
             "OBS WebSocket сообщение op={Op} проигнорировано");
 
+    private static readonly TimeSpan DisconnectTimeout = TimeSpan.FromSeconds(5);
+
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ObsRequestResponse>> _pending = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly object _syncLock = new();
@@ -128,21 +130,24 @@ public sealed class ObsWebSocketClient(ILogger<ObsWebSocketClient> logger) : IOb
 
         try
         {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(DisconnectTimeout);
+
             await (cts?.CancelAsync() ?? Task.CompletedTask).ConfigureAwait(false);
 
             if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
             {
-                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "client shutdown", cancellationToken).ConfigureAwait(false);
+                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "client shutdown", timeoutCts.Token).ConfigureAwait(false);
             }
 
             if (receiveTask is not null)
             {
-                await receiveTask.ConfigureAwait(false);
+                await receiveTask.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
         }
         catch (Exception exception) when (exception is OperationCanceledException or WebSocketException)
         {
-            logger.LogDebug(exception, "OBS WebSocket отключен во время закрытия соединения");
+            logger.LogDebug(exception, "OBS WebSocket отключён во время закрытия соединения (или по таймауту)");
         }
         finally
         {

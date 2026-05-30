@@ -19,7 +19,7 @@ public sealed class ChatSender(
     private const int MaxSendAttempts = 5;
     private const double RateLimitMaxDelaySeconds = 30.0;
     private static readonly TimeSpan SendInterval = TimeSpan.FromMilliseconds(750);
-    private static readonly TimeSpan StopDrainTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan MaxDrainTimeout = TimeSpan.FromSeconds(120);
     private static readonly TimeSpan RateLimitInitialDelay = TimeSpan.FromSeconds(2);
 
     private Channel<ChatSendItem> _channel = CreateChannel();
@@ -67,14 +67,17 @@ public sealed class ChatSender(
         try
         {
             using var drainCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            drainCts.CancelAfter(StopDrainTimeout);
+            drainCts.CancelAfter(MaxDrainTimeout);
 
             await task.WaitAsync(drainCts.Token);
             logger.LogInformation("ChatSender: все сообщения отправлены");
         }
         catch (OperationCanceledException timeoutEx)
         {
-            logger.LogWarning(timeoutEx, "ChatSender: не все сообщения успели отправиться (timeout), принудительная остановка");
+            var remaining = _channel.Reader.CanCount ? _channel.Reader.Count : -1;
+            logger.LogWarning(timeoutEx,
+                "ChatSender: дренаж очереди прерван (в очереди осталось {Remaining}) — не все сообщения отправлены, принудительная остановка",
+                remaining);
 
             if (_cts != null)
             {
