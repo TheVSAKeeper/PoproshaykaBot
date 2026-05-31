@@ -26,6 +26,7 @@ public sealed class SseService : IAsyncDisposable
     private Task? _broadcastTask;
     private Task? _keepAliveTask;
     private bool _isRunning;
+    private TimeSpan _clientWriteTimeout = TimeSpan.FromSeconds(10);
 
     public SseService(
         SettingsManager settingsManager,
@@ -51,6 +52,17 @@ public sealed class SseService : IAsyncDisposable
 
     public long ClientDroppedMessageCount => _metrics.ClientDropCount;
 
+    public bool IsRunning
+    {
+        get
+        {
+            lock (_lifecycleLock)
+            {
+                return _isRunning;
+            }
+        }
+    }
+
     public void Start()
     {
         _logger.LogDebug("Инициализация запуска сервиса SSE");
@@ -65,6 +77,8 @@ public sealed class SseService : IAsyncDisposable
 
             _cts = new();
             var keepAliveSeconds = Math.Max(5, _settingsManager.Current.Twitch.Infrastructure.SseKeepAliveSeconds);
+            var writeTimeoutSeconds = Math.Max(1, _settingsManager.Current.Twitch.Infrastructure.SseClientWriteTimeoutSeconds);
+            _clientWriteTimeout = TimeSpan.FromSeconds(writeTimeoutSeconds);
 
             _keepAliveTask = Task.Run(() => KeepAliveLoopAsync(keepAliveSeconds, _cts.Token));
             _broadcastTask = Task.Run(() => BroadcastLoopAsync(_cts.Token));
@@ -135,7 +149,7 @@ public sealed class SseService : IAsyncDisposable
         _logger.LogDebug("SSE клиент удалён по завершению соединения. Активных: {Count}", _registry.Count);
     }
 
-    public void AddClient(HttpResponse response)
+    public bool AddClient(HttpResponse response)
     {
         _logger.LogDebug("Попытка регистрации нового SSE клиента");
 
@@ -145,8 +159,8 @@ public sealed class SseService : IAsyncDisposable
         {
             if (!_isRunning || _cts is null)
             {
-                _logger.LogWarning("Попытка зарегистрировать SSE клиента до Start() сервиса. Подключение отклонено");
-                return;
+                _logger.LogWarning("Попытка зарегистрировать SSE клиента при остановленном сервисе. Подключение отклонено");
+                return false;
             }
 
             token = _cts.Token;
@@ -159,10 +173,12 @@ public sealed class SseService : IAsyncDisposable
             pipeline.WriterTask = Task.Run(() => ClientWriterLoopAsync(pipeline, token));
 
             _logger.LogInformation("Установлено новое SSE подключение. Всего активных клиентов: {ClientCount}", clientCount);
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка при установке нового SSE подключения");
+            return false;
         }
     }
 
@@ -235,6 +251,11 @@ public sealed class SseService : IAsyncDisposable
         _cts?.Dispose();
     }
 
+    internal static string BuildPingPayload(int intervalSeconds)
+    {
+        return JsonSerializer.Serialize(new PingPayload(intervalSeconds), ServerJsonOptions.Default);
+    }
+
     private void Enqueue(SseEnvelope envelope)
     {
         bool willDrop;
@@ -267,12 +288,13 @@ public sealed class SseService : IAsyncDisposable
     private async Task KeepAliveLoopAsync(int intervalSeconds, CancellationToken token)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(intervalSeconds));
+        var pingPayload = BuildPingPayload(intervalSeconds);
 
         try
         {
             while (await timer.WaitForNextTickAsync(token))
             {
-                Enqueue(SseEnvelope.Comment("keep-alive"));
+                Enqueue(new("ping", pingPayload));
             }
         }
         catch (OperationCanceledException ex)
@@ -363,13 +385,23 @@ public sealed class SseService : IAsyncDisposable
         {
             await foreach (var buffer in pipeline.Channel.Reader.ReadAllAsync(token))
             {
+                using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                writeCts.CancelAfter(_clientWriteTimeout);
+
                 try
                 {
-                    await pipeline.Response.Body.WriteAsync(buffer, token);
-                    await pipeline.Response.Body.FlushAsync(token);
+                    await pipeline.Response.Body.WriteAsync(buffer, writeCts.Token);
+                    await pipeline.Response.Body.FlushAsync(writeCts.Token);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    break;
                 }
                 catch (OperationCanceledException)
                 {
+                    _logger.LogDebug("SSE клиент не принял данные за {Timeout} c — отключаю зависшего клиента",
+                        _clientWriteTimeout.TotalSeconds);
+
                     break;
                 }
                 catch (Exception ex)
@@ -392,6 +424,8 @@ public sealed class SseService : IAsyncDisposable
             RemoveClient(pipeline.Response);
         }
     }
+
+    private sealed record PingPayload(int IntervalSeconds);
 
     private sealed record DroppedNotice(long Count, long ClientCount);
 }

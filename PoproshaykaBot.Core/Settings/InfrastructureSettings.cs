@@ -8,6 +8,7 @@ public class InfrastructureSettings
     public int SseClientChannelCapacity { get; set; } = 256;
     public int SseDropLogThrottle { get; set; } = 50;
     public int SseDropNotifyThreshold { get; set; } = 10;
+    public int SseClientWriteTimeoutSeconds { get; set; } = 10;
     public int StreamStuckOnlineThresholdSeconds { get; set; } = 120;
     public int OAuthAuthTimeoutMinutes { get; set; } = 5;
 }
