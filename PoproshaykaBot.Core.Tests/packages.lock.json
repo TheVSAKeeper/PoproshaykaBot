@@ -336,7 +336,7 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "[8.0.1, )",
           "Microsoft.Extensions.Http": "[8.0.0, )",
-          "Microsoft.Extensions.Logging.Abstractions": "[8.0.0, )",
+          "Microsoft.Extensions.Logging.Abstractions": "[8.0.2, )",
           "Serilog": "[4.3.1, )",
           "Serilog.Extensions.Logging": "[8.0.0, )",
           "System.Drawing.Common": "[8.0.10, )"
@@ -351,7 +351,7 @@
           "Microsoft.Extensions.Logging.Console": "[8.0.0, )",
           "Microsoft.Extensions.Logging.Debug": "[8.0.0, )",
           "Microsoft.Web.WebView2": "[1.0.3650.58, )",
-          "PoproshaykaBot.Core": "[3.1.0.5, )",
+          "PoproshaykaBot.Core": "[3.1.0.13, )",
           "Serilog.Extensions.Logging": "[8.0.0, )",
           "Serilog.Sinks.Console": "[6.1.1, )",
           "Serilog.Sinks.Debug": "[3.0.0, )",
@@ -389,11 +389,11 @@
       },
       "Microsoft.Extensions.Logging.Abstractions": {
         "type": "CentralTransitive",
-        "requested": "[8.0.0, )",
-        "resolved": "8.0.0",
-        "contentHash": "arDBqTgFCyS0EvRV7O3MZturChstm50OJ0y9bDJvAcmEPJm0FFpFyjU/JLYyStNGGey081DvnQYlncNX5SJJGA==",
+        "requested": "[8.0.2, )",
+        "resolved": "8.0.2",
+        "contentHash": "nroMDjS7hNBPtkZqVBbSiQaQjWRDxITI8Y7XnDs97rqG3EbzVTNLZQf7bIeUJcaHOV8bca47s1Uxq94+2oGdxA==",
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.0"
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2"
         }
       },
       "Microsoft.Extensions.Logging.Console": {

@@ -1,0 +1,241 @@
+﻿using Microsoft.Extensions.DependencyInjection;
+using PoproshaykaBot.Core.Broadcast;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Infrastructure.Di;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Infrastructure.Logging;
+using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Core.Polls;
+using PoproshaykaBot.Core.Server;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Migrations;
+using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch;
+using PoproshaykaBot.Core.Update;
+using PoproshaykaBot.Wpf.ViewModels;
+using PoproshaykaBot.Wpf.Views;
+using Serilog;
+using Serilog.Core;
+using Serilog.Debugging;
+using Serilog.Events;
+using Serilog.Extensions.Logging;
+using System.Diagnostics;
+using System.Windows;
+
+namespace PoproshaykaBot.Wpf;
+
+public partial class App : Application
+{
+    private const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
+
+    private ServiceProvider? _services;
+    private AppLifetime? _appLifetime;
+    private StreamMonitoringHost? _streamMonitoringHost;
+    private Timer? _memoryWatchdog;
+    private Mutex? _singleInstanceMutex;
+
+    private bool _isUiSmoke;
+    private bool _isFinalizeUpdate;
+    private bool _appLifetimeStarted;
+    private bool _streamMonitoringStarted;
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        _isUiSmoke = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
+        _isFinalizeUpdate = e.Args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
+
+        var uiLogSink = new UiLogSink();
+        SelfLog.Enable(message => Debug.WriteLine($"[Serilog] {message}"));
+        Log.Logger = BuildLogger(uiLogSink);
+        Log.Information("Запуск приложения (WPF)...");
+
+        AttachFatalExceptionTrap();
+
+        StyledMessageBox.DefaultTitle = "PoproshaykaBot";
+        ThemeManager.Register(ThemeManager.DefaultLight);
+        ThemeManager.Register(ThemeManager.DefaultDark);
+        ThemeManager.Apply("light");
+
+        _singleInstanceMutex = AcquireSingleInstanceLock(_isFinalizeUpdate);
+
+        if (_singleInstanceMutex is null)
+        {
+            Log.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
+
+            if (!_isUiSmoke)
+            {
+                StyledMessageBox.Show("PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
+                    "Приложение уже запущено",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+
+            Shutdown();
+            return;
+        }
+
+        Log.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}", ResolveStorageMode(), AppPaths.BaseDirectory);
+
+        if (_isFinalizeUpdate)
+        {
+            FinalizeUpdate();
+        }
+
+        MigrateLegacySettingsLayout();
+
+        FontScaleManager.Initialize(FontScaleManager.DefaultScale);
+        ViewLocator.InstallIntoApplication();
+
+        var services = new ServiceCollection();
+        ConfigureServices(services, uiLogSink);
+        _services = services.BuildServiceProvider();
+
+        _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
+
+        _appLifetime = _services.GetRequiredService<AppLifetime>();
+        _streamMonitoringHost = _services.GetRequiredService<StreamMonitoringHost>();
+
+        if (_isUiSmoke)
+        {
+            Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
+        }
+        else
+        {
+            var settingsManager = _services.GetRequiredService<SettingsManager>();
+            _appLifetimeStarted = StartHttpServerIfNeeded(settingsManager, _appLifetime);
+            _streamMonitoringStarted = StartStreamMonitoring(_streamMonitoringHost);
+            _memoryWatchdog = CreateMemoryWatchdog();
+        }
+
+        var window = _services.GetRequiredService<MainWindow>();
+        MainWindow = window;
+        window.Show();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        if (_services is not null)
+        {
+            Task.Run(StopAllComponents).GetAwaiter().GetResult();
+        }
+
+        if (!_isUiSmoke)
+        {
+            ApplyPendingUpdate();
+        }
+
+        Log.Information("Завершение работы приложения");
+        Log.CloseAndFlush();
+
+        _memoryWatchdog?.Dispose();
+        _singleInstanceMutex?.Dispose();
+
+        base.OnExit(e);
+    }
+
+    private static Logger BuildLogger(UiLogSink uiLogSink)
+    {
+        return new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+            .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
+            .WriteTo.Console(outputTemplate: OutputTemplate)
+            .WriteTo.Debug(outputTemplate: OutputTemplate)
+            .WriteTo.File(AppPaths.Combine("logs", "bot_log_.txt"),
+                rollingInterval: RollingInterval.Day,
+                fileSizeLimitBytes: 50L * 1024 * 1024,
+                rollOnFileSizeLimit: true,
+                retainedFileCountLimit: 31,
+                outputTemplate: OutputTemplate)
+            .WriteTo.Sink(uiLogSink, LogEventLevel.Information)
+            .CreateLogger();
+    }
+
+    private static string ResolveStorageMode()
+    {
+        if (AppPaths.IsBaseDirectoryOverridden)
+        {
+            return "override";
+        }
+
+        return AppPaths.IsPortable ? "portable" : "AppData";
+    }
+
+    private static void MigrateLegacySettingsLayout()
+    {
+        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        var logger = loggerFactory.CreateLogger(nameof(LegacySettingsLayoutMigrator));
+
+        try
+        {
+            LegacySettingsLayoutMigrator.Run(AppPaths.BaseDirectory, AppPaths.SettingsDirectory, logger);
+        }
+        catch (Exception exception)
+        {
+            Log.Error(exception, "Ошибка пред-миграции layout-а настроек");
+        }
+    }
+
+    private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)
+    {
+        services
+            .AddCoreInfrastructure(uiLogSink)
+            .AddStatistics()
+            .AddSettingsStores()
+            .AddTwitchClients()
+            .AddChatPipeline()
+            .AddStreamMonitoring()
+            .AddBroadcasting()
+            .AddPolls()
+            .AddHttpServer()
+            .AddObsIntegration()
+            .AddSelfUpdate();
+
+        services.AddSingleton<BotConnectionManager>();
+
+        services.AddKeepShell();
+        services.AddSingleton<SpikePageViewModel>();
+        services.AddSingleton<ShellViewModel>();
+        services.AddSingleton<MainWindow>();
+    }
+
+    private void StopAllComponents()
+    {
+        using var shutdownWatchdog = _isUiSmoke ? null : CreateShutdownWatchdog();
+        using var shutdownTimeout = _isUiSmoke ? null : new CancellationTokenSource(TimeSpan.FromSeconds(ShutdownSoftDeadlineSeconds));
+        var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
+
+        if (_streamMonitoringStarted && _streamMonitoringHost is not null)
+        {
+            StopStreamMonitoring(_streamMonitoringHost, shutdownToken);
+        }
+
+        if (_appLifetimeStarted && _appLifetime is not null)
+        {
+            StopAppLifetime(_appLifetime, shutdownToken);
+        }
+
+        _services!.DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
+
+    private void AttachFatalExceptionTrap()
+    {
+        DispatcherUnhandledException += (_, args) => Log.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception exception)
+            {
+                Log.Fatal(exception, "Приложение завершило работу из-за непредвиденной ошибки");
+            }
+
+            Log.CloseAndFlush();
+        };
+    }
+}
