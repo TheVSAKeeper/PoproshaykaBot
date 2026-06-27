@@ -35,5 +35,8 @@
         <keepshell:ShellLayout.TitleBar>
             <views:TitleBarView />
         </keepshell:ShellLayout.TitleBar>
+        <keepshell:ShellLayout.StatusBar>
+            <views:StatusBarView />
+        </keepshell:ShellLayout.StatusBar>
     </keepshell:ShellLayout>
 </Window>

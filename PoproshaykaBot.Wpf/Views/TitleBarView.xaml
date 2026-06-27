@@ -94,6 +94,14 @@
                         Orientation="Horizontal"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True">
 
+                <Button Style="{StaticResource Button.Primary}"
+                        Content="{Binding ConnectButtonText}"
+                        Command="{Binding ToggleConnectCommand}"
+                        VerticalAlignment="Center"
+                        MinHeight="26"
+                        Padding="14,3"
+                        Margin="0,0,10,0" />
+
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center"
                             Margin="0,0,8,0">

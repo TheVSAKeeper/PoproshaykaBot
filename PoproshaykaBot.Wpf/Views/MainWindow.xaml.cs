@@ -7,6 +7,7 @@ namespace PoproshaykaBot.Wpf.Views;
 public partial class MainWindow : Window
 {
     private readonly ShellViewModel _viewModel;
+    private bool _closeConfirmed;
 
     public MainWindow(ShellViewModel viewModel)
     {
@@ -14,16 +15,24 @@ public partial class MainWindow : Window
         _viewModel = viewModel;
         DataContext = viewModel;
 
-        WindowChromeTheming.Attach(this, enableBackdrop: true);
+        WindowChromeTheming.Attach(this, true);
 
         Closing += OnClosing;
     }
 
-    private void OnClosing(object? sender, CancelEventArgs e)
+    private async void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (!_viewModel.RequestClose())
+        if (_closeConfirmed)
         {
-            e.Cancel = true;
+            return;
+        }
+
+        e.Cancel = true;
+
+        if (await _viewModel.RequestCloseAsync())
+        {
+            _closeConfirmed = true;
+            Dispatcher.BeginInvoke(() => Close());
         }
     }
 }
