@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
 using System.Globalization;
+using System.Net.Sockets;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Obs;
@@ -12,10 +13,9 @@ public sealed class ObsIntegrationService(
     ILogger<ObsIntegrationService> logger)
     : IDisposable, IObsSceneController
 {
+    private const string BrowserSourceInputKind = "browser_source";
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(5);
     private static readonly string[] MicrophoneNameMarkers = ["mic", "microphone", "микрофон", "микро"];
-
-    private const string BrowserSourceInputKind = "browser_source";
 
     private static readonly Action<ILogger, string, string, string, string, Exception?> LogBrowserSourceProvisioned =
         LoggerMessage.Define<string, string, string, string>(LogLevel.Information,
@@ -62,7 +62,16 @@ public sealed class ObsIntegrationService(
             {
                 var safeMessage = ToSafeMessage(exception);
                 CurrentStatus = ObsConnectionSnapshot.Disconnected(safeMessage);
-                logger.LogWarning(exception, "Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+
+                if (IsExpectedConnectionFailure(exception))
+                {
+                    logger.LogWarning("Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+                }
+                else
+                {
+                    logger.LogWarning(exception, "Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+                }
+
                 return CurrentStatus;
             }
         }
@@ -420,6 +429,18 @@ public sealed class ObsIntegrationService(
         };
     }
 
+    private static bool IsExpectedConnectionFailure(Exception exception)
+    {
+        return exception.GetBaseException() is SocketException
+        {
+            SocketErrorCode: SocketError.ConnectionRefused
+            or SocketError.TimedOut
+            or SocketError.HostUnreachable
+            or SocketError.HostDown
+            or SocketError.ConnectionReset,
+        };
+    }
+
     private static string GetRequiredString(JsonElement element, string propertyName)
     {
         return GetOptionalString(element, propertyName) ?? string.Empty;
@@ -585,7 +606,16 @@ public sealed class ObsIntegrationService(
         {
             var safeMessage = ToSafeMessage(exception);
             CurrentStatus = ObsConnectionSnapshot.Disconnected(safeMessage);
-            logger.LogWarning(exception, "Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+
+            if (IsExpectedConnectionFailure(exception))
+            {
+                logger.LogWarning("Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+            }
+            else
+            {
+                logger.LogWarning(exception, "Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+            }
+
             return CurrentStatus;
         }
     }
