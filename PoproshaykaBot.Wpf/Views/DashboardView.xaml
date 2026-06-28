@@ -16,7 +16,7 @@
         <DataTemplate x:Key="DashboardTileChrome"
                       DataType="{x:Type tiles:DashboardTileViewModel}">
             <Border Style="{StaticResource Card}"
-                    Margin="6">
+                    Margin="3">
                 <DockPanel LastChildFill="True">
                     <DockPanel DockPanel.Dock="Top"
                                LastChildFill="True"
@@ -65,9 +65,9 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid Margin="-20">
         <Grid x:Name="TilesGrid"
-              Margin="14"
+              Margin="3"
               Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}" />
 
         <controls:EmptyState Icon="LayoutDashboard"
