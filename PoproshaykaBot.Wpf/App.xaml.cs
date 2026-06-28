@@ -15,6 +15,7 @@ using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Update;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
@@ -24,7 +25,6 @@ using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
 using PoproshaykaBot.Wpf.Views.Onboarding;
 using Serilog;
-using Serilog.Core;
 using Serilog.Debugging;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
@@ -38,6 +38,7 @@ public partial class App : Application
     private const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
     private ServiceProvider? _services;
+    private KeepShellLogging? _logging;
     private AppLifetime? _appLifetime;
     private StreamMonitoringHost? _streamMonitoringHost;
     private Timer? _memoryWatchdog;
@@ -55,10 +56,28 @@ public partial class App : Application
         _isUiSmoke = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         _isFinalizeUpdate = e.Args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
 
-        var uiLogSink = new UiLogSink();
+        var coreUiLogSink = new UiLogSink();
         SelfLog.Enable(message => Debug.WriteLine($"[Serilog] {message}"));
-        Log.Logger = BuildLogger(uiLogSink);
-        Log.Information("Запуск приложения (WPF)...");
+
+        _logging = KeepShellLogging.Bootstrap(new()
+        {
+            LogsDirectory = AppPaths.Combine("logs"),
+            FileNamePrefix = AppInfo.LogFilePrefix,
+            OutputTemplate = OutputTemplate,
+            MinimumLevel = LogEventLevel.Debug,
+            MinimumLevelOverrides = new Dictionary<string, LogEventLevel>
+            {
+                ["Microsoft"] = LogEventLevel.Information,
+                ["Microsoft.AspNetCore"] = LogEventLevel.Warning,
+                ["System.Net.Http.HttpClient"] = LogEventLevel.Warning,
+            },
+            WriteToDebug = true,
+            Configure = configuration => configuration
+                .WriteTo.Console(outputTemplate: OutputTemplate)
+                .WriteTo.Sink(coreUiLogSink, LogEventLevel.Information),
+        });
+
+        Log.Information(AppInfo.SessionStartMarker + "...");
 
         AttachFatalExceptionTrap();
 
@@ -98,7 +117,7 @@ public partial class App : Application
         ViewLocator.InstallIntoApplication();
 
         var services = new ServiceCollection();
-        ConfigureServices(services, uiLogSink);
+        ConfigureServices(services, coreUiLogSink);
         _services = services.BuildServiceProvider();
 
         _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
@@ -138,31 +157,12 @@ public partial class App : Application
         }
 
         Log.Information("Завершение работы приложения");
-        Log.CloseAndFlush();
+        _logging?.Dispose();
 
         _memoryWatchdog?.Dispose();
         _singleInstanceMutex?.Dispose();
 
         base.OnExit(e);
-    }
-
-    private static Logger BuildLogger(UiLogSink uiLogSink)
-    {
-        return new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-            .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
-            .WriteTo.Console(outputTemplate: OutputTemplate)
-            .WriteTo.Debug(outputTemplate: OutputTemplate)
-            .WriteTo.File(AppPaths.Combine("logs", "bot_log_.txt"),
-                rollingInterval: RollingInterval.Day,
-                fileSizeLimitBytes: 50L * 1024 * 1024,
-                rollOnFileSizeLimit: true,
-                retainedFileCountLimit: 31,
-                outputTemplate: OutputTemplate)
-            .WriteTo.Sink(uiLogSink, LogEventLevel.Information)
-            .CreateLogger();
     }
 
     private static string ResolveStorageMode()
@@ -193,7 +193,7 @@ public partial class App : Application
     private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)
     {
         services
-            .AddCoreInfrastructure(uiLogSink)
+            .AddCoreInfrastructure(uiLogSink, disposeSerilog: false)
             .AddStatistics()
             .AddSettingsStores()
             .AddTwitchClients()
@@ -208,6 +208,14 @@ public partial class App : Application
         services.AddSingleton<BotConnectionManager>();
 
         services.AddKeepShell();
+
+        services.AddSingleton(new ErrorReportOptions
+        {
+            IssueRepo = AppInfo.RepoSlug,
+            LogFileGlobs = [AppInfo.LogFileGlob],
+            SessionStartMarker = AppInfo.SessionStartMarker,
+        });
+        services.AddSingleton<ErrorReportService>();
 
         services.AddSingleton<DashboardTileViewModel, LogsTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, StreamInfoTileViewModel>();

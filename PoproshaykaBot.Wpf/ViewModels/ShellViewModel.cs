@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Windows;
 
@@ -66,7 +67,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Ошибка завершения работы при закрытии окна");
+            _logger.ShutdownOnCloseFailed(exception);
         }
 
         return true;
@@ -103,7 +104,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 }
                 catch (Exception exception)
                 {
-                    _logger.LogError(exception, "Ошибка при отключении бота");
+                    _logger.BotDisconnectFailed(exception);
                 }
 
                 break;
@@ -118,7 +119,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 }
                 catch (InvalidOperationException exception)
                 {
-                    _logger.LogError(exception, "Ошибка запуска подключения");
+                    _logger.BotStartConnectionFailed(exception);
                 }
 
                 break;
@@ -136,7 +137,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         if (phaseEvent.Phase == BotLifecyclePhase.Failed)
         {
-            _logger.LogError(phaseEvent.Exception, "Ошибка подключения бота");
+            _logger.BotConnectFailed(phaseEvent.Exception);
 
             StyledMessageBox.Show($"Ошибка подключения бота: {phaseEvent.Exception?.Message}",
                 "Ошибка",

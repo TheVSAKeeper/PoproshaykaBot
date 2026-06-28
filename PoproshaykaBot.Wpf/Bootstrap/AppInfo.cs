@@ -10,7 +10,7 @@ public static class AppInfo
     public const string ReleasesUrl = RepositoryUrl + "/releases";
 
     public const string LogFilePrefix = "bot_log_";
-    public const string LogFileGlob = LogFilePrefix + "*.txt";
+    public const string LogFileGlob = LogFilePrefix + "*.log";
 
     public const string SessionStartMarker = Name + ".Wpf запускается";
 
