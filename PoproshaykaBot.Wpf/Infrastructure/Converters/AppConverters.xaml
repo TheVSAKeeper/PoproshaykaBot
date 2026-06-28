@@ -4,5 +4,6 @@
 
     <conv:StreamStatusToBrushConverter x:Key="StreamStatusToBrush" />
     <conv:TimecodeConverter x:Key="Timecode" />
+    <conv:DrawingColorToBrushConverter x:Key="DrawingColorToBrush" />
 
 </ResourceDictionary>

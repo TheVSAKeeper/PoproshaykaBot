@@ -1,0 +1,290 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.ViewModels.Dialogs;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Windows.Data;
+
+namespace PoproshaykaBot.Wpf.ViewModels;
+
+public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPageHeader, IDisposable
+{
+    private readonly IUserStatisticsRepository _userStatistics;
+    private readonly StatisticsAutoSaver _statisticsAutoSaver;
+    private readonly UserRankService _userRankService;
+    private readonly UserPointsManagementService _pointsManagement;
+    private readonly IChannelProvider _channelProvider;
+    private readonly SettingsManager _settingsManager;
+    private readonly IDialogService _dialogService;
+    private readonly ObservableCollection<UserStatisticsRowViewModel> _rows = [];
+    private readonly ICollectionView _view;
+    private readonly List<IDisposable> _subscriptions = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedRow))]
+    [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
+    private UserStatisticsRowViewModel? _selectedRow;
+
+    [ObservableProperty]
+    private string _filterText = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActionButtonText))]
+    [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
+    private double _adjustmentAmount;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
+    private bool _isBusy;
+
+    [ObservableProperty]
+    private string _totalUsers = "0";
+
+    [ObservableProperty]
+    private string _totalMessages = "0";
+
+    [ObservableProperty]
+    private string _totalPoints = "0";
+
+    [ObservableProperty]
+    private string _totalBonusPenalty = "0 / 0";
+
+    public UserStatisticsPageViewModel(
+        IUserStatisticsRepository userStatistics,
+        StatisticsAutoSaver statisticsAutoSaver,
+        UserRankService userRankService,
+        UserPointsManagementService pointsManagement,
+        IChannelProvider channelProvider,
+        SettingsManager settingsManager,
+        IDialogService dialogService,
+        IEventBus eventBus)
+    {
+        _userStatistics = userStatistics;
+        _statisticsAutoSaver = statisticsAutoSaver;
+        _userRankService = userRankService;
+        _pointsManagement = pointsManagement;
+        _channelProvider = channelProvider;
+        _settingsManager = settingsManager;
+        _dialogService = dialogService;
+
+        _view = new ListCollectionView(_rows);
+        _view.SortDescriptions.Add(new SortDescription(nameof(UserStatisticsRowViewModel.Points), ListSortDirection.Descending));
+
+        _subscriptions.Add(eventBus.SubscribeOnUi<UserPunished>(_ => Reload()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<UserRewarded>(_ => Reload()));
+
+        Reload();
+    }
+
+    public string PageTitle => "Статистика пользователей";
+
+    public string? PageDescription => null;
+
+    public ICollectionView UsersView => _view;
+
+    public bool HasSelectedRow => SelectedRow is not null;
+
+    public string ActionButtonText
+    {
+        get
+        {
+            var delta = (long)AdjustmentAmount;
+            var term = _userRankService.PointTerm;
+            return delta switch
+            {
+                > 0 => $"Добавить {delta} {term.ForCount(delta)}",
+                < 0 => $"Убрать {-delta} {term.ForCount(-delta)}",
+                _ => "Изменить баланс",
+            };
+        }
+    }
+
+    partial void OnFilterTextChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _view.Filter = null;
+        }
+        else
+        {
+            var trimmed = value.Trim();
+            _view.Filter = obj => obj is UserStatisticsRowViewModel row
+                && (row.Name.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase)
+                    || row.UserId.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase));
+        }
+    }
+
+    [RelayCommand]
+    private void ClearFilter() => FilterText = string.Empty;
+
+    [RelayCommand]
+    private void Refresh() => Reload();
+
+    [RelayCommand(CanExecute = nameof(CanApplyAdjustment))]
+    private async Task ApplyAdjustmentAsync()
+    {
+        if (SelectedRow is null)
+        {
+            return;
+        }
+
+        var row = SelectedRow;
+        var delta = (long)AdjustmentAmount;
+
+        if (delta == 0)
+        {
+            return;
+        }
+
+        IsBusy = true;
+
+        try
+        {
+            bool updated;
+
+            if (delta < 0)
+            {
+                var amount = (ulong)-delta;
+                var notification = _pointsManagement.GetPunishmentNotification(row.Name, amount);
+                _dialogService.Info("Наказание", notification);
+                updated = await _pointsManagement.PunishUserAsync(row.UserId, row.Name, amount, _channelProvider.Channel);
+            }
+            else
+            {
+                var amount = (ulong)delta;
+                var notification = _pointsManagement.GetRewardNotification(row.Name, amount);
+                _dialogService.Info("Поощрение", notification);
+                updated = await _pointsManagement.RewardUserAsync(row.UserId, row.Name, amount, _channelProvider.Channel);
+            }
+
+            if (!updated)
+            {
+                _dialogService.Warning("Ошибка", "Пользователь не найден в статистике.");
+                return;
+            }
+
+            Reload();
+
+            try
+            {
+                await _statisticsAutoSaver.SaveNowAsync();
+            }
+            catch (Exception ex)
+            {
+                _dialogService.Error("Ошибка сохранения", $"Не удалось сохранить статистику: {ex.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            var verb = delta < 0 ? "наказать" : "поощрить";
+            _dialogService.Error("Ошибка", $"Не удалось {verb} пользователя: {ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private bool CanApplyAdjustment() => SelectedRow is not null && (long)AdjustmentAmount != 0 && !IsBusy;
+
+    [RelayCommand]
+    private void IncreaseAdjustment()
+    {
+        if (AdjustmentAmount < 1_000_000)
+        {
+            AdjustmentAmount++;
+        }
+    }
+
+    [RelayCommand]
+    private void DecreaseAdjustment()
+    {
+        if (AdjustmentAmount > -1_000_000)
+        {
+            AdjustmentAmount--;
+        }
+    }
+
+    [RelayCommand]
+    private async Task EditPointTermAsync()
+    {
+        var dialog = new PointTermDialogViewModel(_settingsManager.Current.Ranks.PointTerm);
+
+        if (!await _dialogService.ShowAsync(dialog))
+        {
+            return;
+        }
+
+        var settings = _settingsManager.Current;
+        var previous = settings.Ranks.PointTerm;
+        settings.Ranks.PointTerm = dialog.BuildResult();
+
+        try
+        {
+            _settingsManager.SaveSettings(settings);
+            OnPropertyChanged(nameof(ActionButtonText));
+        }
+        catch (Exception ex)
+        {
+            settings.Ranks.PointTerm = previous;
+            _dialogService.Error("Ошибка сохранения", $"Не удалось сохранить названия баллов: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        foreach (var sub in _subscriptions)
+        {
+            sub.Dispose();
+        }
+
+        _subscriptions.Clear();
+    }
+
+    private void Reload()
+    {
+        var selectedId = SelectedRow?.UserId;
+        var all = _userStatistics.GetAll();
+
+        _rows.Clear();
+
+        long totalMessages = 0;
+        long totalPoints = 0;
+        long totalBonus = 0;
+        long totalPenalty = 0;
+
+        UserStatisticsRowViewModel? toSelect = null;
+
+        foreach (var user in all)
+        {
+            var rank = _userRankService.GetRankDisplay(user.Points);
+            var row = new UserStatisticsRowViewModel(user, rank);
+            _rows.Add(row);
+
+            totalMessages += (long)user.MessageCount;
+            totalPoints += user.Points;
+            totalBonus += (long)user.BonusPoints;
+            totalPenalty += (long)user.PenaltyPoints;
+
+            if (user.UserId == selectedId)
+            {
+                toSelect = row;
+            }
+        }
+
+        TotalUsers = all.Count.ToString("N0");
+        TotalMessages = totalMessages.ToString("N0");
+        TotalPoints = totalPoints.ToString("N0");
+        TotalBonusPenalty = $"{totalBonus:N0} / {totalPenalty:N0}";
+
+        SelectedRow = toSelect;
+    }
+}

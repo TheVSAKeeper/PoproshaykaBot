@@ -1,0 +1,79 @@
+<UserControl x:Class="PoproshaykaBot.Wpf.Views.SettingsPageView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:SettingsPageViewModel}"
+             d:DesignHeight="720"
+             d:DesignWidth="1100">
+
+    <DockPanel LastChildFill="True">
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource Bg.Surface}"
+                BorderBrush="{DynamicResource Border.Subtle}"
+                BorderThickness="0,1,0,0"
+                Padding="0,12,0,0"
+                Margin="0,12,0,0">
+            <DockPanel LastChildFill="False">
+                <TextBlock DockPanel.Dock="Left"
+                           Text="● Есть несохранённые изменения"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource State.Warning}"
+                           Visibility="{Binding HasChanges, Converter={StaticResource BoolToVisibility}}" />
+
+                <Button DockPanel.Dock="Right"
+                        Content="Сохранить"
+                        Style="{StaticResource Button.Primary}"
+                        Command="{Binding SaveCommand}"
+                        MinWidth="120" />
+                <Button DockPanel.Dock="Right"
+                        Content="Отменить изменения"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding RevertCommand}"
+                        MinWidth="120"
+                        Margin="0,0,8,0" />
+            </DockPanel>
+        </Border>
+
+        <TabControl>
+            <TabItem Header="Основные">
+                <ContentControl Content="{Binding Basic}" />
+            </TabItem>
+            <TabItem Header="Ограничения">
+                <ContentControl Content="{Binding RateLimiting}" />
+            </TabItem>
+            <TabItem Header="HTTP сервер">
+                <ContentControl Content="{Binding HttpServer}" />
+            </TabItem>
+            <TabItem Header="Сообщения">
+                <ContentControl Content="{Binding Messages}" />
+            </TabItem>
+            <TabItem Header="Авторизация">
+                <ContentControl Content="{Binding OAuth}" />
+            </TabItem>
+            <TabItem Header="Чат OBS">
+                <ContentControl Content="{Binding ObsChat}" />
+            </TabItem>
+            <TabItem Header="OBS подключение">
+                <ContentControl Content="{Binding ObsIntegration}" />
+            </TabItem>
+            <TabItem Header="Автоматический режим">
+                <ContentControl Content="{Binding AutoBroadcast}" />
+            </TabItem>
+            <TabItem Header="Автозапуск бота">
+                <ContentControl Content="{Binding BotLifecycle}" />
+            </TabItem>
+            <TabItem Header="Опросы">
+                <ContentControl Content="{Binding Polls}" />
+            </TabItem>
+            <TabItem Header="Прочее">
+                <ContentControl Content="{Binding Misc}" />
+            </TabItem>
+            <TabItem Header="Обновления">
+                <ContentControl Content="{Binding Update}" />
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</UserControl>

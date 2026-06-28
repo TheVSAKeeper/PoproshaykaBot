@@ -1,0 +1,89 @@
+<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.MiscSettingsSectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:MiscSettingsSectionViewModel}"
+             d:DesignHeight="400"
+             d:DesignWidth="600">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  Padding="12">
+        <StackPanel>
+            <Border Style="{StaticResource Card}"
+                    Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="Данные приложения"
+                               Style="{StaticResource TextBlock.Heading}"
+                               Margin="0,0,0,12" />
+
+                    <Button Style="{StaticResource Button.Secondary}"
+                            Content="Открыть папку с настройками"
+                            Command="{Binding OpenSettingsFolderCommand}"
+                            HorizontalAlignment="Left"
+                            Margin="0,0,0,8" />
+
+                    <TextBlock Style="{StaticResource TextBlock.Subtle}"
+                               Text="Открыть папку, где хранятся файлы настроек, профилей и логов."
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}"
+                    Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="Профили трансляций"
+                               Style="{StaticResource TextBlock.Heading}"
+                               Margin="0,0,0,12" />
+
+                    <Button Style="{StaticResource Button.Secondary}"
+                            Content="Импортировать профили из JSON..."
+                            Command="{Binding ImportBroadcastProfilesCommand}"
+                            HorizontalAlignment="Left"
+                            Margin="0,0,0,8" />
+
+                    <TextBlock Style="{StaticResource TextBlock.Subtle}"
+                               Text="Импортировать профили трансляций из файла JSON. Дубликаты по имени будут переименованы автоматически."
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}"
+                    Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="Сброс"
+                               Style="{StaticResource TextBlock.Heading}"
+                               Margin="0,0,0,12" />
+
+                    <Button Style="{StaticResource Button.Destructive}"
+                            Content="Сбросить все настройки..."
+                            Command="{Binding ResetAllSettingsCommand}"
+                            HorizontalAlignment="Left"
+                            Margin="0,0,0,8" />
+
+                    <TextBlock Style="{StaticResource TextBlock.Subtle}"
+                               Foreground="{DynamicResource State.Error}"
+                               Text="Сбросить все настройки к значениям по умолчанию. Действие необратимо."
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="О программе"
+                               Style="{StaticResource TextBlock.Heading}"
+                               Margin="0,0,0,12" />
+
+                    <Button Style="{StaticResource Button.Secondary}"
+                            Content="О программе"
+                            Command="{Binding ShowAboutCommand}"
+                            HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+
+</UserControl>
