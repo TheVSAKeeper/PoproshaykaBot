@@ -7,7 +7,6 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -15,6 +14,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 {
     private readonly BotConnectionManager _connectionManager;
     private readonly ILogger<ShellViewModel> _logger;
+    private readonly ShellPreferences _preferences;
+    private readonly IDialogService _dialogService;
     private readonly List<IDisposable> _subscriptions = [];
     private readonly NavigationItem _settingsSection;
 
@@ -29,13 +30,19 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         SettingsPageViewModel settingsPage,
         UserStatisticsPageViewModel statisticsPage,
         StreamHistoryPageViewModel streamHistoryPage,
+        ThemeViewModel theme,
+        ShellPreferences preferences,
         BotConnectionManager connectionManager,
         IEventBus eventBus,
-        ILogger<ShellViewModel> logger)
+        ILogger<ShellViewModel> logger,
+        IDialogService dialogService)
         : base(modal)
     {
         _connectionManager = connectionManager;
         _logger = logger;
+        _preferences = preferences;
+        _dialogService = dialogService;
+        Theme = theme;
 
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: settingsPage.OnEnter);
 
@@ -43,13 +50,19 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Sections.Add(_settingsSection);
         Sections.Add(new("Пользователи", PackIconLucideKind.Users, statisticsPage));
         Sections.Add(new("История стримов", PackIconLucideKind.History, streamHistoryPage));
-        Selected = Sections[0];
+
+        IsNavCollapsed = _preferences.NavCollapsed;
+
+        var lastPage = _preferences.LastPage;
+        Selected = Sections.FirstOrDefault(section => string.Equals(section.Title, lastPage, StringComparison.Ordinal)) ?? Sections[0];
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnLifecyclePhaseChanged));
         _subscriptions.Add(eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(statusEvent => SetStatus(statusEvent.Message, StatusSeverity.Info)));
 
         ApplyPhase(_connectionManager.CurrentPhase);
     }
+
+    public ThemeViewModel Theme { get; }
 
     public string ConnectButtonText => Phase switch
     {
@@ -86,6 +99,21 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     protected override void NavigateToSettings()
     {
         Selected = _settingsSection;
+    }
+
+    protected override void OnNavCollapsedChanged(bool value)
+    {
+        _preferences.NavCollapsed = value;
+    }
+
+    protected override void OnSelectionChanged(NavigationItem? value)
+    {
+        base.OnSelectionChanged(value);
+
+        if (value is not null)
+        {
+            _preferences.LastPage = value.Title;
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanToggleConnect))]
@@ -139,10 +167,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         {
             _logger.BotConnectFailed(phaseEvent.Exception);
 
-            StyledMessageBox.Show($"Ошибка подключения бота: {phaseEvent.Exception?.Message}",
-                "Ошибка",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.Error("Ошибка", $"Ошибка подключения бота: {phaseEvent.Exception?.Message}");
         }
     }
 

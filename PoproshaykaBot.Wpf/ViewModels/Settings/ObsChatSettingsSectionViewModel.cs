@@ -9,7 +9,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
@@ -321,12 +320,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
         if (port <= 0)
         {
-            StyledMessageBox.Show(
-                "Не удалось определить порт HTTP-сервера. Проверьте настройки на вкладке «HTTP сервер».",
-                "Демо анимаций",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-
+            _dialogService.Warning("Демо анимаций", "Не удалось определить порт HTTP-сервера. Проверьте настройки на вкладке «HTTP сервер».");
             return;
         }
 
@@ -338,11 +332,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
         }
         catch (Exception exception)
         {
-            StyledMessageBox.Show(
-                $"Не удалось открыть демо в браузере.\n\n{exception.Message}",
-                "Демо анимаций",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.Error("Демо анимаций", $"Не удалось открыть демо в браузере.\n\n{exception.Message}");
         }
     }
 

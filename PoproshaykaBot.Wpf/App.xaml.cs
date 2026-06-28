@@ -81,71 +81,89 @@ public partial class App : Application
 
         AttachFatalExceptionTrap();
 
-        StyledMessageBox.DefaultTitle = "PoproshaykaBot";
-        ThemeManager.Register(ThemeManager.DefaultLight);
-        ThemeManager.Register(ThemeManager.DefaultDark);
-        ThemeManager.Apply("light");
+        StyledMessageBox.DefaultTitle = AppInfo.Name;
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        _singleInstanceMutex = AcquireSingleInstanceLock(_isFinalizeUpdate);
-
-        if (_singleInstanceMutex is null)
+        try
         {
-            Log.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
+            var uiSettingsPath = AppPaths.SettingsFile("ui-preferences.toml");
+            ISettingsStore uiSettings = new SettingsStore(uiSettingsPath);
 
-            if (!_isUiSmoke)
+            AppThemes.Register();
+            var themeKey = uiSettings.GetStringValue(SettingsKeys.Theme);
+            ThemeManager.Apply(string.IsNullOrWhiteSpace(themeKey) ? AppThemes.LightKey : themeKey);
+            FontScaleManager.Initialize(uiSettings.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
+
+            _singleInstanceMutex = AcquireSingleInstanceLock(_isFinalizeUpdate);
+
+            if (_singleInstanceMutex is null)
             {
-                StyledMessageBox.Show("PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
-                    "Приложение уже запущено",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                Log.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
+
+                if (!_isUiSmoke)
+                {
+                    StyledMessageBox.Show("PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
+                        "Приложение уже запущено",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+
+                Shutdown();
+                return;
             }
 
-            Shutdown();
-            return;
+            Log.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}", ResolveStorageMode(), AppPaths.BaseDirectory);
+
+            if (_isFinalizeUpdate)
+            {
+                FinalizeUpdate();
+            }
+
+            MigrateLegacySettingsLayout();
+
+            ViewLocator.InstallIntoApplication();
+
+            var services = new ServiceCollection();
+            ConfigureServices(services, coreUiLogSink, uiSettings);
+            _services = services.BuildServiceProvider();
+
+            _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
+
+            _appLifetime = _services.GetRequiredService<AppLifetime>();
+            _streamMonitoringHost = _services.GetRequiredService<StreamMonitoringHost>();
+
+            if (_isUiSmoke)
+            {
+                Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
+            }
+            else
+            {
+                var settingsManager = _services.GetRequiredService<SettingsManager>();
+                _appLifetimeStarted = StartHttpServerIfNeeded(settingsManager, _appLifetime);
+                _streamMonitoringStarted = StartStreamMonitoring(_streamMonitoringHost);
+                _memoryWatchdog = CreateMemoryWatchdog();
+            }
+
+            var window = _services.GetRequiredService<MainWindow>();
+            MainWindow = window;
+            window.Show();
+
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
+
+            MaybeLaunchOnboardingWizard();
         }
-
-        Log.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}", ResolveStorageMode(), AppPaths.BaseDirectory);
-
-        if (_isFinalizeUpdate)
+        catch (Exception ex)
         {
-            FinalizeUpdate();
+            Log.Fatal(ex, "{App} не смог запуститься", AppInfo.Name);
+            StyledMessageBox.Show(ex.ToString(), $"{AppInfo.Name} – ошибка запуска", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
         }
-
-        MigrateLegacySettingsLayout();
-
-        FontScaleManager.Initialize(FontScaleManager.DefaultScale);
-        ViewLocator.InstallIntoApplication();
-
-        var services = new ServiceCollection();
-        ConfigureServices(services, coreUiLogSink);
-        _services = services.BuildServiceProvider();
-
-        _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
-
-        _appLifetime = _services.GetRequiredService<AppLifetime>();
-        _streamMonitoringHost = _services.GetRequiredService<StreamMonitoringHost>();
-
-        if (_isUiSmoke)
-        {
-            Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
-        }
-        else
-        {
-            var settingsManager = _services.GetRequiredService<SettingsManager>();
-            _appLifetimeStarted = StartHttpServerIfNeeded(settingsManager, _appLifetime);
-            _streamMonitoringStarted = StartStreamMonitoring(_streamMonitoringHost);
-            _memoryWatchdog = CreateMemoryWatchdog();
-        }
-
-        var window = _services.GetRequiredService<MainWindow>();
-        MainWindow = window;
-        window.Show();
-
-        MaybeLaunchOnboardingWizard();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _services?.GetService<ISettingsStore>()?.Flush();
+
         if (_services is not null)
         {
             Task.Run(StopAllComponents).GetAwaiter().GetResult();
@@ -190,8 +208,10 @@ public partial class App : Application
         }
     }
 
-    private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)
+    private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink, ISettingsStore uiSettings)
     {
+        services.AddSingleton(uiSettings);
+
         services
             .AddCoreInfrastructure(uiLogSink, disposeSerilog: false)
             .AddStatistics()
@@ -229,6 +249,8 @@ public partial class App : Application
         services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<UserStatisticsPageViewModel>();
         services.AddSingleton<StreamHistoryPageViewModel>();
+        services.AddSingleton<ThemeViewModel>();
+        services.AddSingleton<ShellPreferences>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
 

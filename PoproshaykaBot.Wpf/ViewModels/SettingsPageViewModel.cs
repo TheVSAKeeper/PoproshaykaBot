@@ -12,7 +12,6 @@ using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.ComponentModel;
 using System.Text.Json;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -44,6 +43,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly IEventBus _eventBus;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly ILogger<SettingsPageViewModel> _logger;
+    private readonly IDialogService _dialogService;
     private readonly ObservableObject[] _dirtyTrackedSections;
 
     private AppSettings _settings = new();
@@ -80,7 +80,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         UpdateStore updateStore,
         IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
-        ILogger<SettingsPageViewModel> logger)
+        ILogger<SettingsPageViewModel> logger,
+        IDialogService dialogService)
     {
         Basic = basic;
         RateLimiting = rateLimiting;
@@ -103,6 +104,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _eventBus = eventBus;
         _kestrelHttpServer = kestrelHttpServer;
         _logger = logger;
+        _dialogService = dialogService;
 
         _dirtyTrackedSections = [Basic, RateLimiting, AutoBroadcast, BotLifecycle, ObsChat, ObsIntegration, Update];
 
@@ -266,13 +268,12 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                 ? $"Настройки сохранены. HTTP сервер перезапущен на порту {newPort}."
                 : "Настройки успешно сохранены.";
 
-            StyledMessageBox.Show(info, "Настройки", MessageBoxButton.OK, MessageBoxImage.Information);
+            _dialogService.Info("Настройки", info);
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Ошибка сохранения настроек");
-            StyledMessageBox.Show($"Ошибка сохранения настроек: {exception.Message}", "Ошибка",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.Error("Ошибка", $"Ошибка сохранения настроек: {exception.Message}");
         }
     }
 
@@ -315,14 +316,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         catch (Exception exception)
         {
             _logger.LogError(exception, "Ошибка перезапуска HTTP сервера на порту {NewPort}", newPort);
-            StyledMessageBox.Show($"""
-                                   Не удалось перезапустить HTTP сервер на порту {newPort}: {exception.Message}
-
-                                   Настройки сохранены. Перезапустите приложение, чтобы изменения вступили в силу.
-                                   """,
+            _dialogService.Error(
                 "Ошибка перезапуска HTTP сервера",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+                $"Не удалось перезапустить HTTP сервер на порту {newPort}: {exception.Message}\n\nНастройки сохранены. Перезапустите приложение, чтобы изменения вступили в силу.");
 
             return false;
         }
@@ -335,20 +331,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
         if (!string.Equals(currentJson, _obsChatBaselineJson, StringComparison.Ordinal))
         {
-            var answer = StyledMessageBox.Show(
-                """
-                Настройки чат-оверлея были изменены извне (например, через демо-страницу) уже после открытия этой страницы.
-
-                Перезаписать их значениями отсюда?
-
-                «Да» – применить значения из этой страницы.
-                «Нет» – оставить внешние изменения, не трогая вкладку «Чат OBS».
-                """,
+            if (!_dialogService.ConfirmWarning(
                 "Конфликт настроек чат-оверлея",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (answer != MessageBoxResult.Yes)
+                "Настройки чат-оверлея были изменены извне (например, через демо-страницу) уже после открытия этой страницы.\n\nПерезаписать их значениями отсюда?\n\n«Да» – применить значения из этой страницы.\n«Нет» – оставить внешние изменения, не трогая вкладку «Чат OBS»."))
             {
                 _obsChatDraft = JsonStoreClone.DeepClone(current);
 
