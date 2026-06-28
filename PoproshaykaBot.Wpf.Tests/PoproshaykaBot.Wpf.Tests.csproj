@@ -22,10 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PoproshaykaBot.Wpf\PoproshaykaBot.Wpf.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <Private>false</Private>
-    </ProjectReference>
+    <ProjectReference Include="..\PoproshaykaBot.Wpf\PoproshaykaBot.Wpf.csproj" />
   </ItemGroup>
 
 </Project>

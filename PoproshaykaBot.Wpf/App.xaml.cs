@@ -81,10 +81,15 @@ public partial class App : Application
 
         AttachFatalExceptionTrap();
 
-        StyledMessageBox.DefaultTitle = "PoproshaykaBot";
-        ThemeManager.Register(ThemeManager.DefaultLight);
-        ThemeManager.Register(ThemeManager.DefaultDark);
-        ThemeManager.Apply("light");
+        StyledMessageBox.DefaultTitle = AppInfo.Name;
+
+        var uiSettingsPath = AppPaths.SettingsFile("ui-preferences.toml");
+        ISettingsStore uiSettings = new SettingsStore(uiSettingsPath);
+
+        AppThemes.Register();
+        var themeKey = uiSettings.GetStringValue(SettingsKeys.Theme);
+        ThemeManager.Apply(string.IsNullOrWhiteSpace(themeKey) ? AppThemes.LightKey : themeKey);
+        FontScaleManager.Initialize(uiSettings.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
 
         _singleInstanceMutex = AcquireSingleInstanceLock(_isFinalizeUpdate);
 
@@ -113,11 +118,10 @@ public partial class App : Application
 
         MigrateLegacySettingsLayout();
 
-        FontScaleManager.Initialize(FontScaleManager.DefaultScale);
         ViewLocator.InstallIntoApplication();
 
         var services = new ServiceCollection();
-        ConfigureServices(services, coreUiLogSink);
+        ConfigureServices(services, coreUiLogSink, uiSettings);
         _services = services.BuildServiceProvider();
 
         _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
@@ -146,6 +150,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _services?.GetService<ISettingsStore>()?.Flush();
+
         if (_services is not null)
         {
             Task.Run(StopAllComponents).GetAwaiter().GetResult();
@@ -190,8 +196,10 @@ public partial class App : Application
         }
     }
 
-    private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)
+    private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink, ISettingsStore uiSettings)
     {
+        services.AddSingleton(uiSettings);
+
         services
             .AddCoreInfrastructure(uiLogSink, disposeSerilog: false)
             .AddStatistics()
@@ -229,6 +237,8 @@ public partial class App : Application
         services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<UserStatisticsPageViewModel>();
         services.AddSingleton<StreamHistoryPageViewModel>();
+        services.AddSingleton<ThemeViewModel>();
+        services.AddSingleton<ShellPreferences>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
 
