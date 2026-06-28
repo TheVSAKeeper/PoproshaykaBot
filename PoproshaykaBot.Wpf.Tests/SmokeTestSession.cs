@@ -1,4 +1,4 @@
-using FlaUI.Core.AutomationElements;
+﻿using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
 using System.Diagnostics;
@@ -219,7 +219,7 @@ internal sealed class SmokeTestSession : IDisposable
         return Path.GetFullPath(Path.Combine(testAssemblyDir,
             "..", "..", "..", "..",
             "PoproshaykaBot.Wpf",
-            "bin", configuration, "net8.0-windows",
+            "bin", configuration, "net10.0-windows",
             AppExeName));
     }
 
