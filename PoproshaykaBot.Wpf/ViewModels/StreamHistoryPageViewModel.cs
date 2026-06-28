@@ -1,7 +1,5 @@
-using System.Collections.ObjectModel;
-using System.ComponentModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
-using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -37,17 +35,13 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public string PageTitle => "История стримов";
     public string? PageDescription => null;
 
-    public ICollectionView SessionsView { get; }
+    public ObservableCollection<StreamSessionRowViewModel> Sessions => _sessions;
     public ObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];
     public ObservableCollection<StreamSessionChatterRowViewModel> Chatters { get; } = [];
 
     public StreamHistoryPageViewModel(StreamSessionHistoryStore historyStore, IEventBus eventBus)
     {
         _historyStore = historyStore;
-
-        var cvs = new CollectionViewSource { Source = _sessions };
-        cvs.SortDescriptions.Add(new SortDescription(nameof(StreamSessionRowViewModel.StartedAt), ListSortDirection.Descending));
-        SessionsView = cvs.View;
 
         _subs.Add(eventBus.SubscribeOnUi<StreamSessionCompleted>(_ => RefreshCommand.Execute(null)));
 
@@ -83,7 +77,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         _sessions.Clear();
 
-        foreach (var record in history.Sessions)
+        foreach (var record in history.Sessions.OrderByDescending(record => record.StartedAt))
         {
             _sessions.Add(new StreamSessionRowViewModel(record));
         }

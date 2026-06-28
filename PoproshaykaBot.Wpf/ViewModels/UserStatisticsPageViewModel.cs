@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure;
@@ -10,8 +10,6 @@ using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Windows.Data;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -24,8 +22,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private readonly IChannelProvider _channelProvider;
     private readonly SettingsManager _settingsManager;
     private readonly IDialogService _dialogService;
+    private readonly List<UserStatisticsRowViewModel> _allRows = [];
     private readonly ObservableCollection<UserStatisticsRowViewModel> _rows = [];
-    private readonly ICollectionView _view;
     private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty]
@@ -75,9 +73,6 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         _settingsManager = settingsManager;
         _dialogService = dialogService;
 
-        _view = new ListCollectionView(_rows);
-        _view.SortDescriptions.Add(new SortDescription(nameof(UserStatisticsRowViewModel.Points), ListSortDirection.Descending));
-
         _subscriptions.Add(eventBus.SubscribeOnUi<UserPunished>(_ => Reload()));
         _subscriptions.Add(eventBus.SubscribeOnUi<UserRewarded>(_ => Reload()));
 
@@ -88,7 +83,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public string? PageDescription => null;
 
-    public ICollectionView UsersView => _view;
+    public ObservableCollection<UserStatisticsRowViewModel> Users => _rows;
 
     public bool HasSelectedRow => SelectedRow is not null;
 
@@ -109,17 +104,32 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     partial void OnFilterTextChanged(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        var selectedId = SelectedRow?.UserId;
+        var trimmed = FilterText.Trim();
+        var hasFilter = trimmed.Length > 0;
+
+        _rows.Clear();
+
+        foreach (var row in _allRows)
         {
-            _view.Filter = null;
+            if (hasFilter
+                && !row.Name.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase)
+                && !row.UserId.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase))
+            {
+                continue;
+            }
+
+            _rows.Add(row);
         }
-        else
-        {
-            var trimmed = value.Trim();
-            _view.Filter = obj => obj is UserStatisticsRowViewModel row
-                && (row.Name.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase)
-                    || row.UserId.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase));
-        }
+
+        SelectedRow = selectedId is not null
+            ? _rows.FirstOrDefault(row => row.UserId == selectedId)
+            : null;
     }
 
     [RelayCommand]
@@ -251,40 +261,33 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     private void Reload()
     {
-        var selectedId = SelectedRow?.UserId;
         var all = _userStatistics.GetAll();
 
-        _rows.Clear();
+        _allRows.Clear();
 
         long totalMessages = 0;
         long totalPoints = 0;
         long totalBonus = 0;
         long totalPenalty = 0;
 
-        UserStatisticsRowViewModel? toSelect = null;
-
         foreach (var user in all)
         {
             var rank = _userRankService.GetRankDisplay(user.Points);
-            var row = new UserStatisticsRowViewModel(user, rank);
-            _rows.Add(row);
+            _allRows.Add(new UserStatisticsRowViewModel(user, rank));
 
             totalMessages += (long)user.MessageCount;
             totalPoints += user.Points;
             totalBonus += (long)user.BonusPoints;
             totalPenalty += (long)user.PenaltyPoints;
-
-            if (user.UserId == selectedId)
-            {
-                toSelect = row;
-            }
         }
+
+        _allRows.Sort((left, right) => right.Points.CompareTo(left.Points));
 
         TotalUsers = all.Count.ToString("N0");
         TotalMessages = totalMessages.ToString("N0");
         TotalPoints = totalPoints.ToString("N0");
         TotalBonusPenalty = $"{totalBonus:N0} / {totalPenalty:N0}";
 
-        SelectedRow = toSelect;
+        ApplyFilter();
     }
 }
