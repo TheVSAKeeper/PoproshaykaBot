@@ -74,6 +74,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         PollsSettingsSectionViewModel polls,
         MiscSettingsSectionViewModel misc,
         UpdateSettingsSectionViewModel update,
+        ShellPreferences shell,
         SettingsManager settingsManager,
         AccountsStore accountsStore,
         ObsChatStore obsChatStore,
@@ -96,6 +97,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         Polls = polls;
         Misc = misc;
         Update = update;
+        Shell = shell;
 
         _settingsManager = settingsManager;
         _accountsStore = accountsStore;
@@ -152,6 +154,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public MiscSettingsSectionViewModel Misc { get; }
 
     public UpdateSettingsSectionViewModel Update { get; }
+
+    public ShellPreferences Shell { get; }
 
     public bool HasChanges => Dirty || Polls.HasChanges;
 
