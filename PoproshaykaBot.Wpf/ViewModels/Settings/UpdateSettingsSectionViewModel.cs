@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Update;
@@ -13,6 +13,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, IDisposable
 {
     private readonly IUpdateCoordinator _coordinator;
+    private readonly IDialogService _dialogService;
     private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty]
@@ -58,9 +59,10 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
     [ObservableProperty]
     private StatusSeverity _repositoryHintSeverity;
 
-    public UpdateSettingsSectionViewModel(IUpdateCoordinator coordinator, IEventBus bus)
+    public UpdateSettingsSectionViewModel(IUpdateCoordinator coordinator, IEventBus bus, IDialogService dialogService)
     {
         _coordinator = coordinator;
+        _dialogService = dialogService;
         IsFrameworkDependentVisible = coordinator.Kind == UpdateKind.FrameworkDependent;
         CurrentVersionText = $"Текущая версия: {coordinator.CurrentVersion} (.NET {Environment.Version.Major})";
         _subscriptions.Add(bus.SubscribeOnUi<UpdateAvailable>(_ => RefreshStatus(null)));
@@ -146,13 +148,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             return;
         }
 
-        var confirm = StyledMessageBox.Show(
-            $"Загрузить и установить версию {candidate.Version}?\n\nПриложение перезапустится автоматически.",
-            "Установка обновления",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-
-        if (confirm != MessageBoxResult.Yes)
+        if (!_dialogService.Confirm("Установка обновления", $"Загрузить и установить версию {candidate.Version}?\n\nПриложение перезапустится автоматически."))
         {
             return;
         }
@@ -170,11 +166,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         {
             await _coordinator.PrepareAsync(candidate, progress, CancellationToken.None);
 
-            StyledMessageBox.Show(
-                "Обновление загружено. Приложение закроется и установит новую версию.",
-                "Установка обновления",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            _dialogService.Info("Установка обновления", "Обновление загружено. Приложение закроется и установит новую версию.");
 
             Application.Current.Shutdown();
         }
@@ -182,11 +174,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         {
             (StatusText, StatusSeverity) = ($"Ошибка загрузки: {exception.Message}", StatusSeverity.Error);
 
-            StyledMessageBox.Show(
-                $"Не удалось установить обновление: {exception.Message}",
-                "Ошибка обновления",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.Error("Ошибка обновления", $"Не удалось установить обновление: {exception.Message}");
 
             IsBusy = false;
         }

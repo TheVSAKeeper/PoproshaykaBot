@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
@@ -9,7 +9,6 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.Onboarding;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
@@ -22,6 +21,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
     private readonly IOnboardingChannelValidator _channelValidator;
     private readonly BotConnectionManager _botConnectionManager;
     private readonly ILogger<CompletionPageViewModel> _logger;
+    private readonly IDialogService _dialogService;
 
     private OnboardingContext? _context;
     private CancellationTokenSource? _validationCts;
@@ -56,7 +56,8 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         KestrelHttpServer kestrelHttpServer,
         IOnboardingChannelValidator channelValidator,
         BotConnectionManager botConnectionManager,
-        ILogger<CompletionPageViewModel> logger)
+        ILogger<CompletionPageViewModel> logger,
+        IDialogService dialogService)
     {
         _settingsManager = settingsManager;
         _accountsStore = accountsStore;
@@ -65,6 +66,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         _channelValidator = channelValidator;
         _botConnectionManager = botConnectionManager;
         _logger = logger;
+        _dialogService = dialogService;
     }
 
     public override string PageTitle => "Готово";
@@ -128,11 +130,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         catch (Exception exception)
         {
             _logger.LogError(exception, "Не удалось сохранить настройки в onboarding-мастере");
-            StyledMessageBox.Show(
-                $"Не удалось сохранить настройки: {exception.Message}",
-                "Ошибка",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.Error("Ошибка", $"Не удалось сохранить настройки: {exception.Message}");
             return false;
         }
 
@@ -299,16 +297,11 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         IsValidationPending = !anyFailure && !anyWarning && anyPending;
     }
 
-    private static bool ConfirmIgnoreChannelNotFound(OnboardingContext context)
+    private bool ConfirmIgnoreChannelNotFound(OnboardingContext context)
     {
-        var result = StyledMessageBox.Show(
-            $"Канал «{context.Settings.Twitch.Channel}» не найден на Twitch. Возможно, имя написано с ошибкой.\n\nВсё равно сохранить настройки?",
+        return _dialogService.ConfirmWarning(
             "Канал не найден",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning,
-            MessageBoxResult.No);
-
-        return result == MessageBoxResult.Yes;
+            $"Канал «{context.Settings.Twitch.Channel}» не найден на Twitch. Возможно, имя написано с ошибкой.\n\nВсё равно сохранить настройки?");
     }
 
     private async Task TryRestartHttpServerAsync(int newPort)
@@ -325,11 +318,9 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         catch (Exception exception)
         {
             _logger.LogError(exception, "Не удалось перезапустить HTTP сервер на порту {Port}", newPort);
-            StyledMessageBox.Show(
-                $"HTTP сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения.",
+            _dialogService.Warning(
                 "Внимание",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+                $"HTTP сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения.");
         }
     }
 

@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure;
@@ -7,7 +7,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
@@ -17,11 +16,13 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
 
     private readonly SettingsManager _settingsManager;
     private readonly BroadcastProfilesManager _broadcastProfiles;
+    private readonly IDialogService _dialogService;
 
-    public MiscSettingsSectionViewModel(SettingsManager settingsManager, BroadcastProfilesManager broadcastProfiles)
+    public MiscSettingsSectionViewModel(SettingsManager settingsManager, BroadcastProfilesManager broadcastProfiles, IDialogService dialogService)
     {
         _settingsManager = settingsManager;
         _broadcastProfiles = broadcastProfiles;
+        _dialogService = dialogService;
     }
 
     public void Dispose()
@@ -33,11 +34,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
     {
         var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "Неизвестно";
 
-        StyledMessageBox.Show(
-            $"PoproshaykaBot\n\nВерсия: {version}\n\nTwitch бот для стримеров",
-            "О программе",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        _dialogService.Info("О программе", $"PoproshaykaBot\n\nВерсия: {version}\n\nTwitch бот для стримеров");
     }
 
     [RelayCommand]
@@ -60,24 +57,14 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         }
         catch (Exception ex)
         {
-            StyledMessageBox.Show(
-                $"Ошибка открытия папки с настройками: {ex.Message}",
-                "Ошибка",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.Error("Ошибка", $"Ошибка открытия папки с настройками: {ex.Message}");
         }
     }
 
     [RelayCommand]
     private void ResetAllSettings()
     {
-        var confirmed = StyledMessageBox.Show(
-            "Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?\n\nЭто действие нельзя отменить.",
-            "Сброс настроек",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning) == MessageBoxResult.Yes;
-
-        if (!confirmed)
+        if (!_dialogService.ConfirmWarning("Сброс настроек", "Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?\n\nЭто действие нельзя отменить."))
         {
             return;
         }
@@ -86,15 +73,11 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         {
             _settingsManager.SaveSettings(new AppSettings());
 
-            StyledMessageBox.Show(
-                "Настройки успешно сброшены к значениям по умолчанию.\n\nПерезапустите приложение для применения изменений.",
-                "Сброс настроек",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            _dialogService.Info("Сброс настроек", "Настройки успешно сброшены к значениям по умолчанию.\n\nПерезапустите приложение для применения изменений.");
         }
         catch (Exception ex)
         {
-            StyledMessageBox.Show($"Ошибка сброса настроек: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.Error("Ошибка", $"Ошибка сброса настроек: {ex.Message}");
         }
     }
 
@@ -122,18 +105,13 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         }
         catch (Exception ex)
         {
-            StyledMessageBox.Show(
-                $"Не удалось прочитать файл: {ex.Message}",
-                "Ошибка импорта",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-
+            _dialogService.Error("Ошибка импорта", $"Не удалось прочитать файл: {ex.Message}");
             return;
         }
 
         if (incoming is null || incoming.Count == 0)
         {
-            StyledMessageBox.Show("В файле нет профилей.", "Импорт", MessageBoxButton.OK, MessageBoxImage.Information);
+            _dialogService.Info("Импорт", "В файле нет профилей.");
             return;
         }
 
@@ -178,11 +156,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
             }
         }
 
-        StyledMessageBox.Show(
-            $"Импортировано: {imported}. Пропущено: {skipped}.",
-            "Импорт профилей",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        _dialogService.Info("Импорт профилей", $"Импортировано: {imported}. Пропущено: {skipped}.");
     }
 
     private sealed record ExternalTwitchProfile(string? Name, string? Title, string? CategoryId);

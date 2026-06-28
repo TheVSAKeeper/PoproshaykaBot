@@ -19,6 +19,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
     private readonly ITwitchOAuthService _oauthService;
     private readonly AccountsStore _accountsStore;
     private readonly Func<OAuthCredentialsSnapshot> _credentialsProvider;
+    private readonly IDialogService _dialogService;
 
     private TwitchAccountSettings _draft = new();
     private CancellationTokenSource? _authCts;
@@ -64,12 +65,14 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         TwitchOAuthRole role,
         ITwitchOAuthService oauthService,
         AccountsStore accountsStore,
-        Func<OAuthCredentialsSnapshot> credentialsProvider)
+        Func<OAuthCredentialsSnapshot> credentialsProvider,
+        IDialogService dialogService)
     {
         _role = role;
         _oauthService = oauthService;
         _accountsStore = accountsStore;
         _credentialsProvider = credentialsProvider;
+        _dialogService = dialogService;
 
         _oauthService.StatusChanged += OnOAuthStatusChanged;
     }
@@ -236,23 +239,13 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
 
         if (string.IsNullOrWhiteSpace(credentials.ClientId) || string.IsNullOrWhiteSpace(credentials.ClientSecret))
         {
-            StyledMessageBox.Show(
-                "Client ID и Client Secret должны быть настроены для обновления токена.",
-                "Настройки отсутствуют",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-
+            _dialogService.Warning("Настройки отсутствуют", "Client ID и Client Secret должны быть настроены для обновления токена.");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(refreshToken))
         {
-            StyledMessageBox.Show(
-                "Refresh Token отсутствует. Требуется повторная авторизация.",
-                "Refresh Token отсутствует",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-
+            _dialogService.Warning("Refresh Token отсутствует", "Refresh Token отсутствует. Требуется повторная авторизация.");
             return;
         }
 
@@ -280,11 +273,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         {
             SetTokenStatus($"Ошибка: {SafeMessage(exception)}", StatusSeverity.Error);
 
-            StyledMessageBox.Show(
-                $"Не удалось обновить токен: {SafeMessage(exception)}",
-                "Ошибка обновления токена",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.Error("Ошибка обновления токена", $"Не удалось обновить токен: {SafeMessage(exception)}");
         }
     }
 
@@ -293,13 +282,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
     {
         var roleName = _role == TwitchOAuthRole.Broadcaster ? "стримера" : "бота";
 
-        var result = StyledMessageBox.Show(
-            $"Вы уверены, что хотите очистить токены {roleName}?\n\nИзменения вступят в силу после нажатия «Сохранить».",
-            "Подтверждение очистки токенов",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-
-        if (result != MessageBoxResult.Yes)
+        if (!_dialogService.Confirm("Подтверждение очистки токенов", $"Вы уверены, что хотите очистить токены {roleName}?\n\nИзменения вступят в силу после нажатия «Сохранить»."))
         {
             return;
         }

@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Obs;
@@ -23,6 +23,7 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
     private readonly ObsIntegrationService _obsIntegration;
     private readonly SettingsManager _settingsManager;
     private readonly ILogger<ObsIntegrationSectionViewModel> _logger;
+    private readonly IDialogService _dialogService;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ReconnectCommand))]
@@ -90,11 +91,13 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
     public ObsIntegrationSectionViewModel(
         ObsIntegrationService obsIntegration,
         SettingsManager settingsManager,
-        ILogger<ObsIntegrationSectionViewModel> logger)
+        ILogger<ObsIntegrationSectionViewModel> logger,
+        IDialogService dialogService)
     {
         _obsIntegration = obsIntegration;
         _settingsManager = settingsManager;
         _logger = logger;
+        _dialogService = dialogService;
     }
 
     public ObservableCollection<string> Scenes { get; } = [];
@@ -197,11 +200,7 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
                 : $"● Источник обновлён: {result.SourceName}",
                 StatusSeverity.Success);
 
-            StyledMessageBox.Show(
-                $"Browser Source готов.\n\nСцена: {result.SceneName}\nИсточник: {result.SourceName}\nURL: {result.Url}",
-                "OBS",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            _dialogService.Info("OBS", $"Browser Source готов.\n\nСцена: {result.SceneName}\nИсточник: {result.SourceName}\nURL: {result.Url}");
         });
     }
 
@@ -230,11 +229,7 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "Не удалось скопировать OBS URL");
-            StyledMessageBox.Show(
-                $"Не удалось скопировать URL: {exception.Message}",
-                "OBS",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            _dialogService.Warning("OBS", $"Не удалось скопировать URL: {exception.Message}");
         }
     }
 

@@ -7,7 +7,6 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -16,6 +15,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly BotConnectionManager _connectionManager;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly ShellPreferences _preferences;
+    private readonly IDialogService _dialogService;
     private readonly List<IDisposable> _subscriptions = [];
     private readonly NavigationItem _settingsSection;
 
@@ -34,12 +34,14 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         ShellPreferences preferences,
         BotConnectionManager connectionManager,
         IEventBus eventBus,
-        ILogger<ShellViewModel> logger)
+        ILogger<ShellViewModel> logger,
+        IDialogService dialogService)
         : base(modal)
     {
         _connectionManager = connectionManager;
         _logger = logger;
         _preferences = preferences;
+        _dialogService = dialogService;
         Theme = theme;
 
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: settingsPage.OnEnter);
@@ -165,10 +167,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         {
             _logger.BotConnectFailed(phaseEvent.Exception);
 
-            StyledMessageBox.Show($"Ошибка подключения бота: {phaseEvent.Exception?.Message}",
-                "Ошибка",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            _dialogService.Error("Ошибка", $"Ошибка подключения бота: {phaseEvent.Exception?.Message}");
         }
     }
 

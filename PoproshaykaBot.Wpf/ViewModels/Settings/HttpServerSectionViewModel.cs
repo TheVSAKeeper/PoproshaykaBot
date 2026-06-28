@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
@@ -9,6 +9,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 public sealed partial class HttpServerSectionViewModel : ObservableObject, IDisposable
 {
     private readonly KestrelHttpServer _server;
+    private readonly IDialogService _dialogService;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ObsUrl))]
@@ -19,9 +20,10 @@ public sealed partial class HttpServerSectionViewModel : ObservableObject, IDisp
     [NotifyPropertyChangedFor(nameof(ServerStatusSeverity))]
     private bool _isRunning;
 
-    public HttpServerSectionViewModel(KestrelHttpServer server)
+    public HttpServerSectionViewModel(KestrelHttpServer server, IDialogService dialogService)
     {
         _server = server;
+        _dialogService = dialogService;
     }
 
     public string ObsUrl => $"http://localhost:{Port}/chat";
@@ -42,13 +44,11 @@ public sealed partial class HttpServerSectionViewModel : ObservableObject, IDisp
         try
         {
             Clipboard.SetText(ObsUrl);
-            StyledMessageBox.Show("URL скопирован в буфер обмена!", "Информация",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            _dialogService.Info("Информация", "URL скопирован в буфер обмена!");
         }
         catch (Exception ex)
         {
-            StyledMessageBox.Show($"Ошибка копирования URL: {ex.Message}", "Ошибка",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.Error("Ошибка", $"Ошибка копирования URL: {ex.Message}");
         }
     }
 
@@ -65,13 +65,11 @@ public sealed partial class HttpServerSectionViewModel : ObservableObject, IDisp
             await _server.StartAsync();
             IsRunning = _server.IsRunning;
 
-            StyledMessageBox.Show("HTTP сервер перезапущен.", "Информация",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            _dialogService.Info("Информация", "HTTP сервер перезапущен.");
         }
         catch (Exception ex)
         {
-            StyledMessageBox.Show($"Ошибка перезапуска сервера: {ex.Message}", "Ошибка",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            _dialogService.Error("Ошибка", $"Ошибка перезапуска сервера: {ex.Message}");
         }
     }
 
