@@ -23,7 +23,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public ShellViewModel(
         ModalHostViewModel modal,
-        SpikePageViewModel overview,
+        DashboardViewModel overview,
         BotConnectionManager connectionManager,
         IEventBus eventBus,
         ILogger<ShellViewModel> logger)
