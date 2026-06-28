@@ -16,8 +16,13 @@ using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.ViewModels;
+using PoproshaykaBot.Wpf.ViewModels.Controls;
+using PoproshaykaBot.Wpf.ViewModels.Dialogs;
+using PoproshaykaBot.Wpf.ViewModels.Onboarding;
+using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
+using PoproshaykaBot.Wpf.Views.Onboarding;
 using Serilog;
 using Serilog.Core;
 using Serilog.Debugging;
@@ -116,6 +121,8 @@ public partial class App : Application
         var window = _services.GetRequiredService<MainWindow>();
         MainWindow = window;
         window.Show();
+
+        MaybeLaunchOnboardingWizard();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -212,8 +219,42 @@ public partial class App : Application
         services.AddSingleton<DashboardTileViewModel, ChatOverlayPreviewTileViewModel>();
 
         services.AddSingleton<DashboardViewModel>();
+        services.AddSingleton<UserStatisticsPageViewModel>();
+        services.AddSingleton<StreamHistoryPageViewModel>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
+
+        services.AddTransient<GameAutocompleteViewModel>();
+        services.AddTransient<BroadcastProfileEditDialogViewModel>();
+        services.AddTransient<PollProfileEditDialogViewModel>();
+        services.AddTransient<PollFromProfileDialogViewModel>();
+
+        services.AddTransient<BasicSettingsSectionViewModel>();
+        services.AddTransient<RateLimitingSettingsViewModel>();
+        services.AddTransient<MessagesSettingsSectionViewModel>();
+        services.AddTransient<HttpServerSectionViewModel>();
+        services.AddTransient<OAuthSettingsViewModel>();
+        services.AddSingleton<ObsChatSettingsSectionViewModel>();
+        services.AddSingleton<ObsIntegrationSectionViewModel>();
+        services.AddTransient<AutoBroadcastSettingsViewModel>();
+        services.AddTransient<BotLifecycleAutomationSectionViewModel>();
+        services.AddTransient<MiscSettingsSectionViewModel>();
+        services.AddSingleton<PollsSettingsSectionViewModel>();
+        services.AddSingleton<UpdateSettingsSectionViewModel>();
+
+        services.AddSingleton<SettingsPageViewModel>();
+
+        services.AddTransient<IOnboardingPageViewModel, WelcomePageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, CredentialsPageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, HttpServerCheckPageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, BotAuthorizationPageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, BroadcasterAuthorizationPageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, BotConnectionPageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, HealthCheckPageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, CompletionPageViewModel>();
+
+        services.AddTransient<OnboardingWizardViewModel>();
+        services.AddTransient<OnboardingWizardWindow>();
     }
 
     private void StopAllComponents()

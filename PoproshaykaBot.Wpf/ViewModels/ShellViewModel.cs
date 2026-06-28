@@ -15,6 +15,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly BotConnectionManager _connectionManager;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly List<IDisposable> _subscriptions = [];
+    private readonly NavigationItem _settingsSection;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConnectButtonText))]
@@ -24,6 +25,9 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public ShellViewModel(
         ModalHostViewModel modal,
         DashboardViewModel overview,
+        SettingsPageViewModel settingsPage,
+        UserStatisticsPageViewModel statisticsPage,
+        StreamHistoryPageViewModel streamHistoryPage,
         BotConnectionManager connectionManager,
         IEventBus eventBus,
         ILogger<ShellViewModel> logger)
@@ -32,7 +36,12 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _connectionManager = connectionManager;
         _logger = logger;
 
+        _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: settingsPage.OnEnter);
+
         Sections.Add(new("Обзор", PackIconLucideKind.LayoutDashboard, overview));
+        Sections.Add(_settingsSection);
+        Sections.Add(new("Пользователи", PackIconLucideKind.Users, statisticsPage));
+        Sections.Add(new("История стримов", PackIconLucideKind.History, streamHistoryPage));
         Selected = Sections[0];
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnLifecyclePhaseChanged));
@@ -75,7 +84,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     protected override void NavigateToSettings()
     {
-        Selected = Sections[0];
+        Selected = _settingsSection;
     }
 
     [RelayCommand(CanExecute = nameof(CanToggleConnect))]
