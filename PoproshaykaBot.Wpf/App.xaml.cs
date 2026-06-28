@@ -16,6 +16,7 @@ using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.ViewModels;
+using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
 using Serilog;
 using Serilog.Core;
@@ -200,7 +201,17 @@ public partial class App : Application
         services.AddSingleton<BotConnectionManager>();
 
         services.AddKeepShell();
-        services.AddSingleton<SpikePageViewModel>();
+
+        services.AddSingleton<DashboardTileViewModel, LogsTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel, StreamInfoTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel, BroadcastStatusTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel, BroadcastProfilesTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel, PollsTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel, ObsInfoTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel, ChatDisplayTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel, ChatOverlayPreviewTileViewModel>();
+
+        services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
     }

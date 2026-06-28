@@ -1,0 +1,57 @@
+<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.ObsInfoTileView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
+             xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:ObsInfoTileViewModel}"
+             d:DesignHeight="640"
+             d:DesignWidth="360">
+
+    <StackPanel>
+        <DockPanel LastChildFill="True"
+                   Margin="0,0,0,10">
+            <Border DockPanel.Dock="Right"
+                    Style="{StaticResource Badge}"
+                    Visibility="{Binding IsToastVisible, Converter={StaticResource BoolToVisibility}}"
+                    Background="{Binding ToastSeverity, Converter={StaticResource SeverityToBrush}, ConverterParameter=Soft}"
+                    BorderBrush="{Binding ToastSeverity, Converter={StaticResource SeverityToBrush}}">
+                <TextBlock Text="{Binding ToastText}"
+                           FontSize="{DynamicResource Font.Size.Caption}"
+                           Foreground="{Binding ToastSeverity, Converter={StaticResource SeverityToBrush}}" />
+            </Border>
+
+            <TextBlock Text="{Binding ConnectionText}"
+                       ToolTip="{Binding ConnectionToolTip}"
+                       FontWeight="SemiBold"
+                       Foreground="{Binding ConnectionStatus, Converter={StaticResource StreamStatusToBrush}}" />
+        </DockPanel>
+
+        <TextBlock Text="{Binding SceneText}"
+                   Margin="0,0,0,12"
+                   Foreground="{DynamicResource Fg.Secondary}"
+                   TextTrimming="CharacterEllipsis" />
+
+        <ContentControl Content="{Binding StreamCard}"
+                        Margin="0,0,0,10" />
+
+        <ContentControl Content="{Binding RecordCard}"
+                        Margin="0,0,0,14" />
+
+        <TextBlock Text="Аудиоисточники"
+                   Style="{StaticResource TextBlock.Subtle}"
+                   Margin="0,0,0,6" />
+
+        <ItemsControl ItemsSource="{Binding AudioSources}"
+                      Visibility="{Binding HasAudioSources, Converter={StaticResource BoolToVisibility}}" />
+
+        <controls:EmptyState Icon="Mic"
+                             IconSize="22"
+                             Heading="Источники не найдены"
+                             Description="Включите OBS-интеграцию и настройте аудиоисточники."
+                             HorizontalAlignment="Stretch"
+                             Visibility="{Binding HasAudioSources, Converter={StaticResource InverseBoolToVisibility}}" />
+    </StackPanel>
+</UserControl>

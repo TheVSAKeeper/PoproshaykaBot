@@ -1,0 +1,164 @@
+<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.BroadcastProfilesTileView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
+             xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:BroadcastProfilesTileViewModel}"
+             d:DesignHeight="320"
+             d:DesignWidth="380">
+
+    <Grid>
+        <controls:EmptyState Icon="LayoutDashboard"
+                             Heading="Нет профилей рассылки"
+                             Description="Добавьте профиль через кнопку «+» в заголовке плитки."
+                             VerticalAlignment="Center"
+                             HorizontalAlignment="Center"
+                             Margin="12"
+                             Visibility="{Binding HasProfiles, Converter={StaticResource InverseBoolToVisibility}}" />
+
+        <StackPanel Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisibility}}">
+
+            <TextBlock Text="{Binding StatusMessage}"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,8"
+                       Visibility="{Binding HasStatusMessage, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource State.Error}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
+            <ItemsControl ItemsSource="{Binding Items}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:BroadcastProfileItemViewModel}">
+                        <Border Margin="0,0,8,8"
+                                Padding="10"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius.S}">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="{DynamicResource Bg.SurfaceAlt}" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource State.SuccessSoft}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource State.Success}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+
+                            <Border.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Применить" Command="{Binding ApplyCommand}" />
+                                    <Separator />
+                                    <MenuItem Header="Редактировать…" Command="{Binding EditCommand}" />
+                                    <MenuItem Header="Дублировать" Command="{Binding DuplicateCommand}" />
+                                    <Separator />
+                                    <MenuItem Header="Удалить" Command="{Binding DeleteCommand}" />
+                                </ContextMenu>
+                            </Border.ContextMenu>
+
+                            <StackPanel MinWidth="140" MaxWidth="300">
+
+                                <DockPanel Margin="0,0,0,6">
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Center">
+                                        <Border Style="{StaticResource Badge.Success}"
+                                                Margin="4,0,0,0"
+                                                Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="Активен" />
+                                        </Border>
+                                        <Border Style="{StaticResource Badge}"
+                                                Margin="4,0,0,0"
+                                                Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="{Binding NumberBadge}"
+                                                       FontFamily="{DynamicResource Font.Mono}" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="{DynamicResource Font.Size.M}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Fg.Primary}"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+                                </DockPanel>
+
+                                <TextBlock Text="{Binding TitleDisplay}"
+                                           FontStyle="Italic"
+                                           Foreground="{DynamicResource Fg.Secondary}"
+                                           FontSize="{DynamicResource Font.Size.S}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,4"
+                                           Visibility="{Binding HasTitleDisplay, Converter={StaticResource BoolToVisibility}}" />
+
+                                <TextBlock Text="{Binding MetaLine}"
+                                           Style="{StaticResource TextBlock.Subtle}"
+                                           FontSize="{DynamicResource Font.Size.S}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,4"
+                                           Visibility="{Binding HasMetaLine, Converter={StaticResource BoolToVisibility}}" />
+
+                                <TextBlock Text="Расходится с текущим стримом"
+                                           Foreground="{DynamicResource State.Warning}"
+                                           FontSize="{DynamicResource Font.Size.XS}"
+                                           Margin="0,0,0,4"
+                                           Visibility="{Binding HasDrift, Converter={StaticResource BoolToVisibility}}" />
+
+                                <DockPanel Margin="0,6,0,0">
+                                    <ProgressBar DockPanel.Dock="Right"
+                                                 IsIndeterminate="True"
+                                                 Width="40"
+                                                 Height="4"
+                                                 Margin="6,0,0,0"
+                                                 VerticalAlignment="Center"
+                                                 Visibility="{Binding IsApplyInFlight, Converter={StaticResource BoolToVisibility}}" />
+                                    <Button Content="Применить"
+                                            Command="{Binding ApplyCommand}"
+                                            Style="{StaticResource Button.Primary}" />
+                                </DockPanel>
+
+                                <StackPanel Orientation="Horizontal"
+                                            Margin="0,4,0,0"
+                                            Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
+                                    <Button Content="–"
+                                            Command="{Binding DecrementNumberCommand}"
+                                            Style="{StaticResource Button.Secondary}"
+                                            Padding="8,2" />
+                                    <TextBlock Text="{Binding NumberBadge}"
+                                               FontFamily="{DynamicResource Font.Mono}"
+                                               FontSize="{DynamicResource Font.Size.S}"
+                                               Foreground="{DynamicResource Fg.Secondary}"
+                                               VerticalAlignment="Center"
+                                               Margin="8,0" />
+                                    <Button Content="+"
+                                            Command="{Binding IncrementNumberCommand}"
+                                            Style="{StaticResource Button.Secondary}"
+                                            Padding="8,2" />
+                                </StackPanel>
+
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+        </StackPanel>
+    </Grid>
+</UserControl>
