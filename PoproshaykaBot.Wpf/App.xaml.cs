@@ -271,6 +271,7 @@ public partial class App : Application
         services.AddTransient<MiscSettingsSectionViewModel>();
         services.AddSingleton<PollsSettingsSectionViewModel>();
         services.AddSingleton<UpdateSettingsSectionViewModel>();
+        services.AddTransient<DashboardLayoutSectionViewModel>();
 
         services.AddSingleton<SettingsPageViewModel>();
 

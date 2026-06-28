@@ -48,7 +48,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: settingsPage.OnEnter);
 
-        Sections.Add(new("Обзор", PackIconLucideKind.LayoutDashboard, overview));
+        Sections.Add(new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter));
         Sections.Add(_settingsSection);
         Sections.Add(new("Пользователи", PackIconLucideKind.Users, statisticsPage));
         Sections.Add(new("История стримов", PackIconLucideKind.History, streamHistoryPage));

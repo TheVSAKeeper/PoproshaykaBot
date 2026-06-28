@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
@@ -26,7 +26,7 @@ public sealed partial class ChatOverlayPreviewTileViewModel : DashboardTileViewM
     private string _errorDescription = string.Empty;
 
     public ChatOverlayPreviewTileViewModel(SettingsManager settings, ILogger<ChatOverlayPreviewTileViewModel> logger)
-        : base("Превью оверлея")
+        : base("chat-overlay-preview", "Превью оверлея")
     {
         _settings = settings;
         Logger = logger;

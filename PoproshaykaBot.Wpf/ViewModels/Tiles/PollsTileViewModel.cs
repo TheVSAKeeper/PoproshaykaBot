@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -44,7 +44,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         IPollController controller,
         PollSnapshotStore snapshotStore,
         IEventBus bus,
-        IDialogService dialogService) : base("Опросы")
+        IDialogService dialogService) : base("polls-control", "Опросы", maxWidth: 500)
     {
         _controller = controller;
         _dialogService = dialogService;

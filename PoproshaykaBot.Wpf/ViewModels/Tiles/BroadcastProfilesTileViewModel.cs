@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
@@ -52,7 +52,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         IStreamStatus stream,
         IEventBus bus,
         ILogger<BroadcastProfilesTileViewModel> logger)
-        : base("Профили рассылки")
+        : base("broadcast-profiles", "Профили рассылки", maxWidth: 500)
     {
         _manager = manager;
         _profiles = profiles;

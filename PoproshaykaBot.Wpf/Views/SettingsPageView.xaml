@@ -75,6 +75,9 @@
             <TabItem Header="Обновления">
                 <ContentControl Content="{Binding Update}" />
             </TabItem>
+            <TabItem Header="Дашборд">
+                <ContentControl Content="{Binding DashboardLayout}" />
+            </TabItem>
             <TabItem Header="Оформление">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"

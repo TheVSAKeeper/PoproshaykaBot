@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.Services;
 using KeepShell.ViewModels;
@@ -54,7 +54,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         IChannelProvider channelProvider,
         IEventBus eventBus,
         IDialogService dialogService)
-        : base("Рассылка")
+        : base("broadcast-status", "Рассылка", maxWidth: 360, maxHeight: 170)
     {
         _scheduler = scheduler;
         _settings = settings;

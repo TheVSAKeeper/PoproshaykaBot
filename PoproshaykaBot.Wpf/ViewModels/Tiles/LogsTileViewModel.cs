@@ -30,7 +30,7 @@ public sealed partial class LogsTileViewModel : DashboardTileViewModel, IDisposa
     private ObservableCollection<LogRowViewModel> _items = [];
 
     public LogsTileViewModel(UiLogSink uiLogSink, ErrorReportService errorReportService, ILogger<LogsTileViewModel> logger)
-        : base("Логи")
+        : base("logs", "Логи")
     {
         _uiLogSink = uiLogSink;
         _errorReportService = errorReportService;
