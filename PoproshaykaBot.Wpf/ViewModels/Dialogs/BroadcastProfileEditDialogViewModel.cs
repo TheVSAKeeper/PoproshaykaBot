@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Collections.ObjectModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Dialogs;
@@ -155,7 +156,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Не удалось загрузить список сцен OBS для привязки профиля");
+            _logger.ObsScenesLoadFailed(ex);
         }
     }
 

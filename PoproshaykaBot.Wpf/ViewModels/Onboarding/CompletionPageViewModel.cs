@@ -9,6 +9,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.Onboarding;
+using PoproshaykaBot.Wpf.Bootstrap;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
@@ -129,7 +130,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Не удалось сохранить настройки в onboarding-мастере");
+            _logger.OnboardingSettingsSaveFailed(exception);
             _dialogService.Error("Ошибка", $"Не удалось сохранить настройки: {exception.Message}");
             return false;
         }
@@ -150,7 +151,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             }
             catch (InvalidOperationException exception)
             {
-                _logger.LogWarning(exception, "Авто-подключение бота отклонено");
+                _logger.OnboardingAutoConnectRejected(exception);
             }
         }
 
@@ -183,7 +184,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Сбой проверок на CompletionPage");
+            _logger.OnboardingCompletionCheckFailed(exception);
             _hasCriticalIssue = false;
             CanAdvance = true;
         }
@@ -279,7 +280,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         }
         catch (Exception exception)
         {
-            _logger.LogDebug(exception, "Сбой проверки канала {Channel}", channel);
+            _logger.OnboardingChannelCheckFailed(exception, channel);
             return (ValidationStatus.Skipped, "ошибка при проверке", ChannelValidationResult.Skipped);
         }
     }
@@ -317,7 +318,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Не удалось перезапустить HTTP сервер на порту {Port}", newPort);
+            _logger.OnboardingHttpServerRestartFailed(exception, newPort);
             _dialogService.Warning(
                 "Внимание",
                 $"HTTP сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения.");

@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Net.Http;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -71,7 +72,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Не удалось сохранить настройки и токены перед подключением бота");
+            _logger.BotConnectionSaveSettingsFailed(exception);
             ApplyPhase(BotLifecyclePhase.Failed, exception.Message);
             ShowRetry = true;
             return;
@@ -192,7 +193,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         }
         catch (InvalidOperationException exception)
         {
-            _logger.LogWarning(exception, "Запуск подключения отклонён: уже выполняется");
+            _logger.BotConnectionStartRejected(exception);
         }
     }
 

@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Diagnostics;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -42,7 +43,7 @@ public sealed partial class WelcomePageViewModel : OnboardingPageViewModelBase
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Не удалось открыть Twitch Developer Console");
+            _logger.OnboardingDevConsoleOpenFailed(exception);
         }
     }
 }

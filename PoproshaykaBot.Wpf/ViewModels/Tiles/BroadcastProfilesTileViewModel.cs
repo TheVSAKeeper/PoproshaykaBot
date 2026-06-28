@@ -14,6 +14,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Threading.Tasks;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -80,14 +81,14 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     private void Add()
     {
         // TODO: not implemented yet – open BroadcastProfileEditDialog when Step 4 dialogs are implemented
-        _logger.LogInformation("Добавление профиля рассылки: не реализовано");
+        _logger.BroadcastProfileAddNotImplemented();
     }
 
     [RelayCommand]
     private void EditCurrent()
     {
         // TODO: not implemented yet – fetch current channel settings and open dialog when Step 4 dialogs are implemented
-        _logger.LogInformation("Редактирование текущих настроек канала: не реализовано");
+        _logger.BroadcastProfileEditNotImplemented();
     }
 
     private void ReloadItems()

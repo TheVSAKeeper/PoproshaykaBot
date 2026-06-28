@@ -16,6 +16,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -215,12 +216,12 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             if (configuredCount == 0)
             {
                 ShowToast("🔁 источники не настроены", "Warning");
-                _logger.LogInformation("Чат-источники для refresh не настроены");
+                _logger.ObsChatSourcesNotConfigured();
             }
             else if (refreshed == 0)
             {
                 ShowToast($"🔁 ни один из {configuredCount} не обновлён", "Error");
-                _logger.LogWarning("Ручной refresh: OBS отклонил все {Count} запросов, проверьте имена источников", configuredCount);
+                _logger.ObsChatSourcesAllRejected(configuredCount);
             }
             else if (refreshed < configuredCount)
             {
@@ -234,12 +235,12 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         catch (OperationCanceledException exception)
         {
             ShowToast("🔁 таймаут", "Error");
-            _logger.LogWarning(exception, "Ручной refresh чат-источников OBS: превышено время ожидания");
+            _logger.ObsChatSourcesRefreshTimeout(exception);
         }
         catch (Exception exception)
         {
             ShowToast("🔁 ошибка", "Error");
-            _logger.LogWarning(exception, "Не удалось обновить чат-источники OBS вручную");
+            _logger.ObsChatSourcesRefreshFailed(exception);
         }
     }
 
@@ -308,7 +309,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
                 return;
             }
 
-            _logger.LogWarning(exception, "Не удалось обновить плитку OBS");
+            _logger.ObsTileRefreshFailed(exception);
             ApplyUnavailableState("не удалось получить данные");
             UpdateRefreshTimer(true, false);
         }

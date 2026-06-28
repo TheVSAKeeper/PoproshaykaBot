@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
 using System.Collections.ObjectModel;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -228,7 +229,7 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Не удалось скопировать OBS URL");
+            _logger.ObsUrlCopyFailed(exception);
             _dialogService.Warning("OBS", $"Не удалось скопировать URL: {exception.Message}");
         }
     }
@@ -324,7 +325,7 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Ошибка операции OBS-интеграции");
+            _logger.ObsOperationFailed(exception);
             SetStatus($"● Ошибка: {ToSafeMessage(exception)}", StatusSeverity.Error);
         }
         finally

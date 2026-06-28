@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using System.Net;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Net.Sockets;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -100,7 +101,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
 
             if (!_kestrelHttpServer.IsRunning && !TryBindPort(port))
             {
-                _logger.LogWarning("Порт {Port} недоступен для биндинга в onboarding", port);
+                _logger.OnboardingPortUnavailable(port);
                 ShowStatus(
                     $"Порт {port} занят другим приложением",
                     "Error",
@@ -145,12 +146,12 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
 
             await _kestrelHttpServer.StartAsync();
 
-            _logger.LogInformation("HTTP сервер перезапущен на порту {Port} в onboarding", newPort);
+            _logger.OnboardingHttpServerRestarted(newPort);
             return true;
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Ошибка запуска HTTP сервера на порту {Port} в onboarding", newPort);
+            _logger.OnboardingHttpServerStartFailed(exception, newPort);
 
             liveSettings.Twitch.HttpServerPort = previousLivePort;
 
@@ -165,7 +166,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
             }
             catch (Exception restoreException)
             {
-                _logger.LogError(restoreException, "Не удалось восстановить HTTP сервер на старом порту {Port}", previousLivePort);
+                _logger.OnboardingHttpServerRestoreFailed(restoreException, previousLivePort);
             }
 
             return false;
