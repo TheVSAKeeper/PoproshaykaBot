@@ -215,7 +215,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
     {
         try
         {
-            Process.Start(new ProcessStartInfo
+            using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = url,
                 UseShellExecute = true,

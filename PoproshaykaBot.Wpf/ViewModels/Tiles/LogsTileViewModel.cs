@@ -68,7 +68,7 @@ public sealed partial class LogsTileViewModel : DashboardTileViewModel, IDisposa
                 _logger.SupportClipboardCopyFailed(clipboardException);
             }
 
-            Process.Start(new ProcessStartInfo(payload.IssueUrl) { UseShellExecute = true });
+            using var process = Process.Start(new ProcessStartInfo(payload.IssueUrl) { UseShellExecute = true });
         }
         catch (Exception exception)
         {
