@@ -1,8 +1,14 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using KeepShell.Services;
 using KeepShell.ViewModels;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Logging;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Windows;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -13,6 +19,8 @@ public sealed partial class LogsTileViewModel : DashboardTileViewModel, IDisposa
     private const int MaxBatchPerTick = 256;
 
     private readonly UiLogSink _uiLogSink;
+    private readonly ErrorReportService _errorReportService;
+    private readonly ILogger<LogsTileViewModel> _logger;
     private readonly DispatcherTimer _flushTimer;
     private readonly Queue<LogRowViewModel> _buffer = new(Capacity);
     private readonly ConcurrentQueue<LogRowViewModel> _pendingRows = [];
@@ -21,10 +29,12 @@ public sealed partial class LogsTileViewModel : DashboardTileViewModel, IDisposa
     [ObservableProperty]
     private ObservableCollection<LogRowViewModel> _items = [];
 
-    public LogsTileViewModel(UiLogSink uiLogSink)
+    public LogsTileViewModel(UiLogSink uiLogSink, ErrorReportService errorReportService, ILogger<LogsTileViewModel> logger)
         : base("Логи")
     {
         _uiLogSink = uiLogSink;
+        _errorReportService = errorReportService;
+        _logger = logger;
         Items = [];
 
         _flushTimer = new(DispatcherPriority.Background)
@@ -40,6 +50,30 @@ public sealed partial class LogsTileViewModel : DashboardTileViewModel, IDisposa
         }
 
         uiLogSink.Emitted += OnEmitted;
+    }
+
+    [RelayCommand]
+    private void OpenSupport()
+    {
+        try
+        {
+            var payload = _errorReportService.Build(null, "Отчёт из плитки «Логи»");
+
+            try
+            {
+                Clipboard.SetText(payload.LogClipboard);
+            }
+            catch (Exception clipboardException)
+            {
+                _logger.SupportClipboardCopyFailed(clipboardException);
+            }
+
+            Process.Start(new ProcessStartInfo(payload.IssueUrl) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            _logger.SupportReportFailed(exception);
+        }
     }
 
     private void OnEmitted(UiLogEntry entry)

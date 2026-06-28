@@ -129,6 +129,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1304, Level = LogLevel.Information, Message = "Редактирование текущих настроек канала: не реализовано")]
     public static partial void BroadcastProfileEditNotImplemented(this ILogger logger);
 
+    [LoggerMessage(EventId = 1305, Level = LogLevel.Warning, Message = "Не удалось положить лог-секцию в буфер обмена")]
+    public static partial void SupportClipboardCopyFailed(this ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 1306, Level = LogLevel.Error, Message = "Не удалось открыть форму репорта")]
+    public static partial void SupportReportFailed(this ILogger logger, Exception exception);
+
     [LoggerMessage(EventId = 1400, Level = LogLevel.Warning, Message = "Не удалось выполнить OBS-действие для карточки {Kind}")]
     public static partial void ObsOutputActionFailed(this ILogger logger, Exception? exception, ObsOutputCardKind kind);
 
