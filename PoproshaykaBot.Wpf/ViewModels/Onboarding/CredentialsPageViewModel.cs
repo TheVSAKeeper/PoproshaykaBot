@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Onboarding;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -344,7 +345,7 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Ошибка при проверке Client ID и Secret");
+            _logger.OnboardingCredentialsCheckFailed(exception);
             ClientStatusText = "Ошибка проверки";
             ClientStatusSeverity = StatusSeverity.Warning;
             return;
@@ -434,7 +435,7 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Ошибка при проверке канала @{Channel}", channel);
+            _logger.OnboardingChannelCredentialsCheckFailed(exception, channel);
             ChannelStatusText = "Не удалось проверить канал";
             ChannelStatusSeverity = StatusSeverity.Warning;
             return;

@@ -11,6 +11,7 @@ using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.ComponentModel;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
@@ -272,7 +273,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Ошибка сохранения настроек");
+            _logger.SettingsSaveFailed(exception);
             _dialogService.Error("Ошибка", $"Ошибка сохранения настроек: {exception.Message}");
         }
     }
@@ -287,8 +288,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     {
         if (!RedirectUriPortResolver.TryResolve(_settings.Twitch.RedirectUri, out var derivedPort))
         {
-            _logger.LogWarning("Некорректный RedirectUri '{RedirectUri}' — порт HTTP сервера не обновлён",
-                _settings.Twitch.RedirectUri);
+            _logger.SettingsRedirectUriInvalid(_settings.Twitch.RedirectUri);
 
             return;
         }
@@ -298,8 +298,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             return;
         }
 
-        _logger.LogInformation("Порт HTTP сервера обновлён с {OldPort} на {NewPort} в соответствии с RedirectUri",
-            _settings.Twitch.HttpServerPort, derivedPort);
+        _logger.SettingsHttpPortUpdated(_settings.Twitch.HttpServerPort, derivedPort);
 
         _settings.Twitch.HttpServerPort = derivedPort;
     }
@@ -308,14 +307,14 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     {
         try
         {
-            _logger.LogInformation("Перезапуск HTTP сервера: порт {OldPort} -> {NewPort}", prevPort, newPort);
+            _logger.SettingsHttpServerRestarting(prevPort, newPort);
             await _kestrelHttpServer.StopAsync();
             await _kestrelHttpServer.StartAsync();
             return true;
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Ошибка перезапуска HTTP сервера на порту {NewPort}", newPort);
+            _logger.SettingsHttpServerRestartFailed(exception, newPort);
             _dialogService.Error(
                 "Ошибка перезапуска HTTP сервера",
                 $"Не удалось перезапустить HTTP сервер на порту {newPort}: {exception.Message}\n\nНастройки сохранены. Перезапустите приложение, чтобы изменения вступили в силу.");

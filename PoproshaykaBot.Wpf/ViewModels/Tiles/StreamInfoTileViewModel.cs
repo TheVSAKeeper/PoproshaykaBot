@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Diagnostics;
 using System.Windows.Media.Imaging;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -94,7 +95,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка обновления информации о стриме");
+            _logger.StreamInfoUpdateFailed(ex);
         }
         finally
         {
@@ -124,7 +125,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Не удалось открыть браузер для {Url}", url);
+            _logger.StreamInfoBrowserOpenFailed(ex, url);
         }
     }
 
@@ -195,7 +196,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка автообновления информации о стриме");
+            _logger.StreamInfoAutoUpdateFailed(ex);
         }
     }
 

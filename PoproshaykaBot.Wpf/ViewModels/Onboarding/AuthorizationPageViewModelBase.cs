@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using System.Diagnostics;
 using System.Net.Http;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -231,7 +232,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             ResultSeverity = StatusSeverity.Error;
             StatusMessage = AuthErrorDetails(exception);
             StatusMessageSeverity = StatusSeverity.Error;
-            _logger.LogError(exception, "OAuth-поток мастера упал для роли {Role}", _role);
+            _logger.OAuthFlowFailed(exception, _role);
         }
         finally
         {
@@ -414,7 +415,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Не удалось открыть браузер для авторизации роли {Role}", _role);
+            _logger.OAuthBrowserOpenFailed(exception, _role);
             StatusMessage = "Не удалось открыть браузер. Скопируйте ссылку и откройте вручную.";
             StatusMessageSeverity = StatusSeverity.Error;
         }
@@ -430,7 +431,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Не удалось скопировать ссылку авторизации в буфер обмена");
+            _logger.OAuthClipboardCopyFailed(exception);
             StatusMessage = "Не удалось скопировать в буфер обмена.";
             StatusMessageSeverity = StatusSeverity.Error;
         }

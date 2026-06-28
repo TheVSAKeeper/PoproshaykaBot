@@ -80,7 +80,7 @@
             <StackPanel Grid.Column="0"
                         Orientation="Horizontal"
                         Margin="14,0">
-                <iconPacks:PackIconLucide Kind="LayoutDashboard"
+                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.LayoutDashboard}"
                                           Width="16"
                                           Height="16"
                                           VerticalAlignment="Center"
@@ -113,7 +113,7 @@
                             Width="36"
                             ToolTip="Светлая тема"
                             AutomationProperties.Name="Светлая тема">
-                        <iconPacks:PackIconLucide Kind="Sun"
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Sun}"
                                                   Width="16"
                                                   Height="16" />
                     </Button>
@@ -125,7 +125,7 @@
                             Margin="2,0,0,0"
                             ToolTip="Тёмная тема"
                             AutomationProperties.Name="Тёмная тема">
-                        <iconPacks:PackIconLucide Kind="Moon"
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Moon}"
                                                   Width="16"
                                                   Height="16" />
                     </Button>

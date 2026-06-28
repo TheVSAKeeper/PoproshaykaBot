@@ -30,7 +30,7 @@
                                 Command="{Binding ResetCommand}"
                                 ToolTip="Сбросить к значению по умолчанию"
                                 Margin="8,0,0,0">
-                            <iconPacks:PackIconLucide Kind="RotateCcw"
+                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.RotateCcw}"
                                                      Width="14"
                                                      Height="14" />
                         </Button>

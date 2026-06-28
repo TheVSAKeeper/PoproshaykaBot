@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -125,7 +126,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
                 }
                 catch (Exception exception)
                 {
-                    _logger.LogError(exception, "Ошибка освобождения ресурсов страницы мастера {PageType}", page.GetType().Name);
+                    _logger.OnboardingPageDisposeFailed(exception, page.GetType().Name);
                 }
             }
         }
@@ -245,11 +246,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         try
         {
             await _botConnectionManager.ShutdownAsync();
-            _logger.LogInformation("Бот остановлен после отмены мастера первичной настройки");
+            _logger.OnboardingBotStopped();
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Не удалось остановить бота при откате мастера");
+            _logger.OnboardingBotStopFailed(exception);
         }
     }
 
@@ -265,11 +266,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
             _accountsStore.SaveAll(_originalBotAccount, _originalBroadcasterAccount);
             await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
             await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
-            _logger.LogInformation("Аккаунты Twitch откачены на исходные значения после отмены мастера");
+            _logger.OnboardingAccountsRolledBack();
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Не удалось восстановить аккаунты Twitch после отмены мастера");
+            _logger.OnboardingAccountsRollbackFailed(exception);
         }
     }
 
@@ -290,7 +291,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
         }
 
         _settingsManager.Current.Twitch.Channel = _originalChannel;
-        _logger.LogInformation("Канал откачен на исходное значение «{Channel}» после отмены мастера", _originalChannel);
+        _logger.OnboardingChannelRolledBack(_originalChannel);
     }
 
     private async Task RollbackHttpServerPortAsync()
@@ -314,11 +315,11 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
             await _kestrelHttpServer.StartAsync();
 
-            _logger.LogInformation("HTTP сервер откачен на исходный порт {Port} после отмены мастера", _originalHttpServerPort);
+            _logger.OnboardingHttpServerRolledBack(_originalHttpServerPort);
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Не удалось откатить HTTP сервер на порт {Port} после отмены мастера", _originalHttpServerPort);
+            _logger.OnboardingHttpServerRollbackFailed(exception, _originalHttpServerPort);
         }
     }
 }

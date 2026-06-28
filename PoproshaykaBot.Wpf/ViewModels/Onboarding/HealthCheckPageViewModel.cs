@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Diagnostics;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -85,7 +86,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Сбой постановки тестового сообщения в очередь отправки");
+            _logger.OnboardingChatTestEnqueueFailed(exception);
             ChatTestStatusText = "✗ Не удалось поставить сообщение в очередь.";
             ChatTestSuccess = false;
             ChatTestError = true;
@@ -101,7 +102,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Не удалось открыть OBS-оверлей в браузере");
+            _logger.OnboardingOverlayBrowserOpenFailed(exception);
         }
     }
 

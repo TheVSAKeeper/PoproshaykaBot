@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Wpf.Bootstrap;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
@@ -260,7 +261,7 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Не удалось выполнить OBS-действие для карточки {Kind}", Kind);
+            _logger.ObsOutputActionFailed(exception, Kind);
             ShowMetaError("не удалось выполнить");
         }
         finally
