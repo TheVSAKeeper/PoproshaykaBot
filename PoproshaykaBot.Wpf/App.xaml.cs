@@ -125,6 +125,7 @@ public partial class App : Application
 
             var services = new ServiceCollection();
             ConfigureServices(services, coreUiLogSink, uiSettings);
+            services.AddSingleton(_logging!.Sink);
             _services = services.BuildServiceProvider();
 
             _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
@@ -237,7 +238,6 @@ public partial class App : Application
         });
         services.AddSingleton<ErrorReportService>();
 
-        services.AddSingleton<DashboardTileViewModel, LogsTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, StreamInfoTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, BroadcastStatusTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, BroadcastProfilesTileViewModel>();
@@ -247,6 +247,7 @@ public partial class App : Application
         services.AddSingleton<DashboardTileViewModel, ChatOverlayPreviewTileViewModel>();
 
         services.AddSingleton<DashboardViewModel>();
+        services.AddSingleton<LogsViewModel>();
         services.AddSingleton<UserStatisticsPageViewModel>();
         services.AddSingleton<StreamHistoryPageViewModel>();
         services.AddSingleton<ThemeViewModel>();
@@ -271,6 +272,7 @@ public partial class App : Application
         services.AddTransient<MiscSettingsSectionViewModel>();
         services.AddSingleton<PollsSettingsSectionViewModel>();
         services.AddSingleton<UpdateSettingsSectionViewModel>();
+        services.AddTransient<DashboardLayoutSectionViewModel>();
 
         services.AddSingleton<SettingsPageViewModel>();
 

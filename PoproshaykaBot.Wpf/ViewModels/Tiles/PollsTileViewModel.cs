@@ -44,7 +44,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         IPollController controller,
         PollSnapshotStore snapshotStore,
         IEventBus bus,
-        IDialogService dialogService) : base("Опросы")
+        IDialogService dialogService) : base("polls-control", "Опросы", maxWidth: 500)
     {
         _controller = controller;
         _dialogService = dialogService;

@@ -88,7 +88,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         IObsWebSocketClient obsClient,
         IEventBus bus,
         ILogger<ObsInfoTileViewModel> logger)
-        : base("OBS")
+        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 320)
     {
         _store = store;
         _obsIntegration = obsIntegration;

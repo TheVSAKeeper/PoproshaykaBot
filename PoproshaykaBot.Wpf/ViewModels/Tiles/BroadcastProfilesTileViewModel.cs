@@ -52,7 +52,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         IStreamStatus stream,
         IEventBus bus,
         ILogger<BroadcastProfilesTileViewModel> logger)
-        : base("Профили рассылки")
+        : base("broadcast-profiles", "Профили рассылки", maxWidth: 500)
     {
         _manager = manager;
         _profiles = profiles;

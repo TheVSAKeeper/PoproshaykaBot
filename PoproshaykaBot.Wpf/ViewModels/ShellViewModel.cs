@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using System.ComponentModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -30,6 +31,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         SettingsPageViewModel settingsPage,
         UserStatisticsPageViewModel statisticsPage,
         StreamHistoryPageViewModel streamHistoryPage,
+        LogsViewModel logsPage,
         ThemeViewModel theme,
         ShellPreferences preferences,
         BotConnectionManager connectionManager,
@@ -41,15 +43,17 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _connectionManager = connectionManager;
         _logger = logger;
         _preferences = preferences;
+        _preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _dialogService = dialogService;
         Theme = theme;
 
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: settingsPage.OnEnter);
 
-        Sections.Add(new("Обзор", PackIconLucideKind.LayoutDashboard, overview));
+        Sections.Add(new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter));
         Sections.Add(_settingsSection);
         Sections.Add(new("Пользователи", PackIconLucideKind.Users, statisticsPage));
         Sections.Add(new("История стримов", PackIconLucideKind.History, streamHistoryPage));
+        Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage));
 
         IsNavCollapsed = _preferences.NavCollapsed;
 
@@ -63,6 +67,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     }
 
     public ThemeViewModel Theme { get; }
+
+    public override IPageHeader? EffectivePageHeader => _preferences.ShowPageHeader ? CurrentPageHeader : null;
 
     public string ConnectButtonText => Phase switch
     {
@@ -88,6 +94,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+
         foreach (var subscription in _subscriptions)
         {
             subscription.Dispose();
@@ -157,6 +165,17 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private bool CanToggleConnect()
     {
         return Phase != BotLifecyclePhase.Disconnecting;
+    }
+
+    private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not nameof(ShellPreferences.ShowPageHeader))
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(EffectivePageHeader));
+        OnPropertyChanged(nameof(ContentMargin));
     }
 
     private void OnLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)

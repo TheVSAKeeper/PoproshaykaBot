@@ -41,6 +41,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly ObsChatStore _obsChatStore;
     private readonly ObsIntegrationStore _obsIntegrationStore;
     private readonly UpdateStore _updateStore;
+    private readonly DashboardLayoutStore _dashboardLayoutStore;
     private readonly IEventBus _eventBus;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly ILogger<SettingsPageViewModel> _logger;
@@ -74,11 +75,14 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         PollsSettingsSectionViewModel polls,
         MiscSettingsSectionViewModel misc,
         UpdateSettingsSectionViewModel update,
+        DashboardLayoutSectionViewModel dashboardLayout,
+        ShellPreferences shell,
         SettingsManager settingsManager,
         AccountsStore accountsStore,
         ObsChatStore obsChatStore,
         ObsIntegrationStore obsIntegrationStore,
         UpdateStore updateStore,
+        DashboardLayoutStore dashboardLayoutStore,
         IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
         ILogger<SettingsPageViewModel> logger,
@@ -96,12 +100,15 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         Polls = polls;
         Misc = misc;
         Update = update;
+        DashboardLayout = dashboardLayout;
+        Shell = shell;
 
         _settingsManager = settingsManager;
         _accountsStore = accountsStore;
         _obsChatStore = obsChatStore;
         _obsIntegrationStore = obsIntegrationStore;
         _updateStore = updateStore;
+        _dashboardLayoutStore = dashboardLayoutStore;
         _eventBus = eventBus;
         _kestrelHttpServer = kestrelHttpServer;
         _logger = logger;
@@ -121,6 +128,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
         OAuth.SettingChanged += OnOAuthSettingChanged;
         Polls.PropertyChanged += OnPollsPropertyChanged;
+        DashboardLayout.Edited += OnDashboardLayoutEdited;
 
         OnEnter();
     }
@@ -153,6 +161,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     public UpdateSettingsSectionViewModel Update { get; }
 
+    public DashboardLayoutSectionViewModel DashboardLayout { get; }
+
+    public ShellPreferences Shell { get; }
+
     public bool HasChanges => Dirty || Polls.HasChanges;
 
     public void OnEnter()
@@ -179,6 +191,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             AutoBroadcast.LoadSettings(_settings.Twitch.AutoBroadcast);
             BotLifecycle.LoadSettings(_settings.Twitch.BotLifecycleAutomation);
             Update.LoadSettings(_updateDraft);
+            DashboardLayout.LoadSettings(_dashboardLayoutStore.LoadDashboard());
             Polls.RevertCommand.Execute(null);
 
             OAuth.RefreshChannel(Basic.GetChannel());
@@ -205,6 +218,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
         OAuth.SettingChanged -= OnOAuthSettingChanged;
         Polls.PropertyChanged -= OnPollsPropertyChanged;
+        DashboardLayout.Edited -= OnDashboardLayoutEdited;
     }
 
     [RelayCommand(CanExecute = nameof(HasChanges))]
@@ -234,6 +248,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
             _updateStore.Save(_updateDraft);
+            _dashboardLayoutStore.SaveDashboard(DashboardLayout.BuildLayout());
 
             if (Polls.HasChanges)
             {
@@ -384,6 +399,14 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     }
 
     private void OnOAuthSettingChanged(object? sender, EventArgs e)
+    {
+        if (!_suppressDirty)
+        {
+            Dirty = true;
+        }
+    }
+
+    private void OnDashboardLayoutEdited(object? sender, EventArgs e)
     {
         if (!_suppressDirty)
         {

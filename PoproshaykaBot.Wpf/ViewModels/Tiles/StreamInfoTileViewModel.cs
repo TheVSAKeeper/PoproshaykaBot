@@ -53,7 +53,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         IStreamStatus stream,
         IEventBus bus,
         ILogger<StreamInfoTileViewModel> logger)
-        : base("Информация о стриме")
+        : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 240)
     {
         _stream = stream;
         _logger = logger;

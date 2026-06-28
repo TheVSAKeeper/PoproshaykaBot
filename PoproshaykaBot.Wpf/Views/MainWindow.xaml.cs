@@ -22,7 +22,7 @@ public partial class MainWindow : Window
         _settings = settings;
         DataContext = viewModel;
 
-        WindowChromeTheming.Attach(this, true);
+        WindowChromeTheming.Attach(this);
 
         Closing += OnClosing;
 

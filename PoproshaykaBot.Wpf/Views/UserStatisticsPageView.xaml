@@ -46,7 +46,7 @@
             </Grid.ColumnDefinitions>
 
             <DataGrid Grid.Column="0"
-                      ItemsSource="{Binding UsersView}"
+                      ItemsSource="{Binding Users}"
                       SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                       AutoGenerateColumns="False"
                       IsReadOnly="True"
@@ -68,6 +68,7 @@
                     <DataGridTextColumn Header="Баллы"
                                         Binding="{Binding Points, StringFormat=N0}"
                                         SortMemberPath="Points"
+                                        SortDirection="Descending"
                                         Width="*" />
                     <DataGridTextColumn Header="Ранг"
                                         Binding="{Binding RankDisplay}"

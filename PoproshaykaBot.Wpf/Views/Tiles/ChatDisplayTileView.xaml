@@ -11,7 +11,7 @@
              d:DesignWidth="380"
              d:DesignHeight="460">
 
-    <Grid Height="460">
+    <Grid>
         <Border BorderBrush="{DynamicResource Border.Default}"
                 BorderThickness="1"
                 CornerRadius="6"

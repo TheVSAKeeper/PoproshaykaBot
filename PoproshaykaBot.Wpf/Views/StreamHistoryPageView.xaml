@@ -33,7 +33,7 @@
         <DataGrid x:Name="SessionsGrid"
                   Grid.Row="1"
                   Margin="16,0,16,0"
-                  ItemsSource="{Binding SessionsView}"
+                  ItemsSource="{Binding Sessions}"
                   SelectedItem="{Binding SelectedRow}"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
@@ -44,6 +44,7 @@
                 <DataGridTextColumn Header="Начало"
                                     Binding="{Binding StartedAtFormatted}"
                                     SortMemberPath="StartedAt"
+                                    SortDirection="Descending"
                                     Width="130" />
                 <DataGridTextColumn Header="Длит."
                                     Binding="{Binding DurationFormatted}"

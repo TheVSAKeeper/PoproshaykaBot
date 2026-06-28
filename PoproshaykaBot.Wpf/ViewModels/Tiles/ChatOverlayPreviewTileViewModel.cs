@@ -26,7 +26,7 @@ public sealed partial class ChatOverlayPreviewTileViewModel : DashboardTileViewM
     private string _errorDescription = string.Empty;
 
     public ChatOverlayPreviewTileViewModel(SettingsManager settings, ILogger<ChatOverlayPreviewTileViewModel> logger)
-        : base("Превью оверлея")
+        : base("chat-overlay-preview", "Превью оверлея")
     {
         _settings = settings;
         Logger = logger;

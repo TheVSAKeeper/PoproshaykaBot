@@ -16,9 +16,7 @@
         <DataTemplate x:Key="DashboardTileChrome"
                       DataType="{x:Type tiles:DashboardTileViewModel}">
             <Border Style="{StaticResource Card}"
-                    Width="380"
-                    Margin="0,0,16,16"
-                    VerticalAlignment="Top">
+                    Margin="3">
                 <DockPanel LastChildFill="True">
                     <DockPanel DockPanel.Dock="Top"
                                LastChildFill="True"
@@ -67,20 +65,10 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid>
-        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled"
-                      Padding="20"
-                      Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}">
-            <ItemsControl ItemsSource="{Binding Tiles}"
-                          ItemTemplate="{StaticResource DashboardTileChrome}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
-        </ScrollViewer>
+    <Grid Margin="-20">
+        <Grid x:Name="TilesGrid"
+              Margin="3"
+              Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}" />
 
         <controls:EmptyState Icon="LayoutDashboard"
                              Heading="Плиток пока нет"

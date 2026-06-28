@@ -96,7 +96,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
     private string _fallbackDescription = string.Empty;
 
     public ChatDisplayTileViewModel(SettingsManager settings, ILogger<ChatDisplayTileViewModel> logger)
-        : base("Чат")
+        : base("twitch-chat", "Чат")
     {
         _settings = settings;
         Logger = logger;
