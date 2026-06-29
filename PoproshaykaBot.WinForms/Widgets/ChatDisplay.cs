@@ -8,6 +8,7 @@ using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Tiles;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Widgets;
 
@@ -16,56 +17,61 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
     private const string WebView2RuntimeDownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
     private const double DefaultZoom = 0.75;
 
-    private const string HideClutterScript = """
-                                             (function () {
-                                                 const selectors = [
-                                                     '[data-a-target="consent-banner"]',
-                                                     '.consent-banner',
-                                                     '.tw-callout-message',
-                                                     '[class*="channelLeaderboardHeader"]',
-                                                     '[class*="channelLeaderboardBottomIconContainer"]',
-                                                     '[class*="community-highlight"]',
-                                                 ];
-                                                 const wrapperClasses = ['tw-transition', 'tw-callout', 'consent-banner'];
-                                                 const findWrapper = (el) => {
-                                                     let node = el;
-                                                     for (let i = 0; i < 15 && node; i++) {
-                                                         if (node.classList && wrapperClasses.some((c) => node.classList.contains(c))) {
-                                                             return node;
-                                                         }
-                                                         node = node.parentElement;
-                                                     }
-                                                     return el;
-                                                 };
-                                                 const hideAll = () => {
-                                                     const consentAccept = document.querySelector('[data-a-target="consent-banner-accept"]');
-                                                     if (consentAccept) {
-                                                         consentAccept.click();
-                                                     }
-                                                     for (const selector of selectors) {
-                                                         document.querySelectorAll(selector).forEach((el) => {
-                                                             const wrapper = findWrapper(el);
-                                                             if (wrapper.dataset.poproshaykaHidden !== '1') {
-                                                                 wrapper.dataset.poproshaykaHidden = '1';
-                                                                 wrapper.style.setProperty('display', 'none', 'important');
+    private const string HideClutterScriptTemplate = """
+                                                     (function () {
+                                                         const selectors = __SELECTORS__;
+                                                         const wrapperClasses = ['tw-transition', 'tw-callout', 'consent-banner'];
+                                                         const findWrapper = (el) => {
+                                                             let node = el;
+                                                             for (let i = 0; i < 15 && node; i++) {
+                                                                 if (node.classList && wrapperClasses.some((c) => node.classList.contains(c))) {
+                                                                     return node;
+                                                                 }
+                                                                 node = node.parentElement;
                                                              }
-                                                         });
-                                                     }
-                                                 };
-                                                 hideAll();
-                                                 if (document.readyState === 'loading') {
-                                                     document.addEventListener('DOMContentLoaded', hideAll, { once: true });
-                                                 }
-                                                 const startObserver = () => {
-                                                     if (document.documentElement) {
-                                                         new MutationObserver(hideAll).observe(document.documentElement, { childList: true, subtree: true });
-                                                     } else {
-                                                         setTimeout(startObserver, 0);
-                                                     }
-                                                 };
-                                                 startObserver();
-                                             })();
-                                             """;
+                                                             return el;
+                                                         };
+                                                         const hideAll = () => {
+                                                             const consentAccept = document.querySelector('[data-a-target="consent-banner-accept"]');
+                                                             if (consentAccept) {
+                                                                 consentAccept.click();
+                                                             }
+                                                             for (const selector of selectors) {
+                                                                 document.querySelectorAll(selector).forEach((el) => {
+                                                                     const wrapper = findWrapper(el);
+                                                                     if (wrapper.dataset.poproshaykaHidden !== '1') {
+                                                                         wrapper.dataset.poproshaykaHidden = '1';
+                                                                         wrapper.style.setProperty('display', 'none', 'important');
+                                                                     }
+                                                                 });
+                                                             }
+                                                         };
+                                                         hideAll();
+                                                         if (document.readyState === 'loading') {
+                                                             document.addEventListener('DOMContentLoaded', hideAll, { once: true });
+                                                         }
+                                                         const startObserver = () => {
+                                                             if (document.documentElement) {
+                                                                 new MutationObserver(hideAll).observe(document.documentElement, { childList: true, subtree: true });
+                                                             } else {
+                                                                 setTimeout(startObserver, 0);
+                                                             }
+                                                         };
+                                                         startObserver();
+                                                     })();
+                                                     """;
+
+    private static readonly string[] BuiltInClutterSelectors =
+    [
+        "[data-a-target=\"consent-banner\"]",
+        ".consent-banner",
+        ".tw-callout-message",
+        "[class*=\"channelLeaderboardHeader\"]",
+        "[class*=\"channelLeaderboardBottomIconContainer\"]",
+        "[class*=\"community-highlight\"]",
+    ];
+
+    private static readonly string BlockersFilePath = AppPaths.Combine("chat-blockers.txt");
 
     private static readonly string ZoomFilePath = AppPaths.Combine("chat-zoom.txt");
 
@@ -75,6 +81,8 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
     private ToolStripButton? _resetZoomButton;
     private ToolStripButton? _openInBrowserButton;
     private ToolStripButton? _resetSessionButton;
+    private ToolStripButton? _editBlockersButton;
+    private string? _clutterScriptId;
 
     public ChatDisplay()
     {
@@ -129,7 +137,17 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
 
         _resetSessionButton.Click += OnResetSessionClicked;
 
-        return [_reloadButton, _resetZoomButton, _openInBrowserButton, _resetSessionButton];
+        _editBlockersButton = new()
+        {
+            AutoToolTip = false,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Text = "🚫",
+            ToolTipText = "Блокировка баннеров – скрыть лишние элементы чата",
+        };
+
+        _editBlockersButton.Click += OnEditBlockersClicked;
+
+        return [_reloadButton, _resetZoomButton, _openInBrowserButton, _resetSessionButton, _editBlockersButton];
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -300,6 +318,31 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
         }
     }
 
+    private async void OnEditBlockersClicked(object? sender, EventArgs e)
+    {
+        if (!TryEditBlockers(LoadUserSelectorsText(), out var updated))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(BlockersFilePath)!);
+            File.WriteAllText(BlockersFilePath, updated);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Не удалось сохранить список блокираторов баннеров чата");
+            MessageBox.Show(this, "Не удалось сохранить список блокираторов. Подробности – в логах.",
+                "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+            return;
+        }
+
+        await RegisterClutterScriptAsync();
+        _webView.CoreWebView2?.Reload();
+    }
+
     private async Task InitializeWebViewAsync()
     {
         try
@@ -318,7 +361,7 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
             _webView.NavigationCompleted += OnNavigationCompleted;
             _webView.ZoomFactorChanged += OnZoomFactorChanged;
 
-            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(HideClutterScript);
+            await RegisterClutterScriptAsync();
 
             _webView.ZoomFactor = LoadSavedZoom();
 
@@ -386,6 +429,7 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
         _resetZoomButton?.Enabled = enabled;
         _openInBrowserButton?.Enabled = enabled;
         _resetSessionButton?.Enabled = enabled;
+        _editBlockersButton?.Enabled = enabled;
     }
 
     private double LoadSavedZoom()
@@ -411,5 +455,127 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
         }
 
         return DefaultZoom;
+    }
+
+    private async Task RegisterClutterScriptAsync()
+    {
+        var core = _webView.CoreWebView2;
+
+        if (core == null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_clutterScriptId != null)
+            {
+                core.RemoveScriptToExecuteOnDocumentCreated(_clutterScriptId);
+            }
+
+            _clutterScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildHideClutterScript());
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Не удалось применить блокираторы баннеров чата");
+        }
+    }
+
+    private string BuildHideClutterScript()
+    {
+        var selectors = BuiltInClutterSelectors.Concat(LoadUserSelectors()).ToArray();
+        return HideClutterScriptTemplate.Replace("__SELECTORS__", JsonSerializer.Serialize(selectors), StringComparison.Ordinal);
+    }
+
+    private IEnumerable<string> LoadUserSelectors()
+    {
+        return LoadUserSelectorsText()
+            .Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith('#'));
+    }
+
+    private string LoadUserSelectorsText()
+    {
+        try
+        {
+            return File.Exists(BlockersFilePath) ? File.ReadAllText(BlockersFilePath) : string.Empty;
+        }
+        catch (IOException ex)
+        {
+            Logger.LogWarning(ex, "Не удалось прочитать список блокираторов баннеров чата");
+            return string.Empty;
+        }
+    }
+
+    private bool TryEditBlockers(string current, out string result)
+    {
+        result = current;
+
+        using var dialog = new Form
+        {
+            Text = "Блокировка баннеров чата",
+            FormBorderStyle = FormBorderStyle.SizableToolWindow,
+            StartPosition = FormStartPosition.CenterParent,
+            ClientSize = LogicalToDeviceUnits(new Size(460, 320)),
+            MinimumSize = LogicalToDeviceUnits(new Size(360, 240)),
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new(LogicalToDeviceUnits(10)),
+        };
+
+        layout.RowStyles.Add(new(SizeType.AutoSize));
+        layout.RowStyles.Add(new(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new(SizeType.AutoSize));
+
+        var hint = new Label
+        {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Text = "По одному CSS-селектору в строке. Строки, начинающиеся с #, – комментарии.\nВстроенные блокираторы работают всегда.",
+        };
+
+        var editor = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            AcceptsReturn = true,
+            WordWrap = false,
+            ScrollBars = ScrollBars.Both,
+            Text = current,
+        };
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+        };
+
+        var ok = new Button { Text = "Сохранить", DialogResult = DialogResult.OK, AutoSize = true };
+        var cancel = new Button { Text = "Отмена", DialogResult = DialogResult.Cancel, AutoSize = true };
+        buttons.Controls.Add(cancel);
+        buttons.Controls.Add(ok);
+
+        layout.Controls.Add(hint, 0, 0);
+        layout.Controls.Add(editor, 0, 1);
+        layout.Controls.Add(buttons, 0, 2);
+
+        dialog.Controls.Add(layout);
+        dialog.AcceptButton = ok;
+        dialog.CancelButton = cancel;
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return false;
+        }
+
+        result = editor.Text;
+        return true;
     }
 }
