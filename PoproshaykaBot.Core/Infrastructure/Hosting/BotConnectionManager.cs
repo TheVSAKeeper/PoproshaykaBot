@@ -113,9 +113,9 @@ public sealed class BotConnectionManager : IAsyncDisposable
 
                 await _appHost.StopAsync(progressReporter, stopCts.Token);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException exception)
             {
-                _logger.LogWarning("Остановка компонентов AppHost прервана по таймауту {Timeout} c (режим {Mode})", stopTimeout.TotalSeconds, mode);
+                _logger.LogWarning(exception, "Остановка компонентов AppHost прервана по таймауту {Timeout} c (режим {Mode})", stopTimeout.TotalSeconds, mode);
                 ReportProgress("Остановка компонентов прервана по таймауту");
             }
             catch (Exception exception)

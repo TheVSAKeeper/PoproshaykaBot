@@ -143,12 +143,12 @@
                 <summary>Шрифт</summary>
                 <div class="demo-config-section">
                     <div class="demo-field demo-field-text">
-                        <span class="demo-field-label">Семейство</span>
+                        <label class="demo-field-label" for="cfg-fontFamily">Семейство</label>
                         <input id="cfg-fontFamily"
                                type="text">
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Размер</span>
+                        <label class="demo-field-label" for="cfg-fontSize">Размер</label>
                         <input id="cfg-fontSize"
                                type="range">
                         <span class="demo-field-value"
@@ -168,7 +168,7 @@
                 <summary>Геометрия</summary>
                 <div class="demo-config-section">
                     <div class="demo-field">
-                        <span class="demo-field-label">Padding</span>
+                        <label class="demo-field-label" for="cfg-padding">Padding</label>
                         <input id="cfg-padding"
                                type="range">
                         <span class="demo-field-value"
@@ -176,7 +176,7 @@
                               id="cfg-padding-value"></span>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Margin</span>
+                        <label class="demo-field-label" for="cfg-margin">Margin</label>
                         <input id="cfg-margin"
                                type="range">
                         <span class="demo-field-value"
@@ -184,7 +184,7 @@
                               id="cfg-margin-value"></span>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Скругление</span>
+                        <label class="demo-field-label" for="cfg-borderRadius">Скругление</label>
                         <input id="cfg-borderRadius"
                                type="range">
                         <span class="demo-field-value"
@@ -198,7 +198,7 @@
                 <summary>Сообщения</summary>
                 <div class="demo-config-section">
                     <div class="demo-field">
-                        <span class="demo-field-label">Максимум сообщений</span>
+                        <label class="demo-field-label" for="cfg-maxMessages">Максимум сообщений</label>
                         <input id="cfg-maxMessages"
                                type="range">
                         <span class="demo-field-value"
@@ -211,7 +211,7 @@
                                for="cfg-showTimestamp">Показывать время</label>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Размер эмоутов</span>
+                        <label class="demo-field-label" for="cfg-emoteSizePixels">Размер эмоутов</label>
                         <input id="cfg-emoteSizePixels"
                                type="range">
                         <span class="demo-field-value"
@@ -219,7 +219,7 @@
                               id="cfg-emoteSizePixels-value"></span>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Размер бейджей</span>
+                        <label class="demo-field-label" for="cfg-badgeSizePixels">Размер бейджей</label>
                         <input id="cfg-badgeSizePixels"
                                type="range">
                         <span class="demo-field-value"
@@ -239,7 +239,7 @@
                                for="cfg-showUserAvatars">Показывать аватарки</label>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Размер аватарки</span>
+                        <label class="demo-field-label" for="cfg-userAvatarSizePixels">Размер аватарки</label>
                         <input id="cfg-userAvatarSizePixels"
                                type="range">
                         <span class="demo-field-value"
@@ -295,7 +295,7 @@
                                for="cfg-enableSmoothScroll">Плавный скролл</label>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Длительность скролла</span>
+                        <label class="demo-field-label" for="cfg-scrollAnimationDuration">Длительность скролла</label>
                         <input id="cfg-scrollAnimationDuration"
                                type="range">
                         <span class="demo-field-value"
@@ -309,7 +309,7 @@
                                for="cfg-autoScrollEnabled">Автоскролл</label>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Порог автоскролла</span>
+                        <label class="demo-field-label" for="cfg-scrollToBottomThreshold">Порог автоскролла</label>
                         <input id="cfg-scrollToBottomThreshold"
                                type="range">
                         <span class="demo-field-value"
@@ -317,7 +317,7 @@
                               id="cfg-scrollToBottomThreshold-value"></span>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Пауза после ручного скролла</span>
+                        <label class="demo-field-label" for="cfg-scrollPauseAfterUserMs">Пауза после ручного скролла</label>
                         <input id="cfg-scrollPauseAfterUserMs"
                                type="range">
                         <span class="demo-field-value"
@@ -337,7 +337,7 @@
                                for="cfg-enableAnimations">Включить анимации</label>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Длительность</span>
+                        <label class="demo-field-label" for="cfg-animationDuration">Длительность</label>
                         <input id="cfg-animationDuration"
                                type="range">
                         <span class="demo-field-value"
@@ -345,27 +345,27 @@
                               id="cfg-animationDuration-value"></span>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Пользователь</span>
+                        <label class="demo-field-label" for="cfg-userMessageAnimation">Пользователь</label>
                         <select data-kind="entry"
                                 id="cfg-userMessageAnimation"></select>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Бот</span>
+                        <label class="demo-field-label" for="cfg-botMessageAnimation">Бот</label>
                         <select data-kind="entry"
                                 id="cfg-botMessageAnimation"></select>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Системное</span>
+                        <label class="demo-field-label" for="cfg-systemMessageAnimation">Системное</label>
                         <select data-kind="entry"
                                 id="cfg-systemMessageAnimation"></select>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Стример</span>
+                        <label class="demo-field-label" for="cfg-broadcasterMessageAnimation">Стример</label>
                         <select data-kind="entry"
                                 id="cfg-broadcasterMessageAnimation"></select>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Новичок</span>
+                        <label class="demo-field-label" for="cfg-firstTimeUserMessageAnimation">Новичок</label>
                         <select data-kind="entry"
                                 id="cfg-firstTimeUserMessageAnimation"></select>
                     </div>
@@ -382,7 +382,7 @@
                                for="cfg-enableMessageFadeOut">Затухание сообщений</label>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Время жизни</span>
+                        <label class="demo-field-label" for="cfg-messageLifetimeSeconds">Время жизни</label>
                         <input id="cfg-messageLifetimeSeconds"
                                type="range">
                         <span class="demo-field-value"
@@ -390,12 +390,12 @@
                               id="cfg-messageLifetimeSeconds-value"></span>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Анимация ухода</span>
+                        <label class="demo-field-label" for="cfg-fadeOutAnimationType">Анимация ухода</label>
                         <select data-kind="exit"
                                 id="cfg-fadeOutAnimationType"></select>
                     </div>
                     <div class="demo-field">
-                        <span class="demo-field-label">Длительность ухода</span>
+                        <label class="demo-field-label" for="cfg-fadeOutAnimationDurationMs">Длительность ухода</label>
                         <input id="cfg-fadeOutAnimationDurationMs"
                                type="range">
                         <span class="demo-field-value"

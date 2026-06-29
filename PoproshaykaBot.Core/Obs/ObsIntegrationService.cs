@@ -14,6 +14,7 @@ public sealed class ObsIntegrationService(
     : IDisposable, IObsSceneController
 {
     private const string BrowserSourceInputKind = "browser_source";
+    private const string ConnectFailedMessage = "Не удалось подключиться к OBS WebSocket: {Message}";
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(5);
     private static readonly string[] MicrophoneNameMarkers = ["mic", "microphone", "микрофон", "микро"];
 
@@ -65,11 +66,11 @@ public sealed class ObsIntegrationService(
 
                 if (IsExpectedConnectionFailure(exception))
                 {
-                    logger.LogWarning("Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+                    logger.LogWarning(ConnectFailedMessage, safeMessage);
                 }
                 else
                 {
-                    logger.LogWarning(exception, "Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+                    logger.LogWarning(exception, ConnectFailedMessage, safeMessage);
                 }
 
                 return CurrentStatus;
@@ -609,11 +610,11 @@ public sealed class ObsIntegrationService(
 
             if (IsExpectedConnectionFailure(exception))
             {
-                logger.LogWarning("Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+                logger.LogWarning(ConnectFailedMessage, safeMessage);
             }
             else
             {
-                logger.LogWarning(exception, "Не удалось подключиться к OBS WebSocket: {Message}", safeMessage);
+                logger.LogWarning(exception, ConnectFailedMessage, safeMessage);
             }
 
             return CurrentStatus;

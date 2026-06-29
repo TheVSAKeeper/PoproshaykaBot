@@ -397,9 +397,9 @@ public sealed class SseService : IAsyncDisposable
                 {
                     break;
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException ex)
                 {
-                    _logger.LogDebug("SSE клиент не принял данные за {Timeout} c — отключаю зависшего клиента",
+                    _logger.LogDebug(ex, "SSE клиент не принял данные за {Timeout} c — отключаю зависшего клиента",
                         _clientWriteTimeout.TotalSeconds);
 
                     break;
