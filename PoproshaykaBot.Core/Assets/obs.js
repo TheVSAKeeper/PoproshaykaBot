@@ -40,6 +40,21 @@
     const seenMessageIdsOrder = [];
     const seenMessageIdsLimit = 1000;
 
+    let eventSource = null;
+    let lastEventTime = Date.now();
+    let staleThresholdMs = 70000;
+    let reconnecting = false;
+    let watchdogIntervalId = null;
+    let reconnectTimeoutId = null;
+    let reconnectDelayMs = 3000;
+    const reconnectMinDelayMs = 3000;
+    const reconnectMaxDelayMs = 30000;
+    const watchdogTickMs = 10000;
+
+    function markAlive() {
+        lastEventTime = Date.now();
+    }
+
     const avatarMemoryCache = new Map();
     const avatarStorageKeyPrefix = 'poproshaykabot.avatar.';
     const avatarStorageTtlMs = 24 * 60 * 60 * 1000;
@@ -311,9 +326,25 @@
     }
 
     function initEventSource() {
-        const eventSource = new EventSource('/events');
+        if (eventSource) {
+            try {
+                eventSource.close();
+            } catch (e) { /* noop */
+            }
+        }
 
-        eventSource.addEventListener('message', function (event) {
+        const es = new EventSource('/events');
+        eventSource = es;
+
+        es.onopen = function () {
+            reconnectDelayMs = reconnectMinDelayMs;
+            reconnecting = false;
+            markAlive();
+            showReloadBanner();
+        };
+
+        es.addEventListener('message', function (event) {
+            markAlive();
             try {
                 addMessage(JSON.parse(event.data));
             } catch (e) {
@@ -321,11 +352,13 @@
             }
         });
 
-        eventSource.addEventListener('clear', function () {
+        es.addEventListener('clear', function () {
+            markAlive();
             clearChat();
         });
 
-        eventSource.addEventListener('chat_settings_changed', function (event) {
+        es.addEventListener('chat_settings_changed', function (event) {
+            markAlive();
             try {
                 updateChatSettings(JSON.parse(event.data));
             } catch (e) {
@@ -333,7 +366,20 @@
             }
         });
 
-        eventSource.addEventListener('dropped', function (event) {
+        es.addEventListener('ping', function (event) {
+            markAlive();
+            try {
+                const payload = JSON.parse(event.data);
+                if (typeof payload.intervalSeconds === 'number' && payload.intervalSeconds > 0) {
+                    staleThresholdMs = Math.max(70000, payload.intervalSeconds * 1000 * 2 + 10000);
+                }
+            } catch (e) {
+                console.debug('Не удалось разобрать ping SSE:', e);
+            }
+        });
+
+        es.addEventListener('dropped', function (event) {
+            markAlive();
             try {
                 const payload = JSON.parse(event.data);
                 console.warn(
@@ -346,8 +392,11 @@
             }
         });
 
-        eventSource.onerror = function (event) {
+        es.onerror = function (event) {
             console.error('SSE ошибка:', event);
+            if (es === eventSource && es.readyState === EventSource.CLOSED) {
+                scheduleReconnect();
+            }
         };
     }
 
@@ -370,17 +419,13 @@
         messageDiv.dataset.fading = 'true';
 
         if (fadeOutAnimationType === 'no-animation' || !validExitAnimations.has(fadeOutAnimationType)) {
-            setTimeout(() => {
-                messageDiv.remove();
-            }, 100);
+            setTimeout(() => messageDiv.remove(), 100);
             return;
         }
 
         messageDiv.dataset.exitAnim = fadeOutAnimationType;
 
-        setTimeout(() => {
-            messageDiv.remove();
-        }, fadeOutDuration);
+        setTimeout(() => messageDiv.remove(), fadeOutDuration);
     }
 
     function cancelFadeOut(messageDiv) {
@@ -510,7 +555,9 @@
             const avatarHtml = renderAvatarPlaceholder(message.userId);
 
             const usernameClasses = ['username', ...userTypeClasses].join(' ');
-            const usernameHtml = `<span class="${usernameClasses}">${escapeHtml(message.displayName || message.username || '')}</span>`;
+            const usernameColor = sanitizeUsernameColor(message.color);
+            const usernameStyle = usernameColor ? ` style="color: ${usernameColor}"` : '';
+            const usernameHtml = `<span class="${usernameClasses}"${usernameStyle}>${escapeHtml(message.displayName || message.username || '')}</span>`;
 
             const headerHtml = `
             <div class="message-header">
@@ -628,6 +675,14 @@
         if (!isHighlightMentions) return text;
 
         return text.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+    }
+
+    const usernameColorPattern = /^#[0-9a-fA-F]{6}$/;
+
+    function sanitizeUsernameColor(value) {
+        if (typeof value !== 'string') return '';
+        const trimmed = value.trim();
+        return usernameColorPattern.test(trimmed) ? trimmed : '';
     }
 
     function escapeAttr(value) {
@@ -831,17 +886,67 @@
         }, reloadBannerLifetimeMs);
     }
 
+    function loadHistoryAndBackfill() {
+        return fetch('/api/history')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(messages => messages.forEach(message => addMessage(message, true)));
+    }
+
+    function scheduleReconnect() {
+        if (reconnecting) {
+            return;
+        }
+        reconnecting = true;
+
+        if (reconnectTimeoutId !== null) {
+            clearTimeout(reconnectTimeoutId);
+        }
+
+        console.warn('SSE: переподключение оверлея через', reconnectDelayMs, 'мс');
+        reconnectTimeoutId = setTimeout(() => {
+            reconnectTimeoutId = null;
+            reconnecting = false;
+            reconnectDelayMs = Math.min(reconnectMaxDelayMs, reconnectDelayMs * 2);
+            loadHistoryAndBackfill()
+                .catch(error => console.error('Ошибка догрузки истории при реконнекте:', error))
+                .finally(() => {
+                    initEventSource();
+                    markAlive();
+                });
+        }, reconnectDelayMs);
+    }
+
+    function startWatchdog() {
+        if (watchdogIntervalId !== null) {
+            return;
+        }
+        watchdogIntervalId = setInterval(() => {
+            if (reconnecting) {
+                return;
+            }
+            const stale = Date.now() - lastEventTime > staleThresholdMs;
+            const closed = eventSource !== null && eventSource.readyState === EventSource.CLOSED;
+            if (stale || closed) {
+                scheduleReconnect();
+            }
+        }, watchdogTickMs);
+    }
+
     function initOverlay() {
         fetch('/api/chat-settings')
             .then(response => response.json())
             .then(settings => updateChatSettings(settings))
-            .then(() => fetch('/api/history'))
-            .then(response => response.json())
-            .then(messages => messages.forEach(message => addMessage(message, true)))
+            .then(() => loadHistoryAndBackfill())
             .catch(error => console.error('Ошибка инициализации оверлея:', error))
             .finally(() => {
-                showReloadBanner();
                 initEventSource();
+                markAlive();
+                startWatchdog();
             });
     }
 

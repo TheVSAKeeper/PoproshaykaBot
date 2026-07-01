@@ -17,6 +17,8 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
     private const int DisconnectedRefreshInterval = 15000;
     private const int MinVolumeMeterDelayMs = 30;
     private const int MaxVolumeMeterDelayMs = 1000;
+    private const int MaxAutoConnectBackoffSteps = 5;
+    private const double MaxAutoConnectIntervalSeconds = 300;
     private static readonly TimeSpan AutoConnectRetryInterval = TimeSpan.FromSeconds(30);
 
     private readonly List<IDisposable> _subs = [];
@@ -28,6 +30,7 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
     private ObsIntegrationSettings _settings = new();
     private CancellationTokenSource? _refreshCts;
     private DateTimeOffset _lastAutoConnectAttempt = DateTimeOffset.MinValue;
+    private int _autoConnectFailures;
     private bool _initialized;
     private bool _refreshing;
     private bool _refreshQueued;
@@ -492,6 +495,13 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
                 return;
             }
 
+            if (connectIfNeeded)
+            {
+                _autoConnectFailures = snapshot.IsConnected
+                    ? 0
+                    : Math.Min(_autoConnectFailures + 1, MaxAutoConnectBackoffSteps);
+            }
+
             ApplySnapshot(snapshot);
             UpdateRefreshTimer(true, snapshot.IsConnected);
         }
@@ -789,13 +799,21 @@ public sealed partial class ObsInfoWidget : UserControl, IDashboardTileHeaderPro
         }
 
         var now = DateTimeOffset.Now;
-        if (now - _lastAutoConnectAttempt < AutoConnectRetryInterval)
+        if (now - _lastAutoConnectAttempt < CurrentAutoConnectInterval())
         {
             return false;
         }
 
         _lastAutoConnectAttempt = now;
         return true;
+    }
+
+    private TimeSpan CurrentAutoConnectInterval()
+    {
+        var seconds = Math.Min(AutoConnectRetryInterval.TotalSeconds * Math.Pow(2, _autoConnectFailures),
+            MaxAutoConnectIntervalSeconds);
+
+        return TimeSpan.FromSeconds(seconds);
     }
 
     private void SetRefreshButtonEnabled(bool enabled)

@@ -17,6 +17,7 @@ public static class EventSubChatMessageMapper
         var userId = GetString(evt, "chatter_user_id");
         var username = GetString(evt, "chatter_user_login");
         var displayName = GetString(evt, "chatter_user_name");
+        var color = NormalizeColor(GetString(evt, "color"));
 
         var messageText = evt.TryGetProperty("message", out var msgEl)
                           && msgEl.TryGetProperty("text", out var textEl)
@@ -42,7 +43,35 @@ public static class EventSubChatMessageMapper
             isModerator,
             isVip,
             isSubscriber,
-            isBot);
+            isBot,
+            color);
+    }
+
+    private static string NormalizeColor(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = raw.Trim();
+
+        if (trimmed is not ['#', _, _, _, _, _, _])
+        {
+            return string.Empty;
+        }
+
+        for (var i = 1; i < trimmed.Length; i++)
+        {
+            var ch = trimmed[i];
+
+            if (ch is (< '0' or > '9') and (< 'a' or > 'f') and (< 'A' or > 'F'))
+            {
+                return string.Empty;
+            }
+        }
+
+        return trimmed;
     }
 
     private static (IReadOnlyList<(string SetId, string BadgeId)> Badges,

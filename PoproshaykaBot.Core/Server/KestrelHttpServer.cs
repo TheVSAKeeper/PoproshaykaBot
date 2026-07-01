@@ -48,9 +48,17 @@ public sealed class KestrelHttpServer(
 
             _app.Use(async (ctx, next) =>
             {
-                var maskedQuery = QueryStringMasker.Mask(ctx.Request.QueryString.Value ?? string.Empty);
-                logger.LogInformation("HTTP запрос: {Method} {Path}{Query}",
-                    ctx.Request.Method, ctx.Request.Path, maskedQuery);
+                if (logger.IsEnabled(LogLevel.Debug))
+                {
+                    var maskedQuery = QueryStringMasker.Mask(ctx.Request.QueryString.Value ?? string.Empty);
+                    logger.LogDebug("HTTP запрос: {Method} {Path}{Query} (UA \"{UserAgent}\", тело {ContentLength} б, от {RemoteIp})",
+                        ctx.Request.Method,
+                        ctx.Request.Path,
+                        maskedQuery,
+                        ctx.Request.Headers.UserAgent.ToString(),
+                        ctx.Request.ContentLength ?? 0,
+                        ctx.Connection.RemoteIpAddress);
+                }
 
                 await next(ctx);
             });

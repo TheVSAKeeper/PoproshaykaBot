@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,12 @@ internal sealed class SseEndpoint(SseService sseService) : IEndpointMapper
 
         endpoints.MapGet("/events", async ctx =>
         {
+            if (!sseService.IsRunning)
+            {
+                ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                return;
+            }
+
             ctx.Response.ContentType = "text/event-stream";
             ctx.Response.Headers.CacheControl = "no-cache";
             ctx.Response.Headers.Connection = "keep-alive";
@@ -22,8 +29,13 @@ internal sealed class SseEndpoint(SseService sseService) : IEndpointMapper
             bufferingFeature?.DisableBuffering();
 
             await ctx.Response.Body.FlushAsync();
+            await ctx.Response.Body.WriteAsync("retry: 3000\n\n"u8.ToArray());
+            await ctx.Response.Body.FlushAsync();
 
-            sseService.AddClient(ctx.Response);
+            if (!sseService.AddClient(ctx.Response))
+            {
+                return;
+            }
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted,
                 lifetime.ApplicationStopping);

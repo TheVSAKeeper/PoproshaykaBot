@@ -21,14 +21,21 @@ using Serilog.Debugging;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using Timer = System.Windows.Forms.Timer;
+using Timer = System.Threading.Timer;
 
 namespace PoproshaykaBot.WinForms;
 
 public static class Program
 {
+    private const int ShutdownSoftDeadlineSeconds = 8;
+
+    private const int ShutdownHardDeadlineSeconds = 12;
+
+    private static int _memoryWatchdogBusy;
+
     [STAThread]
     private static void Main(string[] args)
     {
@@ -43,9 +50,17 @@ public static class Program
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+            .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
             .WriteTo.Console(outputTemplate: OutputTemplate)
             .WriteTo.Debug(outputTemplate: OutputTemplate)
-            .WriteTo.File(AppPaths.Combine("logs", "bot_log_.txt"), rollingInterval: RollingInterval.Day, outputTemplate: OutputTemplate)
+            .WriteTo.File(AppPaths.Combine("logs", "bot_log_.txt"),
+                rollingInterval: RollingInterval.Day,
+                fileSizeLimitBytes: 50L * 1024 * 1024,
+                rollOnFileSizeLimit: true,
+                retainedFileCountLimit: 31,
+                outputTemplate: OutputTemplate)
             .WriteTo.Sink(uiLogSink, LogEventLevel.Information)
             .CreateLogger();
 
@@ -63,8 +78,7 @@ public static class Program
 
                 if (!isUiSmoke)
                 {
-                    MessageBox.Show(
-                        "PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
+                    MessageBox.Show("PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
                         "Приложение уже запущено",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
@@ -85,12 +99,7 @@ public static class Program
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             ApplicationConfiguration.Initialize();
 
-            using var memoryCheckTimer = CreateMemoryWatchdogTimer();
-
-            if (!isUiSmoke)
-            {
-                memoryCheckTimer.Start();
-            }
+            using var memoryWatchdog = isUiSmoke ? null : CreateMemoryWatchdog();
 
             RunApp(isUiSmoke, uiLogSink);
         }
@@ -135,23 +144,39 @@ public static class Program
         }
         finally
         {
-            if (streamMonitoringStarted)
-            {
-                StopStreamMonitoring(streamMonitoringHost);
-            }
-
-            if (appLifetimeStarted)
-            {
-                StopAppLifetime(appLifetime);
-            }
-
-            serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            StopAllComponents(serviceProvider, appLifetime, streamMonitoringHost, appLifetimeStarted, streamMonitoringStarted, isUiSmoke);
 
             if (!isUiSmoke)
             {
                 ApplyPendingUpdate();
             }
         }
+    }
+
+    private static void StopAllComponents(
+        ServiceProvider serviceProvider,
+        AppLifetime appLifetime,
+        StreamMonitoringHost streamMonitoringHost,
+        bool appLifetimeStarted,
+        bool streamMonitoringStarted,
+        bool isUiSmoke)
+    {
+        using var shutdownWatchdog = isUiSmoke ? null : CreateShutdownWatchdog();
+
+        using var shutdownTimeout = isUiSmoke ? null : new CancellationTokenSource(TimeSpan.FromSeconds(ShutdownSoftDeadlineSeconds));
+        var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
+
+        if (streamMonitoringStarted)
+        {
+            StopStreamMonitoring(streamMonitoringHost, shutdownToken);
+        }
+
+        if (appLifetimeStarted)
+        {
+            StopAppLifetime(appLifetime, shutdownToken);
+        }
+
+        serviceProvider.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     private static void FinalizeUpdate()
@@ -228,11 +253,15 @@ public static class Program
         }
     }
 
-    private static void StopStreamMonitoring(StreamMonitoringHost host)
+    private static void StopStreamMonitoring(StreamMonitoringHost host, CancellationToken cancellationToken)
     {
         try
         {
-            host.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+            host.StopAsync(cancellationToken).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Warning("Остановка стрим-мониторинга прервана по таймауту завершения");
         }
         catch (Exception ex)
         {
@@ -269,11 +298,15 @@ public static class Program
         }
     }
 
-    private static void StopAppLifetime(AppLifetime appLifetime)
+    private static void StopAppLifetime(AppLifetime appLifetime, CancellationToken cancellationToken)
     {
         try
         {
-            appLifetime.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+            appLifetime.StopAsync(cancellationToken).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Warning("Остановка AppLifetime прервана по таймауту завершения");
         }
         catch (Exception ex)
         {
@@ -311,53 +344,180 @@ public static class Program
         return $"Local\\PoproshaykaBot-{hash[..16]}";
     }
 
-    private static Timer CreateMemoryWatchdogTimer()
+    private static Timer CreateMemoryWatchdog()
     {
-        const long ThresholdMb = 1024;
-        const long MemoryThreshold = 1024 * 1024 * ThresholdMb;
-        const int CheckIntervalMs = 1000;
-        const int KillDelayMs = 1000;
+        const long BytesPerMb = 1024 * 1024;
+        const long SelfThresholdMb = 1024;
+        const long TotalThresholdMb = 2048;
+        const int LogEveryNthCheck = 30;
+        var checkInterval = TimeSpan.FromSeconds(2);
 
-        var memoryCheckTimer = new Timer { Interval = CheckIntervalMs };
-        memoryCheckTimer.Tick += (_, _) =>
-        {
-            var currentProcess = Process.GetCurrentProcess();
-            var memoryBytes = currentProcess.PrivateMemorySize64;
+        var checkCount = 0;
 
-            if (memoryBytes <= MemoryThreshold)
+        return new(_ =>
             {
-                return;
+                if (Interlocked.Exchange(ref _memoryWatchdogBusy, 1) == 1)
+                {
+                    return;
+                }
+
+                try
+                {
+                    var selfBytes = SelfMemoryBytes();
+                    var childBytes = ChildProcessMemoryBytes(out var childCount);
+                    var totalBytes = selfBytes + childBytes;
+
+                    if (++checkCount % LogEveryNthCheck == 1)
+                    {
+                        Log.Information("Память: процесс {SelfMb} МБ, дочерние {ChildMb} МБ ({ChildCount} проц.), всего {TotalMb} МБ",
+                            selfBytes / BytesPerMb, childBytes / BytesPerMb, childCount, totalBytes / BytesPerMb);
+                    }
+
+                    if (selfBytes <= SelfThresholdMb * BytesPerMb && totalBytes <= TotalThresholdMb * BytesPerMb)
+                    {
+                        return;
+                    }
+
+                    Log.Fatal("Аномальное потребление памяти: процесс {SelfMb} МБ, дочерние {ChildMb} МБ ({ChildCount} проц.), всего {TotalMb} МБ — принудительное завершение процесса",
+                        selfBytes / BytesPerMb, childBytes / BytesPerMb, childCount, totalBytes / BytesPerMb);
+
+                    Log.CloseAndFlush();
+                    Process.GetCurrentProcess().Kill();
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _memoryWatchdogBusy, 0);
+                }
+            },
+            null,
+            checkInterval,
+            checkInterval);
+    }
+
+    private static long SelfMemoryBytes()
+    {
+        using var process = Process.GetCurrentProcess();
+        return process.PrivateMemorySize64;
+    }
+
+    private static long ChildProcessMemoryBytes(out int count)
+    {
+        count = 0;
+        var parentByPid = SnapshotParentMap();
+
+        if (parentByPid.Count == 0)
+        {
+            return 0;
+        }
+
+        var childrenByParent = new Dictionary<int, List<int>>();
+        foreach (var (pid, parentPid) in parentByPid)
+        {
+            if (!childrenByParent.TryGetValue(parentPid, out var siblings))
+            {
+                siblings = [];
+                childrenByParent[parentPid] = siblings;
             }
 
-            Log.Warning("Обнаружено аномальное потребление памяти: {MemoryBytes} байт", memoryBytes);
-            memoryCheckTimer.Stop();
+            siblings.Add(pid);
+        }
 
-            Task.Run(async () =>
+        long totalBytes = 0;
+        var pending = new Queue<int>();
+        var visited = new HashSet<int> { Environment.ProcessId };
+        pending.Enqueue(Environment.ProcessId);
+
+        while (pending.Count > 0)
+        {
+            if (!childrenByParent.TryGetValue(pending.Dequeue(), out var children))
             {
-                await Task.Delay(KillDelayMs);
-                Log.Fatal("Принудительное завершение процесса из-за утечки памяти");
-                await Log.CloseAndFlushAsync();
-                currentProcess.Kill();
-            });
+                continue;
+            }
 
-            var memoryMb = memoryBytes / (1024.0 * 1024.0);
-            var killDelaySeconds = KillDelayMs / 1000;
-            var secondsWord = GetRussianSecondsWord(killDelaySeconds);
-            var message =
-                $"""
-                 Внимание! Обнаружено аномальное потребление ресурсов.
+            foreach (var childPid in children)
+            {
+                if (!visited.Add(childPid))
+                {
+                    continue;
+                }
 
-                 Текущее использование: {memoryMb:F2} MB
-                 Установленный лимит: {ThresholdMb:F2} MB
+                pending.Enqueue(childPid);
 
-                 У вас есть {killDelaySeconds} {secondsWord}, чтобы прочитать это сообщение, затем процесс будет убит принудительно.
-                 """;
+                try
+                {
+                    using var child = Process.GetProcessById(childPid);
+                    totalBytes += child.PrivateMemorySize64;
+                    count++;
+                }
+                catch (Exception exception)
+                {
+                    Log.Debug(exception, "Watchdog: процесс {Pid} недоступен для замера памяти", childPid);
+                }
+            }
+        }
 
-            MessageBox.Show(message, "Критическая нагрузка на память", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            Environment.FailFast("Пользователь подтвердил закрытие при утечке памяти.");
-        };
+        return totalBytes;
+    }
 
-        return memoryCheckTimer;
+    private static Dictionary<int, int> SnapshotParentMap()
+    {
+        const uint Th32csSnapprocess = 0x00000002;
+        var map = new Dictionary<int, int>();
+        var snapshot = CreateToolhelp32Snapshot(Th32csSnapprocess, 0);
+
+        if (snapshot == IntPtr.Zero || snapshot == new IntPtr(-1))
+        {
+            return map;
+        }
+
+        try
+        {
+            var entry = new ProcessEntry32 { dwSize = (uint)Marshal.SizeOf<ProcessEntry32>() };
+
+            if (!Process32First(snapshot, ref entry))
+            {
+                return map;
+            }
+
+            do
+            {
+                map[(int)entry.th32ProcessID] = (int)entry.th32ParentProcessID;
+            } while (Process32Next(snapshot, ref entry));
+        }
+        finally
+        {
+            CloseHandle(snapshot);
+        }
+
+        return map;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32First(IntPtr hSnapshot, ref ProcessEntry32 lppe);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32Next(IntPtr hSnapshot, ref ProcessEntry32 lppe);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    private static Timer CreateShutdownWatchdog()
+    {
+        return new(_ =>
+            {
+                Log.Fatal("Завершение работы превысило лимит {Seconds} c — принудительное завершение процесса", ShutdownHardDeadlineSeconds);
+                Log.CloseAndFlush();
+                Process.GetCurrentProcess().Kill();
+            },
+            null,
+            TimeSpan.FromSeconds(ShutdownHardDeadlineSeconds),
+            Timeout.InfiniteTimeSpan);
     }
 
     private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)
@@ -376,22 +536,6 @@ public static class Program
             .AddSelfUpdate()
             .AddDashboardTiles()
             .AddForms();
-    }
-
-    private static string GetRussianSecondsWord(int seconds)
-    {
-        var mod100 = seconds % 100;
-        if (mod100 is >= 11 and <= 14)
-        {
-            return "секунд";
-        }
-
-        return (seconds % 10) switch
-        {
-            1 => "секунда",
-            2 or 3 or 4 => "секунды",
-            _ => "секунд",
-        };
     }
 
     private static bool ValidateAndResolvePortConflict(SettingsManager settingsManager)
@@ -437,5 +581,22 @@ public static class Program
             MessageBoxIcon.Information);
 
         return true;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry32
+    {
+        public uint dwSize;
+        public uint cntUsage;
+        public uint th32ProcessID;
+        public IntPtr th32DefaultHeapID;
+        public uint th32ModuleID;
+        public uint cntThreads;
+        public uint th32ParentProcessID;
+        public int pcPriClassBase;
+        public uint dwFlags;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string szExeFile;
     }
 }

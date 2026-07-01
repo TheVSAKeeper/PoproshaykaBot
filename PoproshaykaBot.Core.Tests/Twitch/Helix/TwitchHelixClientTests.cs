@@ -17,7 +17,7 @@ public sealed class TwitchHelixClientTests
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient(Arg.Any<string>()).Returns(httpClient);
 
-        var client = new BotHelixClient(factory, NullLogger<TwitchHelixClient>.Instance);
+        var client = new BotHelixClient(factory, NullLogger<BotHelixClient>.Instance);
         return (client, stub);
     }
 
@@ -433,10 +433,10 @@ public sealed class TwitchHelixClientTests
         factory.CreateClient(Arg.Any<string>())
             .Returns(_ => new(stub, false) { BaseAddress = new(HelixBaseUrl) });
 
-        var bot = new BotHelixClient(factory, NullLogger<TwitchHelixClient>.Instance);
+        var bot = new BotHelixClient(factory, NullLogger<BotHelixClient>.Instance);
         await bot.GetUserByLoginAsync("a");
 
-        var broadcaster = new BroadcasterHelixClient(factory, NullLogger<TwitchHelixClient>.Instance);
+        var broadcaster = new BroadcasterHelixClient(factory, NullLogger<BroadcasterHelixClient>.Instance);
         await broadcaster.GetUserByLoginAsync("a");
 
         using (Assert.EnterMultipleScope())

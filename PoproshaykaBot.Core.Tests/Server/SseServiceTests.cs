@@ -19,7 +19,8 @@ public sealed class SseServiceTests
 
         _settingsManager.Current.Returns(_settings);
         _logger = new();
-        _service = new(_settingsManager, _logger, new(), new(), new());
+        _registry = new();
+        _service = new(_settingsManager, _logger, new(), _registry, new());
     }
 
     [TearDown]
@@ -32,11 +33,61 @@ public sealed class SseServiceTests
     private SettingsManager _settingsManager = null!;
     private RecordingLogger<SseService> _logger = null!;
     private SseService _service = null!;
+    private SseClientRegistry _registry = null!;
 
     [Test]
     public void DroppedMessageCount_FreshService_IsZero()
     {
-        Assert.That(_service.DroppedMessageCount, Is.EqualTo(0));
+        Assert.That(_service.DroppedMessageCount, Is.Zero);
+    }
+
+    [Test]
+    public void IsRunning_BeforeStart_IsFalse()
+    {
+        Assert.That(_service.IsRunning, Is.False);
+    }
+
+    [Test]
+    public void IsRunning_AfterStart_IsTrue()
+    {
+        _service.Start();
+        Assert.That(_service.IsRunning, Is.True);
+    }
+
+    [Test]
+    public async Task IsRunning_AfterStop_IsFalse()
+    {
+        _service.Start();
+        await _service.StopAsync();
+        Assert.That(_service.IsRunning, Is.False);
+    }
+
+    [Test]
+    public void AddClient_BeforeStart_ReturnsFalse()
+    {
+        var http = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+        Assert.That(_service.AddClient(http.Response), Is.False);
+    }
+
+    [Test]
+    public void AddClient_AfterStart_ReturnsTrue()
+    {
+        _service.Start();
+        var http = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_service.AddClient(http.Response), Is.True);
+            Assert.That(_registry.Count, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task AddClient_AfterStop_ReturnsFalse()
+    {
+        _service.Start();
+        await _service.StopAsync();
+        var http = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+        Assert.That(_service.AddClient(http.Response), Is.False);
     }
 
     [Test]
@@ -78,7 +129,7 @@ public sealed class SseServiceTests
             _service.AddChatMessage(msg);
         }
 
-        Assert.That(_service.DroppedMessageCount, Is.EqualTo(0));
+        Assert.That(_service.DroppedMessageCount, Is.Zero);
     }
 
     [Test]
@@ -143,6 +194,45 @@ public sealed class SseServiceTests
         throw new TimeoutException($"Ожидалось >= {expectedAtLeast} байт в потоке, но за {timeout.TotalSeconds:F1}с пришло {stream.Length}.");
     }
 
+    private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException($"Условие не выполнилось за {timeout.TotalSeconds:F1}с.");
+    }
+
+    [Test]
+    public async Task ClientWriter_WhenWriteExceedsTimeout_RemovesStuckClient()
+    {
+        _settings.Twitch.Infrastructure.SseClientWriteTimeoutSeconds = 1;
+        _service.Start();
+
+        var http = new DefaultHttpContext();
+        var blocking = new BlockingStream();
+        http.Response.Body = blocking;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_service.AddClient(http.Response), Is.True);
+            Assert.That(_registry.Count, Is.EqualTo(1));
+        }
+
+        _service.AddChatMessage(SampleMessage());
+
+        await WaitForConditionAsync(() => _registry.Count == 0, TimeSpan.FromSeconds(4));
+        Assert.That(_registry.Count, Is.Zero,
+            "Клиент с зависшей записью должен быть отключён по таймауту.");
+    }
+
     private sealed class BlockingStream : MemoryStream
     {
         private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -163,6 +253,19 @@ public sealed class SseServiceTests
         {
             _gate.TrySetResult();
         }
+    }
+
+    [Test]
+    public void BuildPingPayload_SerializesIntervalAsCamelCase()
+    {
+        Assert.That(SseService.BuildPingPayload(30), Is.EqualTo("{\"intervalSeconds\":30}"));
+    }
+
+    [Test]
+    public void Formatter_PingEvent_ProducesObservableSseEvent()
+    {
+        var text = SseFormatter.Format(new("ping", SseService.BuildPingPayload(30)));
+        Assert.That(text, Is.EqualTo("event: ping\ndata: {\"intervalSeconds\":30}\n\n"));
     }
 
     private static ChatMessageData SampleMessage()

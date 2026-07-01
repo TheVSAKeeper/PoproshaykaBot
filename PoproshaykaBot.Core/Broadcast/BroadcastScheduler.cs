@@ -138,7 +138,7 @@ public sealed class BroadcastScheduler(
         {
             try
             {
-                await _runnerTask;
+                await _runnerTask.ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -171,7 +171,7 @@ public sealed class BroadcastScheduler(
             try
             {
                 logger.LogDebug("Ожидание завершения предыдущего цикла рассылки перед запуском нового");
-                await previousTask;
+                await previousTask.ConfigureAwait(false);
             }
             catch (OperationCanceledException ex)
             {
@@ -193,7 +193,7 @@ public sealed class BroadcastScheduler(
 
         try
         {
-            while (await _timer!.WaitForNextTickAsync(cancellationToken))
+            while (await _timer!.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
                 string? currentChannel;
                 lock (_stateLock)

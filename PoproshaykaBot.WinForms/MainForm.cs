@@ -35,6 +35,7 @@ public partial class MainForm : Form
 
     private BotLifecyclePhase _currentPhase = BotLifecyclePhase.Idle;
     private bool _shutdownStarted;
+    private bool _shutdownCompleted;
     private bool _initialized;
     private bool _onboardingWizardOpen;
     private UserStatisticsForm? _userStatisticsForm;
@@ -106,8 +107,18 @@ public partial class MainForm : Form
     {
         base.OnFormClosing(e);
 
-        if (_shutdownStarted || e.Cancel)
+        if (e.Cancel)
         {
+            return;
+        }
+
+        if (_shutdownStarted)
+        {
+            if (!_shutdownCompleted)
+            {
+                e.Cancel = true;
+            }
+
             return;
         }
 
@@ -397,7 +408,7 @@ public partial class MainForm : Form
                 _settingsForm = null;
             }
 
-            await _connectionManager.ShutdownAsync();
+            await _connectionManager.ShutdownAsync(BotStopMode.Forced);
         }
         catch (Exception ex)
         {
@@ -405,6 +416,7 @@ public partial class MainForm : Form
         }
         finally
         {
+            _shutdownCompleted = true;
             Close();
         }
     }

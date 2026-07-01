@@ -9,8 +9,10 @@ public sealed class EventSubChatMessageMapperTests
     private const string BotId = "bot-42";
     private const string ViewerId = "viewer-7";
 
-    private static JsonElement Payload(string chatterUserId)
+    private static JsonElement Payload(string chatterUserId, string? color = null)
     {
+        var colorField = color is null ? string.Empty : $", \"color\": \"{color}\"";
+
         var json = $$"""
                      {
                        "event": {
@@ -18,7 +20,7 @@ public sealed class EventSubChatMessageMapperTests
                          "message_id": "msg-1",
                          "chatter_user_id": "{{chatterUserId}}",
                          "chatter_user_login": "chatter",
-                         "chatter_user_name": "Chatter",
+                         "chatter_user_name": "Chatter"{{colorField}},
                          "message": { "text": "привет" },
                          "badges": []
                        }
@@ -47,7 +49,7 @@ public sealed class EventSubChatMessageMapperTests
     [Test]
     public void Map_WhenBotIdIsNull_LeavesIsBotFalse()
     {
-        var message = EventSubChatMessageMapper.Map(Payload(BotId), null);
+        var message = EventSubChatMessageMapper.Map(Payload(BotId));
 
         Assert.That(message.IsBot, Is.False);
     }
@@ -58,5 +60,37 @@ public sealed class EventSubChatMessageMapperTests
         var message = EventSubChatMessageMapper.Map(Payload(BotId), string.Empty);
 
         Assert.That(message.IsBot, Is.False);
+    }
+
+    [Test]
+    public void Map_WhenColorIsValidHex_PreservesIt()
+    {
+        var message = EventSubChatMessageMapper.Map(Payload(ViewerId, "#FF0000"), BotId);
+
+        Assert.That(message.Color, Is.EqualTo("#FF0000"));
+    }
+
+    [Test]
+    public void Map_WhenColorIsMissing_ReturnsEmpty()
+    {
+        var message = EventSubChatMessageMapper.Map(Payload(ViewerId), BotId);
+
+        Assert.That(message.Color, Is.Empty);
+    }
+
+    [Test]
+    public void Map_WhenColorIsEmptyString_ReturnsEmpty()
+    {
+        var message = EventSubChatMessageMapper.Map(Payload(ViewerId, ""), BotId);
+
+        Assert.That(message.Color, Is.Empty);
+    }
+
+    [Test]
+    public void Map_WhenColorIsMalformed_ReturnsEmpty()
+    {
+        var message = EventSubChatMessageMapper.Map(Payload(ViewerId, "red"), BotId);
+
+        Assert.That(message.Color, Is.Empty);
     }
 }

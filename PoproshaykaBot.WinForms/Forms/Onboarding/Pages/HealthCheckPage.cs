@@ -38,7 +38,11 @@ public sealed partial class HealthCheckPage : OnboardingPageBase
         SetCanAdvance(true);
 
         var url = $"http://localhost:{context.Settings.Twitch.HttpServerPort}/chat";
-        _overlayUrlLabel.Text = $"Адрес для Browser Source в OBS: {url}";
+        _overlayUrlLabel.Text =
+            $"Адрес для Browser Source в OBS: {url}{Environment.NewLine}"
+            + "Совет: в свойствах источника снимите «Shutdown source when not visible» и "
+            + "«Refresh browser when scene becomes active», иначе оверлей перезагружается при смене сцены.";
+
         ResetStatuses();
     }
 
