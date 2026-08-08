@@ -83,7 +83,7 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid Margin="-20">
+    <Grid>
         <Grid x:Name="TilesGrid"
               Margin="3"
               Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}" />

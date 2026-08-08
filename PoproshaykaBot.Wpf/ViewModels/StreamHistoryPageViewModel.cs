@@ -39,6 +39,10 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public ObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];
     public ObservableCollection<StreamSessionChatterRowViewModel> Chatters { get; } = [];
 
+    public bool HasSessions => _sessions.Count > 0;
+    public bool HasSegments => Segments.Count > 0;
+    public bool HasChatters => Chatters.Count > 0;
+
     public StreamHistoryPageViewModel(StreamSessionHistoryStore historyStore, IEventBus eventBus)
     {
         _historyStore = historyStore;
@@ -55,6 +59,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         if (value?.Source is not { } session)
         {
+            NotifyDetailEmptiness();
             return;
         }
 
@@ -67,6 +72,14 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         {
             Chatters.Add(new StreamSessionChatterRowViewModel(ch));
         }
+
+        NotifyDetailEmptiness();
+    }
+
+    private void NotifyDetailEmptiness()
+    {
+        OnPropertyChanged(nameof(HasSegments));
+        OnPropertyChanged(nameof(HasChatters));
     }
 
     [RelayCommand]
@@ -83,6 +96,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         }
 
         UpdateSummary();
+        OnPropertyChanged(nameof(HasSessions));
 
         SelectedRow = selectedId.HasValue
             ? _sessions.FirstOrDefault(r => r.Source.Id == selectedId)
