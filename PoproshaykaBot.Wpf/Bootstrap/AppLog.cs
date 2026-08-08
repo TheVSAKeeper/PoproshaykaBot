@@ -143,4 +143,13 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1408, Level = LogLevel.Debug, Message = "Не удалось загрузить список сцен OBS для привязки профиля")]
     public static partial void ObsScenesLoadFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1500, Level = LogLevel.Information, Message = "Обновление {Version} загружено, приложение перезапустится")]
+    public static partial void UpdateDownloaded(this ILogger logger, string version);
+
+    [LoggerMessage(EventId = 1501, Level = LogLevel.Error, Message = "Ошибка загрузки обновления")]
+    public static partial void UpdateDownloadFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1502, Level = LogLevel.Information, Message = "Версия {Version} пропущена")]
+    public static partial void UpdateVersionSkipped(this ILogger logger, string version);
 }

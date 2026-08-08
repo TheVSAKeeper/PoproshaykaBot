@@ -38,5 +38,8 @@
         <keepshell:ShellLayout.StatusBar>
             <views:StatusBarView />
         </keepshell:ShellLayout.StatusBar>
+        <keepshell:ShellLayout.ContentOverlay>
+            <views:UpdateBannerView DataContext="{Binding UpdateBanner}" />
+        </keepshell:ShellLayout.ContentOverlay>
     </keepshell:ShellLayout>
 </Window>

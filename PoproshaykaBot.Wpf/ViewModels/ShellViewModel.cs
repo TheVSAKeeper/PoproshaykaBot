@@ -37,7 +37,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         BotConnectionManager connectionManager,
         IEventBus eventBus,
         ILogger<ShellViewModel> logger,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        UpdateBannerViewModel updateBanner)
         : base(modal)
     {
         _connectionManager = connectionManager;
@@ -46,6 +47,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _dialogService = dialogService;
         Theme = theme;
+        UpdateBanner = updateBanner;
 
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: settingsPage.OnEnter);
 
@@ -65,6 +67,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     }
 
     public ThemeViewModel Theme { get; }
+
+    public UpdateBannerViewModel UpdateBanner { get; }
 
     public override IPageHeader? EffectivePageHeader => _preferences.ShowPageHeader ? CurrentPageHeader : null;
 
@@ -92,6 +96,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public void Dispose()
     {
+        UpdateBanner.Dispose();
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
         foreach (var subscription in _subscriptions)
