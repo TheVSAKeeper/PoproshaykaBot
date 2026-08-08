@@ -11,6 +11,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
     private readonly Dictionary<string, TileMeta> _catalog;
     private readonly Dictionary<string, PlacedTile> _placed = new(StringComparer.Ordinal);
     private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
+    private readonly List<DashboardTileSettings> _preserved = [];
     private bool _suppress;
 
     [ObservableProperty]
@@ -60,7 +61,17 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
     public void LoadSettings(DashboardLayoutSettings? draft)
     {
-        LoadFrom(draft is { Tiles.Count: > 0 } ? draft : DashboardLayoutDefaults.Create());
+        _preserved.Clear();
+
+        if (draft is not { Tiles.Count: > 0 })
+        {
+            LoadFrom(DashboardLayoutDefaults.Create());
+            return;
+        }
+
+        _preserved.AddRange(draft.Tiles.Where(tile => !tile.IsVisible || !_catalog.ContainsKey(tile.TypeId)));
+
+        LoadFrom(draft);
     }
 
     public DashboardLayoutSettings BuildLayout()
@@ -89,6 +100,12 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
                 MaxHeight = placed.MaxHeight,
                 MaxWidth = placed.MaxWidth,
             });
+        }
+
+        foreach (var tile in _preserved.Where(tile => !_placed.ContainsKey(tile.TypeId)))
+        {
+            tile.Order = order++;
+            layout.Tiles.Add(tile);
         }
 
         return layout;
