@@ -8,19 +8,53 @@
              d:DataContext="{d:DesignInstance vm:ShellViewModel}"
              d:DesignWidth="1100">
 
+    <UserControl.Resources>
+        <DataTemplate x:Key="MonitoringIndicator" DataType="{x:Type vm:StreamMonitoringIndicatorViewModel}">
+            <StackPanel Orientation="Horizontal"
+                        Margin="14,0,0,0"
+                        ToolTip="{Binding Tooltip}"
+                        Visibility="{Binding IsReported, Converter={StaticResource BoolToVisibility}}">
+                <Ellipse Width="8"
+                         Height="8"
+                         VerticalAlignment="Center"
+                         Fill="{Binding Severity, Converter={StaticResource SeverityToBrush}}" />
+                <TextBlock Text="{Binding Text}"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg.Secondary}" />
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <Border Background="{DynamicResource Bg.Surface}"
             BorderBrush="{DynamicResource Border.Subtle}"
             BorderThickness="0,1,0,0"
             Padding="14,5">
-        <StackPanel Orientation="Horizontal">
-            <Ellipse Width="8"
-                     Height="8"
-                     VerticalAlignment="Center"
-                     Fill="{Binding StatusSeverity, Converter={StaticResource SeverityToBrush}}" />
-            <TextBlock Text="{Binding StatusText}"
-                       Margin="8,0,0,0"
-                       VerticalAlignment="Center"
-                       Foreground="{DynamicResource Fg.Secondary}" />
-        </StackPanel>
+        <Grid>
+            <StackPanel Orientation="Horizontal">
+                <Ellipse Width="8"
+                         Height="8"
+                         VerticalAlignment="Center"
+                         Fill="{Binding StatusSeverity, Converter={StaticResource SeverityToBrush}}" />
+                <TextBlock Text="{Binding StatusText}"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg.Secondary}" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        DataContext="{Binding StreamMonitoring}"
+                        Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="Мониторинг стрима"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg.Secondary}"
+                           Opacity="0.7" />
+                <ContentPresenter Content="{Binding Bot}"
+                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
+                <ContentPresenter Content="{Binding Broadcaster}"
+                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
+            </StackPanel>
+        </Grid>
     </Border>
 </UserControl>

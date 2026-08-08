@@ -296,6 +296,7 @@ public partial class App : Application
         services.AddSingleton<ThemeViewModel>();
         services.AddSingleton<ShellPreferences>();
         services.AddSingleton<UpdateBannerViewModel>();
+        services.AddSingleton<StreamMonitoringViewModel>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
 
