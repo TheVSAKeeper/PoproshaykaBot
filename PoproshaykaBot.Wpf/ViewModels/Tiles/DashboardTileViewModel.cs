@@ -26,6 +26,8 @@ public abstract partial class DashboardTileViewModel : ObservableObject
 
     public int? MaxHeight { get; }
 
+    public virtual bool FillsAvailableSpace => false;
+
     public ObservableCollection<ToolbarItemViewModel> HeaderActions { get; } = [];
 
     [RelayCommand]

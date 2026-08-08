@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -11,18 +11,19 @@ namespace PoproshaykaBot.Wpf.Views.Tiles;
 public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlayPreviewTileViewModel>
 {
     private bool _initialized;
+    private bool _disposed;
     private ChatOverlayPreviewTileViewModel? _viewModel;
 
     public ChatOverlayPreviewTileView()
     {
         InitializeComponent();
         Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
+        Dispatcher.ShutdownStarted += OnShutdownStarted;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_initialized)
+        if (_initialized || _disposed)
         {
             return;
         }
@@ -38,8 +39,15 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         await InitializeWebViewAsync(viewModel);
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    private void OnShutdownStarted(object? sender, EventArgs e)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
         if (_viewModel is not null)
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
@@ -53,7 +61,19 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         try
         {
             var environment = await WebView2EnvironmentFactory.CreateAsync(viewModel.UserDataFolder, viewModel.Logger);
+
+            if (_disposed)
+            {
+                return;
+            }
+
             await WebView.EnsureCoreWebView2Async(environment);
+
+            if (_disposed)
+            {
+                return;
+            }
+
             WebView.CoreWebView2.Navigate(viewModel.CurrentUrl);
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
@@ -76,7 +96,7 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
             return;
         }
 
-        if (WebView.CoreWebView2 is null || _viewModel is null)
+        if (_disposed || WebView.CoreWebView2 is null || _viewModel is null)
         {
             return;
         }

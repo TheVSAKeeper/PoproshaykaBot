@@ -10,6 +10,7 @@ namespace PoproshaykaBot.Wpf.Views.Tiles;
 public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileViewModel>
 {
     private bool _initialized;
+    private bool _disposed;
     private bool _reloadAttempted;
     private ChatDisplayTileViewModel? _viewModel;
     private string? _clutterScriptId;
@@ -18,12 +19,12 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
     {
         InitializeComponent();
         Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
+        Dispatcher.ShutdownStarted += OnShutdownStarted;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_initialized)
+        if (_initialized || _disposed)
         {
             return;
         }
@@ -38,17 +39,26 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         _viewModel.ReloadRequested += OnReloadRequested;
         _viewModel.ResetSessionRequested += OnResetSessionRequested;
         _viewModel.ClutterScriptChanged += OnClutterScriptChanged;
+        _viewModel.ChannelUriChanged += OnChannelUriChanged;
 
         await InitializeWebViewAsync(viewModel);
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    private void OnShutdownStarted(object? sender, EventArgs e)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
         if (_viewModel is not null)
         {
             _viewModel.ReloadRequested -= OnReloadRequested;
             _viewModel.ResetSessionRequested -= OnResetSessionRequested;
             _viewModel.ClutterScriptChanged -= OnClutterScriptChanged;
+            _viewModel.ChannelUriChanged -= OnChannelUriChanged;
         }
 
         if (WebView.CoreWebView2 is not null)
@@ -65,7 +75,18 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         try
         {
             var environment = await WebView2EnvironmentFactory.CreateAsync(viewModel.UserDataFolder, viewModel.Logger);
+
+            if (_disposed)
+            {
+                return;
+            }
+
             await WebView.EnsureCoreWebView2Async(environment);
+
+            if (_disposed)
+            {
+                return;
+            }
 
             WebView.CoreWebView2.ProcessFailed += OnProcessFailed;
             WebView.NavigationCompleted += OnNavigationCompleted;
@@ -95,7 +116,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
     private async Task RegisterClutterScriptAsync(ChatDisplayTileViewModel viewModel)
     {
-        if (WebView.CoreWebView2 is null)
+        if (_disposed || WebView.CoreWebView2 is null)
         {
             return;
         }
@@ -124,7 +145,22 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
         await RegisterClutterScriptAsync(_viewModel);
 
+        if (_disposed)
+        {
+            return;
+        }
+
         WebView.Reload();
+    }
+
+    private void OnChannelUriChanged()
+    {
+        if (_disposed || _viewModel?.ChannelUri is not { } channelUri || WebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        WebView.Source = channelUri;
     }
 
     private void OnReloadRequested()
@@ -156,6 +192,12 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         try
         {
             await WebView.CoreWebView2.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.AllSite);
+
+            if (_disposed)
+            {
+                return;
+            }
+
             WebView.Reload();
         }
         catch (Exception exception)

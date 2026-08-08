@@ -50,16 +50,34 @@
                                       Margin="0,0,4,0" />
 
                         <TextBlock Text="{Binding Title}"
+                                   ToolTip="{Binding Title}"
                                    FontFamily="{DynamicResource Font.Sans}"
                                    FontSize="{DynamicResource Font.Size.L}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Fg.Primary}"
                                    VerticalAlignment="Center"
+                                   TextWrapping="NoWrap"
                                    TextTrimming="CharacterEllipsis" />
                     </DockPanel>
 
-                    <ContentControl Content="{Binding}"
-                                    Visibility="{Binding IsCollapsed, Converter={StaticResource InverseBoolToVisibility}}" />
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                  Visibility="{Binding IsCollapsed, Converter={StaticResource InverseBoolToVisibility}}">
+                        <ScrollViewer.Style>
+                            <Style TargetType="ScrollViewer">
+                                <Setter Property="VerticalScrollBarVisibility"
+                                        Value="Auto" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FillsAvailableSpace}"
+                                                 Value="True">
+                                        <Setter Property="VerticalScrollBarVisibility"
+                                                Value="Disabled" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ScrollViewer.Style>
+
+                        <ContentControl Content="{Binding}" />
+                    </ScrollViewer>
                 </DockPanel>
             </Border>
         </DataTemplate>

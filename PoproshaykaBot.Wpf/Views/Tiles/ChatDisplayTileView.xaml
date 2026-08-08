@@ -11,7 +11,21 @@
              d:DesignWidth="380"
              d:DesignHeight="460">
 
-    <Grid>
+    <DockPanel LastChildFill="True">
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource Bg.SurfaceAlt}"
+                BorderBrush="{DynamicResource Border.Subtle}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="8,6"
+                Margin="0,0,0,6"
+                Visibility="{Binding AccountChangeRequiresRestart, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="Аккаунт отображения чата изменён. Перезапустите приложение, чтобы чат открылся под новым аккаунтом."
+                       Style="{StaticResource TextBlock.Subtle}"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <Grid>
         <Border BorderBrush="{DynamicResource Border.Default}"
                 BorderThickness="1"
                 CornerRadius="6"
@@ -29,5 +43,6 @@
                              VerticalAlignment="Center"
                              HorizontalAlignment="Center"
                              Visibility="{Binding HasFallback, Converter={StaticResource BoolToVisibility}}" />
-    </Grid>
+        </Grid>
+    </DockPanel>
 </UserControl>
