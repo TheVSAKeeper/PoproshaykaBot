@@ -2,14 +2,17 @@
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.Auth;
+using System.ComponentModel.DataAnnotations;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
-public sealed partial class BasicSettingsSectionViewModel : ObservableObject, IDisposable
+public sealed partial class BasicSettingsSectionViewModel : ObservableValidator, IDisposable
 {
     private static readonly TwitchSettings DefaultSettings = new();
 
     [ObservableProperty]
+    [NotifyDataErrorInfo]
+    [Required(ErrorMessage = "Укажите канал: без него чат и подключение бота не работают")]
     private string _channel = string.Empty;
 
     [ObservableProperty]

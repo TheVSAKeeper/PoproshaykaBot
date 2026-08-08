@@ -30,9 +30,20 @@
                        Text="{Binding Summary}" />
         </DockPanel>
 
+        <controls:EmptyState Grid.Row="1"
+                             Icon="History"
+                             Heading="Стримов пока нет"
+                             Description="Сессия появится здесь после первого завершённого стрима."
+                             VerticalAlignment="Center"
+                             HorizontalAlignment="Center"
+                             Margin="16"
+                             Visibility="{Binding HasSessions, Converter={StaticResource InverseBoolToVisibility}}" />
+
         <DataGrid x:Name="SessionsGrid"
                   Grid.Row="1"
                   Margin="16,0,16,0"
+                  AutomationProperties.Name="Список сессий стрима"
+                  Visibility="{Binding HasSessions, Converter={StaticResource BoolToVisibility}}"
                   ItemsSource="{Binding Sessions}"
                   SelectedItem="{Binding SelectedRow}"
                   AutoGenerateColumns="False"
@@ -179,8 +190,17 @@
                            Margin="0,0,0,4"
                            Text="Сегменты" />
 
+                <TextBlock Grid.Row="1"
+                           Style="{StaticResource TextBlock.Subtle}"
+                           VerticalAlignment="Top"
+                           Text="Выберите стрим, чтобы увидеть его сегменты"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding HasSegments, Converter={StaticResource InverseBoolToVisibility}}" />
+
                 <DataGrid Grid.Row="1"
                           ItemsSource="{Binding Segments}"
+                          AutomationProperties.Name="Сегменты выбранного стрима"
+                          Visibility="{Binding HasSegments, Converter={StaticResource BoolToVisibility}}"
                           AutoGenerateColumns="False"
                           IsReadOnly="True"
                           CanUserSortColumns="False"
@@ -224,8 +244,17 @@
                            Margin="0,0,0,4"
                            Text="Чаттеры" />
 
+                <TextBlock Grid.Row="1"
+                           Style="{StaticResource TextBlock.Subtle}"
+                           VerticalAlignment="Top"
+                           Text="Выберите стрим, чтобы увидеть его чаттеров"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding HasChatters, Converter={StaticResource InverseBoolToVisibility}}" />
+
                 <DataGrid Grid.Row="1"
                           ItemsSource="{Binding Chatters}"
+                          AutomationProperties.Name="Чаттеры выбранного стрима"
+                          Visibility="{Binding HasChatters, Converter={StaticResource BoolToVisibility}}"
                           AutoGenerateColumns="False"
                           IsReadOnly="True"
                           CanUserSortColumns="True"

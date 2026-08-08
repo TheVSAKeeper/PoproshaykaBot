@@ -48,6 +48,8 @@ public sealed partial class ChatOverlayPreviewTileViewModel : DashboardTileViewM
         HeaderActions.Add(_viewerModeAction);
     }
 
+    public override bool FillsAvailableSpace => true;
+
     public ILogger Logger { get; }
 
     public string UserDataFolder { get; }

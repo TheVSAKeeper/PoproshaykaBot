@@ -90,6 +90,7 @@
                     <TextBlock Text="Репозиторий обновлений (owner/repo):"
                                Margin="0,0,0,4" />
                     <TextBox Style="{StaticResource TextBox.Form}"
+                             AutomationProperties.Name="Репозиторий обновлений в формате owner/repo"
                              Text="{Binding RepositoryOverride, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              keepshell:PlaceholderBehavior.Placeholder="{Binding DefaultRepositorySlug}"
                              Margin="0,0,0,4" />

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
@@ -239,6 +240,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             var prevBotToken = _accountsStore.LoadBot().AccessToken;
             var prevBroadcasterToken = _accountsStore.LoadBroadcaster().AccessToken;
             var prevPort = _settingsManager.Current.Twitch.HttpServerPort;
+            var prevChannel = _settingsManager.Current.Twitch.Channel;
+            var prevChatDisplayAccount = _settingsManager.Current.Twitch.ChatDisplayAccount;
 
             ReconcileHttpServerPort();
             var newPort = _settings.Twitch.HttpServerPort;
@@ -263,6 +266,12 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             if (!string.Equals(prevBroadcasterToken, _broadcasterDraft.AccessToken, StringComparison.Ordinal))
             {
                 await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
+            }
+
+            if (!string.Equals(prevChannel, _settings.Twitch.Channel, StringComparison.OrdinalIgnoreCase)
+                || prevChatDisplayAccount != _settings.Twitch.ChatDisplayAccount)
+            {
+                await _eventBus.PublishAsync(new ChatDisplaySettingsChanged(_settings.Twitch.Channel, _settings.Twitch.ChatDisplayAccount));
             }
 
             var portChanged = newPort != prevPort;

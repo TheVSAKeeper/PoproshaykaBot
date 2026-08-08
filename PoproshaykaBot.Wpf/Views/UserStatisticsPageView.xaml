@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+             xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -21,20 +22,25 @@
                    Margin="0,0,0,12">
             <Button DockPanel.Dock="Right"
                     Content="Обновить"
-                    Style="{StaticResource Button.Ghost}"
+                    Style="{StaticResource Button.Secondary}"
                     Command="{Binding RefreshCommand}"
-                    Margin="8,0,0,0" />
+                    AutomationProperties.Name="Перечитать статистику"
+                    Margin="16,0,0,0" />
             <Button DockPanel.Dock="Right"
                     Content="Названия баллов"
-                    Style="{StaticResource Button.Ghost}"
+                    Style="{StaticResource Button.Secondary}"
                     Command="{Binding EditPointTermCommand}"
+                    AutomationProperties.Name="Изменить названия баллов"
                     Margin="8,0,0,0" />
             <Button DockPanel.Dock="Right"
                     Content="Очистить"
                     Style="{StaticResource Button.Ghost}"
-                    Command="{Binding ClearFilterCommand}" />
+                    Command="{Binding ClearFilterCommand}"
+                    AutomationProperties.Name="Очистить поиск"
+                    Margin="4,0,0,0" />
             <TextBox Style="{StaticResource TextBox.Form}"
                      Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     AutomationProperties.Name="Поиск пользователя по имени или идентификатору"
                      keepshell:PlaceholderBehavior.Placeholder="Поиск пользователя (имя или ID)..." />
         </DockPanel>
 
@@ -45,8 +51,20 @@
                                   MinWidth="260" />
             </Grid.ColumnDefinitions>
 
+            <controls:EmptyState Grid.Column="0"
+                                 Icon="Users"
+                                 Heading="{Binding EmptyHeading}"
+                                 Description="{Binding EmptyDescription}"
+                                 DescriptionMaxWidth="320"
+                                 VerticalAlignment="Center"
+                                 HorizontalAlignment="Center"
+                                 Margin="0,0,16,0"
+                                 Visibility="{Binding HasUsers, Converter={StaticResource InverseBoolToVisibility}}" />
+
             <DataGrid Grid.Column="0"
                       ItemsSource="{Binding Users}"
+                      AutomationProperties.Name="Статистика пользователей"
+                      Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}"
                       SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                       AutoGenerateColumns="False"
                       IsReadOnly="True"

@@ -4,7 +4,10 @@ using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Diagnostics;
@@ -15,7 +18,7 @@ using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
-public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
+public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, IDisposable
 {
     private const string HideClutterScriptTemplate = """
                                             (function () {
@@ -83,13 +86,19 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
     private readonly SettingsManager _settings;
     private readonly IShellLauncher _shellLauncher;
     private readonly IDialogService _dialogService;
+    private readonly IDisposable _chatDisplaySubscription;
 
     private readonly ToolbarItemViewModel _reloadAction;
     private readonly ToolbarItemViewModel _resetZoomAction;
     private readonly ToolbarItemViewModel _resetSessionAction;
 
+    private TwitchOAuthRole _chatDisplayAccount;
+
     [ObservableProperty]
     private double _zoomFactor;
+
+    [ObservableProperty]
+    private bool _accountChangeRequiresRestart;
 
     [ObservableProperty]
     private bool _hasFallback;
@@ -108,7 +117,8 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
         SettingsManager settings,
         ILogger<ChatDisplayTileViewModel> logger,
         IShellLauncher shellLauncher,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        IEventBus bus)
         : base("twitch-chat", "Чат")
     {
         _settings = settings;
@@ -117,20 +127,17 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
         Logger = logger;
 
         var twitch = settings.Current.Twitch;
+        _chatDisplayAccount = twitch.ChatDisplayAccount;
         UserDataFolder = WebView2UserDataFolders.Resolve(twitch.ChatDisplayAccount);
-        AccountLabel = twitch.ChatDisplayAccount == TwitchOAuthRole.Broadcaster ? "стримера" : "бота";
+        AccountLabel = ResolveAccountLabel(twitch.ChatDisplayAccount);
+        ChannelUri = BuildChannelUri(twitch.Channel);
 
-        var channel = twitch.Channel?.Trim();
-
-        if (!string.IsNullOrEmpty(channel))
-        {
-            ChannelUri = new Uri($"https://www.twitch.tv/popout/{Uri.EscapeDataString(channel)}/chat?popout=");
-        }
+        _chatDisplaySubscription = bus.SubscribeOnUi<ChatDisplaySettingsChanged>(OnChatDisplaySettingsChanged);
 
         _zoomFactor = LoadSavedZoom();
 
         _reloadAction = new(PackIconLucideKind.RefreshCw, ReloadCommand, "Перезагрузить страницу чата");
-        _resetZoomAction = new(PackIconLucideKind.Search, ResetZoomCommand, "Сбросить масштаб к значению по умолчанию");
+        _resetZoomAction = new(PackIconLucideKind.Scaling, ResetZoomCommand, "Сбросить масштаб к значению по умолчанию");
         _resetSessionAction = new(PackIconLucideKind.Trash2, ResetSessionCommand, "Очистить куки и кэш активного аккаунта (бот или стример)");
 
         HeaderActions.Add(_reloadAction);
@@ -146,15 +153,24 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
 
     public event Action? ClutterScriptChanged;
 
+    public event Action? ChannelUriChanged;
+
+    public override bool FillsAvailableSpace => true;
+
     public ILogger Logger { get; }
 
     public string UserDataFolder { get; }
 
-    public string AccountLabel { get; }
+    public string AccountLabel { get; private set; }
 
-    public Uri? ChannelUri { get; }
+    public Uri? ChannelUri { get; private set; }
 
     public ICommand? FallbackActionCommand => ShowRuntimeDownload ? OpenRuntimeDownloadCommand : null;
+
+    public void Dispose()
+    {
+        _chatDisplaySubscription.Dispose();
+    }
 
     public string BuildHideClutterScript()
     {
@@ -191,6 +207,48 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
     partial void OnZoomFactorChanged(double value)
     {
         SaveZoom(value);
+    }
+
+    private static Uri? BuildChannelUri(string? channel)
+    {
+        var trimmed = channel?.Trim();
+
+        return string.IsNullOrEmpty(trimmed)
+            ? null
+            : new Uri($"https://www.twitch.tv/popout/{Uri.EscapeDataString(trimmed)}/chat?popout=");
+    }
+
+    private static string ResolveAccountLabel(TwitchOAuthRole role)
+    {
+        return role == TwitchOAuthRole.Broadcaster ? "стримера" : "бота";
+    }
+
+    private void OnChatDisplaySettingsChanged(ChatDisplaySettingsChanged @event)
+    {
+        if (@event.ChatDisplayAccount != _chatDisplayAccount)
+        {
+            _chatDisplayAccount = @event.ChatDisplayAccount;
+            AccountLabel = ResolveAccountLabel(@event.ChatDisplayAccount);
+            AccountChangeRequiresRestart = true;
+        }
+
+        var uri = BuildChannelUri(@event.Channel);
+
+        if (uri == ChannelUri)
+        {
+            return;
+        }
+
+        ChannelUri = uri;
+
+        if (uri is null)
+        {
+            ShowNoChannelFallback();
+            return;
+        }
+
+        HasFallback = false;
+        ChannelUriChanged?.Invoke();
     }
 
     private void DisableWebViewActions()

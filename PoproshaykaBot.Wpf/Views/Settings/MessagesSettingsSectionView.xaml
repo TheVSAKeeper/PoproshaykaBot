@@ -50,6 +50,7 @@
                     </DockPanel>
 
                     <TextBox Grid.Row="2"
+                             AutomationProperties.Name="{Binding Label}"
                              Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
                              keepshell:PlaceholderBehavior.Placeholder="{Binding Placeholder}">
                         <TextBox.Style>
@@ -75,7 +76,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
         <ItemsControl ItemsSource="{Binding Entries}"
-                      ItemTemplate="{StaticResource MessageEntryTemplate}"
-                      Margin="20,16,20,20" />
+                      Margin="12"
+                      ItemTemplate="{StaticResource MessageEntryTemplate}" />
     </ScrollViewer>
 </UserControl>

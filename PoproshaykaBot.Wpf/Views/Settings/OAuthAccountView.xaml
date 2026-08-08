@@ -26,6 +26,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBox Grid.Column="0"
                          Style="{StaticResource TextBox.Form}"
+                         AutomationProperties.Name="Список scope через пробел"
                          Text="{Binding ScopesText, UpdateSourceTrigger=PropertyChanged}"
                          keepshell:PlaceholderBehavior.Placeholder="Список scope через пробел" />
                 <Button Grid.Column="1"

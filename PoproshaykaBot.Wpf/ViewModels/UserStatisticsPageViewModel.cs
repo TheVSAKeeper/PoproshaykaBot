@@ -35,6 +35,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private string _filterText = string.Empty;
 
     [ObservableProperty]
+    private bool _isFilterActive;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActionButtonText))]
     [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
     private double _adjustmentAmount;
@@ -79,11 +82,19 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         Reload();
     }
 
-    public string PageTitle => "Статистика пользователей";
+    public string PageTitle => "Пользователи";
 
-    public string? PageDescription => null;
+    public string? PageDescription => "Статистика сообщений, баллов и рангов";
 
     public ObservableCollection<UserStatisticsRowViewModel> Users => _rows;
+
+    public bool HasUsers => _rows.Count > 0;
+
+    public string EmptyHeading => IsFilterActive ? "Ничего не найдено" : "Статистики пока нет";
+
+    public string EmptyDescription => IsFilterActive
+        ? "Ни один пользователь не подходит под фильтр. Очистите поиск, чтобы увидеть всех."
+        : "Пользователи появятся здесь, когда бот начнёт собирать сообщения чата.";
 
     public bool HasSelectedRow => SelectedRow is not null;
 
@@ -130,6 +141,11 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         SelectedRow = selectedId is not null
             ? _rows.FirstOrDefault(row => row.UserId == selectedId)
             : null;
+
+        IsFilterActive = hasFilter;
+        OnPropertyChanged(nameof(HasUsers));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyDescription));
     }
 
     [RelayCommand]

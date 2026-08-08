@@ -31,18 +31,28 @@
             BorderThickness="0,1,0,0"
             Padding="14,5">
         <Grid>
-            <StackPanel Orientation="Horizontal">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0"
+                        Orientation="Horizontal">
                 <Ellipse Width="8"
                          Height="8"
                          VerticalAlignment="Center"
                          Fill="{Binding StatusSeverity, Converter={StaticResource SeverityToBrush}}" />
                 <TextBlock Text="{Binding StatusText}"
-                           Margin="8,0,0,0"
+                           Margin="8,0,8,0"
                            VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding StatusText}"
                            Foreground="{DynamicResource Fg.Secondary}" />
             </StackPanel>
 
-            <StackPanel Orientation="Horizontal"
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         DataContext="{Binding StreamMonitoring}"
                         Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
