@@ -23,6 +23,12 @@
         FontFamily="{DynamicResource Font.Sans}"
         FontSize="{DynamicResource Font.Size.M}">
 
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Alt" Key="U" Command="{Binding NavigateToStatisticsCommand}" />
+        <KeyBinding Modifiers="Alt" Key="H" Command="{Binding NavigateToStreamHistoryCommand}" />
+        <KeyBinding Modifiers="Control+Shift" Key="Delete" Command="{Binding ClearChatHistoryCommand}" />
+    </Window.InputBindings>
+
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="36"
                             ResizeBorderThickness="6"

@@ -18,6 +18,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1003, Level = LogLevel.Error, Message = "Ошибка запуска подключения")]
     public static partial void BotStartConnectionFailed(this ILogger logger, Exception exception);
 
+    [LoggerMessage(EventId = 1004, Level = LogLevel.Information, Message = "История сообщений чата очищена")]
+    public static partial void ChatHistoryCleared(this ILogger logger);
+
     [LoggerMessage(EventId = 1100, Level = LogLevel.Error, Message = "OAuth-поток мастера упал для роли {Role}")]
     public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
 

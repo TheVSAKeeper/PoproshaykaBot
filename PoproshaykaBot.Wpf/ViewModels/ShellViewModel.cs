@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
@@ -21,6 +22,9 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly List<IDisposable> _subscriptions = [];
     private readonly NavigationItem _settingsSection;
     private readonly SettingsPageViewModel _settingsPage;
+    private readonly ChatHistoryManager _chatHistory;
+    private readonly NavigationItem _statisticsSection;
+    private readonly NavigationItem _streamHistorySection;
     private NavigationItem? _current;
     private bool _returningToSettings;
 
@@ -43,7 +47,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         ILogger<ShellViewModel> logger,
         IDialogService dialogService,
         UpdateBannerViewModel updateBanner,
-        StreamMonitoringViewModel streamMonitoring)
+        StreamMonitoringViewModel streamMonitoring,
+        ChatHistoryManager chatHistory)
         : base(modal)
     {
         _connectionManager = connectionManager;
@@ -56,11 +61,15 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         StreamMonitoring = streamMonitoring;
 
         _settingsPage = settingsPage;
+        _chatHistory = chatHistory;
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: ActivateSettings);
 
+        _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage) { StartsGroup = true };
+        _streamHistorySection = new("История стримов", PackIconLucideKind.History, streamHistoryPage);
+
         Sections.Add(new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter));
-        Sections.Add(new("Пользователи", PackIconLucideKind.Users, statisticsPage) { StartsGroup = true });
-        Sections.Add(new("История стримов", PackIconLucideKind.History, streamHistoryPage));
+        Sections.Add(_statisticsSection);
+        Sections.Add(_streamHistorySection);
         Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage) { StartsGroup = true });
 
         IsNavCollapsed = _preferences.NavCollapsed;
@@ -120,6 +129,31 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     protected override void NavigateToSettings()
     {
         Selected = _settingsSection;
+    }
+
+    [RelayCommand]
+    private void NavigateToStatistics()
+    {
+        Selected = _statisticsSection;
+    }
+
+    [RelayCommand]
+    private void NavigateToStreamHistory()
+    {
+        Selected = _streamHistorySection;
+    }
+
+    [RelayCommand]
+    private void ClearChatHistory()
+    {
+        if (!_dialogService.Confirm("Очистка истории чата",
+                "Вы уверены, что хотите очистить всю историю сообщений чата?\n\nЭто действие нельзя отменить."))
+        {
+            return;
+        }
+
+        _chatHistory.ClearHistory();
+        _logger.ChatHistoryCleared();
     }
 
     private NavigationItem? FindSectionByTitle(string? title)
