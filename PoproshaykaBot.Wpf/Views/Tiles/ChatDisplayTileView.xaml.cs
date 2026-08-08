@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -12,6 +12,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
     private bool _initialized;
     private bool _reloadAttempted;
     private ChatDisplayTileViewModel? _viewModel;
+    private string? _clutterScriptId;
 
     public ChatDisplayTileView()
     {
@@ -36,6 +37,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         _viewModel = viewModel;
         _viewModel.ReloadRequested += OnReloadRequested;
         _viewModel.ResetSessionRequested += OnResetSessionRequested;
+        _viewModel.ClutterScriptChanged += OnClutterScriptChanged;
 
         await InitializeWebViewAsync(viewModel);
     }
@@ -46,6 +48,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         {
             _viewModel.ReloadRequested -= OnReloadRequested;
             _viewModel.ResetSessionRequested -= OnResetSessionRequested;
+            _viewModel.ClutterScriptChanged -= OnClutterScriptChanged;
         }
 
         if (WebView.CoreWebView2 is not null)
@@ -67,7 +70,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             WebView.CoreWebView2.ProcessFailed += OnProcessFailed;
             WebView.NavigationCompleted += OnNavigationCompleted;
 
-            await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(ChatDisplayTileViewModel.HideClutterScript);
+            await RegisterClutterScriptAsync(viewModel);
 
             if (viewModel.ChannelUri is { } channelUri)
             {
@@ -88,6 +91,40 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             viewModel.Logger.LogError(exception, "Не удалось инициализировать WebView2 для Twitch-чата");
             viewModel.ShowGenericFallback();
         }
+    }
+
+    private async Task RegisterClutterScriptAsync(ChatDisplayTileViewModel viewModel)
+    {
+        if (WebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_clutterScriptId is not null)
+            {
+                WebView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_clutterScriptId);
+            }
+
+            _clutterScriptId = await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(viewModel.BuildHideClutterScript());
+        }
+        catch (Exception exception)
+        {
+            viewModel.Logger.LogWarning(exception, "Не удалось применить блокираторы баннеров чата");
+        }
+    }
+
+    private async void OnClutterScriptChanged()
+    {
+        if (_viewModel is null || WebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        await RegisterClutterScriptAsync(_viewModel);
+
+        WebView.Reload();
     }
 
     private void OnReloadRequested()
