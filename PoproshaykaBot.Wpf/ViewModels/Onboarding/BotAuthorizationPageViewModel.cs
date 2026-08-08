@@ -9,8 +9,10 @@ public sealed class BotAuthorizationPageViewModel : AuthorizationPageViewModelBa
     public BotAuthorizationPageViewModel(
         ITwitchOAuthService oauthService,
         SettingsManager settingsManager,
-        ILogger<BotAuthorizationPageViewModel> logger)
-        : base(TwitchOAuthRole.Bot, oauthService, settingsManager, logger)
+        ILogger<BotAuthorizationPageViewModel> logger,
+        IShellLauncher shellLauncher,
+        IClipboardService clipboard)
+        : base(TwitchOAuthRole.Bot, oauthService, settingsManager, logger, shellLauncher, clipboard)
     {
     }
 }

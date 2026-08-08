@@ -5,7 +5,6 @@ using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Onboarding;
 using PoproshaykaBot.Wpf.Bootstrap;
-using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
@@ -15,8 +14,8 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
     private readonly IOnboardingChannelValidator _channelValidator;
     private readonly ILogger<CredentialsPageViewModel> _logger;
 
-    private readonly DispatcherTimer _clientDebounce;
-    private readonly DispatcherTimer _channelDebounce;
+    private readonly IUiTimer _clientDebounce;
+    private readonly IUiTimer _channelDebounce;
 
     private CancellationTokenSource? _clientValidationCts;
     private CancellationTokenSource? _channelValidationCts;
@@ -70,17 +69,15 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
     public CredentialsPageViewModel(
         IClientCredentialsValidator clientCredentialsValidator,
         IOnboardingChannelValidator channelValidator,
-        ILogger<CredentialsPageViewModel> logger)
+        ILogger<CredentialsPageViewModel> logger,
+        IUiDispatcher uiDispatcher)
     {
         _clientCredentialsValidator = clientCredentialsValidator;
         _channelValidator = channelValidator;
         _logger = logger;
 
-        _clientDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
-        _clientDebounce.Tick += OnClientDebounceTick;
-
-        _channelDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
-        _channelDebounce.Tick += OnChannelDebounceTick;
+        _clientDebounce = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(800), OnClientDebounceTick);
+        _channelDebounce = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(800), OnChannelDebounceTick);
     }
 
     public override string PageTitle => "Учётные данные приложения";
@@ -153,10 +150,7 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
         _disposed = true;
 
         _clientDebounce.Stop();
-        _clientDebounce.Tick -= OnClientDebounceTick;
-
         _channelDebounce.Stop();
-        _channelDebounce.Tick -= OnChannelDebounceTick;
 
         _clientValidationCts?.Cancel();
         _clientValidationCts?.Dispose();
@@ -289,13 +283,13 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
         _channelDebounce.Start();
     }
 
-    private async void OnClientDebounceTick(object? sender, EventArgs e)
+    private async void OnClientDebounceTick()
     {
         _clientDebounce.Stop();
         await RunCredentialsCheckAsync();
     }
 
-    private async void OnChannelDebounceTick(object? sender, EventArgs e)
+    private async void OnChannelDebounceTick()
     {
         _channelDebounce.Stop();
         await RunChannelCheckAsync();

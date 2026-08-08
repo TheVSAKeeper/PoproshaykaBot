@@ -9,8 +9,10 @@ public sealed class BroadcasterAuthorizationPageViewModel : AuthorizationPageVie
     public BroadcasterAuthorizationPageViewModel(
         ITwitchOAuthService oauthService,
         SettingsManager settingsManager,
-        ILogger<BroadcasterAuthorizationPageViewModel> logger)
-        : base(TwitchOAuthRole.Broadcaster, oauthService, settingsManager, logger)
+        ILogger<BroadcasterAuthorizationPageViewModel> logger,
+        IShellLauncher shellLauncher,
+        IClipboardService clipboard)
+        : base(TwitchOAuthRole.Broadcaster, oauthService, settingsManager, logger, shellLauncher, clipboard)
     {
     }
 }

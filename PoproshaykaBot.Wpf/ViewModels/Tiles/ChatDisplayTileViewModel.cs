@@ -74,6 +74,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
     private static readonly string ZoomFilePath = AppPaths.Combine("chat-zoom.txt");
 
     private readonly SettingsManager _settings;
+    private readonly IShellLauncher _shellLauncher;
 
     private readonly ToolbarItemViewModel _reloadAction;
     private readonly ToolbarItemViewModel _resetZoomAction;
@@ -95,10 +96,11 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
     [ObservableProperty]
     private string _fallbackDescription = string.Empty;
 
-    public ChatDisplayTileViewModel(SettingsManager settings, ILogger<ChatDisplayTileViewModel> logger)
+    public ChatDisplayTileViewModel(SettingsManager settings, ILogger<ChatDisplayTileViewModel> logger, IShellLauncher shellLauncher)
         : base("twitch-chat", "Чат")
     {
         _settings = settings;
+        _shellLauncher = shellLauncher;
         Logger = logger;
 
         var twitch = settings.Current.Twitch;
@@ -202,29 +204,13 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
             return;
         }
 
-        OpenExternal(ChannelUri.ToString(), "Не удалось открыть ссылку в браузере");
+        _shellLauncher.Open(ChannelUri.ToString());
     }
 
     [RelayCommand]
     private void OpenRuntimeDownload()
     {
-        OpenExternal(WebView2RuntimeDownloadUrl, "Не удалось открыть ссылку на WebView2 Runtime");
-    }
-
-    private void OpenExternal(string url, string failureMessage)
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true,
-            });
-        }
-        catch (Exception exception)
-        {
-            Logger.LogError(exception, failureMessage);
-        }
+        _shellLauncher.Open(WebView2RuntimeDownloadUrl);
     }
 
     private double LoadSavedZoom()

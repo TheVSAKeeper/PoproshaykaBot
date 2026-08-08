@@ -39,6 +39,7 @@ public partial class App : Application
 
     private ServiceProvider? _services;
     private KeepShellLogging? _logging;
+    private KeepShellLoggingOptions? _loggingOptions;
     private AppLifetime? _appLifetime;
     private StreamMonitoringHost? _streamMonitoringHost;
     private Timer? _memoryWatchdog;
@@ -46,6 +47,7 @@ public partial class App : Application
 
     private bool _isUiSmoke;
     private bool _isFinalizeUpdate;
+    private GalleryOptions? _galleryOptions;
     private bool _appLifetimeStarted;
     private bool _streamMonitoringStarted;
 
@@ -56,10 +58,18 @@ public partial class App : Application
         _isUiSmoke = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         _isFinalizeUpdate = e.Args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
 
+        var galleryIndex = Array.FindIndex(e.Args, static arg => string.Equals(arg, GalleryRun.ArgumentName, StringComparison.OrdinalIgnoreCase));
+
+        if (galleryIndex >= 0)
+        {
+            _galleryOptions = GalleryOptions.Parse(e.Args.Skip(galleryIndex + 1), System.IO.Path.Combine(AppPaths.BaseDirectory, GalleryRun.FolderName));
+            _isUiSmoke = true;
+        }
+
         var coreUiLogSink = new UiLogSink();
         SelfLog.Enable(message => Debug.WriteLine($"[Serilog] {message}"));
 
-        _logging = KeepShellLogging.Bootstrap(new()
+        _loggingOptions = new()
         {
             LogsDirectory = AppPaths.Combine("logs"),
             FileNamePrefix = AppInfo.LogFilePrefix,
@@ -75,7 +85,9 @@ public partial class App : Application
             Configure = configuration => configuration
                 .WriteTo.Console(outputTemplate: OutputTemplate)
                 .WriteTo.Sink(coreUiLogSink, LogEventLevel.Information),
-        });
+        };
+
+        _logging = KeepShellLogging.Bootstrap(_loggingOptions);
 
         Log.Information(AppInfo.SessionStartMarker + "...");
 
@@ -126,6 +138,7 @@ public partial class App : Application
             var services = new ServiceCollection();
             ConfigureServices(services, coreUiLogSink, uiSettings);
             services.AddSingleton(_logging!.Sink);
+            services.AddSingleton(_loggingOptions!);
             _services = services.BuildServiceProvider();
 
             _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
@@ -143,6 +156,12 @@ public partial class App : Application
                 _appLifetimeStarted = StartHttpServerIfNeeded(settingsManager, _appLifetime);
                 _streamMonitoringStarted = StartStreamMonitoring(_streamMonitoringHost);
                 _memoryWatchdog = CreateMemoryWatchdog();
+            }
+
+            if (_galleryOptions is not null)
+            {
+                RunGallery(_galleryOptions, _services);
+                return;
             }
 
             var window = _services.GetRequiredService<MainWindow>();
@@ -182,6 +201,30 @@ public partial class App : Application
         _singleInstanceMutex?.Dispose();
 
         base.OnExit(e);
+    }
+
+    private void RunGallery(GalleryOptions options, IServiceProvider services)
+    {
+        Log.Information("Съёмка галереи: страниц {Pages}, тем {Themes}, каталог {Directory}",
+            options.Pages.Count,
+            options.Themes.Count,
+            options.Directory);
+
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            var code = 1;
+
+            try
+            {
+                code = await GalleryRun.RenderAsync(options, services);
+            }
+            catch (Exception exception)
+            {
+                Log.Error(exception, "Съёмка галереи упала");
+            }
+
+            Shutdown(code);
+        });
     }
 
     private static string ResolveStorageMode()

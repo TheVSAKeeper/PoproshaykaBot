@@ -2,7 +2,6 @@
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
@@ -10,6 +9,7 @@ public sealed partial class HttpServerSectionViewModel : ObservableObject, IDisp
 {
     private readonly KestrelHttpServer _server;
     private readonly IDialogService _dialogService;
+    private readonly IClipboardService _clipboard;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ObsUrl))]
@@ -20,10 +20,11 @@ public sealed partial class HttpServerSectionViewModel : ObservableObject, IDisp
     [NotifyPropertyChangedFor(nameof(ServerStatusSeverity))]
     private bool _isRunning;
 
-    public HttpServerSectionViewModel(KestrelHttpServer server, IDialogService dialogService)
+    public HttpServerSectionViewModel(KestrelHttpServer server, IDialogService dialogService, IClipboardService clipboard)
     {
         _server = server;
         _dialogService = dialogService;
+        _clipboard = clipboard;
     }
 
     public string ObsUrl => $"http://localhost:{Port}/chat";
@@ -41,15 +42,13 @@ public sealed partial class HttpServerSectionViewModel : ObservableObject, IDisp
     [RelayCommand]
     private void CopyUrl()
     {
-        try
+        if (_clipboard.TrySetText(ObsUrl))
         {
-            Clipboard.SetText(ObsUrl);
             _dialogService.Info("Информация", "URL скопирован в буфер обмена!");
+            return;
         }
-        catch (Exception ex)
-        {
-            _dialogService.Error("Ошибка", $"Ошибка копирования URL: {ex.Message}");
-        }
+
+        _dialogService.Error("Ошибка", "Не удалось скопировать URL в буфер обмена.");
     }
 
     [RelayCommand]

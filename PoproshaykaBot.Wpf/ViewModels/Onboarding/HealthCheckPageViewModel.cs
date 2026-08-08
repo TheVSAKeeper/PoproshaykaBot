@@ -15,6 +15,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 {
     private readonly IChatMessenger _chatMessenger;
     private readonly ILogger<HealthCheckPageViewModel> _logger;
+    private readonly IShellLauncher _shellLauncher;
     private readonly List<IDisposable> _subs = [];
 
     private bool _botStatusDetected;
@@ -43,10 +44,12 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
     public HealthCheckPageViewModel(
         IChatMessenger chatMessenger,
         IEventBus eventBus,
-        ILogger<HealthCheckPageViewModel> logger)
+        ILogger<HealthCheckPageViewModel> logger,
+        IShellLauncher shellLauncher)
     {
         _chatMessenger = chatMessenger;
         _logger = logger;
+        _shellLauncher = shellLauncher;
 
         _subs.Add(eventBus.SubscribeOnUi<ChatMessageReceived>(OnChatMessageReceived));
     }
@@ -96,14 +99,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
     [RelayCommand]
     private void OpenOverlayInBrowser()
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo(OverlayUrl) { UseShellExecute = true });
-        }
-        catch (Exception exception)
-        {
-            _logger.OnboardingOverlayBrowserOpenFailed(exception);
-        }
+        _shellLauncher.Open(OverlayUrl);
     }
 
     public void Dispose()

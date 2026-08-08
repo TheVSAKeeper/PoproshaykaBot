@@ -20,6 +20,8 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     private readonly ITwitchOAuthService _oauthService;
     private readonly SettingsManager _settingsManager;
     private readonly ILogger _logger;
+    private readonly IShellLauncher _shellLauncher;
+    private readonly IClipboardService _clipboard;
 
     private OnboardingContext? _context;
     private OnboardingContext? _credentialsSubscriptionContext;
@@ -51,12 +53,16 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         TwitchOAuthRole role,
         ITwitchOAuthService oauthService,
         SettingsManager settingsManager,
-        ILogger logger)
+        ILogger logger,
+        IShellLauncher shellLauncher,
+        IClipboardService clipboard)
     {
         _role = role;
         _oauthService = oauthService;
         _settingsManager = settingsManager;
         _logger = logger;
+        _shellLauncher = shellLauncher;
+        _clipboard = clipboard;
     }
 
     public override string PageTitle => _role == TwitchOAuthRole.Broadcaster
@@ -402,39 +408,28 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
 
     private void OpenInBrowser(string authUrl)
     {
-        try
+        if (_shellLauncher.Open(authUrl))
         {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = authUrl,
-                UseShellExecute = true,
-            });
-
             StatusMessage = "Браузер открыт. Подтвердите доступ.";
             StatusMessageSeverity = StatusSeverity.Info;
+            return;
         }
-        catch (Exception exception)
-        {
-            _logger.OAuthBrowserOpenFailed(exception, _role);
-            StatusMessage = "Не удалось открыть браузер. Скопируйте ссылку и откройте вручную.";
-            StatusMessageSeverity = StatusSeverity.Error;
-        }
+
+        StatusMessage = "Не удалось открыть браузер. Скопируйте ссылку и откройте вручную.";
+        StatusMessageSeverity = StatusSeverity.Error;
     }
 
     private void CopyToClipboard(string authUrl)
     {
-        try
+        if (_clipboard.TrySetText(authUrl))
         {
-            Clipboard.SetText(authUrl);
             StatusMessage = "Ссылка скопирована. Откройте её в браузере и подтвердите доступ.";
             StatusMessageSeverity = StatusSeverity.Info;
+            return;
         }
-        catch (Exception exception)
-        {
-            _logger.OAuthClipboardCopyFailed(exception);
-            StatusMessage = "Не удалось скопировать в буфер обмена.";
-            StatusMessageSeverity = StatusSeverity.Error;
-        }
+
+        StatusMessage = "Не удалось скопировать в буфер обмена.";
+        StatusMessageSeverity = StatusSeverity.Error;
     }
 
     private static string SafeAuthMessage(Exception exception)

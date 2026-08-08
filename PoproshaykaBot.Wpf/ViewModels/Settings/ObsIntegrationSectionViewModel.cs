@@ -25,6 +25,7 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
     private readonly SettingsManager _settingsManager;
     private readonly ILogger<ObsIntegrationSectionViewModel> _logger;
     private readonly IDialogService _dialogService;
+    private readonly IClipboardService _clipboard;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ReconnectCommand))]
@@ -93,12 +94,14 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
         ObsIntegrationService obsIntegration,
         SettingsManager settingsManager,
         ILogger<ObsIntegrationSectionViewModel> logger,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        IClipboardService clipboard)
     {
         _obsIntegration = obsIntegration;
         _settingsManager = settingsManager;
         _logger = logger;
         _dialogService = dialogService;
+        _clipboard = clipboard;
     }
 
     public ObservableCollection<string> Scenes { get; } = [];
@@ -222,16 +225,13 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
     [RelayCommand(CanExecute = nameof(CanOperateAlways))]
     private void CopyOverlayUrl()
     {
-        try
+        if (_clipboard.TrySetText(OverlayUrl))
         {
-            Clipboard.SetText(OverlayUrl);
             SetStatus("● URL скопирован", StatusSeverity.Success);
+            return;
         }
-        catch (Exception exception)
-        {
-            _logger.ObsUrlCopyFailed(exception);
-            _dialogService.Warning("OBS", $"Не удалось скопировать URL: {exception.Message}");
-        }
+
+        _dialogService.Warning("OBS", "Не удалось скопировать URL в буфер обмена.");
     }
 
     [RelayCommand]

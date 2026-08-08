@@ -20,6 +20,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
     private readonly AccountsStore _accountsStore;
     private readonly Func<OAuthCredentialsSnapshot> _credentialsProvider;
     private readonly IDialogService _dialogService;
+    private readonly IShellLauncher _shellLauncher;
 
     private TwitchAccountSettings _draft = new();
     private CancellationTokenSource? _authCts;
@@ -66,13 +67,15 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         ITwitchOAuthService oauthService,
         AccountsStore accountsStore,
         Func<OAuthCredentialsSnapshot> credentialsProvider,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        IShellLauncher shellLauncher)
     {
         _role = role;
         _oauthService = oauthService;
         _accountsStore = accountsStore;
         _credentialsProvider = credentialsProvider;
         _dialogService = dialogService;
+        _shellLauncher = shellLauncher;
 
         _oauthService.StatusChanged += OnOAuthStatusChanged;
     }
@@ -412,15 +415,11 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         SettingChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private static void OpenInDefaultBrowser(string authUrl)
+    private void OpenInDefaultBrowser(string authUrl)
     {
         // TODO: embedded WebView2 login dialog is Step 5 (onboarding); settings flow stays on the system browser
 
-        using var process = Process.Start(new ProcessStartInfo
-        {
-            FileName = authUrl,
-            UseShellExecute = true,
-        });
+        _shellLauncher.Open(authUrl);
     }
 
     private static string SafeMessage(Exception exception)

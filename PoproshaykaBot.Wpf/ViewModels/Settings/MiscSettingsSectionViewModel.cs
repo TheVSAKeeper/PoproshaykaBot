@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
-using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
@@ -17,12 +16,21 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
     private readonly SettingsManager _settingsManager;
     private readonly BroadcastProfilesManager _broadcastProfiles;
     private readonly IDialogService _dialogService;
+    private readonly IShellLauncher _shellLauncher;
+    private readonly IFilePicker _filePicker;
 
-    public MiscSettingsSectionViewModel(SettingsManager settingsManager, BroadcastProfilesManager broadcastProfiles, IDialogService dialogService)
+    public MiscSettingsSectionViewModel(
+        SettingsManager settingsManager,
+        BroadcastProfilesManager broadcastProfiles,
+        IDialogService dialogService,
+        IShellLauncher shellLauncher,
+        IFilePicker filePicker)
     {
         _settingsManager = settingsManager;
         _broadcastProfiles = broadcastProfiles;
         _dialogService = dialogService;
+        _shellLauncher = shellLauncher;
+        _filePicker = filePicker;
     }
 
     public void Dispose()
@@ -40,24 +48,24 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
     [RelayCommand]
     private void OpenSettingsFolder()
     {
+        var dir = AppPaths.BaseDirectory;
+
         try
         {
-            var dir = AppPaths.BaseDirectory;
-
             if (!Directory.Exists(dir))
             {
                 Directory.CreateDirectory(dir);
             }
-
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = dir,
-                UseShellExecute = true,
-            });
         }
         catch (Exception ex)
         {
             _dialogService.Error("Ошибка", $"Ошибка открытия папки с настройками: {ex.Message}");
+            return;
+        }
+
+        if (!_shellLauncher.Open(dir))
+        {
+            _dialogService.Error("Ошибка", "Не удалось открыть папку с настройками.");
         }
     }
 
@@ -84,14 +92,9 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
     [RelayCommand]
     private void ImportBroadcastProfiles()
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Импорт профилей трансляций из JSON",
-            Filter = "JSON файлы (*.json)|*.json|Все файлы (*.*)|*.*",
-            CheckFileExists = true,
-        };
+        var path = _filePicker.PickFile(new("Импорт профилей трансляций из JSON", "JSON файлы (*.json)|*.json|Все файлы (*.*)|*.*"));
 
-        if (dialog.ShowDialog() != true)
+        if (path is null)
         {
             return;
         }
@@ -100,7 +103,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
 
         try
         {
-            var json = File.ReadAllText(dialog.FileName);
+            var json = File.ReadAllText(path);
             incoming = JsonSerializer.Deserialize<List<ExternalTwitchProfile>>(json, ImportJsonOptions);
         }
         catch (Exception ex)
