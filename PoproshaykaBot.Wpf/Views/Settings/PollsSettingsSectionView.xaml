@@ -1,4 +1,4 @@
-<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.PollsSettingsSectionView"
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.PollsSettingsSectionView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
@@ -13,7 +13,7 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="0,0,0,20">
+        <StackPanel Margin="12">
 
             <Border Style="{StaticResource Card}"
                     Margin="0,0,0,16">

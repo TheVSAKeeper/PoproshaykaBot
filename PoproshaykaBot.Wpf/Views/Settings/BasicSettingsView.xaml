@@ -1,8 +1,9 @@
-<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.BasicSettingsView"
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.BasicSettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -44,11 +45,20 @@
                       HorizontalAlignment="Left"
                       MinWidth="220" />
 
-            <TextBlock Text="ℹ️ Канал – название канала Twitch, к чату которого подключается бот. Аккаунт отображения определяет, от чьего имени бот показывает сообщения в оверлее."
-                       Style="{StaticResource TextBlock.Subtle}"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource Fg.Muted}"
-                       Margin="0,16,0,0" />
+            <DockPanel LastChildFill="True"
+                       Margin="0,16,0,0">
+                <iconPacks:PackIconLucide DockPanel.Dock="Left"
+                                          Kind="Info"
+                                          Width="14"
+                                          Height="14"
+                                          VerticalAlignment="Top"
+                                          Margin="0,2,6,0"
+                                          Foreground="{DynamicResource Fg.Muted}" />
+                <TextBlock Text="Канал – название канала Twitch, к чату которого подключается бот. Аккаунт отображения определяет, от чьего имени бот показывает сообщения в оверлее."
+                           Style="{StaticResource TextBlock.Subtle}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource Fg.Muted}" />
+            </DockPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

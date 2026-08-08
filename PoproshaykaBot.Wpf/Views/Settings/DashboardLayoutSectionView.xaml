@@ -12,123 +12,121 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled"
                   Padding="12">
-        <Border Style="{StaticResource Card}">
-            <DockPanel LastChildFill="True">
-                <TextBlock DockPanel.Dock="Top"
-                           Text="Раскладка панели"
-                           Style="{StaticResource TextBlock.Heading}"
-                           Margin="0,0,0,4" />
-                <TextBlock DockPanel.Dock="Top"
-                           Style="{StaticResource TextBlock.Subtle}"
-                           TextWrapping="Wrap"
-                           Margin="0,0,0,16"
-                           Text="Перетащите плитки из палитры в сетку. Правый клик по плитке – ширина, высота и максимальные размеры. Результат виден на вкладке «Обзор»." />
+        <DockPanel LastChildFill="True">
+            <TextBlock DockPanel.Dock="Top"
+                       Text="Раскладка панели"
+                       Style="{StaticResource TextBlock.Heading}"
+                       Margin="0,0,0,4" />
+            <TextBlock DockPanel.Dock="Top"
+                       Style="{StaticResource TextBlock.Subtle}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,16"
+                       Text="Перетащите плитки из палитры в сетку. Правый клик по плитке – ширина, высота и максимальные размеры. Результат виден на вкладке «Обзор»." />
 
-                <Grid DockPanel.Dock="Top"
-                      Margin="0,0,0,16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="150" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="24" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="150" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+            <Grid DockPanel.Dock="Top"
+                  Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0"
-                               Text="Колонки"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0" />
-                    <Slider Grid.Column="1"
-                            Minimum="{Binding MinColumnCount}"
-                            Maximum="{Binding MaxColumnCount}"
-                            Value="{Binding ColumnCount, Mode=TwoWay}"
-                            TickFrequency="1"
-                            IsSnapToTickEnabled="True"
-                            VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="2"
-                               Text="{Binding ColumnCount}"
-                               VerticalAlignment="Center"
-                               MinWidth="16"
-                               Margin="8,0,0,0" />
+                <TextBlock Grid.Column="0"
+                           Text="Колонки"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <Slider Grid.Column="1"
+                        Minimum="{Binding MinColumnCount}"
+                        Maximum="{Binding MaxColumnCount}"
+                        Value="{Binding ColumnCount, Mode=TwoWay}"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2"
+                           Text="{Binding ColumnCount}"
+                           VerticalAlignment="Center"
+                           MinWidth="16"
+                           Margin="8,0,0,0" />
 
-                    <TextBlock Grid.Column="4"
-                               Text="Строки"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0" />
-                    <Slider Grid.Column="5"
-                            Minimum="{Binding MinRowCount}"
-                            Maximum="{Binding MaxRowCount}"
-                            Value="{Binding RowCount, Mode=TwoWay}"
-                            TickFrequency="1"
-                            IsSnapToTickEnabled="True"
-                            VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="6"
-                               Text="{Binding RowCount}"
-                               VerticalAlignment="Center"
-                               MinWidth="16"
-                               Margin="8,0,0,0" />
+                <TextBlock Grid.Column="4"
+                           Text="Строки"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <Slider Grid.Column="5"
+                        Minimum="{Binding MinRowCount}"
+                        Maximum="{Binding MaxRowCount}"
+                        Value="{Binding RowCount, Mode=TwoWay}"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        VerticalAlignment="Center" />
+                <TextBlock Grid.Column="6"
+                           Text="{Binding RowCount}"
+                           VerticalAlignment="Center"
+                           MinWidth="16"
+                           Margin="8,0,0,0" />
 
-                    <Button Grid.Column="8"
-                            Content="Сбросить"
-                            Style="{StaticResource Button.Secondary}"
-                            Command="{Binding ResetLayoutCommand}"
-                            Margin="0,0,8,0" />
-                    <Button Grid.Column="9"
-                            Content="Очистить"
-                            Style="{StaticResource Button.Secondary}"
-                            Command="{Binding ClearGridCommand}" />
-                </Grid>
+                <Button Grid.Column="8"
+                        Content="Сбросить"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding ResetLayoutCommand}"
+                        Margin="0,0,8,0" />
+                <Button Grid.Column="9"
+                        Content="Очистить"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding ClearGridCommand}" />
+            </Grid>
 
-                <Grid MinHeight="380">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="190" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+            <Grid MinHeight="380">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="190" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0"
-                            Background="{DynamicResource Bg.Surface}"
-                            BorderBrush="{DynamicResource Border.Subtle}"
-                            BorderThickness="1"
-                            CornerRadius="6"
-                            Padding="8"
-                            Margin="0,0,12,0">
-                        <DockPanel>
-                            <TextBlock DockPanel.Dock="Top"
-                                       Text="Палитра"
-                                       Style="{StaticResource TextBlock.Subtle}"
-                                       Margin="0,0,0,8" />
-                            <ItemsControl ItemsSource="{Binding AvailablePalette}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Content="{Binding Title}"
-                                                Tag="{Binding TypeId}"
-                                                Style="{StaticResource Button.Secondary}"
-                                                HorizontalContentAlignment="Left"
-                                                HorizontalAlignment="Stretch"
-                                                Margin="0,0,0,6"
-                                                Padding="10,6"
-                                                Cursor="Hand"
-                                                PreviewMouseLeftButtonDown="OnPaletteMouseDown" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </DockPanel>
-                    </Border>
+                <Border Grid.Column="0"
+                        Background="{DynamicResource Bg.Surface}"
+                        BorderBrush="{DynamicResource Border.Subtle}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="8"
+                        Margin="0,0,12,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top"
+                                   Text="Палитра"
+                                   Style="{StaticResource TextBlock.Subtle}"
+                                   Margin="0,0,0,8" />
+                        <ItemsControl ItemsSource="{Binding AvailablePalette}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding Title}"
+                                            Tag="{Binding TypeId}"
+                                            Style="{StaticResource Button.Secondary}"
+                                            HorizontalContentAlignment="Left"
+                                            HorizontalAlignment="Stretch"
+                                            Margin="0,0,0,6"
+                                            Padding="10,6"
+                                            Cursor="Hand"
+                                            PreviewMouseLeftButtonDown="OnPaletteMouseDown" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DockPanel>
+                </Border>
 
-                    <Border Grid.Column="1"
-                            BorderBrush="{DynamicResource Border.Subtle}"
-                            BorderThickness="1"
-                            CornerRadius="6"
-                            Padding="4">
-                        <Grid x:Name="EditorGrid" />
-                    </Border>
-                </Grid>
-            </DockPanel>
-        </Border>
+                <Border Grid.Column="1"
+                        BorderBrush="{DynamicResource Border.Subtle}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="4">
+                    <Grid x:Name="EditorGrid" />
+                </Border>
+            </Grid>
+        </DockPanel>
     </ScrollViewer>
 </UserControl>

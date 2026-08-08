@@ -10,6 +10,37 @@
              d:DesignHeight="720"
              d:DesignWidth="1100">
 
+    <UserControl.Resources>
+        <Style x:Key="SettingsTabControl"
+               TargetType="TabControl"
+               BasedOn="{StaticResource {x:Type TabControl}}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <WrapPanel Grid.Row="0"
+                                       IsItemsHost="True"
+                                       Margin="0,0,0,8" />
+                            <Border Grid.Row="1"
+                                    Background="{DynamicResource Bg.Surface}"
+                                    BorderBrush="{DynamicResource Border.Subtle}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.L}"
+                                    Padding="16">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                  ContentSource="SelectedContent" />
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <DockPanel LastChildFill="True">
         <Border DockPanel.Dock="Bottom"
                 Background="{DynamicResource Bg.Surface}"
@@ -18,11 +49,19 @@
                 Padding="0,12,0,0"
                 Margin="0,12,0,0">
             <DockPanel LastChildFill="False">
-                <TextBlock DockPanel.Dock="Left"
-                           Text="● Есть несохранённые изменения"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource State.Warning}"
-                           Visibility="{Binding HasChanges, Converter={StaticResource BoolToVisibility}}" />
+                <StackPanel DockPanel.Dock="Left"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding HasChanges, Converter={StaticResource BoolToVisibility}}">
+                    <Ellipse Width="8"
+                             Height="8"
+                             VerticalAlignment="Center"
+                             Fill="{DynamicResource State.Warning}" />
+                    <TextBlock Text="Есть несохранённые изменения"
+                               Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource State.Warning}" />
+                </StackPanel>
 
                 <Button DockPanel.Dock="Right"
                         Content="Сохранить"
@@ -38,7 +77,7 @@
             </DockPanel>
         </Border>
 
-        <TabControl>
+        <TabControl Style="{StaticResource SettingsTabControl}">
             <TabItem Header="Основные">
                 <ContentControl Content="{Binding Basic}" />
             </TabItem>
@@ -82,7 +121,6 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               Padding="12">
-                    <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Text="Внешний вид"
                                        Style="{StaticResource TextBlock.Heading}"
@@ -119,7 +157,6 @@
                                        TextWrapping="Wrap"
                                        Margin="0,2,0,0" />
                         </StackPanel>
-                    </Border>
                 </ScrollViewer>
             </TabItem>
         </TabControl>

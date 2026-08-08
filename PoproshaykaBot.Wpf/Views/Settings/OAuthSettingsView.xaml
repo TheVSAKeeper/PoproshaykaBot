@@ -12,7 +12,7 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
-        <StackPanel>
+        <StackPanel Margin="12">
             <Border Style="{StaticResource Card}"
                     Margin="0,0,0,12">
                 <StackPanel>
