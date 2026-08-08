@@ -3,10 +3,11 @@ using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
+using System.ComponentModel.DataAnnotations;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
-public sealed partial class OAuthSettingsViewModel : ObservableObject, IDisposable
+public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDisposable
 {
     [ObservableProperty]
     private string _clientId = string.Empty;
@@ -15,6 +16,8 @@ public sealed partial class OAuthSettingsViewModel : ObservableObject, IDisposab
     private string _clientSecret = string.Empty;
 
     [ObservableProperty]
+    [NotifyDataErrorInfo]
+    [CustomValidation(typeof(OAuthSettingsViewModel), nameof(ValidateRedirectUri))]
     private string _redirectUri = string.Empty;
 
     [ObservableProperty]
@@ -101,6 +104,26 @@ public sealed partial class OAuthSettingsViewModel : ObservableObject, IDisposab
     partial void OnRedirectUriChanged(string value)
     {
         RaiseSettingChanged();
+    }
+
+    public static ValidationResult? ValidateRedirectUri(string? value, ValidationContext context)
+    {
+        var trimmed = value?.Trim();
+
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return new("Укажите Redirect URI: на него Twitch возвращает код авторизации");
+        }
+
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return new("Нужен абсолютный адрес http или https, например http://localhost:8080");
+        }
+
+        return uri.IsDefaultPort
+            ? new ValidationResult("Укажите порт явно: по нему настраивается встроенный HTTP сервер")
+            : ValidationResult.Success;
     }
 
     [RelayCommand]

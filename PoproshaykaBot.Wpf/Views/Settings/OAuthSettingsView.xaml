@@ -39,6 +39,7 @@
                                FontSize="{DynamicResource Font.Size.S}"
                                Margin="0,0,0,4" />
                     <TextBox Style="{StaticResource TextBox.Form}"
+                             AutomationProperties.Name="Redirect URI"
                              Text="{Binding RedirectUri, UpdateSourceTrigger=PropertyChanged}"
                              keepshell:PlaceholderBehavior.Placeholder="http://localhost:8080"
                              Margin="0,0,0,12" />

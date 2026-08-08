@@ -1,4 +1,4 @@
-<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.UpdateSettingsSectionView"
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.UpdateSettingsSectionView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
@@ -90,6 +90,7 @@
                     <TextBlock Text="Репозиторий обновлений (owner/repo):"
                                Margin="0,0,0,4" />
                     <TextBox Style="{StaticResource TextBox.Form}"
+                             AutomationProperties.Name="Репозиторий обновлений в формате owner/repo"
                              Text="{Binding RepositoryOverride, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              keepshell:PlaceholderBehavior.Placeholder="{Binding DefaultRepositorySlug}"
                              Margin="0,0,0,4" />

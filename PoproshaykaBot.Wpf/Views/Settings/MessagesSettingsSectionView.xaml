@@ -50,6 +50,7 @@
                     </DockPanel>
 
                     <TextBox Grid.Row="2"
+                             AutomationProperties.Name="{Binding Label}"
                              Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
                              keepshell:PlaceholderBehavior.Placeholder="{Binding Placeholder}">
                         <TextBox.Style>

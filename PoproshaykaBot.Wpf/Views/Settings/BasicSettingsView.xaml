@@ -29,6 +29,7 @@
                         Command="{Binding ResetChannelCommand}"
                         Margin="8,0,0,0" />
                 <TextBox Style="{StaticResource TextBox.Form}"
+                         AutomationProperties.Name="Канал Twitch"
                          Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          keepshell:PlaceholderBehavior.Placeholder="{Binding ChannelPlaceholder}" />
             </DockPanel>
@@ -38,6 +39,7 @@
                        FontSize="{DynamicResource Font.Size.S}"
                        Margin="0,0,0,4" />
             <ComboBox Style="{StaticResource ComboBox.Form}"
+                      AutomationProperties.Name="Аккаунт для отображения чата"
                       ItemsSource="{Binding ChatAccountOptions}"
                       DisplayMemberPath="Display"
                       SelectedValuePath="Role"

@@ -153,6 +153,7 @@
                            Style="{StaticResource RowLabel}" />
                 <TextBox Style="{StaticResource TextBox.Form}"
                          keepshell:PlaceholderBehavior.Placeholder="Например: Inter, Arial, sans-serif"
+                         AutomationProperties.Name="Семейство шрифтов"
                          Text="{Binding FontFamily, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </DockPanel>
 
@@ -219,6 +220,7 @@
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления сообщений пользователей"
                           SelectedValue="{Binding UserMessageAnimation, Mode=TwoWay}" />
             </DockPanel>
 
@@ -229,6 +231,7 @@
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления сообщений бота"
                           SelectedValue="{Binding BotMessageAnimation, Mode=TwoWay}" />
             </DockPanel>
 
@@ -239,6 +242,7 @@
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления системных сообщений"
                           SelectedValue="{Binding SystemMessageAnimation, Mode=TwoWay}" />
             </DockPanel>
 
@@ -249,6 +253,7 @@
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления сообщений стримера"
                           SelectedValue="{Binding BroadcasterMessageAnimation, Mode=TwoWay}" />
             </DockPanel>
 
@@ -259,6 +264,7 @@
                           ItemsSource="{Binding EntryAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления первого сообщения зрителя"
                           SelectedValue="{Binding FirstTimeUserMessageAnimation, Mode=TwoWay}" />
             </DockPanel>
 
@@ -383,6 +389,7 @@
                           ItemsSource="{Binding ExitAnimationOptions}"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация исчезновения сообщений"
                           SelectedValue="{Binding FadeOutAnimationType, Mode=TwoWay}" />
             </DockPanel>
 

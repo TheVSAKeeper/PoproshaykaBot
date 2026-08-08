@@ -34,6 +34,7 @@
                                   VerticalAlignment="Center" />
                         <TextBox Grid.Column="1"
                                  Style="{StaticResource TextBox.Form}"
+                                 AutomationProperties.Name="Шаблон сообщения о старте опроса"
                                  Text="{Binding StartTemplate, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding StartEnabled}"
                                  keepshell:PlaceholderBehavior.Placeholder="Шаблон при старте голосования" />
@@ -51,6 +52,7 @@
                                   VerticalAlignment="Center" />
                         <TextBox Grid.Column="1"
                                  Style="{StaticResource TextBox.Form}"
+                                 AutomationProperties.Name="Шаблон сообщения о ходе опроса"
                                  Text="{Binding ProgressTemplate, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding ProgressEnabled}"
                                  keepshell:PlaceholderBehavior.Placeholder="Шаблон промо-сообщения о прогрессе" />
@@ -68,6 +70,7 @@
                                   VerticalAlignment="Center" />
                         <TextBox Grid.Column="1"
                                  Style="{StaticResource TextBox.Form}"
+                                 AutomationProperties.Name="Шаблон сообщения о финале опроса"
                                  Text="{Binding EndTemplate, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding EndEnabled}"
                                  keepshell:PlaceholderBehavior.Placeholder="Шаблон при завершении голосования" />
@@ -85,6 +88,7 @@
                                   VerticalAlignment="Center" />
                         <TextBox Grid.Column="1"
                                  Style="{StaticResource TextBox.Form}"
+                                 AutomationProperties.Name="Шаблон сообщения о досрочном завершении опроса"
                                  Text="{Binding TerminatedTemplate, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding TerminatedEnabled}"
                                  keepshell:PlaceholderBehavior.Placeholder="Шаблон при досрочном завершении" />
@@ -102,6 +106,7 @@
                                   VerticalAlignment="Center" />
                         <TextBox Grid.Column="1"
                                  Style="{StaticResource TextBox.Form}"
+                                 AutomationProperties.Name="Шаблон сообщения об архивации опроса"
                                  Text="{Binding ArchivedTemplate, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding ArchivedEnabled}"
                                  keepshell:PlaceholderBehavior.Placeholder="Шаблон при архивировании" />

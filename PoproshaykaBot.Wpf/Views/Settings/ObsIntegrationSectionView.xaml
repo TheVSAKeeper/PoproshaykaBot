@@ -37,6 +37,7 @@
                                FontSize="{DynamicResource Font.Size.S}"
                                Margin="0,0,0,4" />
                     <TextBox Style="{StaticResource TextBox.Form}"
+                             AutomationProperties.Name="Хост OBS WebSocket"
                              Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"
                              keepshell:PlaceholderBehavior.Placeholder="127.0.0.1"
                              Margin="0,0,0,12" />
@@ -128,6 +129,7 @@
                                Margin="0,0,0,4" />
                     <ComboBox Style="{StaticResource ComboBox.Form}"
                               IsEditable="True"
+                              AutomationProperties.Name="Сцена OBS"
                               ItemsSource="{Binding Scenes}"
                               Text="{Binding SceneName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </StackPanel>
@@ -147,6 +149,7 @@
                                FontSize="{DynamicResource Font.Size.S}"
                                Margin="0,0,0,4" />
                     <TextBox Style="{StaticResource TextBox.Form}"
+                             AutomationProperties.Name="Имя источника браузера в OBS"
                              Text="{Binding SourceName, UpdateSourceTrigger=PropertyChanged}"
                              keepshell:PlaceholderBehavior.Placeholder="PoproshaykaBot Chat"
                              Margin="0,0,0,12" />
