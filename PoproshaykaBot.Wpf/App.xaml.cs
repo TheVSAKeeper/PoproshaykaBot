@@ -187,11 +187,11 @@ public partial class App : Application
         if (_services is not null)
         {
             Task.Run(StopAllComponents).GetAwaiter().GetResult();
-        }
 
-        if (!_isUiSmoke)
-        {
-            ApplyPendingUpdate();
+            if (!_isUiSmoke)
+            {
+                ApplyPendingUpdate();
+            }
         }
 
         Log.Information("Завершение работы приложения");
@@ -295,6 +295,8 @@ public partial class App : Application
         services.AddSingleton<StreamHistoryPageViewModel>();
         services.AddSingleton<ThemeViewModel>();
         services.AddSingleton<ShellPreferences>();
+        services.AddSingleton<UpdateBannerViewModel>();
+        services.AddSingleton<StreamMonitoringViewModel>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
 

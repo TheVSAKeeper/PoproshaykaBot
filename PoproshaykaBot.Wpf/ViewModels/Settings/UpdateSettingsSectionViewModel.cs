@@ -168,7 +168,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 
             _dialogService.Info("Установка обновления", "Обновление загружено. Приложение закроется и установит новую версию.");
 
-            Application.Current.Shutdown();
+            Application.Current.MainWindow?.Close();
         }
         catch (Exception exception)
         {

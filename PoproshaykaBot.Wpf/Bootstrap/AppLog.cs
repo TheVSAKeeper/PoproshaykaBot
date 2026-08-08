@@ -18,6 +18,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1003, Level = LogLevel.Error, Message = "Ошибка запуска подключения")]
     public static partial void BotStartConnectionFailed(this ILogger logger, Exception exception);
 
+    [LoggerMessage(EventId = 1004, Level = LogLevel.Information, Message = "История сообщений чата очищена")]
+    public static partial void ChatHistoryCleared(this ILogger logger);
+
     [LoggerMessage(EventId = 1100, Level = LogLevel.Error, Message = "OAuth-поток мастера упал для роли {Role}")]
     public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
 
@@ -143,4 +146,13 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1408, Level = LogLevel.Debug, Message = "Не удалось загрузить список сцен OBS для привязки профиля")]
     public static partial void ObsScenesLoadFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1500, Level = LogLevel.Information, Message = "Обновление {Version} загружено, приложение перезапустится")]
+    public static partial void UpdateDownloaded(this ILogger logger, string version);
+
+    [LoggerMessage(EventId = 1501, Level = LogLevel.Error, Message = "Ошибка загрузки обновления")]
+    public static partial void UpdateDownloadFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1502, Level = LogLevel.Information, Message = "Версия {Version} пропущена")]
+    public static partial void UpdateVersionSkipped(this ILogger logger, string version);
 }

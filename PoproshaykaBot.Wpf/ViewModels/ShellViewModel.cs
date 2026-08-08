@@ -2,12 +2,14 @@
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.ComponentModel;
+using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -19,6 +21,12 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly IDialogService _dialogService;
     private readonly List<IDisposable> _subscriptions = [];
     private readonly NavigationItem _settingsSection;
+    private readonly SettingsPageViewModel _settingsPage;
+    private readonly ChatHistoryManager _chatHistory;
+    private readonly NavigationItem _statisticsSection;
+    private readonly NavigationItem _streamHistorySection;
+    private NavigationItem? _current;
+    private bool _returningToSettings;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConnectButtonText))]
@@ -37,7 +45,10 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         BotConnectionManager connectionManager,
         IEventBus eventBus,
         ILogger<ShellViewModel> logger,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        UpdateBannerViewModel updateBanner,
+        StreamMonitoringViewModel streamMonitoring,
+        ChatHistoryManager chatHistory)
         : base(modal)
     {
         _connectionManager = connectionManager;
@@ -46,12 +57,19 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _dialogService = dialogService;
         Theme = theme;
+        UpdateBanner = updateBanner;
+        StreamMonitoring = streamMonitoring;
 
-        _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: settingsPage.OnEnter);
+        _settingsPage = settingsPage;
+        _chatHistory = chatHistory;
+        _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: ActivateSettings);
+
+        _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage) { StartsGroup = true };
+        _streamHistorySection = new("История стримов", PackIconLucideKind.History, streamHistoryPage);
 
         Sections.Add(new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter));
-        Sections.Add(new("Пользователи", PackIconLucideKind.Users, statisticsPage) { StartsGroup = true });
-        Sections.Add(new("История стримов", PackIconLucideKind.History, streamHistoryPage));
+        Sections.Add(_statisticsSection);
+        Sections.Add(_streamHistorySection);
         Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage) { StartsGroup = true });
 
         IsNavCollapsed = _preferences.NavCollapsed;
@@ -65,6 +83,10 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     }
 
     public ThemeViewModel Theme { get; }
+
+    public UpdateBannerViewModel UpdateBanner { get; }
+
+    public StreamMonitoringViewModel StreamMonitoring { get; }
 
     public override IPageHeader? EffectivePageHeader => _preferences.ShowPageHeader ? CurrentPageHeader : null;
 
@@ -92,6 +114,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public void Dispose()
     {
+        UpdateBanner.Dispose();
+        StreamMonitoring.Dispose();
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
         foreach (var subscription in _subscriptions)
@@ -105,6 +129,31 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     protected override void NavigateToSettings()
     {
         Selected = _settingsSection;
+    }
+
+    [RelayCommand]
+    private void NavigateToStatistics()
+    {
+        Selected = _statisticsSection;
+    }
+
+    [RelayCommand]
+    private void NavigateToStreamHistory()
+    {
+        Selected = _streamHistorySection;
+    }
+
+    [RelayCommand]
+    private void ClearChatHistory()
+    {
+        if (!_dialogService.Confirm("Очистка истории чата",
+                "Вы уверены, что хотите очистить всю историю сообщений чата?\n\nЭто действие нельзя отменить."))
+        {
+            return;
+        }
+
+        _chatHistory.ClearHistory();
+        _logger.ChatHistoryCleared();
     }
 
     private NavigationItem? FindSectionByTitle(string? title)
@@ -129,12 +178,88 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     protected override void OnSelectionChanged(NavigationItem? value)
     {
+        if (!_returningToSettings && LeavingDirtySettings(value) && !TryLeaveSettings(value))
+        {
+            return;
+        }
+
         base.OnSelectionChanged(value);
+
+        _current = value;
 
         if (value is not null)
         {
             _preferences.LastPage = value.Title;
         }
+    }
+
+    private void ActivateSettings()
+    {
+        if (_returningToSettings)
+        {
+            return;
+        }
+
+        _settingsPage.OnEnter();
+    }
+
+    private bool LeavingDirtySettings(NavigationItem? value)
+    {
+        return ReferenceEquals(_current, _settingsSection)
+            && !ReferenceEquals(value, _settingsSection)
+            && _settingsPage.HasChanges;
+    }
+
+    private bool TryLeaveSettings(NavigationItem? target)
+    {
+        var choice = StyledMessageBox.Show(
+            "На странице настроек есть несохранённые изменения. Сохранить их перед переходом?",
+            "Несохранённые настройки",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Yes);
+
+        switch (choice)
+        {
+            case MessageBoxResult.Yes:
+                ReturnToSettings();
+                _ = SaveThenNavigateAsync(target);
+                return false;
+
+            case MessageBoxResult.No:
+                _settingsPage.RevertCommand.Execute(null);
+                return true;
+
+            default:
+                ReturnToSettings();
+                return false;
+        }
+    }
+
+    private void ReturnToSettings()
+    {
+        _returningToSettings = true;
+
+        try
+        {
+            Selected = _settingsSection;
+        }
+        finally
+        {
+            _returningToSettings = false;
+        }
+    }
+
+    private async Task SaveThenNavigateAsync(NavigationItem? target)
+    {
+        await _settingsPage.SaveCommand.ExecuteAsync(null);
+
+        if (_settingsPage.HasChanges || target is null)
+        {
+            return;
+        }
+
+        Selected = target;
     }
 
     [RelayCommand(CanExecute = nameof(CanToggleConnect))]

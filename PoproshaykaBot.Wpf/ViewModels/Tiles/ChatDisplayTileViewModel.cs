@@ -6,25 +6,20 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
 using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
 {
-    public const string HideClutterScript = """
+    private const string HideClutterScriptTemplate = """
                                             (function () {
-                                                const selectors = [
-                                                    '[data-a-target="consent-banner"]',
-                                                    '.consent-banner',
-                                                    '.tw-callout-message',
-                                                    '[class*="channelLeaderboardHeader"]',
-                                                    '[class*="channelLeaderboardBottomIconContainer"]',
-                                                    '[class*="community-highlight"]',
-                                                ];
+                                                const selectors = __SELECTORS__;
                                                 const wrapperClasses = ['tw-transition', 'tw-callout', 'consent-banner'];
                                                 const findWrapper = (el) => {
                                                     let node = el;
@@ -73,8 +68,21 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
 
     private static readonly string ZoomFilePath = AppPaths.Combine("chat-zoom.txt");
 
+    private static readonly string BlockersFilePath = AppPaths.Combine("chat-blockers.txt");
+
+    private static readonly string[] BuiltInClutterSelectors =
+    [
+        "[data-a-target=\"consent-banner\"]",
+        ".consent-banner",
+        ".tw-callout-message",
+        "[class*=\"channelLeaderboardHeader\"]",
+        "[class*=\"channelLeaderboardBottomIconContainer\"]",
+        "[class*=\"community-highlight\"]",
+    ];
+
     private readonly SettingsManager _settings;
     private readonly IShellLauncher _shellLauncher;
+    private readonly IDialogService _dialogService;
 
     private readonly ToolbarItemViewModel _reloadAction;
     private readonly ToolbarItemViewModel _resetZoomAction;
@@ -96,11 +104,16 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
     [ObservableProperty]
     private string _fallbackDescription = string.Empty;
 
-    public ChatDisplayTileViewModel(SettingsManager settings, ILogger<ChatDisplayTileViewModel> logger, IShellLauncher shellLauncher)
+    public ChatDisplayTileViewModel(
+        SettingsManager settings,
+        ILogger<ChatDisplayTileViewModel> logger,
+        IShellLauncher shellLauncher,
+        IDialogService dialogService)
         : base("twitch-chat", "Чат")
     {
         _settings = settings;
         _shellLauncher = shellLauncher;
+        _dialogService = dialogService;
         Logger = logger;
 
         var twitch = settings.Current.Twitch;
@@ -124,11 +137,14 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
         HeaderActions.Add(_resetZoomAction);
         HeaderActions.Add(new(PackIconLucideKind.ExternalLink, OpenInBrowserCommand, "Открыть текущую страницу в системном браузере"));
         HeaderActions.Add(_resetSessionAction);
+        HeaderActions.Add(new(PackIconLucideKind.Ban, EditBlockersCommand, "Блокировка баннеров: скрыть лишние элементы чата"));
     }
 
     public event Action? ReloadRequested;
 
     public event Action? ResetSessionRequested;
+
+    public event Action? ClutterScriptChanged;
 
     public ILogger Logger { get; }
 
@@ -139,6 +155,12 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
     public Uri? ChannelUri { get; }
 
     public ICommand? FallbackActionCommand => ShowRuntimeDownload ? OpenRuntimeDownloadCommand : null;
+
+    public string BuildHideClutterScript()
+    {
+        var selectors = BuiltInClutterSelectors.Concat(LoadUserSelectors()).ToArray();
+        return HideClutterScriptTemplate.Replace("__SELECTORS__", JsonSerializer.Serialize(selectors), StringComparison.Ordinal);
+    }
 
     public void ShowNoChannelFallback()
     {
@@ -211,6 +233,53 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel
     private void OpenRuntimeDownload()
     {
         _shellLauncher.Open(WebView2RuntimeDownloadUrl);
+    }
+
+    [RelayCommand]
+    private async Task EditBlockersAsync()
+    {
+        var dialog = new ChatBlockersDialogViewModel(LoadUserSelectorsText());
+
+        if (!await _dialogService.ShowAsync(dialog))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(BlockersFilePath)!);
+            File.WriteAllText(BlockersFilePath, dialog.Selectors);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Не удалось сохранить список блокираторов баннеров чата");
+            _dialogService.Error("Ошибка", "Не удалось сохранить список блокираторов. Подробности – в логах.");
+
+            return;
+        }
+
+        ClutterScriptChanged?.Invoke();
+    }
+
+    private IEnumerable<string> LoadUserSelectors()
+    {
+        return LoadUserSelectorsText()
+            .Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith('#'));
+    }
+
+    private string LoadUserSelectorsText()
+    {
+        try
+        {
+            return File.Exists(BlockersFilePath) ? File.ReadAllText(BlockersFilePath) : string.Empty;
+        }
+        catch (IOException exception)
+        {
+            Logger.LogWarning(exception, "Не удалось прочитать список блокираторов баннеров чата");
+            return string.Empty;
+        }
     }
 
     private double LoadSavedZoom()
