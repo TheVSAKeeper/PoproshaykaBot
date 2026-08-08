@@ -7,7 +7,6 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -45,9 +44,9 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private readonly Dictionary<string, (double Level, DateTimeOffset UpdatedAt)> _volumeTargets =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly DispatcherTimer _refreshTimer;
-    private readonly DispatcherTimer _volumeMeterTimer;
-    private readonly DispatcherTimer _toastTimer;
+    private readonly IUiTimer _refreshTimer;
+    private readonly IUiTimer _volumeMeterTimer;
+    private readonly IUiTimer _toastTimer;
 
     private ObsIntegrationSettings _settings = new();
     private CancellationTokenSource? _refreshCts;
@@ -87,7 +86,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         ObsIntegrationService obsIntegration,
         IObsWebSocketClient obsClient,
         IEventBus bus,
-        ILogger<ObsInfoTileViewModel> logger)
+        ILogger<ObsInfoTileViewModel> logger,
+        IUiDispatcher uiDispatcher)
         : base("obs-info", "OBS", maxWidth: 380, maxHeight: 320)
     {
         _store = store;
@@ -102,14 +102,9 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         HeaderActions.Add(new(MahApps.Metro.IconPacks.PackIconLucideKind.RefreshCw, RefreshCommand, toolTip: "Обновить данные OBS"));
         HeaderActions.Add(new(MahApps.Metro.IconPacks.PackIconLucideKind.RefreshCcw, RefreshChatSourcesCommand, toolTip: "Жёстко обновить чат-источники OBS (refreshnocache)"));
 
-        _refreshTimer = new() { Interval = TimeSpan.FromMilliseconds(DisconnectedRefreshIntervalMs) };
-        _refreshTimer.Tick += OnRefreshTimerTick;
-
-        _volumeMeterTimer = new() { Interval = TimeSpan.FromMilliseconds(MinVolumeMeterDelayMs) };
-        _volumeMeterTimer.Tick += OnVolumeMeterTimerTick;
-
-        _toastTimer = new() { Interval = ToastDuration };
-        _toastTimer.Tick += OnToastTimerTick;
+        _refreshTimer = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(DisconnectedRefreshIntervalMs), OnRefreshTimerTick);
+        _volumeMeterTimer = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(MinVolumeMeterDelayMs), OnVolumeMeterTimerTick);
+        _toastTimer = uiDispatcher.CreateTimer(ToastDuration, OnToastTimerTick);
 
         Initialize();
     }
@@ -136,12 +131,12 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         _ = RefreshSnapshotAsync(connectIfNeeded: ShouldTryAutoConnect());
     }
 
-    private void OnRefreshTimerTick(object? sender, EventArgs e)
+    private void OnRefreshTimerTick()
     {
         _ = RefreshSnapshotAsync(connectIfNeeded: ShouldTryAutoConnect());
     }
 
-    private void OnVolumeMeterTimerTick(object? sender, EventArgs e)
+    private void OnVolumeMeterTimerTick()
     {
         if (AudioSources.Count == 0)
         {
@@ -164,7 +159,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     // TODO: восстановить плавное сглаживание уровней (CompositionTarget.Rendering 33ms / Storyboard) – сейчас уровень присваивается напрямую.
 
-    private void OnToastTimerTick(object? sender, EventArgs e)
+    private void OnToastTimerTick()
     {
         _toastTimer.Stop();
         IsToastVisible = false;
@@ -557,7 +552,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
         if (enabled)
         {
-            if (!_refreshTimer.IsEnabled)
+            if (!_refreshTimer.IsRunning)
             {
                 _refreshTimer.Start();
             }
@@ -565,7 +560,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             return;
         }
 
-        if (_refreshTimer.IsEnabled)
+        if (_refreshTimer.IsRunning)
         {
             _refreshTimer.Stop();
         }
@@ -734,11 +729,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         _disposed = true;
 
         _refreshTimer.Stop();
-        _refreshTimer.Tick -= OnRefreshTimerTick;
         _volumeMeterTimer.Stop();
-        _volumeMeterTimer.Tick -= OnVolumeMeterTimerTick;
         _toastTimer.Stop();
-        _toastTimer.Tick -= OnToastTimerTick;
 
         _obsClient.EventReceived -= OnObsEventReceived;
 

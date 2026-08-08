@@ -1,7 +1,4 @@
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.Logging;
-using PoproshaykaBot.Wpf.Bootstrap;
-using System.Diagnostics;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
@@ -9,11 +6,11 @@ public sealed partial class WelcomePageViewModel : OnboardingPageViewModelBase
 {
     private const string TwitchDevConsoleUrl = "https://dev.twitch.tv/console/apps";
 
-    private readonly ILogger<WelcomePageViewModel> _logger;
+    private readonly IShellLauncher _shellLauncher;
 
-    public WelcomePageViewModel(ILogger<WelcomePageViewModel> logger)
+    public WelcomePageViewModel(IShellLauncher shellLauncher)
     {
-        _logger = logger;
+        _shellLauncher = shellLauncher;
     }
 
     public override string PageTitle => "Добро пожаловать";
@@ -37,13 +34,6 @@ public sealed partial class WelcomePageViewModel : OnboardingPageViewModelBase
     [RelayCommand]
     private void OpenDevConsole()
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo(TwitchDevConsoleUrl) { UseShellExecute = true });
-        }
-        catch (Exception exception)
-        {
-            _logger.OnboardingDevConsoleOpenFailed(exception);
-        }
+        _shellLauncher.Open(TwitchDevConsoleUrl);
     }
 }

@@ -21,12 +21,6 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1100, Level = LogLevel.Error, Message = "OAuth-поток мастера упал для роли {Role}")]
     public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
 
-    [LoggerMessage(EventId = 1101, Level = LogLevel.Warning, Message = "Не удалось открыть браузер для авторизации роли {Role}")]
-    public static partial void OAuthBrowserOpenFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
-
-    [LoggerMessage(EventId = 1102, Level = LogLevel.Warning, Message = "Не удалось скопировать ссылку авторизации в буфер обмена")]
-    public static partial void OAuthClipboardCopyFailed(this ILogger logger, Exception? exception);
-
     [LoggerMessage(EventId = 1103, Level = LogLevel.Error, Message = "Не удалось сохранить настройки и токены перед подключением бота")]
     public static partial void BotConnectionSaveSettingsFailed(this ILogger logger, Exception? exception);
 
@@ -56,9 +50,6 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1112, Level = LogLevel.Warning, Message = "Сбой постановки тестового сообщения в очередь отправки")]
     public static partial void OnboardingChatTestEnqueueFailed(this ILogger logger, Exception? exception);
-
-    [LoggerMessage(EventId = 1113, Level = LogLevel.Warning, Message = "Не удалось открыть OBS-оверлей в браузере")]
-    public static partial void OnboardingOverlayBrowserOpenFailed(this ILogger logger, Exception? exception);
 
     [LoggerMessage(EventId = 1114, Level = LogLevel.Warning, Message = "Порт {Port} недоступен для биндинга в onboarding")]
     public static partial void OnboardingPortUnavailable(this ILogger logger, int port);
@@ -96,9 +87,6 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1125, Level = LogLevel.Error, Message = "Не удалось откатить HTTP сервер на порт {Port} после отмены мастера")]
     public static partial void OnboardingHttpServerRollbackFailed(this ILogger logger, Exception? exception, int port);
 
-    [LoggerMessage(EventId = 1126, Level = LogLevel.Warning, Message = "Не удалось открыть Twitch Developer Console")]
-    public static partial void OnboardingDevConsoleOpenFailed(this ILogger logger, Exception? exception);
-
     [LoggerMessage(EventId = 1200, Level = LogLevel.Error, Message = "Ошибка сохранения настроек")]
     public static partial void SettingsSaveFailed(this ILogger logger, Exception? exception);
 
@@ -116,9 +104,6 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1300, Level = LogLevel.Error, Message = "Ошибка обновления информации о стриме")]
     public static partial void StreamInfoUpdateFailed(this ILogger logger, Exception? exception);
-
-    [LoggerMessage(EventId = 1301, Level = LogLevel.Error, Message = "Не удалось открыть браузер для {Url}")]
-    public static partial void StreamInfoBrowserOpenFailed(this ILogger logger, Exception? exception, string url);
 
     [LoggerMessage(EventId = 1302, Level = LogLevel.Error, Message = "Ошибка автообновления информации о стриме")]
     public static partial void StreamInfoAutoUpdateFailed(this ILogger logger, Exception? exception);
@@ -152,9 +137,6 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1405, Level = LogLevel.Warning, Message = "Не удалось обновить плитку OBS")]
     public static partial void ObsTileRefreshFailed(this ILogger logger, Exception? exception);
-
-    [LoggerMessage(EventId = 1406, Level = LogLevel.Warning, Message = "Не удалось скопировать OBS URL")]
-    public static partial void ObsUrlCopyFailed(this ILogger logger, Exception? exception);
 
     [LoggerMessage(EventId = 1407, Level = LogLevel.Warning, Message = "Ошибка операции OBS-интеграции")]
     public static partial void ObsOperationFailed(this ILogger logger, Exception? exception);

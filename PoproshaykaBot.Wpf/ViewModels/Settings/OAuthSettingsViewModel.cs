@@ -22,10 +22,14 @@ public sealed partial class OAuthSettingsViewModel : ObservableObject, IDisposab
     [NotifyPropertyChangedFor(nameof(ChannelHintSeverity))]
     private string _channel = string.Empty;
 
-    public OAuthSettingsViewModel(ITwitchOAuthService oauthService, AccountsStore accountsStore, IDialogService dialogService)
+    public OAuthSettingsViewModel(
+        ITwitchOAuthService oauthService,
+        AccountsStore accountsStore,
+        IDialogService dialogService,
+        IShellLauncher shellLauncher)
     {
-        Bot = new(TwitchOAuthRole.Bot, oauthService, accountsStore, GetCredentials, dialogService);
-        Broadcaster = new(TwitchOAuthRole.Broadcaster, oauthService, accountsStore, GetCredentials, dialogService);
+        Bot = new(TwitchOAuthRole.Bot, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher);
+        Broadcaster = new(TwitchOAuthRole.Broadcaster, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher);
 
         Bot.SettingChanged += OnChildSettingChanged;
         Broadcaster.SettingChanged += OnChildSettingChanged;

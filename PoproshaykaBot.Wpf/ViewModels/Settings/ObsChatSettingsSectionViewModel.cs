@@ -5,7 +5,6 @@ using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.ComponentModel.DataAnnotations;
-using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
@@ -19,6 +18,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     private readonly ObsChatStore _store;
     private readonly SettingsManager _settings;
     private readonly IDialogService _dialogService;
+    private readonly IShellLauncher _shellLauncher;
 
     private ObsChatSettings _baseline = new();
 
@@ -132,11 +132,12 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     [ObservableProperty]
     private string _firstTimeUserMessageAnimation = Defaults.FirstTimeUserMessageAnimation;
 
-    public ObsChatSettingsSectionViewModel(ObsChatStore store, SettingsManager settings, IDialogService dialogService)
+    public ObsChatSettingsSectionViewModel(ObsChatStore store, SettingsManager settings, IDialogService dialogService, IShellLauncher shellLauncher)
     {
         _store = store;
         _settings = settings;
         _dialogService = dialogService;
+        _shellLauncher = shellLauncher;
 
         EntryAnimationOptions = MessageAnimationType.EntryAnimations
             .Select(option => new AnimationOption(option.Value, option.DisplayName))
@@ -326,13 +327,9 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
         var url = string.Format(CultureInfo.InvariantCulture, "http://localhost:{0}/animations-demo", port);
 
-        try
+        if (!_shellLauncher.Open(url))
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (Exception exception)
-        {
-            _dialogService.Error("Демо анимаций", $"Не удалось открыть демо в браузере.\n\n{exception.Message}");
+            _dialogService.Error("Демо анимаций", "Не удалось открыть демо в браузере.");
         }
     }
 

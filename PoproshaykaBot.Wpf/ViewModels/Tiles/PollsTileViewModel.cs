@@ -6,7 +6,6 @@ using PoproshaykaBot.Core.Infrastructure.Events.Polling;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Collections.ObjectModel;
-using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
@@ -15,7 +14,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
     private readonly IPollController _controller;
     private readonly IDialogService _dialogService;
     private readonly List<IDisposable> _subs = [];
-    private readonly DispatcherTimer _liveTimer;
+    private readonly IUiTimer _liveTimer;
 
     [ObservableProperty]
     private PollSnapshot? _currentSnapshot;
@@ -44,7 +43,8 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         IPollController controller,
         PollSnapshotStore snapshotStore,
         IEventBus bus,
-        IDialogService dialogService) : base("polls-control", "Опросы", maxWidth: 500)
+        IDialogService dialogService,
+        IUiDispatcher uiDispatcher) : base("polls-control", "Опросы", maxWidth: 500)
     {
         _controller = controller;
         _dialogService = dialogService;
@@ -52,8 +52,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         HeaderActions.Add(new ToolbarItemViewModel(PackIconLucideKind.Plus, CreateAdHocCommand, toolTip: "Создать опрос"));
         HeaderActions.Add(new ToolbarItemViewModel(PackIconLucideKind.List, CreateFromProfileCommand, toolTip: "Из профиля…"));
 
-        _liveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _liveTimer.Tick += OnLiveTimerTick;
+        _liveTimer = uiDispatcher.CreateTimer(TimeSpan.FromSeconds(1), OnLiveTimerTick);
         _liveTimer.Start();
 
         _subs.Add(bus.SubscribeOnUi<PollStarted>(@event =>
@@ -121,7 +120,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         }
     }
 
-    private void OnLiveTimerTick(object? sender, EventArgs e)
+    private void OnLiveTimerTick()
     {
         var snapshot = CurrentSnapshot;
 
@@ -227,7 +226,6 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
     public void Dispose()
     {
         _liveTimer.Stop();
-        _liveTimer.Tick -= OnLiveTimerTick;
 
         foreach (var sub in _subs)
         {

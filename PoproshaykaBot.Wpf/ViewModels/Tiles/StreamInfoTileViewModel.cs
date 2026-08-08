@@ -6,10 +6,8 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
-using System.Diagnostics;
 using System.Windows.Media.Imaging;
 using PoproshaykaBot.Wpf.Bootstrap;
-using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
@@ -18,9 +16,11 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private readonly IStreamStatus _stream;
     private readonly ILogger<StreamInfoTileViewModel> _logger;
     private readonly List<IDisposable> _subs = [];
-    private readonly DispatcherTimer _refreshTimer;
+    private readonly IUiTimer _refreshTimer;
+    private readonly IShellLauncher _shellLauncher;
     private readonly ToolbarItemViewModel _openChannelToolbarItem;
     private string? _lastThumbnailRawUrl;
+    private bool _refreshTimerRunning;
 
     [ObservableProperty]
     private StreamStatus _status = StreamStatus.Unknown;
@@ -52,14 +52,16 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     public StreamInfoTileViewModel(
         IStreamStatus stream,
         IEventBus bus,
-        ILogger<StreamInfoTileViewModel> logger)
+        ILogger<StreamInfoTileViewModel> logger,
+        IUiDispatcher uiDispatcher,
+        IShellLauncher shellLauncher)
         : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 240)
     {
         _stream = stream;
         _logger = logger;
+        _shellLauncher = shellLauncher;
 
-        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
-        _refreshTimer.Tick += OnRefreshTimerTick;
+        _refreshTimer = uiDispatcher.CreateTimer(TimeSpan.FromSeconds(30), OnRefreshTimerTick);
 
         _openChannelToolbarItem = new ToolbarItemViewModel(
             PackIconLucideKind.ExternalLink,
@@ -114,19 +116,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
             return;
         }
 
-        var url = $"https://twitch.tv/{ChannelLogin}";
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true,
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.StreamInfoBrowserOpenFailed(ex, url);
-        }
+        _shellLauncher.Open($"https://twitch.tv/{ChannelLogin}");
     }
 
     private void ApplyCurrentStatus()
@@ -168,21 +158,20 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     {
         if (Status == StreamStatus.Online)
         {
-            if (!_refreshTimer.IsEnabled)
+            if (!_refreshTimerRunning)
             {
                 _refreshTimer.Start();
+                _refreshTimerRunning = true;
             }
         }
-        else
+        else if (_refreshTimerRunning)
         {
-            if (_refreshTimer.IsEnabled)
-            {
-                _refreshTimer.Stop();
-            }
+            _refreshTimer.Stop();
+            _refreshTimerRunning = false;
         }
     }
 
-    private async void OnRefreshTimerTick(object? sender, EventArgs e)
+    private async void OnRefreshTimerTick()
     {
         if (_stream.CurrentStatus != StreamStatus.Online)
         {
@@ -236,7 +225,8 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     public void Dispose()
     {
         _refreshTimer.Stop();
-        _refreshTimer.Tick -= OnRefreshTimerTick;
+        _refreshTimerRunning = false;
+
         foreach (var sub in _subs)
         {
             sub.Dispose();

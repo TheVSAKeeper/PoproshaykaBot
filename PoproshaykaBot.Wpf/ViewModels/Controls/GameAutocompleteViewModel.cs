@@ -2,7 +2,6 @@
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using System.Collections.ObjectModel;
-using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Controls;
 
@@ -11,7 +10,7 @@ public sealed partial class GameAutocompleteViewModel : ObservableObject, IDispo
     private const int MinQueryLength = 2;
 
     private readonly IGameCategoryResolver _resolver;
-    private readonly DispatcherTimer _debounce;
+    private readonly IUiTimer _debounce;
     private CancellationTokenSource? _cts;
     private bool _suppress;
 
@@ -24,11 +23,10 @@ public sealed partial class GameAutocompleteViewModel : ObservableObject, IDispo
     [ObservableProperty]
     private GameSuggestion? _selected;
 
-    public GameAutocompleteViewModel(IGameCategoryResolver resolver)
+    public GameAutocompleteViewModel(IGameCategoryResolver resolver, IUiDispatcher uiDispatcher)
     {
         _resolver = resolver;
-        _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-        _debounce.Tick += OnDebounceTick;
+        _debounce = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(300), OnDebounceTick);
     }
 
     public ObservableCollection<GameSuggestion> Suggestions { get; } = [];
@@ -47,7 +45,6 @@ public sealed partial class GameAutocompleteViewModel : ObservableObject, IDispo
     public void Dispose()
     {
         _debounce.Stop();
-        _debounce.Tick -= OnDebounceTick;
         _cts?.Cancel();
         _cts?.Dispose();
         _cts = null;
@@ -65,7 +62,7 @@ public sealed partial class GameAutocompleteViewModel : ObservableObject, IDispo
         _debounce.Start();
     }
 
-    private void OnDebounceTick(object? sender, EventArgs e)
+    private void OnDebounceTick()
     {
         _debounce.Stop();
         _ = SearchAsync();

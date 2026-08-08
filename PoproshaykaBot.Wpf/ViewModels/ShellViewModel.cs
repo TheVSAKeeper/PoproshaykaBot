@@ -50,15 +50,13 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: settingsPage.OnEnter);
 
         Sections.Add(new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter));
-        Sections.Add(_settingsSection);
-        Sections.Add(new("Пользователи", PackIconLucideKind.Users, statisticsPage));
+        Sections.Add(new("Пользователи", PackIconLucideKind.Users, statisticsPage) { StartsGroup = true });
         Sections.Add(new("История стримов", PackIconLucideKind.History, streamHistoryPage));
-        Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage));
+        Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage) { StartsGroup = true });
 
         IsNavCollapsed = _preferences.NavCollapsed;
 
-        var lastPage = _preferences.LastPage;
-        Selected = Sections.FirstOrDefault(section => string.Equals(section.Title, lastPage, StringComparison.Ordinal)) ?? Sections[0];
+        Selected = FindSectionByTitle(_preferences.LastPage) ?? Sections[0];
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnLifecyclePhaseChanged));
         _subscriptions.Add(eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(statusEvent => SetStatus(statusEvent.Message, StatusSeverity.Info)));
@@ -107,6 +105,21 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     protected override void NavigateToSettings()
     {
         Selected = _settingsSection;
+    }
+
+    private NavigationItem? FindSectionByTitle(string? title)
+    {
+        if (string.IsNullOrEmpty(title))
+        {
+            return null;
+        }
+
+        if (string.Equals(_settingsSection.Title, title, StringComparison.Ordinal))
+        {
+            return _settingsSection;
+        }
+
+        return Sections.FirstOrDefault(section => string.Equals(section.Title, title, StringComparison.Ordinal));
     }
 
     protected override void OnNavCollapsedChanged(bool value)
