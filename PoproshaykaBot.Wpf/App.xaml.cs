@@ -47,7 +47,8 @@ public partial class App : Application
 
     private bool _isUiSmoke;
     private bool _isFinalizeUpdate;
-    private GalleryOptions? _galleryOptions;
+    private string[]? _galleryArgs;
+    private GalleryArguments? _galleryArguments;
     private bool _appLifetimeStarted;
     private bool _streamMonitoringStarted;
 
@@ -58,11 +59,12 @@ public partial class App : Application
         _isUiSmoke = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         _isFinalizeUpdate = e.Args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
 
-        var galleryIndex = Array.FindIndex(e.Args, static arg => string.Equals(arg, GalleryRun.ArgumentName, StringComparison.OrdinalIgnoreCase));
+        var galleryIndex = Array.FindIndex(e.Args, static arg => string.Equals(arg, GalleryHost.ArgumentName, StringComparison.OrdinalIgnoreCase));
 
         if (galleryIndex >= 0)
         {
-            _galleryOptions = GalleryOptions.Parse(e.Args.Skip(galleryIndex + 1), System.IO.Path.Combine(AppPaths.BaseDirectory, GalleryRun.FolderName));
+            // Сам разбор идёт ниже, после AppThemes.Register: ключ темы каркас проверяет по реестру.
+            _galleryArgs = [.. e.Args.Skip(galleryIndex + 1)];
             _isUiSmoke = true;
         }
 
@@ -102,6 +104,12 @@ public partial class App : Application
             ISettingsStore uiSettings = new SettingsStore(uiSettingsPath);
 
             AppThemes.Register();
+
+            if (_galleryArgs is not null)
+            {
+                _galleryArguments = GalleryHost.Parse(_galleryArgs, System.IO.Path.Combine(AppPaths.BaseDirectory, GalleryRunner.FolderName));
+            }
+
             var themeKey = uiSettings.GetStringValue(SettingsKeys.Theme);
             ThemeManager.Apply(string.IsNullOrWhiteSpace(themeKey) ? AppThemes.LightKey : themeKey);
             FontScaleManager.Initialize(uiSettings.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
@@ -158,9 +166,9 @@ public partial class App : Application
                 _memoryWatchdog = CreateMemoryWatchdog();
             }
 
-            if (_galleryOptions is not null)
+            if (_galleryArguments is not null)
             {
-                RunGallery(_galleryOptions, _services);
+                RunGallery(_galleryArguments, _services);
                 return;
             }
 
@@ -203,12 +211,9 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private void RunGallery(GalleryOptions options, IServiceProvider services)
+    private void RunGallery(GalleryArguments arguments, IServiceProvider services)
     {
-        Log.Information("Съёмка галереи: страниц {Pages}, тем {Themes}, каталог {Directory}",
-            options.Pages.Count,
-            options.Themes.Count,
-            options.Directory);
+        FontScaleManager.Apply(arguments.FontScale);
 
         _ = Dispatcher.InvokeAsync(async () =>
         {
@@ -216,7 +221,7 @@ public partial class App : Application
 
             try
             {
-                code = await GalleryRun.RenderAsync(options, services);
+                code = await GalleryRunner.RunAsync(GalleryHost.Create(services, arguments), arguments, new GalleryJournal());
             }
             catch (Exception exception)
             {

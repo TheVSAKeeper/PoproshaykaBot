@@ -26,11 +26,11 @@
       },
       "KeepShell.Testing": {
         "type": "Direct",
-        "requested": "[0.1.87, )",
-        "resolved": "0.1.87",
-        "contentHash": "zEtKUrNpUDkzg+wC57jfBICrdi6XULpym54Xl7et+G8Bde0BysnWFm0wzl+Knf34S6zYHwv0ubRoVst8cKsMlw==",
+        "requested": "[0.1.89, )",
+        "resolved": "0.1.89",
+        "contentHash": "O7UL//nERzctMLfn4B5FGLIg98pVMLfeRygArkeIs/55+g0lYCqfx7WsKit+MHgAlLSmtC8LCCpxI0ify1lXfw==",
         "dependencies": {
-          "KeepShell": "0.1.87"
+          "KeepShell": "0.1.89"
         }
       },
       "Meziantou.Analyzer": {
@@ -249,7 +249,8 @@
         "type": "Project",
         "dependencies": {
           "CommunityToolkit.Mvvm": "[8.3.2, )",
-          "KeepShell": "[0.1.87, )",
+          "KeepShell": "[0.1.89, )",
+          "KeepShell.Automation": "[0.1.89, )",
           "MahApps.Metro.IconPacks.Lucide": "[6.2.1, )",
           "Microsoft.Web.WebView2": "[1.0.3650.58, )",
           "PoproshaykaBot.Core": "[3.1.0.15, )",
@@ -267,9 +268,9 @@
       },
       "KeepShell": {
         "type": "CentralTransitive",
-        "requested": "[0.1.87, )",
-        "resolved": "0.1.87",
-        "contentHash": "mc8FmdVHZGGkgsZJqNC7dMkqj9w6qHhfuvJKghJ5LIlbyA9+roQ6o4N+cuRLsOde8RMQNzu8p5fCLkWhkHSUsw==",
+        "requested": "[0.1.89, )",
+        "resolved": "0.1.89",
+        "contentHash": "Ke0pbfx/P5y5LkrKhsI9Bccd7wyhmkephvBThjU/gbQ8UKiurtYx2L2ZDLsoXFAFCBWJJefv5ZuSCd30QVj9Ig==",
         "dependencies": {
           "CommunityToolkit.Mvvm": "8.3.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",
@@ -280,6 +281,15 @@
           "Serilog.Sinks.Debug": "2.0.0",
           "Serilog.Sinks.File": "6.0.0",
           "Tomlyn": "2.4.0"
+        }
+      },
+      "KeepShell.Automation": {
+        "type": "CentralTransitive",
+        "requested": "[0.1.89, )",
+        "resolved": "0.1.89",
+        "contentHash": "PTx+qzbAPXn0CUH6f5zXi7K6YDbrAKQAyPIQJpCro9LduDSrtTvGepOr/qeyoeMXW0Nc2GM29J8qBfhV8Kg/Fw==",
+        "dependencies": {
+          "KeepShell": "0.1.89"
         }
       },
       "MahApps.Metro.IconPacks.Lucide": {
