@@ -25,6 +25,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly ChatHistoryManager _chatHistory;
     private readonly NavigationItem _statisticsSection;
     private readonly NavigationItem _streamHistorySection;
+    private readonly NavigationItem _overviewSection;
     private NavigationItem? _current;
     private bool _returningToSettings;
 
@@ -67,7 +68,9 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage) { StartsGroup = true };
         _streamHistorySection = new("История стримов", PackIconLucideKind.History, streamHistoryPage);
 
-        Sections.Add(new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter));
+        _overviewSection = new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter);
+
+        Sections.Add(_overviewSection);
         Sections.Add(_statisticsSection);
         Sections.Add(_streamHistorySection);
         Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage) { StartsGroup = true });
@@ -89,6 +92,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public StreamMonitoringViewModel StreamMonitoring { get; }
 
     public override IPageHeader? EffectivePageHeader => _preferences.ShowPageHeader ? CurrentPageHeader : null;
+
+    public new Thickness ContentMargin => ReferenceEquals(Selected, _overviewSection) ? default : base.ContentMargin;
 
     public string ConnectButtonText => Phase switch
     {
@@ -184,6 +189,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         }
 
         base.OnSelectionChanged(value);
+
+        OnPropertyChanged(nameof(ContentMargin));
 
         _current = value;
 

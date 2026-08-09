@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Wpf.ViewModels;
+﻿using KeepShell.Bootstrap;
+using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.Windows;
 using System.Windows.Controls;
@@ -7,14 +8,58 @@ namespace PoproshaykaBot.Wpf.Views;
 
 public partial class DashboardView : UserControl, IView<DashboardViewModel>
 {
+    private const double StackedWidthThreshold = 720;
+    private const double StarBandMinWidth = 320;
+    private const double StarBandMinHeight = 320;
+
     private readonly Dictionary<DashboardTileViewModel, ContentControl> _hosts = [];
     private DashboardViewModel? _viewModel;
+    private bool _stacked;
 
     public DashboardView()
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        SizeChanged += OnSizeChanged;
         Unloaded += OnUnloaded;
+    }
+
+    private static void ApplyTracks<T>(IList<T> definitions, int count, Func<T> create, Action<T, int> apply)
+    {
+        while (definitions.Count > count)
+        {
+            definitions.RemoveAt(definitions.Count - 1);
+        }
+
+        while (definitions.Count < count)
+        {
+            definitions.Add(create());
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            apply(definitions[i], i);
+        }
+    }
+
+    private static bool ShouldStack(double width)
+    {
+        return width > 0 && width < StackedWidthThreshold * FontScaleManager.Current;
+    }
+
+    private static bool Scrollable(TileBand band)
+    {
+        return band.Rows.All(row => row.Length.IsAuto) && band.Columns.All(column => column.Length.IsAuto);
+    }
+
+    private static FrameworkElement Wrap(Grid grid)
+    {
+        return new ScrollViewer
+        {
+            Content = grid,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -34,6 +79,24 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         RebuildGrid();
     }
 
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!e.WidthChanged)
+        {
+            return;
+        }
+
+        var stacked = ShouldStack(e.NewSize.Width);
+
+        if (stacked == _stacked)
+        {
+            return;
+        }
+
+        _stacked = stacked;
+        RebuildGrid();
+    }
+
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         if (_viewModel is not null)
@@ -49,77 +112,134 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private void RebuildGrid()
     {
+        DetachHosts();
+        BandsGrid.Children.Clear();
+        BandsGrid.ColumnDefinitions.Clear();
+        BandsGrid.RowDefinitions.Clear();
+
         if (_viewModel is null)
         {
-            TilesGrid.Children.Clear();
-            TilesGrid.ColumnDefinitions.Clear();
-            TilesGrid.RowDefinitions.Clear();
             return;
         }
 
-        SyncDefinitions();
+        var bands = _viewModel.Bands;
 
-        var placedTiles = new HashSet<DashboardTileViewModel>();
+        BandsScroll.VerticalScrollBarVisibility = _stacked ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+        BandsGrid.Margin = _stacked ? new(0, 0, 0, -1) : new(0, 0, -1, -1);
 
-        foreach (var placement in _viewModel.Placements)
+        if (_stacked)
         {
-            var host = GetOrCreateHost(placement.Tile);
+            ApplyTracks(
+                BandsGrid.RowDefinitions,
+                bands.Count,
+                static () => new RowDefinition(),
+                (definition, index) =>
+                {
+                    definition.Height = GridLength.Auto;
+                    definition.MinHeight = bands[index].Width.Length.IsStar ? StarBandMinHeight : 0;
+                });
+        }
+        else
+        {
+            ApplyTracks(
+                BandsGrid.ColumnDefinitions,
+                bands.Count,
+                static () => new ColumnDefinition(),
+                (definition, index) =>
+                {
+                    var track = bands[index].Width;
 
-            Grid.SetRow(host, placement.Row);
-            Grid.SetColumn(host, placement.Column);
-            Grid.SetRowSpan(host, placement.RowSpan);
-            Grid.SetColumnSpan(host, placement.ColumnSpan);
-
-            if (!TilesGrid.Children.Contains(host))
-            {
-                TilesGrid.Children.Add(host);
-            }
-
-            placedTiles.Add(placement.Tile);
+                    definition.Width = track.Length;
+                    definition.MaxWidth = track.Max;
+                    definition.MinWidth = track.Length.IsStar ? StarBandMinWidth : 0;
+                });
         }
 
-        foreach (var (tile, host) in _hosts)
+        for (var index = 0; index < bands.Count; index++)
         {
-            if (!placedTiles.Contains(tile))
+            var content = BuildBandContent(bands[index]);
+
+            if (_stacked)
             {
-                TilesGrid.Children.Remove(host);
+                Grid.SetRow(content, index);
             }
+            else
+            {
+                Grid.SetColumn(content, index);
+            }
+
+            BandsGrid.Children.Add(content);
         }
     }
 
-    private void SyncDefinitions()
+    private FrameworkElement BuildBandContent(TileBand band)
     {
-        var columnWidths = _viewModel!.ColumnWidths;
-        var rowHeights = _viewModel.RowHeights;
+        var grid = BuildBand(band);
 
-        while (TilesGrid.ColumnDefinitions.Count > columnWidths.Count)
+        if (_stacked)
         {
-            TilesGrid.ColumnDefinitions.RemoveAt(TilesGrid.ColumnDefinitions.Count - 1);
+            return grid;
         }
 
-        while (TilesGrid.ColumnDefinitions.Count < columnWidths.Count)
+        var seam = new Border
         {
-            TilesGrid.ColumnDefinitions.Add(new());
+            BorderThickness = new(0, 0, 1, 0),
+            MaxWidth = band.Width.Max,
+            Child = Scrollable(band) ? Wrap(grid) : grid,
+        };
+
+        seam.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+
+        return seam;
+    }
+
+    private Grid BuildBand(TileBand band)
+    {
+        var grid = new Grid();
+
+        ApplyTracks(
+            grid.ColumnDefinitions,
+            band.Columns.Count,
+            static () => new ColumnDefinition(),
+            (definition, index) =>
+            {
+                definition.Width = _stacked ? new(1, GridUnitType.Star) : band.Columns[index].Length;
+                definition.MaxWidth = _stacked ? double.PositiveInfinity : band.Columns[index].Max;
+            });
+
+        ApplyTracks(
+            grid.RowDefinitions,
+            band.Rows.Count,
+            static () => new RowDefinition(),
+            (definition, index) =>
+            {
+                definition.Height = band.Rows[index].Length;
+                definition.MaxHeight = band.Rows[index].Max;
+            });
+
+        foreach (var slot in band.Tiles)
+        {
+            var host = GetOrCreateHost(slot.Tile);
+
+            Grid.SetRow(host, slot.Row);
+            Grid.SetColumn(host, slot.Column);
+            Grid.SetRowSpan(host, slot.RowSpan);
+            Grid.SetColumnSpan(host, slot.ColumnSpan);
+
+            grid.Children.Add(host);
         }
 
-        for (var i = 0; i < columnWidths.Count; i++)
-        {
-            TilesGrid.ColumnDefinitions[i].Width = columnWidths[i];
-        }
+        return grid;
+    }
 
-        while (TilesGrid.RowDefinitions.Count > rowHeights.Count)
+    private void DetachHosts()
+    {
+        foreach (var host in _hosts.Values)
         {
-            TilesGrid.RowDefinitions.RemoveAt(TilesGrid.RowDefinitions.Count - 1);
-        }
-
-        while (TilesGrid.RowDefinitions.Count < rowHeights.Count)
-        {
-            TilesGrid.RowDefinitions.Add(new());
-        }
-
-        for (var i = 0; i < rowHeights.Count; i++)
-        {
-            TilesGrid.RowDefinitions[i].Height = rowHeights[i];
+            if (host.Parent is Grid parent)
+            {
+                parent.Children.Remove(host);
+            }
         }
     }
 

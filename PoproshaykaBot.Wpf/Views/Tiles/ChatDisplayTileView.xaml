@@ -26,13 +26,9 @@
         </Border>
 
         <Grid>
-        <Border BorderBrush="{DynamicResource Border.Default}"
-                BorderThickness="1"
-                CornerRadius="6"
-                Visibility="{Binding HasFallback, Converter={StaticResource InverseBoolToVisibility}}">
-            <wv2:WebView2 x:Name="WebView"
-                          ZoomFactor="{Binding ZoomFactor, Mode=TwoWay}" />
-        </Border>
+        <wv2:WebView2 x:Name="WebView"
+                      ZoomFactor="{Binding ZoomFactor, Mode=TwoWay}"
+                      Visibility="{Binding HasFallback, Converter={StaticResource InverseBoolToVisibility}}" />
 
         <controls:EmptyState Icon="MessageSquareWarning"
                              Heading="{Binding FallbackHeading}"

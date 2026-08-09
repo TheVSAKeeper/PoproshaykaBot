@@ -55,7 +55,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         ILogger<StreamInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher,
         IShellLauncher shellLauncher)
-        : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 240)
+        : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 400)
     {
         _stream = stream;
         _logger = logger;

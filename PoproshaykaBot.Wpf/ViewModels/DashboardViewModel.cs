@@ -10,9 +10,6 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed class DashboardViewModel : ObservableObject, IDisposable
 {
-    private const double CollapsedRowHeight = 44;
-    private const double CollapsedColumnWidth = 56;
-
     private readonly Dictionary<string, DashboardTileViewModel> _tilesByTypeId;
     private readonly DashboardLayoutStore _layoutStore;
     private readonly HashSet<DashboardTileViewModel> _observed = [];
@@ -33,13 +30,9 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
     public event EventHandler? LayoutChanged;
 
-    public IReadOnlyList<TilePlacement> Placements { get; private set; } = [];
+    public IReadOnlyList<TileBand> Bands { get; private set; } = [];
 
-    public IReadOnlyList<GridLength> ColumnWidths { get; private set; } = [];
-
-    public IReadOnlyList<GridLength> RowHeights { get; private set; } = [];
-
-    public bool HasTiles => Placements.Count > 0;
+    public bool HasTiles { get; private set; }
 
     public void OnEnter()
     {
@@ -79,6 +72,127 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         };
     }
 
+    private static bool Stretches(Placement placement)
+    {
+        return placement.Tile.FillsAvailableSpace && !placement.IsCollapsed;
+    }
+
+    private static bool Grows(Placement placement)
+    {
+        return placement.Tile.GrowsWithSpace && !placement.IsCollapsed;
+    }
+
+    private static IReadOnlyList<TileBand> BuildBands(IReadOnlyList<Placement> placements, int columnCount, int rowCount)
+    {
+        var bands = new List<TileBand>();
+
+        foreach (var (start, end) in SplitColumns(placements, columnCount))
+        {
+            var members = placements
+                .Where(p => p.Column >= start && p.Column + p.ColumnSpan <= end)
+                .ToList();
+
+            if (members.Count == 0)
+            {
+                continue;
+            }
+
+            var columns = new TrackSize[end - start];
+
+            for (var column = start; column < end; column++)
+            {
+                columns[column - start] = ComputeColumn(members, column);
+            }
+
+            var rows = new TrackSize[rowCount];
+
+            for (var row = 0; row < rowCount; row++)
+            {
+                rows[row] = ComputeRow(members, row);
+            }
+
+            var slots = members
+                .Select(p => new TileSlot(p.Tile, p.Row, p.Column - start, p.RowSpan, p.ColumnSpan))
+                .ToList();
+
+            bands.Add(new(ComputeBandWidth(members, columns), columns, rows, slots));
+        }
+
+        return bands;
+    }
+
+    private static IEnumerable<(int Start, int End)> SplitColumns(IReadOnlyList<Placement> placements, int columnCount)
+    {
+        var start = 0;
+
+        for (var seam = 1; seam < columnCount; seam++)
+        {
+            if (placements.Any(p => p.Column < seam && seam < p.Column + p.ColumnSpan))
+            {
+                continue;
+            }
+
+            yield return (start, seam);
+            start = seam;
+        }
+
+        yield return (start, columnCount);
+    }
+
+    private static TrackSize ComputeColumn(IReadOnlyList<Placement> members, int column)
+    {
+        var covering = members
+            .Where(p => p.Column <= column && column < p.Column + p.ColumnSpan)
+            .ToList();
+
+        if (covering.Any(Stretches))
+        {
+            return new(new(1, GridUnitType.Star), double.PositiveInfinity);
+        }
+
+        return new(GridLength.Auto, Ceiling(covering, p => p.MaxWidth, p => p.ColumnSpan));
+    }
+
+    private static TrackSize ComputeRow(IReadOnlyList<Placement> members, int row)
+    {
+        var covering = members
+            .Where(p => p.Row <= row && row < p.Row + p.RowSpan)
+            .ToList();
+
+        if (covering.Any(Stretches))
+        {
+            return new(new(1, GridUnitType.Star), double.PositiveInfinity);
+        }
+
+        var ceiling = Ceiling(covering, p => p.MaxHeight, p => p.RowSpan);
+
+        return covering.Any(Grows)
+            ? new(new(1, GridUnitType.Star), ceiling)
+            : new(GridLength.Auto, ceiling);
+    }
+
+    private static TrackSize ComputeBandWidth(IReadOnlyList<Placement> members, IReadOnlyList<TrackSize> columns)
+    {
+        if (members.Any(Stretches))
+        {
+            return new(new(1, GridUnitType.Star), double.PositiveInfinity);
+        }
+
+        var ceiling = columns.Sum(c => c.Max);
+
+        return new(GridLength.Auto, double.IsInfinity(ceiling) ? double.PositiveInfinity : ceiling);
+    }
+
+    private static double Ceiling(IReadOnlyList<Placement> covering, Func<Placement, int?> size, Func<Placement, int> span)
+    {
+        if (covering.Count == 0 || covering.Any(p => size(p) is null))
+        {
+            return double.PositiveInfinity;
+        }
+
+        return covering.Max(p => size(p)!.Value / (double)span(p));
+    }
+
     private void ApplyLayout(DashboardLayoutSettings layout)
     {
         var columnCount = Math.Clamp(layout.ColumnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
@@ -86,14 +200,10 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
         var placements = BuildPlacements(layout, columnCount, rowCount);
 
-        ColumnWidths = ComputeColumnWidths(placements, columnCount, rowCount);
-        RowHeights = ComputeRowHeights(placements, rowCount);
-
         ObserveCollapse(placements);
 
-        Placements = placements
-            .Select(p => new TilePlacement(p.Tile, p.Row, p.Column, p.ColumnSpan, p.RowSpan))
-            .ToList();
+        Bands = BuildBands(placements, columnCount, rowCount);
+        HasTiles = placements.Count > 0;
 
         OnPropertyChanged(nameof(HasTiles));
         LayoutChanged?.Invoke(this, EventArgs.Empty);
@@ -123,86 +233,6 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         }
 
         return placements;
-    }
-
-    private IReadOnlyList<GridLength> ComputeColumnWidths(IReadOnlyList<Placement> placements, int columnCount, int rowCount)
-    {
-        var widths = new GridLength[columnCount];
-
-        for (var column = 0; column < columnCount; column++)
-        {
-            var columnIndex = column;
-
-            var fullColumnTile = placements.FirstOrDefault(p => p.Row == 0
-                                                                && p.RowSpan == rowCount
-                                                                && p.Column <= columnIndex
-                                                                && columnIndex < p.Column + p.ColumnSpan);
-
-            if (fullColumnTile is { IsCollapsed: true })
-            {
-                widths[column] = new(CollapsedColumnWidth);
-                continue;
-            }
-
-            if (fullColumnTile != null)
-            {
-                widths[column] = new(1, GridUnitType.Star);
-                continue;
-            }
-
-            var singleColumnTiles = placements
-                .Where(p => p.ColumnSpan == 1 && p.Column == columnIndex)
-                .ToList();
-
-            if (singleColumnTiles.Any(p => p.MaxWidth == null))
-            {
-                widths[column] = new(1, GridUnitType.Star);
-                continue;
-            }
-
-            var compact = singleColumnTiles.Where(p => p.MaxWidth.HasValue).ToList();
-
-            widths[column] = compact.Count > 0
-                ? new GridLength(compact.Max(p => p.MaxWidth!.Value))
-                : new(1, GridUnitType.Star);
-        }
-
-        return widths;
-    }
-
-    private IReadOnlyList<GridLength> ComputeRowHeights(IReadOnlyList<Placement> placements, int rowCount)
-    {
-        var heights = new GridLength[rowCount];
-
-        for (var row = 0; row < rowCount; row++)
-        {
-            var rowIndex = row;
-            var singleRowTiles = placements
-                .Where(p => p.RowSpan == 1 && p.Row == rowIndex)
-                .ToList();
-
-            if (singleRowTiles.Count > 0 && singleRowTiles.All(p => p.IsCollapsed))
-            {
-                heights[row] = new(CollapsedRowHeight);
-                continue;
-            }
-
-            var nonCollapsed = singleRowTiles.Where(p => !p.IsCollapsed).ToList();
-
-            if (nonCollapsed.Any(p => p.MaxHeight == null))
-            {
-                heights[row] = new(1, GridUnitType.Star);
-                continue;
-            }
-
-            var compact = nonCollapsed.Where(p => p.MaxHeight.HasValue).ToList();
-
-            heights[row] = compact.Count > 0
-                ? new GridLength(compact.Max(p => p.MaxHeight!.Value))
-                : new(1, GridUnitType.Star);
-        }
-
-        return heights;
     }
 
     private void ObserveCollapse(IReadOnlyList<Placement> placements)
@@ -236,9 +266,18 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
     private void OnTilePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_suppressCollapsePersist
-            || !string.Equals(e.PropertyName, nameof(DashboardTileViewModel.IsCollapsed), StringComparison.Ordinal)
-            || sender is not DashboardTileViewModel tile)
+        if (_suppressCollapsePersist || sender is not DashboardTileViewModel tile)
+        {
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(DashboardTileViewModel.GrowsWithSpace), StringComparison.Ordinal))
+        {
+            Reload();
+            return;
+        }
+
+        if (!string.Equals(e.PropertyName, nameof(DashboardTileViewModel.IsCollapsed), StringComparison.Ordinal))
         {
             return;
         }
@@ -269,9 +308,17 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         bool IsCollapsed);
 }
 
-public sealed record TilePlacement(
+public sealed record TrackSize(GridLength Length, double Max);
+
+public sealed record TileSlot(
     DashboardTileViewModel Tile,
     int Row,
     int Column,
-    int ColumnSpan,
-    int RowSpan);
+    int RowSpan,
+    int ColumnSpan);
+
+public sealed record TileBand(
+    TrackSize Width,
+    IReadOnlyList<TrackSize> Columns,
+    IReadOnlyList<TrackSize> Rows,
+    IReadOnlyList<TileSlot> Tiles);
