@@ -22,9 +22,9 @@
       },
       "KeepShell": {
         "type": "Direct",
-        "requested": "[0.1.81, )",
-        "resolved": "0.1.81",
-        "contentHash": "vSHQrB/T+RDqTs+AKQqeA1YsDGpmPGkgeRRULkn5HoOzECnV4VnjCzZsGfxSrSmfBS7jvtu0sksrT13F7YWVEA==",
+        "requested": "[0.1.84, )",
+        "resolved": "0.1.84",
+        "contentHash": "WTz79tyOXrwoJ664T4ogj+RnVUgGeuCVjQ8xxYqCKmN/N5TlpoFalMSnk4VW8r9mvtfC5qsfc8QMSBYsTAr5ng==",
         "dependencies": {
           "CommunityToolkit.Mvvm": "8.3.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",

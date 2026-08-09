@@ -64,7 +64,7 @@ public sealed record GalleryOptions(
                     break;
 
                 case "--scale":
-                    scale = ParseDouble(value, scale, AppDefaults.ViewCaptureScaleMin, AppDefaults.ViewCaptureScaleMax);
+                    scale = ParseDouble(value, scale, ViewCapture.ScaleMin, ViewCapture.ScaleMax);
                     index++;
                     positional = false;
                     break;
