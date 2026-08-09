@@ -15,44 +15,95 @@
     <UserControl.Resources>
         <DataTemplate x:Key="DashboardTileChrome"
                       DataType="{x:Type tiles:DashboardTileViewModel}">
-            <Border Style="{StaticResource Card}"
-                    Margin="3">
+            <Border x:Name="TileRoot"
+                    Background="{DynamicResource Bg.Surface}"
+                    BorderBrush="{DynamicResource Border.Subtle}"
+                    BorderThickness="0,0,0,1"
+                    Padding="14,10,14,14">
+                <Border.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Command="{Binding ToggleCollapseCommand}">
+                            <MenuItem.Style>
+                                <Style TargetType="MenuItem">
+                                    <Setter Property="Header"
+                                            Value="Свернуть плитку" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCollapsed}"
+                                                     Value="True">
+                                            <Setter Property="Header"
+                                                    Value="Развернуть плитку" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </MenuItem.Style>
+                        </MenuItem>
+                    </ContextMenu>
+                </Border.ContextMenu>
+
                 <DockPanel LastChildFill="True">
-                    <DockPanel DockPanel.Dock="Top"
+                    <DockPanel x:Name="TileHeader"
+                               DockPanel.Dock="Top"
                                LastChildFill="True"
-                               Margin="0,0,0,12">
-                        <Button DockPanel.Dock="Right"
-                                Style="{StaticResource Button.Icon}"
-                                Command="{Binding ToggleCollapseCommand}"
-                                AutomationProperties.Name="Свернуть или развернуть плитку">
-                            <iconPacks:PackIconLucide Width="16"
-                                                      Height="16">
-                                <iconPacks:PackIconLucide.Style>
-                                    <Style TargetType="iconPacks:PackIconLucide">
-                                        <Setter Property="Kind"
-                                                Value="ChevronDown" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsCollapsed}"
-                                                         Value="True">
-                                                <Setter Property="Kind"
-                                                        Value="ChevronRight" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </iconPacks:PackIconLucide.Style>
-                            </iconPacks:PackIconLucide>
-                        </Button>
+                               Margin="0,0,0,10">
+                        <DockPanel.Resources>
+                            <Style x:Key="Button.Icon"
+                                   TargetType="Button"
+                                   BasedOn="{StaticResource Button.Ghost}">
+                                <Setter Property="Width"
+                                        Value="{DynamicResource Control.Height.Compact}" />
+                                <Setter Property="Height"
+                                        Value="{DynamicResource Control.Height.Compact}" />
+                                <Setter Property="MinHeight"
+                                        Value="{DynamicResource Control.Height.Compact}" />
+                                <Setter Property="Padding"
+                                        Value="0" />
+                                <Setter Property="HorizontalContentAlignment"
+                                        Value="Center" />
+                                <Setter Property="VerticalContentAlignment"
+                                        Value="Center" />
+                            </Style>
+                        </DockPanel.Resources>
 
-                        <ItemsControl DockPanel.Dock="Right"
-                                      Style="{StaticResource Toolbar.ItemsControl}"
-                                      ItemsSource="{Binding HeaderActions}"
-                                      VerticalAlignment="Center"
-                                      Margin="0,0,4,0" />
+                        <StackPanel x:Name="TileActions"
+                                    DockPanel.Dock="Right"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <ItemsControl x:Name="TileToolbar"
+                                          Style="{StaticResource Toolbar.ItemsControl}"
+                                          ItemsSource="{Binding HeaderActions}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,4,0"
+                                          Opacity="0" />
 
-                        <TextBlock Text="{Binding Title}"
+                            <Button x:Name="TileCollapse"
+                                    Style="{StaticResource Button.Icon}"
+                                    Opacity="0.55"
+                                    Command="{Binding ToggleCollapseCommand}"
+                                    AutomationProperties.Name="Свернуть или развернуть плитку">
+                                <iconPacks:PackIconLucide Width="14"
+                                                          Height="14">
+                                    <iconPacks:PackIconLucide.Style>
+                                        <Style TargetType="iconPacks:PackIconLucide">
+                                            <Setter Property="Kind"
+                                                    Value="ChevronDown" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCollapsed}"
+                                                             Value="True">
+                                                    <Setter Property="Kind"
+                                                            Value="ChevronRight" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </iconPacks:PackIconLucide.Style>
+                                </iconPacks:PackIconLucide>
+                            </Button>
+                        </StackPanel>
+
+                        <TextBlock x:Name="TileTitle"
+                                   Text="{Binding Title}"
                                    ToolTip="{Binding Title}"
                                    FontFamily="{DynamicResource Font.Sans}"
-                                   FontSize="{DynamicResource Font.Size.L}"
+                                   FontSize="{DynamicResource Font.Size.S}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Fg.Primary}"
                                    VerticalAlignment="Center"
@@ -66,11 +117,20 @@
                             <Style TargetType="ScrollViewer">
                                 <Setter Property="VerticalScrollBarVisibility"
                                         Value="Auto" />
+                                <Setter Property="VerticalAlignment"
+                                        Value="Top" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding FillsAvailableSpace}"
                                                  Value="True">
                                         <Setter Property="VerticalScrollBarVisibility"
                                                 Value="Disabled" />
+                                        <Setter Property="VerticalAlignment"
+                                                Value="Stretch" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding GrowsWithSpace}"
+                                                 Value="True">
+                                        <Setter Property="VerticalAlignment"
+                                                Value="Stretch" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -80,13 +140,43 @@
                     </ScrollViewer>
                 </DockPanel>
             </Border>
+
+            <DataTemplate.Triggers>
+                <Trigger SourceName="TileRoot"
+                         Property="IsMouseOver"
+                         Value="True">
+                    <Setter TargetName="TileToolbar"
+                            Property="Opacity"
+                            Value="1" />
+                    <Setter TargetName="TileCollapse"
+                            Property="Opacity"
+                            Value="1" />
+                </Trigger>
+
+                <Trigger SourceName="TileRoot"
+                         Property="IsKeyboardFocusWithin"
+                         Value="True">
+                    <Setter TargetName="TileToolbar"
+                            Property="Opacity"
+                            Value="1" />
+                    <Setter TargetName="TileCollapse"
+                            Property="Opacity"
+                            Value="1" />
+                </Trigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
     </UserControl.Resources>
 
     <Grid>
-        <Grid x:Name="TilesGrid"
-              Margin="3"
-              Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}" />
+        <Border Background="{DynamicResource Bg.Base}"
+                Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}">
+            <ScrollViewer x:Name="BandsScroll"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Disabled">
+                <Grid x:Name="BandsGrid"
+                      Margin="0,0,-1,-1" />
+            </ScrollViewer>
+        </Border>
 
         <controls:EmptyState Icon="LayoutDashboard"
                              Heading="Плиток пока нет"

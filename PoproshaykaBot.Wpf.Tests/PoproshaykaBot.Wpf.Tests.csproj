@@ -9,6 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Опоры тестов каркаса: хранилище настроек в памяти, сток биндингов, STA-хост окна. -->
+    <PackageReference Include="KeepShell.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit3TestAdapter" />

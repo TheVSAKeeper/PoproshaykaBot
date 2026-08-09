@@ -20,6 +20,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
     private PollSnapshot? _currentSnapshot;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(GrowsWithSpace))]
     private bool _hasSnapshot;
 
     [ObservableProperty]
@@ -44,7 +45,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         PollSnapshotStore snapshotStore,
         IEventBus bus,
         IDialogService dialogService,
-        IUiDispatcher uiDispatcher) : base("polls-control", "Опросы", maxWidth: 500)
+        IUiDispatcher uiDispatcher) : base("polls-control", "Опросы", maxWidth: 500, maxHeight: 320)
     {
         _controller = controller;
         _dialogService = dialogService;

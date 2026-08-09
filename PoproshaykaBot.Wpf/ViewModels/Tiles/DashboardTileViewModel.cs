@@ -28,6 +28,8 @@ public abstract partial class DashboardTileViewModel : ObservableObject
 
     public virtual bool FillsAvailableSpace => false;
 
+    public virtual bool GrowsWithSpace => false;
+
     public ObservableCollection<ToolbarItemViewModel> HeaderActions { get; } = [];
 
     [RelayCommand]

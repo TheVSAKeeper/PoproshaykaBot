@@ -22,9 +22,9 @@
       },
       "KeepShell": {
         "type": "Direct",
-        "requested": "[0.1.81, )",
-        "resolved": "0.1.81",
-        "contentHash": "vSHQrB/T+RDqTs+AKQqeA1YsDGpmPGkgeRRULkn5HoOzECnV4VnjCzZsGfxSrSmfBS7jvtu0sksrT13F7YWVEA==",
+        "requested": "[0.1.89, )",
+        "resolved": "0.1.89",
+        "contentHash": "Ke0pbfx/P5y5LkrKhsI9Bccd7wyhmkephvBThjU/gbQ8UKiurtYx2L2ZDLsoXFAFCBWJJefv5ZuSCd30QVj9Ig==",
         "dependencies": {
           "CommunityToolkit.Mvvm": "8.3.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",
@@ -33,6 +33,15 @@
           "Serilog.Sinks.Debug": "2.0.0",
           "Serilog.Sinks.File": "6.0.0",
           "Tomlyn": "2.4.0"
+        }
+      },
+      "KeepShell.Automation": {
+        "type": "Direct",
+        "requested": "[0.1.89, )",
+        "resolved": "0.1.89",
+        "contentHash": "PTx+qzbAPXn0CUH6f5zXi7K6YDbrAKQAyPIQJpCro9LduDSrtTvGepOr/qeyoeMXW0Nc2GM29J8qBfhV8Kg/Fw==",
+        "dependencies": {
+          "KeepShell": "0.1.89"
         }
       },
       "MahApps.Metro.IconPacks.Lucide": {

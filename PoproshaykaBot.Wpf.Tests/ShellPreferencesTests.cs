@@ -1,4 +1,5 @@
 ﻿using KeepShell.Bootstrap;
+using KeepShell.Testing;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.ViewModels;
 
@@ -7,34 +8,10 @@ namespace PoproshaykaBot.Wpf.Tests;
 [TestFixture]
 public class ShellPreferencesTests
 {
-    private sealed class FakeStore : ISettingsStore
-    {
-        private readonly Dictionary<string, string> _map = new(StringComparer.Ordinal);
-
-        public event EventHandler<string>? Changed;
-
-        public string FilePath => "memory";
-
-        public string? GetStringValue(string key)
-        {
-            return _map.TryGetValue(key, out var value) ? value : null;
-        }
-
-        public void SetValue(string key, string value)
-        {
-            _map[key] = value;
-            Changed?.Invoke(this, key);
-        }
-
-        public void Flush()
-        {
-        }
-    }
-
     [Test]
     public void Loads_existing_values_without_rewriting()
     {
-        var store = new FakeStore();
+        var store = new MemorySettings();
         store.SetValue(SettingsKeys.NavCollapsed, "true");
 
         var prefs = new ShellPreferences(store);
@@ -45,7 +22,7 @@ public class ShellPreferencesTests
     [Test]
     public void Persists_changes()
     {
-        var store = new FakeStore();
+        var store = new MemorySettings();
         var prefs = new ShellPreferences(store);
 
         prefs.NavCollapsed = true;

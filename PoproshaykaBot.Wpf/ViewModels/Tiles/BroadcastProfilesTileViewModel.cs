@@ -33,6 +33,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProfiles))]
+    [NotifyPropertyChangedFor(nameof(GrowsWithSpace))]
     private ObservableCollection<BroadcastProfileItemViewModel> _items = [];
 
     [ObservableProperty]
@@ -46,13 +47,15 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     public bool HasProfiles => Items.Count > 0;
 
+    public override bool GrowsWithSpace => HasProfiles;
+
     public BroadcastProfilesTileViewModel(
         BroadcastProfilesManager manager,
         BroadcastProfilesStore profiles,
         IStreamStatus stream,
         IEventBus bus,
         ILogger<BroadcastProfilesTileViewModel> logger)
-        : base("broadcast-profiles", "Профили рассылки", maxWidth: 500)
+        : base("broadcast-profiles", "Профили рассылки", maxWidth: 500, maxHeight: 320)
     {
         _manager = manager;
         _profiles = profiles;

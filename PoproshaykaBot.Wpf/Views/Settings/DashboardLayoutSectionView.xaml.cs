@@ -307,7 +307,8 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             root.Items.Add(item);
         }
 
-        // ponytail: free-form "Указать px" omitted — KeepShell IDialogService has no number prompt; presets/auto/default cover the rest.
+        // TODO: произвольное значение в px ввести нельзя – у IDialogService каркаса нет запроса числа,
+        //       поэтому остаются пресеты, «авто» и умолчание. Завести поле, когда числовой промпт появится в KeepShell.
         return root;
     }
 

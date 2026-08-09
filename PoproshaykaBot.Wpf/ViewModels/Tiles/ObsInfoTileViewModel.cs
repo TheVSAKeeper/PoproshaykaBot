@@ -70,6 +70,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAudioSources))]
+    [NotifyPropertyChangedFor(nameof(GrowsWithSpace))]
     private bool _audioSourcesEmpty = true;
 
     [ObservableProperty]
@@ -88,7 +89,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         IEventBus bus,
         ILogger<ObsInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher)
-        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 320)
+        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 420)
     {
         _store = store;
         _obsIntegration = obsIntegration;
@@ -116,6 +117,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     public ObservableCollection<ObsSourceMeterViewModel> AudioSources { get; } = [];
 
     public bool HasAudioSources => !AudioSourcesEmpty;
+
+    public override bool GrowsWithSpace => HasAudioSources;
 
     private void Initialize()
     {

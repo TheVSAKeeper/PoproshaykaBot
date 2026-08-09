@@ -106,6 +106,15 @@ public static class Program
         catch (Exception ex)
         {
             Log.Fatal(ex, "Приложение завершило работу из-за непредвиденной ошибки");
+            Environment.ExitCode = 1;
+
+            if (!isUiSmoke)
+            {
+                MessageBox.Show(ex.ToString(),
+                    "PoproshaykaBot – ошибка запуска",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
         finally
         {
@@ -122,7 +131,11 @@ public static class Program
         var services = new ServiceCollection();
         ConfigureServices(services, uiLogSink);
 
-        var serviceProvider = services.BuildServiceProvider();
+        var serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
         var appLifetime = serviceProvider.GetRequiredService<AppLifetime>();
         var streamMonitoringHost = serviceProvider.GetRequiredService<StreamMonitoringHost>();
         var appLifetimeStarted = false;
