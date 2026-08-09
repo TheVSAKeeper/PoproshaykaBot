@@ -161,10 +161,6 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _logger.ChatHistoryCleared();
     }
 
-    /// <summary>
-    /// Открыть секцию по ключу. Настройки в <see cref="ShellViewModelBase.Sections" /> не входят —
-    /// их открывает своя команда рейла, поэтому пункт проверяется отдельно.
-    /// </summary>
     public NavigationItem? FindSectionByKey(string? key)
     {
         if (string.IsNullOrEmpty(key))

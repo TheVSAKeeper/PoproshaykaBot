@@ -5,10 +5,6 @@ using System.Windows;
 
 namespace PoproshaykaBot.Wpf.Bootstrap;
 
-/// <summary>
-/// Бот глазами каркасной галереи: перечень страниц и съёмка одного кадра. Цикл по темам, окно за
-/// экраном, пропуски, <c>index.json</c> и код возврата держит <see cref="GalleryRunner" />.
-/// </summary>
 public sealed class GalleryHost : IGalleryHost
 {
     public const string ArgumentName = "--gallery";
@@ -32,7 +28,6 @@ public sealed class GalleryHost : IGalleryHost
 
     public IReadOnlyList<GalleryCase> Cases { get; }
 
-    /// <summary>Разбор строки запуска: прикладных ключей у бота нет, общие разбирает каркас.</summary>
     public static GalleryArguments Parse(IEnumerable<string> args, string defaultDirectory)
     {
         var defaults = new GalleryDefaults
@@ -97,8 +92,6 @@ public sealed class GalleryHost : IGalleryHost
 
     private void Navigate(string page)
     {
-        // Настройки открываются своей командой: пункта в Sections у них нет, а ActivateSettings
-        // должен отработать так же, как при клике человека.
         if (string.Equals(page, SectionKeys.Settings, StringComparison.OrdinalIgnoreCase))
         {
             _shell.OpenSettingsCommand.Execute(null);

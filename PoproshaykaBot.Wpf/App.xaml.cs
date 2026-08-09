@@ -63,7 +63,6 @@ public partial class App : Application
 
         if (galleryIndex >= 0)
         {
-            // Сам разбор идёт ниже, после AppThemes.Register: ключ темы каркас проверяет по реестру.
             _galleryArgs = [.. e.Args.Skip(galleryIndex + 1)];
             _isUiSmoke = true;
         }

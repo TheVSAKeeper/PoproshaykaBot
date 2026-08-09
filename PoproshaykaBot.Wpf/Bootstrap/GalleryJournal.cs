@@ -2,10 +2,6 @@
 
 namespace PoproshaykaBot.Wpf.Bootstrap;
 
-/// <summary>
-/// Прогон докладывает о себе в общий журнал приложения. Без него отказ кадра виден только кодом
-/// возврата, а какой именно кадр отвалился и почему – ничем.
-/// </summary>
 public sealed class GalleryJournal : IGalleryJournal
 {
     public void Started(int cases, int themes, string directory)
