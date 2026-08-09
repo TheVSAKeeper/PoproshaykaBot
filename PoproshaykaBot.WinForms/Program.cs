@@ -122,7 +122,11 @@ public static class Program
         var services = new ServiceCollection();
         ConfigureServices(services, uiLogSink);
 
-        var serviceProvider = services.BuildServiceProvider();
+        var serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
         var appLifetime = serviceProvider.GetRequiredService<AppLifetime>();
         var streamMonitoringHost = serviceProvider.GetRequiredService<StreamMonitoringHost>();
         var appLifetimeStarted = false;

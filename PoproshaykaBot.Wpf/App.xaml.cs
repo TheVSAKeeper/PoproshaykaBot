@@ -147,7 +147,11 @@ public partial class App : Application
             ConfigureServices(services, coreUiLogSink, uiSettings);
             services.AddSingleton(_logging!.Sink);
             services.AddSingleton(_loggingOptions!);
-            _services = services.BuildServiceProvider();
+            _services = services.BuildServiceProvider(new ServiceProviderOptions
+            {
+                ValidateOnBuild = true,
+                ValidateScopes = true,
+            });
 
             _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
 
