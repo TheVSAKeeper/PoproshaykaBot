@@ -29,15 +29,6 @@ public static class GalleryRun
 
     private const double OffScreen = -32000;
 
-    private static readonly Dictionary<string, string> PageTitles = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["overview"] = "Обзор",
-        ["users"] = "Пользователи",
-        ["streams"] = "История стримов",
-        ["logs"] = "Логи",
-        ["settings"] = "Настройки",
-    };
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -125,25 +116,22 @@ public static class GalleryRun
 
     private static bool Navigate(ShellViewModel shell, string page)
     {
-        if (!PageTitles.TryGetValue(page, out var title))
-        {
-            return false;
-        }
-
-        if (string.Equals(page, "settings", StringComparison.OrdinalIgnoreCase))
+        // Настройки открываются своей командой: пункта в Sections у них нет, а ActivateSettings
+        // должен отработать так же, как при клике человека.
+        if (string.Equals(page, SectionKeys.Settings, StringComparison.OrdinalIgnoreCase))
         {
             shell.OpenSettingsCommand.Execute(null);
+
             return true;
         }
 
-        var section = shell.Sections.FirstOrDefault(item => string.Equals(item.Title, title, StringComparison.Ordinal));
-
-        if (section is null)
+        if (shell.FindSectionByKey(page) is not { } section)
         {
             return false;
         }
 
         shell.Selected = section;
+
         return true;
     }
 

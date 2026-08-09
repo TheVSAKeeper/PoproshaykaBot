@@ -63,21 +63,21 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         _settingsPage = settingsPage;
         _chatHistory = chatHistory;
-        _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: ActivateSettings);
+        _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: ActivateSettings, key: SectionKeys.Settings);
 
-        _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage) { StartsGroup = true };
-        _streamHistorySection = new("История стримов", PackIconLucideKind.History, streamHistoryPage);
+        _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, key: SectionKeys.Users) { StartsGroup = true };
+        _streamHistorySection = new("История стримов", PackIconLucideKind.History, streamHistoryPage, key: SectionKeys.Streams);
 
-        _overviewSection = new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter);
+        _overviewSection = new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter, key: SectionKeys.Overview);
 
         Sections.Add(_overviewSection);
         Sections.Add(_statisticsSection);
         Sections.Add(_streamHistorySection);
-        Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage) { StartsGroup = true });
+        Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage, key: SectionKeys.Logs) { StartsGroup = true });
 
         IsNavCollapsed = _preferences.NavCollapsed;
 
-        Selected = FindSectionByTitle(_preferences.LastPage) ?? Sections[0];
+        Selected = FindSectionByKey(_preferences.LastPage) ?? Sections[0];
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnLifecyclePhaseChanged));
         _subscriptions.Add(eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(statusEvent => SetStatus(statusEvent.Message, StatusSeverity.Info)));
@@ -161,19 +161,29 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _logger.ChatHistoryCleared();
     }
 
-    private NavigationItem? FindSectionByTitle(string? title)
+    /// <summary>
+    /// Открыть секцию по ключу. Настройки в <see cref="ShellViewModelBase.Sections" /> не входят —
+    /// их открывает своя команда рейла, поэтому пункт проверяется отдельно.
+    /// </summary>
+    public NavigationItem? FindSectionByKey(string? key)
     {
-        if (string.IsNullOrEmpty(title))
+        if (string.IsNullOrEmpty(key))
         {
             return null;
         }
 
-        if (string.Equals(_settingsSection.Title, title, StringComparison.Ordinal))
+        if (SectionKeys.LegacyTitles.TryGetValue(key, out var migrated))
+        {
+            key = migrated;
+        }
+
+        if (string.Equals(_settingsSection.Key, key, StringComparison.OrdinalIgnoreCase))
         {
             return _settingsSection;
         }
 
-        return Sections.FirstOrDefault(section => string.Equals(section.Title, title, StringComparison.Ordinal));
+        return Sections.FirstOrDefault(section => section.Key.Length > 0
+            && string.Equals(section.Key, key, StringComparison.OrdinalIgnoreCase));
     }
 
     protected override void OnNavCollapsedChanged(bool value)
@@ -196,7 +206,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         if (value is not null)
         {
-            _preferences.LastPage = value.Title;
+            _preferences.LastPage = value.Key;
         }
     }
 

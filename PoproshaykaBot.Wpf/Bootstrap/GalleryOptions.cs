@@ -13,7 +13,7 @@ public sealed record GalleryOptions(
     string Element,
     IReadOnlyList<string> Unknown)
 {
-    public static IReadOnlyList<string> AllPages { get; } = ["overview", "users", "streams", "logs", "settings"];
+    public static IReadOnlyList<string> AllPages => SectionKeys.All;
 
     public static GalleryOptions Parse(IEnumerable<string> args, string defaultDirectory)
     {

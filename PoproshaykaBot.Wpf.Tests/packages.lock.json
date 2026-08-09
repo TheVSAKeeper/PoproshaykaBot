@@ -1,4 +1,4 @@
-﻿{
+{
   "version": 2,
   "dependencies": {
     "net10.0-windows7.0": {
@@ -23,6 +23,15 @@
         "requested": "[4.0.8, )",
         "resolved": "4.0.8",
         "contentHash": "vNi4NMG0CcJyjXxiNDcQ21FwV/whM9o9OEZKD+oP7tuxAqFEzX/x5OhC3OZJqW/w+8GOtCmJPBquYgMWgz0rfQ=="
+      },
+      "KeepShell.Testing": {
+        "type": "Direct",
+        "requested": "[0.1.87, )",
+        "resolved": "0.1.87",
+        "contentHash": "zEtKUrNpUDkzg+wC57jfBICrdi6XULpym54Xl7et+G8Bde0BysnWFm0wzl+Knf34S6zYHwv0ubRoVst8cKsMlw==",
+        "dependencies": {
+          "KeepShell": "0.1.87"
+        }
       },
       "Meziantou.Analyzer": {
         "type": "Direct",
@@ -240,7 +249,7 @@
         "type": "Project",
         "dependencies": {
           "CommunityToolkit.Mvvm": "[8.3.2, )",
-          "KeepShell": "[0.1.84, )",
+          "KeepShell": "[0.1.87, )",
           "MahApps.Metro.IconPacks.Lucide": "[6.2.1, )",
           "Microsoft.Web.WebView2": "[1.0.3650.58, )",
           "PoproshaykaBot.Core": "[3.1.0.15, )",
@@ -258,9 +267,9 @@
       },
       "KeepShell": {
         "type": "CentralTransitive",
-        "requested": "[0.1.84, )",
-        "resolved": "0.1.84",
-        "contentHash": "WTz79tyOXrwoJ664T4ogj+RnVUgGeuCVjQ8xxYqCKmN/N5TlpoFalMSnk4VW8r9mvtfC5qsfc8QMSBYsTAr5ng==",
+        "requested": "[0.1.87, )",
+        "resolved": "0.1.87",
+        "contentHash": "mc8FmdVHZGGkgsZJqNC7dMkqj9w6qHhfuvJKghJ5LIlbyA9+roQ6o4N+cuRLsOde8RMQNzu8p5fCLkWhkHSUsw==",
         "dependencies": {
           "CommunityToolkit.Mvvm": "8.3.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",

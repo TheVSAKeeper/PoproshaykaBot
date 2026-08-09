@@ -1,4 +1,4 @@
-﻿{
+{
   "version": 2,
   "dependencies": {
     "net10.0-windows7.0": {
@@ -22,9 +22,9 @@
       },
       "KeepShell": {
         "type": "Direct",
-        "requested": "[0.1.84, )",
-        "resolved": "0.1.84",
-        "contentHash": "WTz79tyOXrwoJ664T4ogj+RnVUgGeuCVjQ8xxYqCKmN/N5TlpoFalMSnk4VW8r9mvtfC5qsfc8QMSBYsTAr5ng==",
+        "requested": "[0.1.87, )",
+        "resolved": "0.1.87",
+        "contentHash": "mc8FmdVHZGGkgsZJqNC7dMkqj9w6qHhfuvJKghJ5LIlbyA9+roQ6o4N+cuRLsOde8RMQNzu8p5fCLkWhkHSUsw==",
         "dependencies": {
           "CommunityToolkit.Mvvm": "8.3.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",
