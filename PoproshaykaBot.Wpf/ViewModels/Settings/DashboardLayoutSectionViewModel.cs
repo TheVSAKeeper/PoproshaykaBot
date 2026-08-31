@@ -1,4 +1,5 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using PoproshaykaBot.Core.Dashboard;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.Infrastructure.Dashboard;

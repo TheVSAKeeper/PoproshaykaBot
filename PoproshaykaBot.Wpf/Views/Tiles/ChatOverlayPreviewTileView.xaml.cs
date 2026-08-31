@@ -10,6 +10,8 @@ namespace PoproshaykaBot.Wpf.Views.Tiles;
 
 public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlayPreviewTileViewModel>
 {
+    private readonly CancellationTokenSource _lifetime = new();
+
     private bool _initialized;
     private bool _disposed;
     private ChatOverlayPreviewTileViewModel? _viewModel;
@@ -47,6 +49,8 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         }
 
         _disposed = true;
+        Dispatcher.ShutdownStarted -= OnShutdownStarted;
+        _lifetime.Cancel();
 
         if (_viewModel is not null)
         {
@@ -54,13 +58,17 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         }
 
         WebView.Dispose();
+        _lifetime.Dispose();
     }
 
     private async Task InitializeWebViewAsync(ChatOverlayPreviewTileViewModel viewModel)
     {
         try
         {
-            var environment = await WebView2EnvironmentFactory.CreateAsync(viewModel.UserDataFolder, viewModel.Logger);
+            var environment = await WebView2EnvironmentFactory.CreateAsync(
+                viewModel.UserDataFolder,
+                viewModel.Logger,
+                _lifetime.Token);
 
             if (_disposed)
             {
@@ -76,6 +84,9 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
 
             WebView.CoreWebView2.Navigate(viewModel.CurrentUrl);
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (WebView2RuntimeNotFoundException exception)
         {

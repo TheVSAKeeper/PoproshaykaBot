@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Settings.Ui;
+﻿using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Tiles;
 using System.ComponentModel;
@@ -281,6 +282,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
 
             var placed = new PlacedTile
             {
+                TypeId = type.Id,
                 Row = tile.Row,
                 Column = tile.Column,
                 ColumnSpan = tile.ColumnSpan,
@@ -457,11 +459,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
 
         if (!_placedTiles.TryGetValue(type, out var placed))
         {
-            placed = new()
-            {
-                ColumnSpan = 1,
-                RowSpan = 1,
-            };
+            placed = new() { TypeId = type.Id };
 
             _placedTiles[type] = placed;
         }

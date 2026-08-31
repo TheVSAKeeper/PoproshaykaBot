@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Polling;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Collections.ObjectModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -12,6 +13,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDisposable
 {
     private readonly IPollController _controller;
+    private readonly PollProfilesManager _profiles;
     private readonly IDialogService _dialogService;
     private readonly List<IDisposable> _subs = [];
     private readonly IUiTimer _liveTimer;
@@ -42,12 +44,14 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
 
     public PollsTileViewModel(
         IPollController controller,
+        PollProfilesManager profiles,
         PollSnapshotStore snapshotStore,
         IEventBus bus,
         IDialogService dialogService,
         IUiDispatcher uiDispatcher) : base("polls-control", "Опросы", maxWidth: 500, maxHeight: 320)
     {
         _controller = controller;
+        _profiles = profiles;
         _dialogService = dialogService;
 
         HeaderActions.Add(new ToolbarItemViewModel(PackIconLucideKind.Plus, CreateAdHocCommand, toolTip: "Создать опрос"));
@@ -65,7 +69,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         _subs.Add(bus.SubscribeOnUi<PollFinalized>(@event => ApplySnapshot(@event.Snapshot)));
         _subs.Add(bus.SubscribeOnUi<PollTerminated>(@event => ApplySnapshot(@event.Snapshot)));
         _subs.Add(bus.SubscribeOnUi<PollArchived>(@event => ApplySnapshot(@event.Snapshot)));
-        _subs.Add(bus.SubscribeOnUi<PollStartFailed>(@event => ShowError($"✗ {@event.SafeMessage}")));
+        _subs.Add(bus.SubscribeOnUi<PollStartFailed>(@event => ShowStatus($"✗ {@event.SafeMessage}")));
 
         var initial = snapshotStore.Current;
 
@@ -76,15 +80,41 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
     }
 
     [RelayCommand]
-    private void CreateAdHoc()
+    private async Task CreateAdHocAsync()
     {
-        // TODO: open PollProfileEditDialog when Step 4 dialogs are implemented
+        var dialog = new PollProfileEditDialogViewModel(_profiles);
+
+        if (!await _dialogService.ShowAsync(dialog))
+        {
+            return;
+        }
+
+        if (dialog.ShouldStartPoll && dialog.Result is not null)
+        {
+            await StartPollAsync(dialog.Result);
+        }
     }
 
     [RelayCommand]
-    private void CreateFromProfile()
+    private async Task CreateFromProfileAsync()
     {
-        // TODO: open PollFromProfileDialog when Step 4 dialogs are implemented
+        if (_profiles.GetAll().Count == 0)
+        {
+            _dialogService.Info(
+                "Нет профилей",
+                "Нет сохранённых профилей. Используйте «Создать опрос», чтобы сохранить первый профиль.");
+
+            return;
+        }
+
+        var dialog = new PollFromProfileDialogViewModel(_profiles, _dialogService);
+
+        if (!await _dialogService.ShowAsync(dialog) || dialog.Result is null)
+        {
+            return;
+        }
+
+        await StartPollAsync(dialog.Result);
     }
 
     [RelayCommand]
@@ -112,12 +142,26 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
 
             if (!ok)
             {
-                ShowError("✗ Не удалось завершить голосование");
+                ShowStatus("✗ Не удалось завершить голосование");
             }
         }
         catch (Exception ex)
         {
-            ShowError($"✗ {ex.Message}");
+            ShowStatus($"✗ {ex.Message}");
+        }
+    }
+
+    private async Task StartPollAsync(PollProfile profile)
+    {
+        ShowStatus("Запуск голосования…");
+
+        try
+        {
+            await _controller.StartAsync(profile, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            ShowStatus($"✗ {ex.Message}");
         }
     }
 
@@ -212,7 +256,8 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         };
     }
 
-    private void ShowError(string message)
+
+    private void ShowStatus(string message)
     {
         StatusMessage = message;
         HasStatusMessage = true;

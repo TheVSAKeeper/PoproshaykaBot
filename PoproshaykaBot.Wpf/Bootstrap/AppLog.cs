@@ -90,6 +90,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1125, Level = LogLevel.Error, Message = "Не удалось откатить HTTP сервер на порт {Port} после отмены мастера")]
     public static partial void OnboardingHttpServerRollbackFailed(this ILogger logger, Exception? exception, int port);
 
+    [LoggerMessage(EventId = 1126, Level = LogLevel.Error, Message = "Ошибка показа мастера первичной настройки")]
+    public static partial void OnboardingWizardShowFailed(this ILogger logger, Exception? exception);
+
     [LoggerMessage(EventId = 1200, Level = LogLevel.Error, Message = "Ошибка сохранения настроек")]
     public static partial void SettingsSaveFailed(this ILogger logger, Exception? exception);
 
@@ -110,12 +113,6 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1302, Level = LogLevel.Error, Message = "Ошибка автообновления информации о стриме")]
     public static partial void StreamInfoAutoUpdateFailed(this ILogger logger, Exception? exception);
-
-    [LoggerMessage(EventId = 1303, Level = LogLevel.Information, Message = "Добавление профиля рассылки: не реализовано")]
-    public static partial void BroadcastProfileAddNotImplemented(this ILogger logger);
-
-    [LoggerMessage(EventId = 1304, Level = LogLevel.Information, Message = "Редактирование текущих настроек канала: не реализовано")]
-    public static partial void BroadcastProfileEditNotImplemented(this ILogger logger);
 
     [LoggerMessage(EventId = 1305, Level = LogLevel.Warning, Message = "Не удалось положить лог-секцию в буфер обмена")]
     public static partial void SupportClipboardCopyFailed(this ILogger logger, Exception? exception);

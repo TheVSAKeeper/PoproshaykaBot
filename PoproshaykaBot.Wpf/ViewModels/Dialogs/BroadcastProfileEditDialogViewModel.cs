@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
@@ -102,6 +102,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
     {
         Title = "Текущие настройки эфира";
         _nameRequired = false;
+        Name = string.Empty;
         NameLabel = "Сохранить как:";
         NamePlaceholder = "имя нового профиля (необязательно)";
         ConfirmButtonText = "Применить";

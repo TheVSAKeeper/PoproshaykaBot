@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using System.IO;
 
@@ -9,7 +9,10 @@ public static class WebView2EnvironmentFactory
     private const int MaxAttempts = 10;
     private const int RetryDelayMs = 600;
 
-    public static async Task<CoreWebView2Environment> CreateAsync(string userDataFolder, ILogger logger)
+    public static async Task<CoreWebView2Environment> CreateAsync(
+        string userDataFolder,
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(userDataFolder);
         ArgumentNullException.ThrowIfNull(logger);
@@ -20,6 +23,7 @@ public static class WebView2EnvironmentFactory
 
         while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             attempt++;
 
             try
@@ -35,7 +39,7 @@ public static class WebView2EnvironmentFactory
                         userDataFolder, attempt, MaxAttempts, RetryDelayMs);
                 }
 
-                await Task.Delay(RetryDelayMs).ConfigureAwait(true);
+                await Task.Delay(RetryDelayMs, cancellationToken).ConfigureAwait(true);
             }
         }
     }

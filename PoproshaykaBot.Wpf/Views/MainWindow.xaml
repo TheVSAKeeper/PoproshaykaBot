@@ -45,7 +45,10 @@
             <views:StatusBarView />
         </keepshell:ShellLayout.StatusBar>
         <keepshell:ShellLayout.ContentOverlay>
-            <views:UpdateBannerView DataContext="{Binding UpdateBanner}" />
+            <StackPanel VerticalAlignment="Top">
+                <views:OnboardingBannerView DataContext="{Binding OnboardingBanner}" />
+                <views:UpdateBannerView DataContext="{Binding UpdateBanner}" />
+            </StackPanel>
         </keepshell:ShellLayout.ContentOverlay>
     </keepshell:ShellLayout>
 </Window>

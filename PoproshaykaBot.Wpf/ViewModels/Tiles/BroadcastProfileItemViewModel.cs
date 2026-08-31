@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
@@ -12,19 +12,28 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
 {
     private readonly Func<BroadcastProfileItemViewModel, Task> _applyAsync;
     private readonly Func<BroadcastProfileItemViewModel, int, Task> _adjustNumberAsync;
+    private readonly Func<BroadcastProfileItemViewModel, Task> _editAsync;
+    private readonly Action<BroadcastProfileItemViewModel> _duplicate;
+    private readonly Action<BroadcastProfileItemViewModel> _delete;
 
     public BroadcastProfileItemViewModel(
         BroadcastProfile profile,
         bool isActive,
         bool hasDrift,
         Func<BroadcastProfileItemViewModel, Task> applyAsync,
-        Func<BroadcastProfileItemViewModel, int, Task> adjustNumberAsync)
+        Func<BroadcastProfileItemViewModel, int, Task> adjustNumberAsync,
+        Func<BroadcastProfileItemViewModel, Task> editAsync,
+        Action<BroadcastProfileItemViewModel> duplicate,
+        Action<BroadcastProfileItemViewModel> delete)
     {
         Profile = profile;
         _isActive = isActive;
         _hasDrift = hasDrift;
         _applyAsync = applyAsync;
         _adjustNumberAsync = adjustNumberAsync;
+        _editAsync = editAsync;
+        _duplicate = duplicate;
+        _delete = delete;
 
         Name = profile.Name;
 
@@ -89,20 +98,20 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
     private bool CanDecrementNumber() => HasNumberPlaceholder && Profile.CurrentNumber > 1;
 
     [RelayCommand]
-    private void Edit()
+    private async Task EditAsync()
     {
-        // TODO: not implemented yet – open BroadcastProfileEditDialog when Step 4 dialogs are implemented
+        await _editAsync(this);
     }
 
     [RelayCommand]
     private void Duplicate()
     {
-        // TODO: not implemented yet – duplicate profile when Step 4 dialogs are implemented
+        _duplicate(this);
     }
 
     [RelayCommand]
     private void Delete()
     {
-        // TODO: not implemented yet – confirm and delete profile when Step 4 dialogs are implemented
+        _delete(this);
     }
 }

@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Wpf.Bootstrap;
+﻿using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.ViewModels;
 using System.ComponentModel;
 using System.Windows;
@@ -15,7 +16,7 @@ public partial class MainWindow : Window
     private readonly ISettingsStore _settings;
     private bool _closeConfirmed;
 
-    public MainWindow(ShellViewModel viewModel, ISettingsStore settings)
+    public MainWindow(ShellViewModel viewModel, ISettingsStore settings, DashboardLayoutStore layoutStore)
     {
         InitializeComponent();
         _viewModel = viewModel;
@@ -26,7 +27,29 @@ public partial class MainWindow : Window
 
         Closing += OnClosing;
 
+        ImportWinFormsPlacement(layoutStore);
         WindowPlacement.Restore(this, _settings, WindowKeys);
+    }
+
+    private void ImportWinFormsPlacement(DashboardLayoutStore layoutStore)
+    {
+        if (!string.IsNullOrWhiteSpace(_settings.GetStringValue(SettingsKeys.WindowWidth)))
+        {
+            return;
+        }
+
+        if (layoutStore.LoadMainWindow() is not { Width: > 0, Height: > 0 } saved)
+        {
+            return;
+        }
+
+        // TODO: WinForms пишет пиксели, WPF читает DIP – при масштабе экрана не 100% окно приедет
+        //  меньше исходного; уточнять, когда появится DPI монитора до показа окна
+        _settings.SetDouble(SettingsKeys.WindowLeft, saved.X);
+        _settings.SetDouble(SettingsKeys.WindowTop, saved.Y);
+        _settings.SetDouble(SettingsKeys.WindowWidth, saved.Width);
+        _settings.SetDouble(SettingsKeys.WindowHeight, saved.Height);
+        _settings.SetBool(SettingsKeys.WindowMaximized, saved.Maximized);
     }
 
     private async void OnClosing(object? sender, CancelEventArgs e)

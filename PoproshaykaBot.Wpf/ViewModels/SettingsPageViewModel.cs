@@ -134,6 +134,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         OnEnter();
     }
 
+    public event EventHandler? SettingsSaved;
+
     public string PageTitle => "Настройки";
 
     public string? PageDescription => "Параметры бота, чата OBS, авторизации и обновлений.";
@@ -283,6 +285,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             }
 
             ResetDirty();
+            SettingsSaved?.Invoke(this, EventArgs.Empty);
 
             if (restartFailed)
             {

@@ -1,8 +1,6 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Settings.Onboarding;
-using PoproshaykaBot.Wpf.Views.Onboarding;
-using Serilog;
-using System.Windows;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf;
@@ -27,19 +25,18 @@ public partial class App
 
         _onboardingLaunched = true;
 
-        Dispatcher.BeginInvoke(() =>
-            {
-                try
-                {
-                    var wizard = _services!.GetRequiredService<OnboardingWizardWindow>();
-                    wizard.Owner = MainWindow;
-                    wizard.ShowDialog();
-                }
-                catch (Exception exception)
-                {
-                    Log.Error(exception, "Ошибка показа мастера первичной настройки");
-                }
-            },
-            DispatcherPriority.ContextIdle);
+        Dispatcher.BeginInvoke(ShowStartupWizard, DispatcherPriority.ContextIdle);
+    }
+
+    private void ShowStartupWizard()
+    {
+        var launcher = _services!.GetRequiredService<IOnboardingWizardLauncher>();
+
+        if (launcher.HasBeenShown)
+        {
+            return;
+        }
+
+        launcher.Show();
     }
 }

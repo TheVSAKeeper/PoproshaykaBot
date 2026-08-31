@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
@@ -11,79 +12,16 @@ using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Diagnostics;
-using System.Globalization;
-using System.IO;
-using System.Text.Json;
 using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, IDisposable
 {
-    private const string HideClutterScriptTemplate = """
-                                            (function () {
-                                                const selectors = __SELECTORS__;
-                                                const wrapperClasses = ['tw-transition', 'tw-callout', 'consent-banner'];
-                                                const findWrapper = (el) => {
-                                                    let node = el;
-                                                    for (let i = 0; i < 15 && node; i++) {
-                                                        if (node.classList && wrapperClasses.some((c) => node.classList.contains(c))) {
-                                                            return node;
-                                                        }
-                                                        node = node.parentElement;
-                                                    }
-                                                    return el;
-                                                };
-                                                const hideAll = () => {
-                                                    const consentAccept = document.querySelector('[data-a-target="consent-banner-accept"]');
-                                                    if (consentAccept) {
-                                                        consentAccept.click();
-                                                    }
-                                                    for (const selector of selectors) {
-                                                        document.querySelectorAll(selector).forEach((el) => {
-                                                            const wrapper = findWrapper(el);
-                                                            if (wrapper.dataset.poproshaykaHidden !== '1') {
-                                                                wrapper.dataset.poproshaykaHidden = '1';
-                                                                wrapper.style.setProperty('display', 'none', 'important');
-                                                            }
-                                                        });
-                                                    }
-                                                };
-                                                hideAll();
-                                                if (document.readyState === 'loading') {
-                                                    document.addEventListener('DOMContentLoaded', hideAll, { once: true });
-                                                }
-                                                const startObserver = () => {
-                                                    if (document.documentElement) {
-                                                        new MutationObserver(hideAll).observe(document.documentElement, { childList: true, subtree: true });
-                                                    } else {
-                                                        setTimeout(startObserver, 0);
-                                                    }
-                                                };
-                                                startObserver();
-                                            })();
-                                            """;
-
     private const string WebView2RuntimeDownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
-    private const double DefaultZoom = 0.75;
-    private const double MinZoom = 0.25;
-    private const double MaxZoom = 5.0;
-
-    private static readonly string ZoomFilePath = AppPaths.Combine("chat-zoom.txt");
-
-    private static readonly string BlockersFilePath = AppPaths.Combine("chat-blockers.txt");
-
-    private static readonly string[] BuiltInClutterSelectors =
-    [
-        "[data-a-target=\"consent-banner\"]",
-        ".consent-banner",
-        ".tw-callout-message",
-        "[class*=\"channelLeaderboardHeader\"]",
-        "[class*=\"channelLeaderboardBottomIconContainer\"]",
-        "[class*=\"community-highlight\"]",
-    ];
 
     private readonly SettingsManager _settings;
+    private readonly ChatDisplayStore _store;
     private readonly IShellLauncher _shellLauncher;
     private readonly IDialogService _dialogService;
     private readonly IDisposable _chatDisplaySubscription;
@@ -118,12 +56,14 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         ILogger<ChatDisplayTileViewModel> logger,
         IShellLauncher shellLauncher,
         IDialogService dialogService,
-        IEventBus bus)
+        IEventBus bus,
+        ChatDisplayStore store)
         : base("twitch-chat", "Чат")
     {
         _settings = settings;
         _shellLauncher = shellLauncher;
         _dialogService = dialogService;
+        _store = store;
         Logger = logger;
 
         var twitch = settings.Current.Twitch;
@@ -134,7 +74,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
         _chatDisplaySubscription = bus.SubscribeOnUi<ChatDisplaySettingsChanged>(OnChatDisplaySettingsChanged);
 
-        _zoomFactor = LoadSavedZoom();
+        _zoomFactor = _store.LoadZoom();
 
         _reloadAction = new(PackIconLucideKind.RefreshCw, ReloadCommand, "Перезагрузить страницу чата");
         _resetZoomAction = new(PackIconLucideKind.Scaling, ResetZoomCommand, "Сбросить масштаб к значению по умолчанию");
@@ -174,8 +114,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     public string BuildHideClutterScript()
     {
-        var selectors = BuiltInClutterSelectors.Concat(LoadUserSelectors()).ToArray();
-        return HideClutterScriptTemplate.Replace("__SELECTORS__", JsonSerializer.Serialize(selectors), StringComparison.Ordinal);
+        return _store.BuildHideClutterScript();
     }
 
     public void ShowNoChannelFallback()
@@ -206,7 +145,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     partial void OnZoomFactorChanged(double value)
     {
-        SaveZoom(value);
+        _store.SaveZoom(value);
     }
 
     private static Uri? BuildChannelUri(string? channel)
@@ -267,7 +206,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     [RelayCommand]
     private void ResetZoom()
     {
-        ZoomFactor = DefaultZoom;
+        ZoomFactor = ChatDisplayStore.DefaultZoom;
     }
 
     [RelayCommand]
@@ -296,85 +235,19 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     [RelayCommand]
     private async Task EditBlockersAsync()
     {
-        var dialog = new ChatBlockersDialogViewModel(LoadUserSelectorsText());
+        var dialog = new ChatBlockersDialogViewModel(_store.LoadBlockersText());
 
         if (!await _dialogService.ShowAsync(dialog))
         {
             return;
         }
 
-        try
+        if (!_store.TrySaveBlockersText(dialog.Selectors))
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(BlockersFilePath)!);
-            File.WriteAllText(BlockersFilePath, dialog.Selectors);
-        }
-        catch (Exception exception)
-        {
-            Logger.LogError(exception, "Не удалось сохранить список блокираторов баннеров чата");
             _dialogService.Error("Ошибка", "Не удалось сохранить список блокираторов. Подробности – в логах.");
-
             return;
         }
 
         ClutterScriptChanged?.Invoke();
-    }
-
-    private IEnumerable<string> LoadUserSelectors()
-    {
-        return LoadUserSelectorsText()
-            .Split('\n')
-            .Select(line => line.Trim())
-            .Where(line => line.Length > 0 && !line.StartsWith('#'));
-    }
-
-    private string LoadUserSelectorsText()
-    {
-        try
-        {
-            return File.Exists(BlockersFilePath) ? File.ReadAllText(BlockersFilePath) : string.Empty;
-        }
-        catch (IOException exception)
-        {
-            Logger.LogWarning(exception, "Не удалось прочитать список блокираторов баннеров чата");
-            return string.Empty;
-        }
-    }
-
-    private double LoadSavedZoom()
-    {
-        try
-        {
-            if (!File.Exists(ZoomFilePath))
-            {
-                return DefaultZoom;
-            }
-
-            var text = File.ReadAllText(ZoomFilePath).Trim();
-
-            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var zoom)
-                && zoom >= MinZoom && zoom <= MaxZoom)
-            {
-                return zoom;
-            }
-        }
-        catch (Exception exception)
-        {
-            Logger.LogWarning(exception, "Не удалось прочитать сохранённый масштаб чата");
-        }
-
-        return DefaultZoom;
-    }
-
-    private void SaveZoom(double zoom)
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(ZoomFilePath)!);
-            File.WriteAllText(ZoomFilePath, zoom.ToString("F3", CultureInfo.InvariantCulture));
-        }
-        catch (Exception exception)
-        {
-            Logger.LogWarning(exception, "Не удалось сохранить масштаб чата");
-        }
     }
 }
