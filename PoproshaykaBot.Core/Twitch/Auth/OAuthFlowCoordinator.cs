@@ -144,7 +144,13 @@ public sealed class OAuthFlowCoordinator(
         ArgumentNullException.ThrowIfNull(onAuthUrlReady);
 
         var semaphore = _authSemaphores[role];
-        await semaphore.WaitAsync(ct);
+
+        if (!await semaphore.WaitAsync(TimeSpan.Zero, ct))
+        {
+            logger.LogInformation("Авторизация роли {Role} уже выполняется, новый запрос ждёт её завершения", role);
+            statusReporter.Report(role, "Для этой роли уже идёт авторизация, ожидание её завершения...");
+            await semaphore.WaitAsync(ct);
+        }
 
         var state = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
         var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
