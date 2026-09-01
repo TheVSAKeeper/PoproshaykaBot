@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Infrastructure.Di;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
+using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
@@ -46,7 +47,7 @@ public partial class App : Application
     private KeepShellLoggingOptions? _loggingOptions;
     private AppLifetime? _appLifetime;
     private StreamMonitoringHost? _streamMonitoringHost;
-    private Timer? _memoryWatchdog;
+    private MemoryWatchdog? _memoryWatchdog;
     private Mutex? _singleInstanceMutex;
 
     private bool _isFinalizeUpdate;
@@ -123,7 +124,7 @@ public partial class App : Application
             ThemeManager.Apply(string.IsNullOrWhiteSpace(themeKey) ? AppThemes.LightKey : themeKey);
             FontScaleManager.Initialize(uiSettings.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
 
-            _singleInstanceMutex = AcquireSingleInstanceLock(_isFinalizeUpdate);
+            _singleInstanceMutex = SingleInstanceGate.TryAcquire(_isFinalizeUpdate);
 
             if (_singleInstanceMutex is null)
             {
@@ -176,7 +177,7 @@ public partial class App : Application
                 var settingsManager = _services.GetRequiredService<SettingsManager>();
                 _appLifetimeStarted = StartHttpServerIfNeeded(settingsManager, _appLifetime);
                 _streamMonitoringStarted = StartStreamMonitoring(_streamMonitoringHost);
-                _memoryWatchdog = CreateMemoryWatchdog();
+                _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)), Log.CloseAndFlush);
             }
 
             if (_galleryArguments is not null)
@@ -362,8 +363,13 @@ public partial class App : Application
 
     private void StopAllComponents()
     {
-        using var shutdownWatchdog = IsHeadless ? null : CreateShutdownWatchdog();
-        using var shutdownTimeout = IsHeadless ? null : new CancellationTokenSource(TimeSpan.FromSeconds(ShutdownSoftDeadlineSeconds));
+        using var shutdownWatchdog = IsHeadless
+            ? null
+            : new ShutdownWatchdog(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(ShutdownWatchdog)),
+                Log.CloseAndFlush,
+                ShutdownDeadlines.HardDeadline);
+
+        using var shutdownTimeout = IsHeadless ? null : new CancellationTokenSource(ShutdownDeadlines.SoftDeadline);
         var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
 
         if (_streamMonitoringStarted && _streamMonitoringHost is not null)
@@ -406,7 +412,7 @@ public partial class App : Application
 
         // TODO: после фатальной ошибки хост только закрывается – автоматический перезапуск невозможен,
         //  пока шлюз одного экземпляра держит мьютекс до выхода процесса; заводить, когда
-        //  AcquireSingleInstanceLock научится ждать освобождения мьютекса
+        //  SingleInstanceGate.TryAcquire научится ждать освобождения мьютекса
         ShowFatalErrorNotice();
 
         try

@@ -1,0 +1,78 @@
+﻿using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+
+namespace PoproshaykaBot.Core.Infrastructure.Runtime;
+
+public sealed class MemoryWatchdog : IDisposable
+{
+    private const long BytesPerMb = 1024 * 1024;
+
+    private const long SelfThresholdMb = 1024;
+
+    private const long TotalThresholdMb = 2048;
+
+    private const int LogEveryNthCheck = 30;
+
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(2);
+
+    private readonly ILogger _logger;
+
+    private readonly Action _flushLogs;
+
+    private readonly Timer _timer;
+
+    private int _busy;
+
+    private int _checkCount;
+
+    public MemoryWatchdog(ILogger logger, Action flushLogs)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(flushLogs);
+
+        _logger = logger;
+        _flushLogs = flushLogs;
+        _timer = new(_ => Check(), null, CheckInterval, CheckInterval);
+    }
+
+    public void Dispose()
+    {
+        _timer.Dispose();
+    }
+
+    private void Check()
+    {
+        if (Interlocked.Exchange(ref _busy, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            var selfBytes = ProcessTree.SelfMemoryBytes();
+            var childBytes = ProcessTree.ChildMemoryBytes(_logger, out var childCount);
+            var totalBytes = selfBytes + childBytes;
+
+            if (++_checkCount % LogEveryNthCheck == 1)
+            {
+                _logger.LogInformation("Память: процесс {SelfMb} МБ, дочерние {ChildMb} МБ ({ChildCount} проц.), всего {TotalMb} МБ",
+                    selfBytes / BytesPerMb, childBytes / BytesPerMb, childCount, totalBytes / BytesPerMb);
+            }
+
+            if (selfBytes <= SelfThresholdMb * BytesPerMb && totalBytes <= TotalThresholdMb * BytesPerMb)
+            {
+                return;
+            }
+
+            _logger.LogCritical("Аномальное потребление памяти: процесс {SelfMb} МБ, дочерние {ChildMb} МБ ({ChildCount} проц.), всего {TotalMb} МБ – принудительное завершение процесса",
+                selfBytes / BytesPerMb, childBytes / BytesPerMb, childCount, totalBytes / BytesPerMb);
+
+            _flushLogs();
+            Process.GetCurrentProcess().Kill();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _busy, 0);
+        }
+    }
+}

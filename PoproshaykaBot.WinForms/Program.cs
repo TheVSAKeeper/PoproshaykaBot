@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Infrastructure.Di;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
+using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
@@ -21,22 +22,12 @@ using Serilog.Debugging;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Security.Cryptography;
-using System.Text;
-using Timer = System.Threading.Timer;
 
 namespace PoproshaykaBot.WinForms;
 
 public static class Program
 {
-    private const int ShutdownSoftDeadlineSeconds = 8;
-
-    private const int ShutdownHardDeadlineSeconds = 12;
-
-    private static int _memoryWatchdogBusy;
-
-    private static Timer? _memoryWatchdog;
+    private static MemoryWatchdog? _memoryWatchdog;
 
     [STAThread]
     private static void Main(string[] args)
@@ -72,7 +63,7 @@ public static class Program
         {
             Log.Information("Запуск приложения...");
 
-            singleInstanceMutex = AcquireSingleInstanceLock(isFinalizeUpdate);
+            singleInstanceMutex = SingleInstanceGate.TryAcquire(isFinalizeUpdate);
 
             if (singleInstanceMutex is null)
             {
@@ -101,7 +92,9 @@ public static class Program
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             ApplicationConfiguration.Initialize();
 
-            _memoryWatchdog = isUiSmoke ? null : CreateMemoryWatchdog();
+            _memoryWatchdog = isUiSmoke
+                ? null
+                : new MemoryWatchdog(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)), Log.CloseAndFlush);
 
             RunApp(isUiSmoke, uiLogSink);
         }
@@ -178,9 +171,13 @@ public static class Program
         bool streamMonitoringStarted,
         bool isUiSmoke)
     {
-        using var shutdownWatchdog = isUiSmoke ? null : CreateShutdownWatchdog();
+        using var shutdownWatchdog = isUiSmoke
+            ? null
+            : new ShutdownWatchdog(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(ShutdownWatchdog)),
+                Log.CloseAndFlush,
+                ShutdownDeadlines.HardDeadline);
 
-        using var shutdownTimeout = isUiSmoke ? null : new CancellationTokenSource(TimeSpan.FromSeconds(ShutdownSoftDeadlineSeconds));
+        using var shutdownTimeout = isUiSmoke ? null : new CancellationTokenSource(ShutdownDeadlines.SoftDeadline);
         var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
 
         if (streamMonitoringStarted)
@@ -294,7 +291,15 @@ public static class Program
             return false;
         }
 
-        if (!ValidateAndResolvePortConflict(settingsManager))
+        var reconcile = HttpServerPortReconciler.Reconcile(settingsManager,
+            new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(HttpServerPortReconciler)));
+
+        if (reconcile.Notice is { } notice)
+        {
+            MessageBox.Show(notice.Message, notice.Title, MessageBoxButtons.OK, ToMessageBoxIcon(notice.Severity));
+        }
+
+        if (!reconcile.IsResolved)
         {
             Log.Warning("Не удалось разрешить конфликт портов. HTTP сервер не запущен");
             MessageBox.Show("Не удалось разрешить конфликт портов. HTTP сервер не запущен.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -341,202 +346,6 @@ public static class Program
         return AppPaths.IsPortable ? "portable" : "AppData";
     }
 
-    private static Mutex? AcquireSingleInstanceLock(bool isFinalizeUpdate)
-    {
-        var mutex = new Mutex(true, BuildSingleInstanceMutexName(), out var createdNew);
-
-        if (createdNew || isFinalizeUpdate)
-        {
-            return mutex;
-        }
-
-        mutex.Dispose();
-        return null;
-    }
-
-    private static string BuildSingleInstanceMutexName()
-    {
-        var key = AppPaths.BaseDirectory.ToLowerInvariant();
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
-        return $"Local\\PoproshaykaBot-{hash[..16]}";
-    }
-
-    private static Timer CreateMemoryWatchdog()
-    {
-        const long BytesPerMb = 1024 * 1024;
-        const long SelfThresholdMb = 1024;
-        const long TotalThresholdMb = 2048;
-        const int LogEveryNthCheck = 30;
-        var checkInterval = TimeSpan.FromSeconds(2);
-
-        var checkCount = 0;
-
-        return new(_ =>
-            {
-                if (Interlocked.Exchange(ref _memoryWatchdogBusy, 1) == 1)
-                {
-                    return;
-                }
-
-                try
-                {
-                    var selfBytes = SelfMemoryBytes();
-                    var childBytes = ChildProcessMemoryBytes(out var childCount);
-                    var totalBytes = selfBytes + childBytes;
-
-                    if (++checkCount % LogEveryNthCheck == 1)
-                    {
-                        Log.Information("Память: процесс {SelfMb} МБ, дочерние {ChildMb} МБ ({ChildCount} проц.), всего {TotalMb} МБ",
-                            selfBytes / BytesPerMb, childBytes / BytesPerMb, childCount, totalBytes / BytesPerMb);
-                    }
-
-                    if (selfBytes <= SelfThresholdMb * BytesPerMb && totalBytes <= TotalThresholdMb * BytesPerMb)
-                    {
-                        return;
-                    }
-
-                    Log.Fatal("Аномальное потребление памяти: процесс {SelfMb} МБ, дочерние {ChildMb} МБ ({ChildCount} проц.), всего {TotalMb} МБ — принудительное завершение процесса",
-                        selfBytes / BytesPerMb, childBytes / BytesPerMb, childCount, totalBytes / BytesPerMb);
-
-                    Log.CloseAndFlush();
-                    Process.GetCurrentProcess().Kill();
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref _memoryWatchdogBusy, 0);
-                }
-            },
-            null,
-            checkInterval,
-            checkInterval);
-    }
-
-    private static long SelfMemoryBytes()
-    {
-        using var process = Process.GetCurrentProcess();
-        return process.PrivateMemorySize64;
-    }
-
-    private static long ChildProcessMemoryBytes(out int count)
-    {
-        count = 0;
-        var parentByPid = SnapshotParentMap();
-
-        if (parentByPid.Count == 0)
-        {
-            return 0;
-        }
-
-        var childrenByParent = new Dictionary<int, List<int>>();
-        foreach (var (pid, parentPid) in parentByPid)
-        {
-            if (!childrenByParent.TryGetValue(parentPid, out var siblings))
-            {
-                siblings = [];
-                childrenByParent[parentPid] = siblings;
-            }
-
-            siblings.Add(pid);
-        }
-
-        long totalBytes = 0;
-        var pending = new Queue<int>();
-        var visited = new HashSet<int> { Environment.ProcessId };
-        pending.Enqueue(Environment.ProcessId);
-
-        while (pending.Count > 0)
-        {
-            if (!childrenByParent.TryGetValue(pending.Dequeue(), out var children))
-            {
-                continue;
-            }
-
-            foreach (var childPid in children)
-            {
-                if (!visited.Add(childPid))
-                {
-                    continue;
-                }
-
-                pending.Enqueue(childPid);
-
-                try
-                {
-                    using var child = Process.GetProcessById(childPid);
-                    totalBytes += child.PrivateMemorySize64;
-                    count++;
-                }
-                catch (Exception exception)
-                {
-                    Log.Debug(exception, "Watchdog: процесс {Pid} недоступен для замера памяти", childPid);
-                }
-            }
-        }
-
-        return totalBytes;
-    }
-
-    private static Dictionary<int, int> SnapshotParentMap()
-    {
-        const uint Th32csSnapprocess = 0x00000002;
-        var map = new Dictionary<int, int>();
-        var snapshot = CreateToolhelp32Snapshot(Th32csSnapprocess, 0);
-
-        if (snapshot == IntPtr.Zero || snapshot == new IntPtr(-1))
-        {
-            return map;
-        }
-
-        try
-        {
-            var entry = new ProcessEntry32 { dwSize = (uint)Marshal.SizeOf<ProcessEntry32>() };
-
-            if (!Process32First(snapshot, ref entry))
-            {
-                return map;
-            }
-
-            do
-            {
-                map[(int)entry.th32ProcessID] = (int)entry.th32ParentProcessID;
-            } while (Process32Next(snapshot, ref entry));
-        }
-        finally
-        {
-            CloseHandle(snapshot);
-        }
-
-        return map;
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool Process32First(IntPtr hSnapshot, ref ProcessEntry32 lppe);
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool Process32Next(IntPtr hSnapshot, ref ProcessEntry32 lppe);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(IntPtr hObject);
-
-    private static Timer CreateShutdownWatchdog()
-    {
-        return new(_ =>
-            {
-                Log.Fatal("Завершение работы превысило лимит {Seconds} c — принудительное завершение процесса", ShutdownHardDeadlineSeconds);
-                Log.CloseAndFlush();
-                Process.GetCurrentProcess().Kill();
-            },
-            null,
-            TimeSpan.FromSeconds(ShutdownHardDeadlineSeconds),
-            Timeout.InfiniteTimeSpan);
-    }
-
     private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)
     {
         services
@@ -555,65 +364,13 @@ public static class Program
             .AddForms();
     }
 
-    private static bool ValidateAndResolvePortConflict(SettingsManager settingsManager)
+    private static MessageBoxIcon ToMessageBoxIcon(PortReconcileSeverity severity)
     {
-        var settings = settingsManager.Current;
-        var redirectUri = settings.Twitch.RedirectUri;
-        var serverPort = settings.Twitch.HttpServerPort;
-
-        if (!RedirectUriPortResolver.TryResolve(redirectUri, out var redirectPort))
+        return severity switch
         {
-            Log.Error("Некорректный RedirectUri: {RedirectUri}", redirectUri);
-            MessageBox.Show($"Некорректный RedirectUri: {redirectUri}\n\nПожалуйста, исправьте URI в настройках OAuth.",
-                "Ошибка конфигурации",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-
-            return false;
-        }
-
-        if (redirectPort == serverPort)
-        {
-            return true;
-        }
-
-        Log.Information("Конфликт портов. Обновление порта с {OldPort} на {NewPort}", serverPort, redirectPort);
-        settings.Twitch.HttpServerPort = redirectPort;
-        settingsManager.SaveSettings(settings);
-
-        var message = $"""
-                       Обнаружен конфликт портов:
-
-                       • RedirectUri использует порт: {redirectPort}
-                       • HTTP сервер был настроен на порт: {serverPort}
-
-                       Для корректной работы OAuth порт HTTP сервера был автоматически обновлен до {redirectPort}.
-
-                       Если вы хотите использовать другой порт, пожалуйста, измените его вручную в настройках HTTP сервера и RedirectUri.
-                       """;
-
-        MessageBox.Show(message,
-            "Порт обновлен",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
-
-        return true;
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct ProcessEntry32
-    {
-        public uint dwSize;
-        public uint cntUsage;
-        public uint th32ProcessID;
-        public IntPtr th32DefaultHeapID;
-        public uint th32ModuleID;
-        public uint cntThreads;
-        public uint th32ParentProcessID;
-        public int pcPriClassBase;
-        public uint dwFlags;
-
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-        public string szExeFile;
+            PortReconcileSeverity.Information => MessageBoxIcon.Information,
+            PortReconcileSeverity.Error => MessageBoxIcon.Error,
+            _ => MessageBoxIcon.None,
+        };
     }
 }
