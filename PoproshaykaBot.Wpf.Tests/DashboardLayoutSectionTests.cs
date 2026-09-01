@@ -136,6 +136,48 @@ public class DashboardLayoutSectionTests
     }
 
     [Test]
+    public void Carries_the_split_tree_from_the_file()
+    {
+        var section = CreateSection();
+        var root = new TilePane("stream-info");
+
+        section.LoadSettings(new()
+        {
+            ColumnCount = 1,
+            RowCount = 1,
+            Root = root,
+            Tiles =
+            [
+                new() { Id = "stream-info", TypeId = "stream-info", Row = 0, Column = 0, ColumnSpan = 1, RowSpan = 1, IsVisible = true },
+            ],
+        });
+
+        Assert.That(section.BuildLayout().Root, Is.SameAs(root),
+            "Без переноса дерева первое сохранение из настроек стёрло бы пропорции, заданные на дашборде.");
+    }
+
+    [Test]
+    public void Resetting_the_layout_drops_the_split_tree()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(new()
+        {
+            ColumnCount = 1,
+            RowCount = 1,
+            Root = new TilePane("stream-info"),
+            Tiles =
+            [
+                new() { Id = "stream-info", TypeId = "stream-info", Row = 0, Column = 0, ColumnSpan = 1, RowSpan = 1, IsVisible = true },
+            ],
+        });
+
+        section.ResetLayoutCommand.Execute(null);
+
+        Assert.That(section.BuildLayout().Root, Is.Null, "Сброс раскладки возвращает и геометрию к дефолтной.");
+    }
+
+    [Test]
     public void The_same_type_twice_in_the_file_is_written_back_once()
     {
         var section = CreateSection();

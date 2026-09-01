@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.Core.Settings.Ui;
@@ -67,6 +68,11 @@ public class DashboardLayoutStore
 
     private void SaveInternal()
     {
+        if (_state.Dashboard is not null)
+        {
+            DashboardLayoutReconciler.SyncRoot(_state.Dashboard);
+        }
+
         var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
         AtomicFile.Save(_filePath, json, _logger);
     }

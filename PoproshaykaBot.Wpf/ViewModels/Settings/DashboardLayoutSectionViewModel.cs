@@ -13,6 +13,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
     private readonly Dictionary<string, PlacedTile> _placed = new(StringComparer.Ordinal);
     private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
     private readonly List<DashboardTileSettings> _preserved = [];
+    private DashboardPane? _root;
     private bool _suppress;
 
     [ObservableProperty]
@@ -84,6 +85,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         {
             ColumnCount = ColumnCount,
             RowCount = RowCount,
+            Root = _root,
         };
 
         var order = 0;
@@ -233,6 +235,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
     private void LoadFrom(DashboardLayoutSettings layout)
     {
+        _root = layout.Root;
         _suppress = true;
 
         try

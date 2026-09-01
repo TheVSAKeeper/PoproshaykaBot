@@ -115,6 +115,18 @@ public static class DashboardLayoutReconciler
         }
     }
 
+    public static void SyncRoot(DashboardLayoutSettings layout)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+
+        if (layout.Root is not null && ProjectsInto(layout.Root, layout))
+        {
+            return;
+        }
+
+        layout.Root = DashboardLayoutTree.TryBuild(layout.Tiles, layout.ColumnCount, layout.RowCount);
+    }
+
     public static string DescribeHiddenTiles(IReadOnlyCollection<string> titles)
     {
         ArgumentNullException.ThrowIfNull(titles);
@@ -129,6 +141,25 @@ public static class DashboardLayoutReconciler
         return titles.Count == 1
             ? $"Плитка {names} не поместилась в сетку и выключена – верните её из палитры."
             : $"Плитки не поместились в сетку и выключены: {names} – верните их из палитры.";
+    }
+
+    private static bool ProjectsInto(DashboardPane root, DashboardLayoutSettings layout)
+    {
+        var expected = layout.Tiles
+            .Where(tile => tile is { IsVisible: true })
+            .Select(tile => new TileRect(tile.TypeId, tile.Row, tile.Column, tile.RowSpan, tile.ColumnSpan))
+            .ToList();
+
+        if (expected.Select(rect => rect.TypeId).Distinct(StringComparer.Ordinal).Count() != expected.Count)
+        {
+            return false;
+        }
+
+        var projected = DashboardLayoutTree.TryProject(root, layout.ColumnCount, layout.RowCount);
+
+        return projected is not null
+               && projected.Count == expected.Count
+               && projected.All(expected.Remove);
     }
 
     private static int NextOrder(DashboardLayoutSettings layout)

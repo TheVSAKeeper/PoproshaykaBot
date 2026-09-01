@@ -168,6 +168,103 @@ public sealed class DashboardLayoutReconcilerTests
         Assert.That(draft.Tiles[0].IsCollapsed, Is.True);
     }
 
+    [Test]
+    public void SyncRoot_LayoutWithoutTree_BuildsItFromTheGrid()
+    {
+        var layout = TwoColumns();
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        var root = layout.Root as SplitPane;
+
+        Assert.That(root, Is.Not.Null, "Раскладка, которая разрезается гильотиной, обязана получить дерево.");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root!.Orientation, Is.EqualTo(SplitOrientation.Columns));
+            Assert.That(root.Children, Has.Count.EqualTo(2));
+        }
+    }
+
+    [Test]
+    public void SyncRoot_TreeThatStillProjectsIntoTheGrid_IsKept()
+    {
+        var layout = TwoColumns();
+        layout.Root = new SplitPane(SplitOrientation.Columns, [
+            new(new TilePane("stream-info"), 0.5),
+            new(new TilePane("polls-control"), 0.5),
+        ]);
+
+        var before = layout.Root;
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That(layout.Root, Is.SameAs(before), "Совпадающее с сеткой дерево нельзя пересобирать: пересборка стирает пропорции.");
+    }
+
+    [Test]
+    public void SyncRoot_TreeThatNoLongerMatchesTheGrid_IsRebuilt()
+    {
+        var layout = TwoColumns();
+        layout.Root = new SplitPane(SplitOrientation.Rows, [
+            new(new TilePane("stream-info"), 0.5),
+            new(new TilePane("polls-control"), 0.5),
+        ]);
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That((layout.Root as SplitPane)?.Orientation, Is.EqualTo(SplitOrientation.Columns),
+            "После правки сетки чужим хостом истина – сетка, и дерево пересобирается по ней.");
+    }
+
+    [Test]
+    public void SyncRoot_GridThatNoTreeExpresses_LeavesNoTree()
+    {
+        var layout = TwoColumns();
+        layout.Tiles[1].Column = 0;
+        layout.Root = new SplitPane(SplitOrientation.Columns, [
+            new(new TilePane("stream-info"), 0.5),
+            new(new TilePane("polls-control"), 0.5),
+        ]);
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That(layout.Root, Is.Null, "Неразрезаемая раскладка остаётся без дерева, а не упрощается втихую.");
+    }
+
+    [Test]
+    public void SyncRoot_GridWithTheSameTypeTwice_LeavesNoTree()
+    {
+        var layout = TwoColumns();
+        layout.Tiles[1].TypeId = "stream-info";
+        layout.Root = new SplitPane(SplitOrientation.Columns, [
+            new(new TilePane("stream-info"), 0.5),
+            new(new TilePane("stream-info"), 0.5),
+        ]);
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That(layout.Root, Is.Null, "Задвоенный TypeId разбор отвергает, и сшивка обязана отвергать его так же.");
+    }
+
+    private static DashboardLayoutSettings TwoColumns()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 1,
+            Tiles =
+            [
+                Tile("stream-info", order: 0, isVisible: true),
+                Tile("polls-control", order: 1, isVisible: true),
+            ],
+        };
+
+        layout.Tiles[1].Column = 1;
+
+        return layout;
+    }
+
     private static DashboardLayoutSettings Defaults()
     {
         return LayoutWith(

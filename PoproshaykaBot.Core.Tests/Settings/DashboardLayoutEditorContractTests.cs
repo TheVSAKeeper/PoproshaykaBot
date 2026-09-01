@@ -178,6 +178,43 @@ public sealed class DashboardLayoutEditorContractTests
         Assert.That(foreign, Has.Count.EqualTo(1), "Задвоенная запись из файла не должна размножаться при сохранении.");
     }
 
+    [Test]
+    public void SaveSettings_SplitTreeFromTheFile_IsCarriedThrough()
+    {
+        var root = new TilePane(KnownTypeId);
+
+        _control.LoadSettings(new()
+        {
+            ColumnCount = 4,
+            RowCount = 3,
+            Root = root,
+            Tiles = [Tile(KnownTypeId, 0, 0)],
+        });
+
+        _control.CreateControl();
+
+        Assert.That(_control.SaveSettings().Root, Is.SameAs(root),
+            "Без переноса дерева сохранение из настроек WinForms стёрло бы пропорции, заданные в WPF.");
+    }
+
+    [Test]
+    public void ResetLayout_DropsTheSplitTree()
+    {
+        _control.LoadSettings(new()
+        {
+            ColumnCount = 4,
+            RowCount = 3,
+            Root = new TilePane(KnownTypeId),
+            Tiles = [Tile(KnownTypeId, 0, 0)],
+        });
+
+        _control.CreateControl();
+        _control.ResetLayout();
+
+        Assert.That(_control.SaveSettings().Root, Is.Null,
+            "Сброс раскладки обязан сбрасывать и пропорции, иначе хосты расходятся: в WPF ResetLayoutCommand дерево стирает.");
+    }
+
     private static DashboardTileSettings Tile(string typeId, int row, int column, int columnSpan = 1)
     {
         return new()

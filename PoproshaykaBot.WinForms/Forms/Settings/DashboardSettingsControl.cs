@@ -14,6 +14,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
     private readonly List<DashboardTileSettings> _preserved = [];
     private DashboardTileDragDropController? _dragDrop;
     private DashboardLayoutSettings? _pendingLayout;
+    private DashboardPane? _root;
     private string _infoHint = string.Empty;
     private bool _initialized;
     private bool _suppressEvents;
@@ -62,6 +63,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
         {
             ColumnCount = (int)_gridColumnsNumeric.Value,
             RowCount = (int)_gridRowsNumeric.Value,
+            Root = _root,
         };
 
         var collapsedByType = CurrentLayout?.Tiles
@@ -150,9 +152,14 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
         OnChanged();
     }
 
-    private void OnResetLayoutButtonClicked(object? sender, EventArgs e)
+    internal void ResetLayout()
     {
         ApplyLayout(DashboardLayoutDefaults.Create());
+    }
+
+    private void OnResetLayoutButtonClicked(object? sender, EventArgs e)
+    {
+        ResetLayout();
         OnChanged();
     }
 
@@ -260,6 +267,8 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
 
     private void ApplyLayout(DashboardLayoutSettings layout)
     {
+        _root = layout.Root;
+
         var columnCount = Math.Clamp(layout.ColumnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
         var rowCount = Math.Clamp(layout.RowCount, DashboardLayoutDefaults.MinRowCount, DashboardLayoutDefaults.MaxRowCount);
 
