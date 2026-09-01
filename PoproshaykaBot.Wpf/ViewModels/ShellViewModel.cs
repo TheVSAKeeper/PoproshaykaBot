@@ -238,6 +238,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     private static MessageBoxResult AskAboutDirtySettings(string action)
     {
+        if (App.IsHeadless)
+        {
+            return MessageBoxResult.No;
+        }
+
         return StyledMessageBox.Show(
             $"На странице настроек есть несохранённые изменения. Сохранить их перед {action}?",
             "Несохранённые настройки",

@@ -49,7 +49,6 @@ public partial class App : Application
     private Timer? _memoryWatchdog;
     private Mutex? _singleInstanceMutex;
 
-    private bool _isUiSmoke;
     private bool _isFinalizeUpdate;
     private string[]? _galleryArgs;
     private GalleryArguments? _galleryArguments;
@@ -58,11 +57,13 @@ public partial class App : Application
 
     internal static bool IsFatalShutdown => Volatile.Read(ref _fatalErrorHandled) == 1;
 
+    internal static bool IsHeadless { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        _isUiSmoke = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
+        IsHeadless = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         _isFinalizeUpdate = e.Args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
 
         var galleryIndex = Array.FindIndex(e.Args, static arg => string.Equals(arg, GalleryHost.ArgumentName, StringComparison.OrdinalIgnoreCase));
@@ -70,7 +71,7 @@ public partial class App : Application
         if (galleryIndex >= 0)
         {
             _galleryArgs = [.. e.Args.Skip(galleryIndex + 1)];
-            _isUiSmoke = true;
+            IsHeadless = true;
         }
 
         var coreUiLogSink = new UiLogSink();
@@ -128,7 +129,7 @@ public partial class App : Application
             {
                 Log.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
 
-                if (!_isUiSmoke)
+                if (!IsHeadless)
                 {
                     StyledMessageBox.Show("PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
                         "Приложение уже запущено",
@@ -166,7 +167,7 @@ public partial class App : Application
             _appLifetime = _services.GetRequiredService<AppLifetime>();
             _streamMonitoringHost = _services.GetRequiredService<StreamMonitoringHost>();
 
-            if (_isUiSmoke)
+            if (IsHeadless)
             {
                 Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
             }
@@ -195,7 +196,13 @@ public partial class App : Application
         catch (Exception ex)
         {
             Log.Fatal(ex, "{App} не смог запуститься", AppInfo.Name);
-            StyledMessageBox.Show(ex.ToString(), $"{AppInfo.Name} – ошибка запуска", MessageBoxButton.OK, MessageBoxImage.Error);
+            Interlocked.Exchange(ref _fatalErrorHandled, 1);
+
+            if (!IsHeadless)
+            {
+                StyledMessageBox.Show(ex.ToString(), $"{AppInfo.Name} – ошибка запуска", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
             Shutdown(1);
         }
     }
@@ -209,7 +216,7 @@ public partial class App : Application
         {
             Task.Run(StopAllComponents).GetAwaiter().GetResult();
 
-            if (!_isUiSmoke)
+            if (!IsHeadless)
             {
                 ApplyPendingUpdate();
             }
@@ -355,8 +362,8 @@ public partial class App : Application
 
     private void StopAllComponents()
     {
-        using var shutdownWatchdog = _isUiSmoke ? null : CreateShutdownWatchdog();
-        using var shutdownTimeout = _isUiSmoke ? null : new CancellationTokenSource(TimeSpan.FromSeconds(ShutdownSoftDeadlineSeconds));
+        using var shutdownWatchdog = IsHeadless ? null : CreateShutdownWatchdog();
+        using var shutdownTimeout = IsHeadless ? null : new CancellationTokenSource(TimeSpan.FromSeconds(ShutdownSoftDeadlineSeconds));
         var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
 
         if (_streamMonitoringStarted && _streamMonitoringHost is not null)
@@ -414,7 +421,7 @@ public partial class App : Application
 
     private void ShowFatalErrorNotice()
     {
-        if (_isUiSmoke)
+        if (IsHeadless)
         {
             return;
         }
