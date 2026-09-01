@@ -56,6 +56,17 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
         _subscriptions.Clear();
     }
 
+    public void ResetInstallState()
+    {
+        if (!IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = false;
+        Refresh();
+    }
+
     private void Refresh()
     {
         var candidate = _coordinator.LatestCandidate;

@@ -36,6 +36,8 @@ public static class Program
 
     private static int _memoryWatchdogBusy;
 
+    private static Timer? _memoryWatchdog;
+
     [STAThread]
     private static void Main(string[] args)
     {
@@ -99,7 +101,7 @@ public static class Program
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             ApplicationConfiguration.Initialize();
 
-            using var memoryWatchdog = isUiSmoke ? null : CreateMemoryWatchdog();
+            _memoryWatchdog = isUiSmoke ? null : CreateMemoryWatchdog();
 
             RunApp(isUiSmoke, uiLogSink);
         }
@@ -120,6 +122,7 @@ public static class Program
         {
             Log.Information("Завершение работы приложения");
             Log.CloseAndFlush();
+            _memoryWatchdog?.Dispose();
             singleInstanceMutex?.Dispose();
         }
     }
@@ -158,6 +161,7 @@ public static class Program
         finally
         {
             StopAllComponents(serviceProvider, appLifetime, streamMonitoringHost, appLifetimeStarted, streamMonitoringStarted, isUiSmoke);
+            _memoryWatchdog?.Dispose();
 
             if (!isUiSmoke)
             {

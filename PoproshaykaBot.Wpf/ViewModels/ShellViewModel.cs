@@ -110,6 +110,12 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public override async Task<bool> RequestCloseAsync()
     {
+        if (!await ConfirmDirtySettingsOnCloseAsync())
+        {
+            UpdateBanner.ResetInstallState();
+            return false;
+        }
+
         try
         {
             await _connectionManager.ShutdownAsync(BotStopMode.Forced);
@@ -230,16 +236,49 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             && _settingsPage.HasChanges;
     }
 
-    private bool TryLeaveSettings(NavigationItem? target)
+    private static MessageBoxResult AskAboutDirtySettings(string action)
     {
-        var choice = StyledMessageBox.Show(
-            "На странице настроек есть несохранённые изменения. Сохранить их перед переходом?",
+        return StyledMessageBox.Show(
+            $"На странице настроек есть несохранённые изменения. Сохранить их перед {action}?",
             "Несохранённые настройки",
             MessageBoxButton.YesNoCancel,
             MessageBoxImage.Warning,
             MessageBoxResult.Yes);
+    }
 
-        switch (choice)
+    private async Task<bool> ConfirmDirtySettingsOnCloseAsync()
+    {
+        if (!_settingsPage.HasChanges)
+        {
+            return true;
+        }
+
+        switch (AskAboutDirtySettings("закрытием"))
+        {
+            case MessageBoxResult.Yes:
+                await _settingsPage.SaveCommand.ExecuteAsync(null);
+
+                if (!_settingsPage.HasChanges)
+                {
+                    return true;
+                }
+
+                ReturnToSettings();
+                return false;
+
+            case MessageBoxResult.No:
+                _settingsPage.RevertCommand.Execute(null);
+                return true;
+
+            default:
+                ReturnToSettings();
+                return false;
+        }
+    }
+
+    private bool TryLeaveSettings(NavigationItem? target)
+    {
+        switch (AskAboutDirtySettings("переходом"))
         {
             case MessageBoxResult.Yes:
                 ReturnToSettings();

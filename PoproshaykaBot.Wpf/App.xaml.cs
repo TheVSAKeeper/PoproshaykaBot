@@ -31,12 +31,15 @@ using Serilog.Events;
 using Serilog.Extensions.Logging;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf;
 
 public partial class App : Application
 {
     private const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
+
+    private static int _fatalErrorHandled;
 
     private ServiceProvider? _services;
     private KeepShellLogging? _logging;
@@ -52,6 +55,8 @@ public partial class App : Application
     private GalleryArguments? _galleryArguments;
     private bool _appLifetimeStarted;
     private bool _streamMonitoringStarted;
+
+    internal static bool IsFatalShutdown => Volatile.Read(ref _fatalErrorHandled) == 1;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -198,6 +203,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _services?.GetService<ISettingsStore>()?.Flush();
+        _memoryWatchdog?.Dispose();
 
         if (_services is not null)
         {
@@ -212,7 +218,6 @@ public partial class App : Application
         Log.Information("Завершение работы приложения");
         _logging?.Dispose();
 
-        _memoryWatchdog?.Dispose();
         _singleInstanceMutex?.Dispose();
 
         base.OnExit(e);
@@ -369,7 +374,7 @@ public partial class App : Application
 
     private void AttachFatalExceptionTrap()
     {
-        DispatcherUnhandledException += (_, args) => Log.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
@@ -380,5 +385,60 @@ public partial class App : Application
 
             Log.CloseAndFlush();
         };
+    }
+
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs args)
+    {
+        Log.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
+        args.Handled = true;
+
+        if (Interlocked.Exchange(ref _fatalErrorHandled, 1) == 1)
+        {
+            return;
+        }
+
+        // TODO: после фатальной ошибки хост только закрывается – автоматический перезапуск невозможен,
+        //  пока шлюз одного экземпляра держит мьютекс до выхода процесса; заводить, когда
+        //  AcquireSingleInstanceLock научится ждать освобождения мьютекса
+        ShowFatalErrorNotice();
+
+        try
+        {
+            Shutdown(1);
+        }
+        catch (InvalidOperationException exception)
+        {
+            Log.Error(exception, "Не удалось штатно завершить работу после фатальной ошибки");
+        }
+    }
+
+    private void ShowFatalErrorNotice()
+    {
+        if (_isUiSmoke)
+        {
+            return;
+        }
+
+        var logsDirectory = _loggingOptions?.LogsDirectory ?? AppPaths.Combine("logs");
+        var caption = $"{AppInfo.Name} – критическая ошибка";
+        var message = $"Произошла непредвиденная ошибка, приложение будет закрыто.\n\nПодробности – в журнале: {logsDirectory}";
+
+        try
+        {
+            StyledMessageBox.Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        catch (Exception styledFailure)
+        {
+            Log.Error(styledFailure, "Не удалось показать сообщение о фатальной ошибке средствами каркаса");
+
+            try
+            {
+                MessageBox.Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (Exception fallbackFailure)
+            {
+                Log.Error(fallbackFailure, "Не удалось показать системное сообщение о фатальной ошибке");
+            }
+        }
     }
 }
