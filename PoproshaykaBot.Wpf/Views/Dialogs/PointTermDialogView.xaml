@@ -58,12 +58,12 @@
 
         <Border Padding="12"
                 CornerRadius="{DynamicResource Radius.M}"
-                Background="{DynamicResource Bg.Soft}"
+                Background="{DynamicResource Bg.SurfaceAlt}"
                 BorderBrush="{DynamicResource Border.Default}"
                 BorderThickness="1"
                 Margin="0,0,0,16">
             <TextBlock Text="{Binding Preview}"
-                       Foreground="{DynamicResource Fg.Default}"
+                       Foreground="{DynamicResource Fg.Primary}"
                        TextWrapping="Wrap" />
         </Border>
 

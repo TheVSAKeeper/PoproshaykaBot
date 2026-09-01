@@ -59,6 +59,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (App.IsFatalShutdown)
+        {
+            return;
+        }
+
         e.Cancel = true;
 
         if (await _viewModel.RequestCloseAsync())

@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Infrastructure.Di;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
+using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
@@ -31,6 +32,7 @@ using Serilog.Events;
 using Serilog.Extensions.Logging;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf;
 
@@ -38,26 +40,31 @@ public partial class App : Application
 {
     private const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
+    private static int _fatalErrorHandled;
+
     private ServiceProvider? _services;
     private KeepShellLogging? _logging;
     private KeepShellLoggingOptions? _loggingOptions;
     private AppLifetime? _appLifetime;
     private StreamMonitoringHost? _streamMonitoringHost;
-    private Timer? _memoryWatchdog;
+    private MemoryWatchdog? _memoryWatchdog;
     private Mutex? _singleInstanceMutex;
 
-    private bool _isUiSmoke;
     private bool _isFinalizeUpdate;
     private string[]? _galleryArgs;
     private GalleryArguments? _galleryArguments;
     private bool _appLifetimeStarted;
     private bool _streamMonitoringStarted;
 
+    internal static bool IsFatalShutdown => Volatile.Read(ref _fatalErrorHandled) == 1;
+
+    internal static bool IsHeadless { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        _isUiSmoke = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
+        IsHeadless = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         _isFinalizeUpdate = e.Args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
 
         var galleryIndex = Array.FindIndex(e.Args, static arg => string.Equals(arg, GalleryHost.ArgumentName, StringComparison.OrdinalIgnoreCase));
@@ -65,7 +72,7 @@ public partial class App : Application
         if (galleryIndex >= 0)
         {
             _galleryArgs = [.. e.Args.Skip(galleryIndex + 1)];
-            _isUiSmoke = true;
+            IsHeadless = true;
         }
 
         var coreUiLogSink = new UiLogSink();
@@ -117,13 +124,13 @@ public partial class App : Application
             ThemeManager.Apply(string.IsNullOrWhiteSpace(themeKey) ? AppThemes.LightKey : themeKey);
             FontScaleManager.Initialize(uiSettings.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
 
-            _singleInstanceMutex = AcquireSingleInstanceLock(_isFinalizeUpdate);
+            _singleInstanceMutex = SingleInstanceGate.TryAcquire(_isFinalizeUpdate);
 
             if (_singleInstanceMutex is null)
             {
                 Log.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
 
-                if (!_isUiSmoke)
+                if (!IsHeadless)
                 {
                     StyledMessageBox.Show("PoproshaykaBot уже запущен.\n\nОдновременно может работать только один экземпляр приложения.",
                         "Приложение уже запущено",
@@ -161,7 +168,7 @@ public partial class App : Application
             _appLifetime = _services.GetRequiredService<AppLifetime>();
             _streamMonitoringHost = _services.GetRequiredService<StreamMonitoringHost>();
 
-            if (_isUiSmoke)
+            if (IsHeadless)
             {
                 Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
             }
@@ -170,7 +177,7 @@ public partial class App : Application
                 var settingsManager = _services.GetRequiredService<SettingsManager>();
                 _appLifetimeStarted = StartHttpServerIfNeeded(settingsManager, _appLifetime);
                 _streamMonitoringStarted = StartStreamMonitoring(_streamMonitoringHost);
-                _memoryWatchdog = CreateMemoryWatchdog();
+                _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)), Log.CloseAndFlush);
             }
 
             if (_galleryArguments is not null)
@@ -190,7 +197,13 @@ public partial class App : Application
         catch (Exception ex)
         {
             Log.Fatal(ex, "{App} не смог запуститься", AppInfo.Name);
-            StyledMessageBox.Show(ex.ToString(), $"{AppInfo.Name} – ошибка запуска", MessageBoxButton.OK, MessageBoxImage.Error);
+            Interlocked.Exchange(ref _fatalErrorHandled, 1);
+
+            if (!IsHeadless)
+            {
+                StyledMessageBox.Show(ex.ToString(), $"{AppInfo.Name} – ошибка запуска", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
             Shutdown(1);
         }
     }
@@ -198,12 +211,13 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _services?.GetService<ISettingsStore>()?.Flush();
+        _memoryWatchdog?.Dispose();
 
         if (_services is not null)
         {
             Task.Run(StopAllComponents).GetAwaiter().GetResult();
 
-            if (!_isUiSmoke)
+            if (!IsHeadless)
             {
                 ApplyPendingUpdate();
             }
@@ -212,7 +226,6 @@ public partial class App : Application
         Log.Information("Завершение работы приложения");
         _logging?.Dispose();
 
-        _memoryWatchdog?.Dispose();
         _singleInstanceMutex?.Dispose();
 
         base.OnExit(e);
@@ -350,8 +363,13 @@ public partial class App : Application
 
     private void StopAllComponents()
     {
-        using var shutdownWatchdog = _isUiSmoke ? null : CreateShutdownWatchdog();
-        using var shutdownTimeout = _isUiSmoke ? null : new CancellationTokenSource(TimeSpan.FromSeconds(ShutdownSoftDeadlineSeconds));
+        using var shutdownWatchdog = IsHeadless
+            ? null
+            : new ShutdownWatchdog(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(ShutdownWatchdog)),
+                Log.CloseAndFlush,
+                ShutdownDeadlines.HardDeadline);
+
+        using var shutdownTimeout = IsHeadless ? null : new CancellationTokenSource(ShutdownDeadlines.SoftDeadline);
         var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
 
         if (_streamMonitoringStarted && _streamMonitoringHost is not null)
@@ -369,7 +387,7 @@ public partial class App : Application
 
     private void AttachFatalExceptionTrap()
     {
-        DispatcherUnhandledException += (_, args) => Log.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
@@ -380,5 +398,60 @@ public partial class App : Application
 
             Log.CloseAndFlush();
         };
+    }
+
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs args)
+    {
+        Log.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
+        args.Handled = true;
+
+        if (Interlocked.Exchange(ref _fatalErrorHandled, 1) == 1)
+        {
+            return;
+        }
+
+        // TODO: после фатальной ошибки хост только закрывается – автоматический перезапуск невозможен,
+        //  пока шлюз одного экземпляра держит мьютекс до выхода процесса; заводить, когда
+        //  SingleInstanceGate.TryAcquire научится ждать освобождения мьютекса
+        ShowFatalErrorNotice();
+
+        try
+        {
+            Shutdown(1);
+        }
+        catch (InvalidOperationException exception)
+        {
+            Log.Error(exception, "Не удалось штатно завершить работу после фатальной ошибки");
+        }
+    }
+
+    private void ShowFatalErrorNotice()
+    {
+        if (IsHeadless)
+        {
+            return;
+        }
+
+        var logsDirectory = _loggingOptions?.LogsDirectory ?? AppPaths.Combine("logs");
+        var caption = $"{AppInfo.Name} – критическая ошибка";
+        var message = $"Произошла непредвиденная ошибка, приложение будет закрыто.\n\nПодробности – в журнале: {logsDirectory}";
+
+        try
+        {
+            StyledMessageBox.Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        catch (Exception styledFailure)
+        {
+            Log.Error(styledFailure, "Не удалось показать сообщение о фатальной ошибке средствами каркаса");
+
+            try
+            {
+                MessageBox.Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (Exception fallbackFailure)
+            {
+                Log.Error(fallbackFailure, "Не удалось показать системное сообщение о фатальной ошибке");
+            }
+        }
     }
 }
