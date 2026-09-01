@@ -58,6 +58,8 @@ public partial class App : Application
 
     internal static bool IsFatalShutdown => Volatile.Read(ref _fatalErrorHandled) == 1;
 
+    private static Serilog.ILogger HostLog => Log.ForContext<App>();
+
     internal static bool IsHeadless { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
@@ -83,9 +85,9 @@ public partial class App : Application
             LogsDirectory = AppPaths.Combine("logs"),
             FileNamePrefix = AppInfo.LogFilePrefix,
             OutputTemplate = OutputTemplate,
-            // TODO: лимита размера файла у каркаса нет, день активного стрима даёт один большой файл –
-            // поднимать, когда в KeepShellLoggingOptions появятся FileSizeLimitBytes и RollOnFileSizeLimit
             RetainedFileCountLimit = 31,
+            FileSizeLimitBytes = 50L * 1024 * 1024,
+            RollOnFileSizeLimit = true,
             MinimumLevel = LogEventLevel.Debug,
             MinimumLevelOverrides = new Dictionary<string, LogEventLevel>
             {
@@ -101,7 +103,7 @@ public partial class App : Application
 
         _logging = KeepShellLogging.Bootstrap(_loggingOptions);
 
-        Log.Information(AppInfo.SessionStartMarker + "...");
+        HostLog.Information(AppInfo.SessionStartMarker + "...");
 
         AttachFatalExceptionTrap();
 
@@ -128,7 +130,7 @@ public partial class App : Application
 
             if (_singleInstanceMutex is null)
             {
-                Log.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
+                HostLog.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
 
                 if (!IsHeadless)
                 {
@@ -142,7 +144,7 @@ public partial class App : Application
                 return;
             }
 
-            Log.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}", ResolveStorageMode(), AppPaths.BaseDirectory);
+            HostLog.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}", ResolveStorageMode(), AppPaths.BaseDirectory);
 
             if (_isFinalizeUpdate)
             {
@@ -170,7 +172,7 @@ public partial class App : Application
 
             if (IsHeadless)
             {
-                Log.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
+                HostLog.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
             }
             else
             {
@@ -196,7 +198,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            Log.Fatal(ex, "{App} не смог запуститься", AppInfo.Name);
+            HostLog.Fatal(ex, "{App} не смог запуститься", AppInfo.Name);
             Interlocked.Exchange(ref _fatalErrorHandled, 1);
 
             if (!IsHeadless)
@@ -210,7 +212,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _services?.GetService<ISettingsStore>()?.Flush();
+        _services?.GetService<ISettingsStore>()?.Close();
         _memoryWatchdog?.Dispose();
 
         if (_services is not null)
@@ -223,7 +225,7 @@ public partial class App : Application
             }
         }
 
-        Log.Information("Завершение работы приложения");
+        HostLog.Information("Завершение работы приложения");
         _logging?.Dispose();
 
         _singleInstanceMutex?.Dispose();
@@ -245,7 +247,7 @@ public partial class App : Application
             }
             catch (Exception exception)
             {
-                Log.Error(exception, "Съёмка галереи упала");
+                HostLog.Error(exception, "Съёмка галереи упала");
             }
 
             Shutdown(code);
@@ -273,7 +275,7 @@ public partial class App : Application
         }
         catch (Exception exception)
         {
-            Log.Error(exception, "Ошибка пред-миграции layout-а настроек");
+            HostLog.Error(exception, "Ошибка пред-миграции layout-а настроек");
         }
     }
 
@@ -395,7 +397,7 @@ public partial class App : Application
         {
             if (args.ExceptionObject is Exception exception)
             {
-                Log.Fatal(exception, "Приложение завершило работу из-за непредвиденной ошибки");
+                HostLog.Fatal(exception, "Приложение завершило работу из-за непредвиденной ошибки");
             }
 
             Log.CloseAndFlush();
@@ -404,7 +406,7 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs args)
     {
-        Log.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
+        HostLog.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
         args.Handled = true;
 
         if (Interlocked.Exchange(ref _fatalErrorHandled, 1) == 1)
@@ -423,7 +425,7 @@ public partial class App : Application
         }
         catch (InvalidOperationException exception)
         {
-            Log.Error(exception, "Не удалось штатно завершить работу после фатальной ошибки");
+            HostLog.Error(exception, "Не удалось штатно завершить работу после фатальной ошибки");
         }
     }
 
@@ -444,7 +446,7 @@ public partial class App : Application
         }
         catch (Exception styledFailure)
         {
-            Log.Error(styledFailure, "Не удалось показать сообщение о фатальной ошибке средствами каркаса");
+            HostLog.Error(styledFailure, "Не удалось показать сообщение о фатальной ошибке средствами каркаса");
 
             try
             {
@@ -452,7 +454,7 @@ public partial class App : Application
             }
             catch (Exception fallbackFailure)
             {
-                Log.Error(fallbackFailure, "Не удалось показать системное сообщение о фатальной ошибке");
+                HostLog.Error(fallbackFailure, "Не удалось показать системное сообщение о фатальной ошибке");
             }
         }
     }

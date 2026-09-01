@@ -1,8 +1,10 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Diagnostics;
 using System.Globalization;
@@ -23,6 +25,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
     private readonly IDialogService _dialogService;
     private readonly IShellLauncher _shellLauncher;
     private readonly IEmbeddedTwitchAuthDialog _embeddedAuth;
+    private readonly ILogger _logger;
 
     private TwitchAccountSettings _draft = new();
     private CancellationTokenSource? _authCts;
@@ -72,7 +75,8 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         Func<OAuthCredentialsSnapshot> credentialsProvider,
         IDialogService dialogService,
         IShellLauncher shellLauncher,
-        IEmbeddedTwitchAuthDialog embeddedAuth)
+        IEmbeddedTwitchAuthDialog embeddedAuth,
+        ILogger logger)
     {
         _role = role;
         _oauthService = oauthService;
@@ -81,6 +85,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         _dialogService = dialogService;
         _shellLauncher = shellLauncher;
         _embeddedAuth = embeddedAuth;
+        _logger = logger;
 
         _oauthService.StatusChanged += OnOAuthStatusChanged;
     }
@@ -148,6 +153,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         _authCts = cts;
         IsAuthInProgress = true;
         SetAuthStatus("Авторизация...", StatusSeverity.Info);
+        _logger.OAuthBrowserFlowStarted(_role, OAuthAuthorizationSurface.Settings);
 
         try
         {
@@ -223,6 +229,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
 
         IsAuthInProgress = true;
         SetAuthStatus("Авторизация во встроенном окне...", StatusSeverity.Info);
+        _logger.OAuthEmbeddedFlowStarted(_role, OAuthAuthorizationSurface.Settings);
 
         try
         {

@@ -21,6 +21,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1004, Level = LogLevel.Information, Message = "История сообщений чата очищена")]
     public static partial void ChatHistoryCleared(this ILogger logger);
 
+    [LoggerMessage(EventId = 1005, Level = LogLevel.Information, Message = "Пользователь запросил подключение бота")]
+    public static partial void BotConnectRequested(this ILogger logger);
+
+    [LoggerMessage(EventId = 1006, Level = LogLevel.Information, Message = "Пользователь запросил отключение бота")]
+    public static partial void BotDisconnectRequested(this ILogger logger);
+
     [LoggerMessage(EventId = 1100, Level = LogLevel.Error, Message = "OAuth-поток мастера упал для роли {Role}")]
     public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
 
@@ -105,6 +111,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1130, Level = LogLevel.Warning, Message = "Встроенная авторизация подавлена в headless-режиме для роли {Role}")]
     public static partial void EmbeddedAuthSuppressedHeadless(this ILogger logger, TwitchOAuthRole role);
 
+    [LoggerMessage(EventId = 1131, Level = LogLevel.Information, Message = "Пользователь начал авторизацию роли {Role} во внешнем браузере ({Surface})")]
+    public static partial void OAuthBrowserFlowStarted(this ILogger logger, TwitchOAuthRole role, OAuthAuthorizationSurface surface);
+
+    [LoggerMessage(EventId = 1132, Level = LogLevel.Information, Message = "Пользователь начал встроенную авторизацию роли {Role} ({Surface})")]
+    public static partial void OAuthEmbeddedFlowStarted(this ILogger logger, TwitchOAuthRole role, OAuthAuthorizationSurface surface);
+
     [LoggerMessage(EventId = 1200, Level = LogLevel.Error, Message = "Ошибка сохранения настроек")]
     public static partial void SettingsSaveFailed(this ILogger logger, Exception? exception);
 
@@ -119,6 +131,9 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1204, Level = LogLevel.Error, Message = "Ошибка перезапуска HTTP сервера на порту {NewPort}")]
     public static partial void SettingsHttpServerRestartFailed(this ILogger logger, Exception? exception, int newPort);
+
+    [LoggerMessage(EventId = 1205, Level = LogLevel.Information, Message = "Пользователь сохранил настройки")]
+    public static partial void SettingsSavedByUser(this ILogger logger);
 
     [LoggerMessage(EventId = 1300, Level = LogLevel.Error, Message = "Ошибка обновления информации о стриме")]
     public static partial void StreamInfoUpdateFailed(this ILogger logger, Exception? exception);

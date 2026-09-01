@@ -195,6 +195,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         ResultText = string.Empty;
         StatusMessage = "Открываем встроенное окно авторизации...";
         StatusMessageSeverity = StatusSeverity.Info;
+        _logger.OAuthEmbeddedFlowStarted(_role, OAuthAuthorizationSurface.OnboardingWizard);
 
         var completed = false;
 
@@ -273,6 +274,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         _authCts = cts;
         _currentAuthUrl = null;
         IsAuthInProgress = true;
+        _logger.OAuthBrowserFlowStarted(_role, OAuthAuthorizationSurface.OnboardingWizard);
         StatusMessage = "Подготовка ссылки...";
         StatusMessageSeverity = StatusSeverity.Info;
         ResultText = string.Empty;

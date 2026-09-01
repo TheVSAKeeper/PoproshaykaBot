@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using System.ComponentModel;
 using System.Windows;
@@ -43,12 +44,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        // TODO: WinForms пишет пиксели, WPF читает DIP – при масштабе экрана не 100% окно приедет
-        //  меньше исходного; уточнять, когда появится DPI монитора до показа окна
-        _settings.SetDouble(SettingsKeys.WindowLeft, saved.X);
-        _settings.SetDouble(SettingsKeys.WindowTop, saved.Y);
-        _settings.SetDouble(SettingsKeys.WindowWidth, saved.Width);
-        _settings.SetDouble(SettingsKeys.WindowHeight, saved.Height);
+        // TODO: масштаб берётся системный – на конфигурации со смешанным DPI окно приедет по
+        //  масштабу основного монитора; уточнять, когда пройдёт прогон на такой машине
+        var bounds = WinFormsPlacementImport.ToDeviceIndependent(saved, WinFormsPlacementImport.GetSystemScale());
+
+        _settings.SetDouble(SettingsKeys.WindowLeft, bounds.X);
+        _settings.SetDouble(SettingsKeys.WindowTop, bounds.Y);
+        _settings.SetDouble(SettingsKeys.WindowWidth, bounds.Width);
+        _settings.SetDouble(SettingsKeys.WindowHeight, bounds.Height);
         _settings.SetBool(SettingsKeys.WindowMaximized, saved.Maximized);
     }
 

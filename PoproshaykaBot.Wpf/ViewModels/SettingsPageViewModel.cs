@@ -15,6 +15,8 @@ using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.ComponentModel;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Text.Json;
+using SettingsSection = PoproshaykaBot.Wpf.ViewModels.Settings.SettingsSection;
+using SettingsSectionList = PoproshaykaBot.Wpf.ViewModels.Settings.SettingsSectionList;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -343,6 +345,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
             ResetDirty();
             SettingsSaved?.Invoke(this, EventArgs.Empty);
+            _logger.SettingsSavedByUser();
 
             if (restartFailed)
             {

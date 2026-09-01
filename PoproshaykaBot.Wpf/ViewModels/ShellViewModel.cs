@@ -333,6 +333,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 break;
 
             case BotLifecyclePhase.Connected:
+                _logger.BotDisconnectRequested();
+
                 try
                 {
                     await _connectionManager.StopAsync();
@@ -348,6 +350,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
                 break;
 
             default:
+                _logger.BotConnectRequested();
+
                 try
                 {
                     _connectionManager.StartConnection();
