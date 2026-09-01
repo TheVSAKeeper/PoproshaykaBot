@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Tiles;
@@ -86,6 +87,8 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
                 MaxWidth = placed.MaxWidth,
             });
         }
+
+        AppendPreservedTiles(layout, ref order);
 
         CurrentLayout = layout;
         return layout;
@@ -247,6 +250,35 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
         finally
         {
             _paletteFlowLayoutPanel.ResumeLayout();
+        }
+    }
+
+    private void AppendPreservedTiles(DashboardLayoutSettings layout, ref int order)
+    {
+        if (CurrentLayout == null)
+        {
+            return;
+        }
+
+        var written = layout.Tiles
+            .Select(tile => tile.TypeId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var tile in CurrentLayout.Tiles)
+        {
+            if (tile.IsVisible && TileCatalog.Find(tile.TypeId) != null)
+            {
+                continue;
+            }
+
+            if (!written.Add(tile.TypeId))
+            {
+                continue;
+            }
+
+            var preserved = JsonStoreClone.DeepClone(tile);
+            preserved.Order = order++;
+            layout.Tiles.Add(preserved);
         }
     }
 
