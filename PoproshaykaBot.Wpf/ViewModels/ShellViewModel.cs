@@ -48,6 +48,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         ILogger<ShellViewModel> logger,
         IDialogService dialogService,
         UpdateBannerViewModel updateBanner,
+        OnboardingBannerViewModel onboardingBanner,
         StreamMonitoringViewModel streamMonitoring,
         ChatHistoryManager chatHistory)
         : base(modal)
@@ -59,9 +60,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _dialogService = dialogService;
         Theme = theme;
         UpdateBanner = updateBanner;
+        OnboardingBanner = onboardingBanner;
         StreamMonitoring = streamMonitoring;
 
         _settingsPage = settingsPage;
+        _settingsPage.SettingsSaved += OnSettingsSaved;
         _chatHistory = chatHistory;
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: ActivateSettings, key: SectionKeys.Settings);
 
@@ -88,6 +91,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public ThemeViewModel Theme { get; }
 
     public UpdateBannerViewModel UpdateBanner { get; }
+
+    public OnboardingBannerViewModel OnboardingBanner { get; }
 
     public StreamMonitoringViewModel StreamMonitoring { get; }
 
@@ -120,6 +125,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public void Dispose()
     {
         UpdateBanner.Dispose();
+        OnboardingBanner.Dispose();
+        _settingsPage.SettingsSaved -= OnSettingsSaved;
         StreamMonitoring.Dispose();
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
@@ -327,6 +334,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         OnPropertyChanged(nameof(EffectivePageHeader));
         OnPropertyChanged(nameof(ContentMargin));
+    }
+
+    private void OnSettingsSaved(object? sender, EventArgs e)
+    {
+        OnboardingBanner.Refresh();
     }
 
     private void OnLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)

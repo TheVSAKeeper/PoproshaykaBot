@@ -16,6 +16,7 @@ using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
@@ -75,6 +76,9 @@ public partial class App : Application
             LogsDirectory = AppPaths.Combine("logs"),
             FileNamePrefix = AppInfo.LogFilePrefix,
             OutputTemplate = OutputTemplate,
+            // TODO: лимита размера файла у каркаса нет, день активного стрима даёт один большой файл –
+            // поднимать, когда в KeepShellLoggingOptions появятся FileSizeLimitBytes и RollOnFileSizeLimit
+            RetainedFileCountLimit = 31,
             MinimumLevel = LogEventLevel.Debug,
             MinimumLevelOverrides = new Dictionary<string, LogEventLevel>
             {
@@ -304,6 +308,8 @@ public partial class App : Application
         services.AddSingleton<ThemeViewModel>();
         services.AddSingleton<ShellPreferences>();
         services.AddSingleton<UpdateBannerViewModel>();
+        services.AddSingleton<OnboardingBannerViewModel>();
+        services.AddSingleton<IOnboardingWizardLauncher, OnboardingWizardLauncher>();
         services.AddSingleton<StreamMonitoringViewModel>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();

@@ -1,21 +1,6 @@
-﻿namespace PoproshaykaBot.WinForms.Forms.Settings;
+﻿namespace PoproshaykaBot.Core.Dashboard;
 
-internal sealed class PlacedTile
-{
-    public int Row { get; set; }
-
-    public int Column { get; set; }
-
-    public int ColumnSpan { get; set; }
-
-    public int RowSpan { get; set; }
-
-    public int? MaxHeight { get; set; }
-
-    public int? MaxWidth { get; set; }
-}
-
-internal static class DashboardLayoutCalculator
+public static class DashboardLayoutCalculator
 {
     public static void ClampPlacement(PlacedTile placed, int columnCount, int rowCount)
     {

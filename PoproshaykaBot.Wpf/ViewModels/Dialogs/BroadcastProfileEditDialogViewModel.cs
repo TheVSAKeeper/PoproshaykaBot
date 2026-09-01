@@ -102,6 +102,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
     {
         Title = "Текущие настройки эфира";
         _nameRequired = false;
+        Name = string.Empty;
         NameLabel = "Сохранить как:";
         NamePlaceholder = "имя нового профиля (необязательно)";
         ConfirmButtonText = "Применить";

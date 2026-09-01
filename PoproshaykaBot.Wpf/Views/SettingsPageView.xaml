@@ -2,7 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
-             xmlns:keepshell="clr-namespace:KeepShell.Bootstrap;assembly=KeepShell"
+             xmlns:settings="clr-namespace:PoproshaykaBot.Wpf.Views.Settings"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -11,34 +12,11 @@
              d:DesignWidth="1100">
 
     <UserControl.Resources>
-        <Style x:Key="SettingsTabControl"
-               TargetType="TabControl"
-               BasedOn="{StaticResource {x:Type TabControl}}">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TabControl">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <WrapPanel Grid.Row="0"
-                                       IsItemsHost="True"
-                                       Margin="0,0,0,8" />
-                            <Border Grid.Row="1"
-                                    Background="{DynamicResource Bg.Surface}"
-                                    BorderBrush="{DynamicResource Border.Subtle}"
-                                    BorderThickness="1"
-                                    CornerRadius="{DynamicResource Radius.L}"
-                                    Padding="16">
-                                <ContentPresenter x:Name="PART_SelectedContentHost"
-                                                  ContentSource="SelectedContent" />
-                            </Border>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <DockPanel LastChildFill="True">
@@ -46,8 +24,8 @@
                 Background="{DynamicResource Bg.Surface}"
                 BorderBrush="{DynamicResource Border.Subtle}"
                 BorderThickness="0,1,0,0"
-                Padding="0,12,0,0"
-                Margin="0,12,0,0">
+                Padding="20,6"
+                Margin="-20,12,-20,-20">
             <DockPanel LastChildFill="False">
                 <StackPanel DockPanel.Dock="Left"
                             Orientation="Horizontal"
@@ -67,98 +45,207 @@
                         Content="Сохранить"
                         Style="{StaticResource Button.Primary}"
                         Command="{Binding SaveCommand}"
-                        MinWidth="120" />
+                        MinWidth="104" />
                 <Button DockPanel.Dock="Right"
                         Content="Отменить изменения"
                         Style="{StaticResource Button.Secondary}"
                         Command="{Binding RevertCommand}"
-                        MinWidth="120"
+                        MinWidth="104"
                         Margin="0,0,8,0" />
             </DockPanel>
         </Border>
 
-        <TabControl Style="{StaticResource SettingsTabControl}">
-            <TabItem Header="Основные">
-                <ContentControl Content="{Binding Basic}" />
-            </TabItem>
-            <TabItem Header="Ограничения">
-                <ContentControl Content="{Binding RateLimiting}" />
-            </TabItem>
-            <TabItem Header="HTTP сервер">
-                <ContentControl Content="{Binding HttpServer}" />
-            </TabItem>
-            <TabItem Header="Сообщения">
-                <ContentControl Content="{Binding Messages}" />
-            </TabItem>
-            <TabItem Header="Авторизация">
-                <ContentControl Content="{Binding OAuth}" />
-            </TabItem>
-            <TabItem Header="Чат OBS">
-                <ContentControl Content="{Binding ObsChat}" />
-            </TabItem>
-            <TabItem Header="OBS подключение">
-                <ContentControl Content="{Binding ObsIntegration}" />
-            </TabItem>
-            <TabItem Header="Автоматический режим">
-                <ContentControl Content="{Binding AutoBroadcast}" />
-            </TabItem>
-            <TabItem Header="Автозапуск бота">
-                <ContentControl Content="{Binding BotLifecycle}" />
-            </TabItem>
-            <TabItem Header="Опросы">
-                <ContentControl Content="{Binding Polls}" />
-            </TabItem>
-            <TabItem Header="Прочее">
-                <ContentControl Content="{Binding Misc}" />
-            </TabItem>
-            <TabItem Header="Обновления">
-                <ContentControl Content="{Binding Update}" />
-            </TabItem>
-            <TabItem Header="Дашборд">
-                <ContentControl Content="{Binding DashboardLayout}" />
-            </TabItem>
-            <TabItem Header="Оформление">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled"
-                              Padding="12">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Width="{StaticResource Setting.NavWidth}"
+                    BorderBrush="{DynamicResource Border.Subtle}"
+                    BorderThickness="0,0,1,0"
+                    Padding="0,0,10,0">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top"
+                          Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0">
+                            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource TextBox.IconField}"
+                                     Tag="{x:Static iconPacks:PackIconLucideKind.Search}"
+                                     AutomationProperties.Name="Поиск по настройкам"
+                                     ToolTip="Фильтр разделов по названию и ключевым словам" />
+                            <TextBlock Text="Поиск"
+                                       Margin="36,0,8,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Fg.Muted}"
+                                       IsHitTestVisible="False"
+                                       Visibility="{Binding SearchTextEmpty, Converter={StaticResource BoolToVisibility}}" />
+                        </Grid>
+
+                        <Button Grid.Column="1"
+                                Style="{StaticResource Button.Icon}"
+                                Command="{Binding ClearSearchCommand}"
+                                Margin="6,0,0,0"
+                                AutomationProperties.Name="Очистить поиск"
+                                ToolTip="Очистить поиск"
+                                Visibility="{Binding SearchTextEmpty, Converter={StaticResource InverseBoolToVisibility}}">
+                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.X}"
+                                                      Width="16"
+                                                      Height="16"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center" />
+                        </Button>
+                    </Grid>
+
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="Ничего не найдено."
+                               Style="{StaticResource TextBlock.Subtle}"
+                               TextWrapping="Wrap"
+                               Margin="8,2,0,0"
+                               Visibility="{Binding Sections.NoMatches, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding Sections.Items}"
+                                      KeyboardNavigation.TabNavigation="Continue">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource Nav.RailItem}"
+                                            Command="{Binding DataContext.Sections.SelectCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            ToolTip="{Binding Title}"
+                                            Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="26" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <iconPacks:PackIconLucide Style="{StaticResource Setting.NavIcon}"
+                                                                      Kind="{Binding Icon}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Title}"
+                                                       Margin="6,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <ScrollViewer Grid.Column="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Margin="16,0,0,0"
+                          Padding="0,0,12,0">
+                <Grid RequestBringIntoView="SuppressAutoScroll">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"
+                                              MaxWidth="{StaticResource Setting.ContentWidth}" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <HeaderedContentControl Style="{StaticResource Setting.Panel}"
+                                                Header="{Binding Sections[basic].Title}"
+                                                Visibility="{Binding Sections[basic].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel>
+                                <ContentControl Content="{Binding Basic}" />
+
+                                <Border Style="{StaticResource Setting.Divider}" />
+                                <TextBlock Text="Ограничения отправки"
+                                           Style="{StaticResource Setting.GroupTitle}" />
+                                <ContentControl Content="{Binding RateLimiting}" />
+
+                                <Border Style="{StaticResource Setting.Divider}" />
+                                <TextBlock Text="Шаблоны сообщений"
+                                           Style="{StaticResource Setting.GroupTitle}" />
+                                <ContentControl Content="{Binding Messages}" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Style="{StaticResource Setting.Panel}"
+                                                Header="{Binding Sections[oauth].Title}"
+                                                Visibility="{Binding Sections[oauth].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <ContentControl Content="{Binding OAuth}" />
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Style="{StaticResource Setting.Panel}"
+                                                Header="{Binding Sections[stream].Title}"
+                                                Visibility="{Binding Sections[stream].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel>
+                                <TextBlock Text="Автоматический режим"
+                                           Style="{StaticResource Setting.GroupTitle}"
+                                           Margin="0,0,0,10" />
+                                <ContentControl Content="{Binding AutoBroadcast}" />
+
+                                <Border Style="{StaticResource Setting.Divider}" />
+                                <TextBlock Text="Автозапуск бота"
+                                           Style="{StaticResource Setting.GroupTitle}" />
+                                <ContentControl Content="{Binding BotLifecycle}" />
+
+                                <Border Style="{StaticResource Setting.Divider}" />
+                                <TextBlock Text="Опросы"
+                                           Style="{StaticResource Setting.GroupTitle}" />
+                                <ContentControl Content="{Binding Polls}" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Style="{StaticResource Setting.Panel}"
+                                                Header="{Binding Sections[update].Title}"
+                                                Visibility="{Binding Sections[update].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <ContentControl Content="{Binding Update}" />
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Style="{StaticResource Setting.Panel}"
+                                                Header="{Binding Sections[appearance].Title}"
+                                                Visibility="{Binding Sections[appearance].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <settings:AppearanceSettingsView />
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Style="{StaticResource Setting.Panel}"
+                                                Header="{Binding Sections[misc].Title}"
+                                                Visibility="{Binding Sections[misc].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <ContentControl Content="{Binding Misc}" />
+                        </HeaderedContentControl>
+                    </Grid>
+
+                    <HeaderedContentControl Style="{StaticResource Setting.Panel}"
+                                            Header="{Binding Sections[obs].Title}"
+                                            Visibility="{Binding Sections[obs].IsSelected, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
-                            <TextBlock Text="Внешний вид"
-                                       Style="{StaticResource TextBlock.Heading}"
-                                       Margin="0,0,0,12" />
+                            <TextBlock Text="Подключение к OBS"
+                                       Style="{StaticResource Setting.GroupTitle}"
+                                       Margin="0,0,0,10" />
+                            <ContentControl Content="{Binding ObsIntegration}" />
 
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
-                                           Text="Масштаб шрифта"
-                                           VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding Shell.FontScale, StringFormat={}{0:P0}}"
-                                           VerticalAlignment="Center" />
-                            </Grid>
-                            <Slider Minimum="{x:Static keepshell:FontScaleManager.MinScale}"
-                                    Maximum="{x:Static keepshell:FontScaleManager.MaxScale}"
-                                    Value="{Binding Shell.FontScale, Mode=TwoWay}"
-                                    TickFrequency="0.1"
-                                    IsSnapToTickEnabled="True"
-                                    Margin="0,6,0,0" />
-                            <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                       Text="Увеличивает размер текста по всему приложению. 100% – стандартный размер."
-                                       TextWrapping="Wrap"
-                                       Margin="0,2,0,0" />
+                            <Border Style="{StaticResource Setting.Divider}" />
+                            <TextBlock Text="Оформление чат-оверлея"
+                                       Style="{StaticResource Setting.GroupTitle}" />
+                            <ContentControl Content="{Binding ObsChat}" />
 
-                            <CheckBox Content="Показывать заголовок страницы"
-                                      IsChecked="{Binding Shell.ShowPageHeader, Mode=TwoWay}"
-                                      Margin="0,16,0,0" />
-                            <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                       Text="Плашка с названием раздела и описанием над содержимым каждой страницы."
-                                       TextWrapping="Wrap"
-                                       Margin="0,2,0,0" />
+                            <Border Style="{StaticResource Setting.Divider}" />
+                            <TextBlock Text="HTTP сервер оверлея"
+                                       Style="{StaticResource Setting.GroupTitle}" />
+                            <ContentControl Content="{Binding HttpServer}" />
                         </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-        </TabControl>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Style="{StaticResource Setting.Panel}"
+                                            Header="{Binding Sections[dashboard].Title}"
+                                            Visibility="{Binding Sections[dashboard].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                        <ContentControl Content="{Binding DashboardLayout}" />
+                    </HeaderedContentControl>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
     </DockPanel>
 </UserControl>

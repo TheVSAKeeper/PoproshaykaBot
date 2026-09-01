@@ -9,6 +9,8 @@ namespace PoproshaykaBot.Wpf.Views.Tiles;
 
 public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileViewModel>
 {
+    private readonly CancellationTokenSource _lifetime = new();
+
     private bool _initialized;
     private bool _disposed;
     private bool _reloadAttempted;
@@ -52,6 +54,8 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         }
 
         _disposed = true;
+        Dispatcher.ShutdownStarted -= OnShutdownStarted;
+        _lifetime.Cancel();
 
         if (_viewModel is not null)
         {
@@ -68,13 +72,17 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
         WebView.NavigationCompleted -= OnNavigationCompleted;
         WebView.Dispose();
+        _lifetime.Dispose();
     }
 
     private async Task InitializeWebViewAsync(ChatDisplayTileViewModel viewModel)
     {
         try
         {
-            var environment = await WebView2EnvironmentFactory.CreateAsync(viewModel.UserDataFolder, viewModel.Logger);
+            var environment = await WebView2EnvironmentFactory.CreateAsync(
+                viewModel.UserDataFolder,
+                viewModel.Logger,
+                _lifetime.Token);
 
             if (_disposed)
             {
@@ -101,6 +109,9 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             {
                 viewModel.ShowNoChannelFallback();
             }
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (WebView2RuntimeNotFoundException exception)
         {

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Twitch.Chat;
@@ -18,6 +19,7 @@ public static class ChatServiceCollectionExtensions
         services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChatSender>());
 
         services.AddSingleton<ChatHistoryManager>();
+        services.AddSingleton<ChatDisplayStore>();
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
         services.AddSingleton<UserPointsManagementService>();

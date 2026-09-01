@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
+﻿using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.Windows;
 using System.Windows.Controls;
