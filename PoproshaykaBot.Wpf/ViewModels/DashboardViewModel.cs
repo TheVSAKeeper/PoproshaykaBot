@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
@@ -42,14 +43,19 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
     public void Reload()
     {
         var layout = _layoutStore.LoadDashboard();
+        var created = layout is null || layout.Tiles.Count == 0;
 
-        if (layout is null || layout.Tiles.Count == 0)
+        if (created)
         {
             layout = DashboardLayoutDefaults.Create();
-            _layoutStore.SaveDashboard(layout);
         }
 
-        ApplyLayout(layout);
+        if (DashboardLayoutReconciler.AppendMissingTypes(layout!, _tilesByTypeId.Keys) || created)
+        {
+            _layoutStore.SaveDashboard(layout!);
+        }
+
+        ApplyLayout(layout!);
     }
 
     public void Dispose()

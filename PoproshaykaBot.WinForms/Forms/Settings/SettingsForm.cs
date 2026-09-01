@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Polls;
@@ -10,6 +11,7 @@ using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
+using PoproshaykaBot.WinForms.Tiles;
 using System.Text.Json;
 
 namespace PoproshaykaBot.WinForms.Forms.Settings;
@@ -214,7 +216,7 @@ public partial class SettingsForm : Form
         _obsIntegrationDraft = new();
         _pollsDraft = new();
         _updateDraft = new();
-        _dashboardDraft = null;
+        _dashboardDraft = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutDefaults.Create(), _dashboardLayoutStore.LoadDashboard());
 
         LoadSettingsToControls();
         _hasChanges = true;
@@ -315,6 +317,7 @@ public partial class SettingsForm : Form
 
             if (_dashboardDraft != null)
             {
+                DashboardLayoutReconciler.MergeCollapseState(_dashboardDraft, _dashboardLayoutStore.LoadDashboard());
                 _dashboardLayoutStore.SaveDashboard(_dashboardDraft);
             }
 

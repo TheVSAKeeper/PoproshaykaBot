@@ -1,5 +1,4 @@
 ﻿using PoproshaykaBot.Core.Dashboard;
-using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using PoproshaykaBot.WinForms.Tiles;
@@ -12,8 +11,10 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
     private readonly Dictionary<DashboardTileType, Button> _paletteCards = [];
     private readonly Dictionary<DashboardTileType, PlacedTile> _placedTiles = [];
     private readonly Dictionary<DashboardTileType, Panel> _tilePanels = [];
+    private readonly List<DashboardTileSettings> _preserved = [];
     private DashboardTileDragDropController? _dragDrop;
     private DashboardLayoutSettings? _pendingLayout;
+    private string _infoHint = string.Empty;
     private bool _initialized;
     private bool _suppressEvents;
 
@@ -36,6 +37,9 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
             : DashboardLayoutDefaults.Create();
 
         CurrentLayout = layout;
+
+        _preserved.Clear();
+        _preserved.AddRange(layout.Tiles.Where(tile => !tile.IsVisible || TileCatalog.Find(tile.TypeId) == null));
 
         if (_initialized)
         {
@@ -88,7 +92,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
             });
         }
 
-        AppendPreservedTiles(layout, ref order);
+        DashboardLayoutReconciler.AppendPreserved(layout, _preserved);
 
         CurrentLayout = layout;
         return layout;
@@ -109,6 +113,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
         }
 
         _initialized = true;
+        _infoHint = _infoLabel.Text;
 
         _dragDrop = new(_placedTiles, PlaceOrMoveTile, ShowTileContextMenu);
 
@@ -253,35 +258,6 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
         }
     }
 
-    private void AppendPreservedTiles(DashboardLayoutSettings layout, ref int order)
-    {
-        if (CurrentLayout == null)
-        {
-            return;
-        }
-
-        var written = layout.Tiles
-            .Select(tile => tile.TypeId)
-            .ToHashSet(StringComparer.Ordinal);
-
-        foreach (var tile in CurrentLayout.Tiles)
-        {
-            if (tile.IsVisible && TileCatalog.Find(tile.TypeId) != null)
-            {
-                continue;
-            }
-
-            if (!written.Add(tile.TypeId))
-            {
-                continue;
-            }
-
-            var preserved = JsonStoreClone.DeepClone(tile);
-            preserved.Order = order++;
-            layout.Tiles.Add(preserved);
-        }
-    }
-
     private void ApplyLayout(DashboardLayoutSettings layout)
     {
         var columnCount = Math.Clamp(layout.ColumnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
@@ -357,7 +333,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
             }
 
             var (occupied, unplaceable) = DashboardLayoutCalculator.ResolveLayout(_placedTiles.Values, rowCount, columnCount);
-            RemoveUnplaceableTiles(unplaceable);
+            RetainUnplaceableTiles(unplaceable);
 
             foreach (var (type, placed) in _placedTiles)
             {
@@ -390,24 +366,50 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
         UpdatePaletteEnabled();
     }
 
-    private void RemoveUnplaceableTiles(IReadOnlyList<PlacedTile> unplaceable)
+    private void RetainUnplaceableTiles(IReadOnlyList<PlacedTile> unplaceable)
     {
         if (unplaceable.Count == 0)
         {
+            ShowNotice(string.Empty);
             return;
         }
 
         var lost = unplaceable.ToHashSet();
 
-        var lostTypes = _placedTiles
+        var lostTiles = _placedTiles
             .Where(pair => lost.Contains(pair.Value))
-            .Select(pair => pair.Key)
             .ToList();
 
-        foreach (var type in lostTypes)
+        foreach (var (type, placed) in lostTiles)
         {
             _placedTiles.Remove(type);
+            RetainAsHidden(type, placed);
         }
+
+        ShowNotice(DashboardLayoutReconciler.DescribeHiddenTiles(lostTiles.Select(pair => pair.Key.Title).ToList()));
+    }
+
+    private void RetainAsHidden(DashboardTileType type, PlacedTile placed)
+    {
+        var isCollapsed = CurrentLayout?.Tiles
+            .FirstOrDefault(tile => string.Equals(tile.TypeId, type.Id, StringComparison.Ordinal))?
+            .IsCollapsed ?? false;
+
+        _preserved.RemoveAll(tile => string.Equals(tile.TypeId, type.Id, StringComparison.Ordinal));
+        _preserved.Add(DashboardLayoutReconciler.CreateHiddenTile(placed, isCollapsed));
+    }
+
+    private void ShowNotice(string notice)
+    {
+        if (notice.Length == 0)
+        {
+            _infoLabel.Text = _infoHint;
+            _infoLabel.ForeColor = SystemColors.GrayText;
+            return;
+        }
+
+        _infoLabel.Text = $"{_infoHint}{Environment.NewLine}⚠️ {notice}";
+        _infoLabel.ForeColor = Color.FromArgb(176, 92, 0);
     }
 
     private void DisposeGridControls()
@@ -479,7 +481,7 @@ public sealed partial class DashboardSettingsControl : UserControl, IDashboardTi
         }
     }
 
-    private void PlaceOrMoveTile(DashboardTileType type, int row, int column)
+    internal void PlaceOrMoveTile(DashboardTileType type, int row, int column)
     {
         var columnCount = (int)_gridColumnsNumeric.Value;
         var rowCount = (int)_gridRowsNumeric.Value;

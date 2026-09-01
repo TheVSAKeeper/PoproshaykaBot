@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
@@ -312,7 +313,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
             _updateStore.Save(_updateDraft);
-            _dashboardLayoutStore.SaveDashboard(DashboardLayout.BuildLayout());
+            SaveDashboardLayout();
 
             if (Polls.HasChanges)
             {
@@ -369,6 +370,15 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private void Revert()
     {
         OnEnter();
+    }
+
+    private void SaveDashboardLayout()
+    {
+        var layout = DashboardLayout.BuildLayout();
+
+        DashboardLayoutReconciler.MergeCollapseState(layout, _dashboardLayoutStore.LoadDashboard());
+
+        _dashboardLayoutStore.SaveDashboard(layout);
     }
 
     private void ReconcileHttpServerPort()

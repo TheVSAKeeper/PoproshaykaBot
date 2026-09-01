@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Settings.Stores;
+﻿using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 
@@ -31,14 +32,19 @@ public sealed partial class DashboardControl : UserControl
         }
 
         var layout = LayoutStore.LoadDashboard();
+        var created = layout == null || layout.Tiles.Count == 0;
 
-        if (layout == null || layout.Tiles.Count == 0)
+        if (created)
         {
             layout = DashboardLayoutDefaults.Create();
-            LayoutStore.SaveDashboard(layout);
         }
 
-        ApplyLayout(layout);
+        if (DashboardLayoutReconciler.AppendMissingTypes(layout!, TileCatalog.All.Select(type => type.Id)) || created)
+        {
+            LayoutStore.SaveDashboard(layout!);
+        }
+
+        ApplyLayout(layout!);
     }
 
     protected override void OnHandleCreated(EventArgs e)

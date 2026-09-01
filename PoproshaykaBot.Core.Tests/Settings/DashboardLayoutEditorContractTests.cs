@@ -107,6 +107,77 @@ public sealed class DashboardLayoutEditorContractTests
             "Повторное сохранение не должно задним числом перенумеровывать раскладку, которую вызывающий уже получил.");
     }
 
+    [Test]
+    public void SaveSettings_TileThatNoLongerFitsTheGrid_IsKeptHidden()
+    {
+        LoadIntoSingleCell();
+
+        var saved = _control.SaveSettings();
+        var lost = saved.Tiles.Where(tile => string.Equals(tile.TypeId, SecondKnownTypeId, StringComparison.Ordinal)).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(lost, Has.Count.EqualTo(1), "Не поместившаяся плитка должна остаться в файле ровно один раз.");
+            Assert.That(lost[0].IsVisible, Is.False, "Не поместившуюся плитку выключают, а не стирают из файла.");
+            Assert.That(saved.Tiles.Count(tile => tile.IsVisible), Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void SaveSettings_TileHiddenByShrunkGrid_SurvivesReload()
+    {
+        LoadIntoSingleCell();
+
+        _control.LoadSettings(_control.SaveSettings());
+
+        var reloaded = _control.SaveSettings().Tiles
+            .Where(tile => string.Equals(tile.TypeId, SecondKnownTypeId, StringComparison.Ordinal))
+            .ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reloaded, Has.Count.EqualTo(1));
+            Assert.That(reloaded[0].IsVisible, Is.False);
+        }
+    }
+
+    [Test]
+    public void SaveSettings_HiddenTilePlacedBackFromPalette_IsWrittenOnce()
+    {
+        var hidden = Tile(SecondKnownTypeId, 1, 0);
+        hidden.IsVisible = false;
+
+        Load(Tile(KnownTypeId, 0, 0), hidden);
+
+        _control.PlaceOrMoveTile(_types[1], 1, 0);
+
+        var placed = _control.SaveSettings().Tiles
+            .Where(tile => string.Equals(tile.TypeId, SecondKnownTypeId, StringComparison.Ordinal))
+            .ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(placed, Has.Count.EqualTo(1), "Возвращённая из палитры плитка не должна задваиваться скрытой копией.");
+            Assert.That(placed[0].IsVisible, Is.True);
+            Assert.That(placed[0].Row, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void SaveSettings_FileWithTheSameTypeTwice_KeepsOneRecord()
+    {
+        var duplicate = Tile(ForeignTypeId, 2, 1);
+        duplicate.IsVisible = false;
+
+        Load(Tile(KnownTypeId, 0, 0), Tile(ForeignTypeId, 1, 2), duplicate);
+
+        var foreign = _control.SaveSettings().Tiles
+            .Where(tile => string.Equals(tile.TypeId, ForeignTypeId, StringComparison.Ordinal))
+            .ToList();
+
+        Assert.That(foreign, Has.Count.EqualTo(1), "Задвоенная запись из файла не должна размножаться при сохранении.");
+    }
+
     private static DashboardTileSettings Tile(string typeId, int row, int column, int columnSpan = 1)
     {
         return new()
@@ -121,12 +192,22 @@ public sealed class DashboardLayoutEditorContractTests
         };
     }
 
+    private void LoadIntoSingleCell()
+    {
+        Load(1, 1, Tile(KnownTypeId, 0, 0), Tile(SecondKnownTypeId, 0, 1));
+    }
+
     private void Load(params DashboardTileSettings[] tiles)
+    {
+        Load(4, 3, tiles);
+    }
+
+    private void Load(int columnCount, int rowCount, params DashboardTileSettings[] tiles)
     {
         _control.LoadSettings(new()
         {
-            ColumnCount = 4,
-            RowCount = 3,
+            ColumnCount = columnCount,
+            RowCount = rowCount,
             Tiles = [.. tiles],
         });
 
