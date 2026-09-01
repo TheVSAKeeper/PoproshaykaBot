@@ -28,7 +28,7 @@ public partial class App
         }
         catch (Exception exception)
         {
-            Log.Error(exception, "Ошибка очистки после обновления");
+            HostLog.Error(exception, "Ошибка очистки после обновления");
         }
     }
 
@@ -50,7 +50,7 @@ public partial class App
         }
         catch (Exception exception)
         {
-            Log.Error(exception, "Ошибка применения запланированного обновления");
+            HostLog.Error(exception, "Ошибка применения запланированного обновления");
         }
     }
 
@@ -59,12 +59,12 @@ public partial class App
         try
         {
             host.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-            Log.Information("Стрим-мониторинг запущен независимо от подключения бота");
+            HostLog.Information("Стрим-мониторинг запущен независимо от подключения бота");
             return true;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Ошибка запуска стрим-мониторинга");
+            HostLog.Error(ex, "Ошибка запуска стрим-мониторинга");
             return false;
         }
     }
@@ -77,11 +77,11 @@ public partial class App
         }
         catch (OperationCanceledException)
         {
-            Log.Warning("Остановка стрим-мониторинга прервана по таймауту завершения");
+            HostLog.Warning("Остановка стрим-мониторинга прервана по таймауту завершения");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Ошибка остановки стрим-мониторинга");
+            HostLog.Error(ex, "Ошибка остановки стрим-мониторинга");
         }
     }
 
@@ -97,7 +97,7 @@ public partial class App
 
         if (!reconcile.IsResolved)
         {
-            Log.Warning("Не удалось разрешить конфликт портов. HTTP сервер не запущен");
+            HostLog.Warning("Не удалось разрешить конфликт портов. HTTP сервер не запущен");
             StyledMessageBox.Show("Не удалось разрешить конфликт портов. HTTP сервер не запущен.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
@@ -105,12 +105,12 @@ public partial class App
         try
         {
             appLifetime.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-            Log.Information("HTTP сервер успешно запущен");
+            HostLog.Information("HTTP сервер успешно запущен");
             return true;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Ошибка запуска HTTP сервера");
+            HostLog.Error(ex, "Ошибка запуска HTTP сервера");
             StyledMessageBox.Show($"Ошибка запуска HTTP сервера: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
@@ -124,11 +124,11 @@ public partial class App
         }
         catch (OperationCanceledException)
         {
-            Log.Warning("Остановка AppLifetime прервана по таймауту завершения");
+            HostLog.Warning("Остановка AppLifetime прервана по таймауту завершения");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Ошибка остановки AppLifetime");
+            HostLog.Error(ex, "Ошибка остановки AppLifetime");
         }
     }
 

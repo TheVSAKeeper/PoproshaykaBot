@@ -87,6 +87,8 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
     [NotifyCanExecuteChangedFor(nameof(CopyOverlayUrlCommand))]
     private bool _isBusy;
 
+    private bool _autoCheckStarted;
+
     [ObservableProperty]
     private string _overlayUrl = string.Empty;
 
@@ -103,6 +105,8 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
         _dialogService = dialogService;
         _clipboard = clipboard;
     }
+
+    public bool IsAutoPopulating { get; private set; }
 
     public ObservableCollection<string> Scenes { get; } = [];
 
@@ -132,6 +136,24 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
 
         OverlayUrl = BuildOverlayUrl();
         SetStatus("● Не проверено", StatusSeverity.None);
+        _autoCheckStarted = false;
+    }
+
+    public void RunAutoConnectionCheck()
+    {
+        if (_autoCheckStarted || App.IsHeadless)
+        {
+            return;
+        }
+
+        _autoCheckStarted = true;
+        SetStatus("● Проверка подключения...", StatusSeverity.None);
+
+        _ = RunObsOperationAsync(async ct =>
+        {
+            var settings = BuildCurrentSettings();
+            await ConnectAndLoadScenesAsync(settings, "Подключен", ct);
+        });
     }
 
     public void SaveTo(ObsIntegrationSettings target)
@@ -355,21 +377,30 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
         var inputNames = await _obsIntegration.ListInputNamesAsync(settings, ct);
         var browserSourceNames = await _obsIntegration.ListBrowserSourceNamesAsync(settings, ct);
 
-        var currentScene = SceneName;
-        Scenes.Clear();
+        IsAutoPopulating = true;
 
-        foreach (var scene in scenes)
+        try
         {
-            Scenes.Add(scene);
-        }
+            var currentScene = SceneName;
+            Scenes.Clear();
 
-        if (string.IsNullOrWhiteSpace(currentScene) && scenes.Count > 0)
+            foreach (var scene in scenes)
+            {
+                Scenes.Add(scene);
+            }
+
+            if (string.IsNullOrWhiteSpace(currentScene) && scenes.Count > 0)
+            {
+                SceneName = scenes[0];
+            }
+
+            PopulateSourceItems(DashboardSources, inputNames, ReadCheckedSources(DashboardSources));
+            PopulateSourceItems(ChatRefreshSources, browserSourceNames, ReadCheckedSources(ChatRefreshSources));
+        }
+        finally
         {
-            SceneName = scenes[0];
+            IsAutoPopulating = false;
         }
-
-        PopulateSourceItems(DashboardSources, inputNames, ReadCheckedSources(DashboardSources));
-        PopulateSourceItems(ChatRefreshSources, browserSourceNames, ReadCheckedSources(ChatRefreshSources));
     }
 
     private static void PopulateSourceItems(

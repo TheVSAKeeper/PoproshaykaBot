@@ -15,6 +15,8 @@ using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.ComponentModel;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Text.Json;
+using SettingsSection = PoproshaykaBot.Wpf.ViewModels.Settings.SettingsSection;
+using SettingsSectionList = PoproshaykaBot.Wpf.ViewModels.Settings.SettingsSectionList;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -38,6 +40,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         "HasErrors",
     };
 
+    private const string ObsSectionKey = "obs";
+
     private readonly SettingsManager _settingsManager;
     private readonly AccountsStore _accountsStore;
     private readonly ObsChatStore _obsChatStore;
@@ -48,6 +52,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly ILogger<SettingsPageViewModel> _logger;
     private readonly IDialogService _dialogService;
+
     private readonly ObservableObject[] _dirtyTrackedSections;
     private readonly ISettingsStore _uiSettings;
 
@@ -228,6 +233,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
 
         ResetDirty();
+        RunObsAutoCheckIfSelected();
     }
 
     public void Dispose()
@@ -265,6 +271,15 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             && Sections.Selected is { } section)
         {
             _uiSettings.SetValue(SettingsKeys.SettingsSection, section.Key);
+            RunObsAutoCheckIfSelected();
+        }
+    }
+
+    private void RunObsAutoCheckIfSelected()
+    {
+        if (string.Equals(Sections.Selected?.Key, ObsSectionKey, StringComparison.Ordinal))
+        {
+            ObsIntegration.RunAutoConnectionCheck();
         }
     }
 
@@ -330,6 +345,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
             ResetDirty();
             SettingsSaved?.Invoke(this, EventArgs.Empty);
+            _logger.SettingsSavedByUser();
 
             if (restartFailed)
             {
@@ -442,6 +458,11 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
 
         if (e.PropertyName is { } name && NonDirtyProperties.Contains(name))
+        {
+            return;
+        }
+
+        if (ReferenceEquals(sender, ObsIntegration) && ObsIntegration.IsAutoPopulating)
         {
             return;
         }

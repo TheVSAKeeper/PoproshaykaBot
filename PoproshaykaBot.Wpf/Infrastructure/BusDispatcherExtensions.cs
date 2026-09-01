@@ -7,6 +7,8 @@ namespace PoproshaykaBot.Wpf.Infrastructure;
 
 public static class BusDispatcherExtensions
 {
+    private static Serilog.ILogger HostLog => Log.ForContext(typeof(BusDispatcherExtensions));
+
     public static IDisposable SubscribeOnUi<TEvent>(this IEventBus bus, Action<TEvent> handler)
         where TEvent : IEvent
     {
@@ -41,7 +43,7 @@ public static class BusDispatcherExtensions
             }
             catch (InvalidOperationException exception)
             {
-                Log.Debug(exception, "Событие {Event} не поставлено в очередь: диспетчер уже завершён", typeof(TEvent).Name);
+                HostLog.Debug(exception, "Событие {Event} не поставлено в очередь: диспетчер уже завершён", typeof(TEvent).Name);
             }
         }));
 
@@ -61,7 +63,7 @@ public static class BusDispatcherExtensions
         }
         catch (ObjectDisposedException exception)
         {
-            Log.Debug(exception, "Событие {Event} доставлено освобождённому получателю", typeof(TEvent).Name);
+            HostLog.Debug(exception, "Событие {Event} доставлено освобождённому получателю", typeof(TEvent).Name);
         }
     }
 
