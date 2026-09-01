@@ -45,8 +45,16 @@
         <StackPanel Orientation="Horizontal"
                     Margin="0,0,0,8">
             <Button Style="{StaticResource Button.Primary}"
+                    Content="{Binding EmbeddedAuthorizeButtonText}"
+                    Command="{Binding AuthorizeInAppCommand}"
+                    ToolTip="Страница авторизации Twitch откроется во встроенном окне приложения."
+                    Margin="0,0,8,0"
+                    Visibility="{Binding IsAuthInProgress, Converter={StaticResource InverseBoolToVisibility}}" />
+            <Button Style="{StaticResource Button.Secondary}"
                     Content="{Binding AuthorizeButtonText}"
                     Command="{Binding AuthorizeCommand}"
+                    ToolTip="Откроется системный браузер на странице авторизации Twitch."
+                    Margin="0,0,8,0"
                     Visibility="{Binding IsAuthInProgress, Converter={StaticResource InverseBoolToVisibility}}" />
             <Button Style="{StaticResource Button.Destructive}"
                     Content="Отменить авторизацию"

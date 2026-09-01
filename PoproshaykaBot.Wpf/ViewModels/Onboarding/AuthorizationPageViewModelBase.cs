@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings;
@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Twitch.Chat;
 using System.Diagnostics;
 using System.Net.Http;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -22,6 +23,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     private readonly ILogger _logger;
     private readonly IShellLauncher _shellLauncher;
     private readonly IClipboardService _clipboard;
+    private readonly IEmbeddedTwitchAuthDialog _embeddedAuth;
 
     private OnboardingContext? _context;
     private OnboardingContext? _credentialsSubscriptionContext;
@@ -32,6 +34,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(OpenBrowserButtonText))]
     [NotifyPropertyChangedFor(nameof(CopyLinkButtonText))]
+    [NotifyPropertyChangedFor(nameof(EmbeddedAuthButtonText))]
     private bool _hasToken;
 
     [ObservableProperty]
@@ -47,6 +50,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     private StatusSeverity _statusMessageSeverity;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AuthorizeInAppCommand))]
     private bool _isAuthInProgress;
 
     protected AuthorizationPageViewModelBase(
@@ -55,7 +59,8 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         SettingsManager settingsManager,
         ILogger logger,
         IShellLauncher shellLauncher,
-        IClipboardService clipboard)
+        IClipboardService clipboard,
+        IEmbeddedTwitchAuthDialog embeddedAuth)
     {
         _role = role;
         _oauthService = oauthService;
@@ -63,6 +68,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         _logger = logger;
         _shellLauncher = shellLauncher;
         _clipboard = clipboard;
+        _embeddedAuth = embeddedAuth;
     }
 
     public override string PageTitle => _role == TwitchOAuthRole.Broadcaster
@@ -80,6 +86,10 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     public string CopyLinkButtonText => HasToken
         ? "Ссылка для смены"
         : "Скопировать ссылку";
+
+    public string EmbeddedAuthButtonText => HasToken
+        ? "Сменить в приложении"
+        : "Войти в приложении";
 
     public override void OnEnter(OnboardingContext context)
     {
@@ -156,6 +166,76 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         });
     }
 
+    [RelayCommand(CanExecute = nameof(CanStartEmbeddedAuth))]
+    private async Task AuthorizeInAppAsync()
+    {
+        if (_context is null || _authCts is not null || IsAuthInProgress)
+        {
+            return;
+        }
+
+        var settings = _context.Settings.Twitch;
+
+        if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret))
+        {
+            ResultText = "Не заполнены Client ID или Secret";
+            ResultSeverity = StatusSeverity.Error;
+            return;
+        }
+
+        var request = new EmbeddedTwitchAuthRequest(
+            _role,
+            settings.ClientId,
+            settings.ClientSecret,
+            GetDefaultScopes(),
+            string.IsNullOrWhiteSpace(settings.RedirectUri) ? null : settings.RedirectUri,
+            _role != TwitchOAuthRole.Broadcaster || !_context.AutoDetectChannel);
+
+        IsAuthInProgress = true;
+        ResultText = string.Empty;
+        StatusMessage = "Открываем встроенное окно авторизации...";
+        StatusMessageSeverity = StatusSeverity.Info;
+
+        var completed = false;
+
+        try
+        {
+            var result = await _embeddedAuth.AuthorizeAsync(request);
+
+            if (result is { Outcome: EmbeddedTwitchAuthOutcome.Completed, Flow: { } flow })
+            {
+                ApplyAuthResult(flow);
+                completed = true;
+            }
+            else if (result.Outcome is EmbeddedTwitchAuthOutcome.Canceled or EmbeddedTwitchAuthOutcome.Unavailable)
+            {
+                StatusMessage = result.Message;
+                StatusMessageSeverity = StatusSeverity.Warning;
+            }
+            else
+            {
+                ResultText = "Ошибка авторизации";
+                ResultSeverity = StatusSeverity.Error;
+                StatusMessage = result.Message;
+                StatusMessageSeverity = StatusSeverity.Error;
+            }
+        }
+        finally
+        {
+            IsAuthInProgress = false;
+        }
+
+        if (completed)
+        {
+            RefreshFromContext();
+        }
+    }
+
+    private bool CanStartEmbeddedAuth()
+    {
+        return !IsAuthInProgress;
+    }
+
     [RelayCommand]
     private async Task CancelAuthAsync()
     {
@@ -173,7 +253,6 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
     }
 
-    // TODO: embedded WebView2 auth dialog (cookie reuse for chat tile) – host in the shell ModalHost; for now system-browser only
     private async Task StartAuthorizationAsync(Action<string> onAuthUrlReady)
     {
         if (_context is null || _authCts is not null)

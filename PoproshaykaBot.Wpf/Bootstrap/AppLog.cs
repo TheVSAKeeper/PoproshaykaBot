@@ -93,6 +93,18 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1126, Level = LogLevel.Error, Message = "Ошибка показа мастера первичной настройки")]
     public static partial void OnboardingWizardShowFailed(this ILogger logger, Exception? exception);
 
+    [LoggerMessage(EventId = 1127, Level = LogLevel.Error, Message = "Встроенная авторизация упала для роли {Role}")]
+    public static partial void EmbeddedAuthFlowFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
+
+    [LoggerMessage(EventId = 1128, Level = LogLevel.Error, Message = "Не удалось поднять встроенный браузер авторизации")]
+    public static partial void EmbeddedAuthWebViewFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1129, Level = LogLevel.Warning, Message = "WebView2 Runtime не установлен – встроенная авторизация недоступна")]
+    public static partial void EmbeddedAuthRuntimeMissing(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1130, Level = LogLevel.Warning, Message = "Встроенная авторизация подавлена в headless-режиме для роли {Role}")]
+    public static partial void EmbeddedAuthSuppressedHeadless(this ILogger logger, TwitchOAuthRole role);
+
     [LoggerMessage(EventId = 1200, Level = LogLevel.Error, Message = "Ошибка сохранения настроек")]
     public static partial void SettingsSaveFailed(this ILogger logger, Exception? exception);
 

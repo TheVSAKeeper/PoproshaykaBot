@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
@@ -21,6 +22,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
     private readonly Func<OAuthCredentialsSnapshot> _credentialsProvider;
     private readonly IDialogService _dialogService;
     private readonly IShellLauncher _shellLauncher;
+    private readonly IEmbeddedTwitchAuthDialog _embeddedAuth;
 
     private TwitchAccountSettings _draft = new();
     private CancellationTokenSource? _authCts;
@@ -60,6 +62,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AuthorizeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AuthorizeInAppCommand))]
     private bool _isAuthInProgress;
 
     public OAuthAccountViewModel(
@@ -68,7 +71,8 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         AccountsStore accountsStore,
         Func<OAuthCredentialsSnapshot> credentialsProvider,
         IDialogService dialogService,
-        IShellLauncher shellLauncher)
+        IShellLauncher shellLauncher,
+        IEmbeddedTwitchAuthDialog embeddedAuth)
     {
         _role = role;
         _oauthService = oauthService;
@@ -76,6 +80,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         _credentialsProvider = credentialsProvider;
         _dialogService = dialogService;
         _shellLauncher = shellLauncher;
+        _embeddedAuth = embeddedAuth;
 
         _oauthService.StatusChanged += OnOAuthStatusChanged;
     }
@@ -90,8 +95,14 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
 
     public string AuthorizeButtonText => _role switch
     {
-        TwitchOAuthRole.Broadcaster => "Авторизовать стримера",
-        _ => "Авторизовать бота",
+        TwitchOAuthRole.Broadcaster => "Авторизовать стримера в браузере",
+        _ => "Авторизовать бота в браузере",
+    };
+
+    public string EmbeddedAuthorizeButtonText => _role switch
+    {
+        TwitchOAuthRole.Broadcaster => "Авторизовать стримера в приложении",
+        _ => "Авторизовать бота в приложении",
     };
 
     public bool HasAccessToken => !string.IsNullOrWhiteSpace(AccessTokenValue);
@@ -183,6 +194,56 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
     private bool CanAuthorize()
     {
         return !IsAuthInProgress;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanAuthorize))]
+    private async Task AuthorizeInAppAsync()
+    {
+        var credentials = _credentialsProvider();
+
+        if (!ValidateAuthInputs(credentials))
+        {
+            return;
+        }
+
+        var scopes = ParseScopes();
+
+        if (scopes.Length == 0)
+        {
+            scopes = GetDefaultScopes();
+        }
+
+        var request = new EmbeddedTwitchAuthRequest(
+            _role,
+            credentials.ClientId,
+            credentials.ClientSecret,
+            scopes,
+            string.IsNullOrWhiteSpace(credentials.RedirectUri) ? null : credentials.RedirectUri,
+            true);
+
+        IsAuthInProgress = true;
+        SetAuthStatus("Авторизация во встроенном окне...", StatusSeverity.Info);
+
+        try
+        {
+            var result = await _embeddedAuth.AuthorizeAsync(request);
+
+            if (result is { Outcome: EmbeddedTwitchAuthOutcome.Completed, Flow: { } flow }
+                && !string.IsNullOrEmpty(flow.AccessToken))
+            {
+                ApplyAuthResult(flow);
+                SetAuthStatus("Авторизация успешна! Не забудьте «Сохранить», чтобы сохранить токены.", StatusSeverity.Success);
+                RaiseSettingChanged();
+                return;
+            }
+
+            SetAuthStatus(result.Message,
+                result.Outcome == EmbeddedTwitchAuthOutcome.Failed ? StatusSeverity.Error : StatusSeverity.Warning);
+        }
+        finally
+        {
+            IsAuthInProgress = false;
+        }
     }
 
     [RelayCommand]
@@ -417,8 +478,6 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
 
     private void OpenInDefaultBrowser(string authUrl)
     {
-        // TODO: embedded WebView2 login dialog is Step 5 (onboarding); settings flow stays on the system browser
-
         _shellLauncher.Open(authUrl);
     }
 

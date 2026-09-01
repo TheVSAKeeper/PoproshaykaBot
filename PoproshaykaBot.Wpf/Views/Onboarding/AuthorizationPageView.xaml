@@ -19,6 +19,11 @@
         <StackPanel Orientation="Horizontal"
                     Margin="0,0,0,8">
             <Button Style="{StaticResource Button.Primary}"
+                    Content="{Binding EmbeddedAuthButtonText}"
+                    Command="{Binding AuthorizeInAppCommand}"
+                    ToolTip="Страница авторизации Twitch откроется во встроенном окне приложения."
+                    Margin="0,0,8,0" />
+            <Button Style="{StaticResource Button.Secondary}"
                     Content="{Binding OpenBrowserButtonText}"
                     Command="{Binding OpenBrowserCommand}"
                     ToolTip="Откроется системный браузер на странице авторизации Twitch."

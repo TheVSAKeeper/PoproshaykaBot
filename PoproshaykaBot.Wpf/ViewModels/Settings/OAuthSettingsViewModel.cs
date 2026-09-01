@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System.ComponentModel.DataAnnotations;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -29,10 +30,11 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
         ITwitchOAuthService oauthService,
         AccountsStore accountsStore,
         IDialogService dialogService,
-        IShellLauncher shellLauncher)
+        IShellLauncher shellLauncher,
+        IEmbeddedTwitchAuthDialog embeddedAuth)
     {
-        Bot = new(TwitchOAuthRole.Bot, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher);
-        Broadcaster = new(TwitchOAuthRole.Broadcaster, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher);
+        Bot = new(TwitchOAuthRole.Bot, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth);
+        Broadcaster = new(TwitchOAuthRole.Broadcaster, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth);
 
         Bot.SettingChanged += OnChildSettingChanged;
         Broadcaster.SettingChanged += OnChildSettingChanged;

@@ -323,6 +323,7 @@ public partial class App : Application
         services.AddSingleton<UpdateBannerViewModel>();
         services.AddSingleton<OnboardingBannerViewModel>();
         services.AddSingleton<IOnboardingWizardLauncher, OnboardingWizardLauncher>();
+        services.AddSingleton<IEmbeddedTwitchAuthDialog, EmbeddedTwitchAuthDialog>();
         services.AddSingleton<StreamMonitoringViewModel>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
@@ -331,6 +332,7 @@ public partial class App : Application
         services.AddTransient<BroadcastProfileEditDialogViewModel>();
         services.AddTransient<PollProfileEditDialogViewModel>();
         services.AddTransient<PollFromProfileDialogViewModel>();
+        services.AddTransient<EmbeddedTwitchAuthDialogViewModel>();
 
         services.AddTransient<BasicSettingsSectionViewModel>();
         services.AddTransient<RateLimitingSettingsViewModel>();
