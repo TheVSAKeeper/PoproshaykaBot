@@ -212,14 +212,14 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _services?.GetService<ISettingsStore>()?.Close();
         _memoryWatchdog?.Dispose();
+        _services?.GetService<ISettingsStore>()?.Close();
 
         if (_services is not null)
         {
             Task.Run(StopAllComponents).GetAwaiter().GetResult();
 
-            if (!IsHeadless)
+            if (!IsHeadless && !IsFatalShutdown)
             {
                 ApplyPendingUpdate();
             }

@@ -135,6 +135,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1205, Level = LogLevel.Information, Message = "Пользователь сохранил настройки")]
     public static partial void SettingsSavedByUser(this ILogger logger);
 
+    [LoggerMessage(EventId = 1206, Level = LogLevel.Error, Message = "Настройки оболочки не записаны на диск: {FilePath}")]
+    public static partial void UiSettingsWriteFailed(this ILogger logger, Exception? exception, string filePath);
+
     [LoggerMessage(EventId = 1300, Level = LogLevel.Error, Message = "Ошибка обновления информации о стриме")]
     public static partial void StreamInfoUpdateFailed(this ILogger logger, Exception? exception);
 

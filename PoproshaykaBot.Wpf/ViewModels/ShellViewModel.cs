@@ -10,6 +10,7 @@ using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -23,6 +24,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly NavigationItem _settingsSection;
     private readonly SettingsPageViewModel _settingsPage;
     private readonly ChatHistoryManager _chatHistory;
+    private readonly ISettingsStore _uiSettings;
     private readonly NavigationItem _statisticsSection;
     private readonly NavigationItem _streamHistorySection;
     private readonly NavigationItem _overviewSection;
@@ -50,7 +52,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         UpdateBannerViewModel updateBanner,
         OnboardingBannerViewModel onboardingBanner,
         StreamMonitoringViewModel streamMonitoring,
-        ChatHistoryManager chatHistory)
+        ChatHistoryManager chatHistory,
+        ISettingsStore uiSettings)
         : base(modal)
     {
         _connectionManager = connectionManager;
@@ -66,6 +69,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _settingsPage = settingsPage;
         _settingsPage.SettingsSaved += OnSettingsSaved;
         _chatHistory = chatHistory;
+        _uiSettings = uiSettings;
+        _uiSettings.WriteFailed += OnUiSettingsWriteFailed;
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: ActivateSettings, key: SectionKeys.Settings);
 
         _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, key: SectionKeys.Users) { StartsGroup = true };
@@ -130,6 +135,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _uiSettings.WriteFailed -= OnUiSettingsWriteFailed;
         _settingsPage.SettingsSaved -= OnSettingsSaved;
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
@@ -379,6 +385,21 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         OnPropertyChanged(nameof(EffectivePageHeader));
         OnPropertyChanged(nameof(ContentMargin));
+    }
+
+    private void OnUiSettingsWriteFailed(object? sender, SettingsWriteFailedEventArgs e)
+    {
+        _logger.UiSettingsWriteFailed(e.Exception, e.FilePath);
+
+        var dispatcher = Application.Current?.Dispatcher;
+
+        if (dispatcher is null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        dispatcher.BeginInvoke(DispatcherPriority.Normal,
+            () => SetStatus("Настройки оформления не сохранены на диск, правки применены только в этом сеансе", StatusSeverity.Error));
     }
 
     private void OnSettingsSaved(object? sender, EventArgs e)
