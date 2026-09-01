@@ -5,6 +5,7 @@ using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views.Tiles;
 
@@ -20,6 +21,7 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
     {
         InitializeComponent();
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         Dispatcher.ShutdownStarted += OnShutdownStarted;
     }
 
@@ -41,7 +43,28 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         await InitializeWebViewAsync(viewModel);
     }
 
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (!IsLoaded)
+            {
+                Release();
+            }
+        });
+    }
+
     private void OnShutdownStarted(object? sender, EventArgs e)
+    {
+        Release();
+    }
+
+    private void Release()
     {
         if (_disposed)
         {
@@ -49,6 +72,8 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         }
 
         _disposed = true;
+        Loaded -= OnLoaded;
+        Unloaded -= OnUnloaded;
         Dispatcher.ShutdownStarted -= OnShutdownStarted;
         _lifetime.Cancel();
 

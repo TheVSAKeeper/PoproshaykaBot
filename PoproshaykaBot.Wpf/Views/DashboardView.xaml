@@ -73,7 +73,7 @@
                                           ItemsSource="{Binding HeaderActions}"
                                           VerticalAlignment="Center"
                                           Margin="0,0,4,0"
-                                          Opacity="0" />
+                                          Opacity="0.55" />
 
                             <Button x:Name="TileCollapse"
                                     Style="{StaticResource Button.Icon}"

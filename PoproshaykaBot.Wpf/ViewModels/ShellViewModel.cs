@@ -130,10 +130,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public void Dispose()
     {
-        UpdateBanner.Dispose();
-        OnboardingBanner.Dispose();
         _settingsPage.SettingsSaved -= OnSettingsSaved;
-        StreamMonitoring.Dispose();
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
         foreach (var subscription in _subscriptions)
