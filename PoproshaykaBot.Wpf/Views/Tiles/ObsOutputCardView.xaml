@@ -1,6 +1,7 @@
-<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.ObsOutputCardView"
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.ObsOutputCardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -162,10 +163,10 @@
                         Style="{StaticResource Badge}"
                         VerticalAlignment="Center"
                         Visibility="{Binding IsStreamMode, Converter={StaticResource BoolToVisibility}}"
-                        BorderBrush="{Binding ChipSeverityResolved, Converter={StaticResource SeverityToBrush}}">
+                        keepshell:SeverityBrushBehavior.BorderBrush="{Binding ChipSeverityResolved}">
                     <TextBlock Text="{Binding ChipText}"
                                FontSize="{DynamicResource Font.Size.Caption}"
-                               Foreground="{Binding ChipSeverityResolved, Converter={StaticResource SeverityToBrush}}" />
+                               keepshell:SeverityBrushBehavior.Foreground="{Binding ChipSeverityResolved}" />
                 </Border>
             </DockPanel>
         </Grid>

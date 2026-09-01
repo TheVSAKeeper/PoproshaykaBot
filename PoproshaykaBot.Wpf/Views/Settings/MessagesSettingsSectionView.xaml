@@ -73,10 +73,7 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-        <ItemsControl ItemsSource="{Binding Entries}"
-                      Margin="12"
-                      ItemTemplate="{StaticResource MessageEntryTemplate}" />
-    </ScrollViewer>
+    <ItemsControl ItemsSource="{Binding Entries}"
+                 
+                  ItemTemplate="{StaticResource MessageEntryTemplate}" />
 </UserControl>

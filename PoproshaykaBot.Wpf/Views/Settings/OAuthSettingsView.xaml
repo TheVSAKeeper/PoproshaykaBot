@@ -10,57 +10,58 @@
              d:DesignHeight="800"
              d:DesignWidth="640">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="12">
-            <Border Style="{StaticResource Card}"
-                    Margin="0,0,0,12">
-                <StackPanel>
-                    <TextBlock Text="Параметры приложения Twitch"
-                               Style="{StaticResource TextBlock.Heading}"
-                               Margin="0,0,0,12" />
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
 
-                    <TextBlock Text="Client ID"
-                               Foreground="{DynamicResource Fg.Muted}"
-                               FontSize="{DynamicResource Font.Size.S}"
-                               Margin="0,0,0,4" />
-                    <keepshell:RevealableTextBox Password="{Binding ClientId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                 Margin="0,0,0,12" />
+    <StackPanel>
+        <StackPanel>
+            <TextBlock Text="Параметры приложения Twitch"
+                       Style="{StaticResource Setting.BlockTitle}" />
 
-                    <TextBlock Text="Client Secret"
-                               Foreground="{DynamicResource Fg.Muted}"
-                               FontSize="{DynamicResource Font.Size.S}"
-                               Margin="0,0,0,4" />
-                    <keepshell:RevealableTextBox Password="{Binding ClientSecret, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                 Margin="0,0,0,12" />
+            <TextBlock Text="Client ID"
+                       Foreground="{DynamicResource Fg.Muted}"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       Margin="0,0,0,4" />
+            <keepshell:RevealableTextBox Password="{Binding ClientId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,12" />
 
-                    <TextBlock Text="Redirect URI"
-                               Foreground="{DynamicResource Fg.Muted}"
-                               FontSize="{DynamicResource Font.Size.S}"
-                               Margin="0,0,0,4" />
-                    <TextBox Style="{StaticResource TextBox.Form}"
-                             AutomationProperties.Name="Redirect URI"
-                             Text="{Binding RedirectUri, UpdateSourceTrigger=PropertyChanged}"
-                             keepshell:PlaceholderBehavior.Placeholder="http://localhost:8080"
-                             Margin="0,0,0,12" />
+            <TextBlock Text="Client Secret"
+                       Foreground="{DynamicResource Fg.Muted}"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       Margin="0,0,0,4" />
+            <keepshell:RevealableTextBox Password="{Binding ClientSecret, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,12" />
 
-                    <TextBlock Text="{Binding ChannelHintText}"
-                               TextWrapping="Wrap"
-                               FontSize="{DynamicResource Font.Size.S}"
-                               Foreground="{Binding ChannelHintSeverity, Converter={StaticResource SeverityToBrush}}"
-                               Margin="0,0,0,12" />
+            <TextBlock Text="Redirect URI"
+                       Foreground="{DynamicResource Fg.Muted}"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       Margin="0,0,0,4" />
+            <TextBox Style="{StaticResource TextBox.Form}"
+                     AutomationProperties.Name="Redirect URI"
+                     Text="{Binding RedirectUri, UpdateSourceTrigger=PropertyChanged}"
+                     keepshell:PlaceholderBehavior.Placeholder="http://localhost:8080"
+                     Margin="0,0,0,12" />
 
-                    <Button Style="{StaticResource Button.Link}"
-                            Content="Запустить мастер настройки"
-                            HorizontalAlignment="Left"
-                            Command="{Binding LaunchOnboardingCommand}" />
-                </StackPanel>
-            </Border>
+            <TextBlock Text="{Binding ChannelHintText}"
+                       TextWrapping="Wrap"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       keepshell:SeverityBrushBehavior.Foreground="{Binding ChannelHintSeverity}"
+                       Margin="0,0,0,12" />
 
-            <ContentControl Content="{Binding Bot}"
-                            Margin="0,0,0,12" />
-
-            <ContentControl Content="{Binding Broadcaster}" />
+            <Button Style="{StaticResource Button.Link}"
+                    Content="Запустить мастер настройки"
+                    HorizontalAlignment="Left"
+                    Command="{Binding LaunchOnboardingCommand}" />
         </StackPanel>
-    </ScrollViewer>
+
+        <ContentControl Content="{Binding Bot}"
+                        Margin="0,0,0,12" />
+
+        <ContentControl Content="{Binding Broadcaster}" />
+    </StackPanel>
 </UserControl>

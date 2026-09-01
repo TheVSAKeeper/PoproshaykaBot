@@ -1,6 +1,7 @@
-<UserControl x:Class="PoproshaykaBot.Wpf.Views.Onboarding.HttpServerCheckPageView"
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Onboarding.HttpServerCheckPageView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Onboarding"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -26,7 +27,7 @@
                                Width="120"
                                VerticalAlignment="Center" />
                     <TextBlock Text="{Binding StatusText}"
-                               Foreground="{Binding StatusSeverity, Converter={StaticResource SeverityToBrush}}"
+                               keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
                                FontWeight="SemiBold"
                                FontSize="{DynamicResource Font.Size.S}"
                                TextWrapping="Wrap"
@@ -42,7 +43,7 @@
         </Border>
 
         <Button Content="Повторить проверку"
-                Style="{StaticResource Button.Default}"
+                Style="{StaticResource Button.Secondary}"
                 Command="{Binding RetryCommand}"
                 Visibility="{Binding IsRetryVisible, Converter={StaticResource BoolToVisibility}}"
                 HorizontalAlignment="Left" />

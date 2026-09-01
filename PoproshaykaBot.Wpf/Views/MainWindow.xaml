@@ -44,11 +44,11 @@
         <keepshell:ShellLayout.StatusBar>
             <views:StatusBarView />
         </keepshell:ShellLayout.StatusBar>
-        <keepshell:ShellLayout.ContentOverlay>
-            <StackPanel VerticalAlignment="Top">
+        <keepshell:ShellLayout.ContentBanner>
+            <StackPanel>
                 <views:OnboardingBannerView DataContext="{Binding OnboardingBanner}" />
                 <views:UpdateBannerView DataContext="{Binding UpdateBanner}" />
             </StackPanel>
-        </keepshell:ShellLayout.ContentOverlay>
+        </keepshell:ShellLayout.ContentBanner>
     </keepshell:ShellLayout>
 </Window>

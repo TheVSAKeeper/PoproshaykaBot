@@ -1,6 +1,7 @@
 ﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.BroadcastStatusTileView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -55,7 +56,7 @@
                    Text="{Binding StatusText}"
                    FontSize="{DynamicResource Font.Size.M}"
                    FontWeight="SemiBold"
-                   Foreground="{Binding StatusSeverity, Converter={StaticResource SeverityToBrush}}" />
+                   keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}" />
 
         <TextBlock Grid.Row="1"
                    Grid.Column="0"

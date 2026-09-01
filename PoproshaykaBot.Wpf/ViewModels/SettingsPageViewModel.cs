@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
@@ -48,6 +49,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly ILogger<SettingsPageViewModel> _logger;
     private readonly IDialogService _dialogService;
     private readonly ObservableObject[] _dirtyTrackedSections;
+    private readonly ISettingsStore _uiSettings;
 
     private AppSettings _settings = new();
     private TwitchAccountSettings _botDraft = new();
@@ -62,6 +64,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     [NotifyPropertyChangedFor(nameof(HasChanges))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private bool _dirty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SearchTextEmpty))]
+    private string _searchText = string.Empty;
 
     public SettingsPageViewModel(
         BasicSettingsSectionViewModel basic,
@@ -87,7 +93,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
         ILogger<SettingsPageViewModel> logger,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        ISettingsStore uiSettings)
     {
         Basic = basic;
         RateLimiting = rateLimiting;
@@ -114,6 +121,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _kestrelHttpServer = kestrelHttpServer;
         _logger = logger;
         _dialogService = dialogService;
+        _uiSettings = uiSettings;
+
+        Sections.Restore(uiSettings.GetStringValue(SettingsKeys.SettingsSection));
+        Sections.PropertyChanged += OnSectionsPropertyChanged;
 
         _dirtyTrackedSections = [Basic, RateLimiting, AutoBroadcast, BotLifecycle, ObsChat, ObsIntegration, Update];
 
@@ -139,6 +150,18 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public string PageTitle => "Настройки";
 
     public string? PageDescription => "Параметры бота, чата OBS, авторизации и обновлений.";
+
+    public SettingsSectionList Sections { get; } = new(
+        new SettingsSection("basic", "Основные", PackIconLucideKind.Settings2, "канал twitch аккаунт отображения чата лимиты ограничения отправки задержка приветствие сообщения шаблоны текст"),
+        new SettingsSection("oauth", "Авторизация", PackIconLucideKind.KeyRound, "oauth токен client id secret redirect uri scopes бот стример вещатель права доступа вход"),
+        new SettingsSection("obs", "OBS", PackIconLucideKind.MonitorPlay, "websocket подключение хост пароль сцена браузер источник оверлей чат цвета шрифт анимация http сервер порт"),
+        new SettingsSection("stream", "Трансляция", PackIconLucideKind.Radio, "автоматический режим рассылка eventsub автозапуск бота остановка опросы голосование категория название"),
+        new SettingsSection("dashboard", "Дашборд", PackIconLucideKind.LayoutDashboard, "раскладка плитки сетка колонки строки обзор палитра перетаскивание"),
+        new SettingsSection("update", "Обновления", PackIconLucideKind.Download, "github релизы версия репозиторий проверка загрузка установка портативная сборка"),
+        new SettingsSection("appearance", "Оформление", PackIconLucideKind.Palette, "тема масштаб шрифта размер текста заголовок страницы внешний вид"),
+        new SettingsSection("misc", "Прочее", PackIconLucideKind.Wrench, "данные приложения папка настроек логи профили трансляций импорт экспорт сброс"));
+
+    public bool SearchTextEmpty => string.IsNullOrWhiteSpace(SearchText);
 
     public BasicSettingsSectionViewModel Basic { get; }
 
@@ -222,6 +245,27 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         OAuth.SettingChanged -= OnOAuthSettingChanged;
         Polls.PropertyChanged -= OnPollsPropertyChanged;
         DashboardLayout.Edited -= OnDashboardLayoutEdited;
+        Sections.PropertyChanged -= OnSectionsPropertyChanged;
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        Sections.Filter(value);
+    }
+
+    [RelayCommand]
+    private void ClearSearch()
+    {
+        SearchText = string.Empty;
+    }
+
+    private void OnSectionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(SettingsSectionList.Selected), StringComparison.Ordinal)
+            && Sections.Selected is { } section)
+        {
+            _uiSettings.SetValue(SettingsKeys.SettingsSection, section.Key);
+        }
     }
 
     [RelayCommand(CanExecute = nameof(HasChanges))]

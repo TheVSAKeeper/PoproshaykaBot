@@ -1,6 +1,7 @@
-<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.ObsInfoTileView"
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.ObsInfoTileView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -16,11 +17,11 @@
             <Border DockPanel.Dock="Right"
                     Style="{StaticResource Badge}"
                     Visibility="{Binding IsToastVisible, Converter={StaticResource BoolToVisibility}}"
-                    Background="{Binding ToastSeverity, Converter={StaticResource SeverityToBrush}, ConverterParameter=Soft}"
-                    BorderBrush="{Binding ToastSeverity, Converter={StaticResource SeverityToBrush}}">
+                    keepshell:SeverityBrushBehavior.SoftBackground="{Binding ToastSeverity}"
+                    keepshell:SeverityBrushBehavior.BorderBrush="{Binding ToastSeverity}">
                 <TextBlock Text="{Binding ToastText}"
                            FontSize="{DynamicResource Font.Size.Caption}"
-                           Foreground="{Binding ToastSeverity, Converter={StaticResource SeverityToBrush}}" />
+                           keepshell:SeverityBrushBehavior.Foreground="{Binding ToastSeverity}" />
             </Border>
 
             <TextBlock Text="{Binding ConnectionText}"

@@ -7,6 +7,7 @@ public static class SettingsKeys
     public const string EnableToastNotifications = "ui.notifications.toast";
     public const string NavCollapsed = "ui.shell.nav_collapsed";
     public const string LastPage = "ui.shell.last_page";
+    public const string SettingsSection = "ui.settings.section";
 
     public const string WindowLeft = "ui.window.left";
     public const string WindowTop = "ui.window.top";
