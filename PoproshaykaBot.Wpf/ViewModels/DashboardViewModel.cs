@@ -33,6 +33,8 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<TileBand> Bands { get; private set; } = [];
 
+    public PaneLayout? Pane { get; private set; }
+
     public bool HasTiles { get; private set; }
 
     public void OnEnter()
@@ -86,6 +88,76 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
     private static bool Grows(Placement placement)
     {
         return placement.Tile.GrowsWithSpace && !placement.IsCollapsed;
+    }
+
+    private static PaneLayout? BuildPane(DashboardPane pane, IReadOnlyDictionary<string, Placement> placements)
+    {
+        return pane switch
+        {
+            TilePane tile => placements.TryGetValue(tile.TypeId, out var placement) ? BuildLeaf(placement) : null,
+            SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 0 } split => BuildSplit(split, placements),
+            _ => null,
+        };
+    }
+
+    private static PaneLayout BuildLeaf(Placement placement)
+    {
+        var star = new GridLength(1, GridUnitType.Star);
+
+        if (Stretches(placement))
+        {
+            return new TilePaneLayout(placement.Tile, new(star, double.PositiveInfinity), new(star, double.PositiveInfinity));
+        }
+
+        var width = new TrackSize(GridLength.Auto, placement.MaxWidth ?? double.PositiveInfinity);
+        var height = new TrackSize(Grows(placement) ? star : GridLength.Auto, placement.MaxHeight ?? double.PositiveInfinity);
+
+        return new TilePaneLayout(placement.Tile, width, height);
+    }
+
+    private static PaneLayout? BuildSplit(SplitPane split, IReadOnlyDictionary<string, Placement> placements)
+    {
+        if (DashboardLayoutTree.ResolveWeights(split.Children) is not { } weights)
+        {
+            return null;
+        }
+
+        var children = new List<PaneLayoutSlot>(split.Children.Count);
+
+        for (var index = 0; index < split.Children.Count; index++)
+        {
+            if (BuildPane(split.Children[index].Pane, placements) is { } child)
+            {
+                children.Add(new(child, weights[index]));
+            }
+        }
+
+        if (children.Count == 0)
+        {
+            return null;
+        }
+
+        if (children.Count == 1)
+        {
+            return children[0].Pane;
+        }
+
+        var alongColumns = split.Orientation == SplitOrientation.Columns;
+
+        var width = MergeTracks(children, static pane => pane.Width, alongColumns);
+        var height = MergeTracks(children, static pane => pane.Height, !alongColumns);
+
+        return new SplitPaneLayout(split.Orientation, children, width, height);
+    }
+
+    private static TrackSize MergeTracks(IReadOnlyList<PaneLayoutSlot> children, Func<PaneLayout, TrackSize> axis, bool alongSplit)
+    {
+        var tracks = children.Select(child => axis(child.Pane)).ToList();
+        var ceiling = alongSplit ? tracks.Sum(track => track.Max) : tracks.Max(track => track.Max);
+
+        return new(
+            tracks.Exists(track => track.Length.IsStar) ? new(1, GridUnitType.Star) : GridLength.Auto,
+            double.IsInfinity(ceiling) ? double.PositiveInfinity : ceiling);
     }
 
     private static IReadOnlyList<TileBand> BuildBands(IReadOnlyList<Placement> placements, int columnCount, int rowCount)
@@ -208,7 +280,16 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
         ObserveCollapse(placements);
 
-        Bands = BuildBands(placements, columnCount, rowCount);
+        layout.ColumnCount = columnCount;
+        layout.RowCount = rowCount;
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Pane = layout.Root is null
+            ? null
+            : BuildPane(layout.Root, placements.ToDictionary(placement => placement.Tile.TypeId, StringComparer.Ordinal));
+
+        Bands = Pane is null ? BuildBands(placements, columnCount, rowCount) : [];
         HasTiles = placements.Count > 0;
 
         OnPropertyChanged(nameof(HasTiles));
@@ -328,3 +409,29 @@ public sealed record TileBand(
     IReadOnlyList<TrackSize> Columns,
     IReadOnlyList<TrackSize> Rows,
     IReadOnlyList<TileSlot> Tiles);
+
+public abstract record PaneLayout(TrackSize Width, TrackSize Height)
+{
+    public bool Scrollable => Width.Length.IsAuto && Height.Length.IsAuto;
+
+    public double MinWidth(double leafMinimum)
+    {
+        return this switch
+        {
+            SplitPaneLayout { Orientation: SplitOrientation.Columns } split => split.Children.Sum(child => child.Pane.MinWidth(leafMinimum)),
+            SplitPaneLayout split => split.Children.Max(child => child.Pane.MinWidth(leafMinimum)),
+            _ => Width.Length.IsStar ? leafMinimum : 0,
+        };
+    }
+}
+
+public sealed record TilePaneLayout(DashboardTileViewModel Tile, TrackSize Width, TrackSize Height)
+    : PaneLayout(Width, Height);
+
+public sealed record SplitPaneLayout(
+    SplitOrientation Orientation,
+    IReadOnlyList<PaneLayoutSlot> Children,
+    TrackSize Width,
+    TrackSize Height) : PaneLayout(Width, Height);
+
+public sealed record PaneLayoutSlot(PaneLayout Pane, double Weight);

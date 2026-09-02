@@ -277,13 +277,15 @@ public static class DashboardLayoutTree
             return null;
         }
 
-        var weights = ReadWeights(children);
+        var weights = ResolveWeights(children);
 
         return weights is null ? null : LayOut(weights, total);
     }
 
-    private static double[]? ReadWeights(IReadOnlyList<PaneSlot> children)
+    public static double[]? ResolveWeights(IReadOnlyList<PaneSlot> children)
     {
+        ArgumentNullException.ThrowIfNull(children);
+
         var count = children.Count;
         var weights = new double[count];
         var known = 0.0;

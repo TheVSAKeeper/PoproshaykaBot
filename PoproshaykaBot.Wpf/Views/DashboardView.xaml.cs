@@ -1,4 +1,5 @@
 ﻿using KeepShell.Bootstrap;
+using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.Windows;
@@ -47,16 +48,49 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         return width > 0 && width < StackedWidthThreshold * FontScaleManager.Current;
     }
 
+    private static bool ShouldStack(double width, PaneLayout pane)
+    {
+        return width > 0 && width < Math.Max(StackedWidthThreshold * FontScaleManager.Current, pane.MinWidth(StarBandMinWidth));
+    }
+
+    private static void CollectLeaves(PaneLayout pane, List<TilePaneLayout> leaves)
+    {
+        switch (pane)
+        {
+            case TilePaneLayout leaf:
+                leaves.Add(leaf);
+                return;
+
+            case SplitPaneLayout split:
+                foreach (var child in split.Children)
+                {
+                    CollectLeaves(child.Pane, leaves);
+                }
+
+                return;
+        }
+    }
+
+    private static double Floor(TrackSize track, double minimum)
+    {
+        return track.Length.IsStar ? Math.Min(minimum, track.Max) : 0;
+    }
+
+    private static GridLength Track(PaneLayoutSlot slot, Func<PaneLayout, TrackSize> axis)
+    {
+        return axis(slot.Pane).Length.IsStar ? new(slot.Weight, GridUnitType.Star) : GridLength.Auto;
+    }
+
     private static bool Scrollable(TileBand band)
     {
         return band.Rows.All(row => row.Length.IsAuto) && band.Columns.All(column => column.Length.IsAuto);
     }
 
-    private static FrameworkElement Wrap(Grid grid)
+    private static FrameworkElement Wrap(FrameworkElement content)
     {
         return new ScrollViewer
         {
-            Content = grid,
+            Content = content,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
@@ -81,20 +115,12 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (!e.WidthChanged)
+        if (!e.WidthChanged || ComputeStacked(e.NewSize.Width) == _stacked)
         {
             return;
         }
 
-        var stacked = ShouldStack(e.NewSize.Width);
-
-        if (stacked == _stacked)
-        {
-            return;
-        }
-
-        _stacked = stacked;
-        RebuildGrid();
+        RebuildGrid(e.NewSize.Width);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -110,7 +136,17 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         RebuildGrid();
     }
 
+    private bool ComputeStacked(double width)
+    {
+        return _viewModel?.Pane is { } pane ? ShouldStack(width, pane) : ShouldStack(width);
+    }
+
     private void RebuildGrid()
+    {
+        RebuildGrid(ActualWidth);
+    }
+
+    private void RebuildGrid(double width)
     {
         DetachHosts();
         BandsGrid.Children.Clear();
@@ -122,9 +158,19 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return;
         }
 
-        var bands = _viewModel.Bands;
+        _stacked = ComputeStacked(width);
 
         BandsScroll.VerticalScrollBarVisibility = _stacked ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+
+        if (_viewModel.Pane is { } pane)
+        {
+            BandsGrid.Margin = new(0, 0, 0, -1);
+            RebuildTree(pane);
+            return;
+        }
+
+        var bands = _viewModel.Bands;
+
         BandsGrid.Margin = _stacked ? new(0, 0, 0, -1) : new(0, 0, -1, -1);
 
         if (_stacked)
@@ -170,6 +216,142 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
             BandsGrid.Children.Add(content);
         }
+    }
+
+    private void RebuildTree(PaneLayout pane)
+    {
+        if (_stacked)
+        {
+            StackLeaves(pane);
+            return;
+        }
+
+        var content = WrapScrollable(pane);
+
+        if (pane is TilePaneLayout)
+        {
+            content = new Border { Child = content };
+        }
+
+        content.MaxWidth = pane.Width.Max;
+        content.MaxHeight = pane.Height.Max;
+        content.HorizontalAlignment = pane.Width.Length.IsStar ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
+
+        BandsGrid.Children.Add(content);
+    }
+
+    private void StackLeaves(PaneLayout pane)
+    {
+        var leaves = new List<TilePaneLayout>();
+
+        CollectLeaves(pane, leaves);
+
+        ApplyTracks(
+            BandsGrid.RowDefinitions,
+            leaves.Count,
+            static () => new RowDefinition(),
+            (definition, index) =>
+            {
+                definition.Height = GridLength.Auto;
+                definition.MaxHeight = leaves[index].Height.Max;
+                definition.MinHeight = Floor(leaves[index].Height, StarBandMinHeight);
+            });
+
+        for (var index = 0; index < leaves.Count; index++)
+        {
+            var host = GetOrCreateHost(leaves[index].Tile);
+
+            Grid.SetRow(host, index);
+            BandsGrid.Children.Add(host);
+        }
+    }
+
+    private FrameworkElement BuildPaneContent(PaneLayout pane)
+    {
+        if (pane is TilePaneLayout leaf)
+        {
+            return GetOrCreateHost(leaf.Tile);
+        }
+
+        var split = (SplitPaneLayout)pane;
+        var alongColumns = split.Orientation == SplitOrientation.Columns;
+        var grid = new Grid();
+
+        if (alongColumns)
+        {
+            ApplyTracks(
+                grid.ColumnDefinitions,
+                split.Children.Count,
+                static () => new ColumnDefinition(),
+                (definition, index) =>
+                {
+                    var child = split.Children[index];
+
+                    definition.Width = Track(child, static target => target.Width);
+                    definition.MaxWidth = child.Pane.Width.Max;
+                    definition.MinWidth = Floor(child.Pane.Width, StarBandMinWidth);
+                });
+        }
+        else
+        {
+            ApplyTracks(
+                grid.RowDefinitions,
+                split.Children.Count,
+                static () => new RowDefinition(),
+                (definition, index) =>
+                {
+                    var child = split.Children[index];
+
+                    definition.Height = Track(child, static target => target.Height);
+                    definition.MaxHeight = child.Pane.Height.Max;
+                    definition.MinHeight = Floor(child.Pane.Height, StarBandMinHeight);
+                });
+        }
+
+        for (var index = 0; index < split.Children.Count; index++)
+        {
+            var content = BuildChildContent(split.Children[index].Pane, alongColumns, index == split.Children.Count - 1);
+
+            if (alongColumns)
+            {
+                Grid.SetColumn(content, index);
+            }
+            else
+            {
+                Grid.SetRow(content, index);
+            }
+
+            grid.Children.Add(content);
+        }
+
+        return grid;
+    }
+
+    private FrameworkElement WrapScrollable(PaneLayout pane)
+    {
+        var element = BuildPaneContent(pane);
+
+        return pane is SplitPaneLayout && pane.Scrollable ? Wrap(element) : element;
+    }
+
+    private FrameworkElement BuildChildContent(PaneLayout pane, bool alongColumns, bool last)
+    {
+        var content = WrapScrollable(pane);
+
+        if (!alongColumns || last)
+        {
+            return content;
+        }
+
+        var seam = new Border
+        {
+            BorderThickness = new(0, 0, 1, 0),
+            Child = content,
+        };
+
+        seam.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+
+        return seam;
     }
 
     private FrameworkElement BuildBandContent(TileBand band)
@@ -236,9 +418,19 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     {
         foreach (var host in _hosts.Values)
         {
-            if (host.Parent is Grid parent)
+            switch (host.Parent)
             {
-                parent.Children.Remove(host);
+                case Grid parent:
+                    parent.Children.Remove(host);
+                    break;
+
+                case Border border:
+                    border.Child = null;
+                    break;
+
+                case ScrollViewer viewer:
+                    viewer.Content = null;
+                    break;
             }
         }
     }
