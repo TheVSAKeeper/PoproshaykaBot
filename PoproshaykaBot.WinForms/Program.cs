@@ -29,10 +29,13 @@ public static class Program
 {
     private static MemoryWatchdog? _memoryWatchdog;
 
+    internal static bool IsUiSmoke { get; private set; }
+
     [STAThread]
     private static void Main(string[] args)
     {
         var isUiSmoke = args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
+        IsUiSmoke = isUiSmoke;
         var isFinalizeUpdate = args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
 
         const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";

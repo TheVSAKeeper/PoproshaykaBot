@@ -190,6 +190,12 @@ public partial class App : Application
 
             var window = _services.GetRequiredService<MainWindow>();
             MainWindow = window;
+
+            if (IsHeadless)
+            {
+                OffScreenWindow.Prepare(window, window.Width, window.Height);
+            }
+
             window.Show();
 
             ShutdownMode = ShutdownMode.OnMainWindowClose;

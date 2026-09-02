@@ -22,6 +22,8 @@ namespace PoproshaykaBot.WinForms;
 
 public partial class MainForm : Form
 {
+    private const int OffScreenPosition = -32000;
+
     private readonly IFormFactory _forms;
     private readonly IEventBus _eventBus;
     private readonly ChatHistoryManager _chatHistoryManager;
@@ -74,6 +76,8 @@ public partial class MainForm : Form
 
         RestoreWindowBounds();
     }
+
+    protected override bool ShowWithoutActivation => Program.IsUiSmoke;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -627,6 +631,14 @@ public partial class MainForm : Form
 
     private void RestoreWindowBounds()
     {
+        if (Program.IsUiSmoke)
+        {
+            StartPosition = FormStartPosition.Manual;
+            Location = new Point(OffScreenPosition, OffScreenPosition);
+            ShowInTaskbar = false;
+            return;
+        }
+
         var saved = _dashboardLayoutStore.LoadMainWindow();
 
         if (saved is null || saved.Width <= 0 || saved.Height <= 0)
@@ -652,6 +664,11 @@ public partial class MainForm : Form
 
     private void SaveWindowBounds()
     {
+        if (Program.IsUiSmoke)
+        {
+            return;
+        }
+
         var isMaximized = WindowState == FormWindowState.Maximized;
         var bounds = isMaximized || WindowState == FormWindowState.Minimized
             ? RestoreBounds
