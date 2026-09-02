@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 using System.Collections;
 
@@ -141,6 +142,7 @@ public sealed partial class UserStatisticsForm : Form
     private void ButtonPointTermOnClick(object? sender, EventArgs e)
     {
         using var dialog = new PointTermDialog();
+        OffScreenForm.PrepareIfHeadless(dialog);
         dialog.LoadFrom(_settingsManager.Current.Ranks.PointTerm);
 
         if (dialog.ShowDialog(this) != DialogResult.OK)

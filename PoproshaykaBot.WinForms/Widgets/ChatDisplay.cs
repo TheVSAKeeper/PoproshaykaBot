@@ -397,6 +397,8 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
             MinimumSize = LogicalToDeviceUnits(new Size(360, 240)),
         };
 
+        OffScreenForm.PrepareIfHeadless(dialog);
+
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
