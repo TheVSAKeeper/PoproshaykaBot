@@ -22,7 +22,7 @@ public partial class SettingsForm : Form
     private readonly AccountsStore _accountsStore;
     private readonly ObsChatStore _obsChatStore;
     private readonly ObsIntegrationStore _obsIntegrationStore;
-    private readonly DashboardLayoutStore _dashboardLayoutStore;
+    private readonly DashboardLayoutCoordinator _dashboardLayoutCoordinator;
     private readonly PollsStore _pollsStore;
     private readonly UpdateStore _updateStore;
     private readonly IEventBus _eventBus;
@@ -38,6 +38,7 @@ public partial class SettingsForm : Form
     private PollsSettings _pollsDraft;
     private UpdateSettings _updateDraft;
     private DashboardLayoutSettings? _dashboardDraft;
+    private int _dashboardRevision;
     private bool _initialized;
     private bool _hasChanges;
 
@@ -46,7 +47,7 @@ public partial class SettingsForm : Form
         AccountsStore accountsStore,
         ObsChatStore obsChatStore,
         ObsIntegrationStore obsIntegrationStore,
-        DashboardLayoutStore dashboardLayoutStore,
+        DashboardLayoutCoordinator dashboardLayoutCoordinator,
         PollsStore pollsStore,
         UpdateStore updateStore,
         IEventBus eventBus,
@@ -57,7 +58,7 @@ public partial class SettingsForm : Form
         _accountsStore = accountsStore;
         _obsChatStore = obsChatStore;
         _obsIntegrationStore = obsIntegrationStore;
-        _dashboardLayoutStore = dashboardLayoutStore;
+        _dashboardLayoutCoordinator = dashboardLayoutCoordinator;
         _pollsStore = pollsStore;
         _updateStore = updateStore;
         _eventBus = eventBus;
@@ -72,7 +73,10 @@ public partial class SettingsForm : Form
         _obsIntegrationDraft = JsonStoreClone.DeepClone(obsIntegrationStore.Load());
         _pollsDraft = JsonStoreClone.DeepClone(pollsStore.Load());
         _updateDraft = JsonStoreClone.DeepClone(updateStore.Load());
-        _dashboardDraft = JsonStoreClone.DeepCloneNullable(dashboardLayoutStore.LoadDashboard());
+        var dashboardSnapshot = dashboardLayoutCoordinator.Read();
+
+        _dashboardRevision = dashboardSnapshot.Revision;
+        _dashboardDraft = dashboardSnapshot.Layout;
 
         InitializeComponent();
 
@@ -216,7 +220,10 @@ public partial class SettingsForm : Form
         _obsIntegrationDraft = new();
         _pollsDraft = new();
         _updateDraft = new();
-        _dashboardDraft = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutDefaults.Create(), _dashboardLayoutStore.LoadDashboard());
+        var dashboardSnapshot = _dashboardLayoutCoordinator.Read();
+
+        _dashboardRevision = dashboardSnapshot.Revision;
+        _dashboardDraft = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutDefaults.Create(), dashboardSnapshot.Layout);
 
         LoadSettingsToControls();
         _hasChanges = true;
@@ -317,8 +324,7 @@ public partial class SettingsForm : Form
 
             if (_dashboardDraft != null)
             {
-                DashboardLayoutReconciler.MergeCollapseState(_dashboardDraft, _dashboardLayoutStore.LoadDashboard());
-                _dashboardLayoutStore.SaveDashboard(_dashboardDraft);
+                _dashboardRevision = _dashboardLayoutCoordinator.Commit(_dashboardDraft, _dashboardRevision).Snapshot.Revision;
             }
 
             if (!string.Equals(prevBotToken, _botDraft.AccessToken, StringComparison.Ordinal))

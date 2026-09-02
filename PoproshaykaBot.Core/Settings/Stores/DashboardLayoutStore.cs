@@ -46,8 +46,18 @@ public class DashboardLayoutStore
 
         lock (_syncLock)
         {
+            var previous = _state.Dashboard;
             _state.Dashboard = JsonStoreClone.DeepClone(layout);
-            SaveInternal();
+
+            try
+            {
+                SaveInternal();
+            }
+            catch
+            {
+                _state.Dashboard = previous;
+                throw;
+            }
 
             _logger?.LogDebug("DashboardLayoutStore: раскладка дашборда сохранена");
         }
@@ -59,8 +69,18 @@ public class DashboardLayoutStore
 
         lock (_syncLock)
         {
+            var previous = _state.MainWindow;
             _state.MainWindow = JsonStoreClone.DeepClone(window);
-            SaveInternal();
+
+            try
+            {
+                SaveInternal();
+            }
+            catch
+            {
+                _state.MainWindow = previous;
+                throw;
+            }
 
             _logger?.LogDebug("DashboardLayoutStore: параметры главного окна сохранены");
         }

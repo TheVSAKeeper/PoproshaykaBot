@@ -5,6 +5,7 @@ namespace PoproshaykaBot.Core.Dashboard;
 public static class DashboardLayoutTree
 {
     private const int MaxCells = 4096;
+    private const int MaxDepth = 32;
 
     public static DashboardPane? TryBuild(IEnumerable<DashboardTileSettings> tiles, int columnCount, int rowCount)
     {
@@ -27,6 +28,53 @@ public static class DashboardLayoutTree
         var projected = new List<TileRect>();
 
         return Project(root, 0, 0, rowCount, columnCount, projected) ? projected : null;
+    }
+
+    public static GridSize? TryMeasure(DashboardPane root)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+
+        return Measure(root, 0);
+    }
+
+    private static GridSize? Measure(DashboardPane? pane, int depth)
+    {
+        if (depth > MaxDepth)
+        {
+            return null;
+        }
+
+        switch (pane)
+        {
+            case TilePane tile:
+                return string.IsNullOrEmpty(tile.TypeId) ? null : new GridSize(1, 1);
+
+            case SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 1 } split:
+                return MeasureSplit(split, depth);
+
+            default:
+                return null;
+        }
+    }
+
+    private static GridSize? MeasureSplit(SplitPane split, int depth)
+    {
+        var alongColumns = split.Orientation == SplitOrientation.Columns;
+        var columns = 0;
+        var rows = 0;
+
+        foreach (var slot in split.Children)
+        {
+            if (slot is null || Measure(slot.Pane, depth + 1) is not { } size)
+            {
+                return null;
+            }
+
+            columns = alongColumns ? columns + size.Columns : Math.Max(columns, size.Columns);
+            rows = alongColumns ? Math.Max(rows, size.Rows) : rows + size.Rows;
+        }
+
+        return new(columns, rows);
     }
 
     private static List<TileRect>? CollectVisible(IEnumerable<DashboardTileSettings> tiles, int columnCount, int rowCount)
@@ -230,7 +278,7 @@ public static class DashboardLayoutTree
         var alongColumns = split.Orientation == SplitOrientation.Columns;
         var start = alongColumns ? column : row;
         var end = alongColumns ? columnEnd : rowEnd;
-        var sizes = Distribute(split.Children, end - start);
+        var sizes = Distribute(split.Children, split.Orientation, end - start);
 
         if (sizes is null)
         {
@@ -270,16 +318,30 @@ public static class DashboardLayoutTree
             : known / (count - unknown);
     }
 
-    private static int[]? Distribute(IReadOnlyList<PaneSlot> children, int total)
+    private static int[]? Distribute(IReadOnlyList<PaneSlot> children, SplitOrientation orientation, int total)
     {
-        if (total < children.Count)
+        var minimums = new int[children.Count];
+        var required = 0;
+
+        for (var index = 0; index < children.Count; index++)
+        {
+            if (children[index] is not { Pane: not null } slot || Measure(slot.Pane, 0) is not { } size)
+            {
+                return null;
+            }
+
+            minimums[index] = orientation == SplitOrientation.Columns ? size.Columns : size.Rows;
+            required += minimums[index];
+        }
+
+        if (total < required)
         {
             return null;
         }
 
         var weights = ResolveWeights(children);
 
-        return weights is null ? null : LayOut(weights, total);
+        return weights is null ? null : LayOut(weights, total, minimums);
     }
 
     public static double[]? ResolveWeights(IReadOnlyList<PaneSlot> children)
@@ -328,7 +390,7 @@ public static class DashboardLayoutTree
         return weights;
     }
 
-    private static int[] LayOut(double[] weights, int total)
+    private static int[] LayOut(double[] weights, int total, int[] minimums)
     {
         var count = weights.Length;
         var sum = weights.Sum();
@@ -342,16 +404,18 @@ public static class DashboardLayoutTree
         var sizes = new int[count];
         var cumulative = 0.0;
         var offset = 0;
+        var reserved = minimums.Sum();
 
         for (var index = 0; index < count; index++)
         {
             cumulative += weights[index] / sum;
+            reserved -= minimums[index];
 
             var boundary = index == count - 1
                 ? total
                 : (int)Math.Round(cumulative * total, MidpointRounding.AwayFromZero);
 
-            boundary = Math.Clamp(boundary, offset + 1, total - (count - 1 - index));
+            boundary = Math.Clamp(boundary, offset + minimums[index], total - reserved);
             sizes[index] = boundary - offset;
             offset = boundary;
         }

@@ -186,7 +186,7 @@ public class DashboardPaneLayoutTests
 
     private static DashboardViewModel CreateDashboard(DashboardLayoutSettings layout, params DashboardTileViewModel[] tiles)
     {
-        return new(tiles, new FakeLayoutStore(layout));
+        return new(tiles, new(new FakeLayoutStore(layout)));
     }
 
     private static DashboardLayoutSettings SideBySideLayout()

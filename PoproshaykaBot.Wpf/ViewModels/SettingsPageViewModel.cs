@@ -48,7 +48,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly ObsChatStore _obsChatStore;
     private readonly ObsIntegrationStore _obsIntegrationStore;
     private readonly UpdateStore _updateStore;
-    private readonly DashboardLayoutStore _dashboardLayoutStore;
+    private readonly DashboardLayoutCoordinator _dashboardLayoutCoordinator;
     private readonly IEventBus _eventBus;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly ILogger<SettingsPageViewModel> _logger;
@@ -64,6 +64,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private string _obsChatBaselineJson = string.Empty;
     private ObsIntegrationSettings _obsIntegrationDraft = new();
     private UpdateSettings _updateDraft = new();
+    private int _dashboardRevision;
     private bool _suppressDirty;
 
     [ObservableProperty]
@@ -95,7 +96,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         ObsChatStore obsChatStore,
         ObsIntegrationStore obsIntegrationStore,
         UpdateStore updateStore,
-        DashboardLayoutStore dashboardLayoutStore,
+        DashboardLayoutCoordinator dashboardLayoutCoordinator,
         IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
         ILogger<SettingsPageViewModel> logger,
@@ -122,7 +123,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _obsChatStore = obsChatStore;
         _obsIntegrationStore = obsIntegrationStore;
         _updateStore = updateStore;
-        _dashboardLayoutStore = dashboardLayoutStore;
+        _dashboardLayoutCoordinator = dashboardLayoutCoordinator;
         _eventBus = eventBus;
         _kestrelHttpServer = kestrelHttpServer;
         _logger = logger;
@@ -223,7 +224,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             AutoBroadcast.LoadSettings(_settings.Twitch.AutoBroadcast);
             BotLifecycle.LoadSettings(_settings.Twitch.BotLifecycleAutomation);
             Update.LoadSettings(_updateDraft);
-            DashboardLayout.LoadSettings(_dashboardLayoutStore.LoadDashboard());
+            var dashboardSnapshot = _dashboardLayoutCoordinator.Read();
+
+            _dashboardRevision = dashboardSnapshot.Revision;
+            DashboardLayout.LoadSettings(dashboardSnapshot.Layout);
             Polls.RevertCommand.Execute(null);
 
             OAuth.RefreshChannel(Basic.GetChannel());
@@ -376,9 +380,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     {
         var layout = DashboardLayout.BuildLayout();
 
-        DashboardLayoutReconciler.MergeCollapseState(layout, _dashboardLayoutStore.LoadDashboard());
-
-        _dashboardLayoutStore.SaveDashboard(layout);
+        _dashboardRevision = _dashboardLayoutCoordinator.Commit(layout, _dashboardRevision).Snapshot.Revision;
     }
 
     private void ReconcileHttpServerPort()

@@ -339,6 +339,45 @@ public sealed class DashboardLayoutTreeTests
         ];
     }
 
+    [Test]
+    public void Measure_NestedTree_CountsTheTracksEverySubtreeNeeds()
+    {
+        Assert.That(DashboardLayoutTree.TryMeasure(SideAndStack()), Is.EqualTo(new GridSize(3, 2)));
+    }
+
+    [Test]
+    public void Project_ChildNarrowerByWeightThanItNeeds_StillGetsItsTracks()
+    {
+        var projected = DashboardLayoutTree.TryProject(SideAndStack(), 3, 2);
+
+        Assert.That(projected, Is.Not.Null, "Доля, которая меньше нужного числа треков, не должна ронять проекцию целиком.");
+
+        Assert.That(projected, Is.EquivalentTo(new[]
+        {
+            new TileRect("stream-info", 0, 0, 2, 1),
+            new TileRect("polls-control", 0, 1, 1, 2),
+            new TileRect("logs", 1, 1, 1, 1),
+            new TileRect("obs-info", 1, 2, 1, 1),
+        }));
+    }
+
+    private static SplitPane SideAndStack()
+    {
+        return new(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.5),
+            new(new SplitPane(SplitOrientation.Rows,
+            [
+                new(new TilePane("polls-control"), 0.5),
+                new(new SplitPane(SplitOrientation.Columns,
+                [
+                    new(new TilePane("logs"), 0.5),
+                    new(new TilePane("obs-info"), 0.5),
+                ]), 0.5),
+            ]), 0.5),
+        ]);
+    }
+
     private static List<TileRect> Rects(IEnumerable<DashboardTileSettings> tiles)
     {
         return

@@ -44,6 +44,22 @@ public sealed class DashboardLayoutStoreTests
         """;
 
     [Test]
+    public void SaveDashboard_WhenTheWriteFails_LeavesTheCacheMatchingDisk()
+    {
+        var blocked = Path.Combine(_directory.FullName, "blocked.json");
+        Directory.CreateDirectory(blocked);
+
+        var store = new DashboardLayoutStore(null, blocked);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(() => store.SaveDashboard(Layout()), Throws.InstanceOf<IOException>());
+            Assert.That(store.LoadDashboard(), Is.Null,
+                "Кэш стора, уехавший вперёд неудавшейся записи, следующая удачная запись вернула бы на диск поверх последнего хорошего файла.");
+        }
+    }
+
+    [Test]
     public void SaveDashboard_LayoutWithoutTree_WritesOneRebuiltFromTheGrid()
     {
         new DashboardLayoutStore(null, _filePath).SaveDashboard(Layout());

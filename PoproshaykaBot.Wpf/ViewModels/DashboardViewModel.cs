@@ -12,13 +12,13 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 public sealed class DashboardViewModel : ObservableObject, IDisposable
 {
     private readonly Dictionary<string, DashboardTileViewModel> _tilesByTypeId;
-    private readonly DashboardLayoutStore _layoutStore;
+    private readonly DashboardLayoutCoordinator _coordinator;
     private readonly HashSet<DashboardTileViewModel> _observed = [];
     private bool _suppressCollapsePersist;
 
-    public DashboardViewModel(IEnumerable<DashboardTileViewModel> tiles, DashboardLayoutStore layoutStore)
+    public DashboardViewModel(IEnumerable<DashboardTileViewModel> tiles, DashboardLayoutCoordinator coordinator)
     {
-        _layoutStore = layoutStore;
+        _coordinator = coordinator;
         _tilesByTypeId = new(StringComparer.Ordinal);
 
         foreach (var tile in tiles)
@@ -44,20 +44,15 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
     public void Reload()
     {
-        var layout = _layoutStore.LoadDashboard();
-        var created = layout is null || layout.Tiles.Count == 0;
-
-        if (created)
+        var layout = _coordinator.Mutate(current =>
         {
-            layout = DashboardLayoutDefaults.Create();
-        }
+            var created = current is null || current.Tiles.Count == 0;
+            var target = created ? DashboardLayoutDefaults.Create() : current!;
 
-        if (DashboardLayoutReconciler.AppendMissingTypes(layout!, _tilesByTypeId.Keys) || created)
-        {
-            _layoutStore.SaveDashboard(layout!);
-        }
+            return DashboardLayoutReconciler.AppendMissingTypes(target, _tilesByTypeId.Keys) || created ? target : null;
+        });
 
-        ApplyLayout(layout!);
+        ApplyLayout(layout ?? DashboardLayoutDefaults.Create());
     }
 
     public void Dispose()
@@ -369,19 +364,27 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var layout = _layoutStore.LoadDashboard();
+        var persisted = false;
 
-        var setting = layout?.Tiles.FirstOrDefault(t => string.Equals(t.TypeId, tile.TypeId, StringComparison.Ordinal));
-
-        if (setting is null)
+        var layout = _coordinator.Mutate(current =>
         {
-            return;
+            var setting = current?.Tiles.FirstOrDefault(t => string.Equals(t.TypeId, tile.TypeId, StringComparison.Ordinal));
+
+            if (setting is null)
+            {
+                return null;
+            }
+
+            setting.IsCollapsed = tile.IsCollapsed;
+            persisted = true;
+
+            return current;
+        });
+
+        if (persisted && layout is not null)
+        {
+            ApplyLayout(layout);
         }
-
-        setting.IsCollapsed = tile.IsCollapsed;
-        _layoutStore.SaveDashboard(layout!);
-
-        ApplyLayout(layout!);
     }
 
     private sealed record Placement(

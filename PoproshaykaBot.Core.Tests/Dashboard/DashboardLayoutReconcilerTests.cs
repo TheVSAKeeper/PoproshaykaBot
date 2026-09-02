@@ -142,7 +142,7 @@ public sealed class DashboardLayoutReconcilerTests
 
     [TestCase(true)]
     [TestCase(false)]
-    public void MergeCollapseState_TakesCollapseFromDisk(bool collapsedOnDisk)
+    public void MergeConcurrentEdits_TakesCollapseFromDisk(bool collapsedOnDisk)
     {
         var draft = LayoutWith(Tile("stream-info", order: 0, isVisible: true));
         draft.Tiles[0].IsCollapsed = !collapsedOnDisk;
@@ -150,22 +150,108 @@ public sealed class DashboardLayoutReconcilerTests
         var persisted = LayoutWith(Tile("stream-info", order: 0, isVisible: true));
         persisted.Tiles[0].IsCollapsed = collapsedOnDisk;
 
-        DashboardLayoutReconciler.MergeCollapseState(draft, persisted);
+        DashboardLayoutReconciler.MergeConcurrentEdits(draft, persisted);
 
         Assert.That(draft.Tiles[0].IsCollapsed, Is.EqualTo(collapsedOnDisk),
             "Свёртка плитки, сделанная на дашборде, не должна откатываться устаревшим черновиком настроек.");
     }
 
     [Test]
-    public void MergeCollapseState_LeavesTilesMissingOnDiskAlone()
+    public void MergeConcurrentEdits_KeepsTilesMissingOnDiskAndAppendsTheOnesOnlyThereAlone()
     {
         var draft = LayoutWith(Tile("stream-info", order: 0, isVisible: true));
         draft.Tiles[0].IsCollapsed = true;
 
-        DashboardLayoutReconciler.MergeCollapseState(draft, LayoutWith(Tile("logs", order: 0, isVisible: true)));
-        DashboardLayoutReconciler.MergeCollapseState(draft, null);
+        DashboardLayoutReconciler.MergeConcurrentEdits(draft, LayoutWith(Tile("logs", order: 0, isVisible: true)));
+        DashboardLayoutReconciler.MergeConcurrentEdits(draft, null);
 
-        Assert.That(draft.Tiles[0].IsCollapsed, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(draft.Tiles[0].IsCollapsed, Is.True);
+            Assert.That(draft.Tiles.Select(tile => tile.TypeId), Is.EqualTo(new[] { "stream-info", "logs" }),
+                "Запись, появившаяся на диске после снятия черновика, обязана пережить сохранение настроек.");
+        }
+    }
+
+    [Test]
+    public void MergeConcurrentEdits_TileTheUserRemoved_ComesBackHiddenAndNotVisible()
+    {
+        var draft = LayoutWith(Tile("stream-info", order: 0, isVisible: true));
+
+        var persisted = LayoutWith(
+            Tile("stream-info", order: 0, isVisible: true),
+            Tile("polls-control", order: 1, isVisible: true));
+
+        DashboardLayoutReconciler.MergeConcurrentEdits(draft, persisted);
+
+        var polls = draft.Tiles.Single(tile => string.Equals(tile.TypeId, "polls-control", StringComparison.Ordinal));
+
+        Assert.That(polls.IsVisible, Is.False,
+            "Оба редактора удаляют плитку выбрасыванием записи из черновика, поэтому слияние обязано вернуть её скрытой, а не видимой.");
+    }
+
+    [Test]
+    public void MergeConcurrentEdits_DraftWithoutATree_DoesNotTakeItFromDisk()
+    {
+        var draft = TwoColumns();
+        var persisted = TwoColumns();
+
+        persisted.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.7),
+            new(new TilePane("polls-control"), 0.3),
+        ]);
+
+        DashboardLayoutReconciler.MergeConcurrentEdits(draft, persisted);
+
+        Assert.That(draft.Root, Is.Null,
+            "Сброс настроек обнуляет дерево вместе с сеткой – совпавшая с дефолтом сетка не повод вернуть старые пропорции.");
+    }
+
+    [Test]
+    public void MergeConcurrentEdits_DraftThatMovedNothing_TakesTheTreeFromDisk()
+    {
+        var draft = TwoColumns();
+
+        draft.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.5),
+            new(new TilePane("polls-control"), 0.5),
+        ]);
+
+        var persisted = TwoColumns();
+
+        persisted.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.7),
+            new(new TilePane("polls-control"), 0.3),
+        ]);
+
+        DashboardLayoutReconciler.MergeConcurrentEdits(draft, persisted);
+
+        Assert.That(draft.Root, Is.SameAs(persisted.Root),
+            "Пропорции, поправленные на дашборде, не должны теряться от сохранения настроек, которое не двигало плитки.");
+    }
+
+    [Test]
+    public void MergeConcurrentEdits_DraftThatMovedTiles_KeepsItsOwnTree()
+    {
+        var draft = TwoColumns();
+        draft.Tiles[0].ColumnSpan = 2;
+        draft.Tiles[1].IsVisible = false;
+        draft.Root = new TilePane("stream-info");
+
+        var persisted = TwoColumns();
+        persisted.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.7),
+            new(new TilePane("polls-control"), 0.3),
+        ]);
+
+        DashboardLayoutReconciler.MergeConcurrentEdits(draft, persisted);
+
+        Assert.That(draft.Root, Is.TypeOf<TilePane>(),
+            "Черновик, переставивший плитки, владеет и деревом – иначе сетка и дерево разойдутся.");
     }
 
     [Test]
@@ -245,6 +331,99 @@ public sealed class DashboardLayoutReconcilerTests
         DashboardLayoutReconciler.SyncRoot(layout);
 
         Assert.That(layout.Root, Is.Null, "Задвоенный TypeId разбор отвергает, и сшивка обязана отвергать его так же.");
+    }
+
+    [Test]
+    public void SyncTiles_TreeDeeperThanTheGrid_GrowsItAndKeepsTheTileFields()
+    {
+        var layout = TwoColumns();
+        layout.Tiles[0].IsCollapsed = true;
+        layout.Tiles[0].MaxWidth = 420;
+        layout.Root = SideAndStack();
+
+        Assert.That(DashboardLayoutReconciler.SyncTiles(layout), Is.True);
+
+        var stream = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "stream-info", StringComparison.Ordinal));
+        var logs = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "logs", StringComparison.Ordinal));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(layout.RowCount, Is.EqualTo(2), "Сетка обязана дорасти до дерева, иначе проекция потеряет лист.");
+            Assert.That((stream.Row, stream.Column, stream.RowSpan, stream.ColumnSpan), Is.EqualTo((0, 0, 2, 1)));
+            Assert.That((logs.Row, logs.Column, logs.RowSpan, logs.ColumnSpan), Is.EqualTo((1, 1, 1, 1)));
+            Assert.That(stream.IsCollapsed, Is.True, "Проекция дерева на сетку не владеет свёрткой и потолками плитки.");
+            Assert.That(stream.MaxWidth, Is.EqualTo(420));
+        }
+    }
+
+    [Test]
+    public void SyncTiles_RecordOutsideTheTree_IsHiddenAndNotDropped()
+    {
+        var layout = TwoColumns();
+        layout.Root = new TilePane("stream-info");
+
+        DashboardLayoutReconciler.SyncTiles(layout);
+
+        var polls = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "polls-control", StringComparison.Ordinal));
+
+        Assert.That(polls.IsVisible, Is.False, "Выпавшая из дерева плитка гасится, а не выбрасывается из файла.");
+    }
+
+    [Test]
+    public void SyncTiles_ThenSyncRoot_LeavesTheSameTree()
+    {
+        var layout = TwoColumns();
+        layout.Root = SideAndStack();
+
+        var before = layout.Root;
+
+        DashboardLayoutReconciler.SyncTiles(layout);
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That(layout.Root, Is.SameAs(before), "Круговой ход дерево – сетка – дерево обязан быть неподвижной точкой.");
+    }
+
+    [Test]
+    public void SyncTiles_TreeWithTheSameLeafTwice_Refuses()
+    {
+        var layout = TwoColumns();
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.5),
+            new(new TilePane("stream-info"), 0.5),
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DashboardLayoutReconciler.SyncTiles(layout), Is.False,
+                "Задвоенный лист свернулся бы в одну запись, и второй лист исчез бы из файла молча.");
+            Assert.That(layout.Tiles.Select(tile => tile.Column), Is.EqualTo(new[] { 0, 1 }));
+        }
+    }
+
+    [Test]
+    public void SyncTiles_WithoutATree_DoesNothing()
+    {
+        var layout = TwoColumns();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DashboardLayoutReconciler.SyncTiles(layout), Is.False);
+            Assert.That(layout.Tiles.Select(tile => tile.Column), Is.EqualTo(new[] { 0, 1 }));
+        }
+    }
+
+    private static SplitPane SideAndStack()
+    {
+        return new(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.5),
+            new(new SplitPane(SplitOrientation.Rows,
+            [
+                new(new TilePane("polls-control"), 0.5),
+                new(new TilePane("logs"), 0.5),
+            ]), 0.5),
+        ]);
     }
 
     private static DashboardLayoutSettings TwoColumns()

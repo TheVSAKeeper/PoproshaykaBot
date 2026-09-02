@@ -41,7 +41,7 @@ public class DashboardLayoutReloadTests
 
     private static DashboardViewModel CreateDashboard(DashboardLayoutStore store)
     {
-        return new([new FakeTile("stream-info"), new FakeTile("broadcast-status")], store);
+        return new([new FakeTile("stream-info"), new FakeTile("broadcast-status")], new(store));
     }
 
     private static DashboardLayoutSettings LayoutWith(params string[] typeIds)

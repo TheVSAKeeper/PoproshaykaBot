@@ -16,7 +16,7 @@ public sealed partial class DashboardControl : UserControl
     }
 
     [Inject]
-    public DashboardLayoutStore LayoutStore { get; internal init; } = null!;
+    public DashboardLayoutCoordinator LayoutCoordinator { get; internal init; } = null!;
 
     [Inject]
     public IControlFactory ControlFactory { get; internal init; } = null!;
@@ -31,20 +31,15 @@ public sealed partial class DashboardControl : UserControl
             return;
         }
 
-        var layout = LayoutStore.LoadDashboard();
-        var created = layout == null || layout.Tiles.Count == 0;
-
-        if (created)
+        var layout = LayoutCoordinator.Mutate(current =>
         {
-            layout = DashboardLayoutDefaults.Create();
-        }
+            var created = current == null || current.Tiles.Count == 0;
+            var target = created ? DashboardLayoutDefaults.Create() : current!;
 
-        if (DashboardLayoutReconciler.AppendMissingTypes(layout!, TileCatalog.All.Select(type => type.Id)) || created)
-        {
-            LayoutStore.SaveDashboard(layout!);
-        }
+            return DashboardLayoutReconciler.AppendMissingTypes(target, TileCatalog.All.Select(type => type.Id)) || created ? target : null;
+        });
 
-        ApplyLayout(layout!);
+        ApplyLayout(layout ?? DashboardLayoutDefaults.Create());
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -213,19 +208,27 @@ public sealed partial class DashboardControl : UserControl
             return;
         }
 
-        var layout = LayoutStore.LoadDashboard();
+        var persisted = false;
 
-        var tile = layout?.Tiles.FirstOrDefault(t => string.Equals(t.TypeId, type.Id, StringComparison.Ordinal));
-
-        if (tile == null)
+        var layout = LayoutCoordinator.Mutate(current =>
         {
-            return;
+            var tile = current?.Tiles.FirstOrDefault(t => string.Equals(t.TypeId, type.Id, StringComparison.Ordinal));
+
+            if (tile == null)
+            {
+                return null;
+            }
+
+            tile.IsCollapsed = !host.IsCollapsed;
+            persisted = true;
+
+            return current;
+        });
+
+        if (persisted && layout != null)
+        {
+            ApplyLayout(layout);
         }
-
-        tile.IsCollapsed = !host.IsCollapsed;
-        LayoutStore.SaveDashboard(layout!);
-
-        ApplyLayout(layout!);
     }
 
     private void ApplyLayout(DashboardLayoutSettings layout)
