@@ -52,7 +52,7 @@ public sealed class DashboardLayoutCoordinator
         return snapshot.Layout;
     }
 
-    public DashboardLayoutCommitResult Commit(DashboardLayoutSettings layout, int baseRevision)
+    public DashboardLayoutCommitResult Commit(DashboardLayoutSettings layout, int baseRevision, bool keepDraftRoot = false)
     {
         ArgumentNullException.ThrowIfNull(layout);
 
@@ -63,7 +63,7 @@ public sealed class DashboardLayoutCoordinator
         {
             merged = baseRevision != _revision;
 
-            DashboardLayoutReconciler.MergeConcurrentEdits(layout, _store.LoadDashboard());
+            DashboardLayoutReconciler.MergeConcurrentEdits(layout, _store.LoadDashboard(), keepDraftRoot);
 
             if (merged)
             {

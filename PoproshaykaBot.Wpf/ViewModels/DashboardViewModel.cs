@@ -1,4 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
@@ -9,16 +11,26 @@ using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
-public sealed class DashboardViewModel : ObservableObject, IDisposable
+public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 {
     private readonly Dictionary<string, DashboardTileViewModel> _tilesByTypeId;
     private readonly DashboardLayoutCoordinator _coordinator;
+    private readonly TimeProvider _time;
+    private readonly ILogger<DashboardEditSession>? _sessionLogger;
     private readonly HashSet<DashboardTileViewModel> _observed = [];
+    private DashboardEditSession? _session;
     private bool _suppressCollapsePersist;
+    private bool _stacked;
 
-    public DashboardViewModel(IEnumerable<DashboardTileViewModel> tiles, DashboardLayoutCoordinator coordinator)
+    public DashboardViewModel(
+        IEnumerable<DashboardTileViewModel> tiles,
+        DashboardLayoutCoordinator coordinator,
+        TimeProvider time,
+        ILogger<DashboardEditSession>? sessionLogger = null)
     {
         _coordinator = coordinator;
+        _time = time;
+        _sessionLogger = sessionLogger;
         _tilesByTypeId = new(StringComparer.Ordinal);
 
         foreach (var tile in tiles)
@@ -37,8 +49,68 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
     public bool HasTiles { get; private set; }
 
+    public bool IsEditing => _session is not null;
+
+    public bool CanEdit => Pane is not null && !_stacked;
+
+    public bool CanUndo => _session?.CanUndo == true;
+
+    public IReadOnlyList<HiddenTile> HiddenTiles { get; private set; } = [];
+
     public void OnEnter()
     {
+        if (_session is null)
+        {
+            Reload();
+        }
+    }
+
+    public void SetStacked(bool stacked)
+    {
+        if (_stacked == stacked)
+        {
+            return;
+        }
+
+        _stacked = stacked;
+
+        if (stacked)
+        {
+            StopEditing();
+        }
+
+        OnPropertyChanged(nameof(CanEdit));
+    }
+
+    public bool Resize(IReadOnlyList<int> path, IReadOnlyList<double> weights)
+    {
+        return _session?.Resize(path, weights) == true;
+    }
+
+    public bool Swap(string firstTypeId, string secondTypeId)
+    {
+        return _session?.Swap(firstTypeId, secondTypeId) == true;
+    }
+
+    public bool Move(string sourceTypeId, string targetTypeId, PaneSide side)
+    {
+        return _session?.Split(sourceTypeId, targetTypeId, side) == true;
+    }
+
+    public void StopEditing()
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        _session.Changed -= OnSessionChanged;
+        _session.Dispose();
+        _session = null;
+
+        OnPropertyChanged(nameof(IsEditing));
+        OnPropertyChanged(nameof(CanUndo));
+
         Reload();
     }
 
@@ -55,8 +127,66 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         ApplyLayout(layout ?? DashboardLayoutDefaults.Create());
     }
 
+    [RelayCommand]
+    private void ToggleEdit()
+    {
+        if (_session is not null)
+        {
+            StopEditing();
+
+            return;
+        }
+
+        if (!CanEdit)
+        {
+            return;
+        }
+
+        _session = new(_coordinator, _time, _sessionLogger);
+        _session.Changed += OnSessionChanged;
+
+        OnPropertyChanged(nameof(IsEditing));
+
+        ApplySession();
+    }
+
+    [RelayCommand]
+    private void Undo()
+    {
+        _session?.Undo();
+    }
+
+    [RelayCommand]
+    private void ResetLayout()
+    {
+        _session?.ResetToDefaults();
+    }
+
+    [RelayCommand]
+    private void AddTile(string? typeId)
+    {
+        if (_session is null || string.IsNullOrEmpty(typeId) || LargestLeaf() is not { } target)
+        {
+            return;
+        }
+
+        _session.Add(typeId, target, PaneSide.Right);
+    }
+
+    [RelayCommand]
+    private void RemoveTile(string? typeId)
+    {
+        if (_session is not null && !string.IsNullOrEmpty(typeId))
+        {
+            _session.Remove(typeId);
+        }
+    }
+
     public void Dispose()
     {
+        _session?.Dispose();
+        _session = null;
+
         foreach (var tile in _observed)
         {
             tile.PropertyChanged -= OnTilePropertyChanged;
@@ -85,32 +215,32 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         return placement.Tile.GrowsWithSpace && !placement.IsCollapsed;
     }
 
-    private static PaneLayout? BuildPane(DashboardPane pane, IReadOnlyDictionary<string, Placement> placements)
+    private static PaneLayout? BuildPane(DashboardPane pane, IReadOnlyDictionary<string, Placement> placements, int[] path)
     {
         return pane switch
         {
-            TilePane tile => placements.TryGetValue(tile.TypeId, out var placement) ? BuildLeaf(placement) : null,
-            SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 0 } split => BuildSplit(split, placements),
+            TilePane tile => placements.TryGetValue(tile.TypeId, out var placement) ? BuildLeaf(placement, path) : null,
+            SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 0 } split => BuildSplit(split, placements, path),
             _ => null,
         };
     }
 
-    private static PaneLayout BuildLeaf(Placement placement)
+    private static PaneLayout BuildLeaf(Placement placement, int[] path)
     {
         var star = new GridLength(1, GridUnitType.Star);
 
         if (Stretches(placement))
         {
-            return new TilePaneLayout(placement.Tile, new(star, double.PositiveInfinity), new(star, double.PositiveInfinity));
+            return new TilePaneLayout(placement.Tile, new(star, double.PositiveInfinity), new(star, double.PositiveInfinity), path);
         }
 
         var width = new TrackSize(GridLength.Auto, placement.MaxWidth ?? double.PositiveInfinity);
         var height = new TrackSize(Grows(placement) ? star : GridLength.Auto, placement.MaxHeight ?? double.PositiveInfinity);
 
-        return new TilePaneLayout(placement.Tile, width, height);
+        return new TilePaneLayout(placement.Tile, width, height, path);
     }
 
-    private static PaneLayout? BuildSplit(SplitPane split, IReadOnlyDictionary<string, Placement> placements)
+    private static PaneLayout? BuildSplit(SplitPane split, IReadOnlyDictionary<string, Placement> placements, int[] path)
     {
         if (DashboardLayoutTree.ResolveWeights(split.Children) is not { } weights)
         {
@@ -121,9 +251,11 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
         for (var index = 0; index < split.Children.Count; index++)
         {
-            if (BuildPane(split.Children[index].Pane, placements) is { } child)
+            var slot = split.Children[index];
+
+            if (BuildPane(slot.Pane, placements, [.. path, index]) is { } child)
             {
-                children.Add(new(child, weights[index]));
+                children.Add(new(child, weights[index], HasWeight(slot, placements)));
             }
         }
 
@@ -138,20 +270,33 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         }
 
         var alongColumns = split.Orientation == SplitOrientation.Columns;
+        var authored = children.Exists(child => child.HasWeight);
 
-        var width = MergeTracks(children, static pane => pane.Width, alongColumns);
-        var height = MergeTracks(children, static pane => pane.Height, !alongColumns);
+        var width = MergeTracks(children, static pane => pane.Width, alongColumns, alongColumns && authored);
+        var height = MergeTracks(children, static pane => pane.Height, !alongColumns, !alongColumns && authored);
 
-        return new SplitPaneLayout(split.Orientation, children, width, height);
+        return new SplitPaneLayout(split.Orientation, children, width, height, path, children.Count == split.Children.Count);
     }
 
-    private static TrackSize MergeTracks(IReadOnlyList<PaneLayoutSlot> children, Func<PaneLayout, TrackSize> axis, bool alongSplit)
+    private static bool HasWeight(PaneSlot slot, IReadOnlyDictionary<string, Placement> placements)
+    {
+        if (slot.Weight is not { } weight || weight <= 0 || !double.IsFinite(weight))
+        {
+            return false;
+        }
+
+        return slot.Pane is not TilePane tile
+            || !placements.TryGetValue(tile.TypeId, out var placement)
+            || !placement.IsCollapsed;
+    }
+
+    private static TrackSize MergeTracks(IReadOnlyList<PaneLayoutSlot> children, Func<PaneLayout, TrackSize> axis, bool alongSplit, bool authored)
     {
         var tracks = children.Select(child => axis(child.Pane)).ToList();
         var ceiling = alongSplit ? tracks.Sum(track => track.Max) : tracks.Max(track => track.Max);
 
         return new(
-            tracks.Exists(track => track.Length.IsStar) ? new(1, GridUnitType.Star) : GridLength.Auto,
+            authored || tracks.Exists(track => track.Length.IsStar) ? new(1, GridUnitType.Star) : GridLength.Auto,
             double.IsInfinity(ceiling) ? double.PositiveInfinity : ceiling);
     }
 
@@ -282,12 +427,19 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
 
         Pane = layout.Root is null
             ? null
-            : BuildPane(layout.Root, placements.ToDictionary(placement => placement.Tile.TypeId, StringComparer.Ordinal));
+            : BuildPane(layout.Root, placements.ToDictionary(placement => placement.Tile.TypeId, StringComparer.Ordinal), []);
 
         Bands = Pane is null ? BuildBands(placements, columnCount, rowCount) : [];
         HasTiles = placements.Count > 0;
 
+        HiddenTiles = layout.Tiles
+            .Where(tile => !tile.IsVisible && _tilesByTypeId.ContainsKey(tile.TypeId))
+            .Select(tile => new HiddenTile(tile.TypeId, _tilesByTypeId[tile.TypeId].Title))
+            .ToList();
+
         OnPropertyChanged(nameof(HasTiles));
+        OnPropertyChanged(nameof(HiddenTiles));
+        OnPropertyChanged(nameof(CanEdit));
         LayoutChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -387,6 +539,30 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void ApplySession()
+    {
+        if (_session is { } session)
+        {
+            ApplyLayout(session.Draft);
+        }
+    }
+
+    private void OnSessionChanged(object? sender, EventArgs e)
+    {
+        ApplySession();
+
+        OnPropertyChanged(nameof(CanUndo));
+    }
+
+    private string? LargestLeaf()
+    {
+        return _session?.Draft.Tiles
+            .Where(tile => tile.IsVisible)
+            .OrderByDescending(tile => tile.RowSpan * tile.ColumnSpan)
+            .Select(tile => tile.TypeId)
+            .FirstOrDefault();
+    }
+
     private sealed record Placement(
         DashboardTileViewModel Tile,
         int Row,
@@ -397,6 +573,8 @@ public sealed class DashboardViewModel : ObservableObject, IDisposable
         int? MaxHeight,
         bool IsCollapsed);
 }
+
+public sealed record HiddenTile(string TypeId, string Title);
 
 public sealed record TrackSize(GridLength Length, double Max);
 
@@ -413,7 +591,7 @@ public sealed record TileBand(
     IReadOnlyList<TrackSize> Rows,
     IReadOnlyList<TileSlot> Tiles);
 
-public abstract record PaneLayout(TrackSize Width, TrackSize Height)
+public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
 {
     public bool Scrollable => Width.Length.IsAuto && Height.Length.IsAuto;
 
@@ -428,13 +606,15 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height)
     }
 }
 
-public sealed record TilePaneLayout(DashboardTileViewModel Tile, TrackSize Width, TrackSize Height)
-    : PaneLayout(Width, Height);
+public sealed record TilePaneLayout(DashboardTileViewModel Tile, TrackSize Width, TrackSize Height, int[] Path)
+    : PaneLayout(Width, Height, Path);
 
 public sealed record SplitPaneLayout(
     SplitOrientation Orientation,
     IReadOnlyList<PaneLayoutSlot> Children,
     TrackSize Width,
-    TrackSize Height) : PaneLayout(Width, Height);
+    TrackSize Height,
+    int[] Path,
+    bool IsComplete) : PaneLayout(Width, Height, Path);
 
-public sealed record PaneLayoutSlot(PaneLayout Pane, double Weight);
+public sealed record PaneLayoutSlot(PaneLayout Pane, double Weight, bool HasWeight);

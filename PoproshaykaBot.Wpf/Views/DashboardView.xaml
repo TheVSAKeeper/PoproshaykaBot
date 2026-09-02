@@ -40,6 +40,7 @@
                     </ContextMenu>
                 </Border.ContextMenu>
 
+                <Grid>
                 <DockPanel LastChildFill="True">
                     <DockPanel x:Name="TileHeader"
                                DockPanel.Dock="Top"
@@ -139,6 +140,17 @@
                         <ContentControl Content="{Binding}" />
                     </ScrollViewer>
                 </DockPanel>
+
+                <Border x:Name="TileShield"
+                        Background="Transparent"
+                        Focusable="True"
+                        Cursor="SizeAll"
+                        AutomationProperties.Name="{Binding Title}"
+                        PreviewMouseLeftButtonDown="OnShieldMouseDown"
+                        PreviewMouseMove="OnShieldMouseMove"
+                        PreviewMouseLeftButtonUp="OnShieldMouseUp"
+                        Visibility="{Binding DataContext.IsEditing, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                </Grid>
             </Border>
 
             <DataTemplate.Triggers>
@@ -170,13 +182,122 @@
     <Grid>
         <Border Background="{DynamicResource Bg.Base}"
                 Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}">
-            <ScrollViewer x:Name="BandsScroll"
-                          HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Disabled">
-                <Grid x:Name="BandsGrid"
-                      Margin="0,0,-1,-1" />
-            </ScrollViewer>
+            <DockPanel LastChildFill="True">
+                <Border x:Name="EditToolbar"
+                        DockPanel.Dock="Top"
+                        Background="{DynamicResource Bg.Surface}"
+                        BorderBrush="{DynamicResource Border.Subtle}"
+                        BorderThickness="0,0,0,1"
+                        Padding="14,8"
+                        Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Button Content="Готово"
+                                Command="{Binding ToggleEditCommand}"
+                                AutomationProperties.Name="Выйти из режима правки панели"
+                                Margin="0,0,8,0" />
+
+                        <Button Content="Отменить"
+                                Style="{StaticResource Button.Ghost}"
+                                Command="{Binding UndoCommand}"
+                                IsEnabled="{Binding CanUndo}"
+                                AutomationProperties.Name="Отменить последнюю правку раскладки"
+                                Margin="0,0,8,0" />
+
+                        <Button x:Name="AddTileButton"
+                                Content="Добавить плитку"
+                                Style="{StaticResource Button.Ghost}"
+                                Click="OnAddTileClick"
+                                AutomationProperties.Name="Добавить плитку на панель"
+                                Margin="0,0,8,0">
+                            <Button.ContextMenu>
+                                <ContextMenu ItemsSource="{Binding HiddenTiles}">
+                                    <ContextMenu.ItemContainerStyle>
+                                        <Style TargetType="MenuItem">
+                                            <Setter Property="Header"
+                                                    Value="{Binding Title}" />
+                                            <Setter Property="Command"
+                                                    Value="{Binding PlacementTarget.DataContext.AddTileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                            <Setter Property="CommandParameter"
+                                                    Value="{Binding TypeId}" />
+                                        </Style>
+                                    </ContextMenu.ItemContainerStyle>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+
+                        <Button Content="Сбросить"
+                                Style="{StaticResource Button.Ghost}"
+                                Command="{Binding ResetLayoutCommand}"
+                                AutomationProperties.Name="Сбросить раскладку панели к умолчаниям"
+                                Margin="0,0,16,0" />
+
+                        <TextBlock Text="Тяните разделители и плитки; Ctrl+Z – отмена, Escape – выход"
+                                   Style="{StaticResource TextBlock.Subtle}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer x:Name="BandsScroll"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Disabled">
+                    <Grid x:Name="BandsGrid"
+                          Margin="0,0,-1,-1" />
+                </ScrollViewer>
+            </DockPanel>
         </Border>
+
+        <Canvas x:Name="EditOverlay"
+                IsHitTestVisible="False" />
+
+        <Button x:Name="EditEntry"
+                Command="{Binding ToggleEditCommand}"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="0,0,16,16"
+                Padding="0"
+                Width="32"
+                Height="32"
+                ToolTip="Настроить панель"
+                AutomationProperties.Name="Настроить панель">
+            <Button.Style>
+                <Style TargetType="Button"
+                       BasedOn="{StaticResource Button.Ghost}">
+                    <Setter Property="Visibility"
+                            Value="Collapsed" />
+                    <Setter Property="Opacity"
+                            Value="0.4" />
+                    <Setter Property="Background"
+                            Value="{DynamicResource Bg.Surface}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding CanEdit}"
+                                     Value="True">
+                            <Setter Property="Visibility"
+                                    Value="Visible" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsEditing}"
+                                     Value="True">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                        </DataTrigger>
+                        <Trigger Property="IsMouseOver"
+                                 Value="True">
+                            <Setter Property="Opacity"
+                                    Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused"
+                                 Value="True">
+                            <Setter Property="Opacity"
+                                    Value="1" />
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Button.Style>
+
+            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings}"
+                                      Width="14"
+                                      Height="14" />
+        </Button>
 
         <controls:EmptyState Icon="LayoutDashboard"
                              Heading="Плиток пока нет"

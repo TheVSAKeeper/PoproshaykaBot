@@ -234,6 +234,33 @@ public sealed class DashboardLayoutReconcilerTests
     }
 
     [Test]
+    public void MergeConcurrentEdits_DraftThatOwnsTheTree_KeepsItsOwnWeights()
+    {
+        var draft = TwoColumns();
+
+        draft.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.55),
+            new(new TilePane("polls-control"), 0.45),
+        ]);
+
+        var persisted = TwoColumns();
+
+        persisted.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.5),
+            new(new TilePane("polls-control"), 0.5),
+        ]);
+
+        var owned = draft.Root;
+
+        DashboardLayoutReconciler.MergeConcurrentEdits(draft, persisted, keepDraftRoot: true);
+
+        Assert.That(draft.Root, Is.SameAs(owned),
+            "Сдвиг разделителя не меняет клеток проекции, поэтому без признака владения деревом живая правка затиралась бы диском.");
+    }
+
+    [Test]
     public void MergeConcurrentEdits_DraftThatMovedTiles_KeepsItsOwnTree()
     {
         var draft = TwoColumns();

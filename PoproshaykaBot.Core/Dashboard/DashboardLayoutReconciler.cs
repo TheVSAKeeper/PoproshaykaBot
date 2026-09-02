@@ -167,7 +167,7 @@ public static class DashboardLayoutReconciler
         return true;
     }
 
-    public static void MergeConcurrentEdits(DashboardLayoutSettings layout, DashboardLayoutSettings? persisted)
+    public static void MergeConcurrentEdits(DashboardLayoutSettings layout, DashboardLayoutSettings? persisted, bool keepDraftRoot = false)
     {
         ArgumentNullException.ThrowIfNull(layout);
 
@@ -191,7 +191,7 @@ public static class DashboardLayoutReconciler
             }
         }
 
-        if (layout.Root is not null && KeepsGeometry(layout, persisted))
+        if (!keepDraftRoot && layout.Root is not null && KeepsGeometry(layout, persisted))
         {
             layout.Root = persisted.Root;
         }

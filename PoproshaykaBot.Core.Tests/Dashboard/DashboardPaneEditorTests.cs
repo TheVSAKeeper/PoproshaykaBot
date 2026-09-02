@@ -308,6 +308,68 @@ public sealed class DashboardPaneEditorTests
         return result;
     }
 
+    [Test]
+    public void Resize_TheAddressedNode_NormalizesWeightsToOne()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
+
+        Assert.That(DashboardPaneEditor.TryResize(root, [], [3, 1], out var result), Is.True);
+        Assert.That(Weights((SplitPane)result), Is.EqualTo(new double?[] { 0.75, 0.25 }).Within(1e-9));
+    }
+
+    [Test]
+    public void Resize_ANestedNode_LeavesTheParentSlotWeightsAlone()
+    {
+        var root = Columns(Rows(Leaf("stream-info", 0.5), Leaf("broadcast-status", 0.5), 0.6), Leaf("twitch-chat", 0.4));
+
+        Assert.That(DashboardPaneEditor.TryResize(root, [0], [0.8, 0.2], out var result), Is.True);
+
+        var split = (SplitPane)result;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Weights(split), Is.EqualTo(new double?[] { 0.6, 0.4 }).Within(1e-9));
+            Assert.That(Weights((SplitPane)split.Children[0].Pane), Is.EqualTo(new double?[] { 0.8, 0.2 }).Within(1e-9));
+        }
+    }
+
+    [Test]
+    public void Resize_AShareUnderTheFloor_LiftsItAndTakesTheDifferenceFromTheNeighbour()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
+
+        Assert.That(DashboardPaneEditor.TryResize(root, [], [0.99, 0.01], out var result), Is.True);
+
+        var weights = Weights((SplitPane)result);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(weights[1], Is.EqualTo(0.05).Within(1e-9),
+                "Затянутый до упора разделитель не должен делать соседа недосягаемым.");
+            Assert.That(weights[0]!.Value + weights[1]!.Value, Is.EqualTo(1).Within(1e-9));
+        }
+    }
+
+    [Test]
+    public void Resize_APathThatDoesNotLandOnASplit_IsRefused()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
+
+        Assert.That(DashboardPaneEditor.TryResize(root, [0], [0.5, 0.5], out _), Is.False);
+    }
+
+    [TestCase(new[] { 0.5 })]
+    [TestCase(new[] { 0.3, 0.3, 0.4 })]
+    [TestCase(new[] { 0.5, 0.0 })]
+    [TestCase(new[] { 0.5, -0.5 })]
+    [TestCase(new[] { 0.5, double.PositiveInfinity })]
+    public void Resize_WeightsThatDoNotFitTheNode_AreRefused(double[] weights)
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
+
+        Assert.That(DashboardPaneEditor.TryResize(root, [], weights, out _), Is.False);
+    }
+
     private static DashboardPane Nested(int depth)
     {
         DashboardPane pane = new TilePane("leaf-0");

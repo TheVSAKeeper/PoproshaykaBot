@@ -35,7 +35,8 @@ public class DashboardPaneLayoutTests
             Assert.That(chat?.Height.Length.IsStar, Is.True);
             Assert.That(column?.Orientation, Is.EqualTo(SplitOrientation.Rows));
             Assert.That(column?.Children, Has.Count.EqualTo(2));
-            Assert.That(column?.Height.Length.IsAuto, Is.True, "Обе плитки столбца идут по контенту, значит и узел по контенту.");
+            Assert.That(column?.Height.Length.IsStar, Is.True,
+                "Разбор сетки задал столбцу доли, а заданная доля растягивает трек и у плитки по контенту – иначе процент не виден.");
         });
     }
 
@@ -184,9 +185,92 @@ public class DashboardPaneLayoutTests
             "Пол двух растягивающихся плиток складывается – по нему хост решает, не пора ли уйти в стопку.");
     }
 
+    [Test]
+    public void Authored_weights_stretch_a_node_of_content_sized_tiles()
+    {
+        using var dashboard = CreateDashboard(AuthoredWeightsLayout(), new FakeTile("stream-info"), new FakeTile("broadcast-status"));
+
+        var root = dashboard.Pane as SplitPaneLayout;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root?.Children[0].HasWeight, Is.True,
+                "Доля из файла задаёт трек сама – иначе процент, выставленный разделителем, ни на что не влияет.");
+            Assert.That(root?.Width.Length.IsStar, Is.True,
+                "Узел с явными долями обязан растягиваться: в Auto-колонке звёздочные треки схлопываются.");
+        });
+    }
+
+    [Test]
+    public void A_collapsed_leaf_ignores_its_weight()
+    {
+        var layout = AuthoredWeightsLayout();
+
+        layout.Tiles.Single(tile => string.Equals(tile.TypeId, "broadcast-status", StringComparison.Ordinal)).IsCollapsed = true;
+
+        using var dashboard = CreateDashboard(layout, new FakeTile("stream-info"), new FakeTile("broadcast-status"));
+
+        var root = dashboard.Pane as SplitPaneLayout;
+
+        Assert.That(root?.Children[1].HasWeight, Is.False,
+            "Свёрнутая плитка идёт по контенту, доля её не растягивает.");
+    }
+
+    [Test]
+    public void A_leaf_of_a_foreign_host_does_not_shift_the_paths_of_its_siblings()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 3,
+            RowCount = 1,
+            Root = new SplitPane(SplitOrientation.Columns,
+            [
+                new(new TilePane("logs"), 0.2),
+                new(new TilePane("stream-info"), 0.3),
+                new(new TilePane("twitch-chat"), 0.5),
+            ]),
+        };
+
+        AddTile(layout, "logs", 0, 0, 1, 1);
+        AddTile(layout, "stream-info", 0, 1, 1, 1);
+        AddTile(layout, "twitch-chat", 0, 2, 1, 1);
+
+        using var dashboard = CreateDashboard(layout, new FakeTile("stream-info"), new FakeTile("twitch-chat", fills: true));
+
+        var root = dashboard.Pane as SplitPaneLayout;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root?.IsComplete, Is.False,
+                "Плитка чужого хоста выпала из представления – доли такого узла править нельзя, разделителя там не будет.");
+            Assert.That((root?.Children[0].Pane as TilePaneLayout)?.Path, Is.EqualTo(new[] { 1 }),
+                "Путь листа адресует исходное дерево, а не сжатое представление: иначе правка уехала бы в чужой узел.");
+            Assert.That((root?.Children[1].Pane as TilePaneLayout)?.Path, Is.EqualTo(new[] { 2 }));
+        });
+    }
+
+    private static DashboardLayoutSettings AuthoredWeightsLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 1,
+            Root = new SplitPane(SplitOrientation.Columns,
+            [
+                new(new TilePane("stream-info"), 0.6),
+                new(new TilePane("broadcast-status"), 0.4),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "broadcast-status", 0, 1, 1, 1);
+
+        return layout;
+    }
+
     private static DashboardViewModel CreateDashboard(DashboardLayoutSettings layout, params DashboardTileViewModel[] tiles)
     {
-        return new(tiles, new(new FakeLayoutStore(layout)));
+        return new(tiles, new(new FakeLayoutStore(layout)), TimeProvider.System);
     }
 
     private static DashboardLayoutSettings SideBySideLayout()

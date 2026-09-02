@@ -65,6 +65,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private ObsIntegrationSettings _obsIntegrationDraft = new();
     private UpdateSettings _updateDraft = new();
     private int _dashboardRevision;
+    private bool _dashboardEdited;
     private bool _suppressDirty;
 
     [ObservableProperty]
@@ -227,6 +228,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             var dashboardSnapshot = _dashboardLayoutCoordinator.Read();
 
             _dashboardRevision = dashboardSnapshot.Revision;
+            _dashboardEdited = false;
             DashboardLayout.LoadSettings(dashboardSnapshot.Layout);
             Polls.RevertCommand.Execute(null);
 
@@ -378,9 +380,15 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     private void SaveDashboardLayout()
     {
+        if (!_dashboardEdited)
+        {
+            return;
+        }
+
         var layout = DashboardLayout.BuildLayout();
 
         _dashboardRevision = _dashboardLayoutCoordinator.Commit(layout, _dashboardRevision).Snapshot.Revision;
+        _dashboardEdited = false;
     }
 
     private void ReconcileHttpServerPort()
@@ -499,6 +507,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     {
         if (!_suppressDirty)
         {
+            _dashboardEdited = true;
             Dirty = true;
         }
     }

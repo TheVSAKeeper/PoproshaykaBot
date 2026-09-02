@@ -5,6 +5,7 @@ namespace PoproshaykaBot.Core.Dashboard;
 public static class DashboardPaneEditor
 {
     private const int MaxDepth = 32;
+    private const double MinimumWeight = 0.05;
 
     public static bool TrySplit(DashboardPane root, string targetTypeId, PaneSide side, string typeId, out DashboardPane result)
     {
@@ -83,6 +84,37 @@ public static class DashboardPaneEditor
         }
 
         result = normalized;
+
+        return true;
+    }
+
+    public static bool TryResize(DashboardPane root, IReadOnlyList<int> path, IReadOnlyList<double> weights, out DashboardPane result)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(weights);
+
+        result = root;
+
+        if (weights.Count < 2 || !IsWellFormed(root))
+        {
+            return false;
+        }
+
+        foreach (var weight in weights)
+        {
+            if (!IsExplicit(weight))
+            {
+                return false;
+            }
+        }
+
+        if (Reweight(root, path, 0, Balance(weights)) is not { } resized || !IsWellFormed(resized))
+        {
+            return false;
+        }
+
+        result = resized;
 
         return true;
     }
@@ -294,6 +326,98 @@ public static class DashboardPaneEditor
     private static bool IsExplicit(double? weight)
     {
         return weight is { } value && value > 0 && double.IsFinite(value);
+    }
+
+    private static double[] Balance(IReadOnlyList<double> weights)
+    {
+        var count = weights.Count;
+        var balanced = new double[count];
+        var total = 0.0;
+
+        foreach (var weight in weights)
+        {
+            total += weight;
+        }
+
+        if (!double.IsFinite(total) || total <= 0 || MinimumWeight * count >= 1)
+        {
+            Array.Fill(balanced, 1.0 / count);
+
+            return balanced;
+        }
+
+        var deficit = 0.0;
+        var free = 0.0;
+
+        for (var index = 0; index < count; index++)
+        {
+            balanced[index] = weights[index] / total;
+
+            if (balanced[index] < MinimumWeight)
+            {
+                deficit += MinimumWeight - balanced[index];
+            }
+            else
+            {
+                free += balanced[index] - MinimumWeight;
+            }
+        }
+
+        if (deficit <= 0)
+        {
+            return balanced;
+        }
+
+        var scale = (free - deficit) / free;
+
+        for (var index = 0; index < count; index++)
+        {
+            balanced[index] = balanced[index] < MinimumWeight
+                ? MinimumWeight
+                : MinimumWeight + ((balanced[index] - MinimumWeight) * scale);
+        }
+
+        return balanced;
+    }
+
+    private static DashboardPane? Reweight(DashboardPane pane, IReadOnlyList<int> path, int depth, IReadOnlyList<double> weights)
+    {
+        if (pane is not SplitPane split)
+        {
+            return null;
+        }
+
+        if (depth == path.Count)
+        {
+            if (split.Children.Count != weights.Count)
+            {
+                return null;
+            }
+
+            var slots = new PaneSlot[weights.Count];
+
+            for (var index = 0; index < weights.Count; index++)
+            {
+                slots[index] = new(split.Children[index].Pane, weights[index]);
+            }
+
+            return new SplitPane(split.Orientation, slots);
+        }
+
+        var position = path[depth];
+
+        if (position < 0
+            || position >= split.Children.Count
+            || Reweight(split.Children[position].Pane, path, depth + 1, weights) is not { } rebuilt)
+        {
+            return null;
+        }
+
+        var children = split.Children.ToArray();
+
+        children[position] = new(rebuilt, split.Children[position].Weight);
+
+        return new SplitPane(split.Orientation, children);
     }
 
     private static DashboardPane NormalizeCore(DashboardPane pane)
