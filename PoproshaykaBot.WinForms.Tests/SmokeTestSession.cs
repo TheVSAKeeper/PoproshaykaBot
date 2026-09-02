@@ -39,7 +39,7 @@ internal sealed class SmokeTestSession : IDisposable
 
         if (!File.Exists(appPath))
         {
-            Assert.Ignore($"Исполняемый файл приложения не найден: {appPath}. Соберите PoproshaykaBot.WinForms перед запуском UI-тестов.");
+            Assert.Fail($"Исполняемый файл приложения не найден: {appPath}. Соберите PoproshaykaBot.WinForms перед запуском UI-тестов.");
         }
 
         var baseDirectory = CreateTempBaseDirectory();
@@ -218,7 +218,7 @@ internal sealed class SmokeTestSession : IDisposable
         return Path.GetFullPath(Path.Combine(testAssemblyDir,
             "..", "..", "..", "..",
             "PoproshaykaBot.WinForms",
-            "bin", configuration, "net8.0-windows",
+            "bin", configuration, "net10.0-windows",
             AppExeName));
     }
 
