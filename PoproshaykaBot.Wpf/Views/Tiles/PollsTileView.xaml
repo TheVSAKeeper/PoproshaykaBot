@@ -97,13 +97,13 @@
             </ItemsControl>
 
             <TextBlock Text="{Binding FooterText}"
-                       Foreground="{Binding FooterStatusKey, Converter={StaticResource StreamStatusToBrush}}"
+                       Foreground="{Binding FooterStatusKey, Converter={StaticResource StreamStatusToBrush}, ConverterParameter=Text}"
                        FontSize="{DynamicResource Font.Size.S}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,8" />
 
             <TextBlock Text="{Binding StatusMessage}"
-                       Foreground="{DynamicResource State.Error}"
+                       Foreground="{DynamicResource State.ErrorText}"
                        FontSize="{DynamicResource Font.Size.S}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,8"

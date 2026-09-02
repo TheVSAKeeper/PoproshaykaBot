@@ -66,7 +66,7 @@
                         <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding BotStatusKnown}" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource State.Success}" />
+                                <Setter Property="Foreground" Value="{DynamicResource State.SuccessText}" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -100,10 +100,10 @@
                         <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding ChatTestSuccess}" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource State.Success}" />
+                                <Setter Property="Foreground" Value="{DynamicResource State.SuccessText}" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding ChatTestError}" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource State.Error}" />
+                                <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>

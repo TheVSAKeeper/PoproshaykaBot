@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -16,12 +16,16 @@ public sealed class StreamStatusToBrushConverter : IValueConverter
             return DependencyProperty.UnsetValue;
         }
 
-        var soft = string.Equals(parameter as string, "Soft", StringComparison.OrdinalIgnoreCase);
+        var variant = parameter as string;
+
+        var suffix = string.Equals(variant, "Soft", StringComparison.OrdinalIgnoreCase) ? "Soft"
+            : string.Equals(variant, "Text", StringComparison.OrdinalIgnoreCase) ? "Text"
+            : string.Empty;
 
         var key = state switch
         {
-            TriState.Positive => soft ? "State.SuccessSoft" : "State.Success",
-            TriState.Negative => soft ? "State.ErrorSoft" : "State.Error",
+            TriState.Positive => "State.Success" + suffix,
+            TriState.Negative => "State.Error" + suffix,
             _ => "Fg.Muted",
         };
 

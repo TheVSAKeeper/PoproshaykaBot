@@ -186,7 +186,7 @@
                                 <DockPanel Margin="0,0,0,2">
                                     <TextBlock DockPanel.Dock="Right"
                                                Text="{Binding SelectedRow.BonusPoints, StringFormat=N0}"
-                                               Foreground="{DynamicResource State.Success}" />
+                                               Foreground="{DynamicResource State.SuccessText}" />
                                     <TextBlock Text="Бонус"
                                                Style="{StaticResource TextBlock.Subtle}" />
                                 </DockPanel>
@@ -194,7 +194,7 @@
                                 <DockPanel>
                                     <TextBlock DockPanel.Dock="Right"
                                                Text="{Binding SelectedRow.PenaltyPoints, StringFormat=N0}"
-                                               Foreground="{DynamicResource State.Error}" />
+                                               Foreground="{DynamicResource State.ErrorText}" />
                                     <TextBlock Text="Штраф"
                                                Style="{StaticResource TextBlock.Subtle}" />
                                 </DockPanel>

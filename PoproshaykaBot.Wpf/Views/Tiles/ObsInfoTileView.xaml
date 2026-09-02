@@ -27,7 +27,7 @@
             <TextBlock Text="{Binding ConnectionText}"
                        ToolTip="{Binding ConnectionToolTip}"
                        FontWeight="SemiBold"
-                       Foreground="{Binding ConnectionStatus, Converter={StaticResource StreamStatusToBrush}}" />
+                       Foreground="{Binding ConnectionStatus, Converter={StaticResource StreamStatusToBrush}, ConverterParameter=Text}" />
         </DockPanel>
 
         <TextBlock Text="{Binding SceneText}"

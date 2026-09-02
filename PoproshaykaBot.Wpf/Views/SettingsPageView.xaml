@@ -38,7 +38,7 @@
                     <TextBlock Text="Есть несохранённые изменения"
                                Margin="8,0,0,0"
                                VerticalAlignment="Center"
-                               Foreground="{DynamicResource State.Warning}" />
+                               Foreground="{DynamicResource State.WarningText}" />
                 </StackPanel>
 
                 <Button DockPanel.Dock="Right"
