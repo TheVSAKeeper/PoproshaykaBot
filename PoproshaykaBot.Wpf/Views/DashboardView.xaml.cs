@@ -454,12 +454,16 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return;
         }
 
-        _shareHint ??= new()
+        if (_shareHint is null)
         {
-            Background = (Brush)FindResource("Bg.Surface"),
-            Foreground = (Brush)FindResource("Fg.Primary"),
-            Padding = new(8, 4, 8, 4),
-        };
+            _shareHint = new()
+            {
+                Padding = new(8, 4, 8, 4),
+            };
+
+            _shareHint.SetResourceReference(TextBlock.BackgroundProperty, "Bg.Surface");
+            _shareHint.SetResourceReference(TextBlock.ForegroundProperty, "Fg.Primary");
+        }
 
         if (!EditOverlay.Children.Contains(_shareHint))
         {
