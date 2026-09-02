@@ -1,7 +1,9 @@
 ﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
+using System.Drawing;
 using System.Text;
 
 namespace PoproshaykaBot.Core.Tests.Settings.Stores;
@@ -162,6 +164,121 @@ public sealed class JsonStoreFormatContractTests
             Assert.That(reloaded.LastAppliedProfileId,
                 Is.EqualTo(Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")));
         }
+    }
+
+    [Test]
+    public void ObsChatStore_WritesTheFormatFixedBeforeTheSharedLayer()
+    {
+        var path = Path.Combine(_directory.FullName, "obs-chat.json");
+        var store = new ObsChatStore(Substitute.For<IEventBus>(), NullLogger<ObsChatStore>.Instance, path);
+
+        store.Save(new());
+
+        AssertFileMatches(path,
+            """
+            {
+              "backgroundColor": {
+                "a": 179,
+                "r": 0,
+                "g": 0,
+                "b": 0
+              },
+              "textColor": {
+                "a": 255,
+                "r": 255,
+                "g": 255,
+                "b": 255
+              },
+              "usernameColor": {
+                "a": 255,
+                "r": 145,
+                "g": 70,
+                "b": 255
+              },
+              "systemMessageColor": {
+                "a": 255,
+                "r": 255,
+                "g": 204,
+                "b": 0
+              },
+              "timestampColor": {
+                "a": 255,
+                "r": 153,
+                "g": 153,
+                "b": 153
+              },
+              "fontFamily": "\"Motiva Sans\", \"Inter\", \"Noto Sans\", Arial, sans-serif",
+              "fontSize": 14,
+              "fontBold": false,
+              "padding": 5,
+              "margin": 5,
+              "borderRadius": 5,
+              "animationDuration": 300,
+              "enableAnimations": true,
+              "maxMessages": 50,
+              "showTimestamp": true,
+              "emoteSizePixels": 28,
+              "badgeSizePixels": 18,
+              "showUserAvatars": false,
+              "userAvatarSizePixels": 32,
+              "showUserTypeBorders": true,
+              "highlightFirstTimeUsers": true,
+              "highlightMentions": true,
+              "enableMessageShadows": true,
+              "enableSpecialEffects": true,
+              "enableSmoothScroll": true,
+              "scrollAnimationDuration": 300,
+              "autoScrollEnabled": true,
+              "scrollToBottomThreshold": 100,
+              "scrollPauseAfterUserMs": 3000,
+              "userMessageAnimation": "slide-in-right",
+              "botMessageAnimation": "fade-in-up",
+              "systemMessageAnimation": "fade-in-up",
+              "broadcasterMessageAnimation": "slide-in-left",
+              "firstTimeUserMessageAnimation": "bounce-in",
+              "enableMessageFadeOut": true,
+              "messageLifetimeSeconds": 30,
+              "fadeOutAnimationType": "fade-out",
+              "fadeOutAnimationDurationMs": 1000
+            }
+            """);
+
+        Assert.That(new ObsChatStore(Substitute.For<IEventBus>(), NullLogger<ObsChatStore>.Instance, path)
+                .Load()
+                .BackgroundColor,
+            Is.EqualTo(Color.FromArgb(179, 0, 0, 0)));
+    }
+
+    [Test]
+    public void ObsIntegrationStore_WritesTheFormatFixedBeforeTheSharedLayer()
+    {
+        var path = Path.Combine(_directory.FullName, "obs-integration.json");
+        var store = new ObsIntegrationStore(Substitute.For<IEventBus>(), NullLogger<ObsIntegrationStore>.Instance, path);
+
+        store.Save(new());
+
+        AssertFileMatches(path,
+            """
+            {
+              "enabled": false,
+              "autoConnect": true,
+              "autoProvisionBrowserSource": false,
+              "applySceneOnProfile": false,
+              "applyProfileOnScene": false,
+              "host": "127.0.0.1",
+              "port": 4455,
+              "password": "",
+              "sceneName": "",
+              "dashboardMicrophoneName": "",
+              "dashboardSourceNames": [],
+              "dashboardVolumeMeterDelayMs": 120,
+              "sourceName": "PoproshaykaBot Chat",
+              "width": 1920,
+              "height": 1080,
+              "chatRefreshSources": [],
+              "refreshChatSourcesOnStreamStart": false
+            }
+            """);
     }
 
     [Test]
