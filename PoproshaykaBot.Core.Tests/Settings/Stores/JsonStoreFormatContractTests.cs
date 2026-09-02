@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
+using PoproshaykaBot.Core.Twitch.Auth;
 using System.Drawing;
 using System.Text;
 
@@ -279,6 +280,93 @@ public sealed class JsonStoreFormatContractTests
               "refreshChatSourcesOnStreamStart": false
             }
             """);
+    }
+
+    [Test]
+    public void AccountsStore_WritesTheFormatFixedBeforeTheSharedLayer()
+    {
+        var path = Path.Combine(_directory.FullName, "accounts.json");
+        var store = new AccountsStore(NullLogger<AccountsStore>.Instance, path);
+
+        store.Mutate(TwitchOAuthRole.Bot, account =>
+        {
+            account.AccessToken = "bot-access";
+            account.RefreshToken = "bot-refresh";
+            account.Login = "thebot";
+            account.UserId = "1234";
+            account.AccessTokenExpiresAt = new(2026, 9, 3, 10, 0, 0, TimeSpan.Zero);
+        });
+
+        AssertFileMatches(path,
+            """
+            {
+              "botAccount": {
+                "accessToken": "bot-access",
+                "refreshToken": "bot-refresh",
+                "login": "thebot",
+                "userId": "1234",
+                "scopes": [
+                  "user:read:chat",
+                  "user:write:chat",
+                  "user:bot"
+                ],
+                "storedScopes": [],
+                "accessTokenExpiresAt": "2026-09-03T10:00:00+00:00"
+              },
+              "broadcasterAccount": {
+                "accessToken": "",
+                "refreshToken": "",
+                "login": "",
+                "userId": "",
+                "scopes": [
+                  "channel:bot",
+                  "channel:manage:broadcast",
+                  "channel:manage:polls",
+                  "channel:read:polls"
+                ],
+                "storedScopes": [],
+                "accessTokenExpiresAt": null
+              }
+            }
+            """);
+    }
+
+    [Test]
+    public void RecentCategoriesStore_WritesTheFormatFixedBeforeTheSharedLayer()
+    {
+        var path = Path.Combine(_directory.FullName, "recent-categories.json");
+
+        File.WriteAllText(path,
+            """{"items":[{"id":"509658","name":"Just Chatting","lastUsedAt":"2026-09-03T10:00:00+00:00"}]}""");
+
+        new RecentCategoriesStore(NullLogger<RecentCategoriesStore>.Instance, path).Save();
+
+        AssertFileMatches(path,
+            """
+            {
+              "items": [
+                {
+                  "id": "509658",
+                  "name": "Just Chatting",
+                  "lastUsedAt": "2026-09-03T10:00:00+00:00"
+                }
+              ]
+            }
+            """);
+    }
+
+    [TestCase("""{"items":null}""")]
+    [TestCase("{}")]
+    public void RecentCategoriesStore_FileWithoutAUsableList_StartsEmptyInsteadOfThrowing(string content)
+    {
+        var path = Path.Combine(_directory.FullName, "recent-categories.json");
+        File.WriteAllText(path, content);
+
+        var store = new RecentCategoriesStore(NullLogger<RecentCategoriesStore>.Instance, path);
+        store.Remember(new("509658", "Just Chatting", "https://art"));
+
+        Assert.That(store.Load().Select(entry => entry.Id), Is.EqualTo(new[] { "509658" }),
+            "Список, отданный как null, обязан читаться пустым: это разобранный JSON, битым файлом он не считается и в бэкап не уходит.");
     }
 
     [Test]

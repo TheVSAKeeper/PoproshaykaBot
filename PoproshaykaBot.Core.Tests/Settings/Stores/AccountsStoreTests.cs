@@ -155,6 +155,41 @@ public sealed class AccountsStoreTests
     }
 
     [Test]
+    public void TryClearAccessToken_WithATokenTheRefreshAlreadyReplaced_WritesNothingAtAll()
+    {
+        var store = Store();
+        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "v2");
+
+        Directory.CreateDirectory(_filePath + ".old");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.TryClearAccessToken(TwitchOAuthRole.Bot, "v1"), Is.False);
+
+            Assert.That(store.LoadBot().AccessToken, Is.EqualTo("v2"),
+                "Пропущенная очистка не должна ходить на диск: запись заблокирована, и любое обращение к ней здесь упало бы. 401 по устаревшему токену прилетает пачками.");
+        }
+    }
+
+    [Test]
+    public void Mutate_WhenTheWriteFails_KeepsTheCacheOnTheVersionThatReachedDisk()
+    {
+        var store = Store();
+        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "v1");
+
+        Directory.CreateDirectory(_filePath + ".old");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(() => store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "v2"),
+                Throws.InstanceOf<IOException>());
+
+            Assert.That(store.LoadBot().AccessToken, Is.EqualTo("v1"),
+                "Токен, не дошедший до диска, не должен оседать в памяти: следующая удачная запись затрёт им целый файл.");
+        }
+    }
+
+    [Test]
     public void Constructor_FileThatFailsToDeserialize_StartsOnDefaultsAndSetsItAsideWithoutTokens()
     {
         File.WriteAllText(_filePath, ParseableButInvalid);
