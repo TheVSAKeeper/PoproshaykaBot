@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
@@ -47,7 +48,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly ObsChatStore _obsChatStore;
     private readonly ObsIntegrationStore _obsIntegrationStore;
     private readonly UpdateStore _updateStore;
-    private readonly DashboardLayoutStore _dashboardLayoutStore;
+    private readonly DashboardLayoutCoordinator _dashboardLayoutCoordinator;
     private readonly IEventBus _eventBus;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly ILogger<SettingsPageViewModel> _logger;
@@ -63,6 +64,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private string _obsChatBaselineJson = string.Empty;
     private ObsIntegrationSettings _obsIntegrationDraft = new();
     private UpdateSettings _updateDraft = new();
+    private int _dashboardRevision;
+    private bool _dashboardEdited;
     private bool _suppressDirty;
 
     [ObservableProperty]
@@ -94,7 +97,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         ObsChatStore obsChatStore,
         ObsIntegrationStore obsIntegrationStore,
         UpdateStore updateStore,
-        DashboardLayoutStore dashboardLayoutStore,
+        DashboardLayoutCoordinator dashboardLayoutCoordinator,
         IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
         ILogger<SettingsPageViewModel> logger,
@@ -121,7 +124,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _obsChatStore = obsChatStore;
         _obsIntegrationStore = obsIntegrationStore;
         _updateStore = updateStore;
-        _dashboardLayoutStore = dashboardLayoutStore;
+        _dashboardLayoutCoordinator = dashboardLayoutCoordinator;
         _eventBus = eventBus;
         _kestrelHttpServer = kestrelHttpServer;
         _logger = logger;
@@ -222,7 +225,11 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             AutoBroadcast.LoadSettings(_settings.Twitch.AutoBroadcast);
             BotLifecycle.LoadSettings(_settings.Twitch.BotLifecycleAutomation);
             Update.LoadSettings(_updateDraft);
-            DashboardLayout.LoadSettings(_dashboardLayoutStore.LoadDashboard());
+            var dashboardSnapshot = _dashboardLayoutCoordinator.Read();
+
+            _dashboardRevision = dashboardSnapshot.Revision;
+            _dashboardEdited = false;
+            DashboardLayout.LoadSettings(dashboardSnapshot.Layout);
             Polls.RevertCommand.Execute(null);
 
             OAuth.RefreshChannel(Basic.GetChannel());
@@ -312,7 +319,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
             _updateStore.Save(_updateDraft);
-            _dashboardLayoutStore.SaveDashboard(DashboardLayout.BuildLayout());
+            SaveDashboardLayout();
 
             if (Polls.HasChanges)
             {
@@ -369,6 +376,19 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private void Revert()
     {
         OnEnter();
+    }
+
+    private void SaveDashboardLayout()
+    {
+        if (!_dashboardEdited)
+        {
+            return;
+        }
+
+        var layout = DashboardLayout.BuildLayout();
+
+        _dashboardRevision = _dashboardLayoutCoordinator.Commit(layout, _dashboardRevision).Snapshot.Revision;
+        _dashboardEdited = false;
     }
 
     private void ReconcileHttpServerPort()
@@ -487,6 +507,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     {
         if (!_suppressDirty)
         {
+            _dashboardEdited = true;
             Dirty = true;
         }
     }

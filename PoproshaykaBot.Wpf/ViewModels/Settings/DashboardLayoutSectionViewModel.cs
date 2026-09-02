@@ -13,6 +13,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
     private readonly Dictionary<string, PlacedTile> _placed = new(StringComparer.Ordinal);
     private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
     private readonly List<DashboardTileSettings> _preserved = [];
+    private DashboardPane? _root;
     private bool _suppress;
 
     [ObservableProperty]
@@ -20,6 +21,9 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
     [ObservableProperty]
     private int _rowCount = DashboardLayoutDefaults.DefaultRowCount;
+
+    [ObservableProperty]
+    private string _notice = string.Empty;
 
     public DashboardLayoutSectionViewModel(IEnumerable<DashboardTileViewModel> tiles)
     {
@@ -81,6 +85,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         {
             ColumnCount = ColumnCount,
             RowCount = RowCount,
+            Root = _root,
         };
 
         var order = 0;
@@ -103,11 +108,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
             });
         }
 
-        foreach (var tile in _preserved.Where(tile => !_placed.ContainsKey(tile.TypeId)))
-        {
-            tile.Order = order++;
-            layout.Tiles.Add(tile);
-        }
+        DashboardLayoutReconciler.AppendPreserved(layout, _preserved);
 
         return layout;
     }
@@ -234,6 +235,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
     private void LoadFrom(DashboardLayoutSettings layout)
     {
+        _root = layout.Root;
         _suppress = true;
 
         try
@@ -289,10 +291,20 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         foreach (var lost in unplaceable)
         {
             _placed.Remove(lost.TypeId);
+            RetainAsHidden(lost);
         }
+
+        Notice = DashboardLayoutReconciler.DescribeHiddenTiles(
+            unplaceable.Select(lost => Meta(lost.TypeId)?.Title ?? lost.TypeId).ToList());
 
         OnPropertyChanged(nameof(AvailablePalette));
         OnPropertyChanged(nameof(PlacedTiles));
+    }
+
+    private void RetainAsHidden(PlacedTile lost)
+    {
+        _preserved.RemoveAll(tile => string.Equals(tile.TypeId, lost.TypeId, StringComparison.Ordinal));
+        _preserved.Add(DashboardLayoutReconciler.CreateHiddenTile(lost, _collapsed.Contains(lost.TypeId)));
     }
 
     private void RaiseLayoutChanged()

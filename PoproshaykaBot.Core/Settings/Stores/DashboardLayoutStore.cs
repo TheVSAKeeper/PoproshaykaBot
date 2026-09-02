@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.Core.Settings.Ui;
@@ -45,8 +46,18 @@ public class DashboardLayoutStore
 
         lock (_syncLock)
         {
+            var previous = _state.Dashboard;
             _state.Dashboard = JsonStoreClone.DeepClone(layout);
-            SaveInternal();
+
+            try
+            {
+                SaveInternal();
+            }
+            catch
+            {
+                _state.Dashboard = previous;
+                throw;
+            }
 
             _logger?.LogDebug("DashboardLayoutStore: раскладка дашборда сохранена");
         }
@@ -58,8 +69,18 @@ public class DashboardLayoutStore
 
         lock (_syncLock)
         {
+            var previous = _state.MainWindow;
             _state.MainWindow = JsonStoreClone.DeepClone(window);
-            SaveInternal();
+
+            try
+            {
+                SaveInternal();
+            }
+            catch
+            {
+                _state.MainWindow = previous;
+                throw;
+            }
 
             _logger?.LogDebug("DashboardLayoutStore: параметры главного окна сохранены");
         }
@@ -67,6 +88,11 @@ public class DashboardLayoutStore
 
     private void SaveInternal()
     {
+        if (_state.Dashboard is not null)
+        {
+            DashboardLayoutReconciler.SyncRoot(_state.Dashboard);
+        }
+
         var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
         AtomicFile.Save(_filePath, json, _logger);
     }
