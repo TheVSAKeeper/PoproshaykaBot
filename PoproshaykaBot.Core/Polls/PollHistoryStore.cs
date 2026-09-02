@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace PoproshaykaBot.Core.Polls;
 
@@ -25,6 +26,10 @@ public sealed class PollHistoryStore(
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver
+        {
+            Modifiers = { JsonStoreNullDefaults.Apply },
+        },
     };
 
     private readonly string _filePath = filePath ?? AppPaths.Combine("polls-history.json");

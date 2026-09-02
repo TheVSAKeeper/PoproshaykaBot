@@ -95,6 +95,19 @@ public class PollHistoryStoreTests
     }
 
     [Test]
+    public void Reload_FileWithANullChoiceList_ReadsItAsEmpty()
+    {
+        File.WriteAllText(_tempFile, """{"entries":[{"pollId":"p1","finalChoices":null}]}""");
+
+        var entry = new PollHistoryStore(_pollsStore, _helix, _broadcasterIdProvider, NullLogger<PollHistoryStore>.Instance, _tempFile)
+            .GetAll()
+            .Single();
+
+        Assert.That(entry.FinalChoices, Is.Empty,
+            "История голосований лежит в своём файле и со своими опциями сериализации, но правило про null у ненулевого свойства действует и здесь.");
+    }
+
+    [Test]
     public void Reload_RestoresEntriesFromDisk()
     {
         _store.TryAdd(Entry("p1"));

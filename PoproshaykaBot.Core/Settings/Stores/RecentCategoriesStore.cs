@@ -49,12 +49,6 @@ public sealed class RecentCategoriesStore
 
     private sealed class RecentCategoriesFileDto
     {
-        private List<GameCategoryCacheEntry>? _items;
-
-        public List<GameCategoryCacheEntry> Items
-        {
-            get => _items ??= [];
-            set => _items = value;
-        }
+        public List<GameCategoryCacheEntry> Items { get; set; } = [];
     }
 }
