@@ -52,6 +52,7 @@ public partial class App : Application
 
     private bool _isFinalizeUpdate;
     private string[]? _galleryArgs;
+    private GalleryWorkspace? _galleryWorkspace;
     private GalleryArguments? _galleryArguments;
     private bool _appLifetimeStarted;
     private bool _streamMonitoringStarted;
@@ -75,6 +76,7 @@ public partial class App : Application
         {
             _galleryArgs = [.. e.Args.Skip(galleryIndex + 1)];
             IsHeadless = true;
+            _galleryWorkspace = GalleryWorkspace.Redirect();
         }
 
         var coreUiLogSink = new UiLogSink();
@@ -117,9 +119,9 @@ public partial class App : Application
 
             AppThemes.Register();
 
-            if (_galleryArgs is not null)
+            if (_galleryArgs is not null && _galleryWorkspace is not null)
             {
-                _galleryArguments = GalleryHost.Parse(_galleryArgs, System.IO.Path.Combine(AppPaths.BaseDirectory, GalleryRunner.FolderName));
+                _galleryArguments = GalleryHost.Parse(_galleryArgs, System.IO.Path.Combine(_galleryWorkspace.OutputRoot, GalleryRunner.FolderName));
             }
 
             var themeKey = uiSettings.GetStringValue(SettingsKeys.Theme);
