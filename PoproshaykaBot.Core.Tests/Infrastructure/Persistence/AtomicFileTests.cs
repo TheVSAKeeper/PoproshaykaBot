@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Infrastructure.Persistence;
+﻿using PoproshaykaBot.Core.Infrastructure.Persistence;
 
 namespace PoproshaykaBot.Core.Tests.Infrastructure.Persistence;
 
@@ -74,6 +74,25 @@ public sealed class AtomicFileTests
             Assert.That(File.ReadAllText(_targetPath), Is.EqualTo("v3"));
             Assert.That(File.ReadAllText(_targetPath + ".bak"), Is.EqualTo("v2"),
                 ".bak must preserve the *last good* version so a crash rolls back to v{N-1}, not to the original baseline.");
+        }
+    }
+
+    [Test]
+    public void Save_WhenTheSwapFails_LeavesTheLastGoodContentReadable()
+    {
+        AtomicFile.Save(_targetPath, "v1");
+        AtomicFile.Save(_targetPath, "v2");
+
+        Directory.CreateDirectory(_targetPath + ".old");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(() => AtomicFile.Save(_targetPath, "v3"), Throws.InstanceOf<IOException>());
+
+            Assert.That(File.ReadAllText(_targetPath), Is.EqualTo("v2"),
+                "Сорвавшаяся запись обязана вернуть файл из .bak: читателю достаётся последняя хорошая версия, а не обрывок.");
+
+            Assert.That(File.ReadAllText(_targetPath + ".bak"), Is.EqualTo("v2"));
         }
     }
 

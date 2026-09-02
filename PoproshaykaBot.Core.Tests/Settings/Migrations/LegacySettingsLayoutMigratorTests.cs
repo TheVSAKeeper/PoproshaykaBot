@@ -1,5 +1,7 @@
-﻿using PoproshaykaBot.Core.Settings.Migrations;
+﻿using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Migrations;
 using PoproshaykaBot.Core.Settings.Stores;
+using System.Text.Json.Nodes;
 
 namespace PoproshaykaBot.Core.Tests.Settings.Migrations;
 
@@ -28,6 +30,22 @@ public sealed class LegacySettingsLayoutMigratorTests
 
     private string _baseDirectory = null!;
     private string _settingsDirectory = null!;
+
+    private const string MonolithicWithTokens = """
+                                                {
+                                                  "twitch": {
+                                                    "channel": "bobito217",
+                                                    "botAccount": {
+                                                      "login": "thebot",
+                                                      "accessToken": "bot-secret-access",
+                                                      "refreshToken": "bot-secret-refresh"
+                                                    }
+                                                  },
+                                                  "ui": {
+                                                    "dashboard": { "columnCount": 4 }
+                                                  }
+                                                }
+                                                """;
 
     [Test]
     public void Run_RelocatesFlatSettingsFilesIntoSubdirectory()
@@ -196,6 +214,57 @@ public sealed class LegacySettingsLayoutMigratorTests
     }
 
     [Test]
+    public void Run_SplitsOnlyInsideTheSettingsDirectory_AndLeavesNothingForSettingsManager()
+    {
+        File.WriteAllText(Path.Combine(_baseDirectory, "settings.json"), MonolithicWithTokens);
+
+        LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);
+
+        var settingsFile = Path.Combine(_settingsDirectory, "settings.json");
+        var afterMigrator = File.ReadAllText(settingsFile);
+
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, settingsFile).Current;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Directory.GetFiles(_baseDirectory, "*.json"), Has.Length.EqualTo(1));
+            Assert.That(Directory.GetFiles(_baseDirectory, "settings.legacy-*.json"), Has.Length.EqualTo(1),
+                "Сплиттер обязан работать по settings/, а не по корню: порядок «перенос, затем разбор» держится на этом.");
+
+            Assert.That(File.ReadAllText(settingsFile), Is.EqualTo(afterMigrator),
+                "SettingsManager поднимается после DI-сборки и по уже разобранному файлу не должен писать ничего.");
+
+            Assert.That(Directory.GetFiles(_settingsDirectory, "settings.pre-migration-*.json"), Has.Length.EqualTo(1),
+                "Второй pre-migration бэкап означал бы, что разбор монолита прошёл дважды.");
+
+            Assert.That(settings.Twitch.Channel, Is.EqualTo("bobito217"));
+        }
+    }
+
+    [Test]
+    public void Run_MonolithicSettingsWithTokens_KeepsThemOnlyInAccountsFile()
+    {
+        File.WriteAllText(Path.Combine(_baseDirectory, "settings.json"), MonolithicWithTokens);
+
+        LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);
+
+        var backups = Directory.GetFiles(_settingsDirectory, "settings.pre-migration-*.json");
+        var backup = backups.Length == 1 ? File.ReadAllText(backups[0]) : string.Empty;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(backups, Has.Length.EqualTo(1));
+            Assert.That(backup, Is.EqualTo(RedactedMonolith()),
+                "Бэкап – это монолит с вычеркнутыми токенами: канал, раскладка и остальное обязаны дойти до разбора целиком.");
+
+            Assert.That(File.ReadAllText(Path.Combine(_settingsDirectory, "accounts.json")), Does.Contain("bot-secret-access"),
+                "Редактируется только бэкап – рабочий accounts.json обязан унести токены дальше.");
+
+            Assert.That(File.ReadAllText(Path.Combine(_settingsDirectory, "settings.json")), Does.Not.Contain("bot-secret-access"));
+        }
+    }
+
+    [Test]
     public void Run_NoLegacyFiles_DoesNothing()
     {
         LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);
@@ -205,5 +274,16 @@ public sealed class LegacySettingsLayoutMigratorTests
             Assert.That(Directory.Exists(_settingsDirectory), Is.True, "Целевая директория создаётся даже без работы");
             Assert.That(Directory.GetFiles(_settingsDirectory), Is.Empty);
         }
+    }
+
+    private static string RedactedMonolith()
+    {
+        var expected = JsonNode.Parse(MonolithicWithTokens)!;
+        var account = expected["twitch"]!["botAccount"]!;
+
+        account["accessToken"] = string.Empty;
+        account["refreshToken"] = string.Empty;
+
+        return expected.ToJsonString(JsonStoreOptions.Default);
     }
 }
