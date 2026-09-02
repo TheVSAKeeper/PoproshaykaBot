@@ -61,7 +61,7 @@
                     <Setter Property="Background"
                             Value="{DynamicResource Accent.Soft}" />
                     <Setter Property="Foreground"
-                            Value="{DynamicResource Accent.Primary}" />
+                            Value="{DynamicResource Accent.Text}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -84,7 +84,7 @@
                                           Width="16"
                                           Height="16"
                                           VerticalAlignment="Center"
-                                          Foreground="{DynamicResource Accent.Primary}" />
+                                          Foreground="{DynamicResource Accent.Text}" />
                 <TextBlock Text="PoproshaykaBot"
                            Margin="10,0,0,0"
                            VerticalAlignment="Center"

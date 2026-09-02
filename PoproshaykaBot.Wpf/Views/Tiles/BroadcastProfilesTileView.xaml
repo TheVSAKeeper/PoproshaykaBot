@@ -29,7 +29,7 @@
                         <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsStatusError}" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource State.Error}" />
+                                <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -114,7 +114,7 @@
                                            Visibility="{Binding HasMetaLine, Converter={StaticResource BoolToVisibility}}" />
 
                                 <TextBlock Text="Расходится с текущим стримом"
-                                           Foreground="{DynamicResource State.Warning}"
+                                           Foreground="{DynamicResource State.WarningText}"
                                            FontSize="{DynamicResource Font.Size.XS}"
                                            Margin="0,0,0,4"
                                            Visibility="{Binding HasDrift, Converter={StaticResource BoolToVisibility}}" />

@@ -37,7 +37,7 @@
                                               Width="16"
                                               Height="16"
                                               VerticalAlignment="Center"
-                                              Foreground="{DynamicResource State.Info}" />
+                                              Foreground="{DynamicResource State.InfoText}" />
                     <TextBlock Text="{Binding Text}"
                                Margin="10,0,0,0"
                                VerticalAlignment="Center"

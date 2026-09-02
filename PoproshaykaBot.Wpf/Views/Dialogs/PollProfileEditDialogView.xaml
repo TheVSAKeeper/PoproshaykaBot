@@ -120,7 +120,7 @@
             </keepshell:NumericSettingField>
 
             <TextBlock Text="{Binding ErrorMessage}"
-                       Foreground="{DynamicResource State.Error}"
+                       Foreground="{DynamicResource State.ErrorText}"
                        FontSize="{DynamicResource Font.Size.S}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,12"

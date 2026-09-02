@@ -34,6 +34,11 @@ public partial class MainWindow : Window
 
     private void ImportWinFormsPlacement(DashboardLayoutStore layoutStore)
     {
+        if (App.IsHeadless)
+        {
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(_settings.GetStringValue(SettingsKeys.WindowWidth)))
         {
             return;
@@ -72,7 +77,12 @@ public partial class MainWindow : Window
         if (await _viewModel.RequestCloseAsync())
         {
             _closeConfirmed = true;
-            WindowPlacement.Save(this, _settings, WindowKeys);
+
+            if (!App.IsHeadless)
+            {
+                WindowPlacement.Save(this, _settings, WindowKeys);
+            }
+
             Dispatcher.BeginInvoke(() => Close());
         }
     }

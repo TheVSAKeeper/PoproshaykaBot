@@ -18,11 +18,10 @@
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0"
                        Text="Масштаб шрифта"
-                       VerticalAlignment="Center" />
+                       Style="{StaticResource Form.Label}" />
             <TextBlock Grid.Column="1"
                        Text="{Binding Shell.FontScale, StringFormat={}{0:P0}}"
-                       Style="{StaticResource TextBlock.Mono}"
-                       VerticalAlignment="Center" />
+                       Style="{StaticResource Form.Value}" />
         </Grid>
         <Slider Minimum="{x:Static keepshell:FontScaleManager.MinScale}"
                 Maximum="{x:Static keepshell:FontScaleManager.MaxScale}"
@@ -31,17 +30,13 @@
                 IsSnapToTickEnabled="True"
                 AutomationProperties.Name="Масштаб шрифта"
                 Margin="0,6,0,0" />
-        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                   Text="Увеличивает размер текста по всему приложению. 100% – стандартный размер."
-                   TextWrapping="Wrap"
-                   Margin="0,6,0,0" />
+        <TextBlock Style="{StaticResource Form.Hint}"
+                   Text="Увеличивает размер текста по всему приложению. 100% – стандартный размер." />
 
         <CheckBox Content="Показывать заголовок страницы"
                   IsChecked="{Binding Shell.ShowPageHeader, Mode=TwoWay}"
                   Margin="0,20,0,0" />
-        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                   Text="Плашка с названием раздела и описанием над содержимым каждой страницы."
-                   TextWrapping="Wrap"
-                   Margin="26,6,0,0" />
+        <TextBlock Style="{StaticResource Form.CheckHint}"
+                   Text="Плашка с названием раздела и описанием над содержимым каждой страницы." />
     </StackPanel>
 </UserControl>

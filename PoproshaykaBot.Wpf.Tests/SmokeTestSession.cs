@@ -40,7 +40,7 @@ internal sealed class SmokeTestSession : IDisposable
 
         if (!File.Exists(appPath))
         {
-            Assert.Ignore($"Исполняемый файл приложения не найден: {appPath}. Соберите PoproshaykaBot.Wpf перед запуском UI-тестов.");
+            Assert.Fail($"Исполняемый файл приложения не найден: {appPath}. Соберите PoproshaykaBot.Wpf перед запуском UI-тестов.");
         }
 
         var baseDirectory = CreateTempBaseDirectory();

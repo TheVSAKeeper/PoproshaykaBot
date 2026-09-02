@@ -16,8 +16,6 @@ using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.ComponentModel;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Text.Json;
-using SettingsSection = PoproshaykaBot.Wpf.ViewModels.Settings.SettingsSection;
-using SettingsSectionList = PoproshaykaBot.Wpf.ViewModels.Settings.SettingsSectionList;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -72,10 +70,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     [NotifyPropertyChangedFor(nameof(HasChanges))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private bool _dirty;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SearchTextEmpty))]
-    private string _searchText = string.Empty;
 
     public SettingsPageViewModel(
         BasicSettingsSectionViewModel basic,
@@ -169,8 +163,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         new SettingsSection("appearance", "Оформление", PackIconLucideKind.Palette, "тема масштаб шрифта размер текста заголовок страницы внешний вид"),
         new SettingsSection("misc", "Прочее", PackIconLucideKind.Wrench, "данные приложения папка настроек логи профили трансляций импорт экспорт сброс"));
 
-    public bool SearchTextEmpty => string.IsNullOrWhiteSpace(SearchText);
-
     public BasicSettingsSectionViewModel Basic { get; }
 
     public RateLimitingSettingsViewModel RateLimiting { get; }
@@ -259,17 +251,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         Polls.PropertyChanged -= OnPollsPropertyChanged;
         DashboardLayout.Edited -= OnDashboardLayoutEdited;
         Sections.PropertyChanged -= OnSectionsPropertyChanged;
-    }
-
-    partial void OnSearchTextChanged(string value)
-    {
-        Sections.Filter(value);
-    }
-
-    [RelayCommand]
-    private void ClearSearch()
-    {
-        SearchText = string.Empty;
     }
 
     private void OnSectionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
