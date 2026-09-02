@@ -30,6 +30,12 @@ public sealed class OnboardingWizardLauncher(
         {
             var wizard = services.GetRequiredService<OnboardingWizardWindow>();
             wizard.Owner = Application.Current.MainWindow;
+
+            if (App.IsHeadless)
+            {
+                OffScreenWindow.Prepare(wizard, wizard.Width, wizard.Height);
+            }
+
             wizard.ShowDialog();
         }
         catch (Exception exception)

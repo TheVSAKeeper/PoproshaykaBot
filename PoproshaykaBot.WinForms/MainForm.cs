@@ -16,14 +16,13 @@ using PoproshaykaBot.WinForms.Forms.Onboarding;
 using PoproshaykaBot.WinForms.Forms.Settings;
 using PoproshaykaBot.WinForms.Forms.StreamHistory;
 using PoproshaykaBot.WinForms.Forms.Users;
+using PoproshaykaBot.WinForms.Infrastructure;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 
 namespace PoproshaykaBot.WinForms;
 
 public partial class MainForm : Form
 {
-    private const int OffScreenPosition = -32000;
-
     private readonly IFormFactory _forms;
     private readonly IEventBus _eventBus;
     private readonly ChatHistoryManager _chatHistoryManager;
@@ -633,9 +632,7 @@ public partial class MainForm : Form
     {
         if (Program.IsUiSmoke)
         {
-            StartPosition = FormStartPosition.Manual;
-            Location = new Point(OffScreenPosition, OffScreenPosition);
-            ShowInTaskbar = false;
+            OffScreenForm.PrepareIfHeadless(this);
             return;
         }
 
