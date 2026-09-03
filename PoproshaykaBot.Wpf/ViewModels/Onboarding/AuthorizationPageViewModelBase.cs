@@ -366,7 +366,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
 
         _context.Settings.Twitch.Channel = result.Login;
-        _settingsManager.Current.Twitch.Channel = result.Login;
+        _settingsManager.UpdateCurrent(settings => settings.Twitch.Channel = result.Login);
     }
 
     private void RefreshFromContext()

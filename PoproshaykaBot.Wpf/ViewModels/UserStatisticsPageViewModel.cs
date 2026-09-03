@@ -249,18 +249,13 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             return;
         }
 
-        var settings = _settingsManager.Current;
-        var previous = settings.Ranks.PointTerm;
-        settings.Ranks.PointTerm = dialog.BuildResult();
-
         try
         {
-            _settingsManager.SaveSettings(settings);
+            _settingsManager.Mutate(settings => settings.Ranks.PointTerm = dialog.BuildResult());
             OnPropertyChanged(nameof(ActionButtonText));
         }
         catch (Exception ex)
         {
-            settings.Ranks.PointTerm = previous;
             _dialogService.Error("Ошибка сохранения", $"Не удалось сохранить названия баллов: {ex.Message}");
         }
     }

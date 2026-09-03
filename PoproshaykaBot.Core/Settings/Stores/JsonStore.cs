@@ -12,17 +12,23 @@ internal sealed class JsonStore<T>
     private readonly string _filePath;
     private readonly ILogger? _logger;
     private readonly Func<string, string>? _backupRedactor;
+    private readonly Func<string, T?>? _parser;
     private readonly object _syncLock = new();
 
     private T _state;
 
-    public JsonStore(string filePath, ILogger? logger = null, Func<string, string>? backupRedactor = null)
+    public JsonStore(
+        string filePath,
+        ILogger? logger = null,
+        Func<string, string>? backupRedactor = null,
+        Func<string, T?>? parser = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(filePath);
 
         _filePath = filePath;
         _logger = logger;
         _backupRedactor = backupRedactor;
+        _parser = parser;
         _state = ReadFile();
     }
 
@@ -175,7 +181,12 @@ internal sealed class JsonStore<T>
         try
         {
             var json = File.ReadAllText(_filePath);
-            return JsonSerializer.Deserialize<T>(json, JsonStoreOptions.Default) ?? new();
+
+            var state = _parser == null
+                ? JsonSerializer.Deserialize<T>(json, JsonStoreOptions.Default)
+                : _parser(json);
+
+            return state ?? new();
         }
         catch (Exception exception)
         {

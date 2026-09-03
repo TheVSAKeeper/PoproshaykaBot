@@ -31,8 +31,7 @@ public static class HttpServerPortReconciler
         }
 
         logger.LogInformation("Конфликт портов. Обновление порта с {OldPort} на {NewPort}", serverPort, redirectPort);
-        settings.Twitch.HttpServerPort = redirectPort;
-        settingsManager.SaveSettings(settings);
+        settingsManager.Mutate(current => current.Twitch.HttpServerPort = redirectPort);
 
         var message = $"""
                        Обнаружен конфликт портов:

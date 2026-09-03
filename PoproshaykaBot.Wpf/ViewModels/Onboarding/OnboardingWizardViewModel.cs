@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -290,14 +290,13 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
             return;
         }
 
-        _settingsManager.Current.Twitch.Channel = _originalChannel;
+        _settingsManager.UpdateCurrent(settings => settings.Twitch.Channel = _originalChannel);
         _logger.OnboardingChannelRolledBack(_originalChannel);
     }
 
     private async Task RollbackHttpServerPortAsync()
     {
-        var liveSettings = _settingsManager.Current;
-        var currentPort = liveSettings.Twitch.HttpServerPort;
+        var currentPort = _settingsManager.Current.Twitch.HttpServerPort;
 
         if (currentPort == _originalHttpServerPort)
         {
@@ -311,7 +310,7 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
                 await _kestrelHttpServer.StopAsync();
             }
 
-            liveSettings.Twitch.HttpServerPort = _originalHttpServerPort;
+            _settingsManager.UpdateCurrent(settings => settings.Twitch.HttpServerPort = _originalHttpServerPort);
 
             await _kestrelHttpServer.StartAsync();
 

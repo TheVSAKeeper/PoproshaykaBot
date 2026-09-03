@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Server;
@@ -133,8 +133,6 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
 
     private async Task<bool> TryRestartServerAsync(int newPort, int previousLivePort)
     {
-        var liveSettings = _settingsManager.Current;
-
         try
         {
             if (_kestrelHttpServer.IsRunning)
@@ -142,7 +140,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
                 await _kestrelHttpServer.StopAsync();
             }
 
-            liveSettings.Twitch.HttpServerPort = newPort;
+            _settingsManager.UpdateCurrent(settings => settings.Twitch.HttpServerPort = newPort);
 
             await _kestrelHttpServer.StartAsync();
 
@@ -153,7 +151,7 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
         {
             _logger.OnboardingHttpServerStartFailed(exception, newPort);
 
-            liveSettings.Twitch.HttpServerPort = previousLivePort;
+            _settingsManager.UpdateCurrent(settings => settings.Twitch.HttpServerPort = previousLivePort);
 
             try
             {

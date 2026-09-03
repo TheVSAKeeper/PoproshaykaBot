@@ -150,17 +150,12 @@ public sealed partial class UserStatisticsForm : Form
             return;
         }
 
-        var current = _settingsManager.Current;
-        var previousTerm = current.Ranks.PointTerm;
-        current.Ranks.PointTerm = dialog.BuildResult();
-
         try
         {
-            _settingsManager.SaveSettings(current);
+            _settingsManager.Mutate(settings => settings.Ranks.PointTerm = dialog.BuildResult());
         }
         catch (Exception exception)
         {
-            current.Ranks.PointTerm = previousTerm;
             MessageBox.Show($"💾 Не удалось сохранить названия: {exception.Message}", "💾 Ошибка сохранения", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }

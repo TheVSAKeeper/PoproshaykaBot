@@ -99,8 +99,7 @@ public sealed partial class BroadcastInfoWidget : UserControl, IDashboardTileHea
 
     private void OnModeToggleClick(object? sender, EventArgs e)
     {
-        var settings = Settings.Current;
-        var willEnableAuto = !settings.Twitch.AutoBroadcast.AutoBroadcastEnabled;
+        var willEnableAuto = !Settings.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled;
 
         if (willEnableAuto && Scheduler.IsActive && Stream.CurrentStatus != StreamStatus.Online)
         {
@@ -119,8 +118,7 @@ public sealed partial class BroadcastInfoWidget : UserControl, IDashboardTileHea
             }
         }
 
-        settings.Twitch.AutoBroadcast.AutoBroadcastEnabled = willEnableAuto;
-        Settings.SaveSettings(settings);
+        Settings.Mutate(settings => settings.Twitch.AutoBroadcast.AutoBroadcastEnabled = willEnableAuto);
 
         if (willEnableAuto)
         {
