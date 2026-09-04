@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Di;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -63,11 +64,14 @@ public partial class App : Application
 
     internal static bool IsHeadless { get; private set; }
 
+    internal static DebugChannelOverride DebugChannel { get; private set; } = DebugChannelOverride.None;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
         IsHeadless = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
+        DebugChannel = DebugChannelOverride.Parse(e.Args);
         _isFinalizeUpdate = e.Args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
 
         var galleryIndex = Array.FindIndex(e.Args, static arg => string.Equals(arg, GalleryHost.ArgumentName, StringComparison.OrdinalIgnoreCase));
@@ -300,6 +304,7 @@ public partial class App : Application
             .AddCoreInfrastructure(uiLogSink, disposeSerilog: false)
             .AddStatistics()
             .AddSettingsStores()
+            .AddDebugChannel(DebugChannel)
             .AddTwitchClients()
             .AddChatPipeline()
             .AddStreamMonitoring()
@@ -337,6 +342,7 @@ public partial class App : Application
         services.AddSingleton<ShellPreferences>();
         services.AddSingleton<UpdateBannerViewModel>();
         services.AddSingleton<OnboardingBannerViewModel>();
+        services.AddSingleton<DebugBannerViewModel>();
         services.AddSingleton<IOnboardingWizardLauncher, OnboardingWizardLauncher>();
         services.AddSingleton<IEmbeddedTwitchAuthDialog, EmbeddedTwitchAuthDialog>();
         services.AddSingleton<ILegacyImportDialog, LegacyImportDialog>();
@@ -363,6 +369,7 @@ public partial class App : Application
         services.AddSingleton<PollsSettingsSectionViewModel>();
         services.AddSingleton<UpdateSettingsSectionViewModel>();
         services.AddTransient<DashboardLayoutSectionViewModel>();
+        services.AddTransient<DebugChannelSectionViewModel>();
 
         services.AddSingleton<SettingsPageViewModel>();
 

@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Settings;
@@ -40,9 +41,12 @@ public sealed class StreamStatusBroadcastHandlerTests
 
         _eventBus = new(NullLogger<InMemoryEventBus>.Instance);
 
+        _targetChannel = new(Channel);
+
         _handler = new(_scheduler,
             _messenger,
             _streamStatus,
+            _targetChannel,
             _settingsManager,
             _eventBus,
             NullLogger<StreamStatusBroadcastHandler>.Instance);
@@ -59,6 +63,7 @@ public sealed class StreamStatusBroadcastHandlerTests
     private IChatMessenger _messenger = null!;
     private IBroadcastScheduler _scheduler = null!;
     private IStreamStatus _streamStatus = null!;
+    private FakeTargetChannelProvider _targetChannel = null!;
     private SettingsManager _settingsManager = null!;
     private AppSettings _settings = null!;
     private InMemoryEventBus _eventBus = null!;

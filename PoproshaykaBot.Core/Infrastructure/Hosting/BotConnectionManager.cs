@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
-using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.Auth;
 
 namespace PoproshaykaBot.Core.Infrastructure.Hosting;
@@ -13,7 +13,7 @@ public sealed class BotConnectionManager : IAsyncDisposable
 
     private static readonly TimeSpan ForcedStopTimeout = TimeSpan.FromSeconds(6);
     private readonly ITwitchOAuthService _tokenService;
-    private readonly SettingsManager _settingsManager;
+    private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly TwitchChatHandler _twitchChatHandler;
     private readonly AppHost _appHost;
     private readonly IEventBus _eventBus;
@@ -30,14 +30,14 @@ public sealed class BotConnectionManager : IAsyncDisposable
 
     public BotConnectionManager(
         ITwitchOAuthService tokenService,
-        SettingsManager settingsManager,
+        ITargetChannelProvider targetChannelProvider,
         TwitchChatHandler twitchChatHandler,
         AppHost appHost,
         IEventBus eventBus,
         ILogger<BotConnectionManager> logger)
     {
         _tokenService = tokenService;
-        _settingsManager = settingsManager;
+        _targetChannelProvider = targetChannelProvider;
         _twitchChatHandler = twitchChatHandler;
         _appHost = appHost;
         _eventBus = eventBus;
@@ -133,6 +133,7 @@ public sealed class BotConnectionManager : IAsyncDisposable
             }
 
             _twitchChatHandler.Reset();
+            _targetChannelProvider.EndSession();
             _logger.LogInformation("Бот успешно остановлен");
             PublishPhase(BotLifecyclePhase.Disconnected);
         }
@@ -214,27 +215,37 @@ public sealed class BotConnectionManager : IAsyncDisposable
             }
 
             ReportProgress("Запуск компонентов бота...");
-            var settings = _settingsManager.Current.Twitch;
+            _targetChannelProvider.BeginSession();
+            var target = _targetChannelProvider.Current;
 
-            _logger.LogInformation("Запуск AppHost для канала {Channel}", settings.Channel);
+            if (target.IsDebugSession)
+            {
+                ReportProgress(target.IsSendingAllowed
+                    ? $"Отладка: подключение к каналу {target.Login}"
+                    : $"Отладка: подключение к каналу {target.Login} без отправки сообщений");
+            }
+
+            _logger.LogInformation("Запуск AppHost для канала {Channel}", target.Login);
 
             var progressReporter = new Progress<string>(ReportProgress);
             await _appHost.StartAsync(progressReporter, ct);
 
-            _logger.LogDebug("Публикация BotJoinedChannel для канала {Channel}", settings.Channel);
-            await _eventBus.PublishAsync(new BotJoinedChannel(settings.Channel), ct);
+            _logger.LogDebug("Публикация BotJoinedChannel для канала {Channel}", target.Login);
+            await _eventBus.PublishAsync(new BotJoinedChannel(target.Login), ct);
 
             ReportProgress("Подключение установлено успешно");
-            _logger.LogInformation("Процесс подключения бота успешно завершен (канал {Channel})", settings.Channel);
+            _logger.LogInformation("Процесс подключения бота успешно завершен (канал {Channel})", target.Login);
             PublishPhase(BotLifecyclePhase.Connected);
         }
         catch (OperationCanceledException ex)
         {
+            _targetChannelProvider.EndSession();
             _logger.LogWarning(ex, "Процесс подключения бота был отменен");
             PublishPhase(BotLifecyclePhase.Cancelled);
         }
         catch (Exception exception)
         {
+            _targetChannelProvider.EndSession();
             _logger.LogError(exception, "Произошла ошибка в процессе подключения бота");
             ReportProgress($"Ошибка подключения: {exception.Message}");
             PublishPhase(BotLifecyclePhase.Failed, exception);

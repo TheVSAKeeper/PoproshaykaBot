@@ -9,6 +9,8 @@ using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
+using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Settings.Debugging;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -46,6 +48,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly ObsChatStore _obsChatStore;
     private readonly ObsIntegrationStore _obsIntegrationStore;
     private readonly UpdateStore _updateStore;
+    private readonly DebugChannelStore _debugChannelStore;
+    private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly DashboardLayoutCoordinator _dashboardLayoutCoordinator;
     private readonly IEventBus _eventBus;
     private readonly KestrelHttpServer _kestrelHttpServer;
@@ -62,6 +66,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private string _obsChatBaselineJson = string.Empty;
     private ObsIntegrationSettings _obsIntegrationDraft = new();
     private UpdateSettings _updateDraft = new();
+    private DebugChannelSettings _debugChannelDraft = new();
     private int _dashboardRevision;
     private bool _dashboardEdited;
     private bool _suppressDirty;
@@ -84,6 +89,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         PollsSettingsSectionViewModel polls,
         MiscSettingsSectionViewModel misc,
         UpdateSettingsSectionViewModel update,
+        DebugChannelSectionViewModel debugChannel,
         DashboardLayoutSectionViewModel dashboardLayout,
         ShellPreferences shell,
         SettingsManager settingsManager,
@@ -91,6 +97,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         ObsChatStore obsChatStore,
         ObsIntegrationStore obsIntegrationStore,
         UpdateStore updateStore,
+        DebugChannelStore debugChannelStore,
+        ITargetChannelProvider targetChannelProvider,
         DashboardLayoutCoordinator dashboardLayoutCoordinator,
         IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
@@ -110,6 +118,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         Polls = polls;
         Misc = misc;
         Update = update;
+        DebugChannel = debugChannel;
         DashboardLayout = dashboardLayout;
         Shell = shell;
 
@@ -118,6 +127,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _obsChatStore = obsChatStore;
         _obsIntegrationStore = obsIntegrationStore;
         _updateStore = updateStore;
+        _debugChannelStore = debugChannelStore;
+        _targetChannelProvider = targetChannelProvider;
         _dashboardLayoutCoordinator = dashboardLayoutCoordinator;
         _eventBus = eventBus;
         _kestrelHttpServer = kestrelHttpServer;
@@ -128,7 +139,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         Sections.Restore(uiSettings.GetStringValue(SettingsKeys.SettingsSection));
         Sections.PropertyChanged += OnSectionsPropertyChanged;
 
-        _dirtyTrackedSections = [Basic, RateLimiting, AutoBroadcast, BotLifecycle, ObsChat, ObsIntegration, Update];
+        _dirtyTrackedSections = [Basic, RateLimiting, AutoBroadcast, BotLifecycle, ObsChat, ObsIntegration, Update, DebugChannel];
 
         foreach (var section in _dirtyTrackedSections)
         {
@@ -160,6 +171,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         new SettingsSection("stream", "Трансляция", PackIconLucideKind.Radio, "автоматический режим рассылка eventsub автозапуск бота остановка опросы голосование категория название"),
         new SettingsSection("dashboard", "Дашборд", PackIconLucideKind.LayoutDashboard, "раскладка плитки сетка колонки строки обзор палитра перетаскивание"),
         new SettingsSection("update", "Обновления", PackIconLucideKind.Download, "github релизы версия репозиторий проверка загрузка установка портативная сборка"),
+        new SettingsSection("debug", "Отладка", PackIconLucideKind.Bug, "чужой канал наблюдение чтение чата тестирование только чтение отправка сообщений"),
         new SettingsSection("appearance", "Оформление", PackIconLucideKind.Palette, "тема масштаб шрифта размер текста заголовок страницы внешний вид"),
         new SettingsSection("misc", "Прочее", PackIconLucideKind.Wrench, "данные приложения папка настроек логи профили трансляций импорт экспорт сброс"));
 
@@ -187,6 +199,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     public UpdateSettingsSectionViewModel Update { get; }
 
+    public DebugChannelSectionViewModel DebugChannel { get; }
+
     public DashboardLayoutSectionViewModel DashboardLayout { get; }
 
     public ShellPreferences Shell { get; }
@@ -206,6 +220,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             _obsChatBaselineJson = SerializeObsChat(_obsChatDraft);
             _obsIntegrationDraft = JsonStoreClone.DeepClone(_obsIntegrationStore.Load());
             _updateDraft = JsonStoreClone.DeepClone(_updateStore.Load());
+            _debugChannelDraft = JsonStoreClone.DeepClone(_debugChannelStore.Load());
 
             Basic.LoadSettings(_settings.Twitch);
             RateLimiting.LoadSettings(_settings.Twitch);
@@ -217,6 +232,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             AutoBroadcast.LoadSettings(_settings.Twitch.AutoBroadcast);
             BotLifecycle.LoadSettings(_settings.Twitch.BotLifecycleAutomation);
             Update.LoadSettings(_updateDraft);
+            DebugChannel.LoadSettings(_debugChannelDraft);
             var dashboardSnapshot = _dashboardLayoutCoordinator.Read();
 
             _dashboardRevision = dashboardSnapshot.Revision;
@@ -285,11 +301,12 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             AutoBroadcast.SaveSettings(_settings.Twitch.AutoBroadcast);
             BotLifecycle.SaveSettings(_settings.Twitch.BotLifecycleAutomation);
             Update.SaveSettings(_updateDraft);
+            DebugChannel.SaveSettings(_debugChannelDraft);
 
             var prevBotToken = _accountsStore.LoadBot().AccessToken;
             var prevBroadcasterToken = _accountsStore.LoadBroadcaster().AccessToken;
             var prevPort = _settingsManager.Current.Twitch.HttpServerPort;
-            var prevChannel = _settingsManager.Current.Twitch.Channel;
+            var prevTargetChannel = _targetChannelProvider.Current.Login;
             var prevChatDisplayAccount = _settingsManager.Current.Twitch.ChatDisplayAccount;
 
             ReconcileHttpServerPort();
@@ -300,6 +317,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
             _updateStore.Save(_updateDraft);
+            _debugChannelStore.Save(_debugChannelDraft);
             SaveDashboardLayout();
 
             if (Polls.HasChanges)
@@ -317,10 +335,12 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                 await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
             }
 
-            if (!string.Equals(prevChannel, _settings.Twitch.Channel, StringComparison.OrdinalIgnoreCase)
+            var newTargetChannel = _targetChannelProvider.Current.Login;
+
+            if (!string.Equals(prevTargetChannel, newTargetChannel, StringComparison.OrdinalIgnoreCase)
                 || prevChatDisplayAccount != _settings.Twitch.ChatDisplayAccount)
             {
-                await _eventBus.PublishAsync(new ChatDisplaySettingsChanged(_settings.Twitch.Channel, _settings.Twitch.ChatDisplayAccount));
+                await _eventBus.PublishAsync(new ChatDisplaySettingsChanged(newTargetChannel, _settings.Twitch.ChatDisplayAccount));
             }
 
             var portChanged = newPort != prevPort;

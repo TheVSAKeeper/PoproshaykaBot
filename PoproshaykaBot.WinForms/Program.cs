@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Di;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -31,11 +32,14 @@ public static class Program
 
     internal static bool IsUiSmoke { get; private set; }
 
+    internal static DebugChannelOverride DebugChannel { get; private set; } = DebugChannelOverride.None;
+
     [STAThread]
     private static void Main(string[] args)
     {
         var isUiSmoke = args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         IsUiSmoke = isUiSmoke;
+        DebugChannel = DebugChannelOverride.Parse(args);
         var isFinalizeUpdate = args.Any(arg => string.Equals(arg, UpdateApplier.FinalizeArgument, StringComparison.OrdinalIgnoreCase));
 
         const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
@@ -355,6 +359,7 @@ public static class Program
             .AddCoreInfrastructure(uiLogSink)
             .AddStatistics()
             .AddSettingsStores()
+            .AddDebugChannel(DebugChannel)
             .AddTwitchClients()
             .AddChatPipeline()
             .AddStreamMonitoring()

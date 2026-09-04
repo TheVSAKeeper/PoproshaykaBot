@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
@@ -19,6 +20,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private readonly ITwitchEventSubClient _eventSubClient;
     private readonly ITwitchHelixClient _helix;
     private readonly IBroadcasterIdProvider _broadcasterIdProvider;
+    private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly SettingsManager _settingsManager;
     private readonly IEventBus _eventBus;
     private readonly TimeProvider _timeProvider;
@@ -39,6 +41,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
         ITwitchHelixClient helix,
         IBroadcasterIdProvider broadcasterIdProvider,
+        ITargetChannelProvider targetChannelProvider,
         SettingsManager settingsManager,
         IEventBus eventBus,
         TimeProvider timeProvider,
@@ -47,6 +50,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _eventSubClient = eventSubClient;
         _helix = helix;
         _broadcasterIdProvider = broadcasterIdProvider;
+        _targetChannelProvider = targetChannelProvider;
         _settingsManager = settingsManager;
         _eventBus = eventBus;
         _timeProvider = timeProvider;
@@ -470,7 +474,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private Task PublishStatusTransitionAsync(StreamStatus newStatus, bool isCatchUp = false)
     {
-        var channel = _settingsManager.Current.Twitch.Channel;
+        var channel = _targetChannelProvider.Current.Login;
 
         if (string.IsNullOrWhiteSpace(channel))
         {
@@ -488,7 +492,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private Task PublishMetadataResolvedAsync()
     {
-        var channel = _settingsManager.Current.Twitch.Channel;
+        var channel = _targetChannelProvider.Current.Login;
         var stream = CurrentStream;
 
         if (string.IsNullOrWhiteSpace(channel) || stream == null)

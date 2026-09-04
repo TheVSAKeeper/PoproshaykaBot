@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
 
@@ -18,7 +19,7 @@ public class PollHistoryStoreTests
         _broadcasterIdProvider = Substitute.For<IBroadcasterIdProvider>();
         _broadcasterIdProvider.GetAsync(Arg.Any<CancellationToken>()).Returns("1");
         _tempFile = Path.Combine(Path.GetTempPath(), $"poll-history-{Guid.NewGuid():N}.json");
-        _store = new(_pollsStore, _helix, _broadcasterIdProvider, NullLogger<PollHistoryStore>.Instance, _tempFile);
+        _store = new(_pollsStore, _helix, _broadcasterIdProvider, new FakeTargetChannelProvider(), NullLogger<PollHistoryStore>.Instance, _tempFile);
     }
 
     [TearDown]
@@ -51,6 +52,23 @@ public class PollHistoryStoreTests
             EndedAtUtc = DateTime.UtcNow,
             FinalStatus = PollSnapshotStatus.Completed,
         };
+    }
+
+    [Test]
+    public async Task BackfillAsync_OnForeignChannel_DoesNotTouchTheBroadcasterApi()
+    {
+        var store = new PollHistoryStore(_pollsStore,
+            _helix,
+            _broadcasterIdProvider,
+            FakeTargetChannelProvider.Foreign("someone-else", "bobito217"),
+            NullLogger<PollHistoryStore>.Instance,
+            _tempFile);
+
+        var added = await store.BackfillAsync(CancellationToken.None);
+
+        Assert.That(added, Is.Zero);
+
+        await _helix.DidNotReceiveWithAnyArgs().GetPollsAsync(default!, default, default, default);
     }
 
     [Test]
@@ -99,7 +117,7 @@ public class PollHistoryStoreTests
     {
         File.WriteAllText(_tempFile, """{"entries":[{"pollId":"p1","finalChoices":null}]}""");
 
-        var entry = new PollHistoryStore(_pollsStore, _helix, _broadcasterIdProvider, NullLogger<PollHistoryStore>.Instance, _tempFile)
+        var entry = new PollHistoryStore(_pollsStore, _helix, _broadcasterIdProvider, new FakeTargetChannelProvider(), NullLogger<PollHistoryStore>.Instance, _tempFile)
             .GetAll()
             .Single();
 
@@ -113,7 +131,7 @@ public class PollHistoryStoreTests
         _store.TryAdd(Entry("p1"));
         _store.TryAdd(Entry("p2"));
 
-        var second = new PollHistoryStore(_pollsStore, _helix, _broadcasterIdProvider, NullLogger<PollHistoryStore>.Instance, _tempFile);
+        var second = new PollHistoryStore(_pollsStore, _helix, _broadcasterIdProvider, new FakeTargetChannelProvider(), NullLogger<PollHistoryStore>.Instance, _tempFile);
         var all = second.GetAll();
 
         Assert.That(all, Has.Count.EqualTo(2));

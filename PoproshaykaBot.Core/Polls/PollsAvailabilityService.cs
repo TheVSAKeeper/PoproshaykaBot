@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -15,6 +16,7 @@ public class PollsAvailabilityService(
     [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
+    ITargetChannelProvider targetChannelProvider,
     AccountsStore accountsStore,
     ILogger<PollsAvailabilityService>? logger = null)
 {
@@ -23,6 +25,14 @@ public class PollsAvailabilityService(
 
     public virtual async Task<PollsAvailability> GetAsync(CancellationToken cancellationToken)
     {
+        var target = targetChannelProvider.Current;
+
+        if (target.IsForeign)
+        {
+            logger?.LogInformation("PollsAvailability: отладка на чужом канале {Channel} — голосования недоступны", target.Login);
+            return PollsAvailability.ForeignChannel;
+        }
+
         if (_cached is not null)
         {
             return _cached;

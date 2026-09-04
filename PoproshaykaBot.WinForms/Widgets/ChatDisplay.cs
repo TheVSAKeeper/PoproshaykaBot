@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using PoproshaykaBot.Core.Chat.Display;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -30,6 +31,9 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
 
     [Inject]
     public SettingsManager Settings { get; internal init; } = null!;
+
+    [Inject]
+    public ITargetChannelProvider TargetChannel { get; internal init; } = null!;
 
     [Inject]
     public ILogger<ChatDisplay> Logger { get; internal init; } = null!;
@@ -182,7 +186,7 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
 
         if (string.IsNullOrEmpty(url))
         {
-            var channel = Settings.Current.Twitch.Channel?.Trim();
+            var channel = TargetChannel.Current.Login.Trim();
 
             if (string.IsNullOrEmpty(channel))
             {
@@ -314,7 +318,7 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
             return;
         }
 
-        var channel = Settings.Current.Twitch.Channel?.Trim();
+        var channel = TargetChannel.Current.Login.Trim();
 
         if (string.IsNullOrEmpty(channel))
         {

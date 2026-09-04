@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Statistics;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
@@ -47,8 +48,11 @@ public sealed class StreamSessionStatisticsHandlerTests
         Directory.CreateDirectory(_tempDirectory);
         _store = new(NullLogger<ActiveStreamSessionStore>.Instance, Path.Combine(_tempDirectory, "active_session.json"));
 
+        _targetChannel = new(Channel);
+
         _handler = new(_messenger,
             _streamStatus,
+            _targetChannel,
             _settingsManager,
             _timeProvider,
             _eventBus,
@@ -80,6 +84,7 @@ public sealed class StreamSessionStatisticsHandlerTests
 
     private IChatMessenger _messenger = null!;
     private IStreamStatus _streamStatus = null!;
+    private FakeTargetChannelProvider _targetChannel = null!;
     private SettingsManager _settingsManager = null!;
     private AppSettings _settings = null!;
     private InMemoryEventBus _eventBus = null!;
@@ -516,6 +521,7 @@ public sealed class StreamSessionStatisticsHandlerTests
 
         var resumed = new StreamSessionStatisticsHandler(_messenger,
             _streamStatus,
+            _targetChannel,
             _settingsManager,
             _timeProvider,
             _eventBus,

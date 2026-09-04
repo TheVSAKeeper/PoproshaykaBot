@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
@@ -18,6 +19,7 @@ public sealed class StreamStatusBroadcastHandler :
     private readonly IBroadcastScheduler _scheduler;
     private readonly IChatMessenger _messenger;
     private readonly IStreamStatus _streamStatus;
+    private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly SettingsManager _settingsManager;
     private readonly ILogger<StreamStatusBroadcastHandler> _logger;
     private readonly IDisposable _onlineSubscription;
@@ -30,6 +32,7 @@ public sealed class StreamStatusBroadcastHandler :
         IBroadcastScheduler scheduler,
         IChatMessenger messenger,
         IStreamStatus streamStatus,
+        ITargetChannelProvider targetChannelProvider,
         SettingsManager settingsManager,
         IEventBus eventBus,
         ILogger<StreamStatusBroadcastHandler> logger)
@@ -37,6 +40,7 @@ public sealed class StreamStatusBroadcastHandler :
         _scheduler = scheduler;
         _messenger = messenger;
         _streamStatus = streamStatus;
+        _targetChannelProvider = targetChannelProvider;
         _settingsManager = settingsManager;
         _logger = logger;
 
@@ -55,7 +59,7 @@ public sealed class StreamStatusBroadcastHandler :
             return Task.CompletedTask;
         }
 
-        var channel = _settingsManager.Current.Twitch.Channel;
+        var channel = _targetChannelProvider.Current.Login;
 
         if (string.IsNullOrWhiteSpace(channel))
         {
