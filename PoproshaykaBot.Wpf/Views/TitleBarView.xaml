@@ -95,6 +95,76 @@
                         Orientation="Horizontal"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True">
 
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsOverviewSelected}"
+                                                   Value="True" />
+                                        <Condition Binding="{Binding Overview.IsEditing}"
+                                                   Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility"
+                                            Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+
+                    <Button Content="Готово"
+                            Command="{Binding Overview.ToggleEditCommand}"
+                            MinHeight="26"
+                            Padding="12,3"
+                            Margin="0,0,6,0"
+                            AutomationProperties.Name="Выйти из режима правки панели" />
+
+                    <Button Content="Отменить"
+                            Style="{StaticResource Button.Ghost}"
+                            Command="{Binding Overview.UndoCommand}"
+                            IsEnabled="{Binding Overview.CanUndo}"
+                            MinHeight="26"
+                            Padding="10,3"
+                            Margin="0,0,6,0"
+                            AutomationProperties.Name="Отменить последнюю правку раскладки" />
+
+                    <Button x:Name="AddTileButton"
+                            Content="Добавить плитку"
+                            Style="{StaticResource Button.Ghost}"
+                            Click="OnAddTileClick"
+                            MinHeight="26"
+                            Padding="10,3"
+                            Margin="0,0,6,0"
+                            AutomationProperties.Name="Добавить плитку на панель">
+                        <Button.ContextMenu>
+                            <ContextMenu ItemsSource="{Binding Overview.HiddenTiles}">
+                                <ContextMenu.ItemContainerStyle>
+                                    <Style TargetType="MenuItem">
+                                        <Setter Property="Header"
+                                                Value="{Binding Title}" />
+                                        <Setter Property="Command"
+                                                Value="{Binding PlacementTarget.DataContext.Overview.AddTileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <Setter Property="CommandParameter"
+                                                Value="{Binding TypeId}" />
+                                    </Style>
+                                </ContextMenu.ItemContainerStyle>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+
+                    <Button Content="Сбросить"
+                            Style="{StaticResource Button.Ghost}"
+                            Command="{Binding Overview.ResetLayoutCommand}"
+                            MinHeight="26"
+                            Padding="10,3"
+                            Margin="0,0,10,0"
+                            AutomationProperties.Name="Сбросить раскладку панели к умолчаниям" />
+                </StackPanel>
+
                 <Button Command="{Binding Overview.ToggleEditCommand}"
                         VerticalAlignment="Center"
                         MinHeight="26"

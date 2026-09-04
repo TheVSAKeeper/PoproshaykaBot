@@ -605,18 +605,6 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         return host;
     }
 
-    private void OnAddTileClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button button || button.ContextMenu is not { } menu)
-        {
-            return;
-        }
-
-        menu.PlacementTarget = button;
-        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-        menu.IsOpen = true;
-    }
-
     private void OnShieldMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not Border shield || shield.DataContext is not DashboardTileViewModel tile)

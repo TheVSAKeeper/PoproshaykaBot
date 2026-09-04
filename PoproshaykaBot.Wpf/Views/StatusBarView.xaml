@@ -50,6 +50,32 @@
                            TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding StatusText}"
                            Foreground="{DynamicResource Fg.Secondary}" />
+
+                <TextBlock Text="Тяните разделители и плитки; Ctrl+Z – отмена, Escape – выход"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource Fg.Muted}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsOverviewSelected}"
+                                                   Value="True" />
+                                        <Condition Binding="{Binding Overview.IsEditing}"
+                                                   Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility"
+                                            Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
 
             <StackPanel Grid.Column="1"

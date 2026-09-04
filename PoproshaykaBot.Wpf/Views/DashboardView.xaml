@@ -183,61 +183,6 @@
         <Border Background="{DynamicResource Bg.Base}"
                 Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}">
             <DockPanel LastChildFill="True">
-                <Border x:Name="EditToolbar"
-                        DockPanel.Dock="Top"
-                        Background="{DynamicResource Bg.Surface}"
-                        BorderBrush="{DynamicResource Border.Subtle}"
-                        BorderThickness="0,0,0,1"
-                        Padding="14,8"
-                        Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel Orientation="Horizontal"
-                                VerticalAlignment="Center">
-                        <Button Content="Готово"
-                                Command="{Binding ToggleEditCommand}"
-                                AutomationProperties.Name="Выйти из режима правки панели"
-                                Margin="0,0,8,0" />
-
-                        <Button Content="Отменить"
-                                Style="{StaticResource Button.Ghost}"
-                                Command="{Binding UndoCommand}"
-                                IsEnabled="{Binding CanUndo}"
-                                AutomationProperties.Name="Отменить последнюю правку раскладки"
-                                Margin="0,0,8,0" />
-
-                        <Button x:Name="AddTileButton"
-                                Content="Добавить плитку"
-                                Style="{StaticResource Button.Ghost}"
-                                Click="OnAddTileClick"
-                                AutomationProperties.Name="Добавить плитку на панель"
-                                Margin="0,0,8,0">
-                            <Button.ContextMenu>
-                                <ContextMenu ItemsSource="{Binding HiddenTiles}">
-                                    <ContextMenu.ItemContainerStyle>
-                                        <Style TargetType="MenuItem">
-                                            <Setter Property="Header"
-                                                    Value="{Binding Title}" />
-                                            <Setter Property="Command"
-                                                    Value="{Binding PlacementTarget.DataContext.AddTileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                            <Setter Property="CommandParameter"
-                                                    Value="{Binding TypeId}" />
-                                        </Style>
-                                    </ContextMenu.ItemContainerStyle>
-                                </ContextMenu>
-                            </Button.ContextMenu>
-                        </Button>
-
-                        <Button Content="Сбросить"
-                                Style="{StaticResource Button.Ghost}"
-                                Command="{Binding ResetLayoutCommand}"
-                                AutomationProperties.Name="Сбросить раскладку панели к умолчаниям"
-                                Margin="0,0,16,0" />
-
-                        <TextBlock Text="Тяните разделители и плитки; Ctrl+Z – отмена, Escape – выход"
-                                   Style="{StaticResource TextBlock.Subtle}"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </Border>
-
                 <ScrollViewer x:Name="BandsScroll"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Disabled">
