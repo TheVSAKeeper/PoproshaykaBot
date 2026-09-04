@@ -202,6 +202,37 @@ public class DashboardPaneLayoutTests
     }
 
     [Test]
+    public void Edit_mode_unfolds_a_collapsed_tile_and_folds_it_back_on_exit()
+    {
+        var layout = AuthoredWeightsLayout();
+
+        layout.Tiles.Single(tile => string.Equals(tile.TypeId, "broadcast-status", StringComparison.Ordinal)).IsCollapsed = true;
+
+        var store = new FakeLayoutStore(layout);
+        var status = new FakeTile("broadcast-status");
+
+        using var dashboard = new DashboardViewModel([new FakeTile("stream-info"), status], new(store), TimeProvider.System);
+
+        Assert.That(status.IsCollapsed, Is.True, "Вне правки свёрнутая плитка остаётся свёрнутой.");
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        Assert.That(status.IsCollapsed, Is.False,
+            "В правке плитку надо видеть целиком: свёрнутая идёт по содержимому, её нельзя ни растянуть, ни поймать за ручку.");
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(status.IsCollapsed, Is.True, "Выход из правки возвращает свёрнутость.");
+            Assert.That(
+                store.LoadDashboard()!.Tiles.Single(tile => string.Equals(tile.TypeId, "broadcast-status", StringComparison.Ordinal)).IsCollapsed,
+                Is.True,
+                "Раскрытие на время правки не должно уезжать в файл.");
+        });
+    }
+
+    [Test]
     public void A_collapsed_leaf_ignores_its_weight()
     {
         var layout = AuthoredWeightsLayout();

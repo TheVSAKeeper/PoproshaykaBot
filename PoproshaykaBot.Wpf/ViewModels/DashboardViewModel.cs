@@ -463,7 +463,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             placements.Add(new(vm, row, column, columnSpan, rowSpan,
                 ResolveMaxSize(tile.MaxWidth, vm.MaxWidth),
                 ResolveMaxSize(tile.MaxHeight, vm.MaxHeight),
-                tile.IsCollapsed));
+                !IsEditing && tile.IsCollapsed));
         }
 
         return placements;
