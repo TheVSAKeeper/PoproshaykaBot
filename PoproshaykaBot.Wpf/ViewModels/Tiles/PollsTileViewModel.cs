@@ -48,7 +48,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         PollSnapshotStore snapshotStore,
         IEventBus bus,
         IDialogService dialogService,
-        IUiDispatcher uiDispatcher) : base("polls-control", "Опросы", maxWidth: 500, maxHeight: 320)
+        IUiDispatcher uiDispatcher) : base("polls-control", "Опросы", maxWidth: 500, maxHeight: 320, minHeight: 130)
     {
         _controller = controller;
         _profiles = profiles;

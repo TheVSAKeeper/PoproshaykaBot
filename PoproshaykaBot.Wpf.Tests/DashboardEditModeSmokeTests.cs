@@ -34,11 +34,13 @@ public class DashboardEditModeSmokeTests
 
         var done = WaitForDescendantByName("Выйти из режима правки панели");
         var splitter = WaitForDescendantByName("Разделитель по вертикали");
+        var horizontal = WaitForDescendantByName("Разделитель по горизонтали");
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(done, Is.Not.Null, "В режиме правки над панелью появляется полоска с кнопкой выхода.");
             Assert.That(splitter, Is.Not.Null, "Между соседями узла обязан появиться разделитель – ради него режим и заведён.");
+            Assert.That(horizontal, Is.Not.Null, "Внутри колонки плитки делит разделитель по горизонтали – иначе высота не правится.");
             Assert.That(WaitForDescendantByName("Добавить плитку"), Is.Not.Null);
         }
 

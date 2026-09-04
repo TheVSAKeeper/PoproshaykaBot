@@ -15,7 +15,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 {
     private const double StackedWidthThreshold = 720;
     private const double StarBandMinWidth = 320;
-    private const double StarBandMinHeight = 320;
+    private const double StarBandMinHeight = 96;
     private const double SplitterThickness = 6;
     private const double DragThreshold = 6;
     private const double SwapZone = 0.3;
@@ -95,7 +95,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private static double Floor(GridLength length, TrackSize track, double minimum)
     {
-        return length.IsStar ? Math.Min(minimum, track.Max) : 0;
+        return Math.Min(Math.Max(track.Min, length.IsStar ? minimum : 0), track.Max);
     }
 
     private static GridLength Track(PaneLayoutSlot slot, Func<PaneLayout, TrackSize> axis)
@@ -290,6 +290,8 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
         content.MaxWidth = pane.Width.Max;
         content.MaxHeight = pane.Height.Max;
+        content.MinWidth = Math.Min(pane.Width.Min, pane.Width.Max);
+        content.MinHeight = Math.Min(pane.Height.Min, pane.Height.Max);
         content.HorizontalAlignment = pane.Width.Length.IsStar ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
 
         BandsGrid.Children.Add(content);
@@ -603,18 +605,6 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
         _hosts[tile] = host;
         return host;
-    }
-
-    private void OnAddTileClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button button || button.ContextMenu is not { } menu)
-        {
-            return;
-        }
-
-        menu.PlacementTarget = button;
-        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-        menu.IsOpen = true;
     }
 
     private void OnShieldMouseDown(object sender, MouseButtonEventArgs e)
