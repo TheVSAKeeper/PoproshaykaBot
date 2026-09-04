@@ -25,7 +25,7 @@ public static class LegacySettingsLayoutMigrator
         ArgumentException.ThrowIfNullOrEmpty(baseDirectory);
         ArgumentException.ThrowIfNullOrEmpty(settingsDirectory);
 
-        if (PathsAreEqual(baseDirectory, settingsDirectory))
+        if (PathComparison.AreEqual(baseDirectory, settingsDirectory))
         {
             return;
         }
@@ -121,12 +121,5 @@ public static class LegacySettingsLayoutMigrator
         {
             logger?.LogError(exception, "Ошибка миграции монолитного settings.json в {Directory}", settingsDirectory);
         }
-    }
-
-    private static bool PathsAreEqual(string a, string b)
-    {
-        return string.Equals(Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            StringComparison.OrdinalIgnoreCase);
     }
 }

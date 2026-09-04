@@ -34,6 +34,21 @@
         </StackPanel>
 
         <StackPanel>
+            <TextBlock Text="Данные предыдущей версии"
+                       Style="{StaticResource Setting.BlockTitle}" />
+
+            <Button Style="{StaticResource Button.Secondary}"
+                    Content="Перенести данные предыдущей версии..."
+                    Command="{Binding ImportLegacyDataCommand}"
+                    HorizontalAlignment="Left"
+                    Margin="0,0,0,8" />
+
+            <TextBlock Style="{StaticResource TextBlock.Subtle}"
+                       Text="Взять настройки и статистику из папки, где бот работал раньше. Перенесённые данные вступят в силу после перезапуска."
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel>
             <TextBlock Text="Профили трансляций"
                        Style="{StaticResource Setting.BlockTitle}" />
 

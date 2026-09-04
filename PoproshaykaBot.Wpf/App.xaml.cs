@@ -153,9 +153,14 @@ public partial class App : Application
                 FinalizeUpdate();
             }
 
-            MigrateLegacySettingsLayout();
-
             ViewLocator.InstallIntoApplication();
+
+            if (!IsHeadless)
+            {
+                uiSettings = OfferLegacyDataImport(uiSettings, uiSettingsPath);
+            }
+
+            MigrateLegacySettingsLayout();
 
             var services = new ServiceCollection();
             ConfigureServices(services, coreUiLogSink, uiSettings);
@@ -334,6 +339,7 @@ public partial class App : Application
         services.AddSingleton<OnboardingBannerViewModel>();
         services.AddSingleton<IOnboardingWizardLauncher, OnboardingWizardLauncher>();
         services.AddSingleton<IEmbeddedTwitchAuthDialog, EmbeddedTwitchAuthDialog>();
+        services.AddSingleton<ILegacyImportDialog, LegacyImportDialog>();
         services.AddSingleton<StreamMonitoringViewModel>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
