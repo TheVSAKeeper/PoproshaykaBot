@@ -15,7 +15,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 {
     private const double StackedWidthThreshold = 720;
     private const double StarBandMinWidth = 320;
-    private const double StarBandMinHeight = 320;
+    private const double StarBandMinHeight = 96;
     private const double SplitterThickness = 6;
     private const double DragThreshold = 6;
     private const double SwapZone = 0.3;
