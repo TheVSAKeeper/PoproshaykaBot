@@ -95,6 +95,47 @@
                         Orientation="Horizontal"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True">
 
+                <Button Command="{Binding Overview.ToggleEditCommand}"
+                        VerticalAlignment="Center"
+                        MinHeight="26"
+                        Padding="10,3"
+                        Margin="0,0,8,0"
+                        ToolTip="Настроить расположение плиток"
+                        AutomationProperties.Name="Настроить панель">
+                    <Button.Style>
+                        <Style TargetType="Button"
+                               BasedOn="{StaticResource Button.Ghost}">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsOverviewSelected}"
+                                                   Value="True" />
+                                        <Condition Binding="{Binding Overview.CanEdit}"
+                                                   Value="True" />
+                                        <Condition Binding="{Binding Overview.IsEditing}"
+                                                   Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility"
+                                            Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+
+                    <StackPanel Orientation="Horizontal">
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings}"
+                                                  Width="14"
+                                                  Height="14"
+                                                  VerticalAlignment="Center"
+                                                  Margin="0,0,6,0" />
+
+                        <TextBlock Text="Настроить панель"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
                 <Button Style="{StaticResource Button.Primary}"
                         Content="{Binding ConnectButtonText}"
                         Command="{Binding ToggleConnectCommand}"

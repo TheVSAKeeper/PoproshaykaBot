@@ -66,6 +66,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         OnboardingBanner = onboardingBanner;
         StreamMonitoring = streamMonitoring;
 
+        Overview = overview;
+
         _settingsPage = settingsPage;
         _settingsPage.SettingsSaved += OnSettingsSaved;
         _chatHistory = chatHistory;
@@ -100,6 +102,10 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public OnboardingBannerViewModel OnboardingBanner { get; }
 
     public StreamMonitoringViewModel StreamMonitoring { get; }
+
+    public DashboardViewModel Overview { get; }
+
+    public bool IsOverviewSelected => ReferenceEquals(Selected, _overviewSection);
 
     public override IPageHeader? EffectivePageHeader => _preferences.ShowPageHeader ? CurrentPageHeader : null;
 
@@ -213,6 +219,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         base.OnSelectionChanged(value);
 
         OnPropertyChanged(nameof(ContentMargin));
+        OnPropertyChanged(nameof(IsOverviewSelected));
 
         _current = value;
 
