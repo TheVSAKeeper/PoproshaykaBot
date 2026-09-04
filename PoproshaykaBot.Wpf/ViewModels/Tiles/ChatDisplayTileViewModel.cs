@@ -58,7 +58,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         IDialogService dialogService,
         IEventBus bus,
         ChatDisplayStore store)
-        : base("twitch-chat", "Чат")
+        : base("twitch-chat", "Чат", minWidth: 280, minHeight: 220)
     {
         _settings = settings;
         _shellLauncher = shellLauncher;

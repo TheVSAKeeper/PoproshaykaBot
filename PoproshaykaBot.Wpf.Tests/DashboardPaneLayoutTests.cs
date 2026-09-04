@@ -181,8 +181,8 @@ public class DashboardPaneLayoutTests
 
         Assert.That(
             dashboard.Pane?.MinWidth(320),
-            Is.EqualTo(640),
-            "Пол двух растягивающихся плиток складывается – по нему хост решает, не пора ли уйти в стопку.");
+            Is.EqualTo(860),
+            "Полы всех трёх плиток складываются – по ним хост решает, не пора ли уйти в стопку: растягивающимся достаётся общий пол полосы, плитке по контенту – её собственный.");
     }
 
     [Test]
@@ -198,6 +198,32 @@ public class DashboardPaneLayoutTests
                 "Доля из файла задаёт трек сама – иначе процент, выставленный разделителем, ни на что не влияет.");
             Assert.That(root?.Width.Length.IsStar, Is.True,
                 "Узел с явными долями обязан растягиваться: в Auto-колонке звёздочные треки схлопываются.");
+        });
+    }
+
+    [Test]
+    public void Tile_minimums_add_up_along_the_split_and_never_pass_the_ceiling()
+    {
+        using var dashboard = CreateDashboard(
+            SideBySideLayout(),
+            new FakeTile("stream-info", minWidth: 200, minHeight: 150),
+            new FakeTile("broadcast-status", maxHeight: 100, minWidth: 180, minHeight: 180),
+            new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220));
+
+        var root = dashboard.Pane as SplitPaneLayout;
+        var column = root?.Children[0].Pane as SplitPaneLayout;
+        var status = column?.Children[1].Pane as TilePaneLayout;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(status?.Height.Min, Is.EqualTo(100),
+                "Пол не пробивает потолок: у плитки с MaxHeight 100 минимум обязан ужаться до него.");
+            Assert.That(column?.Height.Min, Is.EqualTo(250),
+                "Вдоль разреза минимумы складываются – столбцу нужно место под обе плитки.");
+            Assert.That(column?.Width.Min, Is.EqualTo(200),
+                "Поперёк разреза берётся самый широкий из детей.");
+            Assert.That(root?.Width.Min, Is.EqualTo(480),
+                "Корень режется по колонкам, значит ширины столбца и чата суммируются.");
         });
     }
 

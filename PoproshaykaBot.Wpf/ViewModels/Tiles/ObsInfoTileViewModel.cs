@@ -89,7 +89,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         IEventBus bus,
         ILogger<ObsInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher)
-        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 420)
+        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 420, minHeight: 140)
     {
         _store = store;
         _obsIntegration = obsIntegration;

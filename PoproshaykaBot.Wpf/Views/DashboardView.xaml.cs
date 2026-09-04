@@ -95,7 +95,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private static double Floor(GridLength length, TrackSize track, double minimum)
     {
-        return length.IsStar ? Math.Min(minimum, track.Max) : 0;
+        return Math.Min(Math.Max(track.Min, length.IsStar ? minimum : 0), track.Max);
     }
 
     private static GridLength Track(PaneLayoutSlot slot, Func<PaneLayout, TrackSize> axis)
@@ -290,6 +290,8 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
         content.MaxWidth = pane.Width.Max;
         content.MaxHeight = pane.Height.Max;
+        content.MinWidth = Math.Min(pane.Width.Min, pane.Width.Max);
+        content.MinHeight = Math.Min(pane.Height.Min, pane.Height.Max);
         content.HorizontalAlignment = pane.Width.Length.IsStar ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
 
         BandsGrid.Children.Add(content);

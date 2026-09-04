@@ -228,14 +228,22 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private static PaneLayout BuildLeaf(Placement placement, int[] path)
     {
         var star = new GridLength(1, GridUnitType.Star);
+        var maxWidth = placement.MaxWidth ?? double.PositiveInfinity;
+        var maxHeight = placement.MaxHeight ?? double.PositiveInfinity;
+        var minWidth = Math.Min(placement.Tile.MinWidth, maxWidth);
+        var minHeight = placement.IsCollapsed ? 0 : Math.Min(placement.Tile.MinHeight, maxHeight);
 
         if (Stretches(placement))
         {
-            return new TilePaneLayout(placement.Tile, new(star, double.PositiveInfinity), new(star, double.PositiveInfinity), path);
+            return new TilePaneLayout(
+                placement.Tile,
+                new(star, double.PositiveInfinity, minWidth),
+                new(star, double.PositiveInfinity, minHeight),
+                path);
         }
 
-        var width = new TrackSize(GridLength.Auto, placement.MaxWidth ?? double.PositiveInfinity);
-        var height = new TrackSize(Grows(placement) ? star : GridLength.Auto, placement.MaxHeight ?? double.PositiveInfinity);
+        var width = new TrackSize(GridLength.Auto, maxWidth, minWidth);
+        var height = new TrackSize(Grows(placement) ? star : GridLength.Auto, maxHeight, minHeight);
 
         return new TilePaneLayout(placement.Tile, width, height, path);
     }
@@ -294,10 +302,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     {
         var tracks = children.Select(child => axis(child.Pane)).ToList();
         var ceiling = alongSplit ? tracks.Sum(track => track.Max) : tracks.Max(track => track.Max);
+        var floor = alongSplit ? tracks.Sum(track => track.Min) : tracks.Max(track => track.Min);
 
         return new(
             authored || tracks.Exists(track => track.Length.IsStar) ? new(1, GridUnitType.Star) : GridLength.Auto,
-            double.IsInfinity(ceiling) ? double.PositiveInfinity : ceiling);
+            double.IsInfinity(ceiling) ? double.PositiveInfinity : ceiling,
+            Math.Min(floor, ceiling));
     }
 
     private static IReadOnlyList<TileBand> BuildBands(IReadOnlyList<Placement> placements, int columnCount, int rowCount)
@@ -576,7 +586,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
 public sealed record HiddenTile(string TypeId, string Title);
 
-public sealed record TrackSize(GridLength Length, double Max);
+public sealed record TrackSize(GridLength Length, double Max, double Min = 0);
 
 public sealed record TileSlot(
     DashboardTileViewModel Tile,
@@ -601,7 +611,7 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
         {
             SplitPaneLayout { Orientation: SplitOrientation.Columns } split => split.Children.Sum(child => child.Pane.MinWidth(leafMinimum)),
             SplitPaneLayout split => split.Children.Max(child => child.Pane.MinWidth(leafMinimum)),
-            _ => Width.Length.IsStar ? leafMinimum : 0,
+            _ => Math.Max(Width.Min, Width.Length.IsStar ? leafMinimum : 0),
         };
     }
 }
