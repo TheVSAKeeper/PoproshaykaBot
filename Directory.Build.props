@@ -10,6 +10,12 @@
     <Version>3.1.0.15</Version>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' Or '$(RuntimeIdentifiers)' != ''">
+    <_RidLockFileSuffix>$(RuntimeIdentifier)</_RidLockFileSuffix>
+    <_RidLockFileSuffix Condition="'$(_RidLockFileSuffix)' == ''">$(RuntimeIdentifiers.Replace(';', '-'))</_RidLockFileSuffix>
+    <NuGetLockFilePath>$(MSBuildProjectDirectory)\obj\packages.$(_RidLockFileSuffix).lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+
   <PropertyGroup Label="Analyzers">
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
