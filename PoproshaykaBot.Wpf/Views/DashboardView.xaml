@@ -183,6 +183,50 @@
         <Border Background="{DynamicResource Bg.Base}"
                 Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}">
             <DockPanel LastChildFill="True">
+                <Border x:Name="PageHeader"
+                        DockPanel.Dock="Top"
+                        Background="{DynamicResource Bg.Surface}"
+                        BorderBrush="{DynamicResource Border.Subtle}"
+                        BorderThickness="0,0,0,1"
+                        Padding="14,4">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding CanEdit}"
+                                                   Value="True" />
+                                        <Condition Binding="{Binding IsEditing}"
+                                                   Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility"
+                                            Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+
+                    <Button x:Name="EditEntry"
+                            Style="{StaticResource Button.Ghost}"
+                            Command="{Binding ToggleEditCommand}"
+                            HorizontalAlignment="Right"
+                            ToolTip="Настроить расположение плиток"
+                            AutomationProperties.Name="Настроить панель">
+                        <StackPanel Orientation="Horizontal">
+                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings}"
+                                                      Width="14"
+                                                      Height="14"
+                                                      VerticalAlignment="Center"
+                                                      Margin="0,0,6,0" />
+
+                            <TextBlock Text="Настроить панель"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Border>
+
                 <Border x:Name="EditToolbar"
                         DockPanel.Dock="Top"
                         Background="{DynamicResource Bg.Surface}"
@@ -249,55 +293,6 @@
 
         <Canvas x:Name="EditOverlay"
                 IsHitTestVisible="False" />
-
-        <Button x:Name="EditEntry"
-                Command="{Binding ToggleEditCommand}"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Bottom"
-                Margin="0,0,16,16"
-                Padding="0"
-                Width="32"
-                Height="32"
-                ToolTip="Настроить панель"
-                AutomationProperties.Name="Настроить панель">
-            <Button.Style>
-                <Style TargetType="Button"
-                       BasedOn="{StaticResource Button.Ghost}">
-                    <Setter Property="Visibility"
-                            Value="Collapsed" />
-                    <Setter Property="Opacity"
-                            Value="0.4" />
-                    <Setter Property="Background"
-                            Value="{DynamicResource Bg.Surface}" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding CanEdit}"
-                                     Value="True">
-                            <Setter Property="Visibility"
-                                    Value="Visible" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding IsEditing}"
-                                     Value="True">
-                            <Setter Property="Visibility"
-                                    Value="Collapsed" />
-                        </DataTrigger>
-                        <Trigger Property="IsMouseOver"
-                                 Value="True">
-                            <Setter Property="Opacity"
-                                    Value="1" />
-                        </Trigger>
-                        <Trigger Property="IsKeyboardFocused"
-                                 Value="True">
-                            <Setter Property="Opacity"
-                                    Value="1" />
-                        </Trigger>
-                    </Style.Triggers>
-                </Style>
-            </Button.Style>
-
-            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings}"
-                                      Width="14"
-                                      Height="14" />
-        </Button>
 
         <controls:EmptyState Icon="LayoutDashboard"
                              Heading="Плиток пока нет"
