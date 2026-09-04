@@ -108,8 +108,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
     [RelayCommand]
     private void ModeToggle()
     {
-        var appSettings = _settings.Current;
-        var willEnableAuto = !appSettings.Twitch.AutoBroadcast.AutoBroadcastEnabled;
+        var willEnableAuto = !_settings.Current.Twitch.AutoBroadcast.AutoBroadcastEnabled;
 
         if (willEnableAuto && _scheduler.IsActive && _streamStatus.CurrentStatus != StreamStatus.Online)
         {
@@ -123,8 +122,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
             }
         }
 
-        appSettings.Twitch.AutoBroadcast.AutoBroadcastEnabled = willEnableAuto;
-        _settings.SaveSettings(appSettings);
+        _settings.Mutate(settings => settings.Twitch.AutoBroadcast.AutoBroadcastEnabled = willEnableAuto);
 
         if (willEnableAuto)
         {

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
@@ -18,19 +19,22 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
     private readonly IDialogService _dialogService;
     private readonly IShellLauncher _shellLauncher;
     private readonly IFilePicker _filePicker;
+    private readonly ILegacyImportDialog _legacyImportDialog;
 
     public MiscSettingsSectionViewModel(
         SettingsManager settingsManager,
         BroadcastProfilesManager broadcastProfiles,
         IDialogService dialogService,
         IShellLauncher shellLauncher,
-        IFilePicker filePicker)
+        IFilePicker filePicker,
+        ILegacyImportDialog legacyImportDialog)
     {
         _settingsManager = settingsManager;
         _broadcastProfiles = broadcastProfiles;
         _dialogService = dialogService;
         _shellLauncher = shellLauncher;
         _filePicker = filePicker;
+        _legacyImportDialog = legacyImportDialog;
     }
 
     public void Dispose()
@@ -67,6 +71,12 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         {
             _dialogService.Error("Ошибка", "Не удалось открыть папку с настройками.");
         }
+    }
+
+    [RelayCommand]
+    private void ImportLegacyData()
+    {
+        _legacyImportDialog.Show();
     }
 
     [RelayCommand]

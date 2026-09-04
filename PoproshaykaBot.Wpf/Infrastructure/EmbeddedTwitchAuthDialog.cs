@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using PoproshaykaBot.Wpf.Views.Dialogs;
-using System.Linq;
 using System.Windows;
 
 namespace PoproshaykaBot.Wpf.Infrastructure;
@@ -30,25 +29,11 @@ public sealed class EmbeddedTwitchAuthDialog(
 
         var window = new EmbeddedTwitchAuthWindow(viewModel)
         {
-            Owner = ResolveOwner(),
+            Owner = DialogOwner.Resolve(),
         };
 
         window.ShowDialog();
 
         return Task.FromResult(viewModel.Result);
-    }
-
-    private static Window? ResolveOwner()
-    {
-        var windows = Application.Current?.Windows.OfType<Window>().ToList();
-
-        if (windows is null)
-        {
-            return null;
-        }
-
-        return windows.FirstOrDefault(window => window.IsActive)
-               ?? windows.LastOrDefault(window => window.IsVisible)
-               ?? Application.Current?.MainWindow;
     }
 }

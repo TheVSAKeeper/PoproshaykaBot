@@ -6,26 +6,29 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
 
-// TODO: ограничение new() не пропустит стораджи с приватным вложенным DTO (AccountsStore,
-//  DashboardLayoutStore, RecentCategoriesStore); заводить фабрику дефолта параметром, когда дойдёт
-//  очередь переводить первый из них
 internal sealed class JsonStore<T>
     where T : class, new()
 {
     private readonly string _filePath;
     private readonly ILogger? _logger;
     private readonly Func<string, string>? _backupRedactor;
+    private readonly Func<string, T?>? _parser;
     private readonly object _syncLock = new();
 
     private T _state;
 
-    public JsonStore(string filePath, ILogger? logger = null, Func<string, string>? backupRedactor = null)
+    public JsonStore(
+        string filePath,
+        ILogger? logger = null,
+        Func<string, string>? backupRedactor = null,
+        Func<string, T?>? parser = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(filePath);
 
         _filePath = filePath;
         _logger = logger;
         _backupRedactor = backupRedactor;
+        _parser = parser;
         _state = ReadFile();
     }
 
@@ -43,12 +46,12 @@ internal sealed class JsonStore<T>
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        var snapshot = JsonStoreClone.DeepClone(value);
-        var json = JsonSerializer.Serialize(snapshot, JsonStoreOptions.Default);
         Exception? failure;
 
         lock (_syncLock)
         {
+            var snapshot = JsonStoreClone.DeepClone(value);
+            var json = JsonSerializer.Serialize(snapshot, JsonStoreOptions.Default);
             failure = TryWrite(json);
 
             if (failure == null)
@@ -69,31 +72,49 @@ internal sealed class JsonStore<T>
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
-        Mutate(state =>
-        {
-            mutator(state);
-            return true;
-        });
+        MutateCore(state =>
+            {
+                mutator(state);
+                return true;
+            },
+            _ => true);
     }
 
     public TResult Mutate<TResult>(Func<T, TResult> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
+        return MutateCore(mutator, _ => true);
+    }
+
+    public bool MutateIf(Func<T, bool> mutator)
+    {
+        ArgumentNullException.ThrowIfNull(mutator);
+
+        return MutateCore(mutator, applied => applied);
+    }
+
+    private TResult MutateCore<TResult>(Func<T, TResult> mutator, Func<TResult, bool> shouldWrite)
+    {
         TResult result;
-        Exception? failure;
+        Exception? failure = null;
+        var written = false;
 
         lock (_syncLock)
         {
             var draft = JsonStoreClone.DeepClone(_state);
             result = mutator(draft);
 
-            var json = JsonSerializer.Serialize(draft, JsonStoreOptions.Default);
-            failure = TryWrite(json);
-
-            if (failure == null)
+            if (shouldWrite(result))
             {
-                _state = draft;
+                var json = JsonSerializer.Serialize(draft, JsonStoreOptions.Default);
+                failure = TryWrite(json);
+
+                if (failure == null)
+                {
+                    _state = draft;
+                    written = true;
+                }
             }
         }
 
@@ -102,7 +123,11 @@ internal sealed class JsonStore<T>
             ReportFailure(failure);
         }
 
-        _logger?.LogDebug("Применена мутация, состояние сохранено в {FilePath}", _filePath);
+        if (written)
+        {
+            _logger?.LogDebug("Применена мутация, состояние сохранено в {FilePath}", _filePath);
+        }
+
         return result;
     }
 
@@ -156,7 +181,12 @@ internal sealed class JsonStore<T>
         try
         {
             var json = File.ReadAllText(_filePath);
-            return JsonSerializer.Deserialize<T>(json, JsonStoreOptions.Default) ?? new();
+
+            var state = _parser == null
+                ? JsonSerializer.Deserialize<T>(json, JsonStoreOptions.Default)
+                : _parser(json);
+
+            return state ?? new();
         }
         catch (Exception exception)
         {

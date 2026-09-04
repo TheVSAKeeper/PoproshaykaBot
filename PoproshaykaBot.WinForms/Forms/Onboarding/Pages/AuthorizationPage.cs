@@ -441,7 +441,7 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
         }
 
         _context.Settings.Twitch.Channel = result.Login;
-        SettingsManager.Current.Twitch.Channel = result.Login;
+        SettingsManager.UpdateCurrent(settings => settings.Twitch.Channel = result.Login);
     }
 
     private void RefreshFromContext()

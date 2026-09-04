@@ -158,6 +158,48 @@ public sealed class JsonStoreTests
         }
     }
 
+    [Test]
+    public void MutateIf_WhenTheMutatorDeclines_TouchesNeitherDiskNorCache()
+    {
+        var store = CreateStore();
+        store.Save(new() { CheckIntervalHours = 3 });
+
+        BlockTheNextWrite();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.MutateIf(settings =>
+                {
+                    settings.CheckIntervalHours = 9;
+                    return false;
+                }),
+                Is.False);
+
+            Assert.That(store.Load().CheckIntervalHours, Is.EqualTo(3),
+                "Отклонённая мутация не должна доезжать ни до файла, ни до кэша: запись здесь заблокирована, и отсутствие исключения это и доказывает.");
+        }
+    }
+
+    [Test]
+    public void MutateIf_WhenTheMutatorAccepts_WritesLikeAnOrdinaryMutation()
+    {
+        var store = CreateStore();
+        store.Save(new() { CheckIntervalHours = 3 });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.MutateIf(settings =>
+                {
+                    settings.CheckIntervalHours = 9;
+                    return true;
+                }),
+                Is.True);
+
+            Assert.That(store.Load().CheckIntervalHours, Is.EqualTo(9));
+            Assert.That(File.ReadAllText(_filePath), Does.Contain("\"checkIntervalHours\": 9"));
+        }
+    }
+
     private JsonStore<UpdateSettings> CreateStore()
     {
         return new(_filePath, NullLogger<JsonStoreTests>.Instance);

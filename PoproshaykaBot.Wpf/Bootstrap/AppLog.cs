@@ -177,6 +177,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1408, Level = LogLevel.Debug, Message = "Не удалось загрузить список сцен OBS для привязки профиля")]
     public static partial void ObsScenesLoadFailed(this ILogger logger, Exception? exception);
 
+    [LoggerMessage(EventId = 1207, Level = LogLevel.Information, Message = "Пользователь открыл перенос данных предыдущей версии из настроек: источников – {Count}")]
+    public static partial void LegacyImportOpenedFromSettings(this ILogger logger, int count);
+
+    [LoggerMessage(EventId = 1208, Level = LogLevel.Warning, Message = "Перенос данных предыдущей версии недоступен в автоматическом режиме")]
+    public static partial void LegacyImportSuppressedHeadless(this ILogger logger);
+
     [LoggerMessage(EventId = 1500, Level = LogLevel.Information, Message = "Обновление {Version} загружено, приложение перезапустится")]
     public static partial void UpdateDownloaded(this ILogger logger, string version);
 

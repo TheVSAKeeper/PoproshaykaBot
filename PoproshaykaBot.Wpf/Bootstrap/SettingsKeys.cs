@@ -8,6 +8,7 @@ public static class SettingsKeys
     public const string NavCollapsed = "ui.shell.nav_collapsed";
     public const string LastPage = "ui.shell.last_page";
     public const string SettingsSection = "ui.settings.section";
+    public const string LegacyImportDismissed = "ui.migration.legacy_import_dismissed";
 
     public const string WindowLeft = "ui.window.left";
     public const string WindowTop = "ui.window.top";

@@ -67,7 +67,24 @@ public sealed class ObsChatStoreTests
     }
 
     [Test]
-    public void Save_WhenTheWriteFails_LeavesTheCacheAheadOfDisk()
+    public void Save_PublishesASnapshotDetachedFromTheCallersObject()
+    {
+        ObsChatSettings? published = null;
+
+        _eventBus.When(bus => bus.PublishAsync(Arg.Any<ChatSettingsChangedEvent>(), Arg.Any<CancellationToken>()))
+            .Do(call => published = call.Arg<ChatSettingsChangedEvent>().Settings);
+
+        var settings = new ObsChatSettings { MaxMessages = 77 };
+        new ObsChatStore(_eventBus, NullLogger<ObsChatStore>.Instance, _filePath).Save(settings);
+
+        settings.MaxMessages = 10;
+
+        Assert.That(published?.MaxMessages, Is.EqualTo(77),
+            "Событие обязано нести то, что легло на диск: правка объекта вызывающим не должна доезжать до подписчиков.");
+    }
+
+    [Test]
+    public void Save_WhenTheWriteFails_KeepsTheCacheOnTheVersionThatReachedDisk()
     {
         File.WriteAllText(_filePath, "{ \"maxMessages\": 10 }");
 
@@ -79,11 +96,11 @@ public sealed class ObsChatStoreTests
         {
             Assert.That(() => store.Save(new() { MaxMessages = 77 }), Throws.InstanceOf<IOException>());
 
-            Assert.That(store.Load().MaxMessages, Is.EqualTo(77),
-                "Стор подменяет кэш до записи и не откатывает его при сбое, в отличие от DashboardLayoutStore.");
+            Assert.That(store.Load().MaxMessages, Is.EqualTo(10),
+                "Непринятое значение не должно оседать в кэше: следующее удачное сохранение затрёт им файл.");
 
             Assert.That(File.ReadAllText(_filePath), Does.Contain("\"maxMessages\": 10"),
-                "На диске остаётся последняя удачная версия – кэш и файл разъезжаются.");
+                "На диске остаётся последняя удачная версия.");
         }
     }
 }

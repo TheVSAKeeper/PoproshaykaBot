@@ -22,7 +22,7 @@ public class HttpServerPortReconcilerTests
             Assert.That(settingsManager.Current.Twitch.HttpServerPort, Is.EqualTo(port));
         });
 
-        settingsManager.DidNotReceive().SaveSettings(Arg.Any<AppSettings>());
+        settingsManager.DidNotReceive().Mutate(Arg.Any<Action<AppSettings>>());
     }
 
     [Test]
@@ -41,7 +41,7 @@ public class HttpServerPortReconcilerTests
             Assert.That(result.Notice.Message, Does.Contain("3000").And.Contain("8080"));
         });
 
-        settingsManager.Received(1).SaveSettings(Arg.Is<AppSettings>(settings => settings.Twitch.HttpServerPort == 3000));
+        settingsManager.Received(1).Mutate(Arg.Any<Action<AppSettings>>());
     }
 
     [TestCase("")]
@@ -61,7 +61,7 @@ public class HttpServerPortReconcilerTests
             Assert.That(settingsManager.Current.Twitch.HttpServerPort, Is.EqualTo(8080));
         });
 
-        settingsManager.DidNotReceive().SaveSettings(Arg.Any<AppSettings>());
+        settingsManager.DidNotReceive().Mutate(Arg.Any<Action<AppSettings>>());
     }
 
     private static SettingsManager CreateSettingsManager(string redirectUri, int httpServerPort)
@@ -72,6 +72,10 @@ public class HttpServerPortReconcilerTests
 
         var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
         settingsManager.Current.Returns(settings);
+
+        settingsManager
+            .When(manager => manager.Mutate(Arg.Any<Action<AppSettings>>()))
+            .Do(call => call.Arg<Action<AppSettings>>()(settings));
 
         return settingsManager;
     }
