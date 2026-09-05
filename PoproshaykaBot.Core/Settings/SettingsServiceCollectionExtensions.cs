@@ -19,6 +19,7 @@ public static class SettingsServiceCollectionExtensions
         services.AddSingleton<ObsChatStore>();
         services.AddSingleton<ObsIntegrationStore>();
         services.AddSingleton<UpdateStore>();
+        services.AddSingleton<DebugChannelStore>();
         services.AddSingleton<OnboardingChecklist>();
         return services;
     }

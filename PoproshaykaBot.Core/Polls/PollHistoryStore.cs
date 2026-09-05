@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
@@ -17,6 +18,7 @@ public sealed class PollHistoryStore(
     [FromKeyedServices(TwitchEndpoints.HelixBroadcasterClient)]
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
+    ITargetChannelProvider targetChannelProvider,
     ILogger<PollHistoryStore> logger,
     string? filePath = null)
     : IHostedComponent
@@ -103,6 +105,12 @@ public sealed class PollHistoryStore(
     public async Task<int> BackfillAsync(CancellationToken cancellationToken)
     {
         EnsureLoaded();
+
+        if (targetChannelProvider.Current.IsForeign)
+        {
+            logger.LogInformation("PollHistoryStore: бэкфилл пропущен — идёт отладка на чужом канале");
+            return 0;
+        }
 
         try
         {

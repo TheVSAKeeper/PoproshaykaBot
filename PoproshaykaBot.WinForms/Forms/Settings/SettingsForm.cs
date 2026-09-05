@@ -6,6 +6,8 @@ using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
+using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Settings.Debugging;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Settings.Update;
@@ -25,9 +27,11 @@ public partial class SettingsForm : Form
     private readonly DashboardLayoutCoordinator _dashboardLayoutCoordinator;
     private readonly PollsStore _pollsStore;
     private readonly UpdateStore _updateStore;
+    private readonly DebugChannelStore _debugChannelStore;
     private readonly IEventBus _eventBus;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly ILogger<SettingsForm> _logger;
+    private readonly DebugChannelOverride _debugChannelOverride;
     private readonly List<SettingsDraftSection> _sections;
     private AppSettings _settings;
     private TwitchAccountSettings _botDraft;
@@ -37,6 +41,7 @@ public partial class SettingsForm : Form
     private ObsIntegrationSettings _obsIntegrationDraft;
     private PollsSettings _pollsDraft;
     private UpdateSettings _updateDraft;
+    private DebugChannelSettings _debugChannelDraft;
     private DashboardLayoutSettings? _dashboardDraft;
     private int _dashboardRevision;
     private bool _initialized;
@@ -50,6 +55,8 @@ public partial class SettingsForm : Form
         DashboardLayoutCoordinator dashboardLayoutCoordinator,
         PollsStore pollsStore,
         UpdateStore updateStore,
+        DebugChannelStore debugChannelStore,
+        DebugChannelOverride debugChannelOverride,
         IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
         ILogger<SettingsForm> logger)
@@ -61,6 +68,8 @@ public partial class SettingsForm : Form
         _dashboardLayoutCoordinator = dashboardLayoutCoordinator;
         _pollsStore = pollsStore;
         _updateStore = updateStore;
+        _debugChannelStore = debugChannelStore;
+        _debugChannelOverride = debugChannelOverride;
         _eventBus = eventBus;
         _kestrelHttpServer = kestrelHttpServer;
         _logger = logger;
@@ -73,6 +82,7 @@ public partial class SettingsForm : Form
         _obsIntegrationDraft = JsonStoreClone.DeepClone(obsIntegrationStore.Load());
         _pollsDraft = JsonStoreClone.DeepClone(pollsStore.Load());
         _updateDraft = JsonStoreClone.DeepClone(updateStore.Load());
+        _debugChannelDraft = JsonStoreClone.DeepClone(debugChannelStore.Load());
         var dashboardSnapshot = dashboardLayoutCoordinator.Read();
 
         _dashboardRevision = dashboardSnapshot.Revision;
@@ -109,6 +119,8 @@ public partial class SettingsForm : Form
                 () => _pollsSettingsControl.SaveSettings(_pollsDraft)),
             new(() => _updateSettingsControl.LoadSettings(_updateDraft),
                 () => _updateSettingsControl.SaveSettings(_updateDraft)),
+            new(() => _debugChannelSettingsControl.LoadSettings(_debugChannelDraft, _debugChannelOverride),
+                () => _debugChannelSettingsControl.SaveSettings(_debugChannelDraft)),
             new(() => _dashboardSettingsControl.LoadSettings(_dashboardDraft),
                 () => _dashboardDraft = _dashboardSettingsControl.SaveSettings()),
         ];
@@ -220,6 +232,7 @@ public partial class SettingsForm : Form
         _obsIntegrationDraft = new();
         _pollsDraft = new();
         _updateDraft = new();
+        _debugChannelDraft = new();
         var dashboardSnapshot = _dashboardLayoutCoordinator.Read();
 
         _dashboardRevision = dashboardSnapshot.Revision;
@@ -321,6 +334,7 @@ public partial class SettingsForm : Form
             _obsIntegrationStore.Save(_obsIntegrationDraft);
             _pollsStore.Save(_pollsDraft);
             _updateStore.Save(_updateDraft);
+            _debugChannelStore.Save(_debugChannelDraft);
 
             if (_dashboardDraft != null)
             {

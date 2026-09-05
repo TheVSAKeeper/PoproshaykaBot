@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Twitch;
+﻿using PoproshaykaBot.Core.Tests.Debugging;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.Helix;
 
@@ -17,12 +18,15 @@ public class ChatSenderTests
         _broadcasterIdProvider.GetAsync(Arg.Any<CancellationToken>()).Returns("1");
         _botUserIdProvider.GetAsync(Arg.Any<CancellationToken>()).Returns("2");
 
-        _sender = new(_helix, _broadcasterIdProvider, _botUserIdProvider, NullLogger<ChatSender>.Instance);
+        _targetChannel = new();
+
+        _sender = new(_helix, _broadcasterIdProvider, _botUserIdProvider, _targetChannel, NullLogger<ChatSender>.Instance);
     }
 
     private ITwitchHelixClient _helix = null!;
     private IBroadcasterIdProvider _broadcasterIdProvider = null!;
     private IBotUserIdProvider _botUserIdProvider = null!;
+    private FakeTargetChannelProvider _targetChannel = null!;
     private ChatSender _sender = null!;
 
     [Test]
@@ -54,5 +58,20 @@ public class ChatSenderTests
         await _sender.StopAsync(progress, CancellationToken.None);
 
         Assert.That(delivered, Is.EqualTo("hello"));
+    }
+
+    [Test]
+    public async Task EnqueueAsync_InObserverMode_DoesNotReachTwitch()
+    {
+        _targetChannel.IsDebugSession = true;
+        _targetChannel.IsSendingAllowed = false;
+
+        var progress = new Progress<string>();
+
+        await _sender.StartAsync(progress, CancellationToken.None);
+        await _sender.EnqueueAsync("hello", null, CancellationToken.None);
+        await _sender.StopAsync(progress, CancellationToken.None);
+
+        await _helix.DidNotReceiveWithAnyArgs().SendChatMessageAsync(default!, default!, default!, default, default);
     }
 }

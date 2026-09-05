@@ -4,6 +4,7 @@ using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat.Display;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
@@ -21,6 +22,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     private const string WebView2RuntimeDownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 
     private readonly SettingsManager _settings;
+    private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly ChatDisplayStore _store;
     private readonly IShellLauncher _shellLauncher;
     private readonly IDialogService _dialogService;
@@ -53,6 +55,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     public ChatDisplayTileViewModel(
         SettingsManager settings,
+        ITargetChannelProvider targetChannelProvider,
         ILogger<ChatDisplayTileViewModel> logger,
         IShellLauncher shellLauncher,
         IDialogService dialogService,
@@ -61,6 +64,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         : base("twitch-chat", "Чат", minWidth: 280, minHeight: 220)
     {
         _settings = settings;
+        _targetChannelProvider = targetChannelProvider;
         _shellLauncher = shellLauncher;
         _dialogService = dialogService;
         _store = store;
@@ -70,7 +74,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         _chatDisplayAccount = twitch.ChatDisplayAccount;
         UserDataFolder = WebView2UserDataFolders.Resolve(twitch.ChatDisplayAccount);
         AccountLabel = ResolveAccountLabel(twitch.ChatDisplayAccount);
-        ChannelUri = BuildChannelUri(twitch.Channel);
+        ChannelUri = BuildChannelUri(targetChannelProvider.Current.Login);
 
         _chatDisplaySubscription = bus.SubscribeOnUi<ChatDisplaySettingsChanged>(OnChatDisplaySettingsChanged);
 
@@ -171,7 +175,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
             AccountChangeRequiresRestart = true;
         }
 
-        var uri = BuildChannelUri(@event.Channel);
+        var uri = BuildChannelUri(_targetChannelProvider.Current.Login);
 
         if (uri == ChannelUri)
         {

@@ -51,6 +51,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         IDialogService dialogService,
         UpdateBannerViewModel updateBanner,
         OnboardingBannerViewModel onboardingBanner,
+        DebugBannerViewModel debugBanner,
         StreamMonitoringViewModel streamMonitoring,
         ChatHistoryManager chatHistory,
         ISettingsStore uiSettings)
@@ -64,6 +65,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Theme = theme;
         UpdateBanner = updateBanner;
         OnboardingBanner = onboardingBanner;
+        DebugBanner = debugBanner;
         StreamMonitoring = streamMonitoring;
 
         Overview = overview;
@@ -100,6 +102,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public UpdateBannerViewModel UpdateBanner { get; }
 
     public OnboardingBannerViewModel OnboardingBanner { get; }
+
+    public DebugBannerViewModel DebugBanner { get; }
 
     public StreamMonitoringViewModel StreamMonitoring { get; }
 
@@ -412,6 +416,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private void OnSettingsSaved(object? sender, EventArgs e)
     {
         OnboardingBanner.Refresh();
+        DebugBanner.Refresh();
     }
 
     private void OnLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)

@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Twitch.Helix;
 using System.Net;
@@ -12,6 +13,7 @@ public sealed class ChatSender(
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
     IBotUserIdProvider botUserIdProvider,
+    ITargetChannelProvider targetChannelProvider,
     ILogger<ChatSender> logger)
     : IHostedComponent
 {
@@ -111,6 +113,17 @@ public sealed class ChatSender(
     {
         if (string.IsNullOrWhiteSpace(message))
         {
+            return;
+        }
+
+        var target = targetChannelProvider.Current;
+
+        if (!target.IsSendingAllowed)
+        {
+            logger.LogInformation("Режим наблюдателя ({Channel}): сообщение не отправлено — {Message}",
+                target.Login,
+                message);
+
             return;
         }
 

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using NSubstitute.ExceptionExtensions;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
@@ -49,9 +50,12 @@ public sealed class StreamStatusManagerTests
 
         _clock = new() { UtcNow = new(2026, 4, 30, 12, 0, 0, TimeSpan.Zero) };
 
+        _targetChannel = new("test-channel");
+
         _manager = new(_eventSubClient,
             _helix,
             _broadcasterIdProvider,
+            _targetChannel,
             _settingsManager,
             _eventBus,
             _clock,
@@ -70,6 +74,7 @@ public sealed class StreamStatusManagerTests
     private ITwitchEventSubClient _eventSubClient = null!;
     private ITwitchHelixClient _helix = null!;
     private IBroadcasterIdProvider _broadcasterIdProvider = null!;
+    private FakeTargetChannelProvider _targetChannel = null!;
     private SettingsManager _settingsManager = null!;
     private AppSettings _settings = null!;
     private InMemoryEventBus _eventBus = null!;
@@ -414,6 +419,7 @@ public sealed class StreamStatusManagerTests
         await using var manager = new StreamStatusManager(_eventSubClient,
             _helix,
             _broadcasterIdProvider,
+            _targetChannel,
             _settingsManager,
             _eventBus,
             _clock,

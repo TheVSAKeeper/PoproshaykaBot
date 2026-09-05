@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -35,6 +36,7 @@ public sealed class PollEventSubscriberTests
 
         _availability = Substitute.For<PollsAvailabilityService>(Substitute.For<ITwitchHelixClient>(),
             _broadcasterIdProvider,
+            new FakeTargetChannelProvider(),
             new AccountsStore(),
             NullLogger<PollsAvailabilityService>.Instance);
 

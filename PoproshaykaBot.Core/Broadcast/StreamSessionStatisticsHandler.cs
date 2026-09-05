@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Statistics;
@@ -27,6 +28,7 @@ public sealed class StreamSessionStatisticsHandler :
 
     private readonly IChatMessenger _messenger;
     private readonly IStreamStatus _streamStatus;
+    private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly SettingsManager _settingsManager;
     private readonly TimeProvider _timeProvider;
     private readonly IEventBus _eventBus;
@@ -51,6 +53,7 @@ public sealed class StreamSessionStatisticsHandler :
     public StreamSessionStatisticsHandler(
         IChatMessenger messenger,
         IStreamStatus streamStatus,
+        ITargetChannelProvider targetChannelProvider,
         SettingsManager settingsManager,
         TimeProvider timeProvider,
         IEventBus eventBus,
@@ -59,6 +62,7 @@ public sealed class StreamSessionStatisticsHandler :
     {
         _messenger = messenger;
         _streamStatus = streamStatus;
+        _targetChannelProvider = targetChannelProvider;
         _settingsManager = settingsManager;
         _timeProvider = timeProvider;
         _eventBus = eventBus;
@@ -74,9 +78,15 @@ public sealed class StreamSessionStatisticsHandler :
 
     public async Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
     {
+        if (!_targetChannelProvider.Current.RecordsUserData)
+        {
+            _logger.LogInformation("Статистика сессии не собирается — идёт отладка на чужом канале в общем профиле данных");
+            return;
+        }
+
         var startedAt = ResolveStartedAt(@event);
         var channel = string.IsNullOrEmpty(@event.Channel)
-            ? _settingsManager.Current.Twitch.Channel
+            ? _targetChannelProvider.Current.Login
             : @event.Channel;
 
         var initialViewers = @event.Stream?.ViewerCount ?? 0;
@@ -163,7 +173,7 @@ public sealed class StreamSessionStatisticsHandler :
 
     public Task HandleAsync(ChatMessageReceived @event, CancellationToken cancellationToken)
     {
-        if (@event.IsBot)
+        if (@event.IsBot || !_targetChannelProvider.Current.RecordsUserData)
         {
             return Task.CompletedTask;
         }
