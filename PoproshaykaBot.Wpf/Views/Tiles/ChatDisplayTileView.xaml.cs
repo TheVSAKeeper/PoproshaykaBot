@@ -102,6 +102,11 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
     private async Task InitializeWebViewAsync(ChatDisplayTileViewModel viewModel)
     {
+        if (App.IsGallery)
+        {
+            return;
+        }
+
         try
         {
             var environment = await WebView2EnvironmentFactory.CreateAsync(

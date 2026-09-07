@@ -65,6 +65,8 @@ public partial class App : Application
 
     internal static bool IsHeadless { get; private set; }
 
+    internal static bool IsGallery { get; private set; }
+
     internal static DebugChannelOverride DebugChannel { get; private set; } = DebugChannelOverride.None;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -81,6 +83,7 @@ public partial class App : Application
         {
             _galleryArgs = [.. e.Args.Skip(galleryIndex + 1)];
             IsHeadless = true;
+            IsGallery = true;
             _galleryWorkspace = GalleryWorkspace.Redirect();
         }
 

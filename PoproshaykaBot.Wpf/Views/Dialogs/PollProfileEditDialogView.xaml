@@ -34,8 +34,8 @@
                      keepshell:PlaceholderBehavior.Placeholder="Вопрос голосования"
                      Margin="0,0,0,12" />
 
-            <TextBlock Margin="0,0,0,4">
-                <Run Style="{StaticResource TextBlock.Subtle}" Text="Варианты ответа" />
+            <TextBlock Style="{StaticResource TextBlock.Subtle}" Margin="0,0,0,4">
+                <Run Text="Варианты ответа" />
                 <Run Foreground="{DynamicResource Fg.Muted}"
                      FontSize="{DynamicResource Font.Size.S}"
                      Text=" (2–5, по одному на строку)" />
