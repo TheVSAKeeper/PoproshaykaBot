@@ -11,7 +11,7 @@ public sealed class MemoryWatchdog : IDisposable
 
     private const long TotalThresholdMb = 2048;
 
-    private const int LogEveryNthCheck = 30;
+    private const int LogEveryNthCheck = 300;
 
     private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(2);
 

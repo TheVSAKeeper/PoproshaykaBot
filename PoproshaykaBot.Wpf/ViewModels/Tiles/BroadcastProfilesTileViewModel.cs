@@ -407,7 +407,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private static bool ProfileDivergesFromStream(BroadcastProfile profile, StreamInfo? stream)
     {
-        if (stream is null)
+        if (stream is null or { IsBare: true })
         {
             return false;
         }

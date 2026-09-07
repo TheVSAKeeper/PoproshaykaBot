@@ -170,7 +170,7 @@ public sealed class TwitchChatHandler :
             }
         }
 
-        _logger.LogDebug("[Бот] {DisplayName}: {Message}", chatMessage.DisplayName, chatMessage.Message);
+        _logger.LogDebug("[Бот] сообщение от {DisplayName} обработано ({Length} симв.)", chatMessage.DisplayName, chatMessage.Message.Length);
     }
 
     private static UserStatus GetUserStatusFlags(ChatMessage chatMessage)

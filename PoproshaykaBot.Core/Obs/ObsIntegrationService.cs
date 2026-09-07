@@ -40,6 +40,10 @@ public sealed class ObsIntegrationService(
 
     private readonly SemaphoreSlim _operationGate = new(1, 1);
 
+    private bool _connectFailureLogged;
+
+    private bool _summaryFailureLogged;
+
     public ObsConnectionSnapshot CurrentStatus { get; private set; } = ObsConnectionSnapshot.Disconnected();
 
     public bool IsConnected => client.IsConnected;
@@ -53,28 +57,7 @@ public sealed class ObsIntegrationService(
         try
         {
             using var cts = CreateTimeoutToken(cancellationToken);
-            try
-            {
-                var snapshot = await client.ConnectAsync(CreateOptions(settings), cts.Token).ConfigureAwait(false);
-                CurrentStatus = await RefreshVersionSnapshotAsync(snapshot, cts.Token).ConfigureAwait(false);
-                return CurrentStatus;
-            }
-            catch (Exception exception)
-            {
-                var safeMessage = ToSafeMessage(exception);
-                CurrentStatus = ObsConnectionSnapshot.Disconnected(safeMessage);
-
-                if (IsExpectedConnectionFailure(exception))
-                {
-                    logger.LogWarning(ConnectFailedMessage, safeMessage);
-                }
-                else
-                {
-                    logger.LogWarning(exception, ConnectFailedMessage, safeMessage);
-                }
-
-                return CurrentStatus;
-            }
+            return await ConnectCoreAsync(settings, cts.Token).ConfigureAwait(false);
         }
         finally
         {
@@ -248,6 +231,8 @@ public sealed class ObsIntegrationService(
                 var audioSources = await GetAudioSourceSnapshotsAsync(settings, cts.Token)
                     .ConfigureAwait(false);
 
+                _summaryFailureLogged = false;
+
                 return new(connection,
                     sceneName,
                     streamStatus.Active,
@@ -266,7 +251,8 @@ public sealed class ObsIntegrationService(
             {
                 var safeMessage = ToSafeMessage(exception);
                 CurrentStatus = ObsConnectionSnapshot.Disconnected(safeMessage);
-                logger.LogWarning(exception, "Не удалось обновить сводку OBS: {Message}", safeMessage);
+                logger.Log(_summaryFailureLogged ? LogLevel.Debug : LogLevel.Warning, exception, "Не удалось обновить сводку OBS: {Message}", safeMessage);
+                _summaryFailureLogged = true;
                 return ObsDashboardSnapshot.Unavailable(CurrentStatus);
             }
         }
@@ -569,6 +555,8 @@ public sealed class ObsIntegrationService(
 
         var snapshot = await client.ConnectAsync(CreateOptions(settings), cancellationToken).ConfigureAwait(false);
         CurrentStatus = await RefreshVersionSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+        _connectFailureLogged = false;
+        _summaryFailureLogged = false;
     }
 
     private async Task<ObsConnectionSnapshot> EnsureDashboardConnectionAsync(
@@ -597,10 +585,19 @@ public sealed class ObsIntegrationService(
             return CurrentStatus;
         }
 
+        return await ConnectCoreAsync(settings, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ObsConnectionSnapshot> ConnectCoreAsync(
+        ObsIntegrationSettings settings,
+        CancellationToken cancellationToken)
+    {
         try
         {
             var snapshot = await client.ConnectAsync(CreateOptions(settings), cancellationToken).ConfigureAwait(false);
             CurrentStatus = await RefreshVersionSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            _connectFailureLogged = false;
+            _summaryFailureLogged = false;
             return CurrentStatus;
         }
         catch (Exception exception)
@@ -608,13 +605,16 @@ public sealed class ObsIntegrationService(
             var safeMessage = ToSafeMessage(exception);
             CurrentStatus = ObsConnectionSnapshot.Disconnected(safeMessage);
 
+            var level = _connectFailureLogged ? LogLevel.Debug : LogLevel.Warning;
+            _connectFailureLogged = true;
+
             if (IsExpectedConnectionFailure(exception))
             {
-                logger.LogWarning(ConnectFailedMessage, safeMessage);
+                logger.Log(level, ConnectFailedMessage, safeMessage);
             }
             else
             {
-                logger.LogWarning(exception, ConnectFailedMessage, safeMessage);
+                logger.Log(level, exception, ConnectFailedMessage, safeMessage);
             }
 
             return CurrentStatus;

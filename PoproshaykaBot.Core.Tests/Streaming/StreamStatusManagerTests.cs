@@ -90,6 +90,26 @@ public sealed class StreamStatusManagerTests
             JsonSerializer.SerializeToElement(new { }));
     }
 
+    private static EventSubNotificationArgs StreamOnlineNotification(string streamId, DateTime startedAt)
+    {
+        return new("stream.online",
+            "1",
+            "msg-1",
+            DateTime.UtcNow,
+            JsonSerializer.SerializeToElement(new
+            {
+                @event = new
+                {
+                    id = streamId,
+                    broadcaster_user_id = BroadcasterId,
+                    broadcaster_user_login = "bobito217",
+                    broadcaster_user_name = "Bobito217",
+                    type = "live",
+                    started_at = startedAt,
+                },
+            }));
+    }
+
     private static HelixStreamInfo SampleStream(string id = "stream-1")
     {
         return new(id,
@@ -367,6 +387,38 @@ public sealed class StreamStatusManagerTests
     }
 
     [Test]
+    public async Task OnSessionReconnect_KeepsSubscriptionsAndStreamStatus()
+    {
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>()).Returns(SampleStream());
+
+        var onlineSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(_ => onlineSignal.TrySetResult());
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await onlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        _helix.ClearReceivedCalls();
+
+        _eventSubClient.OnSessionReconnect +=
+            Raise.Event<EventSubAsyncHandler<EventSubReconnectArgs>>(new EventSubReconnectArgs("wss://example.invalid/ws", "session-1", "session-2"),
+                CancellationToken.None);
+
+        await _helix.DidNotReceive().CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+
+        await _helix.DidNotReceive().GetStreamAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Online),
+            "миграция сессии EventSub переносит подписки на стороне Twitch – статус стрима сбрасывать нельзя");
+    }
+
+    [Test]
     public async Task RefreshLiveSnapshot_PreservesChannelUpdateValuesOverLaggingHelixSnapshot()
     {
         var oldSnapshot = new HelixStreamInfo("stream-1",
@@ -502,6 +554,36 @@ public sealed class StreamStatusManagerTests
         {
             Assert.That(received!.Stream.Id, Is.EqualTo("stream-online-1"));
             Assert.That(received.Channel, Is.EqualTo(_settings.Twitch.Channel));
+        }
+    }
+
+    [Test]
+    public async Task HandleStreamOnline_PublishesStreamWentOnline_WithIdAndStartFromNotification()
+    {
+        var startedAt = new DateTime(2026, 5, 17, 10, 0, 0, DateTimeKind.Utc);
+
+        StreamWentOnline? received = null;
+        var receivedSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(@event =>
+        {
+            received = @event;
+            receivedSignal.TrySetResult();
+        });
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnNotification +=
+            Raise.Event<EventSubAsyncHandler<EventSubNotificationArgs>>(StreamOnlineNotification("stream-online-2", startedAt),
+                CancellationToken.None);
+
+        await receivedSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.That(received?.Stream, Is.Not.Null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(received!.Stream!.Id, Is.EqualTo("stream-online-2"));
+            Assert.That(received.Stream.StartedAt, Is.EqualTo(startedAt));
         }
     }
 }

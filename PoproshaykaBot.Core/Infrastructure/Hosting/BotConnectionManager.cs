@@ -7,8 +7,15 @@ using PoproshaykaBot.Core.Twitch.Auth;
 
 namespace PoproshaykaBot.Core.Infrastructure.Hosting;
 
-public sealed class BotConnectionManager : IAsyncDisposable
+public sealed class BotConnectionManager : IBotConnectionController, IAsyncDisposable
 {
+    private enum BotCancellationReason
+    {
+        None = 0,
+        UserRequested = 1,
+        Shutdown = 2,
+    }
+
     private static readonly TimeSpan GracefulStopTimeout = TimeSpan.FromSeconds(60);
 
     private static readonly TimeSpan ForcedStopTimeout = TimeSpan.FromSeconds(6);
@@ -27,6 +34,7 @@ public sealed class BotConnectionManager : IAsyncDisposable
     private Task? _connectionTask;
     private bool _disposed;
     private bool _shutdownCompleted;
+    private BotCancellationReason _cancellationReason = BotCancellationReason.None;
 
     public BotConnectionManager(
         ITwitchOAuthService tokenService,
@@ -60,22 +68,36 @@ public sealed class BotConnectionManager : IAsyncDisposable
             throw new InvalidOperationException("Connection is already in progress");
         }
 
-        _logger.LogInformation("Начат процесс подключения бота");
-
         _cts?.Dispose();
         _cts = new();
+        _cancellationReason = BotCancellationReason.None;
 
         _connectionTask = ConnectAsync(_cts.Token);
     }
 
     public void CancelConnection()
     {
+        CancelConnection(BotCancellationReason.UserRequested);
+    }
+
+    private void CancelConnection(BotCancellationReason reason)
+    {
         if (_cts == null || _cts.IsCancellationRequested)
         {
             return;
         }
 
-        _logger.LogInformation("Пользователь запросил отмену подключения");
+        _cancellationReason = reason;
+
+        if (reason == BotCancellationReason.UserRequested)
+        {
+            _logger.LogInformation("Пользователь запросил отмену подключения");
+        }
+        else
+        {
+            _logger.LogDebug("Отмена незавершённого подключения при остановке");
+        }
+
         _cts.Cancel();
     }
 
@@ -93,9 +115,9 @@ public sealed class BotConnectionManager : IAsyncDisposable
 
         try
         {
-            _logger.LogDebug("Инициализация процесса остановки бота (StopAsync, режим {Mode})", mode);
+            SetPhase(BotLifecyclePhase.Disconnecting,
+                mode == BotStopMode.Forced ? "принудительная остановка" : "штатная остановка");
 
-            CurrentPhase = BotLifecyclePhase.Disconnecting;
             await _eventBus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnecting));
 
             var progressReporter = new Progress<string>(ReportProgress);
@@ -134,7 +156,6 @@ public sealed class BotConnectionManager : IAsyncDisposable
 
             _twitchChatHandler.Reset();
             _targetChannelProvider.EndSession();
-            _logger.LogInformation("Бот успешно остановлен");
             PublishPhase(BotLifecyclePhase.Disconnected);
         }
         finally
@@ -152,7 +173,7 @@ public sealed class BotConnectionManager : IAsyncDisposable
 
         _logger.LogDebug("Инициализация полной остановки бота (ShutdownAsync, режим {Mode})", mode);
 
-        CancelConnection();
+        CancelConnection(BotCancellationReason.Shutdown);
 
         var pendingConnect = _connectionTask;
 
@@ -197,7 +218,7 @@ public sealed class BotConnectionManager : IAsyncDisposable
 
     private async Task ConnectAsync(CancellationToken ct)
     {
-        PublishPhase(BotLifecyclePhase.Connecting);
+        PublishPhase(BotLifecyclePhase.Connecting, reason: "запрошено подключение бота");
 
         try
         {
@@ -241,14 +262,14 @@ public sealed class BotConnectionManager : IAsyncDisposable
         {
             _targetChannelProvider.EndSession();
             _logger.LogWarning(ex, "Процесс подключения бота был отменен");
-            PublishPhase(BotLifecyclePhase.Cancelled);
+            PublishPhase(BotLifecyclePhase.Cancelled, reason: DescribeCancellation(_cancellationReason));
         }
         catch (Exception exception)
         {
             _targetChannelProvider.EndSession();
             _logger.LogError(exception, "Произошла ошибка в процессе подключения бота");
             ReportProgress($"Ошибка подключения: {exception.Message}");
-            PublishPhase(BotLifecyclePhase.Failed, exception);
+            PublishPhase(BotLifecyclePhase.Failed, exception, "ошибка подключения");
         }
     }
 
@@ -258,9 +279,34 @@ public sealed class BotConnectionManager : IAsyncDisposable
         _logger.LogInformation("{Message}", message);
     }
 
-    private void PublishPhase(BotLifecyclePhase phase, Exception? exception = null)
+    private static string DescribeCancellation(BotCancellationReason reason)
     {
-        CurrentPhase = phase;
+        return reason switch
+        {
+            BotCancellationReason.UserRequested => "отмена по запросу пользователя",
+            BotCancellationReason.Shutdown => "отмена при завершении работы",
+            _ => "отмена без явного запроса",
+        };
+    }
+
+    private void PublishPhase(BotLifecyclePhase phase, Exception? exception = null, string? reason = null)
+    {
+        SetPhase(phase, reason);
         _ = _eventBus.PublishAsync(new BotLifecyclePhaseChanged(phase, exception));
+    }
+
+    private void SetPhase(BotLifecyclePhase phase, string? reason)
+    {
+        var previous = CurrentPhase;
+        CurrentPhase = phase;
+
+        if (string.IsNullOrEmpty(reason))
+        {
+            _logger.LogInformation("Фаза бота: {PreviousPhase} → {Phase}", previous, phase);
+        }
+        else
+        {
+            _logger.LogInformation("Фаза бота: {PreviousPhase} → {Phase} (причина: {Reason})", previous, phase, reason);
+        }
     }
 }

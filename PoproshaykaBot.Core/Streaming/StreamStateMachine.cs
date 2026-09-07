@@ -67,12 +67,24 @@ internal sealed class StreamStateMachine
         }
     }
 
-    public StatusTransition MarkOnline()
+    public StatusTransition MarkOnline(string? streamId, DateTime startedAt)
     {
         lock (_lock)
         {
             var previous = _status;
             _status = StreamStatus.Online;
+
+            if (!string.IsNullOrEmpty(streamId)
+                && startedAt != default
+                && !string.Equals(_stream?.Id, streamId, StringComparison.Ordinal))
+            {
+                _stream = ApplyOverlayLocked(new()
+                {
+                    Id = streamId,
+                    StartedAt = DateTime.SpecifyKind(startedAt, DateTimeKind.Utc),
+                });
+            }
+
             return new(previous != StreamStatus.Online, previous);
         }
     }
