@@ -371,7 +371,7 @@ public sealed class TwitchHelixClientTests
     }
 
     [Test]
-    public async Task GetPollsAsync_StatusOptional_OmitsParameterWhenNotProvided()
+    public async Task GetPollsAsync_NeverSendsStatusParameter()
     {
         var (client, handler) = Build(StubHttpMessageHandler.ReturnsJson(HttpStatusCode.OK, """{"data":[]}"""));
 
@@ -383,18 +383,8 @@ public sealed class TwitchHelixClientTests
             Assert.That(url, Does.Contain("broadcaster_id=12345"));
             Assert.That(url, Does.Contain("first=5"));
             Assert.That(url, Does.Not.Contain("status="),
-                "Если status=null, query-параметр не должен добавляться");
+                "Get Polls не фильтрует по статусу, параметр status слать нельзя");
         }
-    }
-
-    [Test]
-    public async Task GetPollsAsync_StatusProvided_AppendsParameter()
-    {
-        var (client, handler) = Build(StubHttpMessageHandler.ReturnsJson(HttpStatusCode.OK, """{"data":[]}"""));
-
-        await client.GetPollsAsync("12345", "ACTIVE", 1);
-
-        Assert.That(handler.Requests[0].RequestUri!.AbsoluteUri, Does.Contain("status=ACTIVE"));
     }
 
     [Test]

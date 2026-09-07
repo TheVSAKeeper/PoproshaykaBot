@@ -42,7 +42,6 @@ public interface ITwitchHelixClient
 
     Task<IReadOnlyList<HelixPollInfo>> GetPollsAsync(
         string broadcasterId,
-        string? status = null,
         int first = 20,
         CancellationToken cancellationToken = default);
 }

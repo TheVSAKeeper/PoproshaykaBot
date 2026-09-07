@@ -121,7 +121,7 @@ public sealed class PollHistoryStore(
                 return 0;
             }
 
-            var polls = await helix.GetPollsAsync(broadcasterId, null, 20, cancellationToken);
+            var polls = await helix.GetPollsAsync(broadcasterId, 20, cancellationToken);
             var added = 0;
 
             foreach (var poll in polls)
@@ -132,6 +132,14 @@ public sealed class PollHistoryStore(
                 }
 
                 var snapshot = PollEventSubMapper.FromHelix(poll, null);
+
+                if (snapshot is null)
+                {
+                    logger.LogWarning("PollHistoryStore: опрос {PollId} – неизвестный статус {Status}, пропущен",
+                        poll.Id, poll.Status);
+
+                    continue;
+                }
 
                 if (snapshot.Status == PollSnapshotStatus.Active)
                 {

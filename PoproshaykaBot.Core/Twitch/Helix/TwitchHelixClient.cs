@@ -247,16 +247,10 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
 
     public async Task<IReadOnlyList<HelixPollInfo>> GetPollsAsync(
         string broadcasterId,
-        string? status = null,
         int first = 20,
         CancellationToken cancellationToken = default)
     {
         var uri = $"{TwitchEndpoints.HelixPolls}?broadcaster_id={Uri.EscapeDataString(broadcasterId)}&first={first}";
-
-        if (!string.IsNullOrWhiteSpace(status))
-        {
-            uri += $"&status={Uri.EscapeDataString(status)}";
-        }
 
         var data = await GetCollectionAsync<HelixPollDto>(uri, cancellationToken);
         return data.Select(MapPoll).ToArray();

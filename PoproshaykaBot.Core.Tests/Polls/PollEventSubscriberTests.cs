@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Polling;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -26,7 +27,6 @@ public sealed class PollEventSubscriberTests
             .Returns("sub-id");
 
         _helix.GetPollsAsync(Arg.Any<string>(),
-                Arg.Any<string?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(Array.Empty<HelixPollInfo>());
@@ -107,5 +107,60 @@ public sealed class PollEventSubscriberTests
                 Arg.Any<IReadOnlyDictionary<string, string>>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>());
+    }
+
+    [TestCase("COMPLETED")]
+    [TestCase("ARCHIVED")]
+    [TestCase("TERMINATED")]
+    [TestCase("SOMETHING_NEW")]
+    public async Task StartAsync_WhenHelixReturnsNoActivePolls_DoesNotPublishPollStarted(string status)
+    {
+        _eventSubClient.SessionId.Returns("existing-session");
+        _helix.GetPollsAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([Poll("finished", status, DateTime.UtcNow.AddDays(-30))]);
+
+        var started = new List<PollStarted>();
+        using var subscription = _eventBus.Subscribe<PollStarted>(started.Add);
+
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(started, Is.Empty,
+            "Get Polls отдаёт и завершённые, и незнакомые по статусу голосования – восстанавливать из них нечего");
+    }
+
+    [Test]
+    public async Task StartAsync_WhenHelixReturnsFinishedAndActivePolls_PublishesActiveOnce()
+    {
+        _eventSubClient.SessionId.Returns("existing-session");
+        _helix.GetPollsAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([
+                Poll("finished", "COMPLETED", DateTime.UtcNow.AddDays(-30)),
+                Poll("running", "ACTIVE", null),
+            ]);
+
+        var started = new List<PollStarted>();
+        using var subscription = _eventBus.Subscribe<PollStarted>(started.Add);
+
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(started, Has.Count.EqualTo(1));
+            Assert.That(started[0].Snapshot.PollId, Is.EqualTo("running"));
+        }
+    }
+
+    private static HelixPollInfo Poll(string id, string status, DateTime? endedAt)
+    {
+        return new(id,
+            BroadcasterId,
+            "Вопрос?",
+            [new("c1", "А", 3, 0, 0), new("c2", "Б", 1, 0, 0)],
+            false,
+            0,
+            status,
+            60,
+            DateTime.UtcNow.AddMinutes(-5),
+            endedAt);
     }
 }
