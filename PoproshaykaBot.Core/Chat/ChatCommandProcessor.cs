@@ -95,12 +95,30 @@ public sealed class ChatCommandProcessor
 
         if (!command.CanExecute(enrichedContext))
         {
+            _logger.LogDebug("Команда {Canonical} отклонена для {Username}: условия выполнения не соблюдены",
+                command.Canonical,
+                enrichedContext.Username);
+
             return ChatCommandResult.NotHandled;
         }
 
         try
         {
             var response = await command.ExecuteAsync(enrichedContext, cancellationToken);
+
+            if (response is null)
+            {
+                _logger.LogInformation("Команда {Canonical} выполнена для {Username}, ответа нет", command.Canonical, enrichedContext.Username);
+            }
+            else
+            {
+                _logger.LogInformation("Команда {Canonical} выполнена для {Username}, ответ {Delivery} длиной {Length} символов",
+                    command.Canonical,
+                    enrichedContext.Username,
+                    response.Delivery,
+                    response.Text.Length);
+            }
+
             return ChatCommandResult.Handled(response);
         }
         catch (Exception ex)

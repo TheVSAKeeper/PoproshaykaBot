@@ -53,9 +53,25 @@ public class AppHost
                 _logger.LogInformation("Запуск компонента {Component} (порядок {Order})", component.Name, component.StartOrder);
                 progress.Report(component.Name);
 
-                await component.StartAsync(progress, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await component.StartAsync(progress, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogError(ex, "Ошибка запуска компонента {Component} (порядок {Order}), запущено до него {StartedCount} из {TotalCount}",
+                        component.Name,
+                        component.StartOrder,
+                        _started.Count,
+                        _components.Count);
+
+                    throw;
+                }
+
                 _started.Add(component);
             }
+
+            _logger.LogInformation("Компоненты AppHost запущены: {StartedCount} из {TotalCount}", _started.Count, _components.Count);
         }
         finally
         {
@@ -76,6 +92,8 @@ public class AppHost
 
         try
         {
+            var failed = 0;
+
             for (var i = _started.Count - 1; i >= 0; i--)
             {
                 var component = _started[i];
@@ -87,11 +105,13 @@ public class AppHost
                 }
                 catch (Exception ex)
                 {
+                    failed++;
                     _logger.LogError(ex, "Ошибка остановки компонента {Component}", component.Name);
                     progress.Report($"Ошибка остановки '{component.Name}': {ex.Message}");
                 }
             }
 
+            _logger.LogInformation("Компоненты AppHost остановлены: {StoppedCount}, с ошибкой: {FailedCount}", _started.Count - failed, failed);
             _started.Clear();
         }
         finally

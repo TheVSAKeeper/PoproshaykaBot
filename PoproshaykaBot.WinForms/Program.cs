@@ -29,6 +29,7 @@ namespace PoproshaykaBot.WinForms;
 public static class Program
 {
     private static MemoryWatchdog? _memoryWatchdog;
+    private static AppExitReason _exitReason = AppExitReason.None;
 
     internal static bool IsUiSmoke { get; private set; }
 
@@ -75,6 +76,7 @@ public static class Program
             if (singleInstanceMutex is null)
             {
                 Log.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
+                _exitReason = AppExitReason.AlreadyRunning;
 
                 if (!isUiSmoke)
                 {
@@ -87,9 +89,7 @@ public static class Program
                 return;
             }
 
-            Log.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}",
-                ResolveStorageMode(),
-                AppPaths.BaseDirectory);
+            ReportEnvironment(args);
 
             if (isFinalizeUpdate)
             {
@@ -108,6 +108,7 @@ public static class Program
         catch (Exception ex)
         {
             Log.Fatal(ex, "Приложение завершило работу из-за непредвиденной ошибки");
+            _exitReason = AppExitReason.Failed;
             Environment.ExitCode = 1;
 
             if (!isUiSmoke)
@@ -120,7 +121,7 @@ public static class Program
         }
         finally
         {
-            Log.Information("Завершение работы приложения");
+            Log.Information("Завершение работы приложения ({Reason}), код выхода {ExitCode}", _exitReason, Environment.ExitCode);
             Log.CloseAndFlush();
             _memoryWatchdog?.Dispose();
             singleInstanceMutex?.Dispose();
@@ -146,6 +147,7 @@ public static class Program
         try
         {
             serviceProvider.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
+            ReportConfiguration(serviceProvider);
 
             var settingsManager = serviceProvider.GetRequiredService<SettingsManager>();
             appLifetimeStarted = StartHttpServerIfNeeded(isUiSmoke, settingsManager, appLifetime);
@@ -162,10 +164,11 @@ public static class Program
         {
             StopAllComponents(serviceProvider, appLifetime, streamMonitoringHost, appLifetimeStarted, streamMonitoringStarted, isUiSmoke);
             _memoryWatchdog?.Dispose();
+            _exitReason = AppExitReason.Normal;
 
-            if (!isUiSmoke)
+            if (!isUiSmoke && ApplyPendingUpdate())
             {
-                ApplyPendingUpdate();
+                _exitReason = AppExitReason.UpdatePending;
             }
         }
     }
@@ -222,13 +225,13 @@ public static class Program
         }
     }
 
-    private static void ApplyPendingUpdate()
+    private static bool ApplyPendingUpdate()
     {
         var executablePath = Environment.ProcessPath;
 
         if (string.IsNullOrEmpty(executablePath))
         {
-            return;
+            return false;
         }
 
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
@@ -236,12 +239,25 @@ public static class Program
 
         try
         {
-            UpdateApplier.TryApplyPending(UpdatePaths.StagingDirectory(executablePath), executablePath, logger);
+            return UpdateApplier.TryApplyPending(UpdatePaths.StagingDirectory(executablePath), executablePath, logger);
         }
         catch (Exception exception)
         {
             Log.Error(exception, "Ошибка применения запланированного обновления");
+            return false;
         }
+    }
+
+    private static void ReportEnvironment(string[] args)
+    {
+        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        StartupReport.LogEnvironment(loggerFactory.CreateLogger(nameof(StartupReport)), args);
+    }
+
+    private static void ReportConfiguration(IServiceProvider serviceProvider)
+    {
+        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        StartupReport.LogConfiguration(loggerFactory.CreateLogger(nameof(StartupReport)), serviceProvider);
     }
 
     private static void MigrateLegacySettingsLayout()
@@ -341,16 +357,6 @@ public static class Program
         {
             Log.Error(ex, "Ошибка остановки AppLifetime");
         }
-    }
-
-    private static string ResolveStorageMode()
-    {
-        if (AppPaths.IsBaseDirectoryOverridden)
-        {
-            return "override";
-        }
-
-        return AppPaths.IsPortable ? "portable" : "AppData";
     }
 
     private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink)

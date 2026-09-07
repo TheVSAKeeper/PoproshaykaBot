@@ -11,7 +11,7 @@ public sealed class UpdateStore
     public UpdateStore(ILogger<UpdateStore>? logger = null, string? filePath = null)
     {
         var path = filePath ?? AppPaths.SettingsFile("update.json");
-        _store = new(path, logger);
+        _store = new(path, logger, describe: SettingsDescriber.Describe);
 
         logger?.LogDebug("UpdateStore инициализирован из {FilePath}", path);
     }

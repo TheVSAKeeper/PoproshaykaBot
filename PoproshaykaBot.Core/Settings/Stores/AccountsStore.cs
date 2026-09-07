@@ -15,7 +15,7 @@ public sealed class AccountsStore
     {
         _logger = logger;
         _filePath = filePath ?? AppPaths.SettingsFile("accounts.json");
-        _store = new(_filePath, logger, AccountsTokenRedactor.Redact);
+        _store = new(_filePath, logger, AccountsTokenRedactor.Redact, describe: DescribeAccounts);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {
@@ -96,6 +96,12 @@ public sealed class AccountsStore
         });
 
         _logger?.LogInformation("AccountsStore: оба аккаунта заменены целиком и сохранены в {FilePath}", _filePath);
+    }
+
+    private static string DescribeAccounts(AccountsFileDto state)
+    {
+        return $"бот – {SettingsDescriber.Describe(state.BotAccount ?? new())}; "
+            + $"вещатель – {SettingsDescriber.Describe(state.BroadcasterAccount ?? new())}";
     }
 
     private static TwitchAccountSettings TakeAccount(AccountsFileDto state, TwitchOAuthRole role)

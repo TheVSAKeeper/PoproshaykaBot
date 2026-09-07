@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.Core.Tests.Debugging;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Tests.Debugging;
+using PoproshaykaBot.Core.Tests.Server;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -20,13 +22,15 @@ public class ChatSenderTests
 
         _targetChannel = new();
 
-        _sender = new(_helix, _broadcasterIdProvider, _botUserIdProvider, _targetChannel, NullLogger<ChatSender>.Instance);
+        _logger = new();
+        _sender = new(_helix, _broadcasterIdProvider, _botUserIdProvider, _targetChannel, _logger);
     }
 
     private ITwitchHelixClient _helix = null!;
     private IBroadcasterIdProvider _broadcasterIdProvider = null!;
     private IBotUserIdProvider _botUserIdProvider = null!;
     private FakeTargetChannelProvider _targetChannel = null!;
+    private RecordingLogger<ChatSender> _logger = null!;
     private ChatSender _sender = null!;
 
     [Test]
@@ -73,5 +77,38 @@ public class ChatSenderTests
         await _sender.StopAsync(progress, CancellationToken.None);
 
         await _helix.DidNotReceiveWithAnyArgs().SendChatMessageAsync(default!, default!, default!, default, default);
+    }
+
+    [Test]
+    public async Task EnqueueAsync_SentMessage_IsLoggedWithChannelAndText()
+    {
+        var sent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _helix.SendChatMessageAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                sent.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        var progress = new Progress<string>();
+
+        await _sender.StartAsync(progress, CancellationToken.None);
+        await _sender.EnqueueAsync("привет чат", null, CancellationToken.None);
+
+        await sent.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await _sender.StopAsync(progress, CancellationToken.None);
+
+        var line = _logger.Entries
+            .Where(entry => entry.Level == LogLevel.Information)
+            .Select(entry => entry.Message)
+            .FirstOrDefault(message => message.Contains("привет чат", StringComparison.Ordinal));
+
+        Assert.That(line, Is.Not.Null, "Успешная отправка должна попадать в лог");
+        Assert.That(line, Does.Contain("test-channel"));
     }
 }

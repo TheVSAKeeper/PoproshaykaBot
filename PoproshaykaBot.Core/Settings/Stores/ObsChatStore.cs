@@ -18,7 +18,7 @@ public sealed class ObsChatStore
         var path = filePath ?? AppPaths.SettingsFile("obs-chat.json");
 
         _eventBus = eventBus;
-        _store = new(path, logger);
+        _store = new(path, logger, describe: SettingsDescriber.Describe);
 
         logger?.LogDebug("ObsChatStore инициализирован из {FilePath}", path);
     }

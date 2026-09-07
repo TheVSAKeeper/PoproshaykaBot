@@ -11,7 +11,7 @@ public class BroadcastProfilesStore
     public BroadcastProfilesStore(ILogger<BroadcastProfilesStore>? logger = null, string? filePath = null)
     {
         var path = filePath ?? AppPaths.SettingsFile("broadcast-profiles.json");
-        _store = new(path, logger);
+        _store = new(path, logger, describe: SettingsDescriber.Describe);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {

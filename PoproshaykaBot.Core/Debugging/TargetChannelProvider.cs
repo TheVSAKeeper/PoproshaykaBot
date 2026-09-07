@@ -12,6 +12,15 @@ public sealed class TargetChannelProvider(
     ILogger<TargetChannelProvider>? logger = null)
     : ITargetChannelProvider
 {
+    private enum TargetChannelSource
+    {
+        None = 0,
+        CommandLine = 1,
+        DebugChannelStore = 2,
+        OwnChannel = 3,
+        OwnChannelAfterInvalidValue = 4,
+    }
+
     private readonly object _syncLock = new();
 
     private TargetChannelState? _reported;
@@ -29,16 +38,16 @@ public sealed class TargetChannelProvider(
                 }
             }
 
-            var (state, rejected) = Resolve();
-            Report(state, rejected);
+            var (state, rejected, source) = Resolve();
+            Report(state, rejected, source);
             return state;
         }
     }
 
     public void BeginSession()
     {
-        var (state, rejected) = Resolve();
-        Report(state, rejected);
+        var (state, rejected, source) = Resolve();
+        Report(state, rejected, source);
 
         lock (_syncLock)
         {
@@ -54,37 +63,48 @@ public sealed class TargetChannelProvider(
         }
     }
 
-    private (TargetChannelState State, string? Rejected) Resolve()
+    private (TargetChannelState State, string? Rejected, TargetChannelSource Source) Resolve()
     {
         var own = settingsManager.Current.Twitch.Channel ?? string.Empty;
         var isolated = AppPaths.IsBaseDirectoryOverridden;
 
         if (commandLine.Channel is { Length: > 0 } fromCommandLine)
         {
-            return (new(fromCommandLine, own, true, commandLine.AllowSending, isolated), null);
+            return (new(fromCommandLine, own, true, commandLine.AllowSending, isolated), null, TargetChannelSource.CommandLine);
         }
 
         if (commandLine.RejectedChannel is { } rejectedArgument)
         {
-            return (new(own, own, true, commandLine.AllowSending, isolated), rejectedArgument);
+            return (new(own, own, true, commandLine.AllowSending, isolated), rejectedArgument, TargetChannelSource.OwnChannelAfterInvalidValue);
         }
 
         var stored = debugChannelStore.Load();
 
         if (!stored.IsEnabled)
         {
-            return (new(own, own, false, true, isolated), null);
+            return (new(own, own, false, true, isolated), null, TargetChannelSource.OwnChannel);
         }
 
         if (ChannelLogin.TryNormalize(stored.Channel, out var fromSettings))
         {
-            return (new(fromSettings, own, true, stored.AllowSending || commandLine.AllowSending, isolated), null);
+            return (new(fromSettings, own, true, stored.AllowSending || commandLine.AllowSending, isolated), null, TargetChannelSource.DebugChannelStore);
         }
 
-        return (new(own, own, true, commandLine.AllowSending, isolated), stored.Channel ?? string.Empty);
+        return (new(own, own, true, commandLine.AllowSending, isolated), stored.Channel ?? string.Empty, TargetChannelSource.OwnChannelAfterInvalidValue);
     }
 
-    private void Report(TargetChannelState state, string? rejected)
+    private static string DescribeSource(TargetChannelSource source)
+    {
+        return source switch
+        {
+            TargetChannelSource.CommandLine => "аргумент --debug-channel",
+            TargetChannelSource.DebugChannelStore => "настройка отладки debug-channel.json",
+            TargetChannelSource.OwnChannelAfterInvalidValue => "свой канал из настроек после нераспознанного значения",
+            _ => "свой канал из настроек",
+        };
+    }
+
+    private void Report(TargetChannelState state, string? rejected, TargetChannelSource source)
     {
         lock (_syncLock)
         {
@@ -104,13 +124,16 @@ public sealed class TargetChannelProvider(
 
             if (!state.IsDebugSession)
             {
+                logger?.LogInformation("Канал бота {Channel} выбран по источнику: {Source}", state.Login, DescribeSource(source));
                 return;
             }
 
-            logger?.LogWarning("Режим отладки: бот работает на канале {Channel} (свой канал {OwnChannel}), отправка сообщений {Sending}",
+            logger?.LogWarning("Режим отладки: бот работает на канале {Channel} (свой канал {OwnChannel}, источник: {Source}), отправка сообщений {Sending}, чужой канал {IsForeign}",
                 state.Login,
                 state.OwnChannel,
-                state.IsSendingAllowed ? "разрешена" : "выключена");
+                DescribeSource(source),
+                state.IsSendingAllowed ? "разрешена" : "выключена",
+                state.IsForeign);
         }
     }
 }

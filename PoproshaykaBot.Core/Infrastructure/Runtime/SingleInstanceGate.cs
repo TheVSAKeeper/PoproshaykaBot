@@ -23,7 +23,7 @@ public static class SingleInstanceGate
         return null;
     }
 
-    internal static string BuildMutexName()
+    public static string BuildMutexName()
     {
         var key = AppPaths.BaseDirectory.ToLowerInvariant();
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
