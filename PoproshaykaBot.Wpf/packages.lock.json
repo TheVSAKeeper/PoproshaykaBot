@@ -22,9 +22,9 @@
       },
       "KeepShell": {
         "type": "Direct",
-        "requested": "[0.1.142, )",
-        "resolved": "0.1.142",
-        "contentHash": "TYBNxgY1fZA8nBpVnY8VwUlS3qyLwtWxuZjKAb6Sd0KayywLTMXoeFtAUJqMTgLEyMwkvw+wliCSg9MHG2SBOw==",
+        "requested": "[0.1.158, )",
+        "resolved": "0.1.158",
+        "contentHash": "yTU6DMhrLuv5rq01HHVxs4aS4pKJc0UutWPr69cDm/MtCqcro2t3LTLF58eteEowJ6LJQc0/Cn351a9PMhcWWA==",
         "dependencies": {
           "CommunityToolkit.Mvvm": "8.3.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",
@@ -37,11 +37,11 @@
       },
       "KeepShell.Automation": {
         "type": "Direct",
-        "requested": "[0.1.142, )",
-        "resolved": "0.1.142",
-        "contentHash": "4oRhgkPfp/QX0Zc4CenRQZ8a0WIpVGGKluF7xMhQNlYJoJyUGkvaIC5mUXuqbpby23crw0Wq+2AJ37gLMHF2/w==",
+        "requested": "[0.1.158, )",
+        "resolved": "0.1.158",
+        "contentHash": "R1nhEu4S6kUxIFQX4QadRNBzTCLJ2BiC2O6zFMyk0Sna0MvPZi6D0WaSyQTyS5NAb3nMBUQ4k5MOaFXxCVoyvQ==",
         "dependencies": {
-          "KeepShell": "0.1.142"
+          "KeepShell": "0.1.158"
         }
       },
       "MahApps.Metro.IconPacks.Lucide": {
