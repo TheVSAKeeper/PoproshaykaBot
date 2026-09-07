@@ -6,7 +6,6 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -37,6 +36,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private readonly IObsWebSocketClient _obsClient;
     private readonly IEventBus _bus;
     private readonly ILogger<ObsInfoTileViewModel> _logger;
+    private readonly IUiDispatcher _uiDispatcher;
 
     private readonly List<IDisposable> _subs = [];
     private readonly object _volumeMeterLock = new();
@@ -96,6 +96,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         _obsClient = obsClient;
         _bus = bus;
         _logger = logger;
+        _uiDispatcher = uiDispatcher;
 
         StreamCard = new(ObsOutputCardKind.Stream, obsIntegration, logger);
         RecordCard = new(ObsOutputCardKind.Record, obsIntegration, logger);
@@ -186,13 +187,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private void ScheduleRefreshFromObsEvent()
     {
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null)
-        {
-            return;
-        }
-
-        dispatcher.BeginInvoke(() => _ = RefreshSnapshotAsync(connectIfNeeded: false));
+        _uiDispatcher.Invoke(() => _ = RefreshSnapshotAsync(connectIfNeeded: false));
     }
 
     [RelayCommand]
@@ -571,6 +566,11 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private bool ShouldTryAutoConnect()
     {
+        if (App.IsGallery)
+        {
+            return false;
+        }
+
         if (!_settings.Enabled || !_settings.AutoConnect || _obsIntegration.CurrentStatus.IsConnected)
         {
             return false;

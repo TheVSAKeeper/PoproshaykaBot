@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Update;
@@ -32,13 +33,13 @@ public partial class App
         }
     }
 
-    private static void ApplyPendingUpdate()
+    private static bool ApplyPendingUpdate()
     {
         var executablePath = Environment.ProcessPath;
 
         if (string.IsNullOrEmpty(executablePath))
         {
-            return;
+            return false;
         }
 
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
@@ -46,12 +47,25 @@ public partial class App
 
         try
         {
-            UpdateApplier.TryApplyPending(UpdatePaths.StagingDirectory(executablePath), executablePath, logger);
+            return UpdateApplier.TryApplyPending(UpdatePaths.StagingDirectory(executablePath), executablePath, logger);
         }
         catch (Exception exception)
         {
             HostLog.Error(exception, "Ошибка применения запланированного обновления");
+            return false;
         }
+    }
+
+    private static void ReportEnvironment(IReadOnlyList<string> arguments)
+    {
+        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        StartupReport.LogEnvironment(loggerFactory.CreateLogger(nameof(StartupReport)), arguments);
+    }
+
+    private static void ReportConfiguration(IServiceProvider serviceProvider)
+    {
+        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        StartupReport.LogConfiguration(loggerFactory.CreateLogger(nameof(StartupReport)), serviceProvider);
     }
 
     private static bool StartStreamMonitoring(StreamMonitoringHost host)

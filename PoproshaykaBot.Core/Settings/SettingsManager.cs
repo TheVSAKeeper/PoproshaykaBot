@@ -27,7 +27,7 @@ public class SettingsManager
     {
         _logger = logger;
         _settingsFilePath = settingsFilePath ?? AppPaths.SettingsFile("settings.json");
-        _store = new(_settingsFilePath, logger, parser: ParseFile);
+        _store = new(_settingsFilePath, logger, parser: ParseFile, describe: SettingsDescriber.Describe);
     }
 
     public virtual AppSettings Current

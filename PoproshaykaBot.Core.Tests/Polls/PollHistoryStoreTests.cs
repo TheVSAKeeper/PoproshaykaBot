@@ -68,7 +68,7 @@ public class PollHistoryStoreTests
 
         Assert.That(added, Is.Zero);
 
-        await _helix.DidNotReceiveWithAnyArgs().GetPollsAsync(default!, default, default, default);
+        await _helix.DidNotReceiveWithAnyArgs().GetPollsAsync(default!, default, default);
     }
 
     [Test]
@@ -144,10 +144,33 @@ public class PollHistoryStoreTests
         var started = DateTime.UtcNow.AddMinutes(-5);
         var ended = DateTime.UtcNow.AddMinutes(-4);
 
-        _helix.GetPollsAsync("1", Arg.Any<string?>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _helix.GetPollsAsync("1", Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([
                 new("active", "1", "Active?", [new("c1", "A", 0, 0, 0)], false, 0, "ACTIVE", 60,
                     started, null),
+                new("done", "1", "Done?", [new("c1", "A", 5, 0, 0), new("c2", "B", 3, 0, 0)], false, 0, "COMPLETED", 60,
+                    started, ended),
+            ]);
+
+        var added = await _store.BackfillAsync(CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(added, Is.EqualTo(1));
+            Assert.That(_store.GetAll().Select(e => e.PollId), Is.EquivalentTo(["done"]));
+        }
+    }
+
+    [Test]
+    public async Task BackfillAsync_SkipsUnknownStatusPolls()
+    {
+        var started = DateTime.UtcNow.AddMinutes(-5);
+        var ended = DateTime.UtcNow.AddMinutes(-4);
+
+        _helix.GetPollsAsync("1", Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([
+                new("unknown", "1", "Unknown?", [new("c1", "A", 7, 0, 0)], false, 0, "SOMETHING_NEW", 60,
+                    started, ended),
                 new("done", "1", "Done?", [new("c1", "A", 5, 0, 0), new("c2", "B", 3, 0, 0)], false, 0, "COMPLETED", 60,
                     started, ended),
             ]);
@@ -168,7 +191,7 @@ public class PollHistoryStoreTests
         var started = DateTime.UtcNow.AddMinutes(-5);
         var ended = DateTime.UtcNow.AddMinutes(-4);
 
-        _helix.GetPollsAsync("1", Arg.Any<string?>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _helix.GetPollsAsync("1", Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([
                 new("done", "1", "Done?", [new("c1", "A", 5, 0, 0)], false, 0, "COMPLETED", 60,
                     started, ended),

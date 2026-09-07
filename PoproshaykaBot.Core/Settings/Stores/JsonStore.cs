@@ -13,6 +13,7 @@ internal sealed class JsonStore<T>
     private readonly ILogger? _logger;
     private readonly Func<string, string>? _backupRedactor;
     private readonly Func<string, T?>? _parser;
+    private readonly Func<T, string>? _describe;
     private readonly object _syncLock = new();
 
     private T _state;
@@ -21,7 +22,8 @@ internal sealed class JsonStore<T>
         string filePath,
         ILogger? logger = null,
         Func<string, string>? backupRedactor = null,
-        Func<string, T?>? parser = null)
+        Func<string, T?>? parser = null,
+        Func<T, string>? describe = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(filePath);
 
@@ -29,6 +31,7 @@ internal sealed class JsonStore<T>
         _logger = logger;
         _backupRedactor = backupRedactor;
         _parser = parser;
+        _describe = describe;
         _state = ReadFile();
     }
 
@@ -47,10 +50,10 @@ internal sealed class JsonStore<T>
         ArgumentNullException.ThrowIfNull(value);
 
         Exception? failure;
+        var snapshot = JsonStoreClone.DeepClone(value);
 
         lock (_syncLock)
         {
-            var snapshot = JsonStoreClone.DeepClone(value);
             var json = JsonSerializer.Serialize(snapshot, JsonStoreOptions.Default);
             failure = TryWrite(json);
 
@@ -65,7 +68,7 @@ internal sealed class JsonStore<T>
             ReportFailure(failure);
         }
 
-        _logger?.LogInformation("Состояние заменено целиком и сохранено в {FilePath}", _filePath);
+        LogSaved(LogLevel.Information, "замена", snapshot);
     }
 
     public void Mutate(Action<T> mutator)
@@ -99,10 +102,11 @@ internal sealed class JsonStore<T>
         TResult result;
         Exception? failure = null;
         var written = false;
+        T draft;
 
         lock (_syncLock)
         {
-            var draft = JsonStoreClone.DeepClone(_state);
+            draft = JsonStoreClone.DeepClone(_state);
             result = mutator(draft);
 
             if (shouldWrite(result))
@@ -125,10 +129,40 @@ internal sealed class JsonStore<T>
 
         if (written)
         {
-            _logger?.LogDebug("Применена мутация, состояние сохранено в {FilePath}", _filePath);
+            LogSaved(LogLevel.Debug, "мутация", draft);
         }
 
         return result;
+    }
+
+    private void LogSaved(LogLevel level, string operation, T state)
+    {
+        var logger = _logger;
+
+        if (logger?.IsEnabled(level) != true)
+        {
+            return;
+        }
+
+        if (_describe == null)
+        {
+            logger.Log(level, "Сохранён {Store} ({Operation}) → {FilePath}", typeof(T).Name, operation, _filePath);
+            return;
+        }
+
+        string description;
+
+        try
+        {
+            description = _describe(state);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Описание {Store} не построено", typeof(T).Name);
+            description = "описание недоступно";
+        }
+
+        logger.Log(level, "Сохранён {Store} ({Operation}): {Description}", typeof(T).Name, operation, description);
     }
 
     private Exception? TryWrite(string json)

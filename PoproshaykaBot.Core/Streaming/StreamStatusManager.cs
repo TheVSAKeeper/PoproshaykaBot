@@ -178,7 +178,6 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 return;
             }
 
-            _logger.LogDebug("Live-snapshot: запрос статуса для BroadcasterId {BroadcasterId} (текущий статус {CurrentStatus})", broadcasterId, CurrentStatus);
             var stream = await _helix.GetStreamAsync(broadcasterId, token);
 
             if (stream != null)
@@ -187,12 +186,13 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
                 if (transition.Transitioned)
                 {
-                    _logger.LogInformation("Live-snapshot: переход {OldStatus} → Online для BroadcasterId {BroadcasterId}", transition.Previous, broadcasterId);
+                    _logger.LogInformation("Live-snapshot: переход {OldStatus} → Online для BroadcasterId {BroadcasterId}, стрим {StreamId}, начат {StartedAt}",
+                        transition.Previous,
+                        broadcasterId,
+                        stream.Id,
+                        stream.StartedAt);
+
                     await PublishStatusTransitionAsync(StreamStatus.Online, true).ConfigureAwait(false);
-                }
-                else
-                {
-                    _logger.LogDebug("Live-snapshot: статус Online подтверждён для BroadcasterId {BroadcasterId}", broadcasterId);
                 }
 
                 return;
@@ -203,20 +203,19 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             switch (probe.Action)
             {
                 case OfflineProbeAction.ForcedOffline:
-                    _logger.LogWarning("Принудительный перевод в Offline после {ElapsedSeconds} с расхождения с API для BroadcasterId {BroadcasterId}",
-                        (int)probe.Elapsed.TotalSeconds, broadcasterId);
+                    _logger.LogWarning("Принудительный перевод в Offline после {ElapsedSeconds} с расхождения с API для BroadcasterId {BroadcasterId}, стрим {StreamId}",
+                        (int)probe.Elapsed.TotalSeconds, broadcasterId, CurrentStream?.Id);
 
                     await PublishStatusTransitionAsync(StreamStatus.Offline).ConfigureAwait(false);
                     return;
 
                 case OfflineProbeAction.Pending:
-                    _logger.LogWarning("API сообщает офлайн при локальном Online, ждём подтверждения (расхождение {Elapsed}/{Threshold})",
-                        probe.Elapsed, StuckOnlineThreshold);
+                    _logger.LogWarning("API сообщает офлайн при локальном Online, ждём подтверждения (расхождение {Elapsed}/{Threshold}), стрим {StreamId}",
+                        probe.Elapsed, StuckOnlineThreshold, CurrentStream?.Id);
 
                     return;
 
                 default:
-                    _logger.LogDebug("Live-snapshot: статус Offline подтверждён для BroadcasterId {BroadcasterId}", broadcasterId);
                     return;
             }
         }
@@ -260,7 +259,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private Task OnSessionReconnectAsync(EventSubReconnectArgs args, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("EventSub session_reconnect → {Url} (старый session: {OldSession})", args.ReconnectUrl, args.OldSessionId);
+        _logger.LogInformation("Сессия EventSub мигрировала: {OldSession} → {NewSession}; подписки и статус стрима сохраняются", args.OldSessionId, args.NewSessionId);
         return Task.CompletedTask;
     }
 
@@ -316,7 +315,10 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private Task OnDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken cancellationToken)
     {
-        _logger.LogWarning("EventSub WebSocket отключен ({Reason}) — статус стрима сброшен в Unknown до восстановления соединения", args.Reason);
+        _logger.LogWarning("EventSub WebSocket отключен ({Reason}) – статус стрима {OldStatus} (стрим {StreamId}) сброшен в Unknown до восстановления соединения",
+            args.Reason,
+            _state.CurrentStatus,
+            CurrentStream?.Id);
 
         _state.ResetToUnknown();
         return Task.CompletedTask;
@@ -356,20 +358,34 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
             if (transition.Transitioned)
             {
-                _logger.LogInformation("Инициализация: статус стрима {OldStatus} → {NewStatus} для BroadcasterId {BroadcasterId}",
-                    transition.Previous, newStatus, broadcasterId);
-
                 var isCatchUp = transition.Previous == StreamStatus.Unknown;
+
+                _logger.LogInformation("Инициализация: статус стрима {OldStatus} → {NewStatus} для BroadcasterId {BroadcasterId}, стрим {StreamId}, начат {StartedAt}, catch-up {IsCatchUp}",
+                    transition.Previous,
+                    newStatus,
+                    broadcasterId,
+                    stream?.Id,
+                    stream?.StartedAt,
+                    isCatchUp);
+
                 await PublishStatusTransitionAsync(newStatus, isCatchUp).ConfigureAwait(false);
             }
             else
             {
-                _logger.LogDebug("Инициализация: статус стрима {Status} подтверждён для BroadcasterId {BroadcasterId}", newStatus, broadcasterId);
+                _logger.LogDebug("Инициализация: статус стрима {Status} подтверждён для BroadcasterId {BroadcasterId}, стрим {StreamId}",
+                    newStatus,
+                    broadcasterId,
+                    stream?.Id);
             }
 
-            _logger.LogInformation(stream != null
-                ? "Начальный статус: онлайн (по данным API)"
-                : "Начальный статус: офлайн (по данным API)");
+            if (stream != null)
+            {
+                _logger.LogInformation("Начальный статус по данным API: онлайн, стрим {StreamId}, начат {StartedAt}", stream.Id, stream.StartedAt);
+            }
+            else
+            {
+                _logger.LogInformation("Начальный статус по данным API: офлайн");
+            }
         }
         catch (OperationCanceledException ex) when (token.IsCancellationRequested)
         {
@@ -399,14 +415,28 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         var data = payload.Deserialize<EventSubStreamOnlinePayloadDto>(WebJsonOptions);
 
-        _logger.LogInformation("Стрим запущен (EventSub), тип: {EventType}", data?.Event?.Type ?? "live");
+        const bool isCatchUp = false;
 
-        var transition = _state.MarkOnline();
+        var streamId = data?.Event?.Id;
+        var startedAt = data?.Event?.StartedAt ?? default;
+        var eventType = data?.Event?.Type ?? "live";
+
+        _logger.LogInformation("Стрим запущен (EventSub): стрим {StreamId}, начат {StartedAt}, тип {EventType}",
+            streamId,
+            startedAt,
+            eventType);
+
+        var transition = _state.MarkOnline(streamId, startedAt);
 
         if (transition.Transitioned)
         {
-            _logger.LogInformation("EventSub: переход {OldStatus} → Online", transition.Previous);
-            await PublishStatusTransitionAsync(StreamStatus.Online).ConfigureAwait(false);
+            _logger.LogInformation("EventSub: переход {OldStatus} → Online, стрим {StreamId}, начат {StartedAt}, catch-up {IsCatchUp}",
+                transition.Previous,
+                streamId,
+                startedAt,
+                isCatchUp);
+
+            await PublishStatusTransitionAsync(StreamStatus.Online, isCatchUp).ConfigureAwait(false);
         }
 
         var runToken = _runCts?.Token ?? CancellationToken.None;
@@ -415,13 +445,15 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private async Task HandleStreamOfflineAsync()
     {
-        _logger.LogInformation("Стрим завершен (EventSub)");
+        var streamId = CurrentStream?.Id;
+
+        _logger.LogInformation("Стрим завершен (EventSub): стрим {StreamId}", streamId);
 
         var transition = _state.ApplyOffline();
 
         if (transition.Transitioned)
         {
-            _logger.LogInformation("EventSub: переход {OldStatus} → Offline", transition.Previous);
+            _logger.LogInformation("EventSub: переход {OldStatus} → Offline, стрим {StreamId}", transition.Previous, streamId);
             await PublishStatusTransitionAsync(StreamStatus.Offline).ConfigureAwait(false);
         }
     }

@@ -125,7 +125,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         Status = _stream.CurrentStatus;
         LastUpdated = DateTime.Now;
 
-        if (Status == StreamStatus.Online && info != null)
+        if (Status == StreamStatus.Online && info is { IsBare: false })
         {
             StreamTitle = info.Title;
             Game = string.IsNullOrWhiteSpace(info.GameName) ? "–" : info.GameName;
@@ -141,7 +141,12 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         }
         else
         {
-            StreamTitle = Status == StreamStatus.Offline ? "Стрим завершён" : "Статус не определён";
+            StreamTitle = Status switch
+            {
+                StreamStatus.Offline => "Стрим завершён",
+                StreamStatus.Online => "Загрузка данных...",
+                _ => "Статус не определён",
+            };
             Game = "–";
             ViewerCount = 0;
             Uptime = TimeSpan.Zero;

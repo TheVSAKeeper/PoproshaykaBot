@@ -57,12 +57,15 @@ public partial class App : Application
     private GalleryArguments? _galleryArguments;
     private bool _appLifetimeStarted;
     private bool _streamMonitoringStarted;
+    private AppExitReason _exitReason = AppExitReason.None;
 
     internal static bool IsFatalShutdown => Volatile.Read(ref _fatalErrorHandled) == 1;
 
     private static Serilog.ILogger HostLog => Log.ForContext<App>();
 
     internal static bool IsHeadless { get; private set; }
+
+    internal static bool IsGallery { get; private set; }
 
     internal static DebugChannelOverride DebugChannel { get; private set; } = DebugChannelOverride.None;
 
@@ -80,6 +83,7 @@ public partial class App : Application
         {
             _galleryArgs = [.. e.Args.Skip(galleryIndex + 1)];
             IsHeadless = true;
+            IsGallery = true;
             _galleryWorkspace = GalleryWorkspace.Redirect();
         }
 
@@ -137,6 +141,7 @@ public partial class App : Application
             if (_singleInstanceMutex is null)
             {
                 HostLog.Information("Обнаружен уже запущенный экземпляр приложения. Завершение работы");
+                _exitReason = AppExitReason.AlreadyRunning;
 
                 if (!IsHeadless)
                 {
@@ -150,7 +155,7 @@ public partial class App : Application
                 return;
             }
 
-            HostLog.Information("Режим хранения данных: {Mode}, базовая директория: {BaseDirectory}", ResolveStorageMode(), AppPaths.BaseDirectory);
+            ReportEnvironment(e.Args);
 
             if (_isFinalizeUpdate)
             {
@@ -177,6 +182,7 @@ public partial class App : Application
             });
 
             _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
+            ReportConfiguration(_services);
 
             _appLifetime = _services.GetRequiredService<AppLifetime>();
             _streamMonitoringHost = _services.GetRequiredService<StreamMonitoringHost>();
@@ -216,6 +222,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             HostLog.Fatal(ex, "{App} не смог запуститься", AppInfo.Name);
+            _exitReason = AppExitReason.Failed;
             Interlocked.Exchange(ref _fatalErrorHandled, 1);
 
             if (!IsHeadless)
@@ -236,13 +243,18 @@ public partial class App : Application
         {
             Task.Run(StopAllComponents).GetAwaiter().GetResult();
 
-            if (!IsHeadless && !IsFatalShutdown)
+            if (_exitReason is AppExitReason.None)
             {
-                ApplyPendingUpdate();
+                _exitReason = AppExitReason.Normal;
+            }
+
+            if (!IsHeadless && !IsFatalShutdown && ApplyPendingUpdate())
+            {
+                _exitReason = AppExitReason.UpdatePending;
             }
         }
 
-        HostLog.Information("Завершение работы приложения");
+        HostLog.Information("Завершение работы приложения ({Reason}), код выхода {ExitCode}", _exitReason, e.ApplicationExitCode);
         _logging?.Dispose();
 
         _singleInstanceMutex?.Dispose();
@@ -269,16 +281,6 @@ public partial class App : Application
 
             Shutdown(code);
         });
-    }
-
-    private static string ResolveStorageMode()
-    {
-        if (AppPaths.IsBaseDirectoryOverridden)
-        {
-            return "override";
-        }
-
-        return AppPaths.IsPortable ? "portable" : "AppData";
     }
 
     private static void MigrateLegacySettingsLayout()
@@ -315,6 +317,7 @@ public partial class App : Application
             .AddSelfUpdate();
 
         services.AddSingleton<BotConnectionManager>();
+        services.AddSingleton<IBotConnectionController>(provider => provider.GetRequiredService<BotConnectionManager>());
 
         services.AddKeepShell();
 
@@ -429,6 +432,7 @@ public partial class App : Application
     {
         HostLog.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
         args.Handled = true;
+        _exitReason = AppExitReason.Failed;
 
         if (Interlocked.Exchange(ref _fatalErrorHandled, 1) == 1)
         {

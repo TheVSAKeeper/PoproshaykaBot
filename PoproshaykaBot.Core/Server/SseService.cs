@@ -146,7 +146,7 @@ public sealed class SseService : IAsyncDisposable
         }
 
         pipeline.Channel.Writer.TryComplete();
-        _logger.LogDebug("SSE клиент удалён по завершению соединения. Активных: {Count}", _registry.Count);
+        _logger.LogInformation("SSE клиент {ClientId} удалён по завершению соединения. Активных: {Count}", pipeline.ClientId, _registry.Count);
     }
 
     public bool AddClient(HttpResponse response)
@@ -172,7 +172,7 @@ public sealed class SseService : IAsyncDisposable
             var clientCount = _registry.Add(response, pipeline);
             pipeline.WriterTask = Task.Run(() => ClientWriterLoopAsync(pipeline, token));
 
-            _logger.LogInformation("Установлено новое SSE подключение. Всего активных клиентов: {ClientCount}", clientCount);
+            _logger.LogInformation("Установлено SSE подключение {ClientId}. Всего активных клиентов: {ClientCount}", pipeline.ClientId, clientCount);
             return true;
         }
         catch (Exception ex)

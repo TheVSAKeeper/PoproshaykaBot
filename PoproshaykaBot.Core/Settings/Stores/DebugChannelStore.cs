@@ -11,7 +11,7 @@ public sealed class DebugChannelStore
     public DebugChannelStore(ILogger<DebugChannelStore>? logger = null, string? filePath = null)
     {
         var path = filePath ?? AppPaths.SettingsFile("debug-channel.json");
-        _store = new(path, logger);
+        _store = new(path, logger, describe: SettingsDescriber.Describe);
 
         logger?.LogDebug("DebugChannelStore инициализирован из {FilePath}", path);
     }

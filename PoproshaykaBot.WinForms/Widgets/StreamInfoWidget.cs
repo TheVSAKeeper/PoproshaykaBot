@@ -203,7 +203,7 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
         _statusTextLabel.Text = "В ЭФИРЕ";
         _statusTextLabel.ForeColor = Color.Red;
 
-        if (info == null)
+        if (info == null || info.IsBare)
         {
             ClearInfoLabels("Загрузка данных...");
             return;

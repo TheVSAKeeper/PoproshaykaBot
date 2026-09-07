@@ -18,7 +18,7 @@ public sealed class ObsIntegrationStore
         var path = filePath ?? AppPaths.SettingsFile("obs-integration.json");
 
         _eventBus = eventBus;
-        _store = new(path, logger);
+        _store = new(path, logger, describe: SettingsDescriber.Describe);
 
         logger?.LogDebug("ObsIntegrationStore инициализирован из {FilePath}", path);
     }

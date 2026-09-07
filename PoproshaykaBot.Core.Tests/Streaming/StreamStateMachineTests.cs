@@ -70,18 +70,69 @@ public sealed class StreamStateMachineTests
     }
 
     [Test]
-    public void MarkOnline_LeavesStreamUntouched()
+    public void MarkOnline_WithoutEventPayload_LeavesStreamUntouched()
     {
         var machine = new StreamStateMachine();
 
-        var transition = machine.MarkOnline();
+        var transition = machine.MarkOnline(null, default);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(transition.Transitioned, Is.True);
             Assert.That(machine.CurrentStatus, Is.EqualTo(StreamStatus.Online));
             Assert.That(machine.CurrentStream, Is.Null,
-                "MarkOnline моделирует EventSub stream.online без snapshot — stream подтянется retry-циклом");
+                "без id и started_at в нотификации stream подтянется retry-циклом");
+        }
+    }
+
+    [Test]
+    public void MarkOnline_WithEventPayload_PublishesCanonicalStart()
+    {
+        var machine = new StreamStateMachine();
+        var startedAt = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+
+        machine.MarkOnline("stream-7", startedAt);
+
+        Assert.That(machine.CurrentStream, Is.Not.Null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(machine.CurrentStream!.Id, Is.EqualTo("stream-7"));
+            Assert.That(machine.CurrentStream.StartedAt, Is.EqualTo(startedAt));
+            Assert.That(machine.CurrentStream.StartedAt.Kind, Is.EqualTo(DateTimeKind.Utc));
+        }
+    }
+
+    [Test]
+    public void MarkOnline_ForStreamAlreadyKnownFromHelix_KeepsMetadata()
+    {
+        var machine = new StreamStateMachine();
+        machine.ApplyOnlineSnapshot(SampleStream());
+
+        machine.MarkOnline("stream-1", new(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(machine.CurrentStream!.Title, Is.EqualTo("Заголовок"));
+            Assert.That(machine.CurrentStream.ViewerCount, Is.EqualTo(42));
+        }
+    }
+
+    [Test]
+    public void MarkOnline_ForDifferentStream_ReplacesStaleSnapshot()
+    {
+        var machine = new StreamStateMachine();
+        machine.ApplyOnlineSnapshot(SampleStream());
+
+        var newStart = new DateTime(2026, 5, 1, 18, 30, 0, DateTimeKind.Utc);
+        machine.MarkOnline("stream-2", newStart);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(machine.CurrentStream!.Id, Is.EqualTo("stream-2"));
+            Assert.That(machine.CurrentStream.StartedAt, Is.EqualTo(newStart));
+            Assert.That(machine.CurrentStream.Title, Is.Empty,
+                "метаданные прошлого стрима не должны переезжать на новый");
         }
     }
 
@@ -222,7 +273,7 @@ public sealed class StreamStateMachineTests
     public void UpdateStreamSnapshot_AppliesStoredOverlay()
     {
         var machine = new StreamStateMachine();
-        machine.MarkOnline();
+        machine.MarkOnline(null, default);
         machine.ApplyChannelUpdate(new("Свежий", "ru", "999", "Программирование", []));
 
         machine.UpdateStreamSnapshot(SampleStream("Старый из Helix"));

@@ -4,6 +4,8 @@ public sealed class ActiveStreamSession
 {
     public string Channel { get; set; } = string.Empty;
 
+    public string? StreamId { get; set; }
+
     public DateTimeOffset StartedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

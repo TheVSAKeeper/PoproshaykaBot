@@ -88,6 +88,11 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
 
     private async Task InitializeWebViewAsync(ChatOverlayPreviewTileViewModel viewModel)
     {
+        if (App.IsGallery)
+        {
+            return;
+        }
+
         try
         {
             var environment = await WebView2EnvironmentFactory.CreateAsync(

@@ -42,7 +42,7 @@ public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChan
 
         if (string.IsNullOrWhiteSpace(channel))
         {
-            _logger.LogWarning("Прощальные сообщения пропущены: канал бота не известен (BotJoinedChannel ещё не публиковался или уже сброшен)");
+            _logger.LogDebug("Прощальные сообщения пропущены: бот не заходил в канал в этой сессии");
             return Task.CompletedTask;
         }
 

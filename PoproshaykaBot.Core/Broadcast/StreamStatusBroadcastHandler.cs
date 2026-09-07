@@ -27,6 +27,7 @@ public sealed class StreamStatusBroadcastHandler :
     private readonly IDisposable _phaseSubscription;
 
     private bool _botConnected;
+    private bool _pendingStartNotification;
 
     public StreamStatusBroadcastHandler(
         IBroadcastScheduler scheduler,
@@ -54,7 +55,15 @@ public sealed class StreamStatusBroadcastHandler :
         var wasConnected = _botConnected;
         _botConnected = @event.Phase == BotLifecyclePhase.Connected;
 
-        if (wasConnected || !_botConnected || _streamStatus.CurrentStatus != StreamStatus.Online)
+        if (wasConnected || !_botConnected)
+        {
+            return Task.CompletedTask;
+        }
+
+        var sendNotification = _pendingStartNotification;
+        _pendingStartNotification = false;
+
+        if (_streamStatus.CurrentStatus != StreamStatus.Online)
         {
             return Task.CompletedTask;
         }
@@ -66,7 +75,7 @@ public sealed class StreamStatusBroadcastHandler :
             return Task.CompletedTask;
         }
 
-        return StartBroadcast(channel, false);
+        return StartBroadcast(channel, sendNotification);
     }
 
     public Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
@@ -75,7 +84,16 @@ public sealed class StreamStatusBroadcastHandler :
 
         if (!_botConnected)
         {
-            _logger.LogDebug("Бот не подключён — рассылка не запускается, уведомление не отправляется");
+            if (@event.IsCatchUp)
+            {
+                _logger.LogDebug("Бот не подключён – рассылка не запускается, уведомление не отправляется");
+            }
+            else
+            {
+                _pendingStartNotification = true;
+                _logger.LogDebug("Бот не подключён – рассылка не запускается, уведомление отложено до подключения бота");
+            }
+
             return Task.CompletedTask;
         }
 
@@ -88,6 +106,8 @@ public sealed class StreamStatusBroadcastHandler :
         var channel = @event.Channel;
 
         _logger.LogInformation("Обработка события стрима OFFLINE для канала {Channel}", channel);
+
+        _pendingStartNotification = false;
 
         if (@event.IsCatchUp)
         {

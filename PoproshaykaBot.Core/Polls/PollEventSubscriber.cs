@@ -156,21 +156,37 @@ public sealed class PollEventSubscriber(
     {
         try
         {
-            var polls = await helix.GetPollsAsync(broadcasterId, "ACTIVE", 1, ct);
-            var active = polls.FirstOrDefault();
+            var polls = await helix.GetPollsAsync(broadcasterId, 20, ct);
 
-            if (active is null)
+            var snapshot = polls
+                .Select(MapOrWarn)
+                .FirstOrDefault(candidate => candidate?.Status == PollSnapshotStatus.Active);
+
+            if (snapshot is null)
             {
+                logger.LogDebug("PollEventSubscriber: активных голосований нет, восстанавливать нечего");
                 return;
             }
 
-            var snapshot = PollEventSubMapper.FromHelix(active, null);
-            logger.LogInformation("PollEventSubscriber: найдено активное голосование {PollId}, восстанавливаем", active.Id);
+            logger.LogInformation("PollEventSubscriber: найдено активное голосование {PollId}, восстанавливаем", snapshot.PollId);
             await eventBus.PublishAsync(new PollStarted(snapshot), ct);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "PollEventSubscriber: не удалось проверить активное голосование");
+        }
+
+        PollSnapshot? MapOrWarn(HelixPollInfo poll)
+        {
+            var candidate = PollEventSubMapper.FromHelix(poll, null);
+
+            if (candidate is null)
+            {
+                logger.LogWarning("PollEventSubscriber: опрос {PollId} – неизвестный статус {Status}, пропущен",
+                    poll.Id, poll.Status);
+            }
+
+            return candidate;
         }
     }
 

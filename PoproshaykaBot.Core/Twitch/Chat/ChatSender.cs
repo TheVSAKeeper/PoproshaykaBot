@@ -131,7 +131,7 @@ public sealed class ChatSender(
 
         foreach (var chunk in SplitByLength(message, MaxMessageLength))
         {
-            var item = new ChatSendItem(chunk, replyParentMessageId);
+            var item = new ChatSendItem(chunk, replyParentMessageId, target.Login);
 
             if (channel.Writer.TryWrite(item))
             {
@@ -279,6 +279,21 @@ public sealed class ChatSender(
             }
 
             await helix.SendChatMessageAsync(broadcasterId, senderId, item.Message, item.ReplyParentMessageId, ct);
+
+            if (string.IsNullOrEmpty(item.ReplyParentMessageId))
+            {
+                logger.LogInformation("ChatSender: сообщение отправлено в канал {Channel} – {Message}",
+                    item.TargetLogin,
+                    item.Message);
+            }
+            else
+            {
+                logger.LogInformation("ChatSender: ответ отправлен в канал {Channel} на сообщение {ReplyParentMessageId} – {Message}",
+                    item.TargetLogin,
+                    item.ReplyParentMessageId,
+                    item.Message);
+            }
+
             return SendOutcome.Done;
         }
         catch (HelixMessageDroppedException ex)
@@ -328,5 +343,5 @@ public sealed class ChatSender(
         }
     }
 
-    private sealed record ChatSendItem(string Message, string? ReplyParentMessageId);
+    private sealed record ChatSendItem(string Message, string? ReplyParentMessageId, string TargetLogin);
 }

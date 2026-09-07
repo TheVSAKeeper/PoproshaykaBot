@@ -201,7 +201,7 @@ internal sealed class SmokeTestSession : IDisposable
         }
     }
 
-    private static string ResolveAppExePath()
+    internal static string ResolveAppExePath()
     {
         var envOverride = Environment.GetEnvironmentVariable(AppExePathEnvVar);
 
