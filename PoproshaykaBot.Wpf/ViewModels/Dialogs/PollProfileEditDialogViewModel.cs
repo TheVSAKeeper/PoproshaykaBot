@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Polls;
 
@@ -54,7 +54,7 @@ public sealed partial class PollProfileEditDialogViewModel : ObservableObject, I
 
     public IReadOnlyList<AutoTriggerItem> TriggerItems { get; } =
     [
-        new(PollAutoTriggerEvent.None, "— нет —"),
+        new(PollAutoTriggerEvent.None, "без автозапуска"),
         new(PollAutoTriggerEvent.StreamOnline, "При начале стрима"),
         new(PollAutoTriggerEvent.BroadcastProfileApplied, "При применении профиля трансляции"),
     ];

@@ -43,6 +43,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     private const string ObsSectionKey = "obs";
 
+    private static readonly string[] DraftlessSectionKeys = ["appearance", "misc"];
+
     private readonly SettingsManager _settingsManager;
     private readonly AccountsStore _accountsStore;
     private readonly ObsChatStore _obsChatStore;
@@ -73,6 +75,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasChanges))]
+    [NotifyPropertyChangedFor(nameof(HasDraft))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private bool _dirty;
 
@@ -92,6 +95,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         DebugChannelSectionViewModel debugChannel,
         DashboardLayoutSectionViewModel dashboardLayout,
         ShellPreferences shell,
+        ThemeViewModel theme,
         SettingsManager settingsManager,
         AccountsStore accountsStore,
         ObsChatStore obsChatStore,
@@ -121,6 +125,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         DebugChannel = debugChannel;
         DashboardLayout = dashboardLayout;
         Shell = shell;
+        Theme = theme;
 
         _settingsManager = settingsManager;
         _accountsStore = accountsStore;
@@ -205,7 +210,13 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     public ShellPreferences Shell { get; }
 
+    public ThemeViewModel Theme { get; }
+
     public bool HasChanges => Dirty || Polls.HasChanges;
+
+    public bool HasDraft => HasChanges
+        || Sections.Selected is not { } selected
+        || !DraftlessSectionKeys.Contains(selected.Key, StringComparer.Ordinal);
 
     public void OnEnter()
     {
@@ -275,6 +286,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             && Sections.Selected is { } section)
         {
             _uiSettings.SetValue(SettingsKeys.SettingsSection, section.Key);
+            OnPropertyChanged(nameof(HasDraft));
             RunObsAutoCheckIfSelected();
         }
     }
@@ -468,6 +480,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     {
         Dirty = false;
         OnPropertyChanged(nameof(HasChanges));
+        OnPropertyChanged(nameof(HasDraft));
         SaveCommand.NotifyCanExecuteChanged();
     }
 
@@ -518,6 +531,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         if (string.Equals(e.PropertyName, nameof(PollsSettingsSectionViewModel.HasChanges), StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(HasChanges));
+            OnPropertyChanged(nameof(HasDraft));
             SaveCommand.NotifyCanExecuteChanged();
         }
     }

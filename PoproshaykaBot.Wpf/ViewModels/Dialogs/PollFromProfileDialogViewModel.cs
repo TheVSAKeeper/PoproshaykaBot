@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Polls;
 using System.Collections.ObjectModel;
@@ -18,6 +18,8 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
     private PollProfile? _selectedProfile;
 
     public ObservableCollection<PollProfile> Profiles { get; } = [];
+
+    public bool IsEmpty => Profiles.Count == 0;
 
     public string PreviewText => BuildPreviewText(_selectedProfile);
 
@@ -84,6 +86,26 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
         }
     }
 
+    [RelayCommand]
+    private async Task CreateProfileAsync()
+    {
+        var editVm = new PollProfileEditDialogViewModel(_manager);
+
+        if (!await _dialogService.ShowAsync(editVm))
+        {
+            return;
+        }
+
+        if (editVm.ShouldStartPoll)
+        {
+            Result = editVm.Result;
+            RequestClose?.Invoke(this, true);
+            return;
+        }
+
+        LoadProfiles(editVm.Result?.Id);
+    }
+
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private void Delete()
     {
@@ -117,6 +139,8 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
         {
             Profiles.Add(p);
         }
+
+        OnPropertyChanged(nameof(IsEmpty));
 
         if (Profiles.Count == 0)
         {
@@ -156,7 +180,7 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
 
         if (profile.ChannelPointsVotingEnabled)
         {
-            lines.Add($"Channel Points: {profile.ChannelPointsPerVote} за голос");
+            lines.Add($"Баллы канала: {profile.ChannelPointsPerVote} за голос");
         }
 
         return string.Join(Environment.NewLine, lines);

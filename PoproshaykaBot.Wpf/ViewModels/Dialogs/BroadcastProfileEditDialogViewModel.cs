@@ -18,11 +18,13 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
     private readonly ILogger<BroadcastProfileEditDialogViewModel> _logger;
 
     private bool _nameRequired = true;
+    private bool _isCurrentSettingsMode;
     private bool _sceneBindingEnabled = true;
     private string _originalLanguage = "ru";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
+    [NotifyPropertyChangedFor(nameof(ConfirmButtonText))]
     private string _name = string.Empty;
 
     [ObservableProperty]
@@ -62,7 +64,9 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
     public event EventHandler<bool>? RequestClose;
 
     public string Title { get; private set; } = "Редактировать профиль";
-    public string ConfirmButtonText { get; private set; } = "OK";
+    public string ConfirmButtonText => _isCurrentSettingsMode
+        ? NewProfileName.Length > 0 ? "Сохранить и применить" : "Применить"
+        : "OK";
     public string NameLabel { get; private set; } = "Имя:";
     public string? NamePlaceholder { get; private set; }
     public bool IsObsSceneVisible { get; private set; } = true;
@@ -105,7 +109,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
         Name = string.Empty;
         NameLabel = "Сохранить как:";
         NamePlaceholder = "имя нового профиля (необязательно)";
-        ConfirmButtonText = "Применить";
+        _isCurrentSettingsMode = true;
         IsObsSceneVisible = false;
         _sceneBindingEnabled = false;
     }

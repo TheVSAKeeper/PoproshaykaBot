@@ -389,14 +389,15 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         if (covering.Any(Stretches))
         {
-            return new(new(1, GridUnitType.Star), double.PositiveInfinity);
+            return new(new(1, GridUnitType.Star), double.PositiveInfinity, Floor(covering, double.PositiveInfinity));
         }
 
         var ceiling = Ceiling(covering, p => p.MaxHeight, p => p.RowSpan);
+        var floor = Floor(covering, ceiling);
 
         return covering.Any(Grows)
-            ? new(new(1, GridUnitType.Star), ceiling)
-            : new(GridLength.Auto, ceiling);
+            ? new(new(1, GridUnitType.Star), ceiling, floor)
+            : new(GridLength.Auto, ceiling, floor);
     }
 
     private static TrackSize ComputeBandWidth(IReadOnlyList<Placement> members, IReadOnlyList<TrackSize> columns)
@@ -409,6 +410,18 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         var ceiling = columns.Sum(c => c.Max);
 
         return new(GridLength.Auto, double.IsInfinity(ceiling) ? double.PositiveInfinity : ceiling);
+    }
+
+    private static double Floor(IReadOnlyList<Placement> covering, double ceiling)
+    {
+        if (covering.Count == 0)
+        {
+            return 0;
+        }
+
+        var floor = covering.Max(p => p.IsCollapsed ? 0 : p.Tile.MinHeight / (double)p.RowSpan);
+
+        return Math.Min(floor, ceiling);
     }
 
     private static double Ceiling(IReadOnlyList<Placement> covering, Func<Placement, int?> size, Func<Placement, int> span)
@@ -599,7 +612,10 @@ public sealed record TileBand(
     TrackSize Width,
     IReadOnlyList<TrackSize> Columns,
     IReadOnlyList<TrackSize> Rows,
-    IReadOnlyList<TileSlot> Tiles);
+    IReadOnlyList<TileSlot> Tiles)
+{
+    public double MinHeight => Rows.Sum(row => Math.Min(row.Min, row.Max));
+}
 
 public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
 {
@@ -612,6 +628,16 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
             SplitPaneLayout { Orientation: SplitOrientation.Columns } split => split.Children.Sum(child => child.Pane.MinWidth(leafMinimum)),
             SplitPaneLayout split => split.Children.Max(child => child.Pane.MinWidth(leafMinimum)),
             _ => Math.Max(Width.Min, Width.Length.IsStar ? leafMinimum : 0),
+        };
+    }
+
+    public double MinHeight(double leafMinimum)
+    {
+        return this switch
+        {
+            SplitPaneLayout { Orientation: SplitOrientation.Rows } split => split.Children.Sum(child => child.Pane.MinHeight(leafMinimum)),
+            SplitPaneLayout split => split.Children.Max(child => child.Pane.MinHeight(leafMinimum)),
+            _ => Math.Min(Math.Max(Height.Min, Height.Length.IsStar ? leafMinimum : 0), Height.Max),
         };
     }
 }

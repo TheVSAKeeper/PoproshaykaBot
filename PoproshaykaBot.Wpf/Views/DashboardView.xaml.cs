@@ -168,12 +168,14 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (!e.WidthChanged || ComputeStacked(e.NewSize.Width) == _stacked)
+        if (e.WidthChanged && ComputeStacked(e.NewSize.Width) != _stacked)
         {
+            RebuildGrid(e.NewSize.Width, e.NewSize.Height);
+
             return;
         }
 
-        RebuildGrid(e.NewSize.Width);
+        ApplyVerticalOverflow(e.NewSize.Height);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -196,10 +198,10 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private void RebuildGrid()
     {
-        RebuildGrid(ActualWidth);
+        RebuildGrid(ActualWidth, ActualHeight);
     }
 
-    private void RebuildGrid(double width)
+    private void RebuildGrid(double width, double height)
     {
         DetachHosts();
         BandsGrid.Children.Clear();
@@ -215,12 +217,12 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         _stacked = ComputeStacked(width);
         _viewModel.SetStacked(_stacked);
 
-        BandsScroll.VerticalScrollBarVisibility = _stacked ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
-
         if (_viewModel.Pane is { } pane)
         {
             BandsGrid.Margin = new(0, 0, 0, -1);
             RebuildTree(pane);
+            ApplyVerticalOverflow(height);
+
             return;
         }
 
@@ -271,6 +273,29 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
             BandsGrid.Children.Add(content);
         }
+
+        ApplyVerticalOverflow(height);
+    }
+
+    private double RequiredHeight()
+    {
+        if (_stacked || _viewModel is null)
+        {
+            return 0;
+        }
+
+        return _viewModel.Pane is { } pane
+            ? pane.MinHeight(StarBandMinHeight)
+            : _viewModel.Bands.Select(band => band.MinHeight).DefaultIfEmpty(0).Max();
+    }
+
+    private void ApplyVerticalOverflow(double height)
+    {
+        var required = RequiredHeight();
+        var overflows = height > 0 && required > height;
+
+        BandsScroll.VerticalScrollBarVisibility = _stacked || overflows ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+        BandsGrid.Height = overflows ? required : double.NaN;
     }
 
     private void RebuildTree(PaneLayout pane)
@@ -431,6 +456,32 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             Panel.SetZIndex(splitter, 1);
             grid.Children.Add(splitter);
         }
+
+        grid.SizeChanged += (_, _) => RefreshSplitters(grid, alongColumns);
+    }
+
+    private static void RefreshSplitters(Grid grid, bool alongColumns)
+    {
+        foreach (var splitter in grid.Children.OfType<GridSplitter>())
+        {
+            var index = alongColumns ? Grid.GetColumn(splitter) : Grid.GetRow(splitter);
+            var movable = alongColumns
+                ? HasRoom(grid.ColumnDefinitions[index - 1]) || HasRoom(grid.ColumnDefinitions[index])
+                : HasRoom(grid.RowDefinitions[index - 1]) || HasRoom(grid.RowDefinitions[index]);
+
+            splitter.IsEnabled = movable;
+            splitter.IsHitTestVisible = movable;
+        }
+    }
+
+    private static bool HasRoom(ColumnDefinition column)
+    {
+        return column.ActualWidth > column.MinWidth + 0.5;
+    }
+
+    private static bool HasRoom(RowDefinition row)
+    {
+        return row.ActualHeight > row.MinHeight + 0.5;
     }
 
     private void CommitShares(Grid grid, int[] path, bool alongColumns, bool canceled)
@@ -550,6 +601,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             {
                 definition.Height = band.Rows[index].Length;
                 definition.MaxHeight = band.Rows[index].Max;
+                definition.MinHeight = Math.Min(band.Rows[index].Min, band.Rows[index].Max);
             });
 
         foreach (var slot in band.Tiles)

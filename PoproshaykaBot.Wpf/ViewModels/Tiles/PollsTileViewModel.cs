@@ -98,15 +98,6 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
     [RelayCommand]
     private async Task CreateFromProfileAsync()
     {
-        if (_profiles.GetAll().Count == 0)
-        {
-            _dialogService.Info(
-                "Нет профилей",
-                "Нет сохранённых профилей. Используйте «Создать опрос», чтобы сохранить первый профиль.");
-
-            return;
-        }
-
         var dialog = new PollFromProfileDialogViewModel(_profiles, _dialogService);
 
         if (!await _dialogService.ShowAsync(dialog) || dialog.Result is null)

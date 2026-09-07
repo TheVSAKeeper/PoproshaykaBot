@@ -21,6 +21,8 @@ namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisposable
 {
+    private const string ConnectedStatus = "connected";
+    private const string UnavailableStatus = "error";
     private const int ConnectedRefreshIntervalMs = 5000;
     private const int DisconnectedRefreshIntervalMs = 15000;
     private const int MinVolumeMeterDelayMs = 30;
@@ -63,6 +65,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private string _connectionText = "○ OBS выкл.";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasOutputs))]
+    [NotifyPropertyChangedFor(nameof(IsUnavailable))]
     private string _connectionStatus = "off";
 
     [ObservableProperty]
@@ -118,6 +122,10 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     public ObservableCollection<ObsSourceMeterViewModel> AudioSources { get; } = [];
 
     public bool HasAudioSources => !AudioSourcesEmpty;
+
+    public bool HasOutputs => string.Equals(ConnectionStatus, ConnectedStatus, StringComparison.Ordinal);
+
+    public bool IsUnavailable => string.Equals(ConnectionStatus, UnavailableStatus, StringComparison.Ordinal);
 
     public override bool GrowsWithSpace => HasAudioSources;
 
@@ -369,7 +377,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             return;
         }
 
-        UpdateConnectionHeader("● OBS подключён", "connected", "OBS WebSocket подключён");
+        UpdateConnectionHeader("● OBS подключён", ConnectedStatus, "OBS WebSocket подключён");
 
         SceneText = $"Сцена: {ToDisplayValue(snapshot.CurrentSceneName)}";
 
@@ -476,12 +484,12 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private void ApplyUnavailableState(string? message)
     {
         UpdateConnectionHeader("● OBS нет",
-            "error",
+            UnavailableStatus,
             string.IsNullOrWhiteSpace(message) ? "OBS WebSocket не подключён" : $"OBS WebSocket не подключён: {message}");
 
         SceneText = "Сцена: —";
-        StreamCard.ApplyUnavailable(message);
-        RecordCard.ApplyUnavailable(message);
+        StreamCard.ApplyUnknown();
+        RecordCard.ApplyUnknown();
         ClearRows();
     }
 

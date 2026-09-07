@@ -408,10 +408,24 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         if (string.IsNullOrWhiteSpace(_draft.AccessToken))
         {
             SetTokenStatus("Токен отсутствует", StatusSeverity.Error);
+            return;
+        }
+
+        if (_draft.AccessTokenExpiresAt is not { } expiresAt)
+        {
+            SetTokenStatus("Не проверен", StatusSeverity.None);
+            return;
+        }
+
+        var expiresAtLocal = expiresAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm", CultureInfo.CurrentCulture);
+
+        if (expiresAt > DateTimeOffset.Now)
+        {
+            SetTokenStatus($"действует до {expiresAtLocal}", StatusSeverity.None);
         }
         else
         {
-            SetTokenStatus("Не проверен", StatusSeverity.None);
+            SetTokenStatus($"истёк {expiresAtLocal}", StatusSeverity.Warning);
         }
     }
 

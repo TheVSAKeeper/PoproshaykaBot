@@ -11,6 +11,7 @@ namespace PoproshaykaBot.Wpf.Views.Settings;
 public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLayoutSectionViewModel>
 {
     private const string DragFormat = "DashboardTileTypeId";
+    private const double TileCellMinWidth = 56;
 
     private DashboardLayoutSectionViewModel? _viewModel;
 
@@ -158,13 +159,17 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     {
         var meta = _viewModel!.Meta(placed.TypeId);
 
+        var title = meta?.Title ?? placed.TypeId;
+
         var text = new TextBlock
         {
-            Text = meta?.Title ?? placed.TypeId,
+            Text = title,
+            ToolTip = title,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
             Margin = new(4),
         };
 
@@ -175,6 +180,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             BorderThickness = new(1),
             CornerRadius = new(4),
             Margin = new(2),
+            MinWidth = TileCellMinWidth,
             Cursor = Cursors.SizeAll,
             AllowDrop = true,
             Tag = placed.TypeId,
@@ -204,6 +210,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             BorderThickness = new(1),
             CornerRadius = new(4),
             Margin = new(2),
+            MinWidth = TileCellMinWidth,
             AllowDrop = true,
             Background = Brushes.Transparent,
             Tag = new CellPosition(row, column),

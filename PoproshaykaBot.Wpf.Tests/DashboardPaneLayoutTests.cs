@@ -228,6 +228,68 @@ public class DashboardPaneLayoutTests
     }
 
     [Test]
+    public void Tile_floors_reach_the_rows_of_a_layout_no_guillotine_cut_expresses()
+    {
+        using var dashboard = CreateDashboard(HoleLayout(), UserLayoutTiles(420));
+
+        Assert.That(dashboard.Pane, Is.Null, "В сетке дыра, дерева не будет – полосный путь и обязан донести полы до строк.");
+
+        var rows = dashboard.Bands.Single().Rows;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows[0].Min, Is.EqualTo(200),
+                "Строка берёт наибольший пол своих плиток: 200 у «Информации о стриме» против 65 у профилей рассылки на две строки.");
+            Assert.That(rows[1].Min, Is.EqualTo(70), "Пол плитки на две строки делится между ними, иначе строка просит вдвое больше нужного.");
+            Assert.That(rows[2].Min, Is.EqualTo(70));
+            Assert.That(rows[3].Min, Is.EqualTo(220 / 3D).Within(0.001), "Растягивающийся чат тоже несёт пол – 220 на три строки.");
+            Assert.That(rows.Sum(row => row.Min), Is.LessThanOrEqualTo(573),
+                "Полы колонки обязаны влезать в дашборд при MinHeight окна 640: 640 − 37 заголовка − 30 статусной строки, иначе нижняя плитка уезжает за край без прокрутки.");
+        });
+    }
+
+    [Test]
+    public void Row_floor_of_a_band_yields_to_the_ceiling_and_to_a_collapsed_tile()
+    {
+        var layout = HoleLayout();
+
+        layout.Tiles.Single(tile => string.Equals(tile.TypeId, "stream-info", StringComparison.Ordinal)).IsCollapsed = true;
+
+        using var dashboard = CreateDashboard(layout, UserLayoutTiles(100));
+
+        var rows = dashboard.Bands.Single().Rows;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows[0].Min, Is.EqualTo(65),
+                "Свёрнутая плитка пола не просит – строке остаётся доля соседа, иначе свёртка перестанет освобождать место.");
+            Assert.That(rows[2].Min, Is.EqualTo(50),
+                "Пол не пробивает потолок и в полосе: MaxHeight 100 у плитки на две строки даёт 50 на строку.");
+        });
+    }
+
+    [TestCase(573, ExpectedResult = true)]
+    [TestCase(733, ExpectedResult = false)]
+    public bool Column_of_the_default_layout_outgrows_the_viewport_and_asks_for_scrolling(double viewport)
+    {
+        using var dashboard = CreateDashboard(DefaultColumnLayout(), DefaultColumnTiles());
+
+        Assert.That(dashboard.Pane?.MinHeight(96), Is.EqualTo(730),
+            "Полы колонки складываются вдоль разреза строк: 200 + 130 + 130 + 130 + 140 – столько высоты просит раскладка по умолчанию.");
+
+        return dashboard.Pane?.MinHeight(96) > viewport;
+    }
+
+    [Test]
+    public void Band_without_a_tree_reports_the_floor_of_its_rows()
+    {
+        using var dashboard = CreateDashboard(HoleLayout(), UserLayoutTiles(420));
+
+        Assert.That(dashboard.Bands.Single().MinHeight, Is.EqualTo(560).Within(0.001),
+            "Полосный путь считает пол по своим строкам: 560 влезает в бюджет 573, и панель обязана остаться сеткой без прокрутки.");
+    }
+
+    [Test]
     public void Edit_mode_unfolds_a_collapsed_tile_and_folds_it_back_on_exit()
     {
         var layout = AuthoredWeightsLayout();
@@ -328,6 +390,62 @@ public class DashboardPaneLayoutTests
     private static DashboardViewModel CreateDashboard(DashboardLayoutSettings layout, params DashboardTileViewModel[] tiles)
     {
         return new(tiles, new(new FakeLayoutStore(layout)), TimeProvider.System);
+    }
+
+    private static DashboardLayoutSettings HoleLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 6,
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "broadcast-profiles", 0, 1, 2, 1);
+        AddTile(layout, "obs-info", 1, 0, 2, 1);
+        AddTile(layout, "twitch-chat", 3, 0, 3, 2);
+
+        return layout;
+    }
+
+    private static DashboardLayoutSettings DefaultColumnLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 1,
+            RowCount = 5,
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "broadcast-profiles", 1, 0, 1, 1);
+        AddTile(layout, "polls", 2, 0, 1, 1);
+        AddTile(layout, "logs", 3, 0, 1, 1);
+        AddTile(layout, "obs-info", 4, 0, 1, 1);
+
+        return layout;
+    }
+
+    private static DashboardTileViewModel[] DefaultColumnTiles()
+    {
+        return
+        [
+            new FakeTile("stream-info", minHeight: 200),
+            new FakeTile("broadcast-profiles", grows: true, minHeight: 130),
+            new FakeTile("polls", grows: true, minHeight: 130),
+            new FakeTile("logs", fills: true, minHeight: 130),
+            new FakeTile("obs-info", minHeight: 140),
+        ];
+    }
+
+    private static DashboardTileViewModel[] UserLayoutTiles(int obsMaxHeight)
+    {
+        return
+        [
+            new FakeTile("stream-info", maxWidth: 420, maxHeight: 400, minHeight: 200),
+            new FakeTile("broadcast-profiles", grows: true, maxWidth: 500, maxHeight: 320, minHeight: 130),
+            new FakeTile("obs-info", maxWidth: 380, maxHeight: obsMaxHeight, minHeight: 140),
+            new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220),
+        ];
     }
 
     private static DashboardLayoutSettings SideBySideLayout()

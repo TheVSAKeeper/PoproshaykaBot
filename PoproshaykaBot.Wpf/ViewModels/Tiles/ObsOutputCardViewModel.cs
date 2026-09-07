@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -174,16 +174,6 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
         Meta = meta ?? string.Empty;
         Chip = chip;
         ChipSeverity = chipSeverity;
-    }
-
-    public void ApplyUnavailable(string? errorMessage)
-    {
-        State = ObsOutputCardState.Error;
-        Timecode = null;
-        MetaIsError = false;
-        Meta = string.IsNullOrWhiteSpace(errorMessage) ? "OBS недоступен" : errorMessage;
-        Chip = null;
-        ChipSeverity = null;
     }
 
     public void ApplyUnknown()

@@ -71,7 +71,7 @@ public sealed partial class ObsOutputStatusCard : UserControl
 
     public void ApplyUnavailable(string? errorMessage)
     {
-        _state = ObsOutputCardState.Error;
+        _state = ObsOutputCardState.Unknown;
         _timecodeLabel.Text = "—:—:—";
         _metaLabel.Text = string.IsNullOrWhiteSpace(errorMessage) ? "OBS недоступен" : errorMessage;
         _secondaryChip = null;

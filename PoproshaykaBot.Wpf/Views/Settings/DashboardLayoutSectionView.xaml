@@ -25,65 +25,59 @@
                    Visibility="{Binding Notice, Converter={StaticResource NullToVisibility}}"
                    Margin="0,0,0,16" />
 
-        <Grid DockPanel.Dock="Top"
-              Margin="0,0,0,16">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="150" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="24" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="150" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <WrapPanel DockPanel.Dock="Top"
+                   Orientation="Horizontal"
+                   Margin="0,0,0,16">
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,0,24,8">
+                <TextBlock Text="Колонки"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <Slider Width="150"
+                        Minimum="{Binding MinColumnCount}"
+                        Maximum="{Binding MaxColumnCount}"
+                        Value="{Binding ColumnCount, Mode=TwoWay}"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        VerticalAlignment="Center" />
+                <TextBlock Text="{Binding ColumnCount}"
+                           VerticalAlignment="Center"
+                           MinWidth="16"
+                           Margin="8,0,0,0" />
+            </StackPanel>
 
-            <TextBlock Grid.Column="0"
-                       Text="Колонки"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,0" />
-            <Slider Grid.Column="1"
-                    Minimum="{Binding MinColumnCount}"
-                    Maximum="{Binding MaxColumnCount}"
-                    Value="{Binding ColumnCount, Mode=TwoWay}"
-                    TickFrequency="1"
-                    IsSnapToTickEnabled="True"
-                    VerticalAlignment="Center" />
-            <TextBlock Grid.Column="2"
-                       Text="{Binding ColumnCount}"
-                       VerticalAlignment="Center"
-                       MinWidth="16"
-                       Margin="8,0,0,0" />
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,0,24,8">
+                <TextBlock Text="Строки"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <Slider Width="150"
+                        Minimum="{Binding MinRowCount}"
+                        Maximum="{Binding MaxRowCount}"
+                        Value="{Binding RowCount, Mode=TwoWay}"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        VerticalAlignment="Center" />
+                <TextBlock Text="{Binding RowCount}"
+                           VerticalAlignment="Center"
+                           MinWidth="16"
+                           Margin="8,0,0,0" />
+            </StackPanel>
 
-            <TextBlock Grid.Column="4"
-                       Text="Строки"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,0" />
-            <Slider Grid.Column="5"
-                    Minimum="{Binding MinRowCount}"
-                    Maximum="{Binding MaxRowCount}"
-                    Value="{Binding RowCount, Mode=TwoWay}"
-                    TickFrequency="1"
-                    IsSnapToTickEnabled="True"
-                    VerticalAlignment="Center" />
-            <TextBlock Grid.Column="6"
-                       Text="{Binding RowCount}"
-                       VerticalAlignment="Center"
-                       MinWidth="16"
-                       Margin="8,0,0,0" />
-
-            <Button Grid.Column="8"
-                    Content="Сбросить"
-                    Style="{StaticResource Button.Secondary}"
-                    Command="{Binding ResetLayoutCommand}"
-                    Margin="0,0,8,0" />
-            <Button Grid.Column="9"
-                    Content="Очистить"
-                    Style="{StaticResource Button.Secondary}"
-                    Command="{Binding ClearGridCommand}" />
-        </Grid>
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,0,0,8">
+                <Button Content="Сбросить"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding ResetLayoutCommand}"
+                        Margin="0,0,8,0" />
+                <Button Content="Очистить"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding ClearGridCommand}" />
+            </StackPanel>
+        </WrapPanel>
 
         <Grid MinHeight="380">
             <Grid.ColumnDefinitions>

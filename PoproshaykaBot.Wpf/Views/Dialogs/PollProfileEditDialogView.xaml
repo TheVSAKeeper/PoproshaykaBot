@@ -10,21 +10,22 @@
              MinWidth="460"
              MaxWidth="560">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="24">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-            <TextBlock Text="{Binding DialogTitle}"
-                       Style="{StaticResource TextBlock.Heading}"
-                       Margin="0,0,0,20" />
+        <TextBlock Grid.Row="0"
+                   Text="{Binding DialogTitle}"
+                   Style="{StaticResource TextBlock.Heading}"
+                   Margin="0,0,0,20" />
 
-            <TextBlock Text="Название профиля (необязательно)"
-                       Style="{StaticResource TextBlock.Subtle}"
-                       Margin="0,0,0,4" />
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     keepshell:PlaceholderBehavior.Placeholder="Имя для сохранения профиля"
-                     Margin="0,0,0,12" />
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
 
             <TextBlock Text="Вопрос голосования"
                        Style="{StaticResource TextBlock.Subtle}"
@@ -60,11 +61,11 @@
                                            Margin="0,0,0,12" />
 
             <CheckBox Style="{StaticResource CheckBox.Default}"
-                      Content="Channel Points за голос"
+                      Content="Баллы канала за голос"
                       IsChecked="{Binding ChannelPointsEnabled, Mode=TwoWay}"
                       Margin="0,0,0,8" />
 
-            <keepshell:NumericSettingField Label="Channel Points за голос"
+            <keepshell:NumericSettingField Label="Баллы канала за голос"
                                            Value="{Binding ChannelPointsPerVote, Mode=TwoWay}"
                                            IncreaseCommand="{Binding IncreaseChannelPointsCommand}"
                                            DecreaseCommand="{Binding DecreaseChannelPointsCommand}"
@@ -119,6 +120,19 @@
                 </keepshell:NumericSettingField.Style>
             </keepshell:NumericSettingField>
 
+            <TextBlock Text="Название профиля (необязательно)"
+                       Style="{StaticResource TextBlock.Subtle}"
+                       Margin="0,0,0,4" />
+            <TextBox Style="{StaticResource TextBox.Form}"
+                     Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     keepshell:PlaceholderBehavior.Placeholder="Имя для сохранения профиля"
+                     Margin="0,0,0,4" />
+
+        </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2"
+                    Margin="0,12,0,0">
             <TextBlock Text="{Binding ErrorMessage}"
                        Foreground="{DynamicResource State.ErrorText}"
                        FontSize="{DynamicResource Font.Size.S}"
@@ -143,7 +157,6 @@
                         Command="{Binding RunCommand}"
                         MinWidth="100" />
             </StackPanel>
-
         </StackPanel>
-    </ScrollViewer>
+    </Grid>
 </UserControl>

@@ -14,6 +14,9 @@ internal sealed class SmokeTestSession : IDisposable
     public const string AppExePathEnvVar = "POPROSHAYKA_APP_EXE";
     public const string BaseDirectoryEnvVar = "POPROSHAYKA_BASE_DIR";
 
+    private const string AppProjectName = "PoproshaykaBot.Wpf";
+    private const string TestProjectName = "PoproshaykaBot.Wpf.Tests";
+
     private static readonly TimeSpan DefaultWindowAppearTimeout = TimeSpan.FromSeconds(30);
 
     private SmokeTestSession(string baseDirectory, FlaUIApplication app, UIA3Automation automation, Window mainWindow)
@@ -213,14 +216,21 @@ internal sealed class SmokeTestSession : IDisposable
         var testAssemblyDir = Path.GetDirectoryName(typeof(SmokeTestSession).Assembly.Location)
                               ?? throw new InvalidOperationException("Не удалось определить каталог тестовой сборки");
 
-        var configuration = new DirectoryInfo(testAssemblyDir).Parent?.Name
-                            ?? throw new InvalidOperationException("Не удалось определить конфигурацию сборки");
+        var testProjectDirectory = Path.DirectorySeparatorChar + TestProjectName + Path.DirectorySeparatorChar;
+        var separatorIndex = testAssemblyDir.LastIndexOf(testProjectDirectory, StringComparison.OrdinalIgnoreCase);
 
-        return Path.GetFullPath(Path.Combine(testAssemblyDir,
-            "..", "..", "..", "..",
-            "PoproshaykaBot.Wpf",
-            "bin", configuration, "net10.0-windows",
-            AppExeName));
+        if (separatorIndex < 0)
+        {
+            throw new InvalidOperationException(
+                $"Каталог тестовой сборки не содержит сегмента {TestProjectName}: {testAssemblyDir}");
+        }
+
+        var appAssemblyDir = string.Concat(
+            testAssemblyDir.AsSpan(0, separatorIndex + 1),
+            AppProjectName,
+            testAssemblyDir.AsSpan(separatorIndex + testProjectDirectory.Length - 1));
+
+        return Path.GetFullPath(Path.Combine(appAssemblyDir, AppExeName));
     }
 
     private static string CreateTempBaseDirectory()
