@@ -8,7 +8,6 @@ using System.Diagnostics;
 using System.Net.Http;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
@@ -24,6 +23,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     private readonly IShellLauncher _shellLauncher;
     private readonly IClipboardService _clipboard;
     private readonly IEmbeddedTwitchAuthDialog _embeddedAuth;
+    private readonly IUiDispatcher _uiDispatcher;
 
     private OnboardingContext? _context;
     private OnboardingContext? _credentialsSubscriptionContext;
@@ -60,7 +60,8 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         ILogger logger,
         IShellLauncher shellLauncher,
         IClipboardService clipboard,
-        IEmbeddedTwitchAuthDialog embeddedAuth)
+        IEmbeddedTwitchAuthDialog embeddedAuth,
+        IUiDispatcher uiDispatcher)
     {
         _role = role;
         _oauthService = oauthService;
@@ -69,6 +70,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         _shellLauncher = shellLauncher;
         _clipboard = clipboard;
         _embeddedAuth = embeddedAuth;
+        _uiDispatcher = uiDispatcher;
     }
 
     public override string PageTitle => _role == TwitchOAuthRole.Broadcaster
@@ -431,15 +433,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             return;
         }
 
-        var dispatcher = Application.Current?.Dispatcher;
-
-        if (dispatcher is null || dispatcher.CheckAccess())
-        {
-            ApplyStatusMessage(message);
-            return;
-        }
-
-        dispatcher.BeginInvoke(() => ApplyStatusMessage(message));
+        _uiDispatcher.Invoke(() => ApplyStatusMessage(message));
     }
 
     private void ApplyStatusMessage(string message)

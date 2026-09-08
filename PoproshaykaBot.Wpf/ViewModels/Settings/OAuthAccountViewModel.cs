@@ -8,8 +8,6 @@ using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Diagnostics;
 using System.Globalization;
-using System.Windows;
-using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
@@ -25,6 +23,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
     private readonly IDialogService _dialogService;
     private readonly IShellLauncher _shellLauncher;
     private readonly IEmbeddedTwitchAuthDialog _embeddedAuth;
+    private readonly IUiDispatcher _uiDispatcher;
     private readonly ILogger _logger;
 
     private TwitchAccountSettings _draft = new();
@@ -76,6 +75,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         IDialogService dialogService,
         IShellLauncher shellLauncher,
         IEmbeddedTwitchAuthDialog embeddedAuth,
+        IUiDispatcher uiDispatcher,
         ILogger logger)
     {
         _role = role;
@@ -85,6 +85,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         _dialogService = dialogService;
         _shellLauncher = shellLauncher;
         _embeddedAuth = embeddedAuth;
+        _uiDispatcher = uiDispatcher;
         _logger = logger;
 
         _oauthService.StatusChanged += OnOAuthStatusChanged;
@@ -469,15 +470,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
             return;
         }
 
-        var dispatcher = Application.Current?.Dispatcher;
-
-        if (dispatcher is null || dispatcher.CheckAccess())
-        {
-            SetAuthStatus(message, StatusSeverity.Info);
-            return;
-        }
-
-        dispatcher.BeginInvoke(() => SetAuthStatus(message, StatusSeverity.Info), DispatcherPriority.Normal);
+        _uiDispatcher.Invoke(() => SetAuthStatus(message, StatusSeverity.Info));
     }
 
     private void SetAuthStatus(string text, StatusSeverity severity)

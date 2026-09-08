@@ -13,8 +13,9 @@ public sealed class BroadcasterAuthorizationPageViewModel : AuthorizationPageVie
         ILogger<BroadcasterAuthorizationPageViewModel> logger,
         IShellLauncher shellLauncher,
         IClipboardService clipboard,
-        IEmbeddedTwitchAuthDialog embeddedAuth)
-        : base(TwitchOAuthRole.Broadcaster, oauthService, settingsManager, logger, shellLauncher, clipboard, embeddedAuth)
+        IEmbeddedTwitchAuthDialog embeddedAuth,
+        IUiDispatcher uiDispatcher)
+        : base(TwitchOAuthRole.Broadcaster, oauthService, settingsManager, logger, shellLauncher, clipboard, embeddedAuth, uiDispatcher)
     {
     }
 }
