@@ -22,9 +22,9 @@
       },
       "KeepShell": {
         "type": "Direct",
-        "requested": "[0.1.162, )",
-        "resolved": "0.1.162",
-        "contentHash": "tTly+lsH/eknR1/GncOgOxZNcgiDTItUDvWRWcGGVU+Utf5LWz+adrsAd+vCwCsbeQDm5WLyfjLYo3JvGYHaZw==",
+        "requested": "[0.1.176, )",
+        "resolved": "0.1.176",
+        "contentHash": "R01yrgf22PCnRRHSUyN8gX4+SEmCMZjRpJqQCbv7tJitEytnIUn42tvc6Vgtw+AFmMM9Z83WUPit8rG4BF5OcA==",
         "dependencies": {
           "CommunityToolkit.Mvvm": "8.3.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",
@@ -37,11 +37,21 @@
       },
       "KeepShell.Automation": {
         "type": "Direct",
-        "requested": "[0.1.162, )",
-        "resolved": "0.1.162",
-        "contentHash": "lZP7oUq+D1Myr5R9Q5GdPDBL4D49qLMG9KNVFz3oz7QlBtCjz3UuwT2fDspW6gyraAtj6yjtYi4IKpivl8VS2g==",
+        "requested": "[0.1.176, )",
+        "resolved": "0.1.176",
+        "contentHash": "UGWymM+hbzwqsB73Q2fqTuNAtP7brv++D8M56Cr7qwOGa3B8b2xv1rOc5hvD/+i/cW8uiFL1MnJbLzTHJJPChw==",
         "dependencies": {
-          "KeepShell": "0.1.162"
+          "KeepShell": "0.1.176"
+        }
+      },
+      "KeepShell.Mcp": {
+        "type": "Direct",
+        "requested": "[0.1.176, )",
+        "resolved": "0.1.176",
+        "contentHash": "BBMxzwi+xbakYvNUG0y9C8pTJzTrQhxBSyIKRF+pfAtMgpmVMi0j1AVnghHHbZAhwpWTHmAy0/lIqKI4VHfSug==",
+        "dependencies": {
+          "KeepShell": "0.1.176",
+          "ModelContextProtocol.AspNetCore": "1.4.1"
         }
       },
       "MahApps.Metro.IconPacks.Lucide": {
@@ -123,6 +133,35 @@
         "type": "Transitive",
         "resolved": "6.2.1",
         "contentHash": "ySAyax37C045Ef1ufN33yQjn3qPM1MuQLgKdxZKYUAl2uZaIrn9wCeBNvfG46QPNRvBFLR6gVKTs6O3o81LNhQ=="
+      },
+      "Microsoft.Extensions.AI.Abstractions": {
+        "type": "Transitive",
+        "resolved": "10.5.2",
+        "contentHash": "Ei+YWV9Ybnps7pR1dgjlG29gelXEwZkhLVAcWmKe6HvXS6LNBYgSdWiY3Hk9OZXYtK34rv/NtLWBQYQGOBQYPQ=="
+      },
+      "ModelContextProtocol": {
+        "type": "Transitive",
+        "resolved": "1.4.1",
+        "contentHash": "mP5hvBpoWe5EbWBqHWD09A4Dy6Pq+/vV2dumOV4uegCZcg+yqf8q8wrxtuZ3EQyXEJn9jzsnoiI/qyfJAihlZQ==",
+        "dependencies": {
+          "ModelContextProtocol.Core": "1.4.1"
+        }
+      },
+      "ModelContextProtocol.AspNetCore": {
+        "type": "Transitive",
+        "resolved": "1.4.1",
+        "contentHash": "AoI+00fRxb0GAMMabMUgpV5QhNoa/F7I9oiVGHfJKtBZ4g/DEyoDdTS9Rp/m4e3MnXhhvSBeu2wTafhesdf52w==",
+        "dependencies": {
+          "ModelContextProtocol": "1.4.1"
+        }
+      },
+      "ModelContextProtocol.Core": {
+        "type": "Transitive",
+        "resolved": "1.4.1",
+        "contentHash": "G/hOBZkJsvF3MSy0sOvXdxca5uRe2Sb4xk7xRuTWNZI45khVBjOLo6nSzGilctIICavNVxbxUF908fLYI9RxkQ==",
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.5.2"
+        }
       },
       "Tomlyn": {
         "type": "Transitive",

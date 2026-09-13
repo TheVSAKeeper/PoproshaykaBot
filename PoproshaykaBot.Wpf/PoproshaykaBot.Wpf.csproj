@@ -33,6 +33,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="KeepShell" />
     <PackageReference Include="KeepShell.Automation" />
+    <PackageReference Include="KeepShell.Mcp" />
     <PackageReference Include="MahApps.Metro.IconPacks.Lucide" />
     <PackageReference Include="Microsoft.Web.WebView2" />
     <PackageReference Include="Serilog.Extensions.Logging" />
