@@ -291,10 +291,18 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     {
         return pane switch
         {
+            TilePane tile when DashboardLayoutTree.IsEmptySlot(tile.TypeId) => BuildEmpty(path),
             TilePane tile => placements.TryGetValue(tile.TypeId, out var placement) ? BuildLeaf(placement, path, alongColumns) : null,
             SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 0 } split => BuildSplit(split, placements, path),
             _ => null,
         };
+    }
+
+    private static PaneLayout BuildEmpty(int[] path)
+    {
+        var star = new TrackSize(new(1, GridUnitType.Star), double.PositiveInfinity, 0);
+
+        return new EmptyPaneLayout(star, star, path);
     }
 
     private static PaneLayout BuildLeaf(Placement placement, int[] path, bool alongColumns)
@@ -704,7 +712,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private string? LargestLeaf()
     {
         return _session?.Draft.Tiles
-            .Where(tile => tile.IsVisible)
+            .Where(tile => tile.IsVisible && !DashboardLayoutTree.IsEmptySlot(tile.TypeId))
             .OrderByDescending(tile => tile.RowSpan * tile.ColumnSpan)
             .Select(tile => tile.TypeId)
             .FirstOrDefault();
@@ -749,6 +757,7 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
     {
         return this switch
         {
+            EmptyPaneLayout => 0,
             SplitPaneLayout { Orientation: SplitOrientation.Columns } split => split.Children.Sum(child => child.Pane.MinWidth(leafMinimum)),
             SplitPaneLayout split => split.Children.Max(child => child.Pane.MinWidth(leafMinimum)),
             _ => Math.Max(Width.Min, Width.Length.IsStar ? leafMinimum : 0),
@@ -759,6 +768,7 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
     {
         return this switch
         {
+            EmptyPaneLayout => 0,
             SplitPaneLayout { Orientation: SplitOrientation.Rows } split => split.Children.Sum(child => child.Pane.MinHeight(leafMinimum)),
             SplitPaneLayout split => split.Children.Max(child => child.Pane.MinHeight(leafMinimum)),
             _ => Math.Min(Math.Max(Height.Min, Height.Length.IsStar ? leafMinimum : 0), Height.Max),
@@ -767,6 +777,9 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
 }
 
 public sealed record TilePaneLayout(DashboardTileViewModel Tile, TrackSize Width, TrackSize Height, int[] Path)
+    : PaneLayout(Width, Height, Path);
+
+public sealed record EmptyPaneLayout(TrackSize Width, TrackSize Height, int[] Path)
     : PaneLayout(Width, Height, Path);
 
 public sealed record SplitPaneLayout(

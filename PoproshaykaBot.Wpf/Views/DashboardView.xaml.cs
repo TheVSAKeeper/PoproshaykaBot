@@ -94,6 +94,20 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         return Floor(track.Length, track, minimum);
     }
 
+    public static double TrackFloor(PaneLayoutSlot slot, bool alongColumns)
+    {
+        ArgumentNullException.ThrowIfNull(slot);
+
+        return alongColumns
+            ? Floor(Track(slot, static target => target.Width), slot.Pane.Width, LeafMinimum(slot.Pane, StarBandMinWidth))
+            : Floor(Track(slot, static target => target.Height), slot.Pane.Height, LeafMinimum(slot.Pane, StarBandMinHeight));
+    }
+
+    private static double LeafMinimum(PaneLayout pane, double minimum)
+    {
+        return pane is EmptyPaneLayout ? 0 : minimum;
+    }
+
     private static double Floor(GridLength length, TrackSize track, double minimum)
     {
         return Math.Min(Math.Max(track.Min, length.IsStar ? minimum : 0), track.Max);
@@ -351,6 +365,11 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private FrameworkElement BuildPaneContent(PaneLayout pane)
     {
+        if (pane is EmptyPaneLayout)
+        {
+            return new Border();
+        }
+
         if (pane is TilePaneLayout leaf)
         {
             _leafPaths[leaf.Tile.TypeId] = leaf.Path;
@@ -374,7 +393,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
                     definition.Width = Track(child, static target => target.Width);
                     definition.MaxWidth = child.Pane.Width.Max;
-                    definition.MinWidth = Floor(definition.Width, child.Pane.Width, StarBandMinWidth);
+                    definition.MinWidth = TrackFloor(child, alongColumns: true);
                 });
         }
         else
@@ -389,7 +408,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
                     definition.Height = Track(child, static target => target.Height);
                     definition.MaxHeight = child.Pane.Height.Max;
-                    definition.MinHeight = Floor(definition.Height, child.Pane.Height, StarBandMinHeight);
+                    definition.MinHeight = TrackFloor(child, alongColumns: false);
                 });
         }
 

@@ -66,6 +66,18 @@ public sealed class DashboardLayoutReconcilerTests
     }
 
     [Test]
+    public void ReservedEmptySlotTypeId_NeverBecomesARecord()
+    {
+        var layout = LayoutWith(Tile("stream-info", order: 0, isVisible: true));
+
+        DashboardLayoutReconciler.AppendMissingTypes(layout, [DashboardLayoutTree.EmptySlotTypeId]);
+        DashboardLayoutReconciler.AppendPreserved(layout, [Tile(DashboardLayoutTree.EmptySlotTypeId, order: 9, isVisible: false)]);
+
+        Assert.That(layout.Tiles.Select(tile => tile.TypeId), Has.No.Member(DashboardLayoutTree.EmptySlotTypeId),
+            "Пустая ячейка дерева не плитка: иначе у пользователя появится фантомная скрытая запись.");
+    }
+
+    [Test]
     public void AppendPreserved_SameTypeTwiceInPreserved_IsWrittenOnce()
     {
         var layout = LayoutWith(Tile("stream-info", order: 0, isVisible: true));
@@ -375,6 +387,65 @@ public sealed class DashboardLayoutReconcilerTests
         DashboardLayoutReconciler.SyncRoot(layout);
 
         Assert.That(layout.Root, Is.SameAs(before), "Явный вес соседа задаёт масштаб, по которому пустой вес доедет до своих клеток.");
+    }
+
+    [Test]
+    public void SyncRoot_EmptyWeightsNextToAHole_AreKept()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 1,
+            RowCount = 5,
+            Root = new SplitPane(SplitOrientation.Rows,
+            [
+                new(new TilePane("stream-info"), null),
+                new(new TilePane(DashboardLayoutTree.EmptySlotTypeId), null),
+            ]),
+        };
+
+        layout.Tiles.Add(Tile("stream-info", order: 0, isVisible: true));
+        layout.Tiles[0].RowSpan = 4;
+
+        var before = layout.Root;
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That(layout.Root, Is.SameAs(before),
+            "Размах дыры берётся из сетки как у обычного листа: иначе равные доли дали бы 3:2 вместо 4:1 и дерево пересобралось бы.");
+    }
+
+    [Test]
+    public void SyncTilesThenSyncRoot_VisibleReservedRecordNextToAHole_DoesNotMoveTheRealTile()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 1,
+            RowCount = 5,
+            Root = new SplitPane(SplitOrientation.Rows,
+            [
+                new(new TilePane("stream-info"), null),
+                new(new TilePane(DashboardLayoutTree.EmptySlotTypeId), null),
+            ]),
+        };
+
+        layout.Tiles.Add(Tile("stream-info", order: 0, isVisible: true));
+        layout.Tiles[0].RowSpan = 4;
+        layout.Tiles.Add(Tile(DashboardLayoutTree.EmptySlotTypeId, order: 1, isVisible: true));
+        layout.Tiles[1].RowSpan = 4;
+
+        var before = layout.Root;
+
+        Assert.That(DashboardLayoutReconciler.SyncTiles(layout), Is.True);
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(layout.Tiles[0].RowSpan, Is.EqualTo(4),
+                "Запись с зарезервированным типом не геометрия: иначе дыра забирает прямоугольник соседа и сдвигает настоящую плитку.");
+            Assert.That(layout.Tiles[1].IsVisible, Is.False);
+            Assert.That(layout.Root, Is.SameAs(before));
+        }
     }
 
     [Test]

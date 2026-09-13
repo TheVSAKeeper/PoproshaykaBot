@@ -114,10 +114,128 @@ public sealed class DashboardLayoutTreeTests
         Assert.That(DashboardLayoutTree.TryBuild(pinwheel, 3, 3), Is.Null, "Вертушка не разрезается сквозным швом, дерева для неё нет.");
     }
 
-    [Test]
-    public void Build_GridWithHole_ReturnsNull()
+    public static IEnumerable<TestCaseData> HoleCases()
     {
-        Assert.That(DashboardLayoutTree.TryBuild([Tile("only", 0, 0, 1, 1)], 2, 1), Is.Null, "Дырка в сетке деревом не выражается.");
+        yield return new TestCaseData(2, 2, new[]
+        {
+            Tile("a", 0, 0, 1, 1),
+            Tile("b", 0, 1, 1, 1),
+            Tile("c", 1, 0, 1, 1),
+        }).SetName("Hole_InTheCorner");
+
+        yield return new TestCaseData(3, 2, new[]
+        {
+            Tile("a", 0, 0, 1, 1),
+            Tile("b", 0, 2, 1, 1),
+            Tile("c", 1, 0, 1, 3),
+        }).SetName("Hole_InTheMiddleOfARow");
+
+        yield return new TestCaseData(3, 2, new[]
+        {
+            Tile("a", 0, 0, 1, 1),
+            Tile("b", 0, 2, 1, 1),
+            Tile("c", 1, 0, 1, 1),
+            Tile("d", 1, 1, 1, 1),
+        }).SetName("Hole_TwoOfThem");
+
+        yield return new TestCaseData(4, 4, BlockedSeamsLayout()).SetName("Hole_BlocksEverySeamAroundFiveTiles");
+
+        yield return new TestCaseData(3, 4, new[]
+        {
+            Tile("a", 0, 0, 3, 1),
+            Tile("b", 2, 1, 1, 1),
+        }).SetName("Hole_BlocksEverySeamAroundATallTile");
+    }
+
+    [TestCaseSource(nameof(HoleCases))]
+    public void Project_OfTreeWithHoles_ReproducesTheSameGrid(int columnCount, int rowCount, DashboardTileSettings[] tiles)
+    {
+        var root = DashboardLayoutTree.TryBuild(tiles, columnCount, rowCount);
+
+        Assert.That(root, Is.Not.Null, "Дыра выражается листом-пустышкой, а не отказом от дерева.");
+
+        var projected = DashboardLayoutTree.TryProject(root!, columnCount, rowCount);
+
+        Assert.That(projected, Is.Not.Null);
+        Assert.That(projected, Is.EquivalentTo(Rects(tiles)), "Пустышка не порождает записи в Tiles.");
+    }
+
+    [Test]
+    public void Build_UserGridWithHole_KeepsTheHoleAsAnEmptyLeaf()
+    {
+        var root = DashboardLayoutTree.TryBuild(UserHoleLayout(), 2, 6) as SplitPane;
+
+        Assert.That(root, Is.Not.Null);
+
+        var top = (SplitPane)root!.Children[0].Pane;
+        var right = (SplitPane)top.Children[1].Pane;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.Orientation, Is.EqualTo(SplitOrientation.Rows));
+            Assert.That(Leaves(root), Is.EqualTo(new[]
+            {
+                "stream-info",
+                "obs-info",
+                "broadcast-profiles",
+                DashboardLayoutTree.EmptySlotTypeId,
+                "twitch-chat",
+            }));
+
+            Assert.That(right.Children[1].Pane, Is.EqualTo(new TilePane(DashboardLayoutTree.EmptySlotTypeId)));
+            Assert.That(right.Children[1].Weight, Is.EqualTo(1.0 / 3).Within(1e-9), "Дыра в одну строку из трёх – это треть полосы.");
+            Assert.That(DashboardLayoutTree.TryMeasure(root), Is.EqualTo(new GridSize(2, 3)), "Пустышка не требует ни строки, ни колонки.");
+        }
+    }
+
+    [Test]
+    public void Build_AdjacentEmptyCells_MergeIntoOneSlot()
+    {
+        var root = DashboardLayoutTree.TryBuild(BlockedSeamsLayout(), 4, 4) as SplitPane;
+
+        Assert.That(root, Is.Not.Null);
+
+        var first = (SplitPane)root!.Children[0].Pane;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.Orientation, Is.EqualTo(SplitOrientation.Columns));
+            Assert.That(root.Children, Has.Count.EqualTo(4));
+
+            Assert.That(root.Children[3].Pane, Is.EqualTo(new TilePane(DashboardLayoutTree.EmptySlotTypeId)),
+                "Колонка из одних пустышек – одна пустышка, а не четыре с разделителями.");
+
+            Assert.That(Leaves(first), Is.EqualTo(new[]
+            {
+                DashboardLayoutTree.EmptySlotTypeId,
+                "left",
+                DashboardLayoutTree.EmptySlotTypeId,
+            }));
+
+            Assert.That(first.Children[0].Weight, Is.EqualTo(0.5).Within(1e-9),
+                "Две склеенные пустышки держат сумму своих долей.");
+        }
+    }
+
+    [Test]
+    public void Project_UserGridWithHole_ReturnsFourRecords()
+    {
+        var root = DashboardLayoutTree.TryBuild(UserHoleLayout(), 2, 6);
+
+        Assert.That(root, Is.Not.Null);
+        Assert.That(DashboardLayoutTree.TryProject(root!, 2, 6), Is.EquivalentTo(Rects(UserHoleLayout())));
+    }
+
+    [Test]
+    public void Build_ReservedTypeIdInTheFile_IsNotTakenForATile()
+    {
+        var reserved = Tile(DashboardLayoutTree.EmptySlotTypeId, 0, 1, 1, 1);
+
+        var root = DashboardLayoutTree.TryBuild([Tile("a", 0, 0, 1, 1), reserved], 2, 1);
+
+        Assert.That(root, Is.Not.Null);
+        Assert.That(Leaves(root!), Is.EqualTo(new[] { "a", DashboardLayoutTree.EmptySlotTypeId }),
+            "Запись с зарезервированным TypeId – не плитка: её клетки становятся дырой.");
     }
 
     [Test]
@@ -154,7 +272,7 @@ public sealed class DashboardLayoutTreeTests
             "Дырявый JSON не должен ронять сохранение раскладки.");
     }
 
-    [TestCase(64, 64, TestName = "Build_GridBeyondTheCellCap_ReturnsNull")]
+    [TestCase(65, 64, TestName = "Build_GridBeyondTheCellCap_ReturnsNull")]
     [TestCase(1000000, 1000000, TestName = "Build_AbsurdGrid_ReturnsNull")]
     public void Build_GridBeyondTheCellCap_ReturnsNull(int columnCount, int rowCount)
     {
@@ -324,6 +442,29 @@ public sealed class DashboardLayoutTreeTests
             Tile("broadcast-status", 2, 0, 2, 2),
             Tile("broadcast-profiles", 4, 0, 1, 2),
             Tile("twitch-chat", 0, 2, 5, 1),
+        ];
+    }
+
+    private static DashboardTileSettings[] UserHoleLayout()
+    {
+        return
+        [
+            Tile("stream-info", 0, 0, 1, 1),
+            Tile("broadcast-profiles", 0, 1, 2, 1),
+            Tile("obs-info", 1, 0, 2, 1),
+            Tile("twitch-chat", 3, 0, 3, 2),
+        ];
+    }
+
+    private static DashboardTileSettings[] BlockedSeamsLayout()
+    {
+        return
+        [
+            Tile("top", 0, 1, 1, 1),
+            Tile("middle", 1, 2, 1, 1),
+            Tile("left", 2, 0, 1, 1),
+            Tile("center", 2, 1, 1, 1),
+            Tile("right", 2, 2, 1, 1),
         ];
     }
 

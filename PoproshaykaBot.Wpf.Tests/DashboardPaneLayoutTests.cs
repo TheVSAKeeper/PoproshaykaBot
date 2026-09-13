@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
+using PoproshaykaBot.Wpf.Views;
 using System.ComponentModel;
 
 namespace PoproshaykaBot.Wpf.Tests;
@@ -91,25 +92,7 @@ public class DashboardPaneLayoutTests
     [Test]
     public void Grid_no_guillotine_cut_expresses_falls_back_to_bands()
     {
-        var layout = new DashboardLayoutSettings
-        {
-            ColumnCount = 3,
-            RowCount = 3,
-        };
-
-        AddTile(layout, "stream-info", 0, 0, 1, 2);
-        AddTile(layout, "broadcast-status", 0, 2, 2, 1);
-        AddTile(layout, "broadcast-profiles", 2, 1, 1, 2);
-        AddTile(layout, "polls", 1, 0, 2, 1);
-        AddTile(layout, "twitch-chat", 1, 1, 1, 1);
-
-        using var dashboard = CreateDashboard(
-            layout,
-            new FakeTile("stream-info"),
-            new FakeTile("broadcast-status"),
-            new FakeTile("broadcast-profiles"),
-            new FakeTile("polls"),
-            new FakeTile("twitch-chat", fills: true));
+        using var dashboard = CreateDashboard(PinwheelLayout(), PinwheelTiles());
 
         Assert.Multiple(() =>
         {
@@ -391,28 +374,45 @@ public class DashboardPaneLayoutTests
     }
 
     [Test]
-    public void Tile_floors_reach_the_rows_of_a_layout_no_guillotine_cut_expresses()
+    public void Hole_in_the_grid_goes_through_the_tree_and_carries_the_tile_floors()
     {
         using var dashboard = CreateDashboard(HoleLayout(), UserLayoutTiles(420));
 
-        Assert.That(dashboard.Pane, Is.Null, "В сетке дыра, дерева не будет – полосный путь и обязан донести полы до строк.");
-
-        var rows = dashboard.Bands.Single().Rows;
+        var hole = RightColumnOfTheHoleLayout(dashboard).Children[1];
 
         Assert.Multiple(() =>
         {
-            Assert.That(rows[0].Min, Is.EqualTo(200),
-                "Строка берёт наибольший пол своих плиток: 200 у «Информации о стриме» против 65 у профилей рассылки на две строки.");
-            Assert.That(rows[1].Min, Is.EqualTo(70), "Пол плитки на две строки делится между ними, иначе строка просит вдвое больше нужного.");
-            Assert.That(rows[2].Min, Is.EqualTo(70));
-            Assert.That(rows[3].Min, Is.EqualTo(220 / 3D).Within(0.001), "Растягивающийся чат тоже несёт пол – 220 на три строки.");
-            Assert.That(rows.Sum(row => row.Min), Is.LessThanOrEqualTo(573),
-                "Полы колонки обязаны влезать в дашборд при MinHeight окна 640: 640 − 37 заголовка − 30 статусной строки, иначе нижняя плитка уезжает за край без прокрутки.");
+            Assert.That(dashboard.Bands, Is.Empty, "Дыра выражается пустым листом, полосный путь ей больше не нужен.");
+            Assert.That(hole.Pane, Is.TypeOf<EmptyPaneLayout>(), "Дыра – это пустая ячейка дерева, а не отсутствующий ребёнок.");
+            Assert.That(hole.HasWeight, Is.True, "Пустая ячейка держит свою долю строки, иначе соседи её съедят.");
+            Assert.That(RightColumnOfTheHoleLayout(dashboard).IsComplete, Is.True,
+                "Узел с дырой собран целиком – значит в правке у него будут и разделители, и клавиатурный перенос доли.");
+            Assert.That(hole.Pane.MinHeight(96), Is.Zero, "Пустая ячейка высоты не просит.");
+            Assert.That(dashboard.Pane?.MinHeight(96), Is.EqualTo(560),
+                "Полы листьев складываются вдоль разреза строк: 200 + 140 у левой колонки и 220 у чата – столько же просила полосная раскладка.");
         });
     }
 
     [Test]
-    public void Row_floor_of_a_band_yields_to_the_ceiling_and_to_a_collapsed_tile()
+    public void Track_of_a_hole_gets_no_floor_while_its_neighbour_keeps_one()
+    {
+        using var dashboard = CreateDashboard(HoleLayout(), UserLayoutTiles(420));
+
+        var right = RightColumnOfTheHoleLayout(dashboard);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(DashboardView.TrackFloor(right.Children[1], alongColumns: false), Is.Zero,
+                "Дыра высоты не просит: общий пол растягивающегося листа толкал бы настоящие плитки вверх.");
+            Assert.That(DashboardView.TrackFloor(right.Children[1], alongColumns: true), Is.Zero,
+                "По ширине то же самое – иначе пустая ячейка упирается в 320 px и гонит раскладку в стопку.");
+            Assert.That(DashboardView.TrackFloor(right.Children[0], alongColumns: false), Is.EqualTo(130),
+                "Настоящий сосед свой пол сохраняет.");
+        });
+    }
+
+    [Test]
+    public void Collapsed_leaf_next_to_a_hole_keeps_the_floor_of_its_track()
     {
         var layout = HoleLayout();
 
@@ -420,15 +420,25 @@ public class DashboardPaneLayoutTests
 
         using var dashboard = CreateDashboard(layout, UserLayoutTiles(100));
 
-        var rows = dashboard.Bands.Single().Rows;
+        var right = RightColumnOfTheHoleLayout(dashboard);
+        var left = (SplitPaneLayout)((SplitPaneLayout)((SplitPaneLayout)dashboard.Pane!).Children[0].Pane).Children[0].Pane;
 
         Assert.Multiple(() =>
         {
-            Assert.That(rows[0].Min, Is.EqualTo(65),
-                "Свёрнутая плитка пола не просит – строке остаётся доля соседа, иначе свёртка перестанет освобождать место.");
-            Assert.That(rows[2].Min, Is.EqualTo(50),
-                "Пол не пробивает потолок и в полосе: MaxHeight 100 у плитки на две строки даёт 50 на строку.");
+            Assert.That((left.Children[0].Pane as TilePaneLayout)?.Height.Min, Is.Zero,
+                "Свёрнутая плитка пола не просит – иначе свёртка перестанет освобождать место.");
+            Assert.That(left.Children[1].Pane.MinHeight(96), Is.EqualTo(100),
+                "Пол не пробивает потолок и на дереве: MaxHeight 100 сильнее MinHeight 140.");
+            Assert.That(right.MinHeight(96), Is.EqualTo(130), "Дыра рядом не добавляет к полу колонки ничего.");
         });
+    }
+
+    private static SplitPaneLayout RightColumnOfTheHoleLayout(DashboardViewModel dashboard)
+    {
+        var root = (SplitPaneLayout)dashboard.Pane!;
+        var top = (SplitPaneLayout)root.Children[0].Pane;
+
+        return (SplitPaneLayout)top.Children[1].Pane;
     }
 
     [TestCase(573, ExpectedResult = true)]
@@ -446,10 +456,11 @@ public class DashboardPaneLayoutTests
     [Test]
     public void Band_without_a_tree_reports_the_floor_of_its_rows()
     {
-        using var dashboard = CreateDashboard(HoleLayout(), UserLayoutTiles(420));
+        using var dashboard = CreateDashboard(PinwheelLayout(), PinwheelTiles());
 
-        Assert.That(dashboard.Bands.Single().MinHeight, Is.EqualTo(560).Within(0.001),
-            "Полосный путь считает пол по своим строкам: 560 влезает в бюджет 573, и панель обязана остаться сеткой без прокрутки.");
+        Assert.That(dashboard.Pane, Is.Null, "Вертушку дерево не выражает – считать полы обязан полосный путь.");
+        Assert.That(dashboard.Bands.Max(band => band.MinHeight), Is.EqualTo(510).Within(0.001),
+            "Полосный путь считает пол по своим строкам: 200 у «Информации о стриме», 220 у чата и 90 у профилей рассылки.");
     }
 
     [Test]
@@ -572,6 +583,35 @@ public class DashboardPaneLayoutTests
     private static DashboardViewModel CreateDashboard(DashboardLayoutSettings layout, params DashboardTileViewModel[] tiles)
     {
         return new(tiles, new(new FakeLayoutStore(layout)), TimeProvider.System);
+    }
+
+    private static DashboardLayoutSettings PinwheelLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 3,
+            RowCount = 3,
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 2);
+        AddTile(layout, "broadcast-status", 0, 2, 2, 1);
+        AddTile(layout, "broadcast-profiles", 2, 1, 1, 2);
+        AddTile(layout, "polls", 1, 0, 2, 1);
+        AddTile(layout, "twitch-chat", 1, 1, 1, 1);
+
+        return layout;
+    }
+
+    private static DashboardTileViewModel[] PinwheelTiles()
+    {
+        return
+        [
+            new FakeTile("stream-info", minHeight: 200),
+            new FakeTile("broadcast-status", minHeight: 100),
+            new FakeTile("broadcast-profiles", minHeight: 90),
+            new FakeTile("polls", minHeight: 130),
+            new FakeTile("twitch-chat", fills: true, minHeight: 220),
+        ];
     }
 
     private static DashboardLayoutSettings HoleLayout()
