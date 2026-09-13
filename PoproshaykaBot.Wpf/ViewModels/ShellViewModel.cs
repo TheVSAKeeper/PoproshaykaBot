@@ -10,7 +10,6 @@ using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.ComponentModel;
 using System.Windows;
-using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -25,6 +24,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly SettingsPageViewModel _settingsPage;
     private readonly ChatHistoryManager _chatHistory;
     private readonly ISettingsStore _uiSettings;
+    private readonly IUiDispatcher _uiDispatcher;
     private readonly NavigationItem _statisticsSection;
     private readonly NavigationItem _streamHistorySection;
     private readonly NavigationItem _overviewSection;
@@ -54,7 +54,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         DebugBannerViewModel debugBanner,
         StreamMonitoringViewModel streamMonitoring,
         ChatHistoryManager chatHistory,
-        ISettingsStore uiSettings)
+        ISettingsStore uiSettings,
+        IUiDispatcher uiDispatcher)
         : base(modal)
     {
         _connectionManager = connectionManager;
@@ -74,6 +75,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _settingsPage.SettingsSaved += OnSettingsSaved;
         _chatHistory = chatHistory;
         _uiSettings = uiSettings;
+        _uiDispatcher = uiDispatcher;
         _uiSettings.WriteFailed += OnUiSettingsWriteFailed;
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: ActivateSettings, key: SectionKeys.Settings);
 
@@ -402,14 +404,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     {
         _logger.UiSettingsWriteFailed(e.Exception, e.FilePath);
 
-        var dispatcher = Application.Current?.Dispatcher;
-
-        if (dispatcher is null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
-        {
-            return;
-        }
-
-        dispatcher.BeginInvoke(DispatcherPriority.Normal,
+        _uiDispatcher.Invoke(
             () => SetStatus("Настройки оформления не сохранены на диск, правки применены только в этом сеансе", StatusSeverity.Error));
     }
 

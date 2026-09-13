@@ -13,8 +13,9 @@ public sealed class BotAuthorizationPageViewModel : AuthorizationPageViewModelBa
         ILogger<BotAuthorizationPageViewModel> logger,
         IShellLauncher shellLauncher,
         IClipboardService clipboard,
-        IEmbeddedTwitchAuthDialog embeddedAuth)
-        : base(TwitchOAuthRole.Bot, oauthService, settingsManager, logger, shellLauncher, clipboard, embeddedAuth)
+        IEmbeddedTwitchAuthDialog embeddedAuth,
+        IUiDispatcher uiDispatcher)
+        : base(TwitchOAuthRole.Bot, oauthService, settingsManager, logger, shellLauncher, clipboard, embeddedAuth, uiDispatcher)
     {
     }
 }

@@ -49,6 +49,7 @@ public partial class App : Application
     private AppLifetime? _appLifetime;
     private StreamMonitoringHost? _streamMonitoringHost;
     private MemoryWatchdog? _memoryWatchdog;
+    private BindingErrorSink? _bindingErrors;
     private Mutex? _singleInstanceMutex;
 
     private bool _isFinalizeUpdate;
@@ -114,6 +115,9 @@ public partial class App : Application
         _logging = KeepShellLogging.Bootstrap(_loggingOptions);
 
         HostLog.Information(AppInfo.SessionStartMarker + "...");
+
+        _bindingErrors = BindingErrorSink.Attach();
+        _bindingErrors.Captured += OnBindingErrorCaptured;
 
         AttachFatalExceptionTrap();
 
@@ -254,12 +258,28 @@ public partial class App : Application
             }
         }
 
+        if (_bindingErrors is { } bindingErrors)
+        {
+            bindingErrors.Captured -= OnBindingErrorCaptured;
+
+            if (bindingErrors.Count > 0)
+            {
+                HostLog.Warning("Ошибок привязки данных за прогон: {BindingErrorCount}", bindingErrors.Count);
+            }
+        }
+
         HostLog.Information("Завершение работы приложения ({Reason}), код выхода {ExitCode}", _exitReason, e.ApplicationExitCode);
+        _bindingErrors?.Dispose();
         _logging?.Dispose();
 
         _singleInstanceMutex?.Dispose();
 
         base.OnExit(e);
+    }
+
+    private static void OnBindingErrorCaptured(object? sender, BindingErrorRecord record)
+    {
+        HostLog.Error("Ошибка привязки данных: {BindingError}", record.Message);
     }
 
     private void RunGallery(GalleryArguments arguments, IServiceProvider services)

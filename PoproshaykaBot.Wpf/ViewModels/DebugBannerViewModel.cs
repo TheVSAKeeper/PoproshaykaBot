@@ -14,6 +14,9 @@ public sealed partial class DebugBannerViewModel : ObservableObject
     private string _text = string.Empty;
 
     [ObservableProperty]
+    private string _shortText = string.Empty;
+
+    [ObservableProperty]
     private bool _isSendingAllowed;
 
     public DebugBannerViewModel(ITargetChannelProvider targetChannelProvider)
@@ -39,7 +42,11 @@ public sealed partial class DebugBannerViewModel : ObservableObject
 
         Text = target.IsSendingAllowed
             ? $"Отладка: бот подключается к каналу {target.Login} и пишет в его чат."
-            : $"Отладка: бот читает чат канала {target.Login}. Сообщения не отправляются — они видны в журнале.";
+            : $"Отладка: бот читает чат канала {target.Login}. Сообщения не отправляются – они видны в журнале.";
+
+        ShortText = target.IsSendingAllowed
+            ? $"Отладка: {target.Login}, отправка включена"
+            : $"Отладка: {target.Login}, только чтение";
 
         IsVisible = true;
     }

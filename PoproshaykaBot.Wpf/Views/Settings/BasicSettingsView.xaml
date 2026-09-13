@@ -44,7 +44,7 @@
         <DockPanel LastChildFill="True"
                    Margin="0,16,0,0">
             <iconPacks:PackIconLucide DockPanel.Dock="Left"
-                                      Kind="Info"
+                                      Kind="{x:Static iconPacks:PackIconLucideKind.Info}"
                                       Width="14"
                                       Height="14"
                                       VerticalAlignment="Top"

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
@@ -21,6 +22,8 @@ namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisposable
 {
+    private const string ConnectedStatus = "connected";
+    private const string UnavailableStatus = "error";
     private const int ConnectedRefreshIntervalMs = 5000;
     private const int DisconnectedRefreshIntervalMs = 15000;
     private const int MinVolumeMeterDelayMs = 30;
@@ -57,12 +60,14 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private bool _disposed;
 
     [ObservableProperty]
-    private string _sceneText = "Сцена: —";
+    private string _sceneText = "Сцена: –";
 
     [ObservableProperty]
     private string _connectionText = "○ OBS выкл.";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasOutputs))]
+    [NotifyPropertyChangedFor(nameof(IsUnavailable))]
     private string _connectionStatus = "off";
 
     [ObservableProperty]
@@ -89,7 +94,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         IEventBus bus,
         ILogger<ObsInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher)
-        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 420, minHeight: 140)
+        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 420, minHeight: 154)
     {
         _store = store;
         _obsIntegration = obsIntegration;
@@ -119,7 +124,15 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     public bool HasAudioSources => !AudioSourcesEmpty;
 
+    public bool HasOutputs => string.Equals(ConnectionStatus, ConnectedStatus, StringComparison.Ordinal);
+
+    public bool IsUnavailable => string.Equals(ConnectionStatus, UnavailableStatus, StringComparison.Ordinal);
+
+    public override PackIconLucideKind Icon => PackIconLucideKind.Video;
+
     public override bool GrowsWithSpace => HasAudioSources;
+
+    public override bool SizesToContent => true;
 
     private void Initialize()
     {
@@ -369,7 +382,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             return;
         }
 
-        UpdateConnectionHeader("● OBS подключён", "connected", "OBS WebSocket подключён");
+        UpdateConnectionHeader("● OBS подключён", ConnectedStatus, "OBS WebSocket подключён");
 
         SceneText = $"Сцена: {ToDisplayValue(snapshot.CurrentSceneName)}";
 
@@ -467,7 +480,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private void ApplyDisabledState()
     {
         UpdateConnectionHeader("○ OBS выкл.", "off", "OBS интеграция отключена в настройках");
-        SceneText = "Сцена: —";
+        SceneText = "Сцена: –";
         StreamCard.ApplyUnknown();
         RecordCard.ApplyUnknown();
         ClearRows();
@@ -476,12 +489,12 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private void ApplyUnavailableState(string? message)
     {
         UpdateConnectionHeader("● OBS нет",
-            "error",
+            UnavailableStatus,
             string.IsNullOrWhiteSpace(message) ? "OBS WebSocket не подключён" : $"OBS WebSocket не подключён: {message}");
 
-        SceneText = "Сцена: —";
-        StreamCard.ApplyUnavailable(message);
-        RecordCard.ApplyUnavailable(message);
+        SceneText = "Сцена: –";
+        StreamCard.ApplyUnknown();
+        RecordCard.ApplyUnknown();
         ClearRows();
     }
 
@@ -596,7 +609,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private static string ToDisplayValue(string? value)
     {
-        return string.IsNullOrWhiteSpace(value) ? "—" : value;
+        return string.IsNullOrWhiteSpace(value) ? "–" : value;
     }
 
     private static (string Text, string? Severity)? FormatStreamHealth(

@@ -4,6 +4,7 @@
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -32,16 +33,26 @@
                     Command="{Binding EditPointTermCommand}"
                     AutomationProperties.Name="Изменить названия баллов"
                     Margin="8,0,0,0" />
-            <Button DockPanel.Dock="Right"
-                    Content="Очистить"
-                    Style="{StaticResource Button.Ghost}"
-                    Command="{Binding ClearFilterCommand}"
-                    AutomationProperties.Name="Очистить поиск"
-                    Margin="4,0,0,0" />
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     AutomationProperties.Name="Поиск пользователя по имени или идентификатору"
-                     keepshell:PlaceholderBehavior.Placeholder="Поиск пользователя (имя или ID)..." />
+            <Grid>
+                <TextBox Style="{StaticResource TextBox.Form}"
+                         Padding="8,0,32,0"
+                         Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         AutomationProperties.Name="Поиск пользователя по имени или идентификатору"
+                         keepshell:PlaceholderBehavior.Placeholder="Поиск пользователя (имя или ID)..." />
+
+                <Button HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,2,0"
+                        Style="{StaticResource Button.Icon}"
+                        Command="{Binding ClearFilterCommand}"
+                        AutomationProperties.Name="Очистить поиск"
+                        ToolTip="Очистить поиск"
+                        Visibility="{Binding IsFilterActive, Converter={StaticResource BoolToVisibility}}">
+                    <iconPacks:PackIconLucide Kind="X"
+                                              Width="14"
+                                              Height="14" />
+                </Button>
+            </Grid>
         </DockPanel>
 
         <Grid Grid.Row="1">
@@ -198,6 +209,24 @@
                                     <TextBlock Text="Штраф"
                                                Style="{StaticResource TextBlock.Subtle}" />
                                 </DockPanel>
+
+                                <TextBlock Text="Управление баллами"
+                                           Style="{StaticResource TextBlock.Heading}"
+                                           Margin="0,16,0,12" />
+
+                                <keepshell:NumericSettingField Label="Изменение баланса"
+                                                              Value="{Binding AdjustmentAmount, Mode=TwoWay}"
+                                                              IncreaseCommand="{Binding IncreaseAdjustmentCommand}"
+                                                              DecreaseCommand="{Binding DecreaseAdjustmentCommand}"
+                                                              IncreaseAutomationName="Увеличить"
+                                                              DecreaseAutomationName="Уменьшить"
+                                                              Margin="0,0,0,12" />
+
+                                <Button Content="{Binding ActionButtonText}"
+                                        Command="{Binding ApplyAdjustmentCommand}"
+                                        Style="{StaticResource Button.Primary}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center" />
                             </StackPanel>
 
                             <TextBlock Text="Выберите пользователя в таблице"
@@ -205,28 +234,6 @@
                                        HorizontalAlignment="Center"
                                        Margin="0,8"
                                        Visibility="{Binding HasSelectedRow, Converter={StaticResource InverseBoolToVisibility}}" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <TextBlock Text="Управление баллами"
-                                       Style="{StaticResource TextBlock.Heading}"
-                                       Margin="0,0,0,12" />
-
-                            <keepshell:NumericSettingField Label="Изменение баланса"
-                                                          Value="{Binding AdjustmentAmount, Mode=TwoWay}"
-                                                          IncreaseCommand="{Binding IncreaseAdjustmentCommand}"
-                                                          DecreaseCommand="{Binding DecreaseAdjustmentCommand}"
-                                                          IncreaseAutomationName="Увеличить"
-                                                          DecreaseAutomationName="Уменьшить"
-                                                          Margin="0,0,0,12" />
-
-                            <Button Content="{Binding ActionButtonText}"
-                                    Command="{Binding ApplyAdjustmentCommand}"
-                                    Style="{StaticResource Button.Primary}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center" />
                         </StackPanel>
                     </Border>
 

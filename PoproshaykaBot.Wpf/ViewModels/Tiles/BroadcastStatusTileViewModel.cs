@@ -54,7 +54,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         IChannelProvider channelProvider,
         IEventBus eventBus,
         IDialogService dialogService)
-        : base("broadcast-status", "Рассылка", maxWidth: 360, minHeight: 130)
+        : base("broadcast-status", "Рассылка", maxWidth: 360, minHeight: 144)
     {
         _scheduler = scheduler;
         _settings = settings;
@@ -80,6 +80,10 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
 
         RefreshState();
     }
+
+    public override PackIconLucideKind Icon => PackIconLucideKind.Megaphone;
+
+    public override bool SizesToContent => true;
 
     [RelayCommand(CanExecute = nameof(CanStart))]
     private void Start()

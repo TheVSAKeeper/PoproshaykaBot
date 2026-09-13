@@ -6,6 +6,7 @@ internal sealed class FakeTile(
     string typeId,
     bool fills = false,
     bool grows = false,
+    bool sizesToContent = false,
     int? maxWidth = null,
     int? maxHeight = null,
     int minWidth = DashboardTileViewModel.DefaultMinWidth,
@@ -15,4 +16,6 @@ internal sealed class FakeTile(
     public override bool FillsAvailableSpace => fills;
 
     public override bool GrowsWithSpace => grows;
+
+    public override bool SizesToContent => sizesToContent;
 }

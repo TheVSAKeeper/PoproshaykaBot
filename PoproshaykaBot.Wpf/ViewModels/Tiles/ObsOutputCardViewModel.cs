@@ -95,7 +95,7 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
         (ObsOutputCardKind.Record, ObsOutputCardState.Active) => "ЗАПИСЬ",
         (_, ObsOutputCardState.Paused) => "ПАУЗА",
         (_, ObsOutputCardState.Error) => "Ошибка",
-        _ => "—",
+        _ => "–",
     };
 
     public string? StatusSeverity => State switch
@@ -113,7 +113,7 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
         (ObsOutputCardKind.Record, ObsOutputCardState.Idle) => "● Старт",
         (ObsOutputCardKind.Record, ObsOutputCardState.Active) => "■ Стоп",
         (ObsOutputCardKind.Record, ObsOutputCardState.Paused) => "■ Стоп",
-        _ => "—",
+        _ => "–",
     };
 
     public string SecondaryButtonText => State switch
@@ -137,7 +137,7 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
                 ObsOutputCardState.Active => "в эфире",
                 ObsOutputCardState.Idle => "офлайн",
                 ObsOutputCardState.Error => "OBS WS",
-                _ => "—",
+                _ => "–",
             };
         }
     }
@@ -174,16 +174,6 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
         Meta = meta ?? string.Empty;
         Chip = chip;
         ChipSeverity = chipSeverity;
-    }
-
-    public void ApplyUnavailable(string? errorMessage)
-    {
-        State = ObsOutputCardState.Error;
-        Timecode = null;
-        MetaIsError = false;
-        Meta = string.IsNullOrWhiteSpace(errorMessage) ? "OBS недоступен" : errorMessage;
-        Chip = null;
-        ChipSeverity = null;
     }
 
     public void ApplyUnknown()

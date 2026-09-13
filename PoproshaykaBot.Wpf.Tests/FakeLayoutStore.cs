@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Settings.Stores;
+﻿using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using System.IO;
 
@@ -20,8 +21,12 @@ internal sealed class FakeLayoutStore(DashboardLayoutSettings? persisted)
 
     public override void SaveDashboard(DashboardLayoutSettings layout)
     {
-        Saved = layout;
-        _current = JsonStoreClone.DeepClone(layout);
+        var snapshot = JsonStoreClone.DeepClone(layout);
+
+        DashboardLayoutReconciler.SyncRoot(snapshot);
+
+        Saved = snapshot;
+        _current = JsonStoreClone.DeepClone(snapshot);
         SaveCount++;
     }
 }

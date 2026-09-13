@@ -4,9 +4,11 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.ComponentModel;
+using System.Globalization;
 using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
@@ -84,7 +86,24 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
     public bool Resize(IReadOnlyList<int> path, IReadOnlyList<double> weights)
     {
-        return _session?.Resize(path, weights) == true;
+        if (_session is null)
+        {
+            return false;
+        }
+
+        if (_session.Resize(path, weights))
+        {
+            return true;
+        }
+
+        if (_sessionLogger?.IsEnabled(LogLevel.Debug) == true)
+        {
+            _sessionLogger.DashboardResizeRefused(
+                string.Join('.', path),
+                string.Join(' ', weights.Select(weight => weight.ToString("0.###", CultureInfo.InvariantCulture))));
+        }
+
+        return false;
     }
 
     public bool Swap(string firstTypeId, string secondTypeId)
@@ -120,8 +139,14 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         {
             var created = current is null || current.Tiles.Count == 0;
             var target = created ? DashboardLayoutDefaults.Create() : current!;
+            var appended = DashboardLayoutReconciler.AppendMissingTypes(target, _tilesByTypeId.Keys);
 
-            return DashboardLayoutReconciler.AppendMissingTypes(target, _tilesByTypeId.Keys) || created ? target : null;
+            target.ColumnCount = Math.Clamp(target.ColumnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
+            target.RowCount = Math.Clamp(target.RowCount, DashboardLayoutDefaults.MinRowCount, DashboardLayoutDefaults.MaxRowCount);
+
+            DashboardLayoutReconciler.SyncRoot(target);
+
+            return ClearFixedWeights(target) || appended || created ? target : null;
         });
 
         ApplyLayout(layout ?? DashboardLayoutDefaults.Create());
@@ -205,6 +230,45 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         };
     }
 
+    private bool ClearFixedWeights(DashboardLayoutSettings layout)
+    {
+        if (layout.Root is null)
+        {
+            return false;
+        }
+
+        var collapsed = layout.Tiles
+            .Where(tile => tile.IsCollapsed)
+            .Select(tile => tile.TypeId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (!DashboardPaneEditor.TryClearFixedWeights(layout.Root, (typeId, orientation) => IsFixed(typeId, orientation, collapsed), out var relaxed))
+        {
+            return false;
+        }
+
+        layout.Root = relaxed;
+
+        return true;
+    }
+
+    private bool IsFixed(string typeId, SplitOrientation orientation, HashSet<string> collapsed)
+    {
+        if (!_tilesByTypeId.TryGetValue(typeId, out var tile) || !tile.SizesToContent)
+        {
+            return false;
+        }
+
+        var isCollapsed = collapsed.Contains(typeId);
+
+        if (tile.FillsAvailableSpace && !isCollapsed)
+        {
+            return false;
+        }
+
+        return orientation == SplitOrientation.Columns || isCollapsed || !tile.GrowsWithSpace;
+    }
+
     private static bool Stretches(Placement placement)
     {
         return placement.Tile.FillsAvailableSpace && !placement.IsCollapsed;
@@ -256,6 +320,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         }
 
         var children = new List<PaneLayoutSlot>(split.Children.Count);
+        var alongColumns = split.Orientation == SplitOrientation.Columns;
 
         for (var index = 0; index < split.Children.Count; index++)
         {
@@ -263,7 +328,9 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
             if (BuildPane(slot.Pane, placements, [.. path, index]) is { } child)
             {
-                children.Add(new(child, weights[index], HasWeight(slot, placements)));
+                var sizesToContent = SizesToContent(child, alongColumns);
+
+                children.Add(new(child, weights[index], HasWeight(slot, placements) && !sizesToContent, sizesToContent));
             }
         }
 
@@ -277,13 +344,27 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             return children[0].Pane;
         }
 
-        var alongColumns = split.Orientation == SplitOrientation.Columns;
         var authored = children.Exists(child => child.HasWeight);
 
         var width = MergeTracks(children, static pane => pane.Width, alongColumns, alongColumns && authored);
         var height = MergeTracks(children, static pane => pane.Height, !alongColumns, !alongColumns && authored);
 
         return new SplitPaneLayout(split.Orientation, children, width, height, path, children.Count == split.Children.Count);
+    }
+
+    private static bool SizesToContent(PaneLayout pane, bool alongColumns)
+    {
+        if ((alongColumns ? pane.Width : pane.Height).Length.IsStar)
+        {
+            return false;
+        }
+
+        return pane switch
+        {
+            TilePaneLayout leaf => leaf.Tile.SizesToContent,
+            SplitPaneLayout split => split.Children.All(child => SizesToContent(child.Pane, alongColumns)),
+            _ => false,
+        };
     }
 
     private static bool HasWeight(PaneSlot slot, IReadOnlyDictionary<string, Placement> placements)
@@ -389,14 +470,15 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         if (covering.Any(Stretches))
         {
-            return new(new(1, GridUnitType.Star), double.PositiveInfinity);
+            return new(new(1, GridUnitType.Star), double.PositiveInfinity, Floor(covering, double.PositiveInfinity));
         }
 
         var ceiling = Ceiling(covering, p => p.MaxHeight, p => p.RowSpan);
+        var floor = Floor(covering, ceiling);
 
         return covering.Any(Grows)
-            ? new(new(1, GridUnitType.Star), ceiling)
-            : new(GridLength.Auto, ceiling);
+            ? new(new(1, GridUnitType.Star), ceiling, floor)
+            : new(GridLength.Auto, ceiling, floor);
     }
 
     private static TrackSize ComputeBandWidth(IReadOnlyList<Placement> members, IReadOnlyList<TrackSize> columns)
@@ -409,6 +491,18 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         var ceiling = columns.Sum(c => c.Max);
 
         return new(GridLength.Auto, double.IsInfinity(ceiling) ? double.PositiveInfinity : ceiling);
+    }
+
+    private static double Floor(IReadOnlyList<Placement> covering, double ceiling)
+    {
+        if (covering.Count == 0)
+        {
+            return 0;
+        }
+
+        var floor = covering.Max(p => p.IsCollapsed ? 0 : p.Tile.MinHeight / (double)p.RowSpan);
+
+        return Math.Min(floor, ceiling);
     }
 
     private static double Ceiling(IReadOnlyList<Placement> covering, Func<Placement, int?> size, Func<Placement, int> span)
@@ -599,7 +693,10 @@ public sealed record TileBand(
     TrackSize Width,
     IReadOnlyList<TrackSize> Columns,
     IReadOnlyList<TrackSize> Rows,
-    IReadOnlyList<TileSlot> Tiles);
+    IReadOnlyList<TileSlot> Tiles)
+{
+    public double MinHeight => Rows.Sum(row => Math.Min(row.Min, row.Max));
+}
 
 public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
 {
@@ -612,6 +709,16 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
             SplitPaneLayout { Orientation: SplitOrientation.Columns } split => split.Children.Sum(child => child.Pane.MinWidth(leafMinimum)),
             SplitPaneLayout split => split.Children.Max(child => child.Pane.MinWidth(leafMinimum)),
             _ => Math.Max(Width.Min, Width.Length.IsStar ? leafMinimum : 0),
+        };
+    }
+
+    public double MinHeight(double leafMinimum)
+    {
+        return this switch
+        {
+            SplitPaneLayout { Orientation: SplitOrientation.Rows } split => split.Children.Sum(child => child.Pane.MinHeight(leafMinimum)),
+            SplitPaneLayout split => split.Children.Max(child => child.Pane.MinHeight(leafMinimum)),
+            _ => Math.Min(Math.Max(Height.Min, Height.Length.IsStar ? leafMinimum : 0), Height.Max),
         };
     }
 }
@@ -627,4 +734,4 @@ public sealed record SplitPaneLayout(
     int[] Path,
     bool IsComplete) : PaneLayout(Width, Height, Path);
 
-public sealed record PaneLayoutSlot(PaneLayout Pane, double Weight, bool HasWeight);
+public sealed record PaneLayoutSlot(PaneLayout Pane, double Weight, bool HasWeight, bool SizesToContent);

@@ -25,7 +25,8 @@
                 BorderBrush="{DynamicResource Border.Subtle}"
                 BorderThickness="0,1,0,0"
                 Padding="20,6"
-                Margin="-20,12,-20,-20">
+                Margin="-20,12,-20,-20"
+                Visibility="{Binding HasDraft, Converter={StaticResource BoolToVisibility}}">
             <DockPanel LastChildFill="False">
                 <StackPanel DockPanel.Dock="Left"
                             Orientation="Horizontal"

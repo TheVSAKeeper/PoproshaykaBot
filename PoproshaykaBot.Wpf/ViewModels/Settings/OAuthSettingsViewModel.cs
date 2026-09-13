@@ -33,10 +33,11 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
         IDialogService dialogService,
         IShellLauncher shellLauncher,
         IEmbeddedTwitchAuthDialog embeddedAuth,
+        IUiDispatcher uiDispatcher,
         ILogger<OAuthAccountViewModel> logger)
     {
-        Bot = new(TwitchOAuthRole.Bot, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth, logger);
-        Broadcaster = new(TwitchOAuthRole.Broadcaster, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth, logger);
+        Bot = new(TwitchOAuthRole.Bot, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth, uiDispatcher, logger);
+        Broadcaster = new(TwitchOAuthRole.Broadcaster, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth, uiDispatcher, logger);
 
         Bot.SettingChanged += OnChildSettingChanged;
         Broadcaster.SettingChanged += OnChildSettingChanged;

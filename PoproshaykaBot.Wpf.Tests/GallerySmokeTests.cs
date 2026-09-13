@@ -40,6 +40,8 @@ public class GallerySmokeTests
         var indexPath = Path.Combine(_outputDirectory, "index.json");
         Assert.That(File.Exists(indexPath), Is.True, $"Индекс прогона не найден: {indexPath}");
 
+        AssertNoBindingErrors();
+
         using var index = JsonDocument.Parse(File.ReadAllText(indexPath));
 
         var unknown = index.RootElement.GetProperty("unknown")
@@ -108,6 +110,25 @@ public class GallerySmokeTests
         {
             Assert.That(unknown, Is.EqualTo(new[] { "dialog:no-such-dialog", "no-such-page" }), "Нераспознанные ключи должны уехать в unknown");
             Assert.That(frames, Is.EqualTo(new[] { SectionKeys.Overview }), "Сняться должен только распознанный кейс");
+        });
+    }
+
+    private void AssertNoBindingErrors()
+    {
+        var reportPath = Path.Combine(_outputDirectory, GalleryRunner.BindingErrorsFileName);
+        Assert.That(File.Exists(reportPath), Is.True, $"Отчёт об ошибках привязок не найден: {reportPath}");
+
+        using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
+
+        var errors = report.RootElement.GetProperty("errors")
+            .EnumerateArray()
+            .Select(error => $"{error.GetProperty("case").GetString()}/{error.GetProperty("theme").GetString()}: {error.GetProperty("message").GetString()}")
+            .ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(errors, Is.Empty, () => string.Join(Environment.NewLine, errors));
+            Assert.That(report.RootElement.GetProperty("count").GetInt32(), Is.Zero, "Счётчик ошибок привязок не совпал с пустым перечнем");
         });
     }
 

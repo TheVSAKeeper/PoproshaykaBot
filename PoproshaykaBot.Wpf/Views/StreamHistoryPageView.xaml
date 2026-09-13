@@ -51,36 +51,43 @@
                   CanUserSortColumns="True"
                   CanUserReorderColumns="False"
                   SelectionMode="Single">
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader"
+                       BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                    <Setter Property="Padding"
+                            Value="6,8" />
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Начало"
                                     Binding="{Binding StartedAtFormatted}"
                                     SortMemberPath="StartedAt"
                                     SortDirection="Descending"
                                     Width="130" />
-                <DataGridTextColumn Header="Длит."
+                <DataGridTextColumn Header="Длительность"
                                     Binding="{Binding DurationFormatted}"
                                     SortMemberPath="Duration"
-                                    Width="80" />
+                                    Width="Auto" />
                 <DataGridTextColumn Header="Игра"
                                     Binding="{Binding GameFormatted}"
                                     SortMemberPath="GameFormatted"
                                     Width="*" />
-                <DataGridTextColumn Header="Сообщ."
+                <DataGridTextColumn Header="Сообщения"
                                     Binding="{Binding MessageCountFormatted}"
                                     SortMemberPath="MessageCount"
-                                    Width="75" />
-                <DataGridTextColumn Header="Чатт."
+                                    Width="Auto" />
+                <DataGridTextColumn Header="Чаттеры"
                                     Binding="{Binding ChatterCountFormatted}"
                                     SortMemberPath="ChatterCount"
-                                    Width="60" />
-                <DataGridTextColumn Header="Пик зр."
+                                    Width="Auto" />
+                <DataGridTextColumn Header="Пик зрителей"
                                     Binding="{Binding PeakViewersFormatted}"
                                     SortMemberPath="PeakViewers"
-                                    Width="70" />
-                <DataGridTextColumn Header="Средн. зр."
+                                    Width="Auto" />
+                <DataGridTextColumn Header="Средние зрители"
                                     Binding="{Binding AverageViewersFormatted}"
                                     SortMemberPath="AverageViewers"
-                                    Width="80" />
+                                    Width="Auto" />
             </DataGrid.Columns>
         </DataGrid>
 
@@ -90,8 +97,19 @@
                       Background="{DynamicResource Border.Default}"
                       Cursor="SizeNS" />
 
+        <controls:EmptyState Grid.Row="3"
+                             Icon="MousePointerClick"
+                             Heading="Выберите стрим, чтобы увидеть его детали, сегменты и чаттеров"
+                             IconSize="24"
+                             MaxWidth="420"
+                             VerticalAlignment="Center"
+                             HorizontalAlignment="Center"
+                             Margin="16"
+                             Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}" />
+
         <Grid Grid.Row="3"
-              Margin="16,4,16,16">
+              Margin="16,4,16,16"
+              Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220" MinWidth="160" />
                 <ColumnDefinition Width="5" />
@@ -193,7 +211,7 @@
                 <TextBlock Grid.Row="1"
                            Style="{StaticResource TextBlock.Subtle}"
                            VerticalAlignment="Top"
-                           Text="Выберите стрим, чтобы увидеть его сегменты"
+                           Text="Сегментов нет"
                            TextWrapping="Wrap"
                            Visibility="{Binding HasSegments, Converter={StaticResource InverseBoolToVisibility}}" />
 
@@ -247,7 +265,7 @@
                 <TextBlock Grid.Row="1"
                            Style="{StaticResource TextBlock.Subtle}"
                            VerticalAlignment="Top"
-                           Text="Выберите стрим, чтобы увидеть его чаттеров"
+                           Text="Чаттеров нет"
                            TextWrapping="Wrap"
                            Visibility="{Binding HasChatters, Converter={StaticResource InverseBoolToVisibility}}" />
 

@@ -37,23 +37,27 @@
                    TextTrimming="CharacterEllipsis" />
 
         <ContentControl Content="{Binding StreamCard}"
-                        Margin="0,0,0,10" />
+                        Margin="0,0,0,10"
+                        Visibility="{Binding HasOutputs, Converter={StaticResource BoolToVisibility}}" />
 
         <ContentControl Content="{Binding RecordCard}"
-                        Margin="0,0,0,14" />
+                        Margin="0,0,0,14"
+                        Visibility="{Binding HasOutputs, Converter={StaticResource BoolToVisibility}}" />
 
-        <TextBlock Text="Аудиоисточники"
-                   Style="{StaticResource TextBlock.Subtle}"
-                   Margin="0,0,0,6" />
+        <StackPanel Visibility="{Binding IsUnavailable, Converter={StaticResource InverseBoolToVisibility}}">
+            <TextBlock Text="Аудиоисточники"
+                       Style="{StaticResource TextBlock.Subtle}"
+                       Margin="0,0,0,6" />
 
-        <ItemsControl ItemsSource="{Binding AudioSources}"
-                      Visibility="{Binding HasAudioSources, Converter={StaticResource BoolToVisibility}}" />
+            <ItemsControl ItemsSource="{Binding AudioSources}"
+                          Visibility="{Binding HasAudioSources, Converter={StaticResource BoolToVisibility}}" />
 
-        <controls:EmptyState Icon="Mic"
-                             IconSize="22"
-                             Heading="Источники не найдены"
-                             Description="Включите OBS-интеграцию и настройте аудиоисточники."
-                             HorizontalAlignment="Stretch"
-                             Visibility="{Binding HasAudioSources, Converter={StaticResource InverseBoolToVisibility}}" />
+            <controls:EmptyState Icon="Mic"
+                                 IconSize="22"
+                                 Heading="Источники не найдены"
+                                 Description="Включите OBS-интеграцию и настройте аудиоисточники."
+                                 HorizontalAlignment="Stretch"
+                                 Visibility="{Binding HasAudioSources, Converter={StaticResource InverseBoolToVisibility}}" />
+        </StackPanel>
     </StackPanel>
 </UserControl>

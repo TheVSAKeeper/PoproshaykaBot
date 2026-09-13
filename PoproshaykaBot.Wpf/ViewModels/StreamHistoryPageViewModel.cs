@@ -27,6 +27,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     [NotifyPropertyChangedFor(nameof(DetailMessages))]
     [NotifyPropertyChangedFor(nameof(DetailChatters))]
     [NotifyPropertyChangedFor(nameof(DetailViewers))]
+    [NotifyPropertyChangedFor(nameof(HasSelection))]
     private StreamSessionRowViewModel? _selectedRow;
 
     [ObservableProperty]
@@ -38,6 +39,8 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public ObservableCollection<StreamSessionRowViewModel> Sessions => _sessions;
     public ObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];
     public ObservableCollection<StreamSessionChatterRowViewModel> Chatters { get; } = [];
+
+    public bool HasSelection => SelectedRow is not null;
 
     public bool HasSessions => _sessions.Count > 0;
     public bool HasSegments => Segments.Count > 0;

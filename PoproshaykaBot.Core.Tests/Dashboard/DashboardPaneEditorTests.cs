@@ -350,6 +350,41 @@ public sealed class DashboardPaneEditorTests
         }
     }
 
+    [TestCase(0.2, 0.5, 0.3, 0.5, 0.3)]
+    [TestCase(0.2, 0.79, 0.01, 0.76, 0.04)]
+    public void Resize_ANodeWithAContentSizedChild_LeavesItsWeightUnsetAndSplitsOnlyTheRest(
+        double content,
+        double first,
+        double second,
+        double expectedFirst,
+        double expectedSecond)
+    {
+        var root = Columns(Leaf("stream-info", null), Leaf("twitch-chat", 0.4), Leaf("polls-control", 0.4));
+
+        Assert.That(DashboardPaneEditor.TryResize(root, [], [content, first, second], out var result), Is.True);
+        Assert.That(Weights((SplitPane)result), Is.EqualTo(new double?[] { null, expectedFirst, expectedSecond }).Within(1e-9),
+            "Плитка по содержимому доли не получает, а соседи делят между собой только остаток – иначе первый же разделитель превращает её в звёздочный трек.");
+    }
+
+    [Test]
+    public void Resize_ANodeWhereOnlyOneChildCarriesAWeight_IsRefused()
+    {
+        var root = Columns(Leaf("stream-info", null), Leaf("twitch-chat", 0.6));
+
+        Assert.That(DashboardPaneEditor.TryResize(root, [], [0.3, 0.7], out _), Is.False,
+            "Двигать нечего: единственная доля узла и так занимает весь остаток.");
+    }
+
+    [Test]
+    public void Resize_ANodeWithoutAnyWeights_AuthorsThemAll()
+    {
+        var root = Columns(Leaf("stream-info", null), Leaf("twitch-chat", null));
+
+        Assert.That(DashboardPaneEditor.TryResize(root, [], [0.3, 0.7], out var result), Is.True);
+        Assert.That(Weights((SplitPane)result), Is.EqualTo(new double?[] { 0.3, 0.7 }).Within(1e-9),
+            "Раскладка без единой доли пишет их с первого разделителя – пустой вес там означает «не задано», а не «по содержимому».");
+    }
+
     [Test]
     public void Resize_APathThatDoesNotLandOnASplit_IsRefused()
     {
@@ -368,6 +403,62 @@ public sealed class DashboardPaneEditorTests
         var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
 
         Assert.That(DashboardPaneEditor.TryResize(root, [], weights, out _), Is.False);
+    }
+
+    [TestCase(SplitOrientation.Columns, true)]
+    [TestCase(SplitOrientation.Rows, false)]
+    public void ClearFixedWeights_LeafFixedAlongTheSplit_LosesItsWeight(SplitOrientation axis, bool expected)
+    {
+        var root = Columns(Leaf("stream-info", 0.4), Leaf("twitch-chat", 0.6));
+
+        var cleared = DashboardPaneEditor.TryClearFixedWeights(
+            root,
+            (typeId, orientation) => orientation == axis && string.Equals(typeId, "stream-info", StringComparison.Ordinal),
+            out var result);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cleared, Is.EqualTo(expected), "Фиксированность осевая: вдоль другой оси доля обязана остаться.");
+            Assert.That(Weights((SplitPane)result), Is.EqualTo(expected ? new double?[] { null, 0.6 } : [0.4, 0.6]));
+        }
+    }
+
+    [Test]
+    public void ClearFixedWeights_NodeOfFixedLeaves_LosesItsWeightAndKeepsTheCrossAxis()
+    {
+        var root = Columns(Rows(Leaf("stream-info", 0.5), Leaf("broadcast-status", 0.5), 0.3), Leaf("twitch-chat", 0.7));
+
+        var cleared = TryClearAlongColumns(root, out var result, "stream-info", "broadcast-status");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cleared, Is.True);
+            Assert.That(Weights((SplitPane)result), Is.EqualTo(new double?[] { null, 0.7 }));
+            Assert.That(Weights((SplitPane)((SplitPane)result).Children[0].Pane), Is.EqualTo(new double?[] { 0.5, 0.5 }),
+                "Доли внутри узла идут по его собственной оси и обнулению не подлежат.");
+        }
+    }
+
+    [Test]
+    public void ClearFixedWeights_NodeWithAStretchingLeaf_IsLeftAlone()
+    {
+        var root = Columns(Rows(Leaf("stream-info", 0.5), Leaf("twitch-chat", 0.5), 0.3), Leaf("polls-control", 0.7));
+
+        var cleared = TryClearAlongColumns(root, out var result, "stream-info");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cleared, Is.False, "Узел фиксирован, только когда фиксированы все его листья.");
+            Assert.That(result, Is.SameAs(root));
+        }
+    }
+
+    private static bool TryClearAlongColumns(DashboardPane root, out DashboardPane result, params string[] fixedTypeIds)
+    {
+        return DashboardPaneEditor.TryClearFixedWeights(
+            root,
+            (typeId, orientation) => orientation == SplitOrientation.Columns && fixedTypeIds.Contains(typeId, StringComparer.Ordinal),
+            out result);
     }
 
     private static DashboardPane Nested(int depth)

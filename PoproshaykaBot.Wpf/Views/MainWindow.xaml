@@ -12,8 +12,8 @@
         Title="PoproshaykaBot"
         Height="720"
         Width="1100"
-        MinHeight="520"
-        MinWidth="880"
+        MinHeight="640"
+        MinWidth="1024"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="False"
@@ -48,7 +48,6 @@
             <StackPanel>
                 <views:OnboardingBannerView DataContext="{Binding OnboardingBanner}" />
                 <views:UpdateBannerView DataContext="{Binding UpdateBanner}" />
-                <views:DebugBannerView DataContext="{Binding DebugBanner}" />
             </StackPanel>
         </keepshell:ShellLayout.ContentBanner>
     </keepshell:ShellLayout>
