@@ -1,6 +1,7 @@
 ﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.StatusBarView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -80,17 +81,49 @@
 
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal"
-                        HorizontalAlignment="Right"
-                        DataContext="{Binding StreamMonitoring}"
-                        Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="Мониторинг стрима"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource Fg.Secondary}"
-                           Opacity="0.7" />
-                <ContentPresenter Content="{Binding Bot}"
-                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
-                <ContentPresenter Content="{Binding Broadcaster}"
-                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
+                        HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal"
+                            DataContext="{Binding StreamMonitoring}"
+                            Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="Мониторинг стрима"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource Fg.Secondary}"
+                               Opacity="0.7" />
+                    <ContentPresenter Content="{Binding Bot}"
+                                      ContentTemplate="{StaticResource MonitoringIndicator}" />
+                    <ContentPresenter Content="{Binding Broadcaster}"
+                                      ContentTemplate="{StaticResource MonitoringIndicator}" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal"
+                            Margin="16,0,0,0"
+                            DataContext="{Binding DebugBanner}"
+                            AutomationProperties.Name="Отладочный канал"
+                            ToolTip="{Binding Text}"
+                            Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="TextElement.Foreground"
+                                    Value="{DynamicResource State.InfoText}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSendingAllowed}"
+                                             Value="True">
+                                    <Setter Property="TextElement.Foreground"
+                                            Value="{DynamicResource State.WarningText}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Bug}"
+                                              Width="13"
+                                              Height="13"
+                                              VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding ShortText}"
+                               Margin="6,0,0,0"
+                               VerticalAlignment="Center"
+                               TextWrapping="NoWrap" />
+                </StackPanel>
             </StackPanel>
         </Grid>
     </Border>
