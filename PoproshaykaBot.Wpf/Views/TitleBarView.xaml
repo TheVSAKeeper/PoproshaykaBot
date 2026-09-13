@@ -80,11 +80,15 @@
             <StackPanel Grid.Column="0"
                         Orientation="Horizontal"
                         Margin="14,0">
-                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.LayoutDashboard}"
-                                          Width="16"
-                                          Height="16"
-                                          VerticalAlignment="Center"
-                                          Foreground="{DynamicResource Accent.Text}" />
+                <Image Width="18"
+                       Height="18"
+                       VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality">
+                    <Image.Source>
+                        <BitmapImage UriSource="pack://application:,,,/Assets/icon.ico"
+                                     DecodePixelWidth="48" />
+                    </Image.Source>
+                </Image>
                 <TextBlock Text="PoproshaykaBot"
                            Margin="10,0,0,0"
                            VerticalAlignment="Center"

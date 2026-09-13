@@ -29,7 +29,11 @@ public partial class MainWindow : Window
         Closing += OnClosing;
 
         ImportWinFormsPlacement(layoutStore);
-        WindowPlacement.Restore(this, _settings, WindowKeys);
+
+        if (!App.IsGallery)
+        {
+            WindowPlacement.Restore(this, _settings, WindowKeys);
+        }
     }
 
     private void ImportWinFormsPlacement(DashboardLayoutStore layoutStore)

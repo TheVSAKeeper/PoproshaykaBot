@@ -1,6 +1,8 @@
-﻿using PoproshaykaBot.Core.Settings.Ui;
+﻿using KeepShell.Bootstrap;
+using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
+using System.ComponentModel;
 
 namespace PoproshaykaBot.Wpf.Tests;
 
@@ -132,6 +134,101 @@ public class DashboardPaneLayoutTests
             Assert.That(chat?.Width.Length.IsAuto, Is.True, "Свёрнутая плитка – это её шапка, растягивать её не за что.");
             Assert.That(chat?.Height.Length.IsAuto, Is.True);
         });
+    }
+
+    [TestCase(SplitOrientation.Columns, true)]
+    [TestCase(SplitOrientation.Rows, false)]
+    public void Collapsed_tile_drops_its_width_floor_to_the_strip_only_inside_a_columns_split(SplitOrientation orientation, bool strip)
+    {
+        var columns = orientation == SplitOrientation.Columns;
+        var floor = strip ? DashboardTileViewModel.ScaledCollapsedStripWidth : 280d;
+
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = columns ? 2 : 1,
+            RowCount = columns ? 1 : 2,
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "twitch-chat", columns ? 0 : 1, columns ? 1 : 0, 1, 1);
+
+        layout.Tiles.Single(tile => string.Equals(tile.TypeId, "twitch-chat", StringComparison.Ordinal)).IsCollapsed = true;
+
+        using var dashboard = CreateDashboard(layout, new FakeTile("stream-info"), new FakeTile("twitch-chat", fills: true, minWidth: 280));
+
+        var root = dashboard.Pane as SplitPaneLayout;
+        var chat = root?.Children[1].Pane as TilePaneLayout;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root?.Orientation, Is.EqualTo(orientation));
+            Assert.That(chat?.Tile.TypeId, Is.EqualTo("twitch-chat"));
+            Assert.That(chat?.Width.Min, Is.EqualTo(floor),
+                "Вдоль колоночного разреза пол свёрнутой плитки – ширина полосы, а не её собственный минимум; поперёк она остаётся шапкой во всю колонку.");
+            Assert.That(chat?.Tile.IsCollapsedToStrip, Is.EqualTo(strip));
+        });
+
+        dashboard.SetStacked(true);
+
+        Assert.That(chat?.Tile.IsCollapsedToStrip, Is.False,
+            "В стопке лист лежит во всю ширину, вертикальной полосе там взяться неоткуда.");
+
+        dashboard.SetStacked(false);
+
+        Assert.That(chat?.Tile.IsCollapsedToStrip, Is.EqualTo(strip), "Выход из стопки возвращает полосу.");
+    }
+
+    [Test]
+    public void Font_scale_change_moves_the_strip_width_and_the_floor_of_the_collapsed_leaf_together()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 1,
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "twitch-chat", 0, 1, 1, 1);
+
+        layout.Tiles.Single(tile => string.Equals(tile.TypeId, "twitch-chat", StringComparison.Ordinal)).IsCollapsed = true;
+
+        using var dashboard = CreateDashboard(layout, new FakeTile("stream-info"), new FakeTile("twitch-chat", fills: true, minWidth: 280));
+
+        Assert.That(
+            ((dashboard.Pane as SplitPaneLayout)?.Children[1].Pane as TilePaneLayout)?.Width.Min,
+            Is.EqualTo(DashboardTileViewModel.CollapsedStripWidth).Within(0.001),
+            "До смены масштаба пол полосы – её собственная ширина.");
+
+        var notified = new List<string?>();
+
+        void OnStaticPropertyChanged(object? sender, PropertyChangedEventArgs args)
+        {
+            notified.Add(args.PropertyName);
+        }
+
+        DashboardTileViewModel.StaticPropertyChanged += OnStaticPropertyChanged;
+
+        try
+        {
+            FontScaleManager.Apply(1.5);
+
+            var chat = (dashboard.Pane as SplitPaneLayout)?.Children[1].Pane as TilePaneLayout;
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(notified, Does.Contain(nameof(DashboardTileViewModel.ScaledCollapsedStripWidth)),
+                    "Ширину полосы шаблон берёт привязкой к статическому свойству: без уведомления повёрнутый заголовок остался бы в полосе прежней ширины.");
+                Assert.That(DashboardTileViewModel.ScaledCollapsedStripWidth,
+                    Is.EqualTo(DashboardTileViewModel.CollapsedStripWidth * 1.5).Within(0.001));
+                Assert.That(chat?.Width.Min, Is.EqualTo(DashboardTileViewModel.ScaledCollapsedStripWidth).Within(0.001),
+                    "Пол трека считает раскладка, поэтому смена масштаба обязана её повторить – иначе полоса шире своего пола и заголовок режется многоточием.");
+            });
+        }
+        finally
+        {
+            DashboardTileViewModel.StaticPropertyChanged -= OnStaticPropertyChanged;
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+        }
     }
 
     [Test]

@@ -11,6 +11,7 @@ public partial class EmbeddedTwitchAuthWindow : Window
 {
     private readonly EmbeddedTwitchAuthDialogViewModel _viewModel;
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly WebViewThemeBackground _themeBackground;
 
     private bool _initialized;
     private bool _tornDown;
@@ -31,6 +32,7 @@ public partial class EmbeddedTwitchAuthWindow : Window
         Closing += OnClosing;
         Closed += OnClosed;
         Dispatcher.ShutdownStarted += OnShutdownStarted;
+        _themeBackground = WebViewThemeBackground.Attach(WebView);
     }
 
     private static void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
@@ -158,6 +160,7 @@ public partial class EmbeddedTwitchAuthWindow : Window
         _viewModel.NavigateRequested -= OnNavigateRequested;
         _viewModel.CloseRequested -= OnCloseRequested;
 
+        _themeBackground.Detach();
         _lifetime.Cancel();
 
         if (WebView.CoreWebView2 is { } core)

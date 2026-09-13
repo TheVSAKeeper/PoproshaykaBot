@@ -12,6 +12,7 @@ namespace PoproshaykaBot.Wpf.Views.Tiles;
 public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlayPreviewTileViewModel>
 {
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly WebViewThemeBackground _themeBackground;
 
     private bool _initialized;
     private bool _disposed;
@@ -23,6 +24,7 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         Dispatcher.ShutdownStarted += OnShutdownStarted;
+        _themeBackground = WebViewThemeBackground.Attach(WebView);
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -75,6 +77,7 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
         Dispatcher.ShutdownStarted -= OnShutdownStarted;
+        _themeBackground.Detach();
         _lifetime.Cancel();
 
         if (_viewModel is not null)

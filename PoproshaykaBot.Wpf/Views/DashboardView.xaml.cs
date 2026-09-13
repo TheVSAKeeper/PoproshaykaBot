@@ -430,7 +430,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
             var splitter = new GridSplitter
             {
-                ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+                ResizeBehavior = GridResizeBehavior.PreviousAndCurrent,
                 ResizeDirection = alongColumns ? GridResizeDirection.Columns : GridResizeDirection.Rows,
                 Background = Brushes.Transparent,
             };
