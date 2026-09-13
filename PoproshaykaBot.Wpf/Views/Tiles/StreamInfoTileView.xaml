@@ -95,8 +95,9 @@
         </Grid>
 
         <Image Source="{Binding Thumbnail}"
-               Stretch="UniformToFill"
-               MaxHeight="180"
+               Stretch="Uniform"
+               MaxHeight="160"
+               HorizontalAlignment="Center"
                Margin="0,4,0,0"
                RenderOptions.BitmapScalingMode="HighQuality"
                Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibility}}" />

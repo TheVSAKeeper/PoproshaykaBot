@@ -1,7 +1,9 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.Bootstrap;
 using MahApps.Metro.IconPacks;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
@@ -12,6 +14,9 @@ public abstract partial class DashboardTileViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isCollapsed;
+
+    [ObservableProperty]
+    private bool _isCollapsedToStrip;
 
     protected DashboardTileViewModel(
         string typeId,
@@ -33,6 +38,17 @@ public abstract partial class DashboardTileViewModel : ObservableObject
 
     public const int DefaultMinHeight = 124;
 
+    public const int CollapsedStripWidth = 38;
+
+    public static double ScaledCollapsedStripWidth => CollapsedStripWidth * FontScaleManager.Current;
+
+    public static event EventHandler<PropertyChangedEventArgs>? StaticPropertyChanged;
+
+    public static void NotifyScaleChanged()
+    {
+        StaticPropertyChanged?.Invoke(null, new(nameof(ScaledCollapsedStripWidth)));
+    }
+
     public string TypeId { get; }
 
     public int? MaxWidth { get; }
@@ -50,6 +66,8 @@ public abstract partial class DashboardTileViewModel : ObservableObject
     public virtual bool GrowsWithSpace => false;
 
     public virtual bool SizesToContent => false;
+
+    public virtual bool ContentFillsTile => false;
 
     public ObservableCollection<ToolbarItemViewModel> HeaderActions { get; } = [];
 

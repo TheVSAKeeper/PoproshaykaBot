@@ -35,7 +35,7 @@ public static class DashboardLayoutReconciler
 
         foreach (var typeId in catalogTypeIds)
         {
-            if (string.IsNullOrEmpty(typeId) || !present.Add(typeId))
+            if (string.IsNullOrEmpty(typeId) || DashboardLayoutTree.IsEmptySlot(typeId) || !present.Add(typeId))
             {
                 continue;
             }
@@ -64,7 +64,7 @@ public static class DashboardLayoutReconciler
 
         foreach (var tile in preserved)
         {
-            if (!written.Add(tile.TypeId))
+            if (DashboardLayoutTree.IsEmptySlot(tile.TypeId) || !written.Add(tile.TypeId))
             {
                 continue;
             }
@@ -115,7 +115,7 @@ public static class DashboardLayoutReconciler
         var columnCount = Math.Max(layout.ColumnCount, minimum.Columns);
         var rowCount = Math.Max(layout.RowCount, minimum.Rows);
 
-        var placed = DashboardLayoutTree.WithGridWeights(layout.Root, VisibleRects(layout));
+        var placed = DashboardLayoutTree.WithGridWeights(layout.Root, VisibleRects(layout), columnCount, rowCount);
 
         if (DashboardLayoutTree.TryProject(placed, columnCount, rowCount) is not { } projected)
         {
@@ -253,7 +253,7 @@ public static class DashboardLayoutReconciler
     private static List<TileRect> VisibleRects(DashboardLayoutSettings layout)
     {
         return layout.Tiles
-            .Where(tile => tile is { IsVisible: true })
+            .Where(tile => tile is { IsVisible: true } && !DashboardLayoutTree.IsEmptySlot(tile.TypeId))
             .Select(tile => new TileRect(tile.TypeId, tile.Row, tile.Column, tile.RowSpan, tile.ColumnSpan))
             .ToList();
     }
@@ -267,7 +267,7 @@ public static class DashboardLayoutReconciler
             return false;
         }
 
-        return Matches(root) || Matches(DashboardLayoutTree.WithGridWeights(root, rects));
+        return Matches(root) || Matches(DashboardLayoutTree.WithGridWeights(root, rects, layout.ColumnCount, layout.RowCount));
 
         bool Matches(DashboardPane pane)
         {

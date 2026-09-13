@@ -9,6 +9,36 @@
              d:DesignHeight="320"
              d:DesignWidth="380">
 
+    <UserControl.Resources>
+        <Style x:Key="ProfileCard"
+               TargetType="Border"
+               BasedOn="{StaticResource Card.Inset}">
+            <Setter Property="Margin"
+                    Value="0,0,0,8" />
+            <Setter Property="Padding"
+                    Value="10" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsActive}"
+                             Value="True">
+                    <Setter Property="Background"
+                            Value="{DynamicResource State.SuccessSoft}" />
+                    <Setter Property="BorderBrush"
+                            Value="{DynamicResource State.Success}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ProfileCardMeta"
+               TargetType="TextBlock">
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Secondary}" />
+            <Setter Property="FontSize"
+                    Value="{DynamicResource Font.Size.XS}" />
+            <Setter Property="TextTrimming"
+                    Value="CharacterEllipsis" />
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
         <TextBlock Text="Профилей нет – добавьте кнопкой «+» в заголовке"
                    Style="{StaticResource TextBlock.Subtle}"
@@ -17,9 +47,14 @@
                    VerticalAlignment="Top"
                    Visibility="{Binding HasProfiles, Converter={StaticResource InverseBoolToVisibility}}" />
 
-        <StackPanel Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisibility}}">
+        <Grid Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-            <TextBlock Text="{Binding StatusMessage}"
+            <TextBlock Grid.Row="0"
+                       Text="{Binding StatusMessage}"
                        FontSize="{DynamicResource Font.Size.S}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,8"
@@ -36,127 +71,113 @@
                 </TextBlock.Style>
             </TextBlock>
 
-            <ItemsControl ItemsSource="{Binding Items}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type vm:BroadcastProfileItemViewModel}">
-                        <Border Margin="0,0,8,8"
-                                Padding="10"
-                                BorderThickness="1"
-                                CornerRadius="{DynamicResource Radius.S}">
-                            <Border.Style>
-                                <Style TargetType="Border">
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource State.SuccessSoft}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource State.Success}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Border.Style>
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:BroadcastProfileItemViewModel}">
+                            <Border Style="{StaticResource ProfileCard}">
+                                <Border.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Применить" Command="{Binding ApplyCommand}" />
+                                        <Separator />
+                                        <MenuItem Header="Редактировать…" Command="{Binding EditCommand}" />
+                                        <MenuItem Header="Дублировать" Command="{Binding DuplicateCommand}" />
+                                        <Separator />
+                                        <MenuItem Header="Удалить" Command="{Binding DeleteCommand}" />
+                                    </ContextMenu>
+                                </Border.ContextMenu>
 
-                            <Border.ContextMenu>
-                                <ContextMenu>
-                                    <MenuItem Header="Применить" Command="{Binding ApplyCommand}" />
-                                    <Separator />
-                                    <MenuItem Header="Редактировать…" Command="{Binding EditCommand}" />
-                                    <MenuItem Header="Дублировать" Command="{Binding DuplicateCommand}" />
-                                    <Separator />
-                                    <MenuItem Header="Удалить" Command="{Binding DeleteCommand}" />
-                                </ContextMenu>
-                            </Border.ContextMenu>
+                                <StackPanel>
 
-                            <StackPanel MinWidth="140" MaxWidth="300">
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" MinWidth="64" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
 
-                                <DockPanel Margin="0,0,0,6">
-                                    <StackPanel DockPanel.Dock="Right"
-                                                Orientation="Horizontal"
-                                                VerticalAlignment="Center">
-                                        <Border Style="{StaticResource Badge.Success}"
-                                                Margin="4,0,0,0"
-                                                Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="Активен" />
-                                        </Border>
-                                        <Border Style="{StaticResource Badge}"
-                                                Margin="4,0,0,0"
-                                                Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
+                                        <StackPanel Grid.Column="1"
+                                                    Orientation="Horizontal"
+                                                    VerticalAlignment="Center">
+                                            <Border Style="{StaticResource Badge}"
+                                                    Margin="4,0,0,0"
+                                                    Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
+                                                <TextBlock Text="{Binding NumberBadge}"
+                                                           FontFamily="{DynamicResource Font.Mono}" />
+                                            </Border>
+                                            <Border Style="{StaticResource Badge.Success}"
+                                                    Margin="4,0,0,0"
+                                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
+                                                <TextBlock Text="Активен" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding Name}"
+                                                   FontSize="{DynamicResource Font.Size.M}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Fg.Primary}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Name}"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <TextBlock Text="{Binding TitleDisplay}"
+                                               Style="{StaticResource ProfileCardMeta}"
+                                               FontStyle="Italic"
+                                               ToolTip="{Binding TitleDisplay}"
+                                               Visibility="{Binding HasTitleDisplay, Converter={StaticResource BoolToVisibility}}" />
+
+                                    <TextBlock Text="{Binding MetaLine}"
+                                               Style="{StaticResource ProfileCardMeta}"
+                                               Margin="0,2,0,0"
+                                               ToolTip="{Binding MetaLine}"
+                                               Visibility="{Binding HasMetaLine, Converter={StaticResource BoolToVisibility}}" />
+
+                                    <TextBlock Text="Расходится с текущим стримом"
+                                               Foreground="{DynamicResource State.WarningText}"
+                                               FontSize="{DynamicResource Font.Size.XS}"
+                                               Margin="0,2,0,0"
+                                               Visibility="{Binding HasDrift, Converter={StaticResource BoolToVisibility}}" />
+
+                                    <WrapPanel Margin="0,4,0,0">
+                                        <Button Content="Применить"
+                                                Command="{Binding ApplyCommand}"
+                                                Style="{StaticResource Button.Secondary}"
+                                                Margin="0,4,0,0" />
+                                        <StackPanel Orientation="Horizontal"
+                                                    Margin="12,4,0,0"
+                                                    Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
+                                            <Button Content="–"
+                                                    Command="{Binding DecrementNumberCommand}"
+                                                    Style="{StaticResource Button.Secondary}"
+                                                    Padding="8,2" />
                                             <TextBlock Text="{Binding NumberBadge}"
-                                                       FontFamily="{DynamicResource Font.Mono}" />
-                                        </Border>
-                                    </StackPanel>
-                                    <TextBlock Text="{Binding Name}"
-                                               FontSize="{DynamicResource Font.Size.M}"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Fg.Primary}"
-                                               TextTrimming="CharacterEllipsis"
-                                               VerticalAlignment="Center" />
-                                </DockPanel>
+                                                       FontFamily="{DynamicResource Font.Mono}"
+                                                       FontSize="{DynamicResource Font.Size.S}"
+                                                       Foreground="{DynamicResource Fg.Secondary}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="8,0" />
+                                            <Button Content="+"
+                                                    Command="{Binding IncrementNumberCommand}"
+                                                    Style="{StaticResource Button.Secondary}"
+                                                    Padding="8,2" />
+                                        </StackPanel>
+                                        <ProgressBar IsIndeterminate="True"
+                                                     Width="40"
+                                                     Height="4"
+                                                     Margin="12,4,0,0"
+                                                     VerticalAlignment="Center"
+                                                     Visibility="{Binding IsApplyInFlight, Converter={StaticResource BoolToVisibility}}" />
+                                    </WrapPanel>
 
-                                <TextBlock Text="{Binding TitleDisplay}"
-                                           FontStyle="Italic"
-                                           Foreground="{DynamicResource Fg.Secondary}"
-                                           FontSize="{DynamicResource Font.Size.S}"
-                                           TextWrapping="Wrap"
-                                           Margin="0,0,0,4"
-                                           Visibility="{Binding HasTitleDisplay, Converter={StaticResource BoolToVisibility}}" />
-
-                                <TextBlock Text="{Binding MetaLine}"
-                                           Style="{StaticResource TextBlock.Subtle}"
-                                           FontSize="{DynamicResource Font.Size.S}"
-                                           TextWrapping="Wrap"
-                                           Margin="0,0,0,4"
-                                           Visibility="{Binding HasMetaLine, Converter={StaticResource BoolToVisibility}}" />
-
-                                <TextBlock Text="Расходится с текущим стримом"
-                                           Foreground="{DynamicResource State.WarningText}"
-                                           FontSize="{DynamicResource Font.Size.XS}"
-                                           Margin="0,0,0,4"
-                                           Visibility="{Binding HasDrift, Converter={StaticResource BoolToVisibility}}" />
-
-                                <DockPanel Margin="0,6,0,0">
-                                    <ProgressBar DockPanel.Dock="Right"
-                                                 IsIndeterminate="True"
-                                                 Width="40"
-                                                 Height="4"
-                                                 Margin="6,0,0,0"
-                                                 VerticalAlignment="Center"
-                                                 Visibility="{Binding IsApplyInFlight, Converter={StaticResource BoolToVisibility}}" />
-                                    <Button Content="Применить"
-                                            Command="{Binding ApplyCommand}"
-                                            Style="{StaticResource Button.Secondary}" />
-                                </DockPanel>
-
-                                <StackPanel Orientation="Horizontal"
-                                            Margin="0,4,0,0"
-                                            Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
-                                    <Button Content="–"
-                                            Command="{Binding DecrementNumberCommand}"
-                                            Style="{StaticResource Button.Secondary}"
-                                            Padding="8,2" />
-                                    <TextBlock Text="{Binding NumberBadge}"
-                                               FontFamily="{DynamicResource Font.Mono}"
-                                               FontSize="{DynamicResource Font.Size.S}"
-                                               Foreground="{DynamicResource Fg.Secondary}"
-                                               VerticalAlignment="Center"
-                                               Margin="8,0" />
-                                    <Button Content="+"
-                                            Command="{Binding IncrementNumberCommand}"
-                                            Style="{StaticResource Button.Secondary}"
-                                            Padding="8,2" />
                                 </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
 
-                            </StackPanel>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
-        </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

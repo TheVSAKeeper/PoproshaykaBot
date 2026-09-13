@@ -4,8 +4,20 @@ namespace PoproshaykaBot.Core.Dashboard;
 
 public static class DashboardLayoutTree
 {
+    public const string EmptySlotTypeId = "__empty";
+
     private const int MaxCells = 4096;
     private const int MaxDepth = 32;
+
+    public static bool IsEmptySlot(string? typeId)
+    {
+        return string.Equals(typeId, EmptySlotTypeId, StringComparison.Ordinal);
+    }
+
+    public static bool IsEmptySlot(DashboardPane? pane)
+    {
+        return pane is TilePane tile && IsEmptySlot(tile.TypeId);
+    }
 
     public static DashboardPane? TryBuild(IEnumerable<DashboardTileSettings> tiles, int columnCount, int rowCount)
     {
@@ -13,7 +25,12 @@ public static class DashboardLayoutTree
 
         var rects = CollectVisible(tiles, columnCount, rowCount);
 
-        return rects is null ? null : Build(rects, 0, 0, rowCount, columnCount);
+        if (rects is null || Build(rects, 0, 0, rowCount, columnCount) is not { } root)
+        {
+            return null;
+        }
+
+        return Collapse(root, 0);
     }
 
     public static IReadOnlyList<TileRect>? TryProject(DashboardPane root, int columnCount, int rowCount)
@@ -37,7 +54,7 @@ public static class DashboardLayoutTree
         return Measure(root, 0);
     }
 
-    public static DashboardPane WithGridWeights(DashboardPane root, IEnumerable<TileRect> rects)
+    public static DashboardPane WithGridWeights(DashboardPane root, IEnumerable<TileRect> rects, int columnCount, int rowCount)
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(rects);
@@ -49,10 +66,14 @@ public static class DashboardLayoutTree
             byTypeId.TryAdd(rect.TypeId, rect);
         }
 
-        return Substitute(root, byTypeId, 0);
+        return Substitute(root, byTypeId, 0, new(0, 0, Math.Max(rowCount, 0), Math.Max(columnCount, 0)));
     }
 
-    private static DashboardPane Substitute(DashboardPane pane, IReadOnlyDictionary<string, TileRect> rects, int depth)
+    private static DashboardPane Substitute(
+        DashboardPane pane,
+        IReadOnlyDictionary<string, TileRect> rects,
+        int depth,
+        GridBounds bounds)
     {
         if (depth > MaxDepth
             || pane is not SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 1 } split)
@@ -60,8 +81,10 @@ public static class DashboardLayoutTree
             return pane;
         }
 
-        var children = new PaneSlot[split.Children.Count];
-        var spans = new int[split.Children.Count];
+        var alongColumns = split.Orientation == SplitOrientation.Columns;
+        var start = alongColumns ? bounds.Column : bounds.Row;
+        var end = alongColumns ? bounds.ColumnEnd : bounds.RowEnd;
+        var extents = new (int Start, int End)?[split.Children.Count];
 
         for (var index = 0; index < split.Children.Count; index++)
         {
@@ -70,16 +93,72 @@ public static class DashboardLayoutTree
                 return pane;
             }
 
-            children[index] = new(Substitute(slot.Pane, rects, depth + 1), slot.Weight);
+            extents[index] = Extent(slot.Pane, split.Orientation, rects, depth);
+        }
 
-            spans[index] = Extent(slot.Pane, split.Orientation, rects, depth) is { } extent && extent.End > extent.Start
-                ? extent.End - extent.Start
-                : 0;
+        FillGaps(extents, start, end);
+
+        var children = new PaneSlot[split.Children.Count];
+        var spans = new int[split.Children.Count];
+
+        for (var index = 0; index < split.Children.Count; index++)
+        {
+            var slot = split.Children[index];
+            var extent = extents[index] ?? (start, start);
+
+            children[index] = new(Substitute(slot.Pane, rects, depth + 1, bounds.Cut(alongColumns, extent)), slot.Weight);
+            spans[index] = extent.End > extent.Start ? extent.End - extent.Start : 0;
         }
 
         ApplySpans(children, spans);
 
         return new SplitPane(split.Orientation, children);
+    }
+
+    private static void FillGaps((int Start, int End)?[] extents, int start, int end)
+    {
+        var cursor = start;
+        var pending = 0;
+
+        for (var index = 0; index <= extents.Length; index++)
+        {
+            var known = index < extents.Length ? extents[index] : (start: end, end: end);
+
+            if (known is null)
+            {
+                pending++;
+
+                continue;
+            }
+
+            if (pending > 0)
+            {
+                Spread(extents, index - pending, pending, cursor, known.Value.Start);
+            }
+
+            pending = 0;
+            cursor = known.Value.End;
+        }
+    }
+
+    private static void Spread((int Start, int End)?[] extents, int from, int count, int start, int end)
+    {
+        var total = end - start;
+
+        if (total < count)
+        {
+            return;
+        }
+
+        var offset = start;
+
+        for (var index = 0; index < count; index++)
+        {
+            var next = start + (int)Math.Round((double)total * (index + 1) / count, MidpointRounding.AwayFromZero);
+
+            extents[from + index] = (offset, next);
+            offset = next;
+        }
     }
 
     private static void ApplySpans(PaneSlot[] children, int[] spans)
@@ -154,16 +233,21 @@ public static class DashboardLayoutTree
 
                 foreach (var slot in split.Children)
                 {
-                    if (slot?.Pane is null || Extent(slot.Pane, orientation, rects, depth + 1) is not { } child)
+                    if (slot?.Pane is null)
                     {
                         return null;
+                    }
+
+                    if (Extent(slot.Pane, orientation, rects, depth + 1) is not { } child)
+                    {
+                        continue;
                     }
 
                     start = Math.Min(start, child.Start);
                     end = Math.Max(end, child.End);
                 }
 
-                return (start, end);
+                return end > start ? (start, end) : null;
 
             default:
                 return null;
@@ -184,6 +268,9 @@ public static class DashboardLayoutTree
 
         switch (pane)
         {
+            case TilePane tile when IsEmptySlot(tile.TypeId):
+                return new GridSize(0, 0);
+
             case TilePane tile:
                 return string.IsNullOrEmpty(tile.TypeId) ? null : new GridSize(1, 1);
 
@@ -228,7 +315,7 @@ public static class DashboardLayoutTree
 
         foreach (var tile in tiles)
         {
-            if (tile is null || !tile.IsVisible)
+            if (tile is null || !tile.IsVisible || IsEmptySlot(tile.TypeId))
             {
                 continue;
             }
@@ -261,15 +348,59 @@ public static class DashboardLayoutTree
             return null;
         }
 
-        foreach (var covered in occupied)
-        {
-            if (!covered)
-            {
-                return null;
-            }
-        }
+        AppendEmptySlots(rects, occupied, columnCount, rowCount);
 
         return rects;
+    }
+
+    private static void AppendEmptySlots(List<TileRect> rects, bool[,] occupied, int columnCount, int rowCount)
+    {
+        for (var row = 0; row < rowCount; row++)
+        {
+            for (var column = 0; column < columnCount; column++)
+            {
+                if (!occupied[row, column])
+                {
+                    rects.Add(new(EmptySlotTypeId, row, column, 1, 1));
+                }
+            }
+        }
+    }
+
+    private static DashboardPane Collapse(DashboardPane pane, int depth)
+    {
+        if (depth > MaxDepth || pane is not SplitPane { Children.Count: > 0 } split)
+        {
+            return pane;
+        }
+
+        var children = new List<PaneSlot>(split.Children.Count);
+
+        foreach (var slot in split.Children)
+        {
+            if (slot?.Pane is null)
+            {
+                return pane;
+            }
+
+            var child = Collapse(slot.Pane, depth + 1);
+
+            if (IsEmptySlot(child) && children.Count > 0 && IsEmptySlot(children[^1].Pane))
+            {
+                children[^1] = new(children[^1].Pane, Merge(children[^1].Weight, slot.Weight));
+
+                continue;
+            }
+
+            children.Add(new(child, slot.Weight));
+        }
+
+        return children.Count == 1 ? children[0].Pane : new SplitPane(split.Orientation, children);
+    }
+
+    private static double? Merge(double? first, double? second)
+    {
+        return IsExplicit(first) && IsExplicit(second) ? first!.Value + second!.Value : null;
     }
 
     private static bool TryOccupy(bool[,] occupied, TileRect rect)
@@ -292,6 +423,11 @@ public static class DashboardLayoutTree
 
     private static DashboardPane? Build(List<TileRect> rects, int row, int column, int rowEnd, int columnEnd)
     {
+        if (rects.Count == 0)
+        {
+            return null;
+        }
+
         if (rects.Count == 1)
         {
             return new TilePane(rects[0].TypeId);
@@ -387,6 +523,11 @@ public static class DashboardLayoutTree
 
     private static bool Project(DashboardPane pane, int row, int column, int rowEnd, int columnEnd, List<TileRect> projected)
     {
+        if (IsEmptySlot(pane))
+        {
+            return true;
+        }
+
         if (rowEnd <= row || columnEnd <= column)
         {
             return false;
@@ -559,5 +700,15 @@ public static class DashboardLayoutTree
         }
 
         return sizes;
+    }
+
+    private readonly record struct GridBounds(int Row, int Column, int RowEnd, int ColumnEnd)
+    {
+        public GridBounds Cut(bool alongColumns, (int Start, int End) extent)
+        {
+            return alongColumns
+                ? this with { Column = extent.Start, ColumnEnd = extent.End }
+                : this with { Row = extent.Start, RowEnd = extent.End };
+        }
     }
 }

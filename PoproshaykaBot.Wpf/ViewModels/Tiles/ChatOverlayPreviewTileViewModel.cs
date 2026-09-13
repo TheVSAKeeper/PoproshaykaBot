@@ -52,6 +52,8 @@ public sealed partial class ChatOverlayPreviewTileViewModel : DashboardTileViewM
 
     public override bool FillsAvailableSpace => true;
 
+    public override bool ContentFillsTile => true;
+
     public ILogger Logger { get; }
 
     public string UserDataFolder { get; }

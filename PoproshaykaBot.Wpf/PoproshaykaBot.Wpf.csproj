@@ -26,6 +26,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="..\PoproshaykaBot.Core\Assets\icon.ico" Link="Assets\icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

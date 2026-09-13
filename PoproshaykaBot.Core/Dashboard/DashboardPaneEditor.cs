@@ -16,6 +16,7 @@ public static class DashboardPaneEditor
         if (side == PaneSide.None
             || string.IsNullOrEmpty(targetTypeId)
             || string.IsNullOrEmpty(typeId)
+            || DashboardLayoutTree.IsEmptySlot(typeId)
             || !TryCollectLeaves(root, out var leaves)
             || !leaves.Contains(targetTypeId)
             || leaves.Contains(typeId))
@@ -83,7 +84,7 @@ public static class DashboardPaneEditor
             return false;
         }
 
-        result = normalized;
+        result = HasTile(normalized) ? normalized : null;
 
         return true;
     }
@@ -150,6 +151,16 @@ public static class DashboardPaneEditor
         return TryCollectLeaves(root, out _);
     }
 
+    private static bool HasTile(DashboardPane? pane)
+    {
+        return pane switch
+        {
+            TilePane tile => !DashboardLayoutTree.IsEmptySlot(tile.TypeId),
+            SplitPane split => split.Children.Any(child => HasTile(child.Pane)),
+            _ => false,
+        };
+    }
+
     private static bool TryCollectLeaves(DashboardPane root, out HashSet<string> leaves)
     {
         leaves = new(StringComparer.Ordinal);
@@ -166,6 +177,9 @@ public static class DashboardPaneEditor
 
         switch (pane)
         {
+            case TilePane tile when DashboardLayoutTree.IsEmptySlot(tile.TypeId):
+                return true;
+
             case TilePane tile:
                 return !string.IsNullOrEmpty(tile.TypeId) && leaves.Add(tile.TypeId);
 

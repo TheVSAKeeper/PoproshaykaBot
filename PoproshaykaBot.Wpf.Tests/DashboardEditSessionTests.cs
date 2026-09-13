@@ -215,6 +215,45 @@ public class DashboardEditSessionTests
         });
     }
 
+    [Test]
+    public void A_resize_next_to_a_hole_reaches_the_file_and_keeps_the_hole()
+    {
+        var store = new FakeLayoutStore(ColumnWithAHole());
+        var time = new ManualTimeProvider();
+
+        using var session = new DashboardEditSession(new(store), time);
+
+        Assert.That(session.Resize([], [0.75, 0.25]), Is.True, "Дыра – законный лист, и узел с ней поддаётся разделителю.");
+
+        session.Flush();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Weights(store.Saved)[0], Is.EqualTo(0.75).Within(0.001));
+            Assert.That(store.Saved!.Tiles.Where(tile => tile.IsVisible).Select(tile => tile.TypeId),
+                Is.EqualTo(new[] { "stream-info" }), "Пустышка не заводит себе записи в Tiles.");
+            Assert.That(store.Saved.Tiles.Single().RowSpan, Is.EqualTo(3), "Доля 0.75 от четырёх строк отдаёт плитке три, дыре – одну.");
+        });
+    }
+
+    private static DashboardLayoutSettings ColumnWithAHole()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 1,
+            RowCount = 4,
+            Root = new SplitPane(SplitOrientation.Rows,
+            [
+                new(new TilePane("stream-info"), 0.5),
+                new(new TilePane(DashboardLayoutTree.EmptySlotTypeId), 0.5),
+            ]),
+        };
+
+        layout.Tiles.Add(new() { Id = "stream-info", TypeId = "stream-info", Order = 0, Row = 0, Column = 0, ColumnSpan = 1, RowSpan = 2, IsVisible = true });
+
+        return layout;
+    }
+
     private static DashboardLayoutSettings SideBySide()
     {
         var layout = new DashboardLayoutSettings
