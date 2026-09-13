@@ -21,6 +21,8 @@ public sealed class KestrelHttpServer(
 
     public bool IsRunning { get; private set; }
 
+    public int? Port { get; private set; }
+
     public async Task StartAsync()
     {
         if (IsRunning)
@@ -72,6 +74,7 @@ public sealed class KestrelHttpServer(
 
             await _app.StartAsync();
 
+            Port = port;
             IsRunning = true;
 
             logger.LogInformation("HTTP сервер запущен на порту {Port}", port);
@@ -93,6 +96,7 @@ public sealed class KestrelHttpServer(
         try
         {
             IsRunning = false;
+            Port = null;
             await sseService.StopAsync();
 
             if (_app != null)

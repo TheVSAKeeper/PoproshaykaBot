@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using KeepShell.Mcp;
+using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
@@ -19,6 +20,7 @@ using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Mcp;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
@@ -219,6 +221,11 @@ public partial class App : Application
 
             window.Show();
 
+            if (!IsHeadless)
+            {
+                _services.GetRequiredService<McpServerHost>().Apply();
+            }
+
             ShutdownMode = ShutdownMode.OnMainWindowClose;
 
             MaybeLaunchOnboardingWizard();
@@ -341,6 +348,18 @@ public partial class App : Application
 
         services.AddKeepShell();
 
+        services.AddSingleton<BotAutomation>();
+        services.AddKeepShellMcp<ShellViewModel>(new McpServerOptions
+        {
+            ServerName = "poproshaykabot",
+            AppName = AppInfo.Name,
+            AppVersion = AppInfo.Version,
+            DefaultPort = 7656,
+            ShotsDirectory = AppPaths.Combine("shots"),
+            ToolTypes = [typeof(PoproshaykaBotTools)],
+            ConfigureTools = static (provider, tools) => tools.AddSingleton(provider.GetRequiredService<BotAutomation>()),
+        });
+
         services.AddSingleton(new ErrorReportOptions
         {
             IssueRepo = AppInfo.RepoSlug,
@@ -393,6 +412,7 @@ public partial class App : Application
         services.AddSingleton<UpdateSettingsSectionViewModel>();
         services.AddTransient<DashboardLayoutSectionViewModel>();
         services.AddTransient<DebugChannelSectionViewModel>();
+        services.AddSingleton<McpSettingsSectionViewModel>();
 
         services.AddSingleton<SettingsPageViewModel>();
 

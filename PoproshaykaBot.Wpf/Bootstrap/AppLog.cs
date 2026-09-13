@@ -27,6 +27,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1006, Level = LogLevel.Information, Message = "Пользователь запросил отключение бота")]
     public static partial void BotDisconnectRequested(this ILogger logger);
 
+    [LoggerMessage(EventId = 1007, Level = LogLevel.Information, Message = "Агент по MCP запросил подключение бота")]
+    public static partial void McpBotConnectRequested(this ILogger logger);
+
+    [LoggerMessage(EventId = 1008, Level = LogLevel.Information, Message = "Агент по MCP запросил отключение бота")]
+    public static partial void McpBotDisconnectRequested(this ILogger logger);
+
     [LoggerMessage(EventId = 1100, Level = LogLevel.Error, Message = "OAuth-поток мастера упал для роли {Role}")]
     public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
 
