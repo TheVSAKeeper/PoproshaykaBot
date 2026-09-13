@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
@@ -59,7 +60,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private bool _disposed;
 
     [ObservableProperty]
-    private string _sceneText = "Сцена: —";
+    private string _sceneText = "Сцена: –";
 
     [ObservableProperty]
     private string _connectionText = "○ OBS выкл.";
@@ -93,7 +94,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         IEventBus bus,
         ILogger<ObsInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher)
-        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 420, minHeight: 140)
+        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 420, minHeight: 154)
     {
         _store = store;
         _obsIntegration = obsIntegration;
@@ -127,7 +128,11 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     public bool IsUnavailable => string.Equals(ConnectionStatus, UnavailableStatus, StringComparison.Ordinal);
 
+    public override PackIconLucideKind Icon => PackIconLucideKind.Video;
+
     public override bool GrowsWithSpace => HasAudioSources;
+
+    public override bool SizesToContent => true;
 
     private void Initialize()
     {
@@ -475,7 +480,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private void ApplyDisabledState()
     {
         UpdateConnectionHeader("○ OBS выкл.", "off", "OBS интеграция отключена в настройках");
-        SceneText = "Сцена: —";
+        SceneText = "Сцена: –";
         StreamCard.ApplyUnknown();
         RecordCard.ApplyUnknown();
         ClearRows();
@@ -487,7 +492,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             UnavailableStatus,
             string.IsNullOrWhiteSpace(message) ? "OBS WebSocket не подключён" : $"OBS WebSocket не подключён: {message}");
 
-        SceneText = "Сцена: —";
+        SceneText = "Сцена: –";
         StreamCard.ApplyUnknown();
         RecordCard.ApplyUnknown();
         ClearRows();
@@ -604,7 +609,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private static string ToDisplayValue(string? value)
     {
-        return string.IsNullOrWhiteSpace(value) ? "—" : value;
+        return string.IsNullOrWhiteSpace(value) ? "–" : value;
     }
 
     private static (string Text, string? Severity)? FormatStreamHealth(

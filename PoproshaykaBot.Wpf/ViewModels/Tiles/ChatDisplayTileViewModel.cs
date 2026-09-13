@@ -61,7 +61,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         IDialogService dialogService,
         IEventBus bus,
         ChatDisplayStore store)
-        : base("twitch-chat", "Чат", minWidth: 280, minHeight: 220)
+        : base("twitch-chat", "Чат", minWidth: 280, minHeight: 234)
     {
         _settings = settings;
         _targetChannelProvider = targetChannelProvider;
@@ -98,6 +98,8 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     public event Action? ClutterScriptChanged;
 
     public event Action? ChannelUriChanged;
+
+    public override PackIconLucideKind Icon => PackIconLucideKind.MessageSquare;
 
     public override bool FillsAvailableSpace => true;
 

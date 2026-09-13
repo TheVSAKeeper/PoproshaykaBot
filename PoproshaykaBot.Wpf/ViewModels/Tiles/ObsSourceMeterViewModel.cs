@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -6,7 +6,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 public sealed partial class ObsSourceMeterViewModel : ObservableObject
 {
     [ObservableProperty]
-    private string _displayName = "—";
+    private string _displayName = "–";
 
     [ObservableProperty]
     private string _detail = string.Empty;
@@ -21,7 +21,7 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
     public ObsSourceMeterViewModel(string sourceName)
     {
         SourceName = sourceName;
-        DisplayName = string.IsNullOrWhiteSpace(sourceName) ? "—" : sourceName.Trim();
+        DisplayName = string.IsNullOrWhiteSpace(sourceName) ? "–" : sourceName.Trim();
     }
 
     public string SourceName { get; }
@@ -72,6 +72,6 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
 
     private void SetName(string displayName)
     {
-        DisplayName = string.IsNullOrWhiteSpace(displayName) ? "—" : displayName.Trim();
+        DisplayName = string.IsNullOrWhiteSpace(displayName) ? "–" : displayName.Trim();
     }
 }

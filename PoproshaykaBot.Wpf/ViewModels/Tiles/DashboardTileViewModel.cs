@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MahApps.Metro.IconPacks;
 using System.Collections.ObjectModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -30,7 +31,7 @@ public abstract partial class DashboardTileViewModel : ObservableObject
 
     public const int DefaultMinWidth = 220;
 
-    public const int DefaultMinHeight = 110;
+    public const int DefaultMinHeight = 124;
 
     public string TypeId { get; }
 
@@ -42,9 +43,13 @@ public abstract partial class DashboardTileViewModel : ObservableObject
 
     public int MinHeight { get; }
 
+    public virtual PackIconLucideKind Icon => PackIconLucideKind.LayoutDashboard;
+
     public virtual bool FillsAvailableSpace => false;
 
     public virtual bool GrowsWithSpace => false;
+
+    public virtual bool SizesToContent => false;
 
     public ObservableCollection<ToolbarItemViewModel> HeaderActions { get; } = [];
 

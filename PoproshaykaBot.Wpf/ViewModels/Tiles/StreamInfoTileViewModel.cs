@@ -55,7 +55,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         ILogger<StreamInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher,
         IShellLauncher shellLauncher)
-        : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 400, minHeight: 200)
+        : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 400, minHeight: 214)
     {
         _stream = stream;
         _logger = logger;
@@ -84,6 +84,10 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
 
         ApplyCurrentStatus();
     }
+
+    public override PackIconLucideKind Icon => PackIconLucideKind.Radio;
+
+    public override bool SizesToContent => true;
 
     [RelayCommand(CanExecute = nameof(CanRefresh))]
     private async Task RefreshAsync()

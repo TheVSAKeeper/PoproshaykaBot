@@ -37,6 +37,144 @@ public static class DashboardLayoutTree
         return Measure(root, 0);
     }
 
+    public static DashboardPane WithGridWeights(DashboardPane root, IEnumerable<TileRect> rects)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(rects);
+
+        var byTypeId = new Dictionary<string, TileRect>(StringComparer.Ordinal);
+
+        foreach (var rect in rects)
+        {
+            byTypeId.TryAdd(rect.TypeId, rect);
+        }
+
+        return Substitute(root, byTypeId, 0);
+    }
+
+    private static DashboardPane Substitute(DashboardPane pane, IReadOnlyDictionary<string, TileRect> rects, int depth)
+    {
+        if (depth > MaxDepth
+            || pane is not SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 1 } split)
+        {
+            return pane;
+        }
+
+        var children = new PaneSlot[split.Children.Count];
+        var spans = new int[split.Children.Count];
+
+        for (var index = 0; index < split.Children.Count; index++)
+        {
+            if (split.Children[index] is not { Pane: not null } slot)
+            {
+                return pane;
+            }
+
+            children[index] = new(Substitute(slot.Pane, rects, depth + 1), slot.Weight);
+
+            spans[index] = Extent(slot.Pane, split.Orientation, rects, depth) is { } extent && extent.End > extent.Start
+                ? extent.End - extent.Start
+                : 0;
+        }
+
+        ApplySpans(children, spans);
+
+        return new SplitPane(split.Orientation, children);
+    }
+
+    private static void ApplySpans(PaneSlot[] children, int[] spans)
+    {
+        var known = 0.0;
+        var knownSpan = 0;
+        var totalSpan = 0;
+        var unknown = 0;
+
+        for (var index = 0; index < children.Length; index++)
+        {
+            if (spans[index] <= 0)
+            {
+                return;
+            }
+
+            totalSpan += spans[index];
+
+            if (IsExplicit(children[index].Weight))
+            {
+                known += children[index].Weight!.Value;
+                knownSpan += spans[index];
+            }
+            else
+            {
+                unknown++;
+            }
+        }
+
+        if (unknown == 0)
+        {
+            return;
+        }
+
+        var unit = knownSpan > 0 && known > 0 ? known / knownSpan : 1.0 / totalSpan;
+
+        for (var index = 0; index < children.Length; index++)
+        {
+            if (!IsExplicit(children[index].Weight))
+            {
+                children[index] = new(children[index].Pane, unit * spans[index]);
+            }
+        }
+    }
+
+    private static (int Start, int End)? Extent(
+        DashboardPane? pane,
+        SplitOrientation orientation,
+        IReadOnlyDictionary<string, TileRect> rects,
+        int depth)
+    {
+        if (depth > MaxDepth)
+        {
+            return null;
+        }
+
+        switch (pane)
+        {
+            case TilePane tile:
+                if (string.IsNullOrEmpty(tile.TypeId) || !rects.TryGetValue(tile.TypeId, out var rect))
+                {
+                    return null;
+                }
+
+                return orientation == SplitOrientation.Columns
+                    ? (rect.Column, rect.ColumnEnd)
+                    : (rect.Row, rect.RowEnd);
+
+            case SplitPane { Children.Count: > 0 } split:
+                var start = int.MaxValue;
+                var end = int.MinValue;
+
+                foreach (var slot in split.Children)
+                {
+                    if (slot?.Pane is null || Extent(slot.Pane, orientation, rects, depth + 1) is not { } child)
+                    {
+                        return null;
+                    }
+
+                    start = Math.Min(start, child.Start);
+                    end = Math.Max(end, child.End);
+                }
+
+                return (start, end);
+
+            default:
+                return null;
+        }
+    }
+
+    private static bool IsExplicit(double? weight)
+    {
+        return weight is { } value && value > 0 && double.IsFinite(value);
+    }
+
     private static GridSize? Measure(DashboardPane? pane, int depth)
     {
         if (depth > MaxDepth)
@@ -360,10 +498,10 @@ public static class DashboardLayoutTree
                 return null;
             }
 
-            if (children[index].Weight is { } weight && weight > 0 && double.IsFinite(weight))
+            if (IsExplicit(children[index].Weight))
             {
-                weights[index] = weight;
-                known += weight;
+                weights[index] = children[index].Weight!.Value;
+                known += weights[index];
             }
             else
             {

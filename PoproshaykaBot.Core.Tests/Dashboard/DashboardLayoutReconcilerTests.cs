@@ -316,6 +316,157 @@ public sealed class DashboardLayoutReconcilerTests
     }
 
     [Test]
+    public void SyncTilesThenSyncRoot_ATreeWithAContentSizedChild_KeepsItsWeightUnset()
+    {
+        var layout = TwoColumns();
+
+        layout.Root = new SplitPane(SplitOrientation.Columns, [
+            new(new TilePane("stream-info"), null),
+            new(new TilePane("polls-control"), 0.5),
+        ]);
+
+        var before = layout.Root;
+
+        Assert.That(DashboardLayoutReconciler.SyncTiles(layout), Is.True);
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(layout.Root, Is.SameAs(before),
+                "Дерево с плиткой по содержимому обязано пережить запись: пересборка по сетке вернула бы ей долю.");
+            Assert.That((layout.Root as SplitPane)?.Children[0].Weight, Is.Null);
+        }
+    }
+
+    [TestCase(4, 1)]
+    [TestCase(1, 4)]
+    public void SyncRoot_EmptyWeightsOnAnUnevenSplit_AreKept(int first, int second)
+    {
+        var layout = Columns(("stream-info", first), ("polls-control", second));
+
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), null),
+            new(new TilePane("polls-control"), null),
+        ]);
+
+        var before = layout.Root;
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That(layout.Root, Is.SameAs(before),
+            "Пустой вес проецируется по размаху листьев в сетке, иначе первая же запись файла подменяет его явным.");
+    }
+
+    [Test]
+    public void SyncRoot_AnExplicitWeightNextToAnEmptyOne_KeepsBoth()
+    {
+        var layout = Columns(("stream-info", 4), ("polls-control", 1));
+
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.8),
+            new(new TilePane("polls-control"), null),
+        ]);
+
+        var before = layout.Root;
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That(layout.Root, Is.SameAs(before), "Явный вес соседа задаёт масштаб, по которому пустой вес доедет до своих клеток.");
+    }
+
+    [Test]
+    public void SyncRoot_ExplicitWeightsRoundingUnlikeTheirSpans_AreKept()
+    {
+        var layout = Columns(("stream-info", 4), ("polls-control", 3), ("logs", 3));
+
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.36),
+            new(new TilePane("polls-control"), 0.38),
+            new(new TilePane("logs"), null),
+        ]);
+
+        var before = layout.Root;
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That(layout.Root, Is.SameAs(before),
+            "Доли явных весов и их размахи совпадают лишь после округления, поэтому дерево, которое само проецируется в сетку, остаётся как есть.");
+    }
+
+    [Test]
+    public void SyncRoot_EmptyWeightsInANestedSplit_AreKept()
+    {
+        var layout = Columns(("stream-info", 4), ("polls-control", 1));
+
+        layout.RowCount = 3;
+        layout.Tiles[0].RowSpan = 3;
+        layout.Tiles[1].RowSpan = 2;
+        layout.Tiles.Add(Tile("logs", order: 2, isVisible: true));
+        layout.Tiles[2].Row = 2;
+        layout.Tiles[2].Column = 4;
+
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), null),
+            new(new SplitPane(SplitOrientation.Rows,
+            [
+                new(new TilePane("polls-control"), null),
+                new(new TilePane("logs"), null),
+            ]), null),
+        ]);
+
+        var before = layout.Root;
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        Assert.That(layout.Root, Is.SameAs(before), "Размах узла – объединение его листьев, поэтому вложенный разрез считается по своей оси.");
+    }
+
+    [Test]
+    public void SyncRoot_EmptyWeightsOnATreeThatNoLongerMatchesTheGrid_IsRebuilt()
+    {
+        var layout = Columns(("stream-info", 4), ("polls-control", 1));
+
+        layout.Root = new SplitPane(SplitOrientation.Rows,
+        [
+            new(new TilePane("stream-info"), null),
+            new(new TilePane("polls-control"), null),
+        ]);
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        var root = layout.Root as SplitPane;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root?.Orientation, Is.EqualTo(SplitOrientation.Columns),
+                "Топология из файла разошлась с сеткой – истина сетка, и дерево пересобирается по ней.");
+            Assert.That(root?.Children.Select(child => child.Weight), Is.EqualTo(new double?[] { 0.8, 0.2 }));
+        }
+    }
+
+    [Test]
+    public void SyncTiles_EmptyWeights_KeepTheSpansTheGridAlreadyHas()
+    {
+        var layout = Columns(("stream-info", 4), ("polls-control", 1));
+
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), null),
+            new(new TilePane("polls-control"), null),
+        ]);
+
+        Assert.That(DashboardLayoutReconciler.SyncTiles(layout), Is.True);
+
+        Assert.That(layout.Tiles.Select(tile => tile.ColumnSpan), Is.EqualTo(new[] { 4, 1 }),
+            "Проекция на сетку обязана сохранить размах плитки по содержимому, а не делить колонки поровну.");
+    }
+
+    [Test]
     public void SyncRoot_TreeThatNoLongerMatchesTheGrid_IsRebuilt()
     {
         var layout = TwoColumns();
@@ -476,6 +627,30 @@ public sealed class DashboardLayoutReconcilerTests
         return LayoutWith(
             Tile("stream-info", order: 0, isVisible: true),
             Tile("polls-control", order: 1, isVisible: true));
+    }
+
+    private static DashboardLayoutSettings Columns(params (string TypeId, int Span)[] bands)
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = bands.Sum(band => band.Span),
+            RowCount = 1,
+        };
+
+        var column = 0;
+
+        for (var index = 0; index < bands.Length; index++)
+        {
+            var tile = Tile(bands[index].TypeId, index, isVisible: true);
+
+            tile.Column = column;
+            tile.ColumnSpan = bands[index].Span;
+            layout.Tiles.Add(tile);
+
+            column += bands[index].Span;
+        }
+
+        return layout;
     }
 
     private static DashboardLayoutSettings LayoutWith(params DashboardTileSettings[] tiles)

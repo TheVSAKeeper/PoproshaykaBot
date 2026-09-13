@@ -115,7 +115,9 @@ public static class DashboardLayoutReconciler
         var columnCount = Math.Max(layout.ColumnCount, minimum.Columns);
         var rowCount = Math.Max(layout.RowCount, minimum.Rows);
 
-        if (DashboardLayoutTree.TryProject(layout.Root, columnCount, rowCount) is not { } projected)
+        var placed = DashboardLayoutTree.WithGridWeights(layout.Root, VisibleRects(layout));
+
+        if (DashboardLayoutTree.TryProject(placed, columnCount, rowCount) is not { } projected)
         {
             return false;
         }
@@ -258,18 +260,28 @@ public static class DashboardLayoutReconciler
 
     private static bool ProjectsInto(DashboardPane root, DashboardLayoutSettings layout)
     {
-        var expected = VisibleRects(layout);
+        var rects = VisibleRects(layout);
 
-        if (expected.Select(rect => rect.TypeId).Distinct(StringComparer.Ordinal).Count() != expected.Count)
+        if (rects.Select(rect => rect.TypeId).Distinct(StringComparer.Ordinal).Count() != rects.Count)
         {
             return false;
         }
 
-        var projected = DashboardLayoutTree.TryProject(root, layout.ColumnCount, layout.RowCount);
+        return Matches(root) || Matches(DashboardLayoutTree.WithGridWeights(root, rects));
 
-        return projected is not null
-               && projected.Count == expected.Count
-               && projected.All(expected.Remove);
+        bool Matches(DashboardPane pane)
+        {
+            var projected = DashboardLayoutTree.TryProject(pane, layout.ColumnCount, layout.RowCount);
+
+            if (projected is null || projected.Count != rects.Count)
+            {
+                return false;
+            }
+
+            var expected = new List<TileRect>(rects);
+
+            return projected.All(expected.Remove);
+        }
     }
 
     private static int NextOrder(DashboardLayoutSettings layout)

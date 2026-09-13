@@ -18,8 +18,11 @@
             <Border x:Name="TileRoot"
                     Background="{DynamicResource Bg.Surface}"
                     BorderBrush="{DynamicResource Border.Subtle}"
-                    BorderThickness="0,0,0,1"
-                    Padding="14,10,14,14">
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource Radius.M}"
+                    Padding="0"
+                    Margin="4"
+                    SnapsToDevicePixels="True">
                 <Border.ContextMenu>
                     <ContextMenu>
                         <MenuItem Command="{Binding ToggleCollapseCommand}">
@@ -42,10 +45,16 @@
 
                 <Grid>
                 <DockPanel LastChildFill="True">
+                    <Border x:Name="TileHeaderBar"
+                            DockPanel.Dock="Top"
+                            Background="{DynamicResource Bg.SurfaceAlt}"
+                            BorderBrush="{DynamicResource Border.Subtle}"
+                            BorderThickness="0,0,0,1"
+                            CornerRadius="9,9,0,0"
+                            Padding="12,7,8,7"
+                            SnapsToDevicePixels="True">
                     <DockPanel x:Name="TileHeader"
-                               DockPanel.Dock="Top"
-                               LastChildFill="True"
-                               Margin="0,0,0,10">
+                               LastChildFill="True">
                         <DockPanel.Resources>
                             <Style x:Key="Button.Icon"
                                    TargetType="Button"
@@ -100,20 +109,32 @@
                             </Button>
                         </StackPanel>
 
+                        <iconPacks:PackIconLucide x:Name="TileIcon"
+                                                  DockPanel.Dock="Left"
+                                                  Kind="{Binding Icon}"
+                                                  Width="14"
+                                                  Height="14"
+                                                  Foreground="{DynamicResource Accent.Text}"
+                                                  VerticalAlignment="Center"
+                                                  Margin="0,0,8,0" />
+
                         <TextBlock x:Name="TileTitle"
                                    Text="{Binding Title}"
                                    ToolTip="{Binding Title}"
                                    FontFamily="{DynamicResource Font.Sans}"
-                                   FontSize="{DynamicResource Font.Size.S}"
+                                   FontSize="{DynamicResource Font.Size.M}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Fg.Primary}"
                                    VerticalAlignment="Center"
                                    TextWrapping="NoWrap"
                                    TextTrimming="CharacterEllipsis" />
                     </DockPanel>
+                    </Border>
 
-                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                  Visibility="{Binding IsCollapsed, Converter={StaticResource InverseBoolToVisibility}}">
+                    <Border x:Name="TileBody"
+                            Padding="14,10,14,14"
+                            Visibility="{Binding IsCollapsed, Converter={StaticResource InverseBoolToVisibility}}">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                         <ScrollViewer.Style>
                             <Style TargetType="ScrollViewer">
                                 <Setter Property="VerticalScrollBarVisibility"
@@ -139,6 +160,7 @@
 
                         <ContentControl Content="{Binding}" />
                     </ScrollViewer>
+                    </Border>
                 </DockPanel>
 
                 <Border x:Name="TileShield"
@@ -154,6 +176,19 @@
             </Border>
 
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsCollapsed}"
+                             Value="True">
+                    <Setter TargetName="TileHeaderBar"
+                            Property="CornerRadius"
+                            Value="9" />
+                    <Setter TargetName="TileHeaderBar"
+                            Property="BorderThickness"
+                            Value="0" />
+                    <Setter TargetName="TileRoot"
+                            Property="VerticalAlignment"
+                            Value="Top" />
+                </DataTrigger>
+
                 <Trigger SourceName="TileRoot"
                          Property="IsMouseOver"
                          Value="True">
@@ -181,13 +216,13 @@
 
     <Grid>
         <Border Background="{DynamicResource Bg.Base}"
+                Padding="8"
                 Visibility="{Binding HasTiles, Converter={StaticResource BoolToVisibility}}">
             <DockPanel LastChildFill="True">
                 <ScrollViewer x:Name="BandsScroll"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Disabled">
-                    <Grid x:Name="BandsGrid"
-                          Margin="0,0,-1,-1" />
+                    <Grid x:Name="BandsGrid" />
                 </ScrollViewer>
             </DockPanel>
         </Border>

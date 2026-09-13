@@ -202,6 +202,72 @@ public class DashboardPaneLayoutTests
     }
 
     [Test]
+    public void A_tile_that_sizes_to_content_gives_up_its_authored_share()
+    {
+        using var dashboard = CreateDashboard(
+            AuthoredWeightsLayout(),
+            new FakeTile("stream-info", sizesToContent: true),
+            new FakeTile("broadcast-status"));
+
+        var root = dashboard.Pane as SplitPaneLayout;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root?.Children[0].SizesToContent, Is.True,
+                "Плитка по содержимому не берёт долю разреза – иначе она растягивается вместе с колонкой.");
+            Assert.That(root?.Children[0].HasWeight, Is.False,
+                "Доля из файла для такой плитки не применяется, иначе трек снова станет звёздочным.");
+            Assert.That(root?.Children[1].HasWeight, Is.True,
+                "Сосед по узлу долю сохраняет: фиксируется одна плитка, а не весь узел.");
+        });
+    }
+
+    [Test]
+    public void Share_of_a_tile_that_sizes_to_content_is_cleared_in_the_file_on_load()
+    {
+        var store = new FakeLayoutStore(AuthoredWeightsLayout());
+
+        using var dashboard = new DashboardViewModel(
+            [new FakeTile("stream-info", sizesToContent: true), new FakeTile("broadcast-status")],
+            new(store),
+            TimeProvider.System);
+
+        var root = store.Saved?.Root as SplitPane;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root?.Children[0].Weight, Is.Null,
+                "Фиксированность обязана доехать до файла: иначе доля остаётся в root и Core раздаёт её при перетаскивании соседей.");
+            Assert.That(root?.Children[1].Weight, Is.EqualTo(0.4));
+        });
+    }
+
+    [Test]
+    public void Empty_shares_of_content_sized_tiles_survive_the_write_and_the_next_load()
+    {
+        var store = new FakeLayoutStore(ContentSizedColumnsLayout());
+
+        using var dashboard = new DashboardViewModel(
+            [new FakeTile("stream-info", sizesToContent: true), new FakeTile("broadcast-status", sizesToContent: true)],
+            new(store),
+            TimeProvider.System);
+
+        dashboard.Reload();
+
+        var root = store.Saved?.Root as SplitPane;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root?.Children.Select(child => child.Weight), Is.EqualTo(new double?[] { null, null }),
+                "Сшивка дерева при записи обязана держать пустые веса: пересборка по сетке вернула бы им доли.");
+            Assert.That(store.Saved?.Tiles.Select(tile => tile.ColumnSpan), Is.EqualTo(new[] { 4, 1 }),
+                "Размах фиксированных плиток менять при этом нечему.");
+            Assert.That(store.SaveCount, Is.EqualTo(1),
+                "Второй заход на дашборд обязан обойтись без записи, иначе каждая загрузка переписывает файл.");
+        });
+    }
+
+    [Test]
     public void Tile_minimums_add_up_along_the_split_and_never_pass_the_ceiling()
     {
         using var dashboard = CreateDashboard(
@@ -383,6 +449,25 @@ public class DashboardPaneLayoutTests
 
         AddTile(layout, "stream-info", 0, 0, 1, 1);
         AddTile(layout, "broadcast-status", 0, 1, 1, 1);
+
+        return layout;
+    }
+
+    private static DashboardLayoutSettings ContentSizedColumnsLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 5,
+            RowCount = 1,
+            Root = new SplitPane(SplitOrientation.Columns,
+            [
+                new(new TilePane("stream-info"), 0.8),
+                new(new TilePane("broadcast-status"), 0.2),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 4);
+        AddTile(layout, "broadcast-status", 0, 4, 1, 1);
 
         return layout;
     }

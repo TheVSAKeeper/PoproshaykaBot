@@ -53,6 +53,8 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     public bool HasProfiles => Items.Count > 0;
 
+    public override PackIconLucideKind Icon => PackIconLucideKind.ListChecks;
+
     public override bool GrowsWithSpace => HasProfiles;
 
     public BroadcastProfilesTileViewModel(
@@ -65,7 +67,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         IDialogService dialogService,
         IServiceScopeFactory scopeFactory,
         IEventBus bus)
-        : base("broadcast-profiles", "Профили рассылки", maxWidth: 500, maxHeight: 320, minHeight: 130)
+        : base("broadcast-profiles", "Профили рассылки", maxWidth: 500, maxHeight: 320, minHeight: 144)
     {
         _manager = manager;
         _profiles = profiles;

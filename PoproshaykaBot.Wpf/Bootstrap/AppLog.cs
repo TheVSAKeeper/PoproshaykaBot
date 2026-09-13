@@ -153,6 +153,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1310, Level = LogLevel.Error, Message = "Не удалось сохранить раскладку панели, правки останутся несохранёнными")]
     public static partial void DashboardLayoutSaveFailed(this ILogger logger, Exception? exception);
 
+    [LoggerMessage(EventId = 1311, Level = LogLevel.Debug, Message = "Пропорции узла {NodePath} панели не изменены: доли {Shares} отклонены")]
+    public static partial void DashboardResizeRefused(this ILogger logger, string nodePath, string shares);
+
     [LoggerMessage(EventId = 1400, Level = LogLevel.Warning, Message = "Не удалось выполнить OBS-действие для карточки {Kind}")]
     public static partial void ObsOutputActionFailed(this ILogger logger, Exception? exception, ObsOutputCardKind kind);
 

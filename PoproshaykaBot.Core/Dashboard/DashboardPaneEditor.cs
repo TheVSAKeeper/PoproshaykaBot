@@ -109,12 +109,29 @@ public static class DashboardPaneEditor
             }
         }
 
-        if (Reweight(root, path, 0, Balance(weights)) is not { } resized || !IsWellFormed(resized))
+        if (Reweight(root, path, 0, weights) is not { } resized || !IsWellFormed(resized))
         {
             return false;
         }
 
         result = resized;
+
+        return true;
+    }
+
+    public static bool TryClearFixedWeights(DashboardPane root, Func<string, SplitOrientation, bool> isFixed, out DashboardPane result)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(isFixed);
+
+        result = root;
+
+        if (!IsWellFormed(root) || !ClearFixed(root, isFixed, out var relaxed))
+        {
+            return false;
+        }
+
+        result = relaxed;
 
         return true;
     }
@@ -328,6 +345,47 @@ public static class DashboardPaneEditor
         return weight is { } value && value > 0 && double.IsFinite(value);
     }
 
+    private static double?[]? Distribute(IReadOnlyList<PaneSlot> children, IReadOnlyList<double> weights)
+    {
+        var weighted = new List<int>(children.Count);
+        var total = 0.0;
+        var movable = 0.0;
+
+        for (var index = 0; index < children.Count; index++)
+        {
+            total += weights[index];
+
+            if (!IsExplicit(children[index].Weight))
+            {
+                continue;
+            }
+
+            weighted.Add(index);
+            movable += weights[index];
+        }
+
+        if (weighted.Count == 0 || weighted.Count == children.Count)
+        {
+            return [.. Balance(weights).Select(weight => (double?)weight)];
+        }
+
+        if (weighted.Count < 2 || !double.IsFinite(total) || total <= 0)
+        {
+            return null;
+        }
+
+        var portion = Math.Clamp(movable / total, MinimumWeight, 1 - MinimumWeight);
+        var balanced = Balance([.. weighted.Select(index => weights[index])]);
+        var shares = new double?[children.Count];
+
+        for (var position = 0; position < weighted.Count; position++)
+        {
+            shares[weighted[position]] = balanced[position] * portion;
+        }
+
+        return shares;
+    }
+
     private static double[] Balance(IReadOnlyList<double> weights)
     {
         var count = weights.Count;
@@ -389,7 +447,7 @@ public static class DashboardPaneEditor
 
         if (depth == path.Count)
         {
-            if (split.Children.Count != weights.Count)
+            if (split.Children.Count != weights.Count || Distribute(split.Children, weights) is not { } shares)
             {
                 return null;
             }
@@ -398,7 +456,7 @@ public static class DashboardPaneEditor
 
             for (var index = 0; index < weights.Count; index++)
             {
-                slots[index] = new(split.Children[index].Pane, weights[index]);
+                slots[index] = new(split.Children[index].Pane, shares[index]);
             }
 
             return new SplitPane(split.Orientation, slots);
@@ -418,6 +476,48 @@ public static class DashboardPaneEditor
         children[position] = new(rebuilt, split.Children[position].Weight);
 
         return new SplitPane(split.Orientation, children);
+    }
+
+    private static bool ClearFixed(DashboardPane pane, Func<string, SplitOrientation, bool> isFixed, out DashboardPane result)
+    {
+        result = pane;
+
+        if (pane is not SplitPane split)
+        {
+            return false;
+        }
+
+        var children = new PaneSlot[split.Children.Count];
+        var changed = false;
+
+        for (var index = 0; index < split.Children.Count; index++)
+        {
+            var slot = split.Children[index];
+            var nested = ClearFixed(slot.Pane, isFixed, out var relaxed) ? relaxed : slot.Pane;
+            var dropped = slot.Weight is not null && IsFixed(slot.Pane, split.Orientation, isFixed);
+
+            changed |= dropped || !ReferenceEquals(nested, slot.Pane);
+            children[index] = new(nested, dropped ? null : slot.Weight);
+        }
+
+        if (!changed)
+        {
+            return false;
+        }
+
+        result = new SplitPane(split.Orientation, children);
+
+        return true;
+    }
+
+    private static bool IsFixed(DashboardPane pane, SplitOrientation orientation, Func<string, SplitOrientation, bool> isFixed)
+    {
+        return pane switch
+        {
+            TilePane tile => isFixed(tile.TypeId, orientation),
+            SplitPane split => split.Children.Count > 0 && split.Children.All(child => IsFixed(child.Pane, orientation, isFixed)),
+            _ => false,
+        };
     }
 
     private static DashboardPane NormalizeCore(DashboardPane pane)
