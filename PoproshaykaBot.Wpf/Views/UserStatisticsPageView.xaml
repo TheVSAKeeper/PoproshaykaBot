@@ -12,28 +12,193 @@
              d:DesignHeight="720"
              d:DesignWidth="1100">
 
+    <UserControl.Resources>
+
+        <Style x:Key="RatingRowItem"
+               TargetType="ListBoxItem"
+               BasedOn="{StaticResource {x:Type ListBoxItem}}">
+            <Setter Property="HorizontalContentAlignment"
+                    Value="Stretch" />
+            <Setter Property="VerticalContentAlignment"
+                    Value="Center" />
+            <Setter Property="Padding"
+                    Value="12,7" />
+            <Setter Property="Margin"
+                    Value="0" />
+            <Setter Property="MinHeight"
+                    Value="56" />
+            <Setter Property="AutomationProperties.Name"
+                    Value="{Binding Summary}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd"
+                                Background="Transparent"
+                                BorderBrush="{DynamicResource Border.Subtle}"
+                                BorderThickness="0,0,0,1"
+                                SnapsToDevicePixels="True">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="3" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Rectangle x:Name="Stripe"
+                                           Fill="Transparent" />
+
+                                <ContentPresenter Grid.Column="1"
+                                                  Margin="{TemplateBinding Padding}"
+                                                  VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="Bd"
+                                        Property="Background"
+                                        Value="{DynamicResource Bg.SurfaceMute}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected"
+                                     Value="True">
+                                <Setter TargetName="Bd"
+                                        Property="Background"
+                                        Value="{DynamicResource Accent.Soft}" />
+                                <Setter TargetName="Stripe"
+                                        Property="Fill"
+                                        Value="{DynamicResource Accent.Primary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="RatingRowTemplate">
+            <Grid ToolTip="{Binding Summary}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="34" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Grid.Row="0"
+                           Grid.RowSpan="2"
+                           Text="{Binding Position}"
+                           Style="{StaticResource MonoCell}"
+                           FontSize="{DynamicResource Font.Size.S}"
+                           Foreground="{DynamicResource Fg.Muted}"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           Margin="0,0,10,0" />
+
+                <DockPanel Grid.Column="1"
+                           Grid.Row="0"
+                           LastChildFill="True">
+                    <Border DockPanel.Dock="Right"
+                            Style="{StaticResource Badge}"
+                            VerticalAlignment="Center"
+                            Margin="10,0,0,0">
+                        <TextBlock Text="{Binding RankDisplay}"
+                                   FontSize="{DynamicResource Font.Size.Caption}"
+                                   Foreground="{DynamicResource Fg.Secondary}" />
+                    </Border>
+
+                    <TextBlock Text="{Binding Name}"
+                               FontSize="{DynamicResource Font.Size.L}"
+                               FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                </DockPanel>
+
+                <Grid Grid.Column="1"
+                      Grid.Row="1"
+                      Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"
+                                          MinWidth="40" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <ProgressBar Grid.Column="0"
+                                 Value="{Binding Share, Mode=OneWay}"
+                                 Maximum="1"
+                                 Height="8"
+                                 MinHeight="8"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,12,0"
+                                 Focusable="False"
+                                 IsHitTestVisible="False" />
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{Binding PointsDisplay}"
+                                   Style="{StaticResource MonoCell}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   MinWidth="58"
+                                   TextAlignment="Right" />
+                        <TextBlock Text="{Binding PointsUnit}"
+                                   Style="{StaticResource MonoCell}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   Foreground="{DynamicResource Fg.Muted}"
+                                   Margin="4,0,0,0" />
+                        <TextBlock Text="·"
+                                   Style="{StaticResource MonoCell}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   Foreground="{DynamicResource Fg.Muted}"
+                                   Margin="6,0,6,0" />
+                        <TextBlock Text="{Binding MessageCountDisplay}"
+                                   Style="{StaticResource MonoCell}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   MinWidth="58"
+                                   TextAlignment="Right" />
+                        <TextBlock Text="сообщ"
+                                   Style="{StaticResource MonoCell}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   Foreground="{DynamicResource Fg.Muted}"
+                                   Margin="4,0,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0"
-                   LastChildFill="True"
-                   Margin="0,0,0,12">
-            <Button DockPanel.Dock="Right"
-                    Content="Обновить"
-                    Style="{StaticResource Button.Secondary}"
-                    Command="{Binding RefreshCommand}"
-                    AutomationProperties.Name="Перечитать статистику"
-                    Margin="16,0,0,0" />
-            <Button DockPanel.Dock="Right"
-                    Content="Названия баллов"
-                    Style="{StaticResource Button.Secondary}"
-                    Command="{Binding EditPointTermCommand}"
-                    AutomationProperties.Name="Изменить названия баллов"
-                    Margin="8,0,0,0" />
-            <Grid>
+        <Grid Grid.Row="0"
+              Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"
+                                  MaxWidth="560" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="2"
+                        Orientation="Horizontal">
+                <Button Content="Названия баллов"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding EditPointTermCommand}"
+                        AutomationProperties.Name="Изменить названия баллов"
+                        Margin="16,0,8,0" />
+                <Button Content="Обновить"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding RefreshCommand}"
+                        AutomationProperties.Name="Перечитать статистику" />
+            </StackPanel>
+
+            <Grid Grid.Column="0">
                 <TextBox Style="{StaticResource TextBox.Form}"
                          Padding="8,0,32,0"
                          Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -53,60 +218,98 @@
                                               Height="14" />
                 </Button>
             </Grid>
-        </DockPanel>
+        </Grid>
 
-        <Grid Grid.Row="1">
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    Margin="0,0,0,12">
+            <TextBlock Text="Сортировка"
+                       Style="{StaticResource TextBlock.Subtle}"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0" />
+
+            <ToggleButton Style="{StaticResource ToggleButton.Toolbar}"
+                          Command="{Binding SortByCommand}"
+                          CommandParameter="{x:Static vm:UserStatisticsSortKey.Points}"
+                          IsChecked="{Binding SortKey, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Points}"
+                          AutomationProperties.Name="Сортировать по баллам"
+                          Margin="0,0,6,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Баллы" />
+                    <TextBlock Text="{Binding SortDirectionArrow}"
+                               Margin="6,0,0,0"
+                               Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </ToggleButton>
+
+            <ToggleButton Style="{StaticResource ToggleButton.Toolbar}"
+                          Command="{Binding SortByCommand}"
+                          CommandParameter="{x:Static vm:UserStatisticsSortKey.Messages}"
+                          IsChecked="{Binding SortKey, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Messages}"
+                          AutomationProperties.Name="Сортировать по сообщениям"
+                          Margin="0,0,6,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Сообщения" />
+                    <TextBlock Text="{Binding SortDirectionArrow}"
+                               Margin="6,0,0,0"
+                               Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </ToggleButton>
+
+            <ToggleButton Style="{StaticResource ToggleButton.Toolbar}"
+                          Command="{Binding SortByCommand}"
+                          CommandParameter="{x:Static vm:UserStatisticsSortKey.Name}"
+                          IsChecked="{Binding SortKey, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Name}"
+                          AutomationProperties.Name="Сортировать по имени">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Имя" />
+                    <TextBlock Text="{Binding SortDirectionArrow}"
+                               Margin="6,0,0,0"
+                               Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+            </ToggleButton>
+        </StackPanel>
+
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*" />
                 <ColumnDefinition Width="2*"
-                                  MinWidth="260" />
+                                  MinWidth="260"
+                                  MaxWidth="380" />
             </Grid.ColumnDefinitions>
 
             <controls:EmptyState Grid.Column="0"
+                                 Grid.ColumnSpan="2"
                                  Icon="Users"
                                  Heading="{Binding EmptyHeading}"
                                  Description="{Binding EmptyDescription}"
                                  DescriptionMaxWidth="320"
-                                 VerticalAlignment="Center"
-                                 HorizontalAlignment="Center"
-                                 Margin="0,0,16,0"
                                  Visibility="{Binding HasUsers, Converter={StaticResource InverseBoolToVisibility}}" />
 
-            <DataGrid Grid.Column="0"
-                      ItemsSource="{Binding Users}"
-                      AutomationProperties.Name="Статистика пользователей"
-                      Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}"
-                      SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserAddRows="False"
-                      CanUserDeleteRows="False"
-                      SelectionMode="Single"
-                      GridLinesVisibility="Horizontal"
-                      Margin="0,0,16,0">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Пользователь"
-                                        Binding="{Binding Name}"
-                                        SortMemberPath="Name"
-                                        Width="2*" />
-                    <DataGridTextColumn Header="Сообщения"
-                                        Binding="{Binding MessageCount, StringFormat=N0}"
-                                        SortMemberPath="MessageCount"
-                                        Width="Auto"
-                                        MinWidth="90" />
-                    <DataGridTextColumn Header="Баллы"
-                                        Binding="{Binding Points, StringFormat=N0}"
-                                        SortMemberPath="Points"
-                                        SortDirection="Descending"
-                                        Width="*" />
-                    <DataGridTextColumn Header="Ранг"
-                                        Binding="{Binding RankDisplay}"
-                                        SortMemberPath="RankDisplay"
-                                        Width="*" />
-                </DataGrid.Columns>
-            </DataGrid>
+            <Border Grid.Column="0"
+                    Style="{StaticResource Card}"
+                    Padding="0"
+                    Margin="0,0,16,0"
+                    Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}">
+                <ListBox ItemsSource="{Binding Users}"
+                         AutomationProperties.Name="Статистика пользователей"
+                         SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                         ItemContainerStyle="{StaticResource RatingRowItem}"
+                         ItemTemplate="{StaticResource RatingRowTemplate}"
+                         SelectionMode="Single"
+                         HorizontalContentAlignment="Stretch"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Padding="0"
+                         VirtualizingStackPanel.IsVirtualizing="True"
+                         VirtualizingStackPanel.VirtualizationMode="Recycling"
+                         ScrollViewer.CanContentScroll="True"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+            </Border>
 
             <ScrollViewer Grid.Column="1"
+                          Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
                 <StackPanel>
@@ -229,11 +432,20 @@
                                         HorizontalContentAlignment="Center" />
                             </StackPanel>
 
-                            <TextBlock Text="Выберите пользователя в таблице"
-                                       Style="{StaticResource TextBlock.Subtle}"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,8"
-                                       Visibility="{Binding HasSelectedRow, Converter={StaticResource InverseBoolToVisibility}}" />
+                            <StackPanel Margin="0,12,0,4"
+                                        Visibility="{Binding HasSelectedRow, Converter={StaticResource InverseBoolToVisibility}}">
+                                <iconPacks:PackIconLucide Kind="MousePointerClick"
+                                                          Width="20"
+                                                          Height="20"
+                                                          HorizontalAlignment="Center"
+                                                          Foreground="{DynamicResource Fg.Muted}" />
+                                <TextBlock Text="Выберите пользователя в списке"
+                                           Style="{StaticResource TextBlock.Subtle}"
+                                           HorizontalAlignment="Center"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap"
+                                           Margin="0,8,0,0" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 

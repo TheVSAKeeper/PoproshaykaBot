@@ -34,7 +34,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private string _summary = string.Empty;
 
     public string PageTitle => "История стримов";
-    public string? PageDescription => null;
+    public string? PageDescription => "Сессии стримов, их сегменты и чаттеры";
 
     public ObservableCollection<StreamSessionRowViewModel> Sessions => _sessions;
     public ObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];

@@ -38,6 +38,13 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private bool _isFilterActive;
 
     [ObservableProperty]
+    private UserStatisticsSortKey _sortKey = UserStatisticsSortKey.Points;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SortDirectionArrow))]
+    private bool _sortDescending = true;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActionButtonText))]
     [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
     private double _adjustmentAmount;
@@ -98,6 +105,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public bool HasSelectedRow => SelectedRow is not null;
 
+    public string SortDirectionArrow => SortDescending ? "↓" : "↑";
+
     public string ActionButtonText
     {
         get
@@ -115,16 +124,15 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     partial void OnFilterTextChanged(string value)
     {
-        ApplyFilter();
+        RebuildView();
     }
 
-    private void ApplyFilter()
+    private void RebuildView()
     {
         var selectedId = SelectedRow?.UserId;
         var trimmed = FilterText.Trim();
         var hasFilter = trimmed.Length > 0;
-
-        _rows.Clear();
+        var visible = new List<UserStatisticsRowViewModel>(_allRows.Count);
 
         foreach (var row in _allRows)
         {
@@ -135,6 +143,13 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
                 continue;
             }
 
+            visible.Add(row);
+        }
+
+        _rows.Clear();
+
+        foreach (var row in UserStatisticsRanking.Arrange(visible, SortKey, SortDescending))
+        {
             _rows.Add(row);
         }
 
@@ -146,6 +161,28 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         OnPropertyChanged(nameof(HasUsers));
         OnPropertyChanged(nameof(EmptyHeading));
         OnPropertyChanged(nameof(EmptyDescription));
+    }
+
+    [RelayCommand]
+    private void SortBy(UserStatisticsSortKey key)
+    {
+        if (key == UserStatisticsSortKey.None)
+        {
+            return;
+        }
+
+        if (SortKey == key)
+        {
+            SortDescending = !SortDescending;
+        }
+        else
+        {
+            SortKey = key;
+            SortDescending = key != UserStatisticsSortKey.Name;
+        }
+
+        OnPropertyChanged(nameof(SortKey));
+        RebuildView();
     }
 
     [RelayCommand]
@@ -253,6 +290,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         {
             _settingsManager.Mutate(settings => settings.Ranks.PointTerm = dialog.BuildResult());
             OnPropertyChanged(nameof(ActionButtonText));
+            Reload();
         }
         catch (Exception ex)
         {
@@ -281,10 +319,12 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         long totalBonus = 0;
         long totalPenalty = 0;
 
+        var pointTerm = _userRankService.PointTerm;
+
         foreach (var user in all)
         {
             var rank = _userRankService.GetRankDisplay(user.Points);
-            _allRows.Add(new UserStatisticsRowViewModel(user, rank));
+            _allRows.Add(new UserStatisticsRowViewModel(user, rank, pointTerm));
 
             totalMessages += (long)user.MessageCount;
             totalPoints += user.Points;
@@ -292,13 +332,11 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             totalPenalty += (long)user.PenaltyPoints;
         }
 
-        _allRows.Sort((left, right) => right.Points.CompareTo(left.Points));
+        TotalUsers = all.Count.ToString("N0", UiCulture.Russian);
+        TotalMessages = totalMessages.ToString("N0", UiCulture.Russian);
+        TotalPoints = totalPoints.ToString("N0", UiCulture.Russian);
+        TotalBonusPenalty = string.Create(UiCulture.Russian, $"{totalBonus:N0} / {totalPenalty:N0}");
 
-        TotalUsers = all.Count.ToString("N0");
-        TotalMessages = totalMessages.ToString("N0");
-        TotalPoints = totalPoints.ToString("N0");
-        TotalBonusPenalty = $"{totalBonus:N0} / {totalPenalty:N0}";
-
-        ApplyFilter();
+        RebuildView();
     }
 }

@@ -9,6 +9,7 @@
                 <ResourceDictionary Source="pack://application:,,,/KeepShell;component/Resources/Converters.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/KeepShell;component/Resources/Styles/Controls.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Infrastructure/Converters/AppConverters.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/TableStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
