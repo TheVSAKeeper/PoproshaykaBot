@@ -19,12 +19,15 @@ internal sealed class SmokeTestSession : IDisposable
 
     private static readonly TimeSpan DefaultWindowAppearTimeout = TimeSpan.FromSeconds(30);
 
-    private SmokeTestSession(string baseDirectory, FlaUIApplication app, UIA3Automation automation, Window mainWindow)
+    private readonly UiSmokeLock _uiLock;
+
+    private SmokeTestSession(string baseDirectory, FlaUIApplication app, UIA3Automation automation, Window mainWindow, UiSmokeLock uiLock)
     {
         BaseDirectory = baseDirectory;
         App = app;
         Automation = automation;
         MainWindow = mainWindow;
+        _uiLock = uiLock;
     }
 
     public FlaUIApplication App { get; }
@@ -46,28 +49,31 @@ internal sealed class SmokeTestSession : IDisposable
             Assert.Fail($"Исполняемый файл приложения не найден: {appPath}. Соберите PoproshaykaBot.Wpf перед запуском UI-тестов.");
         }
 
-        var baseDirectory = CreateTempBaseDirectory();
-
-        if (options.SeedConfiguredSettings)
-        {
-            SeedConfiguredSettings(baseDirectory);
-        }
-
-        var processStartInfo = new ProcessStartInfo
-        {
-            FileName = appPath,
-            Arguments = "--ui-smoke",
-            WorkingDirectory = Path.GetDirectoryName(appPath)!,
-            UseShellExecute = false,
-        };
-
-        processStartInfo.EnvironmentVariables[BaseDirectoryEnvVar] = baseDirectory;
+        var uiLock = UiSmokeLock.Acquire();
+        var baseDirectory = string.Empty;
 
         UIA3Automation? automation = null;
         FlaUIApplication? app = null;
 
         try
         {
+            baseDirectory = CreateTempBaseDirectory();
+
+            if (options.SeedConfiguredSettings)
+            {
+                SeedConfiguredSettings(baseDirectory);
+            }
+
+            var processStartInfo = new ProcessStartInfo
+            {
+                FileName = appPath,
+                Arguments = "--ui-smoke",
+                WorkingDirectory = Path.GetDirectoryName(appPath)!,
+                UseShellExecute = false,
+            };
+
+            processStartInfo.EnvironmentVariables[BaseDirectoryEnvVar] = baseDirectory;
+
             automation = new();
             app = FlaUIApplication.Launch(processStartInfo);
 
@@ -75,7 +81,7 @@ internal sealed class SmokeTestSession : IDisposable
             var mainWindow = WaitForFirstTopLevelWindow(app, automation, timeout)
                              ?? throw new InvalidOperationException($"Не удалось обнаружить ни одного top-level окна процесса в течение {timeout}");
 
-            return new(baseDirectory, app, automation, mainWindow);
+            return new(baseDirectory, app, automation, mainWindow, uiLock);
         }
         catch
         {
@@ -91,6 +97,7 @@ internal sealed class SmokeTestSession : IDisposable
             app?.Dispose();
             automation?.Dispose();
             CleanupBaseDirectory(baseDirectory);
+            uiLock.Dispose();
             throw;
         }
     }
@@ -152,6 +159,7 @@ internal sealed class SmokeTestSession : IDisposable
         }
 
         CleanupBaseDirectory(BaseDirectory);
+        _uiLock.Dispose();
     }
 
     private static Window? WaitForFirstTopLevelWindow(FlaUIApplication app, UIA3Automation automation, TimeSpan timeout)
