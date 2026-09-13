@@ -135,6 +135,12 @@
                         </HeaderedContentControl>
 
                         <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                Header="{Binding Sections[mcp].Title}"
+                                                Visibility="{Binding Sections[mcp].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <ContentControl Content="{Binding Mcp}" />
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
                                                 Header="{Binding Sections[appearance].Title}"
                                                 Visibility="{Binding Sections[appearance].IsSelected, Converter={StaticResource BoolToVisibility}}">
                             <settings:AppearanceSettingsView />

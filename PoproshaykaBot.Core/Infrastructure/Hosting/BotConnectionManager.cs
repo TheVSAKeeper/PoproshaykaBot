@@ -56,6 +56,8 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
 
     public bool IsBusy => _connectionTask is { IsCompleted: false };
 
+    public Task WaitForConnectionAsync() => _connectionTask ?? Task.CompletedTask;
+
     public BotLifecyclePhase CurrentPhase { get; private set; } = BotLifecyclePhase.Idle;
 
     public void StartConnection()

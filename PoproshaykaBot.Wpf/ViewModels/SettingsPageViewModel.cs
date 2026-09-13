@@ -43,7 +43,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     private const string ObsSectionKey = "obs";
 
-    private static readonly string[] DraftlessSectionKeys = ["appearance", "misc"];
+    private static readonly string[] DraftlessSectionKeys = ["appearance", "misc", "mcp"];
 
     private readonly SettingsManager _settingsManager;
     private readonly AccountsStore _accountsStore;
@@ -93,6 +93,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         MiscSettingsSectionViewModel misc,
         UpdateSettingsSectionViewModel update,
         DebugChannelSectionViewModel debugChannel,
+        McpSettingsSectionViewModel mcp,
         DashboardLayoutSectionViewModel dashboardLayout,
         ShellPreferences shell,
         ThemeViewModel theme,
@@ -123,6 +124,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         Misc = misc;
         Update = update;
         DebugChannel = debugChannel;
+        Mcp = mcp;
         DashboardLayout = dashboardLayout;
         Shell = shell;
         Theme = theme;
@@ -141,24 +143,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _dialogService = dialogService;
         _uiSettings = uiSettings;
 
-        Sections.Restore(uiSettings.GetStringValue(SettingsKeys.SettingsSection));
-        Sections.PropertyChanged += OnSectionsPropertyChanged;
-
         _dirtyTrackedSections = [Basic, RateLimiting, AutoBroadcast, BotLifecycle, ObsChat, ObsIntegration, Update, DebugChannel];
 
-        foreach (var section in _dirtyTrackedSections)
-        {
-            section.PropertyChanged += OnSectionPropertyChanged;
-        }
-
-        foreach (var entry in Messages.Entries)
-        {
-            entry.PropertyChanged += OnSectionPropertyChanged;
-        }
-
-        OAuth.SettingChanged += OnOAuthSettingChanged;
-        Polls.PropertyChanged += OnPollsPropertyChanged;
-        DashboardLayout.Edited += OnDashboardLayoutEdited;
+        Sections.Restore(uiSettings.GetStringValue(SettingsKeys.SettingsSection));
+        Subscribe();
 
         OnEnter();
     }
@@ -177,6 +165,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         new SettingsSection("dashboard", "Дашборд", PackIconLucideKind.LayoutDashboard, "раскладка плитки сетка колонки строки обзор палитра перетаскивание"),
         new SettingsSection("update", "Обновления", PackIconLucideKind.Download, "github релизы версия репозиторий проверка загрузка установка портативная сборка"),
         new SettingsSection("debug", "Отладка", PackIconLucideKind.Bug, "чужой канал наблюдение чтение чата тестирование только чтение отправка сообщений"),
+        new SettingsSection("mcp", "Агентная отладка", PackIconLucideKind.Bot, "mcp агент claude codex сервер токен порт инструменты"),
         new SettingsSection("appearance", "Оформление", PackIconLucideKind.Palette, "тема масштаб шрифта размер текста заголовок страницы внешний вид"),
         new SettingsSection("misc", "Прочее", PackIconLucideKind.Wrench, "данные приложения папка настроек логи профили трансляций импорт экспорт сброс"));
 
@@ -205,6 +194,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public UpdateSettingsSectionViewModel Update { get; }
 
     public DebugChannelSectionViewModel DebugChannel { get; }
+
+    public McpSettingsSectionViewModel Mcp { get; }
 
     public DashboardLayoutSectionViewModel DashboardLayout { get; }
 
@@ -278,6 +269,25 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         Polls.PropertyChanged -= OnPollsPropertyChanged;
         DashboardLayout.Edited -= OnDashboardLayoutEdited;
         Sections.PropertyChanged -= OnSectionsPropertyChanged;
+    }
+
+    private void Subscribe()
+    {
+        Sections.PropertyChanged += OnSectionsPropertyChanged;
+
+        foreach (var section in _dirtyTrackedSections)
+        {
+            section.PropertyChanged += OnSectionPropertyChanged;
+        }
+
+        foreach (var entry in Messages.Entries)
+        {
+            entry.PropertyChanged += OnSectionPropertyChanged;
+        }
+
+        OAuth.SettingChanged += OnOAuthSettingChanged;
+        Polls.PropertyChanged += OnPollsPropertyChanged;
+        DashboardLayout.Edited += OnDashboardLayoutEdited;
     }
 
     private void OnSectionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
