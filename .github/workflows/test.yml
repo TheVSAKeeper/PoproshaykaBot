@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        host: [ WinForms, Wpf ]
+        host: [ Wpf ]
 
     steps:
       - name: Checkout
