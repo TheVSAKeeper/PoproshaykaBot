@@ -1,8 +1,12 @@
 ﻿using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
+using NUnit.Framework.Interfaces;
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using FlaUIApplication = FlaUI.Core.Application;
 
@@ -16,6 +20,10 @@ internal sealed class SmokeTestSession : IDisposable
 
     private const string AppProjectName = "PoproshaykaBot.Wpf";
     private const string TestProjectName = "PoproshaykaBot.Wpf.Tests";
+    private const string LogsDirectoryName = "logs";
+    private const string MainWindowCaptureFileName = "main-window.png";
+    private const uint PrintWindowFullContent = 2;
+    private const int CaptureRenderDelayMilliseconds = 300;
 
     private static readonly TimeSpan DefaultWindowAppearTimeout = TimeSpan.FromSeconds(30);
 
@@ -96,6 +104,14 @@ internal sealed class SmokeTestSession : IDisposable
 
             app?.Dispose();
             automation?.Dispose();
+
+            var diagnosticsDirectory = TryCreateDiagnosticsDirectory();
+
+            if (diagnosticsDirectory is not null)
+            {
+                TryCopyLogs(baseDirectory, diagnosticsDirectory);
+            }
+
             CleanupBaseDirectory(baseDirectory);
             uiLock.Dispose();
             throw;
@@ -122,6 +138,15 @@ internal sealed class SmokeTestSession : IDisposable
 
     public void Dispose()
     {
+        var diagnosticsDirectory = TestContext.CurrentContext.Result.Outcome.Status == TestStatus.Failed
+            ? TryCreateDiagnosticsDirectory()
+            : null;
+
+        if (diagnosticsDirectory is not null)
+        {
+            TryCaptureMainWindow(diagnosticsDirectory);
+        }
+
         try
         {
             CloseProcessWindowsGracefully(TimeSpan.FromSeconds(3));
@@ -156,6 +181,11 @@ internal sealed class SmokeTestSession : IDisposable
         catch
         {
             // best-effort cleanup
+        }
+
+        if (diagnosticsDirectory is not null)
+        {
+            TryCopyLogs(BaseDirectory, diagnosticsDirectory);
         }
 
         CleanupBaseDirectory(BaseDirectory);
@@ -221,6 +251,22 @@ internal sealed class SmokeTestSession : IDisposable
             return Path.GetFullPath(envOverride);
         }
 
+        var (testAssemblyDir, separatorIndex) = LocateTestProjectSegment();
+        var testProjectDirectory = Path.DirectorySeparatorChar + TestProjectName + Path.DirectorySeparatorChar;
+
+        var appAssemblyDir = string.Concat(
+            testAssemblyDir.AsSpan(0, separatorIndex + 1),
+            AppProjectName,
+            testAssemblyDir.AsSpan(separatorIndex + testProjectDirectory.Length - 1));
+
+        return Path.GetFullPath(Path.Combine(appAssemblyDir, AppExeName));
+    }
+
+    [DllImport("user32.dll")]
+    private static extern int PrintWindow(IntPtr hwnd, IntPtr deviceContext, uint flags);
+
+    private static (string TestAssemblyDirectory, int SeparatorIndex) LocateTestProjectSegment()
+    {
         var testAssemblyDir = Path.GetDirectoryName(typeof(SmokeTestSession).Assembly.Location)
                               ?? throw new InvalidOperationException("Не удалось определить каталог тестовой сборки");
 
@@ -233,12 +279,124 @@ internal sealed class SmokeTestSession : IDisposable
                 $"Каталог тестовой сборки не содержит сегмента {TestProjectName}: {testAssemblyDir}");
         }
 
-        var appAssemblyDir = string.Concat(
-            testAssemblyDir.AsSpan(0, separatorIndex + 1),
-            AppProjectName,
-            testAssemblyDir.AsSpan(separatorIndex + testProjectDirectory.Length - 1));
+        return (testAssemblyDir, separatorIndex);
+    }
 
-        return Path.GetFullPath(Path.Combine(appAssemblyDir, AppExeName));
+    private static string? TryCreateDiagnosticsDirectory()
+    {
+        try
+        {
+            var (testAssemblyDir, separatorIndex) = LocateTestProjectSegment();
+            var root = Path.Combine(testAssemblyDir[..separatorIndex], "artifacts", "ui-smoke");
+            var name = SanitizeDirectoryName(TestContext.CurrentContext.Test.Name);
+
+            var candidate = Path.Combine(root, name);
+            var suffix = 1;
+
+            while (Directory.Exists(candidate))
+            {
+                candidate = Path.Combine(root, $"{name}-{suffix}");
+                suffix++;
+            }
+
+            Directory.CreateDirectory(candidate);
+            return candidate;
+        }
+        catch
+        {
+            // best-effort diagnostics
+            return null;
+        }
+    }
+
+    private static string SanitizeDirectoryName(string testName)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var sanitized = new StringBuilder(testName.Length);
+
+        foreach (var symbol in testName)
+        {
+            sanitized.Append(Array.IndexOf(invalid, symbol) >= 0 ? '_' : symbol);
+        }
+
+        var result = sanitized.ToString().Trim().Trim('.');
+        return string.IsNullOrEmpty(result) ? "ui-smoke" : result;
+    }
+
+    private static void TryCopyLogs(string baseDirectory, string diagnosticsDirectory)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(baseDirectory))
+            {
+                return;
+            }
+
+            var logsDirectory = Path.Combine(baseDirectory, LogsDirectoryName);
+
+            if (!Directory.Exists(logsDirectory))
+            {
+                return;
+            }
+
+            var target = Path.Combine(diagnosticsDirectory, LogsDirectoryName);
+            Directory.CreateDirectory(target);
+
+            foreach (var file in Directory.EnumerateFiles(logsDirectory))
+            {
+                File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
+            }
+        }
+        catch
+        {
+            // best-effort diagnostics
+        }
+    }
+
+    private void TryCaptureMainWindow(string diagnosticsDirectory)
+    {
+        try
+        {
+            if (!MainWindow.IsAvailable)
+            {
+                return;
+            }
+
+            MainWindow.Move(0, 0);
+            Thread.Sleep(CaptureRenderDelayMilliseconds);
+            var handle = MainWindow.Properties.NativeWindowHandle.ValueOrDefault;
+            var bounds = MainWindow.BoundingRectangle;
+
+            if (handle == IntPtr.Zero || bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return;
+            }
+
+            using var bitmap = new Bitmap(bounds.Width, bounds.Height);
+
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                var deviceContext = graphics.GetHdc();
+
+                try
+                {
+                    if (PrintWindow(handle, deviceContext, PrintWindowFullContent) == 0)
+                    {
+                        return;
+                    }
+                }
+                finally
+                {
+                    graphics.ReleaseHdc(deviceContext);
+                }
+            }
+
+            bitmap.Save(Path.Combine(diagnosticsDirectory, MainWindowCaptureFileName), ImageFormat.Png);
+        }
+        catch
+        {
+            // best-effort diagnostics
+        }
     }
 
     private static string CreateTempBaseDirectory()
