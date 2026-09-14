@@ -120,7 +120,7 @@ public static class DashboardPaneEditor
             return false;
         }
 
-        result = moved;
+        result = SameStructure(root, moved) ? root : moved;
 
         return true;
     }
@@ -208,6 +208,34 @@ public static class DashboardPaneEditor
         ArgumentNullException.ThrowIfNull(root);
 
         return TryCollectLeaves(root, out _);
+    }
+
+    private static bool SameStructure(DashboardPane first, DashboardPane second)
+    {
+        switch (first)
+        {
+            case TilePane left when second is TilePane right:
+                return string.Equals(left.TypeId, right.TypeId, StringComparison.Ordinal);
+
+            case SplitPane left when second is SplitPane right:
+                if (left.Orientation != right.Orientation || left.Children.Count != right.Children.Count)
+                {
+                    return false;
+                }
+
+                for (var index = 0; index < left.Children.Count; index++)
+                {
+                    if (!SameStructure(left.Children[index].Pane, right.Children[index].Pane))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            default:
+                return false;
+        }
     }
 
     private static bool HasTile(DashboardPane? pane)

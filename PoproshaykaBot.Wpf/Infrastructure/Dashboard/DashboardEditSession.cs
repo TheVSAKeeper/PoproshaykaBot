@@ -256,6 +256,11 @@ public sealed class DashboardEditSession : IDisposable
                 return DashboardEditStatus.Rejected;
             }
 
+            if (ReferenceEquals(updated, root))
+            {
+                return DashboardEditStatus.Applied;
+            }
+
             if (!Fits(updated))
             {
                 _draft = previous;

@@ -248,6 +248,52 @@ public sealed class DashboardPaneEditorTests
         yield return new TestCaseData(new[] { 2 }, new[] { 0 }, PaneSide.Left).SetName("Move_TheHoleItself");
     }
 
+    [TestCaseSource(nameof(MovesOntoTheOwnSpot))]
+    public void Move_WhereTheTileAlreadyStands_KeepsTheTreeAndItsWeights(SplitPane root, int[] source, int[] target, PaneSide side)
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DashboardPaneEditor.TryMove(root, source, target, side, out var result), Is.True,
+                "Жест легален – плитку просто некуда переносить.");
+
+            Assert.That(result, Is.SameAs(root),
+                "Удаление с повторным разрезом обнулило бы доли узла, хотя порядок листьев тот же.");
+        }
+    }
+
+    public static IEnumerable<TestCaseData> MovesOntoTheOwnSpot()
+    {
+        yield return new TestCaseData(Columns(Leaf("stream-info", 0.2), Leaf("polls-control", 0.8)), new[] { 1 }, new[] { 0 }, PaneSide.Right)
+            .SetName("Move_RightOfTheLeftNeighbour");
+
+        yield return new TestCaseData(Columns(Leaf("stream-info", 0.2), Leaf("polls-control", 0.8)), new[] { 0 }, new[] { 1 }, PaneSide.Left)
+            .SetName("Move_LeftOfTheRightNeighbour");
+
+        yield return new TestCaseData(Rows(Leaf("stream-info", 0.2), Leaf("polls-control", 0.8)), new[] { 1 }, new[] { 0 }, PaneSide.Bottom)
+            .SetName("Move_BelowTheUpperNeighbour");
+
+        yield return new TestCaseData(Rows(Leaf("stream-info", 0.2), Leaf("polls-control", 0.8)), new[] { 0 }, new[] { 1 }, PaneSide.Top)
+            .SetName("Move_AboveTheLowerNeighbour");
+
+        yield return new TestCaseData(Columns(Leaf("stream-info", 0.2), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.8)), new[] { 0 }, new[] { 1 }, PaneSide.Left)
+            .SetName("Move_LeftOfTheHoleItAlreadyBorders");
+    }
+
+    [Test]
+    public void Move_ToTheOtherSideOfItsNeighbour_ReordersTheLeavesAndLevelsTheWeights()
+    {
+        var root = Columns(Leaf("stream-info", 0.2), Leaf("polls-control", 0.8));
+
+        Assert.That(DashboardPaneEditor.TryMove(root, [1], [0], PaneSide.Left, out var result), Is.True);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.SameAs(root));
+            Assert.That(Leaves((SplitPane)result), Is.EqualTo(new[] { "polls-control", "stream-info" }));
+            Assert.That(Weights((SplitPane)result), Is.EqualTo(new double?[] { 0.5, 0.5 }));
+        }
+    }
+
     [Test]
     public void Remove_OneOfThreeSiblings_SpreadsItsShareOverTheRest()
     {

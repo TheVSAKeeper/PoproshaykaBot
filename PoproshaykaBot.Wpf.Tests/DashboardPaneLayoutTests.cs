@@ -1,5 +1,6 @@
 ﻿using KeepShell.Bootstrap;
 using PoproshaykaBot.Core.Settings.Ui;
+using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
@@ -571,6 +572,20 @@ public class DashboardPaneLayoutTests
                 Is.True,
                 "Раскрытие на время правки не должно уезжать в файл.");
         });
+    }
+
+    [Test]
+    public void A_move_that_leaves_the_layout_as_it_was_still_clears_the_notice()
+    {
+        using var dashboard = CreateDashboard(AuthoredWeightsLayout(), new FakeTile("stream-info"), new FakeTile("broadcast-status"));
+
+        dashboard.ToggleEditCommand.Execute(null);
+        dashboard.ShowEditNotice("Плитку не получилось перенести на это место.");
+
+        dashboard.ReportMove(DashboardEditStatus.Applied);
+
+        Assert.That(dashboard.EditNotice, Is.Null,
+            "Перенос на занимаемое место дерева не меняет, события Changed не будет – ленту гасит сам удавшийся исход.");
     }
 
     [Test]

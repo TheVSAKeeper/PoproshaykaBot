@@ -136,6 +136,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         switch (status)
         {
             case DashboardEditStatus.Applied:
+                EditNotice = null;
                 return;
 
             case DashboardEditStatus.GridFull:
@@ -248,6 +249,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         switch (status)
         {
             case DashboardEditStatus.Applied:
+                EditNotice = null;
                 return;
 
             case DashboardEditStatus.GridFull:
@@ -275,6 +277,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         switch (_session.Remove(typeId))
         {
             case DashboardRemoveStatus.Removed:
+                EditNotice = null;
                 return;
 
             case DashboardRemoveStatus.LastTile:

@@ -248,6 +248,35 @@ public class DashboardEditSessionTests
     }
 
     [Test]
+    public void A_move_onto_the_spot_the_tile_already_holds_keeps_the_draft_as_it_was()
+    {
+        var layout = SideBySide();
+
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), 0.2),
+            new(new TilePane("twitch-chat"), 0.8),
+        ]);
+
+        var store = new FakeLayoutStore(layout);
+        var time = new ManualTimeProvider();
+
+        using var session = new DashboardEditSession(new(store), time);
+
+        Assert.That(session.Move([1], [0], PaneSide.Right), Is.EqualTo(DashboardEditStatus.Applied),
+            "Бросок на место, где плитка уже стоит, законен – отказывать пользователю не в чем.");
+
+        time.Advance(DashboardEditSession.WriteDelay);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Weights(session.Draft), Is.EqualTo(new double?[] { 0.2, 0.8 }));
+            Assert.That(session.CanUndo, Is.False, "Шаг отмены здесь съел бы предыдущую настоящую правку.");
+            Assert.That(store.SaveCount, Is.Zero, "Менять нечего – и отложенной записи заводить не за чем.");
+        });
+    }
+
+    [Test]
     public void Removing_the_last_leaf_is_refused()
     {
         var layout = SideBySide();
