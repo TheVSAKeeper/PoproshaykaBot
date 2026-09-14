@@ -13,7 +13,7 @@ public sealed class KestrelHttpServer(
     IEnumerable<IEndpointMapper> endpointMappers,
     ILogger<KestrelHttpServer> logger,
     ILoggerFactory loggerFactory)
-    : IAsyncDisposable
+    : IAsyncDisposable, IHttpServerStatus
 {
     private readonly IReadOnlyList<IEndpointMapper> _endpointMappers = endpointMappers.ToArray();
 

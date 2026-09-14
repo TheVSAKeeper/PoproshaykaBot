@@ -54,7 +54,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         IChannelProvider channelProvider,
         IEventBus eventBus,
         IDialogService dialogService)
-        : base("broadcast-status", "Рассылка", maxWidth: 360, minHeight: 144)
+        : base("broadcast-status", "Рассылка", maxWidth: 360, minHeight: 160)
     {
         _scheduler = scheduler;
         _settings = settings;

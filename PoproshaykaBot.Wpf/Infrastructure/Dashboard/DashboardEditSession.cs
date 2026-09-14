@@ -64,21 +64,21 @@ public sealed class DashboardEditSession : IDisposable
         return Apply(root => DashboardPaneEditor.TryResize(root, path, weights, out var result) ? result : null);
     }
 
-    public bool Swap(string firstTypeId, string secondTypeId)
+    public DashboardEditStatus Swap(string firstTypeId, string secondTypeId)
     {
-        return Apply(root => DashboardPaneEditor.TrySwap(root, firstTypeId, secondTypeId, out var result) ? result : null);
+        return ApplyWithStatus(root => DashboardPaneEditor.TrySwap(root, firstTypeId, secondTypeId, out var result) ? result : null);
     }
 
-    public bool Split(string sourceTypeId, string targetTypeId, PaneSide side)
+    public DashboardEditStatus Split(string sourceTypeId, string targetTypeId, PaneSide side)
     {
         if (string.Equals(sourceTypeId, targetTypeId, StringComparison.Ordinal))
         {
-            return false;
+            return DashboardEditStatus.Rejected;
         }
 
-        return Apply(root =>
+        return ApplyWithStatus(root =>
         {
-            if (!DashboardPaneEditor.TryRemove(root, sourceTypeId, out var without) || without is null)
+            if (DashboardPaneEditor.Remove(root, sourceTypeId) is not { Status: DashboardRemoveStatus.Removed, Root: { } without })
             {
                 return null;
             }
@@ -87,9 +87,9 @@ public sealed class DashboardEditSession : IDisposable
         });
     }
 
-    public bool Add(string typeId, string targetTypeId, PaneSide side)
+    public DashboardEditStatus Add(string typeId, string targetTypeId, PaneSide side)
     {
-        return Apply(root =>
+        return ApplyWithStatus(root =>
         {
             DashboardLayoutReconciler.AppendMissingTypes(_draft, [typeId]);
 
@@ -97,11 +97,25 @@ public sealed class DashboardEditSession : IDisposable
         });
     }
 
-    public bool Remove(string typeId)
+    public DashboardRemoveStatus Remove(string typeId)
     {
-        return Apply(root => root is TilePane
-            ? null
-            : DashboardPaneEditor.TryRemove(root, typeId, out var result) ? result : null);
+        var status = DashboardRemoveStatus.Rejected;
+
+        var applied = Apply(root =>
+        {
+            var removal = DashboardPaneEditor.Remove(root, typeId);
+
+            status = removal.Status;
+
+            return removal.Root;
+        });
+
+        if (applied)
+        {
+            return DashboardRemoveStatus.Removed;
+        }
+
+        return status == DashboardRemoveStatus.LastTile ? DashboardRemoveStatus.LastTile : DashboardRemoveStatus.Rejected;
     }
 
     public bool Undo()
@@ -224,20 +238,32 @@ public sealed class DashboardEditSession : IDisposable
 
     private bool Apply(Func<DashboardPane, DashboardPane?> change)
     {
+        return ApplyWithStatus(change) == DashboardEditStatus.Applied;
+    }
+
+    private DashboardEditStatus ApplyWithStatus(Func<DashboardPane, DashboardPane?> change)
+    {
         lock (_gate)
         {
             if (_disposed || _draft.Root is not { } root)
             {
-                return false;
+                return DashboardEditStatus.Unavailable;
             }
 
             var previous = Clone(_draft)!;
 
-            if (change(root) is not { } updated || !Fits(updated))
+            if (change(root) is not { } updated)
             {
                 _draft = previous;
 
-                return false;
+                return DashboardEditStatus.Rejected;
+            }
+
+            if (!Fits(updated))
+            {
+                _draft = previous;
+
+                return DashboardEditStatus.GridFull;
             }
 
             _draft.Root = updated;
@@ -246,7 +272,7 @@ public sealed class DashboardEditSession : IDisposable
             {
                 _draft = previous;
 
-                return false;
+                return DashboardEditStatus.Rejected;
             }
 
             Remember(previous);
@@ -255,7 +281,7 @@ public sealed class DashboardEditSession : IDisposable
 
         Raise();
 
-        return true;
+        return DashboardEditStatus.Applied;
     }
 
     private void Remember(DashboardLayoutSettings previous)

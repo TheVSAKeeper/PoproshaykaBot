@@ -11,11 +11,11 @@ using PoproshaykaBot.Wpf.Bootstrap;
 namespace PoproshaykaBot.Wpf.Mcp;
 
 public sealed class BotAutomation(
-    BotConnectionManager connectionManager,
+    IBotConnectionController connectionManager,
     ITargetChannelProvider targetChannelProvider,
     IStreamStatus streamStatus,
-    KestrelHttpServer httpServer,
-    ObsIntegrationService obsIntegration,
+    IHttpServerStatus httpServer,
+    IObsSceneController obsIntegration,
     SettingsManager settingsManager,
     ILogger<BotAutomation> logger)
 {

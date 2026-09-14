@@ -16,8 +16,6 @@
         Width="620"
         MinHeight="480"
         MinWidth="480"
-        MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height, Mode=OneTime}"
-        MaxWidth="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Width, Mode=OneTime}"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
         AllowsTransparency="False"

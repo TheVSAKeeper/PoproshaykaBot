@@ -207,14 +207,25 @@ public sealed class DashboardPaneEditorTests
         Assert.That(weights, Is.All.Matches<double?>(weight => weight is null || double.IsFinite(weight.Value)));
     }
 
-    [Test]
-    public void Remove_TheOnlyLeaf_LeavesNoTree()
+    [TestCaseSource(nameof(RemovalsThatLeaveNoTile))]
+    public void Remove_TheLastRealTile_IsToldApartFromARefusal(DashboardPane root, string typeId)
     {
+        var removal = DashboardPaneEditor.Remove(root, typeId);
+
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(DashboardPaneEditor.TryRemove(new TilePane("stream-info"), "stream-info", out var result), Is.True);
-            Assert.That(result, Is.Null);
+            Assert.That(removal.Status, Is.EqualTo(DashboardRemoveStatus.LastTile),
+                "«Плиток не осталось» и «удалить нельзя» – разные ответы: хост объясняет их пользователю по-разному.");
+            Assert.That(removal.Root, Is.Null);
         }
+    }
+
+    public static IEnumerable<TestCaseData> RemovalsThatLeaveNoTile()
+    {
+        yield return new TestCaseData(new TilePane("stream-info"), "stream-info").SetName("LastTile_TheOnlyLeaf");
+
+        yield return new TestCaseData(Columns(Leaf("stream-info", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5)), "stream-info")
+            .SetName("LastTile_TheOnlyLeafBesideAHole");
     }
 
     [TestCase("nothing")]
@@ -223,10 +234,12 @@ public sealed class DashboardPaneEditorTests
     {
         var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
 
+        var removal = DashboardPaneEditor.Remove(root, typeId);
+
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(DashboardPaneEditor.TryRemove(root, typeId, out var result), Is.False);
-            Assert.That(result, Is.SameAs(root));
+            Assert.That(removal.Status, Is.EqualTo(DashboardRemoveStatus.Rejected));
+            Assert.That(removal.Root, Is.Null);
         }
     }
 
@@ -272,7 +285,7 @@ public sealed class DashboardPaneEditorTests
             Assert.That(DashboardPaneEditor.IsWellFormed(root), Is.False);
             Assert.That(DashboardPaneEditor.TrySplit(root, "stream-info", PaneSide.Left, "obs-info", out _), Is.False);
             Assert.That(DashboardPaneEditor.TrySwap(root, "stream-info", "polls-control", out _), Is.False);
-            Assert.That(DashboardPaneEditor.TryRemove(root, "stream-info", out _), Is.False);
+            Assert.That(DashboardPaneEditor.Remove(root, "stream-info").Status, Is.EqualTo(DashboardRemoveStatus.Rejected));
             Assert.That(DashboardPaneEditor.Normalize(root), Is.Null);
         }
     }
@@ -303,9 +316,11 @@ public sealed class DashboardPaneEditorTests
 
     private static DashboardPane? Remove(DashboardPane root, string typeId)
     {
-        Assert.That(DashboardPaneEditor.TryRemove(root, typeId, out var result), Is.True);
+        var removal = DashboardPaneEditor.Remove(root, typeId);
 
-        return result;
+        Assert.That(removal.Status, Is.EqualTo(DashboardRemoveStatus.Removed));
+
+        return removal.Root;
     }
 
     [Test]

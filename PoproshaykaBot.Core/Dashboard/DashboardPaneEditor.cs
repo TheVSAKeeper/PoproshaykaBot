@@ -57,36 +57,28 @@ public static class DashboardPaneEditor
         return true;
     }
 
-    public static bool TryRemove(DashboardPane root, string typeId, out DashboardPane? result)
+    public static DashboardRemoveResult Remove(DashboardPane root, string typeId)
     {
         ArgumentNullException.ThrowIfNull(root);
 
-        result = root;
-
         if (string.IsNullOrEmpty(typeId) || !TryCollectLeaves(root, out var leaves) || !leaves.Contains(typeId))
         {
-            return false;
+            return DashboardRemoveResult.Rejected;
         }
 
         if (root is TilePane)
         {
-            result = null;
-
-            return true;
+            return DashboardRemoveResult.LastTile;
         }
 
         if (root is not SplitPane split
             || !TryRemoveIn(split, typeId, out var replacement)
             || Normalize(replacement) is not { } normalized)
         {
-            result = root;
-
-            return false;
+            return DashboardRemoveResult.Rejected;
         }
 
-        result = HasTile(normalized) ? normalized : null;
-
-        return true;
+        return HasTile(normalized) ? DashboardRemoveResult.Removed(normalized) : DashboardRemoveResult.LastTile;
     }
 
     public static bool TryResize(DashboardPane root, IReadOnlyList<int> path, IReadOnlyList<double> weights, out DashboardPane result)
