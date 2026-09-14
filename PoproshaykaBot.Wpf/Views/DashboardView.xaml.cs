@@ -1,6 +1,7 @@
 ﻿using KeepShell.Bootstrap;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Settings.Ui;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.Windows;
@@ -19,6 +20,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     private const double SplitterThickness = 6;
     private const double DragThreshold = 6;
     private const double SwapZone = 0.3;
+    private const double DropFillOpacity = 0.35;
     private const double ShareStep = 0.05;
     private const double RoomTolerance = 0.5;
     private const string ResizeRefused = "Размер этой плитки сейчас не изменить.";
@@ -31,6 +33,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     private DashboardTileViewModel? _dragTile;
     private Border? _dragShield;
     private Border? _dropHint;
+    private Border? _dropFill;
     private TextBlock? _shareHint;
     private Point _dragOrigin;
     private bool _dragging;
@@ -738,8 +741,8 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
                 Padding = new(8, 4, 8, 4),
             };
 
-            _shareHint.SetResourceReference(TextBlock.BackgroundProperty, "Bg.Surface");
-            _shareHint.SetResourceReference(TextBlock.ForegroundProperty, "Fg.Primary");
+            _shareHint.SetResourceReference(TextBlock.BackgroundProperty, ThemeKeys.BgSurface);
+            _shareHint.SetResourceReference(TextBlock.ForegroundProperty, ThemeKeys.FgPrimary);
         }
 
         if (!EditOverlay.Children.Contains(_shareHint))
@@ -936,15 +939,26 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return;
         }
 
-        _dropHint ??= new()
+        if (_dropHint is null)
         {
-            BorderThickness = new(2),
-            IsHitTestVisible = false,
-        };
+            _dropFill = new()
+            {
+                Opacity = DropFillOpacity,
+            };
 
-        _dropHint.SetResourceReference(Border.BorderBrushProperty, "Accent.Base");
-        _dropHint.SetResourceReference(Border.BackgroundProperty, "Bg.Subtle");
-        _dropHint.Opacity = 0.6;
+            _dropFill.SetResourceReference(Border.BackgroundProperty, ThemeKeys.AccentSoft);
+            _dropFill.SetResourceReference(Border.CornerRadiusProperty, ThemeKeys.RadiusM);
+
+            _dropHint = new()
+            {
+                BorderThickness = new(2),
+                IsHitTestVisible = false,
+                Child = _dropFill,
+            };
+
+            _dropHint.SetResourceReference(Border.BorderBrushProperty, ThemeKeys.AccentPrimary);
+            _dropHint.SetResourceReference(Border.CornerRadiusProperty, ThemeKeys.RadiusM);
+        }
 
         if (!EditOverlay.Children.Contains(_dropHint))
         {
@@ -953,6 +967,8 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
         var bounds = target.Bounds;
         var side = Side(position, bounds);
+
+        _dropFill!.Visibility = side == PaneSide.None ? Visibility.Collapsed : Visibility.Visible;
 
         var rect = side switch
         {
