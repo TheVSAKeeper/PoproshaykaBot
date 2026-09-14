@@ -67,6 +67,7 @@ jobs:
           cache-dependency-path: "**/packages.lock.json"
 
       - name: Build app (Release, x64)
+        id: build-app
         run: >
           dotnet build PoproshaykaBot.${{ matrix.host }}/PoproshaykaBot.${{ matrix.host }}.csproj
           --configuration Release
@@ -92,5 +93,18 @@ jobs:
         with:
           name: ui-test-results-${{ matrix.host }}
           path: TestResults/*.trx
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Capture gallery
+        if: always() && matrix.host == 'Wpf' && steps.build-app.outcome == 'success'
+        run: pwsh -NoProfile -File tools/capture-view.ps1 -Configuration Release -NoBuild
+
+      - name: Upload gallery frames
+        if: always() && matrix.host == 'Wpf'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-gallery-${{ matrix.host }}
+          path: artifacts/gallery/**
           if-no-files-found: warn
           retention-days: 7
