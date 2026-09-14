@@ -22,6 +22,7 @@ public static class ServerServiceCollectionExtensions
         services.AddSingleton<SseClientRegistry>();
         services.AddSingleton<SseService>();
         services.AddSingleton<KestrelHttpServer>();
+        services.AddSingleton<IHttpServerStatus>(sp => sp.GetRequiredService<KestrelHttpServer>());
         services.AddSingleton<AppLifetime>();
         services.AddSingleton<IAppLifetimeComponent, KestrelHttpServerLifetimeAdapter>();
 
