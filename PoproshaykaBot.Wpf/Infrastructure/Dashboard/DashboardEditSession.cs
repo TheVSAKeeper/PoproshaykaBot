@@ -64,36 +64,28 @@ public sealed class DashboardEditSession : IDisposable
         return Apply(root => DashboardPaneEditor.TryResize(root, path, weights, out var result) ? result : null);
     }
 
-    public DashboardEditStatus Swap(string firstTypeId, string secondTypeId)
+    public DashboardEditStatus Swap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
     {
-        return ApplyWithStatus(root => DashboardPaneEditor.TrySwap(root, firstTypeId, secondTypeId, out var result) ? result : null);
+        return ApplyWithStatus(root => DashboardPaneEditor.TrySwap(root, firstPath, secondPath, out var result) ? result : null);
     }
 
-    public DashboardEditStatus Split(string sourceTypeId, string targetTypeId, PaneSide side)
+    public DashboardEditStatus Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        if (string.Equals(sourceTypeId, targetTypeId, StringComparison.Ordinal))
-        {
-            return DashboardEditStatus.Rejected;
-        }
-
-        return ApplyWithStatus(root =>
-        {
-            if (DashboardPaneEditor.Remove(root, sourceTypeId) is not { Status: DashboardRemoveStatus.Removed, Root: { } without })
-            {
-                return null;
-            }
-
-            return DashboardPaneEditor.TrySplit(without, targetTypeId, side, sourceTypeId, out var result) ? result : null;
-        });
+        return ApplyWithStatus(root => DashboardPaneEditor.TryMove(root, sourcePath, targetPath, side, out var result) ? result : null);
     }
 
     public DashboardEditStatus Add(string typeId, string targetTypeId, PaneSide side)
     {
         return ApplyWithStatus(root =>
         {
+            if (!DashboardPaneEditor.TryFindPath(root, targetTypeId, out var targetPath))
+            {
+                return null;
+            }
+
             DashboardLayoutReconciler.AppendMissingTypes(_draft, [typeId]);
 
-            return DashboardPaneEditor.TrySplit(root, targetTypeId, side, typeId, out var result) ? result : null;
+            return DashboardPaneEditor.TrySplit(root, targetPath, side, typeId, out var result) ? result : null;
         });
     }
 
@@ -103,7 +95,12 @@ public sealed class DashboardEditSession : IDisposable
 
         var applied = Apply(root =>
         {
-            var removal = DashboardPaneEditor.Remove(root, typeId);
+            if (!DashboardPaneEditor.TryFindPath(root, typeId, out var path))
+            {
+                return null;
+            }
+
+            var removal = DashboardPaneEditor.Remove(root, path);
 
             status = removal.Status;
 

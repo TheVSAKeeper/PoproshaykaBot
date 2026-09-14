@@ -24,7 +24,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     private const string ResizeRefused = "Размер этой плитки сейчас не изменить.";
 
     private readonly Dictionary<DashboardTileViewModel, ContentControl> _hosts = [];
-    private readonly Dictionary<string, int[]> _leafPaths = new(StringComparer.Ordinal);
+    private readonly Dictionary<FrameworkElement, int[]> _panePaths = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<SplitPaneLayout, Grid> _splitGrids = new(ReferenceEqualityComparer.Instance);
 
     private DashboardViewModel? _viewModel;
@@ -250,7 +250,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         BandsGrid.Children.Clear();
         BandsGrid.ColumnDefinitions.Clear();
         BandsGrid.RowDefinitions.Clear();
-        _leafPaths.Clear();
+        _panePaths.Clear();
         _splitGrids.Clear();
 
         if (_viewModel is null)
@@ -396,14 +396,20 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     {
         if (pane is EmptyPaneLayout)
         {
-            return new Border();
+            var empty = new Border { Background = Brushes.Transparent };
+
+            _panePaths[empty] = pane.Path;
+
+            return empty;
         }
 
         if (pane is TilePaneLayout leaf)
         {
-            _leafPaths[leaf.Tile.TypeId] = leaf.Path;
+            var host = GetOrCreateHost(leaf.Tile);
 
-            return GetOrCreateHost(leaf.Tile);
+            _panePaths[host] = leaf.Path;
+
+            return host;
         }
 
         var split = (SplitPaneLayout)pane;
@@ -905,7 +911,9 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return;
         }
 
-        if (TargetAt(position) is not { } target || string.Equals(target.Tile.TypeId, source.TypeId, StringComparison.Ordinal))
+        if (TargetAt(position) is not { } target
+            || PathOf(source) is not { } sourcePath
+            || sourcePath.AsSpan().SequenceEqual(target.Path))
         {
             return;
         }
@@ -913,8 +921,8 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         var side = Side(position, target.Bounds);
 
         var moved = side == PaneSide.None
-            ? _viewModel.Swap(source.TypeId, target.Tile.TypeId)
-            : _viewModel.Move(source.TypeId, target.Tile.TypeId, side);
+            ? _viewModel.Swap(sourcePath, target.Path)
+            : _viewModel.Move(sourcePath, target.Path, side);
 
         _viewModel.ReportMove(moved);
     }
@@ -971,18 +979,22 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
         while (hit is not null)
         {
-            if (hit is FrameworkElement { DataContext: DashboardTileViewModel tile } element && _hosts.ContainsKey(tile))
+            if (hit is FrameworkElement element && _panePaths.TryGetValue(element, out var path))
             {
-                var host = _hosts[tile];
-                var origin = host.TransformToAncestor(this).Transform(new(0, 0));
+                var origin = element.TransformToAncestor(this).Transform(new(0, 0));
 
-                return new(tile, new(origin, new Size(host.ActualWidth, host.ActualHeight)), element);
+                return new(path, new(origin, new Size(element.ActualWidth, element.ActualHeight)));
             }
 
             hit = VisualTreeHelper.GetParent(hit);
         }
 
         return null;
+    }
+
+    private int[]? PathOf(DashboardTileViewModel tile)
+    {
+        return _hosts.TryGetValue(tile, out var host) && _panePaths.TryGetValue(host, out var path) ? path : null;
     }
 
     private void EndDrag()
@@ -1050,14 +1062,14 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return AdjustShare(tile, key);
         }
 
-        if (TargetFor(key) is not { } neighbour)
+        if (PathOf(tile) is not { } path || TargetFor(key) is not { } neighbour)
         {
             _viewModel.ShowEditNotice("Перенести плитку некуда: с этой стороны соседей нет.");
 
             return true;
         }
 
-        _viewModel.ReportMove(_viewModel.Move(tile.TypeId, neighbour, SideOf(key)));
+        _viewModel.ReportMove(_viewModel.Move(path, neighbour, SideOf(key)));
 
         return true;
     }
@@ -1073,9 +1085,9 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         };
     }
 
-    private string? TargetFor(Key key)
+    private int[]? TargetFor(Key key)
     {
-        if (FocusedTile() is not { } tile || !_leafPaths.TryGetValue(tile.TypeId, out var path) || _viewModel?.Pane is not { } root)
+        if (FocusedTile() is not { } tile || PathOf(tile) is not { } path || _viewModel?.Pane is not { } root)
         {
             return null;
         }
@@ -1105,11 +1117,25 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
                 return null;
             }
 
-            var leaves = new List<TilePaneLayout>();
+            return FirstLeafPath(node.Children[neighbour].Pane);
+        }
 
-            CollectLeaves(node.Children[neighbour].Pane, leaves);
+        return null;
+    }
 
-            return leaves.Count > 0 ? leaves[0].Tile.TypeId : null;
+    private static int[]? FirstLeafPath(PaneLayout pane)
+    {
+        if (pane is not SplitPaneLayout split)
+        {
+            return pane.Path;
+        }
+
+        foreach (var child in split.Children)
+        {
+            if (FirstLeafPath(child.Pane) is { } path)
+            {
+                return path;
+            }
         }
 
         return null;
@@ -1117,7 +1143,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private bool AdjustShare(DashboardTileViewModel tile, Key key)
     {
-        if (!_leafPaths.TryGetValue(tile.TypeId, out var path) || _viewModel is not { Pane: { } root } viewModel)
+        if (PathOf(tile) is not { } path || _viewModel is not { Pane: { } root } viewModel)
         {
             return false;
         }
@@ -1293,5 +1319,5 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         return Keyboard.FocusedElement is FrameworkElement { DataContext: DashboardTileViewModel tile } ? tile : null;
     }
 
-    private sealed record DropTarget(DashboardTileViewModel Tile, Rect Bounds, FrameworkElement Element);
+    private sealed record DropTarget(int[] Path, Rect Bounds);
 }

@@ -156,7 +156,7 @@ public class DashboardEditSessionTests
         }
 
         var status = byMove
-            ? session.Split("stream-info", "twitch-chat", PaneSide.Bottom)
+            ? session.Move([0], [1], PaneSide.Bottom)
             : session.Add("audience-tracker", "twitch-chat", PaneSide.Right);
 
         if (!disposeFirst)
@@ -187,7 +187,7 @@ public class DashboardEditSessionTests
             }
 
             var status = byMove
-                ? session.Split("twitch-chat", bottom, PaneSide.Bottom)
+                ? session.Move(PathOf(session, "twitch-chat"), PathOf(session, bottom), PaneSide.Bottom)
                 : session.Add("logs", bottom, PaneSide.Bottom);
 
             Assert.That(status, Is.EqualTo(DashboardEditStatus.GridFull),
@@ -199,16 +199,52 @@ public class DashboardEditSessionTests
         }
     }
 
-    [TestCase("stream-info", Description = "Плитку переносят саму на себя")]
-    [TestCase("audience-tracker", Description = "Целевой плитки в дереве нет")]
-    public void A_move_that_the_tree_refuses_is_not_reported_as_a_full_grid(string target)
+    [TestCase(new[] { 0 }, Description = "Плитку переносят саму на себя")]
+    [TestCase(new[] { 7 }, Description = "Пути цели в дереве нет")]
+    public void A_move_that_the_tree_refuses_is_not_reported_as_a_full_grid(int[] target)
     {
         var store = new FakeLayoutStore(SideBySide());
 
         using var session = new DashboardEditSession(new(store), new ManualTimeProvider());
 
-        Assert.That(session.Split("stream-info", target, PaneSide.Bottom), Is.EqualTo(DashboardEditStatus.Rejected),
+        Assert.That(session.Move([0], target, PaneSide.Bottom), Is.EqualTo(DashboardEditStatus.Rejected),
             "Сетка здесь свободна, и звать пользователя освобождать место было бы ложью.");
+    }
+
+    [Test]
+    public void A_swap_with_a_hole_moves_the_tile_into_the_empty_cell()
+    {
+        var store = new FakeLayoutStore(ColumnWithAHole());
+
+        using var session = new DashboardEditSession(new(store), new ManualTimeProvider());
+
+        Assert.That(session.Swap([0], [1]), Is.EqualTo(DashboardEditStatus.Applied),
+            "Пустая ячейка адресуется путём, и обмен с ней – обычная правка дерева.");
+
+        session.Flush();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(store.Saved!.Tiles.Single().Row, Is.EqualTo(2), "Плитка переехала в нижнюю половину, где была дыра.");
+            Assert.That(store.Saved.Tiles.Select(tile => tile.TypeId), Has.No.Member(DashboardLayoutTree.EmptySlotTypeId),
+                "Дыра не заводит себе записи в Tiles даже после переезда.");
+        });
+    }
+
+    [Test]
+    public void A_move_onto_a_hole_divides_it()
+    {
+        var store = new FakeLayoutStore(ColumnWithAHole());
+
+        using var session = new DashboardEditSession(new(store), new ManualTimeProvider());
+
+        Assert.That(session.Move([0], [1], PaneSide.Bottom), Is.EqualTo(DashboardEditStatus.Applied),
+            "Бросок на пустую ячейку – тот же перенос, что и на соседнюю плитку.");
+
+        session.Flush();
+
+        Assert.That(store.Saved!.Tiles.Single().Row, Is.EqualTo(2),
+            "Плитка ушла в нижнюю половину дыры, а верхняя осталась пустой.");
     }
 
     [Test]
@@ -310,6 +346,14 @@ public class DashboardEditSessionTests
                 Is.EqualTo(new[] { "stream-info" }), "Пустышка не заводит себе записи в Tiles.");
             Assert.That(store.Saved.Tiles.Single().RowSpan, Is.EqualTo(3), "Доля 0.75 от четырёх строк отдаёт плитке три, дыре – одну.");
         });
+    }
+
+    private static IReadOnlyList<int> PathOf(DashboardEditSession session, string typeId)
+    {
+        Assert.That(DashboardPaneEditor.TryFindPath(session.Draft.Root!, typeId, out var path), Is.True,
+            $"Плитка {typeId} обязана быть в дереве черновика.");
+
+        return path;
     }
 
     private static DashboardLayoutSettings ColumnWithAHole()

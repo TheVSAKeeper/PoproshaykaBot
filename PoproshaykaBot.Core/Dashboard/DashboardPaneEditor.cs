@@ -7,26 +7,51 @@ public static class DashboardPaneEditor
     private const int MaxDepth = 32;
     private const double MinimumWeight = 0.05;
 
-    public static bool TrySplit(DashboardPane root, string targetTypeId, PaneSide side, string typeId, out DashboardPane result)
+    public static bool TryFindPath(DashboardPane root, string typeId, out IReadOnlyList<int> path)
     {
         ArgumentNullException.ThrowIfNull(root);
+
+        path = [];
+
+        if (string.IsNullOrEmpty(typeId)
+            || DashboardLayoutTree.IsEmptySlot(typeId)
+            || !TryCollectLeaves(root, out var leaves))
+        {
+            return false;
+        }
+
+        var found = leaves.FindIndex(leaf => string.Equals(leaf.TypeId, typeId, StringComparison.Ordinal));
+
+        if (found < 0)
+        {
+            return false;
+        }
+
+        path = leaves[found].Path;
+
+        return true;
+    }
+
+    public static bool TrySplit(DashboardPane root, IReadOnlyList<int> targetPath, PaneSide side, string typeId, out DashboardPane result)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(targetPath);
 
         result = root;
 
         if (side == PaneSide.None
-            || string.IsNullOrEmpty(targetTypeId)
             || string.IsNullOrEmpty(typeId)
             || DashboardLayoutTree.IsEmptySlot(typeId)
             || !TryCollectLeaves(root, out var leaves)
-            || !leaves.Contains(targetTypeId)
-            || leaves.Contains(typeId))
+            || Holds(leaves, typeId)
+            || Find(root, targetPath) is not TilePane)
         {
             return false;
         }
 
         var orientation = side is PaneSide.Left or PaneSide.Right ? SplitOrientation.Columns : SplitOrientation.Rows;
         var before = side is PaneSide.Left or PaneSide.Top;
-        if (Insert(root, targetTypeId, orientation, before, typeId) is not { } split || Normalize(split) is not { } normalized)
+        if (InsertAt(root, targetPath, orientation, before, typeId) is not { } split || Normalize(split) is not { } normalized)
         {
             return false;
         }
@@ -36,44 +61,86 @@ public static class DashboardPaneEditor
         return true;
     }
 
-    public static bool TrySwap(DashboardPane root, string firstTypeId, string secondTypeId, out DashboardPane result)
+    public static bool TrySwap(DashboardPane root, IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath, out DashboardPane result)
     {
         ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(firstPath);
+        ArgumentNullException.ThrowIfNull(secondPath);
 
         result = root;
 
-        if (string.IsNullOrEmpty(firstTypeId)
-            || string.IsNullOrEmpty(secondTypeId)
-            || string.Equals(firstTypeId, secondTypeId, StringComparison.Ordinal)
-            || !TryCollectLeaves(root, out var leaves)
-            || !leaves.Contains(firstTypeId)
-            || !leaves.Contains(secondTypeId))
+        if (SamePath(firstPath, secondPath)
+            || !IsWellFormed(root)
+            || Find(root, firstPath) is not TilePane first
+            || Find(root, secondPath) is not TilePane second
+            || string.Equals(first.TypeId, second.TypeId, StringComparison.Ordinal)
+            || Substitute(root, firstPath, second, 0) is not { } half
+            || Substitute(half, secondPath, first, 0) is not { } swapped)
         {
             return false;
         }
 
-        result = Exchange(root, firstTypeId, secondTypeId);
+        result = swapped;
 
         return true;
     }
 
-    public static DashboardRemoveResult Remove(DashboardPane root, string typeId)
+    public static bool TryMove(DashboardPane root, IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side, out DashboardPane result)
     {
         ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(sourcePath);
+        ArgumentNullException.ThrowIfNull(targetPath);
 
-        if (string.IsNullOrEmpty(typeId) || !TryCollectLeaves(root, out var leaves) || !leaves.Contains(typeId))
+        result = root;
+
+        if (side == PaneSide.None || SamePath(sourcePath, targetPath) || !TryCollectLeaves(root, out var leaves))
+        {
+            return false;
+        }
+
+        var source = IndexOf(leaves, sourcePath);
+        var target = IndexOf(leaves, targetPath);
+
+        if (source < 0 || target < 0 || DashboardLayoutTree.IsEmptySlot(leaves[source].TypeId))
+        {
+            return false;
+        }
+
+        if (RemoveAt(root, sourcePath) is not { } without
+            || !TryCollectLeaves(without, out var remaining)
+            || !Follows(leaves, remaining, source))
+        {
+            return false;
+        }
+
+        var shifted = target > source ? target - 1 : target;
+
+        if (!TrySplit(without, remaining[shifted].Path, side, leaves[source].TypeId, out var moved))
+        {
+            return false;
+        }
+
+        result = moved;
+
+        return true;
+    }
+
+    public static DashboardRemoveResult Remove(DashboardPane root, IReadOnlyList<int> path)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(path);
+
+        if (!IsWellFormed(root) || Find(root, path) is not TilePane tile || DashboardLayoutTree.IsEmptySlot(tile.TypeId))
         {
             return DashboardRemoveResult.Rejected;
         }
 
-        if (root is TilePane)
+        if (path.Count == 0)
         {
             return DashboardRemoveResult.LastTile;
         }
 
-        if (root is not SplitPane split
-            || !TryRemoveIn(split, typeId, out var replacement)
-            || Normalize(replacement) is not { } normalized)
+        if (RemoveAt(root, path) is not { } normalized)
         {
             return DashboardRemoveResult.Rejected;
         }
@@ -153,14 +220,14 @@ public static class DashboardPaneEditor
         };
     }
 
-    private static bool TryCollectLeaves(DashboardPane root, out HashSet<string> leaves)
+    private static bool TryCollectLeaves(DashboardPane root, out List<PaneLeaf> leaves)
     {
-        leaves = new(StringComparer.Ordinal);
+        leaves = [];
 
-        return Collect(root, leaves, 0);
+        return Collect(root, [], leaves, new(StringComparer.Ordinal), 0);
     }
 
-    private static bool Collect(DashboardPane? pane, HashSet<string> leaves, int depth)
+    private static bool Collect(DashboardPane? pane, List<int> prefix, List<PaneLeaf> leaves, HashSet<string> seen, int depth)
     {
         if (depth > MaxDepth)
         {
@@ -170,10 +237,19 @@ public static class DashboardPaneEditor
         switch (pane)
         {
             case TilePane tile when DashboardLayoutTree.IsEmptySlot(tile.TypeId):
+                leaves.Add(new(tile.TypeId, [.. prefix]));
+
                 return true;
 
             case TilePane tile:
-                return !string.IsNullOrEmpty(tile.TypeId) && leaves.Add(tile.TypeId);
+                if (string.IsNullOrEmpty(tile.TypeId) || !seen.Add(tile.TypeId))
+                {
+                    return false;
+                }
+
+                leaves.Add(new(tile.TypeId, [.. prefix]));
+
+                return true;
 
             case SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows } split:
                 if (split.Children is not { Count: > 1 })
@@ -181,9 +257,17 @@ public static class DashboardPaneEditor
                     return false;
                 }
 
-                foreach (var slot in split.Children)
+                for (var index = 0; index < split.Children.Count; index++)
                 {
-                    if (slot is null || !Collect(slot.Pane, leaves, depth + 1))
+                    var slot = split.Children[index];
+
+                    prefix.Add(index);
+
+                    var collected = slot is not null && Collect(slot.Pane, prefix, leaves, seen, depth + 1);
+
+                    prefix.RemoveAt(prefix.Count - 1);
+
+                    if (!collected)
                     {
                         return false;
                     }
@@ -196,110 +280,218 @@ public static class DashboardPaneEditor
         }
     }
 
-    private static DashboardPane? Insert(DashboardPane pane, string target, SplitOrientation orientation, bool before, string typeId)
+    private static bool Holds(List<PaneLeaf> leaves, string typeId)
     {
-        if (pane is TilePane tile)
+        return leaves.Exists(leaf => string.Equals(leaf.TypeId, typeId, StringComparison.Ordinal));
+    }
+
+    private static int IndexOf(List<PaneLeaf> leaves, IReadOnlyList<int> path)
+    {
+        for (var index = 0; index < leaves.Count; index++)
         {
-            return string.Equals(tile.TypeId, target, StringComparison.Ordinal)
-                ? new SplitPane(orientation, Pair(new PaneSlot(tile, 0.5), new(new TilePane(typeId), 0.5), before))
-                : null;
+            if (SamePath(leaves[index].Path, path))
+            {
+                return index;
+            }
         }
 
-        var split = (SplitPane)pane;
+        return -1;
+    }
 
-        for (var index = 0; index < split.Children.Count; index++)
+    private static bool Follows(List<PaneLeaf> before, List<PaneLeaf> after, int removed)
+    {
+        if (after.Count != before.Count - 1)
         {
-            var slot = split.Children[index];
-
-            if (slot.Pane is TilePane leaf
-                && string.Equals(leaf.TypeId, target, StringComparison.Ordinal)
-                && split.Orientation == orientation)
-            {
-                var half = slot.Weight is { } weight ? weight / 2 : (double?)null;
-                var children = new List<PaneSlot>(split.Children);
-
-                children.RemoveAt(index);
-                children.InsertRange(index, Pair(new PaneSlot(leaf, half), new(new TilePane(typeId), half), before));
-
-                return new SplitPane(orientation, children);
-            }
-
-            var replaced = Insert(slot.Pane, target, orientation, before, typeId);
-
-            if (replaced is null)
-            {
-                continue;
-            }
-
-            var updated = new List<PaneSlot>(split.Children);
-            updated[index] = slot with { Pane = replaced };
-
-            return Build(split.Orientation, updated);
+            return false;
         }
 
-        return null;
+        for (var index = 0; index < after.Count; index++)
+        {
+            if (!string.Equals(after[index].TypeId, before[index < removed ? index : index + 1].TypeId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool SamePath(IReadOnlyList<int> first, IReadOnlyList<int> second)
+    {
+        if (first.Count != second.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < first.Count; index++)
+        {
+            if (first[index] != second[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int[] Parent(IReadOnlyList<int> path)
+    {
+        var parent = new int[path.Count - 1];
+
+        for (var index = 0; index < parent.Length; index++)
+        {
+            parent[index] = path[index];
+        }
+
+        return parent;
+    }
+
+    private static DashboardPane? Find(DashboardPane root, IReadOnlyList<int> path)
+    {
+        DashboardPane? pane = root;
+
+        foreach (var index in path)
+        {
+            if (pane is not SplitPane split || index < 0 || index >= split.Children.Count)
+            {
+                return null;
+            }
+
+            pane = split.Children[index].Pane;
+        }
+
+        return pane;
+    }
+
+    private static DashboardPane? Substitute(DashboardPane? pane, IReadOnlyList<int> path, DashboardPane replacement, int depth)
+    {
+        if (depth == path.Count)
+        {
+            return replacement;
+        }
+
+        if (pane is not SplitPane split)
+        {
+            return null;
+        }
+
+        var index = path[depth];
+
+        if (index < 0 || index >= split.Children.Count || Substitute(split.Children[index].Pane, path, replacement, depth + 1) is not { } rebuilt)
+        {
+            return null;
+        }
+
+        var children = new List<PaneSlot>(split.Children);
+        children[index] = split.Children[index] with { Pane = rebuilt };
+
+        return new SplitPane(split.Orientation, children);
+    }
+
+    private static DashboardPane? Rebuild(DashboardPane? pane, IReadOnlyList<int> path, int depth, Func<DashboardPane, DashboardPane?> at)
+    {
+        if (pane is null)
+        {
+            return null;
+        }
+
+        if (depth == path.Count)
+        {
+            return at(pane);
+        }
+
+        if (pane is not SplitPane split)
+        {
+            return null;
+        }
+
+        var index = path[depth];
+
+        if (index < 0 || index >= split.Children.Count || Rebuild(split.Children[index].Pane, path, depth + 1, at) is not { } rebuilt)
+        {
+            return null;
+        }
+
+        var children = new List<PaneSlot>(split.Children);
+        children[index] = split.Children[index] with { Pane = rebuilt };
+
+        return Build(split.Orientation, children);
+    }
+
+    private static DashboardPane? InsertAt(DashboardPane root, IReadOnlyList<int> path, SplitOrientation orientation, bool before, string typeId)
+    {
+        if (Find(root, path) is not TilePane leaf)
+        {
+            return null;
+        }
+
+        if (path.Count == 0)
+        {
+            return new SplitPane(orientation, Pair(new PaneSlot(leaf, 0.5), new(new TilePane(typeId), 0.5), before));
+        }
+
+        var index = path[path.Count - 1];
+
+        return Rebuild(root, Parent(path), 0, parent => InsertInto(parent, index, orientation, before, typeId));
+    }
+
+    private static DashboardPane? InsertInto(DashboardPane parent, int index, SplitOrientation orientation, bool before, string typeId)
+    {
+        if (parent is not SplitPane split || index < 0 || index >= split.Children.Count || split.Children[index].Pane is not TilePane leaf)
+        {
+            return null;
+        }
+
+        var slot = split.Children[index];
+
+        if (split.Orientation == orientation)
+        {
+            var half = slot.Weight is { } weight ? weight / 2 : (double?)null;
+            var siblings = new List<PaneSlot>(split.Children);
+
+            siblings.RemoveAt(index);
+            siblings.InsertRange(index, Pair(new PaneSlot(leaf, half), new(new TilePane(typeId), half), before));
+
+            return new SplitPane(orientation, siblings);
+        }
+
+        var nested = new SplitPane(orientation, Pair(new PaneSlot(leaf, 0.5), new(new TilePane(typeId), 0.5), before));
+        var children = new List<PaneSlot>(split.Children);
+
+        children[index] = slot with { Pane = nested };
+
+        return Build(split.Orientation, children);
+    }
+
+    private static DashboardPane? RemoveAt(DashboardPane root, IReadOnlyList<int> path)
+    {
+        if (path.Count == 0)
+        {
+            return null;
+        }
+
+        var index = path[path.Count - 1];
+
+        return Rebuild(root, Parent(path), 0, parent => Drop(parent, index)) is { } replacement ? Normalize(replacement) : null;
+    }
+
+    private static DashboardPane? Drop(DashboardPane parent, int index)
+    {
+        if (parent is not SplitPane split || index < 0 || index >= split.Children.Count)
+        {
+            return null;
+        }
+
+        var remaining = new List<PaneSlot>(split.Children);
+
+        remaining.RemoveAt(index);
+
+        return Build(split.Orientation, remaining);
     }
 
     private static List<PaneSlot> Pair(PaneSlot existing, PaneSlot inserted, bool before)
     {
         return before ? [inserted, existing] : [existing, inserted];
-    }
-
-    private static DashboardPane Exchange(DashboardPane pane, string first, string second)
-    {
-        if (pane is TilePane tile)
-        {
-            if (string.Equals(tile.TypeId, first, StringComparison.Ordinal))
-            {
-                return new TilePane(second);
-            }
-
-            return string.Equals(tile.TypeId, second, StringComparison.Ordinal) ? new TilePane(first) : tile;
-        }
-
-        var split = (SplitPane)pane;
-        var children = new List<PaneSlot>(split.Children.Count);
-
-        foreach (var slot in split.Children)
-        {
-            children.Add(slot with { Pane = Exchange(slot.Pane, first, second) });
-        }
-
-        return new SplitPane(split.Orientation, children);
-    }
-
-    private static bool TryRemoveIn(SplitPane split, string typeId, out DashboardPane replacement)
-    {
-        replacement = split;
-
-        for (var index = 0; index < split.Children.Count; index++)
-        {
-            var slot = split.Children[index];
-
-            if (slot.Pane is TilePane leaf && string.Equals(leaf.TypeId, typeId, StringComparison.Ordinal))
-            {
-                var remaining = new List<PaneSlot>(split.Children);
-                remaining.RemoveAt(index);
-
-                replacement = Build(split.Orientation, remaining);
-
-                return true;
-            }
-
-            if (slot.Pane is not SplitPane nested || !TryRemoveIn(nested, typeId, out var inner))
-            {
-                continue;
-            }
-
-            var children = new List<PaneSlot>(split.Children);
-            children[index] = slot with { Pane = inner };
-
-            replacement = Build(split.Orientation, children);
-
-            return true;
-        }
-
-        return false;
     }
 
     private static DashboardPane Build(SplitOrientation orientation, List<PaneSlot> slots)
@@ -577,4 +769,6 @@ public static class DashboardPaneEditor
 
         return known >= 1 ? explicitCount / (double)count / known : 1;
     }
+
+    private readonly record struct PaneLeaf(string TypeId, int[] Path);
 }

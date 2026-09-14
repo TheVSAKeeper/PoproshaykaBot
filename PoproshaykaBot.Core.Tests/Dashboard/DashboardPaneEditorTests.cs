@@ -58,29 +58,78 @@ public sealed class DashboardPaneEditorTests
         }
     }
 
-    [Test]
-    public void Split_LeafWithAutoWeight_KeepsBothHalvesAuto()
+    [TestCase("stream-info", TestName = "Split_AutoWeightOfATile")]
+    [TestCase(DashboardLayoutTree.EmptySlotTypeId, TestName = "Split_AutoWeightOfAHole")]
+    public void Split_LeafWithAutoWeight_KeepsBothHalvesAuto(string target)
     {
-        var root = Columns(Leaf("stream-info", null), Leaf("polls-control", 0.4));
+        var root = Columns(Leaf(target, null), Leaf("polls-control", 0.4));
 
-        var split = (SplitPane)Split(root, "stream-info", PaneSide.Left, "obs-info");
+        Assert.That(DashboardPaneEditor.TrySplit(root, [0], PaneSide.Left, "obs-info", out var result), Is.True);
 
-        Assert.That(Weights(split), Is.EqualTo(new double?[] { null, null, 0.4 }),
+        Assert.That(Weights((SplitPane)result), Is.EqualTo(new double?[] { null, null, 0.4 }),
             "«По контенту» – это и свёрнутая плитка тоже, разрез не имеет права подменять её долей.");
     }
 
-    [TestCase("stream-info", PaneSide.Left, "polls-control", TestName = "Split_TypeIdAlreadyInTheTree")]
-    [TestCase("nothing", PaneSide.Left, "obs-info", TestName = "Split_UnknownTarget")]
-    [TestCase("stream-info", PaneSide.None, "obs-info", TestName = "Split_WithoutASide")]
-    [TestCase("stream-info", PaneSide.Left, "", TestName = "Split_WithoutATypeId")]
-    public void Split_ImpossibleRequest_LeavesTheTreeAlone(string target, PaneSide side, string typeId)
+    [TestCase(new[] { 0 }, PaneSide.Left, "polls-control", TestName = "Split_TypeIdAlreadyInTheTree")]
+    [TestCase(new[] { 5 }, PaneSide.Left, "obs-info", TestName = "Split_PathOutsideTheNode")]
+    [TestCase(new int[0], PaneSide.Left, "obs-info", TestName = "Split_PathToANodeInsteadOfALeaf")]
+    [TestCase(new[] { 0, 0 }, PaneSide.Left, "obs-info", TestName = "Split_PathThroughALeaf")]
+    [TestCase(new[] { 0 }, PaneSide.None, "obs-info", TestName = "Split_WithoutASide")]
+    [TestCase(new[] { 0 }, PaneSide.Left, "", TestName = "Split_WithoutATypeId")]
+    [TestCase(new[] { 0 }, PaneSide.Left, DashboardLayoutTree.EmptySlotTypeId, TestName = "Split_InsertingTheReservedHole")]
+    public void Split_ImpossibleRequest_LeavesTheTreeAlone(int[] targetPath, PaneSide side, string typeId)
     {
         var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(DashboardPaneEditor.TrySplit(root, target, side, typeId, out var result), Is.False);
+            Assert.That(DashboardPaneEditor.TrySplit(root, targetPath, side, typeId, out var result), Is.False);
             Assert.That(result, Is.SameAs(root));
+        }
+    }
+
+    [Test]
+    public void Split_TheHoleItself_DividesTheHoleAndNotItsNeighbour()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5));
+
+        Assert.That(DashboardPaneEditor.TrySplit(root, [1], PaneSide.Bottom, "obs-info", out var result), Is.True,
+            "Пустая ячейка – такой же лист дерева: разрезать её обязано быть можно.");
+
+        var nested = ((SplitPane)result).Children[1].Pane as SplitPane;
+
+        Assert.That(nested, Is.Not.Null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(nested!.Orientation, Is.EqualTo(SplitOrientation.Rows));
+            Assert.That(Leaves(nested), Is.EqualTo(new[] { DashboardLayoutTree.EmptySlotTypeId, "obs-info" }));
+        }
+    }
+
+    [Test]
+    public void Split_OneOfSeveralHoles_TouchesOnlyTheAddressedOne()
+    {
+        var root = Columns(Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.25), Leaf("stream-info", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.25));
+
+        Assert.That(DashboardPaneEditor.TrySplit(root, [2], PaneSide.Right, "obs-info", out var result), Is.True);
+
+        Assert.That(Leaves((SplitPane)result), Is.EqualTo(new[] { DashboardLayoutTree.EmptySlotTypeId, "stream-info", DashboardLayoutTree.EmptySlotTypeId, "obs-info" }),
+            "Дыры неразличимы по TypeId, поэтому адресует их только путь – первая обязана остаться нетронутой.");
+    }
+
+    [Test]
+    public void FindPath_TheReservedHole_IsNotAddressableByTypeId()
+    {
+        var root = Columns(Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.25), Leaf("stream-info", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.25));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DashboardPaneEditor.TryFindPath(root, DashboardLayoutTree.EmptySlotTypeId, out var hole), Is.False,
+                "Один TypeId на все дыры: резолв по нему выдал бы произвольную из них.");
+            Assert.That(hole, Is.Empty);
+            Assert.That(DashboardPaneEditor.TryFindPath(root, "stream-info", out var tile), Is.True);
+            Assert.That(tile, Is.EqualTo(new[] { 1 }));
         }
     }
 
@@ -89,7 +138,7 @@ public sealed class DashboardPaneEditorTests
     {
         var root = Columns(Leaf("stream-info", 0.7), Rows(Leaf("polls-control", 0.5), Leaf("obs-info", 0.5), 0.3));
 
-        Assert.That(DashboardPaneEditor.TrySwap(root, "stream-info", "obs-info", out var swapped), Is.True);
+        Assert.That(DashboardPaneEditor.TrySwap(root, [0], [1, 1], out var swapped), Is.True);
 
         var split = (SplitPane)swapped;
         var nested = (SplitPane)split.Children[1].Pane;
@@ -102,18 +151,101 @@ public sealed class DashboardPaneEditorTests
         }
     }
 
-    [TestCase("stream-info", "nothing")]
-    [TestCase("stream-info", "stream-info")]
-    [TestCase("", "polls-control")]
-    public void Swap_ImpossibleRequest_LeavesTheTreeAlone(string first, string second)
+    [Test]
+    public void Swap_ATileWithAHole_MovesTheTileAndLeavesAHoleBehind()
     {
-        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
+        var root = Columns(Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.7), Rows(Leaf("polls-control", 0.5), Leaf("stream-info", 0.5), 0.3));
 
+        Assert.That(DashboardPaneEditor.TrySwap(root, [0], [1, 1], out var swapped), Is.True);
+
+        var split = (SplitPane)swapped;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Leaves(split), Is.EqualTo(new[] { "stream-info" }));
+            Assert.That(Leaves((SplitPane)split.Children[1].Pane), Is.EqualTo(new[] { "polls-control", DashboardLayoutTree.EmptySlotTypeId }),
+                "Плитка уезжает в дыру, а на её месте остаётся дыра – ячейка не может стать ничем.");
+            Assert.That(Weights(split), Is.EqualTo(new double?[] { 0.7, 0.3 }), "Обмен меняет жильцов, а не пропорции.");
+        }
+    }
+
+    [TestCaseSource(nameof(ImpossibleSwaps))]
+    public void Swap_ImpossibleRequest_LeavesTheTreeAlone(DashboardPane root, int[] first, int[] second)
+    {
         using (Assert.EnterMultipleScope())
         {
             Assert.That(DashboardPaneEditor.TrySwap(root, first, second, out var result), Is.False);
             Assert.That(result, Is.SameAs(root));
         }
+    }
+
+    public static IEnumerable<TestCaseData> ImpossibleSwaps()
+    {
+        var pair = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
+
+        yield return new TestCaseData(pair, new[] { 0 }, new[] { 9 }).SetName("Swap_PathOutsideTheNode");
+        yield return new TestCaseData(pair, new[] { 0 }, new[] { 0 }).SetName("Swap_OnePathTwice");
+        yield return new TestCaseData(pair, Array.Empty<int>(), new[] { 0 }).SetName("Swap_PathToANodeInsteadOfALeaf");
+
+        yield return new TestCaseData(
+                Columns(Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5)),
+                new[] { 0 },
+                new[] { 1 })
+            .SetName("Swap_TwoHoles");
+    }
+
+    [Test]
+    public void Move_ATileOntoAHole_DividesTheHoleAndTakesTheTileOutOfItsOldPlace()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.25), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.25));
+
+        Assert.That(DashboardPaneEditor.TryMove(root, [1], [2], PaneSide.Right, out var result), Is.True);
+
+        Assert.That(Leaves((SplitPane)result), Is.EqualTo(new[] { "stream-info", DashboardLayoutTree.EmptySlotTypeId, "polls-control" }),
+            "Бросок на дыру – это перенос: плитка уходит со старого места и делит дыру.");
+    }
+
+    [Test]
+    public void Move_ThroughANodeThatCollapses_FollowsTheTargetToItsNewPath()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Rows(Leaf("polls-control", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5), 0.5));
+
+        Assert.That(DashboardPaneEditor.TryMove(root, [0], [1, 1], PaneSide.Left, out var result), Is.True,
+            "Удаление источника схлопывает узел, и путь цели обязан быть пересчитан, а не взят прежним.");
+
+        var split = (SplitPane)result;
+        var nested = split.Children[1].Pane as SplitPane;
+
+        Assert.That(nested, Is.Not.Null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(split.Orientation, Is.EqualTo(SplitOrientation.Rows));
+            Assert.That(Leaves(split), Is.EqualTo(new[] { "polls-control" }));
+            Assert.That(nested!.Orientation, Is.EqualTo(SplitOrientation.Columns));
+            Assert.That(Leaves(nested), Is.EqualTo(new[] { "stream-info", DashboardLayoutTree.EmptySlotTypeId }));
+        }
+    }
+
+    [TestCaseSource(nameof(ImpossibleMoves))]
+    public void Move_ImpossibleRequest_LeavesTheTreeAlone(int[] source, int[] target, PaneSide side)
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.25), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.25));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DashboardPaneEditor.TryMove(root, source, target, side, out var result), Is.False);
+            Assert.That(result, Is.SameAs(root));
+        }
+    }
+
+    public static IEnumerable<TestCaseData> ImpossibleMoves()
+    {
+        yield return new TestCaseData(new[] { 0 }, new[] { 0 }, PaneSide.Left).SetName("Move_OntoItself");
+        yield return new TestCaseData(new[] { 0 }, new[] { 9 }, PaneSide.Left).SetName("Move_PathOutsideTheNode");
+        yield return new TestCaseData(new[] { 0 }, Array.Empty<int>(), PaneSide.Left).SetName("Move_TargetIsANodeInsteadOfALeaf");
+        yield return new TestCaseData(new[] { 0 }, new[] { 1 }, PaneSide.None).SetName("Move_WithoutASide");
+        yield return new TestCaseData(new[] { 2 }, new[] { 0 }, PaneSide.Left).SetName("Move_TheHoleItself");
     }
 
     [Test]
@@ -180,7 +312,7 @@ public sealed class DashboardPaneEditorTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(DashboardPaneEditor.IsWellFormed(root), Is.True);
-            Assert.That(DashboardPaneEditor.TrySplit(root, "leaf-0", PaneSide.Left, "obs-info", out var result), Is.False,
+            Assert.That(DashboardPaneEditor.TrySplit(root, PathOf(root, "leaf-0"), PaneSide.Left, "obs-info", out var result), Is.False,
                 "Разрез, уводящий дерево за потолок глубины, не должен отдаваться как успешный: спроецировать его уже нельзя.");
             Assert.That(result, Is.SameAs(root));
         }
@@ -208,9 +340,9 @@ public sealed class DashboardPaneEditorTests
     }
 
     [TestCaseSource(nameof(RemovalsThatLeaveNoTile))]
-    public void Remove_TheLastRealTile_IsToldApartFromARefusal(DashboardPane root, string typeId)
+    public void Remove_TheLastRealTile_IsToldApartFromARefusal(DashboardPane root, int[] path)
     {
-        var removal = DashboardPaneEditor.Remove(root, typeId);
+        var removal = DashboardPaneEditor.Remove(root, path);
 
         using (Assert.EnterMultipleScope())
         {
@@ -222,25 +354,33 @@ public sealed class DashboardPaneEditorTests
 
     public static IEnumerable<TestCaseData> RemovalsThatLeaveNoTile()
     {
-        yield return new TestCaseData(new TilePane("stream-info"), "stream-info").SetName("LastTile_TheOnlyLeaf");
+        yield return new TestCaseData(new TilePane("stream-info"), Array.Empty<int>()).SetName("LastTile_TheOnlyLeaf");
 
-        yield return new TestCaseData(Columns(Leaf("stream-info", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5)), "stream-info")
+        yield return new TestCaseData(Columns(Leaf("stream-info", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5)), new[] { 0 })
             .SetName("LastTile_TheOnlyLeafBesideAHole");
     }
 
-    [TestCase("nothing")]
-    [TestCase("")]
-    public void Remove_ImpossibleRequest_LeavesTheTreeAlone(string typeId)
+    [TestCaseSource(nameof(ImpossibleRemovals))]
+    public void Remove_ImpossibleRequest_LeavesTheTreeAlone(DashboardPane root, int[] path)
     {
-        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
-
-        var removal = DashboardPaneEditor.Remove(root, typeId);
+        var removal = DashboardPaneEditor.Remove(root, path);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(removal.Status, Is.EqualTo(DashboardRemoveStatus.Rejected));
             Assert.That(removal.Root, Is.Null);
         }
+    }
+
+    public static IEnumerable<TestCaseData> ImpossibleRemovals()
+    {
+        var pair = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.5));
+
+        yield return new TestCaseData(pair, new[] { 9 }).SetName("Remove_PathOutsideTheNode");
+        yield return new TestCaseData(pair, Array.Empty<int>()).SetName("Remove_PathToANodeInsteadOfALeaf");
+
+        yield return new TestCaseData(Columns(Leaf("stream-info", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5)), new[] { 1 })
+            .SetName("Remove_TheHoleItself");
     }
 
     [Test]
@@ -283,9 +423,11 @@ public sealed class DashboardPaneEditorTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(DashboardPaneEditor.IsWellFormed(root), Is.False);
-            Assert.That(DashboardPaneEditor.TrySplit(root, "stream-info", PaneSide.Left, "obs-info", out _), Is.False);
-            Assert.That(DashboardPaneEditor.TrySwap(root, "stream-info", "polls-control", out _), Is.False);
-            Assert.That(DashboardPaneEditor.Remove(root, "stream-info").Status, Is.EqualTo(DashboardRemoveStatus.Rejected));
+            Assert.That(DashboardPaneEditor.TryFindPath(root, "stream-info", out _), Is.False);
+            Assert.That(DashboardPaneEditor.TrySplit(root, [0], PaneSide.Left, "obs-info", out _), Is.False);
+            Assert.That(DashboardPaneEditor.TrySwap(root, [0], [1], out _), Is.False);
+            Assert.That(DashboardPaneEditor.TryMove(root, [0], [1], PaneSide.Left, out _), Is.False);
+            Assert.That(DashboardPaneEditor.Remove(root, [0]).Status, Is.EqualTo(DashboardRemoveStatus.Rejected));
             Assert.That(DashboardPaneEditor.Normalize(root), Is.Null);
         }
     }
@@ -307,16 +449,23 @@ public sealed class DashboardPaneEditorTests
         yield return new TestCaseData(Nested(64)).SetName("Malformed_TooDeep");
     }
 
+    private static IReadOnlyList<int> PathOf(DashboardPane root, string typeId)
+    {
+        Assert.That(DashboardPaneEditor.TryFindPath(root, typeId, out var path), Is.True, $"Плитка {typeId} обязана быть в дереве.");
+
+        return path;
+    }
+
     private static DashboardPane Split(DashboardPane root, string target, PaneSide side, string typeId)
     {
-        Assert.That(DashboardPaneEditor.TrySplit(root, target, side, typeId, out var result), Is.True);
+        Assert.That(DashboardPaneEditor.TrySplit(root, PathOf(root, target), side, typeId, out var result), Is.True);
 
         return result;
     }
 
     private static DashboardPane? Remove(DashboardPane root, string typeId)
     {
-        var removal = DashboardPaneEditor.Remove(root, typeId);
+        var removal = DashboardPaneEditor.Remove(root, PathOf(root, typeId));
 
         Assert.That(removal.Status, Is.EqualTo(DashboardRemoveStatus.Removed));
 

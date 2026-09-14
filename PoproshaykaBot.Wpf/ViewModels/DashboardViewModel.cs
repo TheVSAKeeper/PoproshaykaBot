@@ -121,14 +121,14 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         return false;
     }
 
-    public DashboardEditStatus Swap(string firstTypeId, string secondTypeId)
+    public DashboardEditStatus Swap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
     {
-        return _session?.Swap(firstTypeId, secondTypeId) ?? DashboardEditStatus.Unavailable;
+        return _session?.Swap(firstPath, secondPath) ?? DashboardEditStatus.Unavailable;
     }
 
-    public DashboardEditStatus Move(string sourceTypeId, string targetTypeId, PaneSide side)
+    public DashboardEditStatus Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        return _session?.Split(sourceTypeId, targetTypeId, side) ?? DashboardEditStatus.Unavailable;
+        return _session?.Move(sourcePath, targetPath, side) ?? DashboardEditStatus.Unavailable;
     }
 
     public void ReportMove(DashboardEditStatus status)
