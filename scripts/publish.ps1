@@ -18,7 +18,7 @@
     Варианты сборки: framework-dependent, portable. По умолчанию — оба.
 
 .PARAMETER UiHost
-    Хост интерфейса: WinForms (релизный) или Wpf. По умолчанию WinForms — как в release.yml.
+    Хост интерфейса: Wpf (релизный) или WinForms (заморожен 14.09.2026). По умолчанию Wpf – как в release.yml.
 
 .PARAMETER OutputDir
     Куда сложить итоговые .exe и .zip. По умолчанию <repo>/artifacts.
@@ -27,7 +27,7 @@
     pwsh ./scripts/publish.ps1
     pwsh ./scripts/publish.ps1 -Arch x64 -Variant portable
     pwsh ./scripts/publish.ps1 -Version 3.0.0.4
-    pwsh ./scripts/publish.ps1 -UiHost Wpf -Arch x64
+    pwsh ./scripts/publish.ps1 -UiHost WinForms -Arch x64
 #>
 
 [CmdletBinding()]
@@ -38,7 +38,7 @@ param(
     [ValidateSet('framework-dependent', 'portable')]
     [string[]]$Variant = @('framework-dependent', 'portable'),
     [ValidateSet('WinForms', 'Wpf')]
-    [string]$UiHost = 'WinForms',
+    [string]$UiHost = 'Wpf',
     [string]$OutputDir
 )
 

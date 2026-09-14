@@ -65,7 +65,7 @@ jobs:
         arch: [ x64, x86 ]
     defaults:
       run:
-        working-directory: ./PoproshaykaBot.WinForms
+        working-directory: ./PoproshaykaBot.Wpf
 
     steps:
       - name: Checkout
@@ -82,7 +82,7 @@ jobs:
 
       - name: Publish framework-dependent
         run: >
-          dotnet publish
+          dotnet publish PoproshaykaBot.Wpf.csproj
           --configuration Release
           --runtime win-${{ matrix.arch }}
           --output .\publish\framework-dependent
@@ -94,7 +94,7 @@ jobs:
 
       - name: Publish portable
         run: >
-          dotnet publish
+          dotnet publish PoproshaykaBot.Wpf.csproj
           --configuration Release
           --runtime win-${{ matrix.arch }}
           --output .\publish\portable
@@ -112,8 +112,8 @@ jobs:
           $version = "${{ needs.prepare.outputs.version }}"
           $arch = "${{ matrix.arch }}"
           New-Item -ItemType Directory -Path ".\artifacts" -Force | Out-Null
-          Rename-Item -Path ".\publish\framework-dependent\PoproshaykaBot.WinForms.exe" -NewName "PoproshaykaBot-v$version-$arch.exe"
-          Rename-Item -Path ".\publish\portable\PoproshaykaBot.WinForms.exe" -NewName "PoproshaykaBot-v$version-$arch-portable.exe"
+          Rename-Item -Path ".\publish\framework-dependent\PoproshaykaBot.Wpf.exe" -NewName "PoproshaykaBot-v$version-$arch.exe"
+          Rename-Item -Path ".\publish\portable\PoproshaykaBot.Wpf.exe" -NewName "PoproshaykaBot-v$version-$arch-portable.exe"
           Move-Item -Path ".\publish\framework-dependent\PoproshaykaBot-v$version-$arch.exe" -Destination ".\artifacts\"
           Move-Item -Path ".\publish\portable\PoproshaykaBot-v$version-$arch-portable.exe" -Destination ".\artifacts\"
           Compress-Archive -Path ".\artifacts\PoproshaykaBot-v$version-$arch.exe" -DestinationPath ".\artifacts\PoproshaykaBot-v$version-$arch.zip"
@@ -122,14 +122,14 @@ jobs:
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)"
           } | Set-Content ".\artifacts\SHA256SUMS-$arch.txt" -Encoding ascii
-          $tfm = (Select-String -Path ".\PoproshaykaBot.WinForms.csproj" -Pattern '<TargetFramework>(.*?)</TargetFramework>').Matches[0].Groups[1].Value
+          $tfm = (Select-String -Path ".\PoproshaykaBot.Wpf.csproj" -Pattern '<TargetFramework>(.*?)</TargetFramework>').Matches[0].Groups[1].Value
           Set-Content ".\artifacts\RUNTIME-$arch.txt" -Value $tfm -Encoding ascii -NoNewline
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.arch }}
-          path: PoproshaykaBot.WinForms/artifacts/*
+          path: PoproshaykaBot.Wpf/artifacts/*
           if-no-files-found: error
           retention-days: 1
 
