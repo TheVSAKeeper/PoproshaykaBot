@@ -496,7 +496,10 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
         for (var index = 0; index < split.Children.Count; index++)
         {
-            var content = WrapScrollable(split.Children[index].Pane);
+            var childPane = split.Children[index].Pane;
+            var content = WrapScrollable(childPane);
+
+            ApplyCrossConstraints(content, childPane, alongColumns);
 
             if (alongColumns)
             {
@@ -830,6 +833,22 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         content.MaxHeight = pane.Height.Max;
         content.MinWidth = Math.Min(pane.Width.Min, pane.Width.Max);
         content.MinHeight = Math.Min(pane.Height.Min, pane.Height.Max);
+        content.HorizontalAlignment = pane.Width.Length.IsStar ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
+        content.VerticalAlignment = pane.Height.Length.IsStar ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+    }
+
+    private static void ApplyCrossConstraints(FrameworkElement content, PaneLayout pane, bool alongColumns)
+    {
+        if (alongColumns)
+        {
+            content.MaxHeight = pane.Height.Max;
+            content.MinHeight = Math.Min(pane.Height.Min, pane.Height.Max);
+            content.VerticalAlignment = pane.Height.Length.IsStar ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+            return;
+        }
+
+        content.MaxWidth = pane.Width.Max;
+        content.MinWidth = Math.Min(pane.Width.Min, pane.Width.Max);
         content.HorizontalAlignment = pane.Width.Length.IsStar ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
     }
 
@@ -1165,6 +1184,8 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         {
             var child = split.Children[index].Pane;
             var element = WrapScrollable(child, BuildSkeleton(child, content, panes));
+
+            ApplyCrossConstraints(element, child, alongColumns);
 
             if (alongColumns)
             {

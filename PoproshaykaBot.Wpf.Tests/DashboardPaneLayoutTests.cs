@@ -1048,6 +1048,61 @@ public class DashboardPaneLayoutTests
         return layout;
     }
 
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    [TestCase(SplitOrientation.Columns)]
+    [TestCase(SplitOrientation.Rows)]
+    public void Child_of_a_split_keeps_its_ceiling_across_the_cut_and_stands_in_the_corner(SplitOrientation orientation)
+    {
+        const double Ceiling = 300;
+
+        var alongColumns = orientation == SplitOrientation.Columns;
+
+        var fixedTile = new FakeTile(
+            "stream-info",
+            maxWidth: alongColumns ? null : (int)Ceiling,
+            maxHeight: alongColumns ? (int)Ceiling : null);
+
+        var chat = new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220);
+
+        using var dashboard = CreateDashboard(CrossAxisLayout(orientation), fixedTile, chat);
+
+        var measured = Measure(dashboard.Pane!, fixedTile, _ => PreviewSize);
+
+        var across = alongColumns ? measured.Height : measured.Width;
+        var corner = alongColumns ? measured.Y : measured.X;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(across, Is.EqualTo(Ceiling).Within(0.5),
+                "Поперёк разреза потолок ставится самому потомку: трек сетки ограничивает только ось разреза, и плитка по содержимому растягивалась на всё место узла.");
+
+            Assert.That(corner, Is.Zero.Within(0.5),
+                "Панель по содержимому прижимается к началу своего места, а не висит по центру остатка.");
+        });
+    }
+
+    private static DashboardLayoutSettings CrossAxisLayout(SplitOrientation orientation)
+    {
+        var alongColumns = orientation == SplitOrientation.Columns;
+
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = alongColumns ? 2 : 1,
+            RowCount = alongColumns ? 1 : 2,
+            Root = new SplitPane(orientation,
+            [
+                new(new TilePane("stream-info"), 0.5),
+                new(new TilePane("twitch-chat"), 0.5),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "twitch-chat", alongColumns ? 0 : 1, alongColumns ? 1 : 0, 1, 1);
+
+        return layout;
+    }
+
     private static void AssertSameRect(Rect predicted, Rect actual)
     {
         Assert.Multiple(() =>
