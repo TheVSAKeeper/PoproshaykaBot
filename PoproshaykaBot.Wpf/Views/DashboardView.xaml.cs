@@ -19,6 +19,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     private const double StarBandMinHeight = 96;
     private const double SplitterThickness = 6;
     private const double DragThreshold = 6;
+    private const double DropReach = 24;
     private const double SwapZone = 0.3;
     private const double DropFillOpacity = 0.35;
     private const double ShareStep = 0.05;
@@ -171,6 +172,42 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         return edges.All(edge => edge.Distance > SwapZone)
             ? PaneSide.None
             : edges.MinBy(edge => edge.Distance).Side;
+    }
+
+    public static int NearestPane(IReadOnlyList<Rect> panes, Point position, double reach, int skip = -1)
+    {
+        ArgumentNullException.ThrowIfNull(panes);
+
+        var nearest = -1;
+        var best = double.MaxValue;
+
+        for (var index = 0; index < panes.Count; index++)
+        {
+            if (index == skip)
+            {
+                continue;
+            }
+
+            var distance = Distance(panes[index], position);
+
+            if (distance > reach || distance >= best)
+            {
+                continue;
+            }
+
+            best = distance;
+            nearest = index;
+        }
+
+        return nearest;
+    }
+
+    private static double Distance(Rect bounds, Point position)
+    {
+        var horizontal = Math.Max(Math.Max(bounds.X - position.X, position.X - bounds.Right), 0);
+        var vertical = Math.Max(Math.Max(bounds.Y - position.Y, position.Y - bounds.Bottom), 0);
+
+        return Math.Sqrt((horizontal * horizontal) + (vertical * vertical));
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -914,7 +951,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return;
         }
 
-        if (TargetAt(position) is not { } target
+        if (TargetAt(position, source) is not { } target
             || PathOf(source) is not { } sourcePath
             || sourcePath.AsSpan().SequenceEqual(target.Path))
         {
@@ -932,7 +969,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private void ShowDropHint(Point position)
     {
-        if (TargetAt(position) is not { } target)
+        if (TargetAt(position, _dragTile) is not { } target || IsSourcePane(_dragTile, target.Path))
         {
             HideOverlay();
 
@@ -986,26 +1023,37 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         Canvas.SetTop(_dropHint, rect.Y);
     }
 
-    private DropTarget? TargetAt(Point position)
+    private DropTarget? TargetAt(Point position, DashboardTileViewModel? source)
     {
-        if (VisualTreeHelper.HitTest(this, position)?.VisualHit is not DependencyObject hit)
-        {
-            return null;
-        }
+        var paths = new List<int[]>();
+        var bounds = new List<Rect>();
 
-        while (hit is not null)
+        foreach (var (element, path) in _panePaths)
         {
-            if (hit is FrameworkElement element && _panePaths.TryGetValue(element, out var path))
+            if (!element.IsVisible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
             {
-                var origin = element.TransformToAncestor(this).Transform(new(0, 0));
-
-                return new(path, new(origin, new Size(element.ActualWidth, element.ActualHeight)));
+                continue;
             }
 
-            hit = VisualTreeHelper.GetParent(hit);
+            var origin = element.TransformToAncestor(this).Transform(new(0, 0));
+
+            paths.Add(path);
+            bounds.Add(new(origin, new Size(element.ActualWidth, element.ActualHeight)));
         }
 
-        return null;
+        var nearest = NearestPane(bounds, position, DropReach);
+
+        if (nearest >= 0 && !bounds[nearest].Contains(position) && IsSourcePane(source, paths[nearest]))
+        {
+            nearest = NearestPane(bounds, position, DropReach, nearest);
+        }
+
+        return nearest < 0 ? null : new(paths[nearest], bounds[nearest]);
+    }
+
+    private bool IsSourcePane(DashboardTileViewModel? source, int[] path)
+    {
+        return source is not null && PathOf(source) is { } sourcePath && sourcePath.AsSpan().SequenceEqual(path);
     }
 
     private int[]? PathOf(DashboardTileViewModel tile)

@@ -5,6 +5,7 @@ using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
 using System.ComponentModel;
+using System.Windows;
 using System.Windows.Controls;
 
 namespace PoproshaykaBot.Wpf.Tests;
@@ -848,6 +849,38 @@ public class DashboardPaneLayoutTests
 
         Assert.That(DashboardView.HasReliableLayout(grid), Is.False,
             "Перестроение дерева и автоповтор Ctrl+стрелки опережают Arrange, и прежние размеры дорожек уже не про эту раскладку.");
+    }
+
+    [Test]
+    public void Drop_target_holds_on_over_the_seam_between_panes()
+    {
+        var panes = new[]
+        {
+            new Rect(0, 0, 398, 300),
+            new Rect(402, 0, 398, 300),
+            new Rect(0, 306, 800, 294),
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(DashboardView.NearestPane(panes, new(200, 150), 24), Is.Zero,
+                "Точка внутри панели берёт её саму.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(399, 150), 24), Is.Zero,
+                "Разделитель лежит поверх шва, и подсказка обязана держаться за ближнюю панель, а не гаснуть под ним.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(401, 150), 24), Is.EqualTo(1),
+                "На другой половине шва ближняя панель уже правая.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(200, 302), 24), Is.Zero,
+                "Щель между рядами тоже отдаёт ближнюю панель.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(200, 700), 24), Is.EqualTo(-1),
+                "Курсор, уехавший за дашборд, цели не имеет.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(399, 150), 24, skip: 0), Is.EqualTo(1),
+                "Плитку-источник из целей выбрасывают: иначе на шве она выигрывает ничью у соседа и гасит подсказку у собственного края.");
+        });
     }
 
     private static DashboardTileViewModel[] StackedNeighbourTiles()

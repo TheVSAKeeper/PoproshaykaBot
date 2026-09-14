@@ -357,6 +357,52 @@ public class DashboardEditSessionTests
     }
 
     [Test]
+    public void Entering_the_edit_mode_marks_every_tile_and_leaving_it_clears_the_mark()
+    {
+        var streamInfo = new FakeTile("stream-info");
+        var chat = new FakeTile("twitch-chat", fills: true);
+
+        using var dashboard = new DashboardViewModel(
+            [streamInfo, chat],
+            new(new FakeLayoutStore(SideBySide())),
+            TimeProvider.System);
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(chat.IsLayoutEditing, Is.True, "Плитка чата обязана узнать о режиме правки: без этого WebView2 закрывает собой подсказку броска.");
+            Assert.That(streamInfo.IsLayoutEditing, Is.True);
+        });
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(chat.IsLayoutEditing, Is.False);
+            Assert.That(streamInfo.IsLayoutEditing, Is.False);
+        });
+    }
+
+    [Test]
+    public void Disposing_the_dashboard_in_the_edit_mode_clears_the_mark()
+    {
+        var streamInfo = new FakeTile("stream-info");
+        var chat = new FakeTile("twitch-chat", fills: true);
+
+        var dashboard = new DashboardViewModel(
+            [streamInfo, chat],
+            new(new FakeLayoutStore(SideBySide())),
+            TimeProvider.System);
+
+        dashboard.ToggleEditCommand.Execute(null);
+        dashboard.Dispose();
+
+        Assert.That(chat.IsLayoutEditing, Is.False,
+            "Плитки переживают страницу «Обзор»: метка, оставшаяся после закрытия, держала бы чат скрытым до перезапуска.");
+    }
+
+    [Test]
     public void A_resize_next_to_a_hole_reaches_the_file_and_keeps_the_hole()
     {
         var store = new FakeLayoutStore(ColumnWithAHole());

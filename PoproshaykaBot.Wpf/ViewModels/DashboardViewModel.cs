@@ -171,6 +171,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         _session.Dispose();
         _session = null;
 
+        SetTilesLayoutEditing(false);
+
         OnPropertyChanged(nameof(IsEditing));
         OnPropertyChanged(nameof(CanUndo));
 
@@ -214,9 +216,19 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         _session = new(_coordinator, _time, _sessionLogger);
         _session.Changed += OnSessionChanged;
 
+        SetTilesLayoutEditing(true);
+
         OnPropertyChanged(nameof(IsEditing));
 
         ApplySession();
+    }
+
+    private void SetTilesLayoutEditing(bool editing)
+    {
+        foreach (var tile in _tilesByTypeId.Values)
+        {
+            tile.IsLayoutEditing = editing;
+        }
     }
 
     [RelayCommand]
@@ -296,6 +308,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         _session?.Dispose();
         _session = null;
+
+        SetTilesLayoutEditing(false);
 
         foreach (var tile in _observed)
         {
