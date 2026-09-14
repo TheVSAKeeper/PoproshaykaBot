@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Settings.Stores;
+﻿using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 
 namespace PoproshaykaBot.Core.Tests.Settings;
@@ -36,6 +37,27 @@ public sealed class DashboardLayoutStoreTests
               "orientation": "Rows",
               "children": [
                 { "pane": { "kind": "tile", "typeId": "stream-info" }, "weight": 0.5 },
+                { "pane": { "kind": "tile", "typeId": "twitch-chat" }, "weight": 0.5 }
+              ]
+            }
+          }
+        }
+        """;
+
+    private const string UnusableWeightFile = """
+        {
+          "dashboard": {
+            "columnCount": 2,
+            "rowCount": 1,
+            "tiles": [
+              { "id": "stream-info", "typeId": "stream-info", "order": 0, "row": 0, "column": 0, "columnSpan": 1, "rowSpan": 1, "isVisible": true },
+              { "id": "twitch-chat", "typeId": "twitch-chat", "order": 1, "row": 0, "column": 1, "columnSpan": 1, "rowSpan": 1, "isVisible": true }
+            ],
+            "root": {
+              "kind": "split",
+              "orientation": "Columns",
+              "children": [
+                { "pane": { "kind": "tile", "typeId": "stream-info" }, "weight": 0.0 },
                 { "pane": { "kind": "tile", "typeId": "twitch-chat" }, "weight": 0.5 }
               ]
             }
@@ -116,6 +138,23 @@ public sealed class DashboardLayoutStoreTests
 
         Assert.That(root?.Orientation, Is.EqualTo(SplitOrientation.Columns),
             "Запись геометрии окна переписывает весь файл, поэтому сшивку нельзя вешать только на SaveDashboard.");
+    }
+
+    [TestCase("0", TestName = "LoadDashboard_ZeroWeightInTheFile_ComesOutAuto")]
+    [TestCase("-1", TestName = "LoadDashboard_NegativeWeightInTheFile_ComesOutAuto")]
+    public void LoadDashboard_UnusableWeightInTheFile_ComesOutAuto(string unusable)
+    {
+        File.WriteAllText(_filePath, UnusableWeightFile.Replace("\"weight\": 0.0", $"\"weight\": {unusable}", StringComparison.Ordinal));
+
+        var layout = new DashboardLayoutStore(null, _filePath).LoadDashboard();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That((layout?.Root as SplitPane)?.Children.Select(child => child.Weight), Is.EqualTo(new double?[] { null, 0.5 }),
+                "Негодная доля из файла обязана стать «по содержимому» уже на чтении, вместе с целой долей соседа.");
+            Assert.That(DashboardPaneEditor.IsWellFormed(layout!.Root!), Is.True,
+                "Редактор раскладки берёт дерево из стора и отказывает на негодной доле: не вылечив её на чтении, мы запрещаем правку дашборда целиком.");
+        }
     }
 
     private static DashboardLayoutSettings Layout()

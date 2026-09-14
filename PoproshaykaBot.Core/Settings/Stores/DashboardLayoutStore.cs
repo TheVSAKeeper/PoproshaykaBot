@@ -22,7 +22,14 @@ public class DashboardLayoutStore
 
     public virtual DashboardLayoutSettings? LoadDashboard()
     {
-        return _store.Load().Dashboard;
+        var layout = _store.Load().Dashboard;
+
+        if (layout?.Root is { } root)
+        {
+            layout.Root = DashboardPaneWeights.Sanitize(root);
+        }
+
+        return layout;
     }
 
     public virtual MainWindowSettings? LoadMainWindow()

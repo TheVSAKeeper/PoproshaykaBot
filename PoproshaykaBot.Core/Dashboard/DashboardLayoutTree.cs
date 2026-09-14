@@ -256,7 +256,7 @@ public static class DashboardLayoutTree
 
     private static bool IsExplicit(double? weight)
     {
-        return weight is { } value && value > 0 && double.IsFinite(value);
+        return DashboardPaneWeights.IsExplicit(weight);
     }
 
     private static GridSize? Measure(DashboardPane? pane, int depth)

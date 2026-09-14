@@ -351,6 +351,72 @@ public sealed class DashboardLayoutReconcilerTests
         }
     }
 
+    [TestCase(0d)]
+    [TestCase(-1d)]
+    [TestCase(double.NaN)]
+    [TestCase(double.PositiveInfinity)]
+    public void SyncRoot_UnusableWeightFromTheFile_BecomesAutoAndKeepsTheNeighbour(double unusable)
+    {
+        var layout = TwoColumns();
+
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), unusable),
+            new(new TilePane("polls-control"), 0.5),
+        ]);
+
+        Assert.That(DashboardPaneEditor.IsWellFormed(layout.Root), Is.False,
+            "Дерево с негодной долей считается негодным, иначе правка редактора продолжит его тиражировать.");
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That((layout.Root as SplitPane)?.Children.Select(child => child.Weight), Is.EqualTo(new double?[] { null, 0.5 }),
+                "Негодная доля лечится в «по содержимому», топология и доля соседа остаются: один плохой вес не стирает авторскую раскладку.");
+            Assert.That(DashboardPaneEditor.IsWellFormed(layout.Root!), Is.True,
+                "После сшивки дерево обязано стать годным – иначе файл с плохой долей больше не откроется в редакторе.");
+        }
+    }
+
+    [Test]
+    public void SyncRoot_UnusableWeightInANestedSplit_IsHealedThere()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 2,
+            Root = new SplitPane(SplitOrientation.Columns,
+            [
+                new(new TilePane("stream-info"), 0.5),
+                new(new SplitPane(SplitOrientation.Rows,
+                [
+                    new(new TilePane("polls-control"), double.NaN),
+                    new(new TilePane("logs"), 0.5),
+                ]), 0.5),
+            ]),
+        };
+
+        layout.Tiles.Add(Tile("stream-info", order: 0, isVisible: true));
+        layout.Tiles[0].RowSpan = 2;
+        layout.Tiles.Add(Tile("polls-control", order: 1, isVisible: true));
+        layout.Tiles[1].Column = 1;
+        layout.Tiles.Add(Tile("logs", order: 2, isVisible: true));
+        layout.Tiles[2].Column = 1;
+        layout.Tiles[2].Row = 1;
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        var root = layout.Root as SplitPane;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root?.Children.Select(child => child.Weight), Is.EqualTo(new double?[] { 0.5, 0.5 }));
+            Assert.That((root?.Children[1].Pane as SplitPane)?.Children.Select(child => child.Weight), Is.EqualTo(new double?[] { null, 0.5 }),
+                "Лечение доли идёт вглубь дерева, а не по одному его корню.");
+        }
+    }
+
     [TestCase(4, 1)]
     [TestCase(1, 4)]
     public void SyncRoot_EmptyWeightsOnAnUnevenSplit_AreKept(int first, int second)
