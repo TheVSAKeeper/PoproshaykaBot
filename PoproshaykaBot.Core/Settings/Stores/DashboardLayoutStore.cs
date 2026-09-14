@@ -41,7 +41,7 @@ public class DashboardLayoutStore
     {
         ArgumentNullException.ThrowIfNull(layout);
 
-        var snapshot = JsonStoreClone.DeepClone(layout);
+        var snapshot = JsonStoreClone.DeepClone(Sanitized(layout));
         MutateFile(state => state.Dashboard = snapshot);
 
         _logger?.LogDebug("DashboardLayoutStore: раскладка дашборда сохранена");
@@ -55,6 +55,29 @@ public class DashboardLayoutStore
         MutateFile(state => state.MainWindow = snapshot);
 
         _logger?.LogDebug("DashboardLayoutStore: параметры главного окна сохранены");
+    }
+
+    private static DashboardLayoutSettings Sanitized(DashboardLayoutSettings layout)
+    {
+        if (layout.Root is not { } root)
+        {
+            return layout;
+        }
+
+        var sanitized = DashboardPaneWeights.Sanitize(root);
+
+        if (ReferenceEquals(sanitized, root))
+        {
+            return layout;
+        }
+
+        return new()
+        {
+            ColumnCount = layout.ColumnCount,
+            RowCount = layout.RowCount,
+            Tiles = layout.Tiles,
+            Root = sanitized,
+        };
     }
 
     private void MutateFile(Action<DashboardLayoutFileDto> mutator)

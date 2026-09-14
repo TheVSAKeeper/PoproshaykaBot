@@ -157,6 +157,37 @@ public sealed class DashboardLayoutStoreTests
         }
     }
 
+    [TestCase(double.NaN, TestName = "SaveDashboard_NaNWeightInMemory_WritesAutoWeight")]
+    [TestCase(double.PositiveInfinity, TestName = "SaveDashboard_InfiniteWeightInMemory_WritesAutoWeight")]
+    [TestCase(0d, TestName = "SaveDashboard_ZeroWeightInMemory_WritesAutoWeight")]
+    [TestCase(-1d, TestName = "SaveDashboard_NegativeWeightInMemory_WritesAutoWeight")]
+    public void SaveDashboard_UnusableWeightInMemory_WritesAutoWeight(double unusable)
+    {
+        var layout = Layout();
+
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            new(new TilePane("stream-info"), unusable),
+            new(new TilePane("twitch-chat"), 0.5),
+        ]);
+
+        var store = new DashboardLayoutStore(null, _filePath);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(() => store.SaveDashboard(layout), Throws.Nothing,
+                "Негодная доля лечится до клонирования: сериализатор без AllowNamedFloatingPointLiterals роняет сохранение на NaN и Infinity.");
+
+            var saved = new DashboardLayoutStore(null, _filePath).LoadDashboard();
+
+            Assert.That(saved?.Root, Is.Not.Null);
+            Assert.That(DashboardPaneEditor.IsWellFormed(saved!.Root!), Is.True,
+                "Дерево на диске обязано быть годным для редактора: негодная доля превращается в «по содержимому».");
+            Assert.That((saved.Root as SplitPane)?.Children[0].Weight, Is.Null,
+                "Доля негодного слота ложится на диск пустой, а не подправленным числом.");
+        }
+    }
+
     private static DashboardLayoutSettings Layout()
     {
         return new()
