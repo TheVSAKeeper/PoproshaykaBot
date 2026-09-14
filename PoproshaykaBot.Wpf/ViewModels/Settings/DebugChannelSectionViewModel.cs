@@ -46,7 +46,7 @@ public sealed partial class DebugChannelSectionViewModel : ObservableObject
 
             if (!ChannelLogin.TryNormalize(Channel, out var login))
             {
-                return "Укажите имя канала Twitch — например, mrbeast или ссылку на канал.";
+                return "Укажите имя канала Twitch – например, mrbeast или ссылку на канал.";
             }
 
             return AllowSending

@@ -35,6 +35,7 @@ using Serilog.Events;
 using Serilog.Extensions.Logging;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Markup;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf;
@@ -75,6 +76,8 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        ApplyUiCulture();
 
         IsHeadless = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         DebugChannel = DebugChannelOverride.Parse(e.Args);
@@ -282,6 +285,13 @@ public partial class App : Application
         _singleInstanceMutex?.Dispose();
 
         base.OnExit(e);
+    }
+
+    private static void ApplyUiCulture()
+    {
+        var language = XmlLanguage.GetLanguage(UiCulture.Russian.IetfLanguageTag);
+
+        FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement), new FrameworkPropertyMetadata(language));
     }
 
     private static void OnBindingErrorCaptured(object? sender, BindingErrorRecord record)

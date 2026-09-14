@@ -284,7 +284,9 @@ internal sealed class SmokeTestSession : IDisposable
 
     private void CloseProcessWindowsGracefully(TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
+        var startedAt = DateTime.UtcNow;
+        var deadline = startedAt + timeout;
+        var ownedOnlyDeadline = startedAt + TimeSpan.FromTicks(timeout.Ticks / 2);
 
         while (DateTime.UtcNow < deadline)
         {
@@ -293,7 +295,11 @@ internal sealed class SmokeTestSession : IDisposable
                 return;
             }
 
-            var windows = EnumerateTopLevelWindows(App, Automation);
+            var owned = DistinctByHandle(EnumerateOwnedWindows());
+
+            var windows = owned.Count > 0 && DateTime.UtcNow < ownedOnlyDeadline
+                ? owned
+                : DistinctByHandle(owned.Concat(EnumerateTopLevelWindows(App, Automation)));
 
             if (windows.Count == 0)
             {
@@ -303,11 +309,6 @@ internal sealed class SmokeTestSession : IDisposable
 
             foreach (var window in windows)
             {
-                if (window is null)
-                {
-                    continue;
-                }
-
                 try
                 {
                     window.Close();
@@ -320,6 +321,39 @@ internal sealed class SmokeTestSession : IDisposable
 
             Thread.Sleep(150);
         }
+    }
+
+    private static List<Window> DistinctByHandle(IEnumerable<Window?> windows)
+    {
+        var handles = new HashSet<IntPtr>();
+        var result = new List<Window>();
+
+        foreach (var window in windows)
+        {
+            if (window is null)
+            {
+                continue;
+            }
+
+            IntPtr handle;
+
+            try
+            {
+                handle = window.Properties.NativeWindowHandle.ValueOrDefault;
+            }
+            catch
+            {
+                // best-effort: window handle may be transitioning
+                handle = IntPtr.Zero;
+            }
+
+            if (handle == IntPtr.Zero || handles.Add(handle))
+            {
+                result.Add(window);
+            }
+        }
+
+        return result;
     }
 
     private bool TryGetHasExited()
@@ -341,6 +375,14 @@ internal sealed class SmokeTestSession : IDisposable
             yield return window;
         }
 
+        foreach (var window in EnumerateOwnedWindows())
+        {
+            yield return window;
+        }
+    }
+
+    private IEnumerable<Window?> EnumerateOwnedWindows()
+    {
         Window[]? modals = null;
 
         try

@@ -18,7 +18,7 @@ public sealed class ChannelInformationApplier(
 {
     private static readonly TimeSpan ConfirmationTimeout = TimeSpan.FromSeconds(8);
 
-    private const string ForeignChannelMessage = "Идёт отладка на чужом канале — название и категорию менять нельзя.";
+    private const string ForeignChannelMessage = "Идёт отладка на чужом канале – название и категорию менять нельзя.";
 
     public async Task<bool> ApplyAsync(BroadcastProfile profile, CancellationToken cancellationToken)
     {

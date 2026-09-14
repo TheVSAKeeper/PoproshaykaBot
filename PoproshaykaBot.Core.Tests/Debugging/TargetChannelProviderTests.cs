@@ -141,7 +141,7 @@ public class TargetChannelProviderTests
         {
             Assert.That(state.Login, Is.EqualTo(OwnChannel));
             Assert.That(state.IsDebugSession, Is.True, "отладка включена, поэтому пользователь ждёт режим наблюдателя, а не обычную работу");
-            Assert.That(state.IsSendingAllowed, Is.False, "канал не разобран — молчание безопаснее, чем рассылка в свой живой чат");
+            Assert.That(state.IsSendingAllowed, Is.False, "канал не разобран – молчание безопаснее, чем рассылка в свой живой чат");
         });
     }
 

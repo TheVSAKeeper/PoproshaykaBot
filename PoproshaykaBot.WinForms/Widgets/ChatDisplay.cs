@@ -78,7 +78,7 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
             AutoToolTip = false,
             DisplayStyle = ToolStripItemDisplayStyle.Text,
             Text = "🗑",
-            ToolTipText = "Очистить куки и кэш активного аккаунта (бот или стример — настраивается в первичной настройке)",
+            ToolTipText = "Очистить куки и кэш активного аккаунта (бот или стример – настраивается в первичной настройке)",
         };
 
         _resetSessionButton.Click += OnResetSessionClicked;
@@ -351,7 +351,7 @@ public sealed partial class ChatDisplay : UserControl, IDashboardTileHeaderProvi
         _webView.Visible = false;
         SetHeaderItemsEnabled(false);
         _fallbackPanel.Visible = true;
-        _fallbackLabel.Text = "Не удалось открыть чат Twitch. Подробности — в логах.";
+        _fallbackLabel.Text = "Не удалось открыть чат Twitch. Подробности – в логах.";
         _fallbackLink.Visible = false;
     }
 

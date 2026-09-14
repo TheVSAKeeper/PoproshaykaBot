@@ -71,7 +71,7 @@ public partial class DebugChannelSettingsControl : UserControl
         if (!ChannelLogin.TryNormalize(_channelTextBox.Text, out var login))
         {
             _hintLabel.ForeColor = Color.Red;
-            _hintLabel.Text = "Укажите имя канала Twitch — например, mrbeast или ссылку на канал.";
+            _hintLabel.Text = "Укажите имя канала Twitch – например, mrbeast или ссылку на канал.";
             return;
         }
 

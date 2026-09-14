@@ -160,7 +160,7 @@ internal sealed record OAuthErrorResponse(
     string? Message);
 
 public sealed class OAuthRefreshRejectedException(int httpStatus, string? errorCode)
-    : Exception($"OAuth refresh отвергнут сервером (HTTP {httpStatus}, code={errorCode ?? "—"})")
+    : Exception($"OAuth refresh отвергнут сервером (HTTP {httpStatus}, code={errorCode ?? "–"})")
 {
     public int HttpStatus { get; } = httpStatus;
     public string? ErrorCode { get; } = errorCode;

@@ -79,7 +79,7 @@ public sealed class PollEventSubscriber(
 
         if (!availabilityResult.IsAvailable)
         {
-            logger.LogInformation("PollEventSubscriber: подписки не создаются — {Reason}", availabilityResult.UnavailableReason);
+            logger.LogInformation("PollEventSubscriber: подписки не создаются – {Reason}", availabilityResult.UnavailableReason);
             IsHealthy = false;
             return;
         }
@@ -112,7 +112,7 @@ public sealed class PollEventSubscriber(
             }
             catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
             {
-                logger.LogInformation(ex, "PollEventSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", type);
+                logger.LogInformation(ex, "PollEventSubscriber: подписка {Type} уже существует для текущей EventSub-сессии – переиспользуем", type);
             }
             catch (Exception ex)
             {

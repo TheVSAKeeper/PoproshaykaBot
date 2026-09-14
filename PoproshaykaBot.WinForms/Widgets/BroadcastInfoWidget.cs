@@ -208,7 +208,7 @@ public sealed partial class BroadcastInfoWidget : UserControl, IDashboardTileHea
         var nextTime = Scheduler.NextBroadcastTime;
         _nextTimeLabel.Text = nextTime.HasValue
             ? $"Следующая: {nextTime.Value:HH:mm:ss}"
-            : "Следующая: —";
+            : "Следующая: –";
 
         UpdateToggleButton(isActive, isAuto);
         UpdateSendNowButton(isActive);

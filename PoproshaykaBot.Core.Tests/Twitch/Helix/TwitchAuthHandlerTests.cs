@@ -125,10 +125,10 @@ public sealed class TwitchAuthHandlerTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized),
-                "Auth-handler не глотает 401 — пробрасывает caller-у, чтобы тот видел и принимал решение");
+                "Auth-handler не глотает 401 – пробрасывает caller-у, чтобы тот видел и принимал решение");
 
             Assert.That(_accountsStore.LoadBot().AccessToken, Is.Empty,
-                "Сохранённый токен должен быть очищен — следующий вызов должен пройти через TwitchOAuthService");
+                "Сохранённый токен должен быть очищен – следующий вызов должен пройти через TwitchOAuthService");
         }
     }
 
@@ -166,7 +166,7 @@ public sealed class TwitchAuthHandlerTests
         await client.GetAsync("helix/users");
 
         Assert.That(_accountsStore.LoadBot().AccessToken, Is.EqualTo(Token),
-            "Успешный ответ не должен дёргать TryClearAccessToken — токен валиден");
+            "Успешный ответ не должен дёргать TryClearAccessToken – токен валиден");
     }
 
     [Test]

@@ -309,7 +309,7 @@ public sealed class StreamStatusManagerTests
 
         var received = await receivedSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.That(received.IsCatchUp, Is.True,
-            "первичный офлайн-снимок не должен триггерить авто-отключение бота — это узнавание состояния, а не настоящий переход стрима в офлайн");
+            "первичный офлайн-снимок не должен триггерить авто-отключение бота – это узнавание состояния, а не настоящий переход стрима в офлайн");
     }
 
     [Test]
@@ -341,7 +341,7 @@ public sealed class StreamStatusManagerTests
 
         var received = await offlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.That(received.IsCatchUp, Is.False,
-            "переход Online → Offline по живому EventSub-уведомлению — настоящий переход, авто-отключение должно сработать");
+            "переход Online → Offline по живому EventSub-уведомлению – настоящий переход, авто-отключение должно сработать");
     }
 
     [Test]
@@ -457,7 +457,7 @@ public sealed class StreamStatusManagerTests
         {
             Assert.That(_manager.CurrentStream, Is.Not.Null);
             Assert.That(_manager.CurrentStream!.Title, Is.EqualTo("Новый заголовок"),
-                "EventSub channel.update авторитетен по title — Helix GetStreams лагает после смены профиля и не должен перетирать свежие значения");
+                "EventSub channel.update авторитетен по title – Helix GetStreams лагает после смены профиля и не должен перетирать свежие значения");
 
             Assert.That(_manager.CurrentStream.GameId, Is.EqualTo("999"));
             Assert.That(_manager.CurrentStream.GameName, Is.EqualTo("Программирование"));
@@ -505,7 +505,7 @@ public sealed class StreamStatusManagerTests
 
         var errorEntries = recordingLogger.Entries.Where(e => e.Level == LogLevel.Error).ToArray();
         Assert.That(errorEntries, Is.Empty,
-            $"409 Conflict при session_reconnect — нормальная ситуация (подписка уже создана и перенесена Twitch'ом), не должна логироваться как Error. Найдено: {string.Join(" | ", errorEntries.Select(e => e.Message))}");
+            $"409 Conflict при session_reconnect – нормальная ситуация (подписка уже создана и перенесена Twitch'ом), не должна логироваться как Error. Найдено: {string.Join(" | ", errorEntries.Select(e => e.Message))}");
     }
 
     [Test]

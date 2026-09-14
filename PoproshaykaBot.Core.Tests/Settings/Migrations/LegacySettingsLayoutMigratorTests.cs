@@ -107,7 +107,7 @@ public sealed class LegacySettingsLayoutMigratorTests
         {
             Assert.That(File.ReadAllText(Path.Combine(_settingsDirectory, "accounts.json")),
                 Is.EqualTo("{\"current\":true}"),
-                "Файл в settings/ имеет приоритет — мигратор не должен затирать актуальные данные");
+                "Файл в settings/ имеет приоритет – мигратор не должен затирать актуальные данные");
 
             Assert.That(File.Exists(Path.Combine(_baseDirectory, "accounts.json")), Is.True,
                 "Legacy-копия остаётся на месте, чтобы пользователь мог разобраться вручную");

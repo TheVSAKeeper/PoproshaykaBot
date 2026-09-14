@@ -152,7 +152,7 @@ public sealed class OAuthTokenRefresher(
 
             if (string.IsNullOrWhiteSpace(account.RefreshToken))
             {
-                logger.LogWarning("Refresh-токен для роли {Role} отсутствует — обновление невозможно, требуется ручная авторизация", role);
+                logger.LogWarning("Refresh-токен для роли {Role} отсутствует – обновление невозможно, требуется ручная авторизация", role);
                 return null;
             }
 
@@ -199,20 +199,20 @@ public sealed class OAuthTokenRefresher(
         {
             var pausedUntil = ApplyBackoff(backoff, RefreshRetryMaxDelay);
 
-            logger.LogError(credentialsRejected, "Twitch отклонил учётные данные приложения при обновлении токена роли {Role} (HTTP {Status}) — обновление приостановлено до {NextAttempt:HH:mm:ss} UTC, проверьте Client ID и Client Secret",
+            logger.LogError(credentialsRejected, "Twitch отклонил учётные данные приложения при обновлении токена роли {Role} (HTTP {Status}) – обновление приостановлено до {NextAttempt:HH:mm:ss} UTC, проверьте Client ID и Client Secret",
                 role,
                 credentialsRejected.HttpStatus,
                 pausedUntil);
 
             statusReporter.Report(role,
-                $"Twitch отклонил Client ID или Client Secret ({OAuthRoleHelpers.DescribeRole(role)}). Проверьте их в настройках — обновление токена приостановлено.");
+                $"Twitch отклонил Client ID или Client Secret ({OAuthRoleHelpers.DescribeRole(role)}). Проверьте их в настройках – обновление токена приостановлено.");
 
             return;
         }
 
         var nextAttemptAt = ApplyBackoff(backoff, NextRetryDelay(backoff.ConsecutiveFailures));
 
-        logger.LogError(exception, "Сбой при обновлении токена роли {Role} (transient — refresh-токен сохранён), следующая попытка не раньше {NextAttempt:HH:mm:ss} UTC",
+        logger.LogError(exception, "Сбой при обновлении токена роли {Role} (transient – refresh-токен сохранён), следующая попытка не раньше {NextAttempt:HH:mm:ss} UTC",
             role,
             nextAttemptAt);
     }
@@ -279,7 +279,7 @@ public sealed class OAuthTokenRefresher(
 
     private async Task HandleScopeMismatchAsync(TwitchOAuthRole role, TwitchAccountSettings accountSnapshot, CancellationToken ct)
     {
-        logger.LogWarning("Scope set роли {Role} изменился — требуется повторная авторизация. Старые: [{Old}]. Новые: [{New}]",
+        logger.LogWarning("Scope set роли {Role} изменился – требуется повторная авторизация. Старые: [{Old}]. Новые: [{New}]",
             role,
             string.Join(" ", accountSnapshot.StoredScopes),
             string.Join(" ", accountSnapshot.Scopes));
@@ -301,15 +301,15 @@ public sealed class OAuthTokenRefresher(
         }
 
         accountsStore.Mutate(role, OAuthRoleHelpers.ClearAccountInPlace);
-        logger.LogInformation("Учётные данные роли {Role} очищены из-за расхождения scope — ожидается повторная авторизация", role);
+        logger.LogInformation("Учётные данные роли {Role} очищены из-за расхождения scope – ожидается повторная авторизация", role);
     }
 
     private void HandleRefreshRejected(TwitchOAuthRole role, OAuthRefreshRejectedException exception, CancellationToken ct)
     {
-        logger.LogWarning("Refresh-токен роли {Role} отвергнут Twitch (HTTP {Status}, code={ErrorCode}) — токены сброшены, требуется повторная авторизация",
+        logger.LogWarning("Refresh-токен роли {Role} отвергнут Twitch (HTTP {Status}, code={ErrorCode}) – токены сброшены, требуется повторная авторизация",
             role,
             exception.HttpStatus,
-            exception.ErrorCode ?? "—");
+            exception.ErrorCode ?? "–");
 
         var msg = $"Требуется повторная авторизация Twitch ({OAuthRoleHelpers.DescribeRole(role)}): refresh-токен отвергнут сервером.";
         statusReporter.Report(role, msg);

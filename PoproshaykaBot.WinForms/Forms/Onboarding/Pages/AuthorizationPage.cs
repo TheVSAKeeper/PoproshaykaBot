@@ -451,7 +451,7 @@ public sealed partial class AuthorizationPage : OnboardingPageBase
 
         if (hasToken)
         {
-            var login = string.IsNullOrWhiteSpace(account.Login) ? "—" : account.Login;
+            var login = string.IsNullOrWhiteSpace(account.Login) ? "–" : account.Login;
             _resultLabel.Text = $"Авторизован: @{login}";
             _resultLabel.ForeColor = Color.Green;
 

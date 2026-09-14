@@ -32,8 +32,8 @@ public class StatisticsTrackingHandlerTests
     private FakeTargetChannelProvider _targetChannel = null!;
     private StatisticsTrackingHandler? _handler;
 
-    [TestCase(false, false, TestName = "Чужой канал в общем профиле — статистика не пишется")]
-    [TestCase(true, true, TestName = "Чужой канал в отдельном профиле — статистика пишется")]
+    [TestCase(false, false, TestName = "Чужой канал в общем профиле – статистика не пишется")]
+    [TestCase(true, true, TestName = "Чужой канал в отдельном профиле – статистика пишется")]
     public async Task HandleAsync_OnForeignChannel_RecordsOnlyInAnIsolatedProfile(bool isProfileIsolated, bool expectTracked)
     {
         _targetChannel.IsProfileIsolated = isProfileIsolated;

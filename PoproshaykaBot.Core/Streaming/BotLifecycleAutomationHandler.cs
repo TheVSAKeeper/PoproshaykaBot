@@ -72,7 +72,7 @@ public sealed class BotLifecycleAutomationHandler :
 
         try
         {
-            _logger.LogInformation("🔴 Стрим онлайн ({Channel}) — автоматически подключаю бота", @event.Channel);
+            _logger.LogInformation("🔴 Стрим онлайн ({Channel}) – автоматически подключаю бота", @event.Channel);
             _connectionManager.StartConnection();
         }
         catch (InvalidOperationException exception)
@@ -106,7 +106,7 @@ public sealed class BotLifecycleAutomationHandler :
             return Task.CompletedTask;
         }
 
-        _logger.LogInformation("⚫ Стрим офлайн ({Channel}) — автоматически отключаю бота", @event.Channel);
+        _logger.LogInformation("⚫ Стрим офлайн ({Channel}) – автоматически отключаю бота", @event.Channel);
 
         _eventBus.ContinueAfterPublish(StopBotAsync);
 

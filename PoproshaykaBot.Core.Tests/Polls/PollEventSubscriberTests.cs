@@ -91,7 +91,7 @@ public sealed class PollEventSubscriberTests
     {
         Assert.That(typeof(PollEventSubscriber).GetInterfaces(),
             Does.Contain(typeof(IStreamHostedComponent)),
-            "голосования принадлежат broadcaster-сессии — подписчик должен быть IStreamHostedComponent наравне с ChannelUpdateSubscriber, иначе IRC-дисконнект бота гасит channel.poll.*");
+            "голосования принадлежат broadcaster-сессии – подписчик должен быть IStreamHostedComponent наравне с ChannelUpdateSubscriber, иначе IRC-дисконнект бота гасит channel.poll.*");
     }
 
     [Test]

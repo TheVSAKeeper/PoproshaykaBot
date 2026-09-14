@@ -23,8 +23,8 @@ public sealed class AccountsStore
 
             logger.LogDebug("AccountsStore инициализирован из {FilePath} (bot.login={BotLogin}, broadcaster.login={BroadcasterLogin})",
                 _filePath,
-                string.IsNullOrEmpty(state.BotAccount?.Login) ? "—" : state.BotAccount.Login,
-                string.IsNullOrEmpty(state.BroadcasterAccount?.Login) ? "—" : state.BroadcasterAccount.Login);
+                string.IsNullOrEmpty(state.BotAccount?.Login) ? "–" : state.BotAccount.Login,
+                string.IsNullOrEmpty(state.BroadcasterAccount?.Login) ? "–" : state.BroadcasterAccount.Login);
         }
     }
 
@@ -78,7 +78,7 @@ public sealed class AccountsStore
         }
         else
         {
-            _logger?.LogDebug("AccountsStore.TryClearAccessToken: токен роли {Role} уже изменился — очистка пропущена", role);
+            _logger?.LogDebug("AccountsStore.TryClearAccessToken: токен роли {Role} уже изменился – очистка пропущена", role);
         }
 
         return cleared;

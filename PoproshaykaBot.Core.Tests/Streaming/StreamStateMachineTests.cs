@@ -206,7 +206,7 @@ public sealed class StreamStateMachineTests
         var afterReset = machine.ProbeOfflineDivergence(startUtc.AddMinutes(3), threshold);
 
         Assert.That(afterReset.Action, Is.EqualTo(OfflineProbeAction.Pending),
-            "после успешного online-snapshot offline-probe должен начаться заново — иначе ложное forced-offline");
+            "после успешного online-snapshot offline-probe должен начаться заново – иначе ложное forced-offline");
     }
 
     [Test]

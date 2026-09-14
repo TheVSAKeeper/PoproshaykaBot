@@ -111,13 +111,13 @@ public sealed class StreamStatusBroadcastHandler :
 
         if (@event.IsCatchUp)
         {
-            _logger.LogDebug("Офлайн-снимок при подключении (catch-up) — рассылка не останавливается и стоп-сообщение не отправляется");
+            _logger.LogDebug("Офлайн-снимок при подключении (catch-up) – рассылка не останавливается и стоп-сообщение не отправляется");
             return Task.CompletedTask;
         }
 
         if (!_botConnected)
         {
-            _logger.LogDebug("Бот не подключён — обработка офлайн пропущена");
+            _logger.LogDebug("Бот не подключён – обработка офлайн пропущена");
             return Task.CompletedTask;
         }
 

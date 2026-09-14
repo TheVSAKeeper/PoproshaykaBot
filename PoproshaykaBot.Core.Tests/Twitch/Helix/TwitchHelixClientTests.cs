@@ -71,7 +71,7 @@ public sealed class TwitchHelixClientTests
         {
             Assert.That(user, Is.Null);
             Assert.That(handler.Requests, Is.Empty,
-                "Пустой login не должен генерировать HTTP-вызов — это лишний удар по quota Helix");
+                "Пустой login не должен генерировать HTTP-вызов – это лишний удар по quota Helix");
         }
     }
 
@@ -240,7 +240,7 @@ public sealed class TwitchHelixClientTests
         {
             Assert.That(ex!.StatusCode, Is.EqualTo(HttpStatusCode.BadGateway));
             Assert.That(ex.TwitchErrorMessage, Is.Null,
-                "Невалидный JSON в теле — TwitchErrorMessage должен быть null, а не падать");
+                "Невалидный JSON в теле – TwitchErrorMessage должен быть null, а не падать");
 
             Assert.That(ex.ResponseBody, Is.EqualTo("<html>502</html>"));
         }
@@ -367,7 +367,7 @@ public sealed class TwitchHelixClientTests
         var body = handler.RequestBodies[0]!;
         var json = JsonDocument.Parse(body).RootElement;
         Assert.That(json.GetProperty("channel_points_per_vote").GetInt32(), Is.Zero,
-            "Когда голосование за channel points отключено, поле должно уйти нулём — иначе Twitch отказывает 400");
+            "Когда голосование за channel points отключено, поле должно уйти нулём – иначе Twitch отказывает 400");
     }
 
     [Test]

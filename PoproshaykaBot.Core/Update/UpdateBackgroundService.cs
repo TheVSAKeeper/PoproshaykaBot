@@ -24,7 +24,7 @@ public sealed class UpdateBackgroundService(
     {
         if (coordinator.Kind == UpdateKind.Unsupported)
         {
-            logger.LogInformation("Сборка не поддерживает автообновление — фоновая проверка отключена");
+            logger.LogInformation("Сборка не поддерживает автообновление – фоновая проверка отключена");
             return Task.CompletedTask;
         }
 
