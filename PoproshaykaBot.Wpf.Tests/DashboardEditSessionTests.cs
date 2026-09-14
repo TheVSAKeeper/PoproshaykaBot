@@ -120,19 +120,95 @@ public class DashboardEditSessionTests
 
             foreach (var typeId in added)
             {
-                Assert.That(session.Add(typeId, target, PaneSide.Right), Is.True, $"Плитка {typeId} ещё помещается в восемь колонок.");
+                Assert.That(session.Add(typeId, target, PaneSide.Right), Is.EqualTo(DashboardEditStatus.Applied), $"Плитка {typeId} ещё помещается в восемь колонок.");
                 target = typeId;
             }
 
-            Assert.That(session.Add("chat-overlay-preview", target, PaneSide.Right), Is.False,
-                "Плитка, уже стоящая в дереве, вторым листом не становится.");
-            Assert.That(session.Add("audience-tracker", target, PaneSide.Right), Is.False,
+            Assert.That(session.Add("chat-overlay-preview", target, PaneSide.Right), Is.EqualTo(DashboardEditStatus.Rejected),
+                "Плитка, уже стоящая в дереве, вторым листом не становится, и упор тут не в сетку.");
+            Assert.That(session.Add("audience-tracker", target, PaneSide.Right), Is.EqualTo(DashboardEditStatus.GridFull),
                 "Девятая колонка пробила бы потолок сетки, а проекция при чтении зажимается до восьми.");
         }
         finally
         {
             session?.Dispose();
         }
+    }
+
+    [TestCase(false, false, Description = "Добавление в черновик без дерева разрезов")]
+    [TestCase(true, false, Description = "Добавление в закрытую сессию")]
+    [TestCase(false, true, Description = "Перенос в черновике без дерева разрезов")]
+    [TestCase(true, true, Description = "Перенос в закрытой сессии")]
+    public void An_edit_without_a_live_tree_is_not_reported_as_a_failed_split(bool disposeFirst, bool byMove)
+    {
+        var layout = SideBySide();
+
+        if (!disposeFirst)
+        {
+            layout.Root = null;
+        }
+
+        var session = new DashboardEditSession(new(new FakeLayoutStore(layout)), new ManualTimeProvider());
+
+        if (disposeFirst)
+        {
+            session.Dispose();
+        }
+
+        var status = byMove
+            ? session.Split("stream-info", "twitch-chat", PaneSide.Bottom)
+            : session.Add("audience-tracker", "twitch-chat", PaneSide.Right);
+
+        if (!disposeFirst)
+        {
+            session.Dispose();
+        }
+
+        Assert.That(status, Is.EqualTo(DashboardEditStatus.Unavailable),
+            "Разреза здесь не было вовсе, и валить отказ на раскладку – значит звать пользователя чинить то, что цело.");
+    }
+
+    [TestCase(false, Description = "Девятая строка от новой плитки")]
+    [TestCase(true, Description = "Девятая строка от переноса соседней плитки")]
+    public void A_ninth_row_is_refused_as_the_grid_ceiling(bool byMove)
+    {
+        var session = new DashboardEditSession(new(new FakeLayoutStore(SideBySide())), new ManualTimeProvider());
+
+        try
+        {
+            var bottom = "stream-info";
+
+            foreach (var typeId in new[] { "audience-tracker", "broadcast-status", "broadcast-profiles", "polls-control", "obs-info", "chat-overlay-preview", "stream-history" })
+            {
+                Assert.That(session.Add(typeId, bottom, PaneSide.Bottom), Is.EqualTo(DashboardEditStatus.Applied),
+                    $"Плитка {typeId} ещё помещается в восемь строк.");
+
+                bottom = typeId;
+            }
+
+            var status = byMove
+                ? session.Split("twitch-chat", bottom, PaneSide.Bottom)
+                : session.Add("logs", bottom, PaneSide.Bottom);
+
+            Assert.That(status, Is.EqualTo(DashboardEditStatus.GridFull),
+                "Девятая строка упирается в тот же потолок, что и девятая колонка, и на перетаскивании он назван так же.");
+        }
+        finally
+        {
+            session.Dispose();
+        }
+    }
+
+    [TestCase("stream-info", Description = "Плитку переносят саму на себя")]
+    [TestCase("audience-tracker", Description = "Целевой плитки в дереве нет")]
+    public void A_move_that_the_tree_refuses_is_not_reported_as_a_full_grid(string target)
+    {
+        var store = new FakeLayoutStore(SideBySide());
+
+        using var session = new DashboardEditSession(new(store), new ManualTimeProvider());
+
+        Assert.That(session.Split("stream-info", target, PaneSide.Bottom), Is.EqualTo(DashboardEditStatus.Rejected),
+            "Сетка здесь свободна, и звать пользователя освобождать место было бы ложью.");
     }
 
     [Test]
@@ -165,19 +241,19 @@ public class DashboardEditSessionTests
 
         var before = session.Draft.Tiles.Count;
 
-        Assert.That(session.Add("audience-tracker", "twitch-chat", PaneSide.Right), Is.True);
+        Assert.That(session.Add("audience-tracker", "twitch-chat", PaneSide.Right), Is.EqualTo(DashboardEditStatus.Applied));
 
         var target = "audience-tracker";
 
         foreach (var typeId in new[] { "broadcast-status", "broadcast-profiles", "polls-control", "obs-info", "chat-overlay-preview" })
         {
-            Assert.That(session.Add(typeId, target, PaneSide.Right), Is.True);
+            Assert.That(session.Add(typeId, target, PaneSide.Right), Is.EqualTo(DashboardEditStatus.Applied));
             target = typeId;
         }
 
         var placed = session.Draft.Tiles.Count;
 
-        Assert.That(session.Add("stream-history", target, PaneSide.Right), Is.False, "Девятая колонка пробила бы потолок сетки.");
+        Assert.That(session.Add("stream-history", target, PaneSide.Right), Is.EqualTo(DashboardEditStatus.GridFull), "Девятая колонка пробила бы потолок сетки.");
 
         Assert.Multiple(() =>
         {

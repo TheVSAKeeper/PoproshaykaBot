@@ -64,19 +64,19 @@ public sealed class DashboardEditSession : IDisposable
         return Apply(root => DashboardPaneEditor.TryResize(root, path, weights, out var result) ? result : null);
     }
 
-    public bool Swap(string firstTypeId, string secondTypeId)
+    public DashboardEditStatus Swap(string firstTypeId, string secondTypeId)
     {
-        return Apply(root => DashboardPaneEditor.TrySwap(root, firstTypeId, secondTypeId, out var result) ? result : null);
+        return ApplyWithStatus(root => DashboardPaneEditor.TrySwap(root, firstTypeId, secondTypeId, out var result) ? result : null);
     }
 
-    public bool Split(string sourceTypeId, string targetTypeId, PaneSide side)
+    public DashboardEditStatus Split(string sourceTypeId, string targetTypeId, PaneSide side)
     {
         if (string.Equals(sourceTypeId, targetTypeId, StringComparison.Ordinal))
         {
-            return false;
+            return DashboardEditStatus.Rejected;
         }
 
-        return Apply(root =>
+        return ApplyWithStatus(root =>
         {
             if (DashboardPaneEditor.Remove(root, sourceTypeId) is not { Status: DashboardRemoveStatus.Removed, Root: { } without })
             {
@@ -87,9 +87,9 @@ public sealed class DashboardEditSession : IDisposable
         });
     }
 
-    public bool Add(string typeId, string targetTypeId, PaneSide side)
+    public DashboardEditStatus Add(string typeId, string targetTypeId, PaneSide side)
     {
-        return Apply(root =>
+        return ApplyWithStatus(root =>
         {
             DashboardLayoutReconciler.AppendMissingTypes(_draft, [typeId]);
 
@@ -238,20 +238,32 @@ public sealed class DashboardEditSession : IDisposable
 
     private bool Apply(Func<DashboardPane, DashboardPane?> change)
     {
+        return ApplyWithStatus(change) == DashboardEditStatus.Applied;
+    }
+
+    private DashboardEditStatus ApplyWithStatus(Func<DashboardPane, DashboardPane?> change)
+    {
         lock (_gate)
         {
             if (_disposed || _draft.Root is not { } root)
             {
-                return false;
+                return DashboardEditStatus.Unavailable;
             }
 
             var previous = Clone(_draft)!;
 
-            if (change(root) is not { } updated || !Fits(updated))
+            if (change(root) is not { } updated)
             {
                 _draft = previous;
 
-                return false;
+                return DashboardEditStatus.Rejected;
+            }
+
+            if (!Fits(updated))
+            {
+                _draft = previous;
+
+                return DashboardEditStatus.GridFull;
             }
 
             _draft.Root = updated;
@@ -260,7 +272,7 @@ public sealed class DashboardEditSession : IDisposable
             {
                 _draft = previous;
 
-                return false;
+                return DashboardEditStatus.Rejected;
             }
 
             Remember(previous);
@@ -269,7 +281,7 @@ public sealed class DashboardEditSession : IDisposable
 
         Raise();
 
-        return true;
+        return DashboardEditStatus.Applied;
     }
 
     private void Remember(DashboardLayoutSettings previous)

@@ -16,6 +16,8 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 {
+    private const string NotReadyNotice = "Панель пока не готова к правке. Выйдите из режима правки и войдите в него снова.";
+
     private readonly Dictionary<string, DashboardTileViewModel> _tilesByTypeId;
     private readonly DashboardLayoutCoordinator _coordinator;
     private readonly TimeProvider _time;
@@ -119,14 +121,35 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         return false;
     }
 
-    public bool Swap(string firstTypeId, string secondTypeId)
+    public DashboardEditStatus Swap(string firstTypeId, string secondTypeId)
     {
-        return _session?.Swap(firstTypeId, secondTypeId) == true;
+        return _session?.Swap(firstTypeId, secondTypeId) ?? DashboardEditStatus.Unavailable;
     }
 
-    public bool Move(string sourceTypeId, string targetTypeId, PaneSide side)
+    public DashboardEditStatus Move(string sourceTypeId, string targetTypeId, PaneSide side)
     {
-        return _session?.Split(sourceTypeId, targetTypeId, side) == true;
+        return _session?.Split(sourceTypeId, targetTypeId, side) ?? DashboardEditStatus.Unavailable;
+    }
+
+    public void ReportMove(DashboardEditStatus status)
+    {
+        switch (status)
+        {
+            case DashboardEditStatus.Applied:
+                return;
+
+            case DashboardEditStatus.GridFull:
+                ShowEditNotice("На панели больше нет места для ещё одного разреза. Перенесите плитку в другое место или уберите одну из соседних.");
+                return;
+
+            case DashboardEditStatus.Unavailable:
+                ShowEditNotice(NotReadyNotice);
+                return;
+
+            default:
+                ShowEditNotice("Плитку не получилось перенести на это место.");
+                return;
+        }
     }
 
     public void ShowEditNotice(string notice)
@@ -218,9 +241,26 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (LargestLeaf() is not { } target || !_session.Add(typeId, target, PaneSide.Right))
+        var status = LargestLeaf() is { } target
+            ? _session.Add(typeId, target, PaneSide.Right)
+            : DashboardEditStatus.Unavailable;
+
+        switch (status)
         {
-            ShowEditNotice("Эту плитку сейчас не добавить.");
+            case DashboardEditStatus.Applied:
+                return;
+
+            case DashboardEditStatus.GridFull:
+                ShowEditNotice("На панели больше нет места для новой плитки. Уберите одну из тех, что уже стоят.");
+                return;
+
+            case DashboardEditStatus.Unavailable:
+                ShowEditNotice(NotReadyNotice);
+                return;
+
+            default:
+                ShowEditNotice("Не получилось освободить место под эту плитку рядом с соседями. Попробуйте сначала поменять раскладку.");
+                return;
         }
     }
 
@@ -342,12 +382,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private static PaneLayout BuildLeaf(Placement placement, int[] path, bool alongColumns)
     {
         var star = new GridLength(1, GridUnitType.Star);
-        var maxWidth = placement.MaxWidth ?? double.PositiveInfinity;
-        var maxHeight = placement.MaxHeight ?? double.PositiveInfinity;
+        var maxWidth = placement.ScaledMaxWidth ?? double.PositiveInfinity;
+        var maxHeight = placement.ScaledMaxHeight ?? double.PositiveInfinity;
         var minWidth = placement.IsCollapsed && alongColumns
             ? Math.Min(DashboardTileViewModel.ScaledCollapsedStripWidth, maxWidth)
-            : Math.Min(placement.Tile.MinWidth, maxWidth);
-        var minHeight = placement.IsCollapsed ? 0 : Math.Min(placement.Tile.MinHeight, maxHeight);
+            : Math.Min(placement.Tile.ScaledMinWidth, maxWidth);
+        var minHeight = placement.IsCollapsed ? 0 : Math.Min(placement.Tile.ScaledMinHeight, maxHeight);
 
         if (Stretches(placement))
         {
@@ -511,7 +551,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             return new(new(1, GridUnitType.Star), double.PositiveInfinity);
         }
 
-        return new(GridLength.Auto, Ceiling(covering, p => p.MaxWidth, p => p.ColumnSpan));
+        return new(GridLength.Auto, Ceiling(covering, p => p.ScaledMaxWidth, p => p.ColumnSpan));
     }
 
     private static TrackSize ComputeRow(IReadOnlyList<Placement> members, int row)
@@ -525,7 +565,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             return new(new(1, GridUnitType.Star), double.PositiveInfinity, Floor(covering, double.PositiveInfinity));
         }
 
-        var ceiling = Ceiling(covering, p => p.MaxHeight, p => p.RowSpan);
+        var ceiling = Ceiling(covering, p => p.ScaledMaxHeight, p => p.RowSpan);
         var floor = Floor(covering, ceiling);
 
         return covering.Any(Grows)
@@ -552,12 +592,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             return 0;
         }
 
-        var floor = covering.Max(p => p.IsCollapsed ? 0 : p.Tile.MinHeight / (double)p.RowSpan);
+        var floor = covering.Max(p => p.IsCollapsed ? 0 : p.Tile.ScaledMinHeight / p.RowSpan);
 
         return Math.Min(floor, ceiling);
     }
 
-    private static double Ceiling(IReadOnlyList<Placement> covering, Func<Placement, int?> size, Func<Placement, int> span)
+    private static double Ceiling(IReadOnlyList<Placement> covering, Func<Placement, double?> size, Func<Placement, int> span)
     {
         if (covering.Count == 0 || covering.Any(p => size(p) is null))
         {
@@ -762,7 +802,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         int RowSpan,
         int? MaxWidth,
         int? MaxHeight,
-        bool IsCollapsed);
+        bool IsCollapsed)
+    {
+        public double? ScaledMaxWidth => MaxWidth * FontScaleManager.Current;
+
+        public double? ScaledMaxHeight => MaxHeight * FontScaleManager.Current;
+    }
 }
 
 public sealed record HiddenTile(string TypeId, string Title);

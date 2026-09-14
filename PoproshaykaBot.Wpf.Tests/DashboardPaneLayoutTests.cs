@@ -454,6 +454,33 @@ public class DashboardPaneLayoutTests
         return dashboard.Pane?.MinHeight(96) > viewport;
     }
 
+    [TestCase(1.0, 730, 100)]
+    [TestCase(1.6, 1168, 160)]
+    public void Floor_and_ceiling_of_a_column_follow_the_font_scale(double scale, double floor, double capped)
+    {
+        try
+        {
+            FontScaleManager.Apply(scale);
+
+            using var column = CreateDashboard(DefaultColumnLayout(), DefaultColumnTiles());
+            using var hole = CreateDashboard(HoleLayout(), UserLayoutTiles(100));
+
+            var left = (SplitPaneLayout)((SplitPaneLayout)((SplitPaneLayout)hole.Pane!).Children[0].Pane).Children[0].Pane;
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(column.Pane?.MinHeight(96 * scale), Is.EqualTo(floor).Within(0.001),
+                    "Содержимое плитки растёт вместе с масштабом шрифта, поэтому пол строки обязан расти тем же множителем – иначе «Информация о стриме» опять уходит во внутреннюю прокрутку.");
+                Assert.That(left.Children[1].Pane.MinHeight(96 * scale), Is.EqualTo(capped).Within(0.001),
+                    "Потолок масштабируется тем же множителем, иначе при 1.6 пол пробил бы MaxHeight 100 на ровном месте.");
+            });
+        }
+        finally
+        {
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+        }
+    }
+
     [Test]
     public void Band_without_a_tree_reports_the_floor_of_its_rows()
     {

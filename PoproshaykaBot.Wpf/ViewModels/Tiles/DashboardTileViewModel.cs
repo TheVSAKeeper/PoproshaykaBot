@@ -59,6 +59,10 @@ public abstract partial class DashboardTileViewModel : ObservableObject
 
     public int MinHeight { get; }
 
+    public double ScaledMinWidth => MinWidth * FontScaleManager.Current;
+
+    public double ScaledMinHeight => MinHeight * FontScaleManager.Current;
+
     public virtual PackIconLucideKind Icon => PackIconLucideKind.LayoutDashboard;
 
     public virtual bool FillsAvailableSpace => false;

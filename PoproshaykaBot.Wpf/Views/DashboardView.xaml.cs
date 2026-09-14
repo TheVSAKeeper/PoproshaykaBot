@@ -36,6 +36,10 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     private bool _dragging;
     private bool _stacked;
 
+    private static double ScaledStarBandMinWidth => StarBandMinWidth * FontScaleManager.Current;
+
+    private static double ScaledStarBandMinHeight => StarBandMinHeight * FontScaleManager.Current;
+
     public DashboardView()
     {
         InitializeComponent();
@@ -70,7 +74,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private static bool ShouldStack(double width, PaneLayout pane)
     {
-        return width > 0 && width < Math.Max(StackedWidthThreshold * FontScaleManager.Current, pane.MinWidth(StarBandMinWidth));
+        return width > 0 && width < Math.Max(StackedWidthThreshold * FontScaleManager.Current, pane.MinWidth(ScaledStarBandMinWidth));
     }
 
     private static void CollectLeaves(PaneLayout pane, List<TilePaneLayout> leaves)
@@ -101,8 +105,8 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         ArgumentNullException.ThrowIfNull(slot);
 
         return alongColumns
-            ? Floor(Track(slot, static target => target.Width), slot.Pane.Width, LeafMinimum(slot.Pane, StarBandMinWidth))
-            : Floor(Track(slot, static target => target.Height), slot.Pane.Height, LeafMinimum(slot.Pane, StarBandMinHeight));
+            ? Floor(Track(slot, static target => target.Width), slot.Pane.Width, LeafMinimum(slot.Pane, ScaledStarBandMinWidth))
+            : Floor(Track(slot, static target => target.Height), slot.Pane.Height, LeafMinimum(slot.Pane, ScaledStarBandMinHeight));
     }
 
     private static double LeafMinimum(PaneLayout pane, double minimum)
@@ -279,7 +283,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
                 (definition, index) =>
                 {
                     definition.Height = GridLength.Auto;
-                    definition.MinHeight = bands[index].Width.Length.IsStar ? StarBandMinHeight : 0;
+                    definition.MinHeight = bands[index].Width.Length.IsStar ? ScaledStarBandMinHeight : 0;
                 });
         }
         else
@@ -294,7 +298,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
                     definition.Width = track.Length;
                     definition.MaxWidth = track.Max;
-                    definition.MinWidth = track.Length.IsStar ? StarBandMinWidth : 0;
+                    definition.MinWidth = track.Length.IsStar ? ScaledStarBandMinWidth : 0;
                 });
         }
 
@@ -325,7 +329,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         }
 
         return _viewModel.Pane is { } pane
-            ? pane.MinHeight(StarBandMinHeight)
+            ? pane.MinHeight(ScaledStarBandMinHeight)
             : _viewModel.Bands.Select(band => band.MinHeight).DefaultIfEmpty(0).Max();
     }
 
@@ -376,7 +380,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             {
                 definition.Height = GridLength.Auto;
                 definition.MaxHeight = leaves[index].Height.Max;
-                definition.MinHeight = Floor(leaves[index].Height, StarBandMinHeight);
+                definition.MinHeight = Floor(leaves[index].Height, ScaledStarBandMinHeight);
             });
 
         for (var index = 0; index < leaves.Count; index++)
@@ -912,10 +916,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             ? _viewModel.Swap(source.TypeId, target.Tile.TypeId)
             : _viewModel.Move(source.TypeId, target.Tile.TypeId, side);
 
-        if (!moved)
-        {
-            _viewModel.ShowEditNotice("Плитку не получилось перенести на это место.");
-        }
+        _viewModel.ReportMove(moved);
     }
 
     private void ShowDropHint(Point position)
@@ -1056,10 +1057,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return true;
         }
 
-        if (!_viewModel.Move(tile.TypeId, neighbour, SideOf(key)))
-        {
-            _viewModel.ShowEditNotice("Плитку не получилось перенести на это место.");
-        }
+        _viewModel.ReportMove(_viewModel.Move(tile.TypeId, neighbour, SideOf(key)));
 
         return true;
     }
