@@ -25,6 +25,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private readonly HashSet<DashboardTileViewModel> _observed = [];
     private DashboardEditSession? _session;
     private DashboardLayoutSettings? _layout;
+    private IReadOnlyDictionary<string, Placement>? _placements;
     private string? _editNotice;
     private bool _suppressCollapsePersist;
     private bool _stacked;
@@ -129,6 +130,20 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     public DashboardEditStatus Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
         return _session?.Move(sourcePath, targetPath, side) ?? DashboardEditStatus.Unavailable;
+    }
+
+    public PaneLayout? PreviewEdit(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
+    {
+        if (_session is not { } session || _placements is null)
+        {
+            return null;
+        }
+
+        var root = side == PaneSide.None
+            ? session.PreviewSwap(sourcePath, targetPath)
+            : session.PreviewMove(sourcePath, targetPath, side);
+
+        return root is null ? null : BuildPane(root, _placements, [], false);
     }
 
     public void ReportMove(DashboardEditStatus status)
@@ -652,9 +667,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         DashboardLayoutReconciler.SyncRoot(layout);
 
+        _placements = placements.ToDictionary(placement => placement.Tile.TypeId, StringComparer.Ordinal);
+
         Pane = layout.Root is null
             ? null
-            : BuildPane(layout.Root, placements.ToDictionary(placement => placement.Tile.TypeId, StringComparer.Ordinal), [], false);
+            : BuildPane(layout.Root, _placements, [], false);
 
         ApplyCollapsedStrips(Pane, false);
 

@@ -36,6 +36,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     private Border? _dropHint;
     private Border? _dropFill;
     private TextBlock? _shareHint;
+    private DropPreview? _preview;
     private Point _dragOrigin;
     private bool _dragging;
     private bool _stacked;
@@ -250,6 +251,8 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        _preview = null;
+
         if (e.WidthChanged && ComputeStacked(e.NewSize.Width) != _stacked)
         {
             RebuildGrid(e.NewSize.Width, e.NewSize.Height);
@@ -292,6 +295,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         BandsGrid.RowDefinitions.Clear();
         _panePaths.Clear();
         _splitGrids.Clear();
+        _preview = null;
 
         if (_viewModel is null)
         {
@@ -397,11 +401,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             content = new Border { Child = content };
         }
 
-        content.MaxWidth = pane.Width.Max;
-        content.MaxHeight = pane.Height.Max;
-        content.MinWidth = Math.Min(pane.Width.Min, pane.Width.Max);
-        content.MinHeight = Math.Min(pane.Height.Min, pane.Height.Max);
-        content.HorizontalAlignment = pane.Width.Length.IsStar ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
+        ApplyRootConstraints(content, pane);
 
         BandsGrid.Children.Add(content);
     }
@@ -432,6 +432,40 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         }
     }
 
+    private static void ApplySplitTracks(Grid grid, SplitPaneLayout split, bool alongColumns)
+    {
+        if (alongColumns)
+        {
+            ApplyTracks(
+                grid.ColumnDefinitions,
+                split.Children.Count,
+                static () => new ColumnDefinition(),
+                (definition, index) =>
+                {
+                    var child = split.Children[index];
+
+                    definition.Width = Track(child, static target => target.Width);
+                    definition.MaxWidth = child.Pane.Width.Max;
+                    definition.MinWidth = TrackFloor(child, alongColumns: true);
+                });
+
+            return;
+        }
+
+        ApplyTracks(
+            grid.RowDefinitions,
+            split.Children.Count,
+            static () => new RowDefinition(),
+            (definition, index) =>
+            {
+                var child = split.Children[index];
+
+                definition.Height = Track(child, static target => target.Height);
+                definition.MaxHeight = child.Pane.Height.Max;
+                definition.MinHeight = TrackFloor(child, alongColumns: false);
+            });
+    }
+
     private FrameworkElement BuildPaneContent(PaneLayout pane)
     {
         if (pane is EmptyPaneLayout)
@@ -458,36 +492,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
         _splitGrids[split] = grid;
 
-        if (alongColumns)
-        {
-            ApplyTracks(
-                grid.ColumnDefinitions,
-                split.Children.Count,
-                static () => new ColumnDefinition(),
-                (definition, index) =>
-                {
-                    var child = split.Children[index];
-
-                    definition.Width = Track(child, static target => target.Width);
-                    definition.MaxWidth = child.Pane.Width.Max;
-                    definition.MinWidth = TrackFloor(child, alongColumns: true);
-                });
-        }
-        else
-        {
-            ApplyTracks(
-                grid.RowDefinitions,
-                split.Children.Count,
-                static () => new RowDefinition(),
-                (definition, index) =>
-                {
-                    var child = split.Children[index];
-
-                    definition.Height = Track(child, static target => target.Height);
-                    definition.MaxHeight = child.Pane.Height.Max;
-                    definition.MinHeight = TrackFloor(child, alongColumns: false);
-                });
-        }
+        ApplySplitTracks(grid, split, alongColumns);
 
         for (var index = 0; index < split.Children.Count; index++)
         {
@@ -513,46 +518,58 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         return grid;
     }
 
+    private static bool HasSplitter(SplitPaneLayout split, int index)
+    {
+        return !split.Children[index - 1].SizesToContent && !split.Children[index].SizesToContent;
+    }
+
+    private static GridSplitter CreateSplitter(bool alongColumns, int index)
+    {
+        var splitter = new GridSplitter
+        {
+            ResizeBehavior = GridResizeBehavior.PreviousAndCurrent,
+            ResizeDirection = alongColumns ? GridResizeDirection.Columns : GridResizeDirection.Rows,
+            Background = Brushes.Transparent,
+        };
+
+        if (alongColumns)
+        {
+            splitter.Width = SplitterThickness;
+            splitter.HorizontalAlignment = HorizontalAlignment.Left;
+            splitter.VerticalAlignment = VerticalAlignment.Stretch;
+            splitter.Margin = new(-SplitterThickness / 2, 0, 0, 0);
+            splitter.Cursor = Cursors.SizeWE;
+            Grid.SetColumn(splitter, index);
+        }
+        else
+        {
+            splitter.Height = SplitterThickness;
+            splitter.VerticalAlignment = VerticalAlignment.Top;
+            splitter.HorizontalAlignment = HorizontalAlignment.Stretch;
+            splitter.Margin = new(0, -SplitterThickness / 2, 0, 0);
+            splitter.Cursor = Cursors.SizeNS;
+            Grid.SetRow(splitter, index);
+        }
+
+        return splitter;
+    }
+
     private void AddSplitters(Grid grid, SplitPaneLayout split, bool alongColumns)
     {
         var added = false;
 
         for (var index = 1; index < split.Children.Count; index++)
         {
-            if (split.Children[index - 1].SizesToContent || split.Children[index].SizesToContent)
+            if (!HasSplitter(split, index))
             {
                 continue;
             }
 
-            var splitter = new GridSplitter
-            {
-                ResizeBehavior = GridResizeBehavior.PreviousAndCurrent,
-                ResizeDirection = alongColumns ? GridResizeDirection.Columns : GridResizeDirection.Rows,
-                Background = Brushes.Transparent,
-            };
+            var splitter = CreateSplitter(alongColumns, index);
 
             System.Windows.Automation.AutomationProperties.SetName(
                 splitter,
                 alongColumns ? "Разделитель по вертикали" : "Разделитель по горизонтали");
-
-            if (alongColumns)
-            {
-                splitter.Width = SplitterThickness;
-                splitter.HorizontalAlignment = HorizontalAlignment.Left;
-                splitter.VerticalAlignment = VerticalAlignment.Stretch;
-                splitter.Margin = new(-SplitterThickness / 2, 0, 0, 0);
-                splitter.Cursor = Cursors.SizeWE;
-                Grid.SetColumn(splitter, index);
-            }
-            else
-            {
-                splitter.Height = SplitterThickness;
-                splitter.VerticalAlignment = VerticalAlignment.Top;
-                splitter.HorizontalAlignment = HorizontalAlignment.Stretch;
-                splitter.Margin = new(0, -SplitterThickness / 2, 0, 0);
-                splitter.Cursor = Cursors.SizeNS;
-                Grid.SetRow(splitter, index);
-            }
 
             splitter.DragDelta += (_, _) => ShowShareHint(grid, split, alongColumns, index);
             splitter.DragCompleted += (_, args) => CommitShares(grid, split.Path, alongColumns, args.Canceled);
@@ -799,9 +816,21 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private FrameworkElement WrapScrollable(PaneLayout pane)
     {
-        var element = BuildPaneContent(pane);
+        return WrapScrollable(pane, BuildPaneContent(pane));
+    }
 
+    private static FrameworkElement WrapScrollable(PaneLayout pane, FrameworkElement element)
+    {
         return pane is SplitPaneLayout && pane.Scrollable ? Wrap(element) : element;
+    }
+
+    private static void ApplyRootConstraints(FrameworkElement content, PaneLayout pane)
+    {
+        content.MaxWidth = pane.Width.Max;
+        content.MaxHeight = pane.Height.Max;
+        content.MinWidth = Math.Min(pane.Width.Min, pane.Width.Max);
+        content.MinHeight = Math.Min(pane.Height.Min, pane.Height.Max);
+        content.HorizontalAlignment = pane.Width.Length.IsStar ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
     }
 
     private FrameworkElement BuildBandContent(TileBand band)
@@ -913,6 +942,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         _dragShield = shield;
         _dragOrigin = e.GetPosition(this);
         _dragging = false;
+        _preview = null;
     }
 
     private void OnShieldMouseMove(object sender, MouseEventArgs e)
@@ -976,6 +1006,21 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return;
         }
 
+        var side = Side(position, target.Bounds);
+
+        if (_preview is not { } preview || !preview.Matches(target.Path, side))
+        {
+            preview = new(target.Path, side, PredictRect(target.Path, side));
+            _preview = preview;
+        }
+
+        if (preview.Rect is not { } rect)
+        {
+            HideOverlay();
+
+            return;
+        }
+
         if (_dropHint is null)
         {
             _dropFill = new()
@@ -1002,25 +1047,151 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             EditOverlay.Children.Add(_dropHint);
         }
 
-        var bounds = target.Bounds;
-        var side = Side(position, bounds);
-
         _dropFill!.Visibility = side == PaneSide.None ? Visibility.Collapsed : Visibility.Visible;
-
-        var rect = side switch
-        {
-            PaneSide.Left => new Rect(bounds.X, bounds.Y, bounds.Width / 2, bounds.Height),
-            PaneSide.Right => new Rect(bounds.X + (bounds.Width / 2), bounds.Y, bounds.Width / 2, bounds.Height),
-            PaneSide.Top => new Rect(bounds.X, bounds.Y, bounds.Width, bounds.Height / 2),
-            PaneSide.Bottom => new Rect(bounds.X, bounds.Y + (bounds.Height / 2), bounds.Width, bounds.Height / 2),
-            _ => bounds,
-        };
 
         _dropHint.Width = rect.Width;
         _dropHint.Height = rect.Height;
 
         Canvas.SetLeft(_dropHint, rect.X);
         Canvas.SetTop(_dropHint, rect.Y);
+    }
+
+    private Rect? PredictRect(int[] targetPath, PaneSide side)
+    {
+        if (_viewModel is null || _dragTile is null || PathOf(_dragTile) is not { } sourcePath)
+        {
+            return null;
+        }
+
+        if (_viewModel.PreviewEdit(sourcePath, targetPath, side) is not { } pane || LeafOf(pane, _dragTile) is not { } leaf)
+        {
+            return null;
+        }
+
+        if (MeasurePane(pane, leaf, new(BandsGrid.ActualWidth, BandsGrid.ActualHeight), TileContentSize) is not { } rect)
+        {
+            return null;
+        }
+
+        var origin = BandsGrid.TransformToAncestor(this).Transform(default);
+
+        rect.Offset(origin.X, origin.Y);
+
+        return rect;
+    }
+
+    private Size TileContentSize(DashboardTileViewModel tile)
+    {
+        return _hosts.TryGetValue(tile, out var host) ? host.DesiredSize : default;
+    }
+
+    public static Rect? MeasurePane(PaneLayout root, PaneLayout target, Size available, Func<DashboardTileViewModel, Size>? content = null)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (available.Width <= 0 || available.Height <= 0 || double.IsInfinity(available.Width) || double.IsInfinity(available.Height))
+        {
+            return null;
+        }
+
+        var panes = new Dictionary<PaneLayout, FrameworkElement>(ReferenceEqualityComparer.Instance);
+        var skeleton = WrapScrollable(root, BuildSkeleton(root, content, panes));
+
+        if (root is TilePaneLayout)
+        {
+            skeleton = new Border { Child = skeleton };
+        }
+
+        ApplyRootConstraints(skeleton, root);
+
+        var host = new Grid();
+
+        host.Children.Add(skeleton);
+        host.Measure(available);
+        host.Arrange(new(default, available));
+
+        if (!panes.TryGetValue(target, out var element) || element.ActualWidth <= 0 || element.ActualHeight <= 0)
+        {
+            return null;
+        }
+
+        return new(element.TransformToAncestor(host).Transform(default), new Size(element.ActualWidth, element.ActualHeight));
+    }
+
+    public static PaneLayout? LeafOf(PaneLayout pane, DashboardTileViewModel tile)
+    {
+        switch (pane)
+        {
+            case TilePaneLayout leaf:
+                return ReferenceEquals(leaf.Tile, tile) ? leaf : null;
+
+            case SplitPaneLayout split:
+                foreach (var child in split.Children)
+                {
+                    if (LeafOf(child.Pane, tile) is { } found)
+                    {
+                        return found;
+                    }
+                }
+
+                return null;
+
+            default:
+                return null;
+        }
+    }
+
+    private static FrameworkElement BuildSkeleton(
+        PaneLayout pane,
+        Func<DashboardTileViewModel, Size>? content,
+        IDictionary<PaneLayout, FrameworkElement> panes)
+    {
+        if (pane is not SplitPaneLayout split)
+        {
+            var probe = new PaneProbe(pane is TilePaneLayout leaf && content is not null ? content(leaf.Tile) : default);
+
+            panes[pane] = probe;
+
+            return probe;
+        }
+
+        var alongColumns = split.Orientation == SplitOrientation.Columns;
+        var grid = new Grid();
+
+        ApplySplitTracks(grid, split, alongColumns);
+
+        for (var index = 0; index < split.Children.Count; index++)
+        {
+            var child = split.Children[index].Pane;
+            var element = WrapScrollable(child, BuildSkeleton(child, content, panes));
+
+            if (alongColumns)
+            {
+                Grid.SetColumn(element, index);
+            }
+            else
+            {
+                Grid.SetRow(element, index);
+            }
+
+            grid.Children.Add(element);
+        }
+
+        if (split.IsComplete)
+        {
+            for (var index = 1; index < split.Children.Count; index++)
+            {
+                if (HasSplitter(split, index))
+                {
+                    grid.Children.Add(CreateSplitter(alongColumns, index));
+                }
+            }
+        }
+
+        panes[pane] = grid;
+
+        return grid;
     }
 
     private DropTarget? TargetAt(Point position, DashboardTileViewModel? source)
@@ -1067,6 +1238,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         _dragShield = null;
         _dragTile = null;
         _dragging = false;
+        _preview = null;
 
         HideOverlay();
     }
@@ -1384,4 +1556,20 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     }
 
     private sealed record DropTarget(int[] Path, Rect Bounds);
+
+    private sealed record DropPreview(int[] Path, PaneSide Side, Rect? Rect)
+    {
+        public bool Matches(int[] path, PaneSide side)
+        {
+            return Side == side && Path.AsSpan().SequenceEqual(path);
+        }
+    }
+
+    private sealed class PaneProbe(Size content) : FrameworkElement
+    {
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            return new(Math.Min(content.Width, availableSize.Width), Math.Min(content.Height, availableSize.Height));
+        }
+    }
 }
