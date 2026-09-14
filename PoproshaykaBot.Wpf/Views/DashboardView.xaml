@@ -302,6 +302,35 @@
         <Canvas x:Name="EditOverlay"
                 IsHitTestVisible="False" />
 
+        <Border VerticalAlignment="Top"
+                HorizontalAlignment="Center"
+                Margin="16"
+                MaxWidth="520"
+                Padding="14,9"
+                IsHitTestVisible="False"
+                Background="{DynamicResource Bg.Surface}"
+                BorderBrush="{DynamicResource State.Warning}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.M}"
+                Visibility="{Binding EditNotice, Converter={StaticResource NullToVisibility}}">
+            <StackPanel Orientation="Horizontal">
+                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Info}"
+                                          Width="14"
+                                          Height="14"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,8,0"
+                                          Foreground="{DynamicResource State.WarningText}" />
+
+                <TextBlock x:Name="EditNoticeText"
+                           Text="{Binding EditNotice}"
+                           MaxWidth="460"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Fg.Primary}"
+                           AutomationProperties.LiveSetting="Assertive" />
+            </StackPanel>
+        </Border>
+
         <controls:EmptyState Icon="LayoutDashboard"
                              Heading="Плиток пока нет"
                              Description="Плитки панели появятся здесь после регистрации."

@@ -78,7 +78,7 @@ public sealed class DashboardEditSession : IDisposable
 
         return Apply(root =>
         {
-            if (!DashboardPaneEditor.TryRemove(root, sourceTypeId, out var without) || without is null)
+            if (DashboardPaneEditor.Remove(root, sourceTypeId) is not { Status: DashboardRemoveStatus.Removed, Root: { } without })
             {
                 return null;
             }
@@ -97,11 +97,25 @@ public sealed class DashboardEditSession : IDisposable
         });
     }
 
-    public bool Remove(string typeId)
+    public DashboardRemoveStatus Remove(string typeId)
     {
-        return Apply(root => root is TilePane
-            ? null
-            : DashboardPaneEditor.TryRemove(root, typeId, out var result) ? result : null);
+        var status = DashboardRemoveStatus.Rejected;
+
+        var applied = Apply(root =>
+        {
+            var removal = DashboardPaneEditor.Remove(root, typeId);
+
+            status = removal.Status;
+
+            return removal.Root;
+        });
+
+        if (applied)
+        {
+            return DashboardRemoveStatus.Removed;
+        }
+
+        return status == DashboardRemoveStatus.LastTile ? DashboardRemoveStatus.LastTile : DashboardRemoveStatus.Rejected;
     }
 
     public bool Undo()

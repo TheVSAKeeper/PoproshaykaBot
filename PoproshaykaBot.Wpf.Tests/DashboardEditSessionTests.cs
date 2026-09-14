@@ -149,7 +149,7 @@ public class DashboardEditSessionTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(session.Remove("stream-info"), Is.False,
+            Assert.That(session.Remove("stream-info"), Is.EqualTo(DashboardRemoveStatus.LastTile),
                 "Пустая панель закрывает сам режим правки, и вернуть плитку оттуда уже нечем – последний лист не удаляется.");
             Assert.That(session.Draft.Tiles.Single(tile => tile.TypeId == "stream-info").IsVisible, Is.True);
         });

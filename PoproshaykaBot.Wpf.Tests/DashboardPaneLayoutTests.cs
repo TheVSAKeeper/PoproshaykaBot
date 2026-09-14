@@ -4,6 +4,7 @@ using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
 using System.ComponentModel;
+using System.Windows.Controls;
 
 namespace PoproshaykaBot.Wpf.Tests;
 
@@ -681,6 +682,117 @@ public class DashboardPaneLayoutTests
         AddTile(layout, "stream-info", 0, 0, 1, 2);
         AddTile(layout, "broadcast-status", 1, 0, 1, 2);
         AddTile(layout, "twitch-chat", 0, 2, 2, 2);
+
+        return layout;
+    }
+
+    [Test]
+    public void Splitter_hint_names_the_floor_that_actually_holds_the_track()
+    {
+        using var dashboard = CreateDashboard(StackedNeighbourLayout(), StackedNeighbourTiles());
+
+        var root = (SplitPaneLayout)dashboard.Pane!;
+        var below = (SplitPaneLayout)root.Children[1].Pane;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(DashboardView.FloorObstacle(root.Children[1], alongColumns: false),
+                Is.EqualTo("несколько плиток одна под другой уже на минимуме высоты"),
+                "Высоту держит сумма полов колонки, а не самая высокая плитка ветки – называть одну из них нечестно.");
+            Assert.That(DashboardView.FloorObstacle(root.Children[0], alongColumns: false),
+                Is.EqualTo("плитка «stream-info» уже на минимуме"),
+                "Один лист – один виновник, как и было.");
+            Assert.That(DashboardView.FloorObstacle(below.Children[1], alongColumns: true),
+                Is.EqualTo("колонка не бывает уже 320 px"),
+                "Колонку держит общий пол растягивающегося листа, а не собственный минимум чата в 280 px.");
+        });
+    }
+
+    [Test]
+    public void Splitter_hint_tells_a_shared_ceiling_from_a_single_one()
+    {
+        using var dashboard = CreateDashboard(StackedNeighbourLayout(), StackedNeighbourTiles());
+
+        var root = (SplitPaneLayout)dashboard.Pane!;
+        var below = (SplitPaneLayout)root.Children[1].Pane;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(DashboardView.CeilingObstacle(below.Children[0].Pane, alongColumns: false),
+                Is.EqualTo("плитки одна под другой вместе не выше 740 px"),
+                "Потолок колонки – сумма потолков её плиток, и одной плиткой он не объясняется.");
+            Assert.That(DashboardView.CeilingObstacle(root.Children[0].Pane, alongColumns: false),
+                Is.EqualTo("плитка «stream-info» не выше 400 px"));
+            Assert.That(DashboardView.CeilingObstacle(below.Children[1].Pane, alongColumns: true),
+                Is.Null,
+                "У чата потолка нет, и упираться в него нечем.");
+        });
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void Splitter_hint_keeps_quiet_until_the_grid_is_actually_laid_out()
+    {
+        var grid = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new() { MinWidth = 320 },
+                new() { MinWidth = 320 },
+            },
+        };
+
+        Assert.That(DashboardView.HasReliableLayout(grid), Is.False,
+            "До прохода раскладки дорожки нулевые, и любой упор по ним – выдуманный.");
+
+        grid.Measure(new(800, 400));
+        grid.Arrange(new(0, 0, 800, 400));
+
+        Assert.That(DashboardView.HasReliableLayout(grid), Is.True,
+            "Размеченная сетка – единственное состояние, в котором об упоре можно судить.");
+
+        grid.InvalidateArrange();
+
+        Assert.That(DashboardView.HasReliableLayout(grid), Is.False,
+            "Перестроение дерева и автоповтор Ctrl+стрелки опережают Arrange, и прежние размеры дорожек уже не про эту раскладку.");
+    }
+
+    private static DashboardTileViewModel[] StackedNeighbourTiles()
+    {
+        return
+        [
+            new FakeTile("stream-info", maxHeight: 400, minHeight: 200),
+            new FakeTile("broadcast-profiles", grows: true, maxHeight: 320, minHeight: 130),
+            new FakeTile("obs-info", maxHeight: 420, minHeight: 140),
+            new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220),
+        ];
+    }
+
+    private static DashboardLayoutSettings StackedNeighbourLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 3,
+            Root = new SplitPane(SplitOrientation.Rows,
+            [
+                new(new TilePane("stream-info"), 1.0 / 3),
+                new(new SplitPane(SplitOrientation.Columns,
+                [
+                    new(new SplitPane(SplitOrientation.Rows,
+                    [
+                        new(new TilePane("broadcast-profiles"), 0.5),
+                        new(new TilePane("obs-info"), 0.5),
+                    ]), 0.5),
+                    new(new TilePane("twitch-chat"), 0.5),
+                ]), 2.0 / 3),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 2);
+        AddTile(layout, "broadcast-profiles", 1, 0, 1, 1);
+        AddTile(layout, "obs-info", 2, 0, 1, 1);
+        AddTile(layout, "twitch-chat", 1, 1, 2, 1);
 
         return layout;
     }

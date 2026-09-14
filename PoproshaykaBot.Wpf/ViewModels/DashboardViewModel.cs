@@ -23,6 +23,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private readonly HashSet<DashboardTileViewModel> _observed = [];
     private DashboardEditSession? _session;
     private DashboardLayoutSettings? _layout;
+    private string? _editNotice;
     private bool _suppressCollapsePersist;
     private bool _stacked;
 
@@ -56,6 +57,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     public bool HasTiles { get; private set; }
 
     public bool IsEditing => _session is not null;
+
+    public string? EditNotice
+    {
+        get => _editNotice;
+        private set => SetProperty(ref _editNotice, value);
+    }
 
     public bool CanEdit => Pane is not null && !_stacked;
 
@@ -122,12 +129,19 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         return _session?.Split(sourceTypeId, targetTypeId, side) == true;
     }
 
+    public void ShowEditNotice(string notice)
+    {
+        EditNotice = string.IsNullOrWhiteSpace(notice) ? null : notice;
+    }
+
     public void StopEditing()
     {
         if (_session is null)
         {
             return;
         }
+
+        EditNotice = null;
 
         _session.Changed -= OnSessionChanged;
         _session.Dispose();
@@ -184,7 +198,10 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Undo()
     {
-        _session?.Undo();
+        if (_session is { } session && !session.Undo())
+        {
+            ShowEditNotice("Отменять нечего: это первое состояние панели с начала правки.");
+        }
     }
 
     [RelayCommand]
@@ -196,20 +213,37 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void AddTile(string? typeId)
     {
-        if (_session is null || string.IsNullOrEmpty(typeId) || LargestLeaf() is not { } target)
+        if (_session is null || string.IsNullOrEmpty(typeId))
         {
             return;
         }
 
-        _session.Add(typeId, target, PaneSide.Right);
+        if (LargestLeaf() is not { } target || !_session.Add(typeId, target, PaneSide.Right))
+        {
+            ShowEditNotice("Эту плитку сейчас не добавить.");
+        }
     }
 
     [RelayCommand]
     private void RemoveTile(string? typeId)
     {
-        if (_session is not null && !string.IsNullOrEmpty(typeId))
+        if (_session is null || string.IsNullOrEmpty(typeId))
         {
-            _session.Remove(typeId);
+            return;
+        }
+
+        switch (_session.Remove(typeId))
+        {
+            case DashboardRemoveStatus.Removed:
+                return;
+
+            case DashboardRemoveStatus.LastTile:
+                ShowEditNotice("Нельзя убрать последнюю плитку. На панели должна остаться хотя бы одна.");
+                return;
+
+            default:
+                ShowEditNotice("Эту плитку сейчас убрать нельзя.");
+                return;
         }
     }
 
@@ -698,6 +732,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     {
         if (_session is { } session)
         {
+            EditNotice = null;
+
             ApplyLayout(session.Draft);
         }
     }
