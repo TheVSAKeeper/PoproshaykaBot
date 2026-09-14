@@ -74,6 +74,16 @@ public sealed class DashboardEditSession : IDisposable
         return ApplyWithStatus(root => DashboardPaneEditor.TryMove(root, sourcePath, targetPath, side, out var result) ? result : null);
     }
 
+    public DashboardPane? PreviewSwap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
+    {
+        return Preview(root => DashboardPaneEditor.TrySwap(root, firstPath, secondPath, out var result) ? result : null);
+    }
+
+    public DashboardPane? PreviewMove(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
+    {
+        return Preview(root => DashboardPaneEditor.TryMove(root, sourcePath, targetPath, side, out var result) ? result : null);
+    }
+
     public DashboardEditStatus Add(string typeId, string targetTypeId, PaneSide side)
     {
         return ApplyWithStatus(root =>
@@ -236,6 +246,19 @@ public sealed class DashboardEditSession : IDisposable
     private bool Apply(Func<DashboardPane, DashboardPane?> change)
     {
         return ApplyWithStatus(change) == DashboardEditStatus.Applied;
+    }
+
+    private DashboardPane? Preview(Func<DashboardPane, DashboardPane?> change)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _draft.Root is not { } root)
+            {
+                return null;
+            }
+
+            return change(root) is { } updated && Fits(updated) ? updated : null;
+        }
     }
 
     private DashboardEditStatus ApplyWithStatus(Func<DashboardPane, DashboardPane?> change)

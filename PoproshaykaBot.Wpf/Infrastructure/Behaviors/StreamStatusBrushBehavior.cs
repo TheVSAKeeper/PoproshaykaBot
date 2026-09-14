@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using PoproshaykaBot.Wpf.Bootstrap;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Shapes;
@@ -7,7 +8,7 @@ namespace PoproshaykaBot.Wpf.Infrastructure.Behaviors;
 
 public static class StreamStatusBrushBehavior
 {
-    private const string NeutralKey = "Fg.Muted";
+    private const string NeutralKey = ThemeKeys.FgMuted;
 
     public static readonly DependencyProperty ForegroundProperty = DependencyProperty.RegisterAttached(
         "Foreground",
@@ -50,9 +51,17 @@ public static class StreamStatusBrushBehavior
             _ => TextElement.ForegroundProperty,
         };
 
-        var key = ResolveKey(e.NewValue);
+        Apply(d, target, TextKey(ResolveKey(e.NewValue)));
+    }
 
-        Apply(d, target, key is null ? NeutralKey : key + "Text");
+    private static string TextKey(string? key)
+    {
+        return key switch
+        {
+            ThemeKeys.StateSuccess => ThemeKeys.StateSuccessText,
+            ThemeKeys.StateError => ThemeKeys.StateErrorText,
+            _ => NeutralKey,
+        };
     }
 
     private static void OnFillChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -72,15 +81,15 @@ public static class StreamStatusBrushBehavior
     {
         if (value is bool flag)
         {
-            return flag ? "State.Success" : null;
+            return flag ? ThemeKeys.StateSuccess : null;
         }
 
         var name = (value as Enum)?.ToString() ?? value as string;
 
         return name?.ToLowerInvariant() switch
         {
-            "online" or "live" or "connected" or "active" or "running" or "started" or "success" or "ok" => "State.Success",
-            "error" or "failed" or "fault" or "faulted" or "stuck" => "State.Error",
+            "online" or "live" or "connected" or "active" or "running" or "started" or "success" or "ok" => ThemeKeys.StateSuccess,
+            "error" or "failed" or "fault" or "faulted" or "stuck" => ThemeKeys.StateError,
             _ => null,
         };
     }

@@ -438,15 +438,6 @@ public sealed class DashboardPaneEditorTests
     }
 
     [Test]
-    public void Normalize_UnusableWeight_BecomesAuto()
-    {
-        var root = Columns(Leaf("stream-info", double.NaN), Leaf("polls-control", -1), Leaf("obs-info", 0.5));
-
-        Assert.That(Weights((SplitPane)DashboardPaneEditor.Normalize(root)!), Is.EqualTo(new double?[] { null, null, 0.5 }),
-            "Мусорный вес – это «по контенту», а не деление на ноль в рендере.");
-    }
-
-    [Test]
     public void Normalize_ExplicitWeightsThatLeaveNothingToAuto_AreCappedForIt()
     {
         var root = Columns(Leaf("stream-info", 0.8), Leaf("polls-control", 0.8), Leaf("obs-info", null));
@@ -493,6 +484,20 @@ public sealed class DashboardPaneEditorTests
             .SetName("Malformed_LeafWithoutTypeId");
 
         yield return new TestCaseData(Nested(64)).SetName("Malformed_TooDeep");
+
+        (double Weight, string Name)[] unusableWeights =
+        [
+            (0, "Zero"),
+            (-1, "Negative"),
+            (double.NaN, "NaN"),
+            (double.PositiveInfinity, "Infinite"),
+        ];
+
+        foreach (var (weight, name) in unusableWeights)
+        {
+            yield return new TestCaseData(Columns(Leaf("stream-info", weight), Leaf("polls-control", 0.5)))
+                .SetName($"Malformed_{name}Weight");
+        }
     }
 
     private static IReadOnlyList<int> PathOf(DashboardPane root, string typeId)

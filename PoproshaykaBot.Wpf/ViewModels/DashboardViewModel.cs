@@ -25,6 +25,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private readonly HashSet<DashboardTileViewModel> _observed = [];
     private DashboardEditSession? _session;
     private DashboardLayoutSettings? _layout;
+    private IReadOnlyDictionary<string, Placement>? _placements;
     private string? _editNotice;
     private bool _suppressCollapsePersist;
     private bool _stacked;
@@ -131,6 +132,20 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         return _session?.Move(sourcePath, targetPath, side) ?? DashboardEditStatus.Unavailable;
     }
 
+    public PaneLayout? PreviewEdit(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
+    {
+        if (_session is not { } session || _placements is null)
+        {
+            return null;
+        }
+
+        var root = side == PaneSide.None
+            ? session.PreviewSwap(sourcePath, targetPath)
+            : session.PreviewMove(sourcePath, targetPath, side);
+
+        return root is null ? null : BuildPane(root, _placements, [], false);
+    }
+
     public void ReportMove(DashboardEditStatus status)
     {
         switch (status)
@@ -170,6 +185,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         _session.Changed -= OnSessionChanged;
         _session.Dispose();
         _session = null;
+
+        SetTilesLayoutEditing(false);
 
         OnPropertyChanged(nameof(IsEditing));
         OnPropertyChanged(nameof(CanUndo));
@@ -214,9 +231,19 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         _session = new(_coordinator, _time, _sessionLogger);
         _session.Changed += OnSessionChanged;
 
+        SetTilesLayoutEditing(true);
+
         OnPropertyChanged(nameof(IsEditing));
 
         ApplySession();
+    }
+
+    private void SetTilesLayoutEditing(bool editing)
+    {
+        foreach (var tile in _tilesByTypeId.Values)
+        {
+            tile.IsLayoutEditing = editing;
+        }
     }
 
     [RelayCommand]
@@ -296,6 +323,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         _session?.Dispose();
         _session = null;
+
+        SetTilesLayoutEditing(false);
 
         foreach (var tile in _observed)
         {
@@ -638,9 +667,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         DashboardLayoutReconciler.SyncRoot(layout);
 
+        _placements = placements.ToDictionary(placement => placement.Tile.TypeId, StringComparer.Ordinal);
+
         Pane = layout.Root is null
             ? null
-            : BuildPane(layout.Root, placements.ToDictionary(placement => placement.Tile.TypeId, StringComparer.Ordinal), [], false);
+            : BuildPane(layout.Root, _placements, [], false);
 
         ApplyCollapsedStrips(Pane, false);
 

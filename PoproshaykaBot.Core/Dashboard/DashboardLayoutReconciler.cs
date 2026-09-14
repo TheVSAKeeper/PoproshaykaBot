@@ -93,9 +93,16 @@ public static class DashboardLayoutReconciler
     {
         ArgumentNullException.ThrowIfNull(layout);
 
-        if (layout.Root is not null && ProjectsInto(layout.Root, layout))
+        if (layout.Root is { } root)
         {
-            return;
+            var sanitized = DashboardPaneWeights.Sanitize(root);
+
+            layout.Root = sanitized;
+
+            if (ProjectsInto(sanitized, layout))
+            {
+                return;
+            }
         }
 
         layout.Root = DashboardLayoutTree.TryBuild(layout.Tiles, layout.ColumnCount, layout.RowCount);

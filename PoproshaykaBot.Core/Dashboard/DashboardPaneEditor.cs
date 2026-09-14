@@ -291,7 +291,9 @@ public static class DashboardPaneEditor
 
                     prefix.Add(index);
 
-                    var collected = slot is not null && Collect(slot.Pane, prefix, leaves, seen, depth + 1);
+                    var collected = slot is not null
+                        && DashboardPaneWeights.IsValid(slot.Weight)
+                        && Collect(slot.Pane, prefix, leaves, seen, depth + 1);
 
                     prefix.RemoveAt(prefix.Count - 1);
 
@@ -568,7 +570,7 @@ public static class DashboardPaneEditor
 
     private static bool IsExplicit(double? weight)
     {
-        return weight is { } value && value > 0 && double.IsFinite(value);
+        return DashboardPaneWeights.IsExplicit(weight);
     }
 
     private static double?[]? Distribute(IReadOnlyList<PaneSlot> children, IReadOnlyList<double> weights)

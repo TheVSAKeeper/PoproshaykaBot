@@ -1,5 +1,6 @@
 ﻿using KeepShell.Bootstrap;
 using Microsoft.Web.WebView2.Wpf;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Windows;
 using System.Windows.Media;
 using DrawingColor = System.Drawing.Color;
@@ -8,8 +9,6 @@ namespace PoproshaykaBot.Wpf.Infrastructure;
 
 public sealed class WebViewThemeBackground
 {
-    private const string SurfaceBrushKey = "Bg.Surface";
-
     private WebView2? _webView;
 
     private WebViewThemeBackground(WebView2 webView)
@@ -51,7 +50,7 @@ public sealed class WebViewThemeBackground
 
     private void Apply()
     {
-        if (_webView?.TryFindResource(SurfaceBrushKey) is not SolidColorBrush brush)
+        if (_webView?.TryFindResource(ThemeKeys.BgSurface) is not SolidColorBrush brush)
         {
             return;
         }

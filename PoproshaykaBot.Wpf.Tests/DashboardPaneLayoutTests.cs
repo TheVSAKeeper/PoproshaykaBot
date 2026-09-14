@@ -1,10 +1,12 @@
 ﻿using KeepShell.Bootstrap;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
 using System.ComponentModel;
+using System.Windows;
 using System.Windows.Controls;
 
 namespace PoproshaykaBot.Wpf.Tests;
@@ -12,6 +14,10 @@ namespace PoproshaykaBot.Wpf.Tests;
 [TestFixture]
 public class DashboardPaneLayoutTests
 {
+    private const int OverflowingTileHeight = 400;
+
+    private static readonly Size PreviewSize = new(1000, 600);
+
     [Test]
     public void Grid_without_a_tree_in_the_file_is_rendered_through_the_guillotine_split()
     {
@@ -848,6 +854,313 @@ public class DashboardPaneLayoutTests
 
         Assert.That(DashboardView.HasReliableLayout(grid), Is.False,
             "Перестроение дерева и автоповтор Ctrl+стрелки опережают Arrange, и прежние размеры дорожек уже не про эту раскладку.");
+    }
+
+    [Test]
+    public void Drop_target_holds_on_over_the_seam_between_panes()
+    {
+        var panes = new[]
+        {
+            new Rect(0, 0, 398, 300),
+            new Rect(402, 0, 398, 300),
+            new Rect(0, 306, 800, 294),
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(DashboardView.NearestPane(panes, new(200, 150), 24), Is.Zero,
+                "Точка внутри панели берёт её саму.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(399, 150), 24), Is.Zero,
+                "Разделитель лежит поверх шва, и подсказка обязана держаться за ближнюю панель, а не гаснуть под ним.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(401, 150), 24), Is.EqualTo(1),
+                "На другой половине шва ближняя панель уже правая.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(200, 302), 24), Is.Zero,
+                "Щель между рядами тоже отдаёт ближнюю панель.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(200, 700), 24), Is.EqualTo(-1),
+                "Курсор, уехавший за дашборд, цели не имеет.");
+
+            Assert.That(DashboardView.NearestPane(panes, new(399, 150), 24, skip: 0), Is.EqualTo(1),
+                "Плитку-источник из целей выбрасывают: иначе на шве она выигрывает ничью у соседа и гасит подсказку у собственного края.");
+        });
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void Drop_hint_promises_the_width_the_move_frees_up()
+    {
+        var overlay = new FakeTile("chat-overlay", fills: true, minWidth: 320, minHeight: 220);
+        var chat = new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220);
+
+        using var dashboard = CreateDashboard(TwoColumnsLayout(), overlay, chat);
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        var source = PathOf(dashboard, overlay);
+        var target = PathOf(dashboard, chat);
+        var preview = dashboard.PreviewEdit(source, target, PaneSide.Top);
+
+        Assert.That(preview, Is.Not.Null, "Перенос разрешён, значит подсказке есть что показать.");
+
+        var predicted = Measure(preview!, overlay);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(predicted.X, Is.Zero.Within(0.5), "Левая колонка освобождается и узел схлопывается – подсказка начинается у левого края панели.");
+
+            Assert.That(predicted.Width, Is.EqualTo(PreviewSize.Width).Within(0.5),
+                "Подсказка обещала верх правой колонки, а плитка вставала на верх всей ширины – ровно эта жалоба и правится.");
+
+            Assert.That(predicted.Height, Is.EqualTo(PreviewSize.Height / 2).Within(0.5));
+        });
+
+        Assert.That(dashboard.Move(source, target, PaneSide.Top), Is.EqualTo(DashboardEditStatus.Applied));
+
+        AssertSameRect(predicted, Measure(dashboard.Pane!, overlay));
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    [TestCase("stream-info", "twitch-chat", PaneSide.Bottom)]
+    [TestCase("stream-info", "twitch-chat", PaneSide.None)]
+    [TestCase("twitch-chat", "broadcast-status", PaneSide.Left)]
+    [TestCase("twitch-chat", "stream-info", PaneSide.None)]
+    [TestCase("broadcast-status", "stream-info", PaneSide.Top)]
+    public void Drop_hint_matches_the_layout_the_drop_produces(string sourceTypeId, string targetTypeId, PaneSide side)
+    {
+        DashboardTileViewModel[] tiles =
+        [
+            new FakeTile("stream-info"),
+            new FakeTile("broadcast-status"),
+            new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220),
+        ];
+
+        using var dashboard = CreateDashboard(SideBySideLayout(), tiles);
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        var dragged = tiles.Single(tile => string.Equals(tile.TypeId, sourceTypeId, StringComparison.Ordinal));
+        var source = PathOf(dashboard, dragged);
+        var target = PathOf(dashboard, tiles.Single(tile => string.Equals(tile.TypeId, targetTypeId, StringComparison.Ordinal)));
+
+        var preview = dashboard.PreviewEdit(source, target, side);
+
+        Assert.That(preview, Is.Not.Null, "Операция разрешена, значит подсказка обязана быть.");
+
+        var predicted = Measure(preview!, dragged);
+
+        var status = side == PaneSide.None
+            ? dashboard.Swap(source, target)
+            : dashboard.Move(source, target, side);
+
+        Assert.That(status, Is.EqualTo(DashboardEditStatus.Applied));
+
+        AssertSameRect(predicted, Measure(dashboard.Pane!, dragged));
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    [TestCase(PaneSide.Top)]
+    [TestCase(PaneSide.None)]
+    public void Drop_hint_measures_an_empty_cell_like_any_other_target(PaneSide side)
+    {
+        var tiles = UserLayoutTiles(420);
+
+        using var dashboard = CreateDashboard(HoleLayout(), tiles);
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        var dragged = tiles.Single(tile => string.Equals(tile.TypeId, "stream-info", StringComparison.Ordinal));
+        var source = PathOf(dashboard, dragged);
+        var hole = RightColumnOfTheHoleLayout(dashboard).Children[1].Pane.Path;
+
+        var preview = dashboard.PreviewEdit(source, hole, side);
+
+        Assert.That(preview, Is.Not.Null, "Пустая ячейка – такой же лист, и подсказка над ней обязана считаться.");
+
+        var predicted = Measure(preview!, dragged);
+
+        var status = side == PaneSide.None
+            ? dashboard.Swap(source, hole)
+            : dashboard.Move(source, hole, side);
+
+        Assert.That(status, Is.EqualTo(DashboardEditStatus.Applied));
+
+        AssertSameRect(predicted, Measure(dashboard.Pane!, dragged));
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void Drop_hint_keeps_quiet_where_the_drop_would_be_refused()
+    {
+        var chat = new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220);
+
+        using var dashboard = CreateDashboard(SingleTileLayout(), chat);
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        var only = PathOf(dashboard, chat);
+
+        Assert.That(dashboard.PreviewEdit(only, only, PaneSide.Top), Is.Null,
+            "Отказ операции – это отсутствие подсказки, а не рамка по старой геометрии.");
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void Drop_hint_leaves_room_for_the_scrollbar_of_a_content_sized_root()
+    {
+        DashboardTileViewModel[] tiles =
+        [
+            new FakeTile("stream-info", sizesToContent: true),
+            new FakeTile("broadcast-status", sizesToContent: true),
+        ];
+
+        using var dashboard = CreateDashboard(ContentSizedRowsLayout(), tiles);
+
+        Assert.That(dashboard.Pane!.Scrollable, Is.True,
+            "Корень из одних Auto-листьев панель заворачивает в ScrollViewer – на этом случае и держится проверка.");
+
+        var predicted = Measure(dashboard.Pane!, tiles[0], _ => new Size(PreviewSize.Width + 200, OverflowingTileHeight));
+
+        Assert.That(predicted.Width, Is.LessThan(PreviewSize.Width),
+            "Две плитки по содержимому не влезают по высоте, и в панели появляется полоса прокрутки, отнимающая ширину: измерение без той же обёртки обещает плитке всю ширину панели, и рамка подсказки вылезает за полосу.");
+    }
+
+    private static DashboardLayoutSettings ContentSizedRowsLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 1,
+            RowCount = 2,
+            Root = new SplitPane(SplitOrientation.Rows,
+            [
+                new(new TilePane("stream-info"), 0.5),
+                new(new TilePane("broadcast-status"), 0.5),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "broadcast-status", 1, 0, 1, 1);
+
+        return layout;
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    [TestCase(SplitOrientation.Columns)]
+    [TestCase(SplitOrientation.Rows)]
+    public void Child_of_a_split_keeps_its_ceiling_across_the_cut_and_stands_in_the_corner(SplitOrientation orientation)
+    {
+        const double Ceiling = 300;
+
+        var alongColumns = orientation == SplitOrientation.Columns;
+
+        var fixedTile = new FakeTile(
+            "stream-info",
+            maxWidth: alongColumns ? null : (int)Ceiling,
+            maxHeight: alongColumns ? (int)Ceiling : null);
+
+        var chat = new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220);
+
+        using var dashboard = CreateDashboard(CrossAxisLayout(orientation), fixedTile, chat);
+
+        var measured = Measure(dashboard.Pane!, fixedTile, _ => PreviewSize);
+
+        var across = alongColumns ? measured.Height : measured.Width;
+        var corner = alongColumns ? measured.Y : measured.X;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(across, Is.EqualTo(Ceiling).Within(0.5),
+                "Поперёк разреза потолок ставится самому потомку: трек сетки ограничивает только ось разреза, и плитка по содержимому растягивалась на всё место узла.");
+
+            Assert.That(corner, Is.Zero.Within(0.5),
+                "Панель по содержимому прижимается к началу своего места, а не висит по центру остатка.");
+        });
+    }
+
+    private static DashboardLayoutSettings CrossAxisLayout(SplitOrientation orientation)
+    {
+        var alongColumns = orientation == SplitOrientation.Columns;
+
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = alongColumns ? 2 : 1,
+            RowCount = alongColumns ? 1 : 2,
+            Root = new SplitPane(orientation,
+            [
+                new(new TilePane("stream-info"), 0.5),
+                new(new TilePane("twitch-chat"), 0.5),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "twitch-chat", alongColumns ? 0 : 1, alongColumns ? 1 : 0, 1, 1);
+
+        return layout;
+    }
+
+    private static void AssertSameRect(Rect predicted, Rect actual)
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(predicted.X, Is.EqualTo(actual.X).Within(0.5), "Предсказанное место обязано совпасть с тем, куда плитка встала после броска.");
+            Assert.That(predicted.Y, Is.EqualTo(actual.Y).Within(0.5));
+            Assert.That(predicted.Width, Is.EqualTo(actual.Width).Within(0.5));
+            Assert.That(predicted.Height, Is.EqualTo(actual.Height).Within(0.5));
+        });
+    }
+
+    private static Rect Measure(PaneLayout pane, DashboardTileViewModel tile, Func<DashboardTileViewModel, Size>? content = null)
+    {
+        var leaf = DashboardView.LeafOf(pane, tile);
+
+        Assert.That(leaf, Is.Not.Null, "Перетаскиваемая плитка обязана найтись в получившемся дереве.");
+
+        var rect = DashboardView.MeasurePane(pane, leaf!, PreviewSize, content);
+
+        Assert.That(rect, Is.Not.Null, "Раскладка меряется на фактический размер панели.");
+
+        return rect!.Value;
+    }
+
+    private static int[] PathOf(DashboardViewModel dashboard, DashboardTileViewModel tile)
+    {
+        var leaf = DashboardView.LeafOf(dashboard.Pane!, tile);
+
+        Assert.That(leaf, Is.Not.Null, $"Плитка {tile.TypeId} обязана быть на панели.");
+
+        return leaf!.Path;
+    }
+
+    private static DashboardLayoutSettings TwoColumnsLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 1,
+        };
+
+        AddTile(layout, "chat-overlay", 0, 0, 1, 1);
+        AddTile(layout, "twitch-chat", 0, 1, 1, 1);
+
+        return layout;
+    }
+
+    private static DashboardLayoutSettings SingleTileLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 1,
+            RowCount = 1,
+        };
+
+        AddTile(layout, "twitch-chat", 0, 0, 1, 1);
+
+        return layout;
     }
 
     private static DashboardTileViewModel[] StackedNeighbourTiles()

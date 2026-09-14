@@ -18,6 +18,9 @@ public abstract partial class DashboardTileViewModel : ObservableObject
     [ObservableProperty]
     private bool _isCollapsedToStrip;
 
+    [ObservableProperty]
+    private bool _isLayoutEditing;
+
     protected DashboardTileViewModel(
         string typeId,
         string title,

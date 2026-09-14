@@ -27,8 +27,52 @@
 
         <Grid>
         <wv2:WebView2 x:Name="WebView"
-                      ZoomFactor="{Binding ZoomFactor, Mode=TwoWay}"
-                      Visibility="{Binding HasFallback, Converter={StaticResource InverseBoolToVisibility}}" />
+                      ZoomFactor="{Binding ZoomFactor, Mode=TwoWay}">
+            <wv2:WebView2.Style>
+                <Style TargetType="wv2:WebView2">
+                    <Setter Property="Visibility"
+                            Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasFallback}"
+                                     Value="True">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsLayoutEditing}"
+                                     Value="True">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </wv2:WebView2.Style>
+        </wv2:WebView2>
+
+        <controls:EmptyState Icon="MessageSquare"
+                             Heading="Чат скрыт"
+                             Description="Окно чата вернётся, когда закончится настройка дашборда."
+                             DescriptionMaxWidth="320"
+                             VerticalAlignment="Center"
+                             HorizontalAlignment="Center">
+            <controls:EmptyState.Style>
+                <Style TargetType="controls:EmptyState">
+                    <Setter Property="Visibility"
+                            Value="Collapsed" />
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsLayoutEditing}"
+                                           Value="True" />
+                                <Condition Binding="{Binding HasFallback}"
+                                           Value="False" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility"
+                                    Value="Visible" />
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </controls:EmptyState.Style>
+        </controls:EmptyState>
 
         <controls:EmptyState Icon="MessageSquareWarning"
                              Heading="{Binding FallbackHeading}"

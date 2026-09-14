@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.Windows;
@@ -173,7 +174,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             Margin = new(4),
         };
 
-        text.SetResourceReference(TextBlock.ForegroundProperty, "Fg.Primary");
+        text.SetResourceReference(TextBlock.ForegroundProperty, ThemeKeys.FgPrimary);
 
         var border = new Border
         {
@@ -188,8 +189,8 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             ContextMenu = BuildContextMenu(placed),
         };
 
-        border.SetResourceReference(Border.BackgroundProperty, "Accent.Soft");
-        border.SetResourceReference(Border.BorderBrushProperty, "Accent.Primary");
+        border.SetResourceReference(Border.BackgroundProperty, ThemeKeys.AccentSoft);
+        border.SetResourceReference(Border.BorderBrushProperty, ThemeKeys.AccentPrimary);
 
         border.PreviewMouseLeftButtonDown += OnTileMouseDown;
         border.DragOver += OnCellDragOver;
@@ -216,7 +217,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             Tag = new CellPosition(row, column),
         };
 
-        border.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        border.SetResourceReference(Border.BorderBrushProperty, ThemeKeys.BorderSubtle);
 
         border.DragOver += OnCellDragOver;
         border.Drop += OnCellDrop;
