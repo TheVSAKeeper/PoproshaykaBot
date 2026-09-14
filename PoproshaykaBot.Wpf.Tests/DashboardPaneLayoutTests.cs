@@ -426,8 +426,9 @@ public class DashboardPaneLayoutTests
 
         Assert.Multiple(() =>
         {
-            Assert.That((left.Children[0].Pane as TilePaneLayout)?.Height.Min, Is.Zero,
-                "Свёрнутая плитка пола не просит – иначе свёртка перестанет освобождать место.");
+            Assert.That((left.Children[0].Pane as TilePaneLayout)?.Height.Min,
+                Is.EqualTo(DashboardTileViewModel.ScaledCollapsedHeaderHeight).Within(0.001),
+                "Свёрнутая плитка просит ровно свою шапку – место она освобождает, но не исчезает из подсчёта высоты.");
             Assert.That(left.Children[1].Pane.MinHeight(96), Is.EqualTo(100),
                 "Пол не пробивает потолок и на дереве: MaxHeight 100 сильнее MinHeight 140.");
             Assert.That(right.MinHeight(96), Is.EqualTo(130), "Дыра рядом не добавляет к полу колонки ничего.");
@@ -452,6 +453,38 @@ public class DashboardPaneLayoutTests
             "Полы колонки складываются вдоль разреза строк: 200 + 130 + 130 + 130 + 140 – столько высоты просит раскладка по умолчанию.");
 
         return dashboard.Pane?.MinHeight(96) > viewport;
+    }
+
+    [TestCase("stream-info;broadcast-profiles;polls;logs;obs-info", 1.0, 265d, 200d)]
+    [TestCase("stream-info;broadcast-profiles;polls;logs;obs-info", 1.6, 424d, 400d)]
+    [TestCase("broadcast-profiles;polls;logs", 1.0, 499d, 400d)]
+    public void Column_of_collapsed_tiles_asks_for_the_height_of_their_headers(string collapsed, double scale, double floor, double viewport)
+    {
+        var layout = DefaultColumnLayout();
+
+        foreach (var typeId in collapsed.Split(';'))
+        {
+            layout.Tiles.Single(tile => string.Equals(tile.TypeId, typeId, StringComparison.Ordinal)).IsCollapsed = true;
+        }
+
+        try
+        {
+            FontScaleManager.Apply(scale);
+
+            using var dashboard = CreateDashboard(layout, DefaultColumnTiles());
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(dashboard.Pane?.MinHeight(96 * scale), Is.EqualTo(floor).Within(0.001),
+                    "Свёрнутая плитка – это её шапка, и высоту шапки колонка просит так же, как просила бы содержимое.");
+                Assert.That(dashboard.Pane?.MinHeight(96 * scale), Is.GreaterThan(viewport),
+                    "С нулевым полом свёрнутой плитки колонка считалась помещающейся и уезжала за нижний край без полосы прокрутки.");
+            });
+        }
+        finally
+        {
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+        }
     }
 
     [TestCase(1.0, 730, 100)]
@@ -489,6 +522,24 @@ public class DashboardPaneLayoutTests
         Assert.That(dashboard.Pane, Is.Null, "Вертушку дерево не выражает – считать полы обязан полосный путь.");
         Assert.That(dashboard.Bands.Max(band => band.MinHeight), Is.EqualTo(510).Within(0.001),
             "Полосный путь считает пол по своим строкам: 200 у «Информации о стриме», 220 у чата и 90 у профилей рассылки.");
+    }
+
+    [Test]
+    public void Band_without_a_tree_counts_a_collapsed_row_by_its_header()
+    {
+        var layout = PinwheelLayout();
+
+        foreach (var tile in layout.Tiles)
+        {
+            tile.IsCollapsed = true;
+        }
+
+        using var dashboard = CreateDashboard(layout, PinwheelTiles());
+
+        Assert.That(dashboard.Pane, Is.Null, "Вертушку дерево не выражает – полы тут считает полосный путь.");
+        Assert.That(dashboard.Bands.Max(band => band.MinHeight),
+            Is.EqualTo(DashboardTileViewModel.CollapsedHeaderHeight * 3).Within(0.001),
+            "Три строки свёрнутых плиток – это три шапки, а не ноль, иначе переполнение полосы не опознаётся.");
     }
 
     [Test]

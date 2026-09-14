@@ -42,11 +42,19 @@ public abstract partial class DashboardTileViewModel : ObservableObject
 
     public static double ScaledCollapsedStripWidth => CollapsedStripWidth * FontScaleManager.Current;
 
+    // TODO: пол завышен – в свёрнутом виде нижняя граница шапки снимается (лишний DIP), а кнопка
+    //  свёртки высотой 28 не масштабируется вместе со шрифтом, поэтому при крупном шрифте завышение
+    //  растёт; мерить шапку по факту, когда пожалуются на прокрутку, включающуюся раньше нужного
+    public const int CollapsedHeaderHeight = 53;
+
+    public static double ScaledCollapsedHeaderHeight => CollapsedHeaderHeight * FontScaleManager.Current;
+
     public static event EventHandler<PropertyChangedEventArgs>? StaticPropertyChanged;
 
     public static void NotifyScaleChanged()
     {
         StaticPropertyChanged?.Invoke(null, new(nameof(ScaledCollapsedStripWidth)));
+        StaticPropertyChanged?.Invoke(null, new(nameof(ScaledCollapsedHeaderHeight)));
     }
 
     public string TypeId { get; }

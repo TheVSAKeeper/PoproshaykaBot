@@ -387,7 +387,9 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         var minWidth = placement.IsCollapsed && alongColumns
             ? Math.Min(DashboardTileViewModel.ScaledCollapsedStripWidth, maxWidth)
             : Math.Min(placement.Tile.ScaledMinWidth, maxWidth);
-        var minHeight = placement.IsCollapsed ? 0 : Math.Min(placement.Tile.ScaledMinHeight, maxHeight);
+        var minHeight = placement.IsCollapsed
+            ? Math.Min(DashboardTileViewModel.ScaledCollapsedHeaderHeight, maxHeight)
+            : Math.Min(placement.Tile.ScaledMinHeight, maxHeight);
 
         if (Stretches(placement))
         {
@@ -592,7 +594,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             return 0;
         }
 
-        var floor = covering.Max(p => p.IsCollapsed ? 0 : p.Tile.ScaledMinHeight / p.RowSpan);
+        var floor = covering.Max(p => (p.IsCollapsed ? DashboardTileViewModel.ScaledCollapsedHeaderHeight : p.Tile.ScaledMinHeight) / p.RowSpan);
 
         return Math.Min(floor, ceiling);
     }
