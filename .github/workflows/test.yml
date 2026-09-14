@@ -94,3 +94,12 @@ jobs:
           path: TestResults/*.trx
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Upload ui-smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-smoke-diagnostics-${{ matrix.host }}
+          path: artifacts/ui-smoke/**
+          if-no-files-found: ignore
+          retention-days: 7

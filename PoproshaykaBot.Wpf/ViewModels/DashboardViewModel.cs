@@ -121,14 +121,14 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         return false;
     }
 
-    public DashboardEditStatus Swap(string firstTypeId, string secondTypeId)
+    public DashboardEditStatus Swap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
     {
-        return _session?.Swap(firstTypeId, secondTypeId) ?? DashboardEditStatus.Unavailable;
+        return _session?.Swap(firstPath, secondPath) ?? DashboardEditStatus.Unavailable;
     }
 
-    public DashboardEditStatus Move(string sourceTypeId, string targetTypeId, PaneSide side)
+    public DashboardEditStatus Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        return _session?.Split(sourceTypeId, targetTypeId, side) ?? DashboardEditStatus.Unavailable;
+        return _session?.Move(sourcePath, targetPath, side) ?? DashboardEditStatus.Unavailable;
     }
 
     public void ReportMove(DashboardEditStatus status)
@@ -136,6 +136,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         switch (status)
         {
             case DashboardEditStatus.Applied:
+                EditNotice = null;
                 return;
 
             case DashboardEditStatus.GridFull:
@@ -248,6 +249,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         switch (status)
         {
             case DashboardEditStatus.Applied:
+                EditNotice = null;
                 return;
 
             case DashboardEditStatus.GridFull:
@@ -275,6 +277,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         switch (_session.Remove(typeId))
         {
             case DashboardRemoveStatus.Removed:
+                EditNotice = null;
                 return;
 
             case DashboardRemoveStatus.LastTile:
@@ -387,7 +390,9 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         var minWidth = placement.IsCollapsed && alongColumns
             ? Math.Min(DashboardTileViewModel.ScaledCollapsedStripWidth, maxWidth)
             : Math.Min(placement.Tile.ScaledMinWidth, maxWidth);
-        var minHeight = placement.IsCollapsed ? 0 : Math.Min(placement.Tile.ScaledMinHeight, maxHeight);
+        var minHeight = placement.IsCollapsed
+            ? Math.Min(DashboardTileViewModel.ScaledCollapsedHeaderHeight, maxHeight)
+            : Math.Min(placement.Tile.ScaledMinHeight, maxHeight);
 
         if (Stretches(placement))
         {
@@ -592,7 +597,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             return 0;
         }
 
-        var floor = covering.Max(p => p.IsCollapsed ? 0 : p.Tile.ScaledMinHeight / p.RowSpan);
+        var floor = covering.Max(p => (p.IsCollapsed ? DashboardTileViewModel.ScaledCollapsedHeaderHeight : p.Tile.ScaledMinHeight) / p.RowSpan);
 
         return Math.Min(floor, ceiling);
     }
