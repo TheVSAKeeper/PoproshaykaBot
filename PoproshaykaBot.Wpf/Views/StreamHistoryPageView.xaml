@@ -53,7 +53,7 @@
                                         SortMemberPath="StartedAt"
                                         SortDirection="Descending"
                                         ElementStyle="{StaticResource MonoCell}"
-                                        Width="150" />
+                                        Width="Auto" />
                     <DataGridTextColumn Header="Длительность"
                                         Binding="{Binding DurationFormatted}"
                                         SortMemberPath="Duration"
@@ -63,6 +63,7 @@
                     <DataGridTextColumn Header="Игра"
                                         Binding="{Binding GameFormatted}"
                                         SortMemberPath="GameFormatted"
+                                        ElementStyle="{StaticResource EllipsisCell}"
                                         Width="*"
                                         MinWidth="140" />
                     <DataGridTextColumn Header="Сообщ."
@@ -70,25 +71,25 @@
                                         SortMemberPath="MessageCount"
                                         ElementStyle="{StaticResource NumericCell}"
                                         HeaderStyle="{StaticResource NumericHeader}"
-                                        Width="95" />
+                                        Width="Auto" />
                     <DataGridTextColumn Header="Чаттеры"
                                         Binding="{Binding ChatterCountFormatted}"
                                         SortMemberPath="ChatterCount"
                                         ElementStyle="{StaticResource NumericCell}"
                                         HeaderStyle="{StaticResource NumericHeader}"
-                                        Width="95" />
+                                        Width="Auto" />
                     <DataGridTextColumn Header="Пик зр."
                                         Binding="{Binding PeakViewersFormatted}"
                                         SortMemberPath="PeakViewers"
                                         ElementStyle="{StaticResource NumericCell}"
                                         HeaderStyle="{StaticResource NumericHeader}"
-                                        Width="90" />
+                                        Width="Auto" />
                     <DataGridTextColumn Header="Средн."
                                         Binding="{Binding AverageViewersFormatted}"
                                         SortMemberPath="AverageViewers"
                                         ElementStyle="{StaticResource NumericCell}"
                                         HeaderStyle="{StaticResource NumericHeader}"
-                                        Width="90" />
+                                        Width="Auto" />
                 </DataGrid.Columns>
             </DataGrid>
         </Border>
@@ -227,27 +228,28 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Игра"
                                                 Binding="{Binding Game}"
+                                                ElementStyle="{StaticResource EllipsisCell}"
                                                 Width="*" />
                             <DataGridTextColumn Header="Длит."
                                                 Binding="{Binding Duration}"
                                                 ElementStyle="{StaticResource RightCell}"
                                                 HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="80" />
+                                                Width="Auto" />
                             <DataGridTextColumn Header="Сообщ."
                                                 Binding="{Binding Messages}"
                                                 ElementStyle="{StaticResource NumericCell}"
                                                 HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="80" />
+                                                Width="Auto" />
                             <DataGridTextColumn Header="Пик зр."
                                                 Binding="{Binding PeakViewers}"
                                                 ElementStyle="{StaticResource NumericCell}"
                                                 HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="75" />
+                                                Width="Auto" />
                             <DataGridTextColumn Header="Средн."
                                                 Binding="{Binding AverageViewers}"
                                                 ElementStyle="{StaticResource NumericCell}"
                                                 HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="75" />
+                                                Width="Auto" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>
@@ -296,13 +298,14 @@
                             <DataGridTextColumn Header="Ник"
                                                 Binding="{Binding DisplayName}"
                                                 SortMemberPath="DisplayName"
+                                                ElementStyle="{StaticResource EllipsisCell}"
                                                 Width="*" />
                             <DataGridTextColumn Header="Сообщ."
                                                 Binding="{Binding MessageCountFormatted}"
                                                 SortMemberPath="MessageCount"
                                                 ElementStyle="{StaticResource NumericCell}"
                                                 HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="80" />
+                                                Width="Auto" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>

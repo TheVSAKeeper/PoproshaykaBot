@@ -22,6 +22,14 @@
                 Value="{DynamicResource Font.Mono}" />
     </Style>
 
+    <Style x:Key="EllipsisCell"
+           TargetType="TextBlock">
+        <Setter Property="TextTrimming"
+                Value="CharacterEllipsis" />
+        <Setter Property="ToolTip"
+                Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+    </Style>
+
     <Style x:Key="TableRow"
            TargetType="DataGridRow"
            BasedOn="{StaticResource {x:Type DataGridRow}}">
