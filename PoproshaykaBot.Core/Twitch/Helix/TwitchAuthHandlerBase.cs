@@ -37,7 +37,7 @@ public abstract class TwitchAuthHandlerBase(
             return response;
         }
 
-        logger.LogWarning("Helix запрос {Method} {Path} (роль {Role}) вернул 401 — пробуем очистить сохранённый токен",
+        logger.LogWarning("Helix запрос {Method} {Path} (роль {Role}) вернул 401 – пробуем очистить сохранённый токен",
             request.Method,
             request.RequestUri?.AbsolutePath,
             Role);

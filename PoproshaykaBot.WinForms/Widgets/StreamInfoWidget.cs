@@ -210,7 +210,7 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
         }
 
         _titleLabel.Text = info.Title;
-        _gameLabel.Text = string.IsNullOrWhiteSpace(info.GameName) ? "—" : $"🎮 {info.GameName}";
+        _gameLabel.Text = string.IsNullOrWhiteSpace(info.GameName) ? "–" : $"🎮 {info.GameName}";
         _viewersLabel.Text = $"👥 {info.ViewerCount:N0}";
 
         var duration = DateTime.UtcNow - info.StartedAt;
@@ -256,9 +256,9 @@ public sealed partial class StreamInfoWidget : UserControl, IDashboardTileHeader
     private void ClearInfoLabels(string titleMessage)
     {
         _titleLabel.Text = titleMessage;
-        _gameLabel.Text = "—";
-        _viewersLabel.Text = "👥 —";
-        _uptimeLabel.Text = "⏱️ —";
+        _gameLabel.Text = "–";
+        _viewersLabel.Text = "👥 –";
+        _uptimeLabel.Text = "⏱️ –";
 
         ClearThumbnail();
 

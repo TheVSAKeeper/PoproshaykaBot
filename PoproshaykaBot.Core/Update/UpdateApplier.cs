@@ -75,7 +75,7 @@ public static class UpdateApplier
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Не удалось переименовать текущий исполняемый файл — обновление отменено");
+            logger.LogError(exception, "Не удалось переименовать текущий исполняемый файл – обновление отменено");
             return false;
         }
 
@@ -85,7 +85,7 @@ public static class UpdateApplier
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Не удалось установить новую версию — выполняется откат");
+            logger.LogError(exception, "Не удалось установить новую версию – выполняется откат");
             Rollback(plan, logger);
             TryDelete(pendingPath, logger);
             return false;

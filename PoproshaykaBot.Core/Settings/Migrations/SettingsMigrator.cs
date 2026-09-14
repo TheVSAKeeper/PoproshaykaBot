@@ -147,7 +147,7 @@ public static class SettingsMigrator
             if (File.Exists(target))
             {
                 JsonStoreBackup.CreateBackup(target, "pre-migration", logger, backupRedactor);
-                logger?.LogWarning("Миграция настроек: целевой {TargetFileName} уже существовал — создан бэкап перед перезаписью авторитетным источником из settings.json",
+                logger?.LogWarning("Миграция настроек: целевой {TargetFileName} уже существовал – создан бэкап перед перезаписью авторитетным источником из settings.json",
                     targetFileName);
             }
 
@@ -160,7 +160,7 @@ public static class SettingsMigrator
         catch (Exception exception)
         {
             logger?.LogError(exception,
-                "Миграция настроек: не удалось записать {TargetFileName} — легаси-поле в settings.json оставлено без изменений",
+                "Миграция настроек: не удалось записать {TargetFileName} – легаси-поле в settings.json оставлено без изменений",
                 targetFileName);
 
             return false;

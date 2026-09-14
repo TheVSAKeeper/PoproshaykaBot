@@ -71,7 +71,7 @@ public sealed class OAuthFlowCoordinator(
 
         if (string.IsNullOrEmpty(state))
         {
-            logger.LogWarning("Callback без state-параметра — игнорируется");
+            logger.LogWarning("Callback без state-параметра – игнорируется");
             return;
         }
 
@@ -83,7 +83,7 @@ public sealed class OAuthFlowCoordinator(
 
         if (pending == null)
         {
-            logger.LogWarning("Callback с неизвестным state '{State}' — возможна CSRF атака или просроченный flow", state);
+            logger.LogWarning("Callback с неизвестным state '{State}' – возможна CSRF атака или просроченный flow", state);
             return;
         }
 

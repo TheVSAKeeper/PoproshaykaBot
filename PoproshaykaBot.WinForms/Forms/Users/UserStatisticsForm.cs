@@ -325,8 +325,8 @@ public sealed partial class UserStatisticsForm : Form
 
     private void UpdateDetails(UserStatistics? user)
     {
-        labelUserId.Text = $"🆔 ID: {user?.UserId ?? "—"}";
-        labelUserName.Text = $"👤 Имя: {user?.Name ?? "—"}";
+        labelUserId.Text = $"🆔 ID: {user?.UserId ?? "–"}";
+        labelUserName.Text = $"👤 Имя: {user?.Name ?? "–"}";
         labelMessages.Text = $"💬 Сообщения: {user?.MessageCount:N0}";
         labelPoints.Text = $"🏆 Баллы: {user?.Points:N0}";
         labelBonus.Text = $"    🎁 Бонус: {user?.BonusPoints:N0}";

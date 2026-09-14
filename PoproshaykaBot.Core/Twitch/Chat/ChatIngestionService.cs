@@ -115,7 +115,7 @@ public sealed class ChatIngestionService(
                 }
                 catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
                 {
-                    logger.LogInformation(ex, "ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии — переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
+                    logger.LogInformation(ex, "ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии – переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
                         broadcasterId, botId);
 
                     return;
@@ -127,7 +127,7 @@ public sealed class ChatIngestionService(
                 }
             }
 
-            logger.LogError(lastError, "ChatIngestionService: не удалось подписаться на чат Twitch — все {Max} попытки создать подписку channel.chat.message провалились", delays.Length);
+            logger.LogError(lastError, "ChatIngestionService: не удалось подписаться на чат Twitch – все {Max} попытки создать подписку channel.chat.message провалились", delays.Length);
         }
         catch (Exception ex)
         {

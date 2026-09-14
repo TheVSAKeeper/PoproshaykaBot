@@ -57,7 +57,7 @@ public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChan
         }
         else if (activeUsers == 0)
         {
-            _logger.LogInformation("Коллективное прощание пропущено: AudienceTracker пуст — ни одного нефильтрованного сообщения за сессию");
+            _logger.LogInformation("Коллективное прощание пропущено: AudienceTracker пуст – ни одного нефильтрованного сообщения за сессию");
         }
         else
         {

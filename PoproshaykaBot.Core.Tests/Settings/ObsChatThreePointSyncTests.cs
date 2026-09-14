@@ -23,7 +23,7 @@ public sealed class ObsChatThreePointSyncTests
         var mutatedCss = ObsChatCssSettings.FromObsChatSettings(mutated);
 
         Assert.That(AreEqual(defaultCss, mutatedCss), Is.False,
-            $"Изменение ObsChatSettings.{sourceProp.Name} не повлияло на ObsChatCssSettings — "
+            $"Изменение ObsChatSettings.{sourceProp.Name} не повлияло на ObsChatCssSettings – "
             + "пропустили шаг (1) three-point sync в FromObsChatSettings.");
     }
 
@@ -36,7 +36,7 @@ public sealed class ObsChatThreePointSyncTests
         var camelCase = ToCamelCase(cssProp.Name);
 
         Assert.That(jsSource, Does.Contain(camelCase),
-            $"Поле ObsChatCssSettings.{cssProp.Name} (JSON: {camelCase}) не используется в obs.js — "
+            $"Поле ObsChatCssSettings.{cssProp.Name} (JSON: {camelCase}) не используется в obs.js – "
             + "пропустили шаг (2) three-point sync.");
     }
 
@@ -73,7 +73,7 @@ public sealed class ObsChatThreePointSyncTests
 
         if (!match.Success)
         {
-            throw new InvalidOperationException($"Не нашли массив '{variableName}' в obs.js. Возможно, его переименовали — "
+            throw new InvalidOperationException($"Не нашли массив '{variableName}' в obs.js. Возможно, его переименовали – "
                                                 + "обновите тест или верните прежнее имя.");
         }
 

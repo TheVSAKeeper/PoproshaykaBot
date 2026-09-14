@@ -78,7 +78,7 @@ public sealed class ChatSender(
         {
             var remaining = _channel.Reader.CanCount ? _channel.Reader.Count : -1;
             logger.LogWarning(timeoutEx,
-                "ChatSender: дренаж очереди прерван (в очереди осталось {Remaining}) — не все сообщения отправлены, принудительная остановка",
+                "ChatSender: дренаж очереди прерван (в очереди осталось {Remaining}) – не все сообщения отправлены, принудительная остановка",
                 remaining);
 
             if (_cts != null)
@@ -120,7 +120,7 @@ public sealed class ChatSender(
 
         if (!target.IsSendingAllowed)
         {
-            logger.LogInformation("Режим наблюдателя ({Channel}): сообщение не отправлено — {Message}",
+            logger.LogInformation("Режим наблюдателя ({Channel}): сообщение не отправлено – {Message}",
                 target.Login,
                 message);
 
@@ -325,7 +325,7 @@ public sealed class ChatSender(
     {
         if (attempt >= MaxSendAttempts)
         {
-            logger.LogError("ChatSender: rate limit 429, исчерпаны все {MaxAttempts} попыток — сообщение отброшено", MaxSendAttempts);
+            logger.LogError("ChatSender: rate limit 429, исчерпаны все {MaxAttempts} попыток – сообщение отброшено", MaxSendAttempts);
             return false;
         }
 

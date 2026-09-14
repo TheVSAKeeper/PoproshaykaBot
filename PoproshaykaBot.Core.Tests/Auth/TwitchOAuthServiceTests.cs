@@ -141,7 +141,7 @@ public sealed class TwitchOAuthServiceTests
         {
             Assert.That(second, Is.Null);
             Assert.That(_handler.Requests.Count, Is.EqualTo(requestsAfterFirst),
-                "Повторный GetAccessTokenAsync не должен снова идти в Twitch — токены очищены");
+                "Повторный GetAccessTokenAsync не должен снова идти в Twitch – токены очищены");
         }
     }
 

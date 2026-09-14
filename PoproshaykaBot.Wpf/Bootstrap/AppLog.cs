@@ -126,7 +126,7 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1200, Level = LogLevel.Error, Message = "Ошибка сохранения настроек")]
     public static partial void SettingsSaveFailed(this ILogger logger, Exception? exception);
 
-    [LoggerMessage(EventId = 1201, Level = LogLevel.Warning, Message = "Некорректный RedirectUri '{RedirectUri}' — порт HTTP сервера не обновлён")]
+    [LoggerMessage(EventId = 1201, Level = LogLevel.Warning, Message = "Некорректный RedirectUri '{RedirectUri}' – порт HTTP сервера не обновлён")]
     public static partial void SettingsRedirectUriInvalid(this ILogger logger, string redirectUri);
 
     [LoggerMessage(EventId = 1202, Level = LogLevel.Information, Message = "Порт HTTP сервера обновлён с {OldPort} на {NewPort} в соответствии с RedirectUri")]

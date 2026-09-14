@@ -43,8 +43,8 @@ public sealed class SettingsMigratorTests
 
             var bot = twitch["botAccount"]!.AsObject();
             Assert.That(bot["login"]!.GetValue<string>(), Is.EqualTo("thevsakeeper"));
-            Assert.That(bot.ContainsKey("accessToken"), Is.False, "Старые токены сбрасываем — они выпущены под недостаточный набор прав");
-            Assert.That(bot.ContainsKey("refreshToken"), Is.False, "Старые токены сбрасываем — они выпущены под недостаточный набор прав");
+            Assert.That(bot.ContainsKey("accessToken"), Is.False, "Старые токены сбрасываем – они выпущены под недостаточный набор прав");
+            Assert.That(bot.ContainsKey("refreshToken"), Is.False, "Старые токены сбрасываем – они выпущены под недостаточный набор прав");
             Assert.That(bot.ContainsKey("storedScopes"), Is.False);
         }
     }
@@ -103,7 +103,7 @@ public sealed class SettingsMigratorTests
             Assert.That(twitch.ContainsKey("refreshToken"), Is.False);
             Assert.That(twitch.ContainsKey("scopes"), Is.False);
             Assert.That(twitch.ContainsKey("storedScopes"), Is.False);
-            Assert.That(twitch.ContainsKey("botAccount"), Is.False, "Без login и без токенов botAccount остаётся пустым — пусть его создаст десериализатор из дефолтов");
+            Assert.That(twitch.ContainsKey("botAccount"), Is.False, "Без login и без токенов botAccount остаётся пустым – пусть его создаст десериализатор из дефолтов");
         }
     }
 

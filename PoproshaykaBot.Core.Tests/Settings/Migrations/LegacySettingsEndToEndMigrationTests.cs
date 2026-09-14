@@ -39,7 +39,7 @@ public sealed class LegacySettingsEndToEndMigrationTests
         var resourceNames = assembly.GetManifestResourceNames();
 
         Assert.That(resourceNames, Does.Contain(FixtureResourceName),
-            "Fixture должен быть упакован как EmbeddedResource — иначе тесты молча отвалятся при перемещении файла.");
+            "Fixture должен быть упакован как EmbeddedResource – иначе тесты молча отвалятся при перемещении файла.");
     }
 
     [Test]
@@ -178,7 +178,7 @@ public sealed class LegacySettingsEndToEndMigrationTests
                 Assert.That(broadcaster.StoredScopes, Is.Empty);
 
                 Assert.That(TwitchScopes.SetEquals(bot.Scopes, bot.StoredScopes), Is.False,
-                    "Целевые Scopes и пустые StoredScopes должны различаться — иначе после получения токена TwitchOAuthService не зафиксирует scope-mismatch");
+                    "Целевые Scopes и пустые StoredScopes должны различаться – иначе после получения токена TwitchOAuthService не зафиксирует scope-mismatch");
             }
         }
         finally

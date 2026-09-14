@@ -43,7 +43,7 @@ public sealed class AtomicFileTests
         AtomicFile.Save(_targetPath, "first");
 
         Assert.That(File.Exists(_targetPath + ".bak"), Is.False,
-            "First write must not create a .bak — there is no previous content to back up.");
+            "First write must not create a .bak – there is no previous content to back up.");
     }
 
     [Test]

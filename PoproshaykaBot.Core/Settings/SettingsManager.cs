@@ -101,7 +101,7 @@ public class SettingsManager
         if (ranks.Count == 0)
         {
             settings.Ranks.Ranks = new RanksSettings().Ranks;
-            _logger.LogWarning("Раздел ranks был пустой — восстановлены значения по умолчанию");
+            _logger.LogWarning("Раздел ranks был пустой – восстановлены значения по умолчанию");
             return;
         }
 
@@ -114,7 +114,7 @@ public class SettingsManager
         }
 
         settings.Ranks.Ranks = new RanksSettings().Ranks;
-        _logger.LogWarning("В разделе ranks обнаружены повреждённые записи (null emoji/name) — список рангов восстановлен из дефолтов");
+        _logger.LogWarning("В разделе ranks обнаружены повреждённые записи (null emoji/name) – список рангов восстановлен из дефолтов");
     }
 
     private AppSettings ParseFile(string json)

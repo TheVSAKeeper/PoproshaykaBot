@@ -319,7 +319,7 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
         }
         catch (JsonException)
         {
-            // Twitch occasionally returns non-JSON error bodies — fall back to raw body
+            // Twitch occasionally returns non-JSON error bodies – fall back to raw body
         }
 
         throw new HelixRequestException(request.Method,

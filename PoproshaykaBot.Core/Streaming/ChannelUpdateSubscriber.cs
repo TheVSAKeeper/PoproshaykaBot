@@ -69,7 +69,7 @@ public sealed class ChannelUpdateSubscriber(
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            logger.LogWarning("ChannelUpdateSubscriber: подписка channel.update пропущена — broadcaster id недоступен (вероятно, нет токена бота).");
+            logger.LogWarning("ChannelUpdateSubscriber: подписка channel.update пропущена – broadcaster id недоступен (вероятно, нет токена бота).");
             IsHealthy = false;
             return;
         }
@@ -91,11 +91,11 @@ public sealed class ChannelUpdateSubscriber(
         catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
             IsHealthy = true;
-            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", SubscriptionType);
+            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии – переиспользуем", SubscriptionType);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "ChannelUpdateSubscriber: не удалось подписаться на {Type} — смена title/game работать не будет", SubscriptionType);
+            logger.LogError(ex, "ChannelUpdateSubscriber: не удалось подписаться на {Type} – смена title/game работать не будет", SubscriptionType);
             IsHealthy = false;
         }
     }
@@ -150,7 +150,7 @@ public sealed class ChannelUpdateSubscriber(
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            logger.LogWarning("ChannelUpdateSubscriber: подписка {Type} отозвана, восстановление пропущено — broadcaster id недоступен", SubscriptionType);
+            logger.LogWarning("ChannelUpdateSubscriber: подписка {Type} отозвана, восстановление пропущено – broadcaster id недоступен", SubscriptionType);
             return;
         }
 
@@ -171,7 +171,7 @@ public sealed class ChannelUpdateSubscriber(
         catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
             IsHealthy = true;
-            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем после revocation", SubscriptionType);
+            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии – переиспользуем после revocation", SubscriptionType);
         }
         catch (Exception ex)
         {

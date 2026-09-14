@@ -45,7 +45,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
     private string _refreshTokenValue = string.Empty;
 
     [ObservableProperty]
-    private string _loginText = "—";
+    private string _loginText = "–";
 
     [ObservableProperty]
     private string _tokenStatusText = string.Empty;
@@ -404,7 +404,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         AccessTokenValue = _draft.AccessToken;
         RefreshTokenValue = _draft.RefreshToken;
 
-        LoginText = string.IsNullOrWhiteSpace(_draft.Login) ? "—" : _draft.Login;
+        LoginText = string.IsNullOrWhiteSpace(_draft.Login) ? "–" : _draft.Login;
 
         if (string.IsNullOrWhiteSpace(_draft.AccessToken))
         {

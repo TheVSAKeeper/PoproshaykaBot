@@ -61,7 +61,7 @@ public sealed class EventSubConnectionHost :
     {
         if (!HasAccessToken())
         {
-            _logger.LogInformation("EventSub WebSocket ({Role}): запуск отложен — нет access-токена для роли. Ждём TwitchAuthorizationRefreshed.", _role);
+            _logger.LogInformation("EventSub WebSocket ({Role}): запуск отложен – нет access-токена для роли. Ждём TwitchAuthorizationRefreshed.", _role);
             return;
         }
 
@@ -110,7 +110,7 @@ public sealed class EventSubConnectionHost :
 
         if (_disposed)
         {
-            _logger.LogDebug("TwitchAuthorizationRefreshed получен после dispose — игнорируется ({Role})", _role);
+            _logger.LogDebug("TwitchAuthorizationRefreshed получен после dispose – игнорируется ({Role})", _role);
             return;
         }
 
@@ -165,7 +165,7 @@ public sealed class EventSubConnectionHost :
     private Task OnSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
         _reconnectionPolicy.Reset();
-        _logger.LogInformation("EventSub session welcome ({Role}, SessionId: {SessionId}) — статус мониторинга: Connected", _role, args.SessionId);
+        _logger.LogInformation("EventSub session welcome ({Role}, SessionId: {SessionId}) – статус мониторинга: Connected", _role, args.SessionId);
         return PublishStatusAsync(StreamMonitoringStatus.Connected);
     }
 
@@ -249,7 +249,7 @@ public sealed class EventSubConnectionHost :
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "EventSubConnectionHost ({Role}): не удалось прочитать AccountsStore — считаем, что токена нет", _role);
+            _logger.LogWarning(ex, "EventSubConnectionHost ({Role}): не удалось прочитать AccountsStore – считаем, что токена нет", _role);
             return false;
         }
     }
@@ -303,7 +303,7 @@ public sealed class EventSubConnectionHost :
 
     private Task PublishStatusAsync(StreamMonitoringStatus status, string? detail = null)
     {
-        _logger.LogDebug("Публикация StreamMonitoringStatusChanged: {Role} {Status} ({Detail})", _role, status, detail ?? "—");
+        _logger.LogDebug("Публикация StreamMonitoringStatusChanged: {Role} {Status} ({Detail})", _role, status, detail ?? "–");
         return _eventBus.PublishAsync(new StreamMonitoringStatusChanged(_role, status, detail));
     }
 }

@@ -71,7 +71,7 @@ public class OnboardingWizardSmokeTests
             cf.ByControlType(ControlType.Text).And(cf.ByName("Шаг 1 из 8")));
 
         Assert.That(stepLabel, Is.Not.Null,
-            "Мастер должен открываться на первом шаге из 8 — текст 'Шаг 1 из 8' должен быть в окне");
+            "Мастер должен открываться на первом шаге из 8 – текст 'Шаг 1 из 8' должен быть в окне");
     }
 
     [Test]

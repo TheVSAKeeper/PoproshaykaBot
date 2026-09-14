@@ -21,7 +21,7 @@ public sealed class StreamSessionStatisticsHandler :
     IEventSubscriber,
     IAsyncDisposable
 {
-    private const string MissingValuePlaceholder = "—";
+    private const string MissingValuePlaceholder = "–";
     private static readonly TimeSpan ViewerSampleInterval = TimeSpan.FromMinutes(1);
 
     private static readonly TimeSpan StreamMatchTolerance = TimeSpan.FromMinutes(5);
@@ -81,7 +81,7 @@ public sealed class StreamSessionStatisticsHandler :
     {
         if (!_targetChannelProvider.Current.RecordsUserData)
         {
-            _logger.LogInformation("Статистика сессии не собирается — идёт отладка на чужом канале в общем профиле данных");
+            _logger.LogInformation("Статистика сессии не собирается – идёт отладка на чужом канале в общем профиле данных");
             return;
         }
 
@@ -286,7 +286,7 @@ public sealed class StreamSessionStatisticsHandler :
                 _activeSessionStore.Delete();
             }
 
-            _logger.LogDebug("Офлайн без активной сессии в памяти — статистика собрана из черновика (если он был)");
+            _logger.LogDebug("Офлайн без активной сессии в памяти – статистика собрана из черновика (если он был)");
             return;
         }
 
@@ -542,7 +542,7 @@ public sealed class StreamSessionStatisticsHandler :
 
                 _segments.Add(current);
 
-                _logger.LogInformation("Категория стрима изменена на \"{Game}\" — открыт новый сегмент статистики (всего сегментов: {Count})",
+                _logger.LogInformation("Категория стрима изменена на \"{Game}\" – открыт новый сегмент статистики (всего сегментов: {Count})",
                     game,
                     _segments.Count);
             }
@@ -620,7 +620,7 @@ public sealed class StreamSessionStatisticsHandler :
 
         if (hasMemorySession)
         {
-            _logger.LogDebug("Catch-up offline при активной сессии в памяти — событие проигнорировано");
+            _logger.LogDebug("Catch-up offline при активной сессии в памяти – событие проигнорировано");
             return Task.CompletedTask;
         }
 

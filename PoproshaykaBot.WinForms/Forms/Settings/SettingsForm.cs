@@ -286,8 +286,8 @@ public partial class SettingsForm : Form
 
                 Перезаписать их значениями из этого окна?
 
-                «Да» — применить значения из этого окна.
-                «Нет» — оставить внешние изменения, не трогая вкладку «OBS Чат».
+                «Да» – применить значения из этого окна.
+                «Нет» – оставить внешние изменения, не трогая вкладку «OBS Чат».
                 """,
                 "Конфликт настроек чат-оверлея",
                 MessageBoxButtons.YesNo,
@@ -390,7 +390,7 @@ public partial class SettingsForm : Form
     {
         if (!RedirectUriPortResolver.TryResolve(_settings.Twitch.RedirectUri, out var derivedPort))
         {
-            _logger.LogWarning("Некорректный RedirectUri '{RedirectUri}' — порт HTTP сервера не обновлён",
+            _logger.LogWarning("Некорректный RedirectUri '{RedirectUri}' – порт HTTP сервера не обновлён",
                 _settings.Twitch.RedirectUri);
 
             return;

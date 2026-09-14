@@ -378,7 +378,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
 
         if (HasToken)
         {
-            var login = string.IsNullOrWhiteSpace(account.Login) ? "—" : account.Login;
+            var login = string.IsNullOrWhiteSpace(account.Login) ? "–" : account.Login;
             ResultText = $"Авторизован: @{login}";
             ResultSeverity = StatusSeverity.Success;
 

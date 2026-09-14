@@ -214,7 +214,7 @@ public class BroadcastProfilesManager(
         }
         else
         {
-            logger.LogDebug("Запрос на удаление профиля трансляции Id={ProfileId} — записей не найдено", id);
+            logger.LogDebug("Запрос на удаление профиля трансляции Id={ProfileId} – записей не найдено", id);
         }
 
         _ = eventBus.PublishAsync(new BroadcastProfilesChanged());

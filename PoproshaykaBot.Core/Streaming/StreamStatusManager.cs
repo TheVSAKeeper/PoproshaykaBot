@@ -267,7 +267,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         if (args.SubscriptionType is not ("stream.online" or "stream.offline"))
         {
-            _logger.LogDebug("Revocation {Type} не относится к StreamStatusManager — игнорируется", args.SubscriptionType);
+            _logger.LogDebug("Revocation {Type} не относится к StreamStatusManager – игнорируется", args.SubscriptionType);
             return;
         }
 
@@ -304,7 +304,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         }
         catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
-            _logger.LogInformation(ex, "Подписка {Type} уже существует для текущей EventSub-сессии — переиспользуем", args.SubscriptionType);
+            _logger.LogInformation(ex, "Подписка {Type} уже существует для текущей EventSub-сессии – переиспользуем", args.SubscriptionType);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -542,7 +542,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         if (string.IsNullOrEmpty(broadcasterId))
         {
-            _logger.LogWarning("Подписки EventSub пропущены — BroadcasterId недоступен (вероятно, нет токена бота). Подписки создадутся после авторизации.");
+            _logger.LogWarning("Подписки EventSub пропущены – BroadcasterId недоступен (вероятно, нет токена бота). Подписки создадутся после авторизации.");
             return;
         }
 
@@ -573,7 +573,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             {
                 subscriptionsCreated++;
 
-                _logger.LogInformation(ex, "Подписка '{Type}' уже существует для текущей EventSub-сессии — переиспользуем (SessionId: {SessionId})",
+                _logger.LogInformation(ex, "Подписка '{Type}' уже существует для текущей EventSub-сессии – переиспользуем (SessionId: {SessionId})",
                     type, sessionId);
             }
             catch (Exception ex)
@@ -589,7 +589,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         }
         else
         {
-            _logger.LogWarning("Создано только {CreatedCount}/2 подписок EventSub stream.* для BroadcasterId {BroadcasterId} — статус стрима будет неполным",
+            _logger.LogWarning("Создано только {CreatedCount}/2 подписок EventSub stream.* для BroadcasterId {BroadcasterId} – статус стрима будет неполным",
                 subscriptionsCreated, broadcasterId);
         }
     }

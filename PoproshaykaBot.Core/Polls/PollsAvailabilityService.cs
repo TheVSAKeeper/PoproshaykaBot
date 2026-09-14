@@ -29,7 +29,7 @@ public class PollsAvailabilityService(
 
         if (target.IsForeign)
         {
-            logger?.LogInformation("PollsAvailability: отладка на чужом канале {Channel} — голосования недоступны", target.Login);
+            logger?.LogInformation("PollsAvailability: отладка на чужом канале {Channel} – голосования недоступны", target.Login);
             return PollsAvailability.ForeignChannel;
         }
 
@@ -67,7 +67,7 @@ public class PollsAvailabilityService(
         {
             if (string.IsNullOrWhiteSpace(accountsStore.LoadBroadcaster().AccessToken))
             {
-                logger?.LogInformation("PollsAvailability: токен стримера отсутствует — голосования недоступны");
+                logger?.LogInformation("PollsAvailability: токен стримера отсутствует – голосования недоступны");
                 return PollsAvailability.NoBroadcasterToken;
             }
 
@@ -91,20 +91,20 @@ public class PollsAvailabilityService(
             if (string.Equals(tier, "affiliate", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(tier, "partner", StringComparison.OrdinalIgnoreCase))
             {
-                logger?.LogInformation("PollsAvailability: канал {Login} имеет статус '{Tier}' — голосования доступны",
+                logger?.LogInformation("PollsAvailability: канал {Login} имеет статус '{Tier}' – голосования доступны",
                     broadcaster.Login, tier);
 
                 return PollsAvailability.Available;
             }
 
-            logger?.LogInformation("PollsAvailability: канал {Login} не Affiliate/Partner (tier='{Tier}') — голосования недоступны",
+            logger?.LogInformation("PollsAvailability: канал {Login} не Affiliate/Partner (tier='{Tier}') – голосования недоступны",
                 broadcaster.Login, tier);
 
             return PollsAvailability.NotAffiliate;
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "PollsAvailability: не удалось проверить статус канала — считаем доступным, ошибки будут при вызове API");
+            logger?.LogWarning(ex, "PollsAvailability: не удалось проверить статус канала – считаем доступным, ошибки будут при вызове API");
             return PollsAvailability.Available;
         }
     }

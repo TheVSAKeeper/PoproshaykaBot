@@ -108,7 +108,7 @@ public sealed class PollHistoryStore(
 
         if (targetChannelProvider.Current.IsForeign)
         {
-            logger.LogInformation("PollHistoryStore: бэкфилл пропущен — идёт отладка на чужом канале");
+            logger.LogInformation("PollHistoryStore: бэкфилл пропущен – идёт отладка на чужом канале");
             return 0;
         }
 

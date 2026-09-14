@@ -126,7 +126,7 @@ public sealed class ChannelUpdateSubscriberTests
                 CancellationToken.None);
 
         Assert.That(_subscriber.IsHealthy, Is.True,
-            "409 при session_reconnect означает, что подписка уже создана от прежней сессии и перенесена Twitch'ом — IsHealthy должен остаться true");
+            "409 при session_reconnect означает, что подписка уже создана от прежней сессии и перенесена Twitch'ом – IsHealthy должен остаться true");
     }
 
     [Test]

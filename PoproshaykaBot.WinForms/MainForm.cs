@@ -401,7 +401,7 @@ public partial class MainForm : Form
         {
             _debugBannerPanel.BackColor = Color.LightCyan;
             _debugBannerLabel.ForeColor = Color.Teal;
-            _debugBannerLabel.Text = $"🐞 Отладка: бот читает чат канала {target.Login}. Сообщения не отправляются — они видны в журнале.";
+            _debugBannerLabel.Text = $"🐞 Отладка: бот читает чат канала {target.Login}. Сообщения не отправляются – они видны в журнале.";
         }
 
         _debugBannerPanel.Visible = true;
