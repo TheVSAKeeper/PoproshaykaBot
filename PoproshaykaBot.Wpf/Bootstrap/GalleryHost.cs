@@ -42,8 +42,6 @@ public sealed class GalleryHost : IGalleryHost
             Themes = [AppThemes.LightKey, AppThemes.DarkKey],
             Width = AppDefaults.GalleryWidthDefault,
             Height = AppDefaults.GalleryHeightDefault,
-            ThemeDelayMs = AppDefaults.GalleryThemeDelayMs,
-            FrameDelayMs = AppDefaults.GalleryPageDelayMs,
         };
 
         return GalleryArguments.Parse(args, defaults, ResolvePages);

@@ -8,6 +8,4 @@ public static class AppDefaults
 
     public const int GalleryWidthDefault = 1280;
     public const int GalleryHeightDefault = 800;
-    public const int GalleryThemeDelayMs = 400;
-    public const int GalleryPageDelayMs = 250;
 }
