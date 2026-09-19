@@ -192,6 +192,7 @@ public partial class App : Application
 
             _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
             ReportConfiguration(_services);
+            StatisticsBootstrap.LoadUserStatistics(_services);
 
             _appLifetime = _services.GetRequiredService<AppLifetime>();
             _streamMonitoringHost = _services.GetRequiredService<StreamMonitoringHost>();
@@ -370,9 +371,9 @@ public partial class App : Application
             ConfigureTools = static (provider, tools) => tools.AddSingleton(provider.GetRequiredService<BotAutomation>()),
         });
 
-        services.AddSingleton(new ErrorReportOptions
+        services.AddSingleton(static provider => new ErrorReportOptions
         {
-            IssueRepo = () => AppInfo.RepoSlug,
+            IssueRepo = () => provider.GetRequiredService<IUpdateRepositoryProvider>().Slug,
             LogFileGlobs = [AppInfo.LogFileGlob],
             SessionStartMarker = AppInfo.SessionStartMarker,
         });

@@ -106,6 +106,20 @@ public static class LegacyImportText
             : "Переносить было нечего: все файлы уже на месте.";
     }
 
+    public static string? BuildRestartNotice(LegacyImportResult result, bool isSettingsEntry)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (!isSettingsEntry || result.CopiedFiles.Count == 0)
+        {
+            return null;
+        }
+
+        return result.CopiedStatistics
+            ? "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска статистика не сохраняется – чтобы не затереть перенесённое."
+            : "Перенесённые данные вступят в силу после перезапуска приложения.";
+    }
+
     public static IReadOnlyList<string> BuildCounts(LegacyImportResult result)
     {
         ArgumentNullException.ThrowIfNull(result);

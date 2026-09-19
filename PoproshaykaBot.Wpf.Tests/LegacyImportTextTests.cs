@@ -40,6 +40,24 @@ public class LegacyImportTextTests
         Assert.That(LegacyImportText.BuildHeadline(result), Is.EqualTo(expected));
     }
 
+    [TestCase(new[] { "users_statistics.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска статистика не сохраняется – чтобы не затереть перенесённое.")]
+    [TestCase(new[] { "settings/settings.json", "bot_statistics.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска статистика не сохраняется – чтобы не затереть перенесённое.")]
+    [TestCase(new[] { "settings/settings.json" }, "Перенесённые данные вступят в силу после перезапуска приложения.")]
+    public void The_restart_line_promises_a_restart_and_warns_only_where_statistics_moved(string[] copied, string expected)
+    {
+        Assert.That(LegacyImportText.BuildRestartNotice(Build(copied), isSettingsEntry: true), Is.EqualTo(expected));
+    }
+
+    [TestCase(false, false)]
+    [TestCase(true, true)]
+    public void The_restart_line_belongs_to_the_settings_entry_with_something_copied(bool isSettingsEntry, bool copiedNothing)
+    {
+        var result = Build(copiedNothing ? [] : ["settings/settings.json"]);
+
+        Assert.That(LegacyImportText.BuildRestartNotice(result, isSettingsEntry), Is.Null,
+            "На старте перезапуск и так впереди, а без переноса сообщать не о чем.");
+    }
+
     private static LegacyImportResult Build(
         IReadOnlyList<string>? copied = null,
         bool inPlace = false,

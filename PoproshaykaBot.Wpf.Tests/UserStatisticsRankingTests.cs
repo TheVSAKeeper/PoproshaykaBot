@@ -89,4 +89,35 @@ public class UserStatisticsRankingTests
 
         Assert.That(ordered[0].Share, Is.EqualTo(UserStatisticsRanking.MinimumShare));
     }
+
+    [TestCase(1, 421, "1-е место из 421")]
+    [TestCase(12, 12, "12-е место из 12")]
+    [TestCase(0, 421, "")]
+    [TestCase(3, 0, "")]
+    public void Names_the_place_of_a_row_in_the_visible_set(int position, int total, string expected)
+    {
+        Assert.That(UserStatisticsRanking.DescribePlace(position, total), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Counts_what_the_filter_left_on_screen()
+    {
+        Assert.That(UserStatisticsRanking.DescribeVisibleCount(12, 421), Is.EqualTo("Показано 12 из 421"));
+    }
+
+    [Test]
+    public void Marks_only_the_first_three_rows_as_leaders()
+    {
+        var rows = new List<UserStatisticsRowViewModel>
+        {
+            Row("a", 400),
+            Row("b", 300),
+            Row("c", 200),
+            Row("d", 100),
+        };
+
+        var ordered = UserStatisticsRanking.Arrange(rows, UserStatisticsSortKey.Points, true);
+
+        Assert.That(ordered.Select(row => row.IsTopThree), Is.EqualTo(new[] { true, true, true, false }));
+    }
 }

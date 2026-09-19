@@ -1,0 +1,549 @@
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Tests.Server;
+
+namespace PoproshaykaBot.Core.Tests.Statistics;
+
+[TestFixture]
+public sealed class StatisticsLoadOwnershipTests
+{
+    private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(10);
+
+    private const string UsersFileName = "users_statistics.json";
+    private const string BotFileName = "bot_statistics.json";
+
+    private const string UsersContent = """
+                                        [
+                                          {
+                                            "userId": "u1",
+                                            "name": "Alice",
+                                            "messageCount": 100,
+                                            "bonusPoints": 5,
+                                            "penaltyPoints": 2,
+                                            "firstSeen": "2024-01-01T00:00:00Z",
+                                            "lastSeen": "2024-01-02T00:00:00Z"
+                                          }
+                                        ]
+                                        """;
+
+    private const string ImportedUsersContent = """
+                                                [
+                                                  {
+                                                    "userId": "u1",
+                                                    "name": "Alice",
+                                                    "messageCount": 500,
+                                                    "bonusPoints": 5,
+                                                    "penaltyPoints": 2,
+                                                    "firstSeen": "2024-01-01T00:00:00Z",
+                                                    "lastSeen": "2024-01-02T00:00:00Z"
+                                                  }
+                                                ]
+                                                """;
+
+    private const string BotContent = """{"totalMessages":7,"startTime":"2024-01-01T00:00:00Z"}""";
+
+    private const string BrokenContent = "{ это не json";
+
+    private string _directory = string.Empty;
+    private string _source = string.Empty;
+
+    [SetUp]
+    public void SetUp()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PoproshaykaBot-StatisticsLoad-" + Guid.NewGuid().ToString("N"));
+
+        _directory = Path.Combine(root, "data");
+        _source = Path.Combine(root, "source");
+
+        Directory.CreateDirectory(_directory);
+        Directory.CreateDirectory(_source);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        try
+        {
+            Directory.Delete(Path.GetDirectoryName(_directory)!, true);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    [Test]
+    public async Task Подключение_бота_не_перечитывает_уже_загруженную_статистику_пользователей()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        await loader.EnsureLoadedAsync();
+        users.TrackMessage("u1", "Alice");
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        try
+        {
+            Assert.That(users.GetById("u1")!.MessageCount, Is.EqualTo(101ul),
+                "Подключение бота не должно ни обнулять счётчики до файла, ни складывать их с файлом");
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    [Test]
+    public async Task Сохранение_до_подключения_бота_не_затирает_статистику_бота()
+    {
+        var usersPath = Path.Combine(_directory, UsersFileName);
+        var botPath = Path.Combine(_directory, BotFileName);
+
+        await File.WriteAllTextAsync(usersPath, UsersContent);
+        await File.WriteAllTextAsync(botPath, BotContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        await loader.EnsureLoadedAsync();
+        users.IncrementBonusPoints("u1", 10);
+
+        await saver.SaveNowAsync();
+
+        var savedUsers = await fileStore.LoadUsersAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await File.ReadAllTextAsync(botPath), Is.EqualTo(BotContent),
+                "Статистика бота не загружалась – её файл нельзя переписывать пустым репозиторием");
+            Assert.That(savedUsers.Value!.Single().BonusPoints, Is.EqualTo(15ul),
+                "Загруженная статистика пользователей обязана сохраняться и до подключения бота");
+        }
+    }
+
+    [TestCase(UsersFileName)]
+    [TestCase(BotFileName)]
+    public async Task Непрочитанный_файл_статистики_не_переписывается_пустым_репозиторием(string brokenFileName)
+    {
+        await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName),
+            string.Equals(brokenFileName, UsersFileName, StringComparison.Ordinal) ? BrokenContent : UsersContent);
+
+        await File.WriteAllTextAsync(Path.Combine(_directory, BotFileName),
+            string.Equals(brokenFileName, BotFileName, StringComparison.Ordinal) ? BrokenContent : BotContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        try
+        {
+            users.TrackMessage("u2", "Bob");
+            bot.IncrementMessagesProcessed();
+
+            await saver.SaveNowAsync();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(await File.ReadAllTextAsync(Path.Combine(_directory, brokenFileName)), Is.EqualTo(BrokenContent),
+                    "Сорвавшееся чтение – не пустота: файл обязан остаться тем, чем был");
+                Assert.That(BackupsOf(brokenFileName), Is.Not.Empty,
+                    "О повреждённом файле пользователь узнаёт по копии с суффиксом invalid рядом с ним");
+                Assert.That(loader.IsLoaded, Is.EqualTo(!string.Equals(brokenFileName, UsersFileName, StringComparison.Ordinal)),
+                    "Флаг «загружено» поднимает только удачное чтение");
+            }
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    [Test]
+    public async Task Отсутствующий_файл_статистики_это_законная_пустота()
+    {
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        try
+        {
+            users.TrackMessage("u3", "Carol");
+
+            await saver.SaveNowAsync();
+
+            var savedUsers = await fileStore.LoadUsersAsync();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(loader.IsLoaded, Is.True,
+                    "Свежий профиль без файла – это ноль записей, а не отказ чтения");
+                Assert.That(savedUsers.Value!.Single().Name, Is.EqualTo("Carol"),
+                    "Накопленное в первом сеансе обязано дойти до диска");
+                Assert.That(File.Exists(Path.Combine(_directory, BotFileName)), Is.True,
+                    "Статистика бота тоже заводится с нуля, а не ждёт файла");
+            }
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    [Test]
+    public async Task Сорвавшееся_повторное_чтение_статистики_бота_гасит_флаг_прошлой_загрузки()
+    {
+        var botPath = Path.Combine(_directory, BotFileName);
+
+        await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
+        await File.WriteAllTextAsync(botPath, BotContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+        await saver.StopAsync(new Progress<string>(), CancellationToken.None);
+
+        await File.WriteAllTextAsync(botPath, BrokenContent);
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        try
+        {
+            bot.IncrementMessagesProcessed();
+
+            await saver.SaveNowAsync();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(await File.ReadAllTextAsync(botPath), Is.EqualTo(BrokenContent),
+                    "Флаг удачной загрузки прошлого подключения не даёт права переписать непрочитанный файл");
+                Assert.That(BackupsOf(BotFileName), Is.Not.Empty,
+                    "О повреждённом файле пользователь узнаёт по копии с суффиксом invalid рядом с ним");
+            }
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    [TestCase(true, 500ul)]
+    [TestCase(false, 101ul)]
+    public async Task Перенос_данных_в_живом_сеансе_решает_судьбу_ближайшего_сохранения(bool importsStatistics, ulong expectedMessageCount)
+    {
+        await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(_source, importsStatistics ? UsersFileName : "chat-zoom.txt"),
+            importsStatistics ? ImportedUsersContent : "1,25");
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        try
+        {
+            users.TrackMessage("u1", "Alice");
+
+            var result = await saver.RunExternalWriteAsync(
+                () =>
+                {
+                    Assert.That(loader.IsLoaded, Is.False,
+                        "Гашение идёт до копирования – иначе автосохранение успевает лечь поверх принесённого");
+
+                    return LegacyDataImporter.Import(_source, _directory, true, null);
+                },
+                static imported => imported.CopiedStatistics);
+
+            Assert.That(result.CopiedFiles.Contains(UsersFileName), Is.EqualTo(importsStatistics),
+                "Перенос обязан либо принести файл статистики, либо не трогать его вовсе");
+
+            Assert.That(loader.IsLoaded, Is.EqualTo(!importsStatistics),
+                "Холостой прогон возвращает ровно погашенное, перенос статистики оставляет флаги опущенными");
+
+            await saver.SaveNowAsync();
+
+            var savedUsers = await fileStore.LoadUsersAsync();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(savedUsers.Value!.Single().MessageCount, Is.EqualTo(expectedMessageCount),
+                    "Принесённое переносом нельзя терять, а холостой прогон нельзя наказывать потерей сеанса");
+                Assert.That(File.Exists(Path.Combine(_directory, BotFileName)), Is.EqualTo(!importsStatistics),
+                    "Половина бота гасится и возвращается вместе с половиной пользователей");
+            }
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    [Test]
+    public async Task Подключение_во_время_внешней_записи_ждёт_её_конца_и_читает_записанное()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
+        await File.WriteAllTextAsync(Path.Combine(_source, UsersFileName), ImportedUsersContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        var entered = new ManualResetEventSlim(false);
+        var release = new ManualResetEventSlim(false);
+
+        var write = Task.Run(() => saver.RunExternalWriteAsync(
+            () =>
+            {
+                entered.Set();
+                release.Wait(WaitTimeout);
+
+                return LegacyDataImporter.Import(_source, _directory, true, null);
+            },
+            static imported => imported.CopiedStatistics));
+
+        try
+        {
+            Assert.That(entered.Wait(WaitTimeout), Is.True, "Внешняя запись обязана дойти до своей работы");
+
+            var start = saver.StartAsync(new Progress<string>(), CancellationToken.None);
+            var waited = await Task.WhenAny(start, Task.Delay(TimeSpan.FromMilliseconds(300)));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(waited, Is.Not.SameAs(start),
+                    "Подключение обязано ждать конца внешней записи, а не читать файл из-под неё");
+                Assert.That(loader.IsLoaded, Is.False,
+                    "Флаг не поднимается, пока внешняя запись не отпустила замок сохранения");
+            }
+
+            release.Set();
+
+            await write;
+            await start;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(loader.IsLoaded, Is.True,
+                    "Дождавшееся подключение читает уже перенесённый файл, и флаг у него законный");
+                Assert.That(users.GetById("u1")!.MessageCount, Is.EqualTo(500ul),
+                    "Подключение обязано прочитать то, что записала внешняя запись, а не доимпортный файл");
+            }
+        }
+        finally
+        {
+            release.Set();
+
+            await Task.WhenAny(write, Task.Delay(WaitTimeout));
+            await saver.DisposeAsync();
+
+            entered.Dispose();
+            release.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task Бросок_внутри_внешней_записи_отпускает_замок_и_оставляет_флаги_погашенными()
+    {
+        var botPath = Path.Combine(_directory, BotFileName);
+
+        await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
+        await File.WriteAllTextAsync(botPath, BotContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var logger = new RecordingLogger<StatisticsAutoSaver>();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, logger);
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        try
+        {
+            var failure = new IOException("каталог назначения не создался");
+
+            Assert.ThrowsAsync<IOException>(
+                () => saver.RunExternalWriteAsync<object>(() => throw failure, _ => false),
+                "Отказ внешней записи не проглатывается – о нём узнаёт вызывающий");
+
+            users.TrackMessage("u1", "Alice");
+            bot.IncrementMessagesProcessed();
+
+            var save = saver.SaveNowAsync();
+            var finished = await Task.WhenAny(save, Task.Delay(WaitTimeout));
+            var botOnDisk = await File.ReadAllTextAsync(botPath);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(finished, Is.SameAs(save),
+                    "Замок сохранения обязан освободиться и на броске – иначе сохранение висит до конца процесса");
+                Assert.That(loader.IsLoaded, Is.False,
+                    "Оборванная запись могла оставить файл перенесённым наполовину – писать поверх него нельзя");
+                Assert.That(botOnDisk, Is.EqualTo(BotContent),
+                    "Обе половины остаются погашенными, пока процесс не перезапустили");
+                Assert.That(
+                    logger.Entries.Any(entry => entry.Level == LogLevel.Warning && ReferenceEquals(entry.Exception, failure)),
+                    Is.True,
+                    "Молчаливо переставшая сохраняться статистика – это потеря сеанса без следа в журнале");
+            }
+
+            await save;
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    [Test]
+    [Repeat(5)]
+    public async Task Одновременные_подключение_и_внешняя_запись_не_встают_в_взаимную_блокировку()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
+        await File.WriteAllTextAsync(Path.Combine(_source, UsersFileName), ImportedUsersContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        try
+        {
+            var start = Task.Run(() => saver.StartAsync(new Progress<string>(), CancellationToken.None));
+
+            var write = Task.Run(() => saver.RunExternalWriteAsync(
+                () => LegacyDataImporter.Import(_source, _directory, true, null),
+                static imported => imported.CopiedStatistics));
+
+            var both = Task.WhenAll(start, write);
+
+            Assert.That(await Task.WhenAny(both, Task.Delay(WaitTimeout)) == both, Is.True,
+                "Порядок замков один во всех путях – семафор сохранения, затем семафор загрузчика");
+
+            await both;
+
+            Assert.That(loader.IsLoaded && users.GetById("u1")!.MessageCount != 500ul, Is.False,
+                "Поднятый флаг обязан означать, что в репозитории лежит содержимое текущего файла");
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    [TestCase(1)]
+    [TestCase(2)]
+    public async Task Гашение_переносом_доживает_до_подключений_бота(int connections)
+    {
+        var usersPath = Path.Combine(_directory, UsersFileName);
+        var botPath = Path.Combine(_directory, BotFileName);
+
+        await File.WriteAllTextAsync(usersPath, UsersContent);
+        await File.WriteAllTextAsync(botPath, BotContent);
+        await File.WriteAllTextAsync(Path.Combine(_source, UsersFileName), ImportedUsersContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        await loader.EnsureLoadedAsync();
+
+        await saver.RunExternalWriteAsync(
+            () => LegacyDataImporter.Import(_source, _directory, true, null),
+            static imported => imported.CopiedStatistics);
+
+        users.TrackMessage("u1", "Alice");
+
+        try
+        {
+            for (var connection = 1; connection <= connections; connection++)
+            {
+                await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+                if (connection < connections)
+                {
+                    await saver.StopAsync(new Progress<string>(), CancellationToken.None);
+                }
+            }
+
+            bot.IncrementMessagesProcessed();
+
+            await saver.SaveNowAsync();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(users.GetById("u1")!.MessageCount, Is.EqualTo(101ul),
+                    "Погашенная статистика не перечитывается подключением – иначе накопленное с момента переноса выбрасывается");
+                Assert.That(loader.IsLoaded, Is.False,
+                    "Перенесённое вступает в силу после перезапуска, а до него флаг остаётся опущенным");
+                Assert.That(await File.ReadAllTextAsync(usersPath), Is.EqualTo(ImportedUsersContent),
+                    "Перенесённый файл нельзя переписывать доимпортным репозиторием");
+                Assert.That(await File.ReadAllTextAsync(botPath), Is.EqualTo(BotContent),
+                    "Статистика бота перечитывается на каждом подключении, но после внешней записи это право снято до перезапуска");
+            }
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    [Test]
+    public async Task Сорвавшееся_чтение_статистики_пользователей_не_повторяется_на_следующем_подключении()
+    {
+        var usersPath = Path.Combine(_directory, UsersFileName);
+
+        await File.WriteAllTextAsync(usersPath, BrokenContent);
+        await File.WriteAllTextAsync(Path.Combine(_directory, BotFileName), BotContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+        await saver.StopAsync(new Progress<string>(), CancellationToken.None);
+
+        await File.WriteAllTextAsync(usersPath, UsersContent);
+
+        users.TrackMessage("u9", "Zed");
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        try
+        {
+            await saver.SaveNowAsync();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(users.GetById("u9")!.MessageCount, Is.EqualTo(1ul),
+                    "Повторная попытка чтения выбросила бы всё, что накопилось после отказа");
+                Assert.That(users.GetById("u1"), Is.Null,
+                    "Отказ чтения не ретраится: файл в этом сеансе больше не читают, даже если он стал читаемым");
+                Assert.That(loader.IsLoaded, Is.False,
+                    "Флаг остаётся опущенным – сохранять поверх файла, который не удалось прочитать, нельзя");
+                Assert.That(await File.ReadAllTextAsync(usersPath), Is.EqualTo(UsersContent),
+                    "Накопленное в сеансе не ложится поверх файла, содержимое которого приложению неизвестно");
+            }
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    private string[] BackupsOf(string fileName)
+    {
+        var pattern = Path.GetFileNameWithoutExtension(fileName) + ".invalid-*" + Path.GetExtension(fileName);
+
+        return Directory.GetFiles(_directory, pattern);
+    }
+
+    private (UserStatisticsRepository Users, BotStatisticsRepository Bot, StatisticsFileStore FileStore, UserStatisticsLoader Loader) CreateGraph()
+    {
+        var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
+        var bot = new BotStatisticsRepository();
+        var fileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _directory);
+        var loader = new UserStatisticsLoader(users, fileStore, NullLogger<UserStatisticsLoader>.Instance);
+
+        return (users, bot, fileStore, loader);
+    }
+}

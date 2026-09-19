@@ -1,13 +1,17 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.ViewModels.Migration;
 using PoproshaykaBot.Wpf.Views.Migration;
 
 namespace PoproshaykaBot.Wpf.Infrastructure;
 
-public sealed class LegacyImportDialog(IFilePicker filePicker, ILogger<LegacyImportDialog> logger) : ILegacyImportDialog
+public sealed class LegacyImportDialog(
+    IFilePicker filePicker,
+    StatisticsAutoSaver statisticsAutoSaver,
+    ILogger<LegacyImportDialog> logger) : ILegacyImportDialog
 {
     public LegacyImportResult? Show()
     {
@@ -22,7 +26,7 @@ public sealed class LegacyImportDialog(IFilePicker filePicker, ILogger<LegacyImp
 
         logger.LegacyImportOpenedFromSettings(candidates.Count);
 
-        var viewModel = new LegacyImportViewModel(candidates, hasOwnData, isSettingsEntry: true, filePicker, logger);
+        var viewModel = new LegacyImportViewModel(candidates, hasOwnData, isSettingsEntry: true, filePicker, logger, statisticsAutoSaver);
 
         var window = new LegacyImportWindow(viewModel)
         {

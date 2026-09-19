@@ -33,6 +33,38 @@ internal static class GalleryTestProfile
                                                  }
                                                  """;
 
+    private const string UserStatisticsJson = """
+                                              [
+                                                {
+                                                  "userId": "101",
+                                                  "name": "alice",
+                                                  "messageCount": 420,
+                                                  "bonusPoints": 150,
+                                                  "penaltyPoints": 10,
+                                                  "firstSeen": "2026-08-01T10:00:00Z",
+                                                  "lastSeen": "2026-09-10T22:00:00Z"
+                                                },
+                                                {
+                                                  "userId": "102",
+                                                  "name": "bob",
+                                                  "messageCount": 210,
+                                                  "bonusPoints": 30,
+                                                  "penaltyPoints": 0,
+                                                  "firstSeen": "2026-08-03T10:00:00Z",
+                                                  "lastSeen": "2026-09-09T21:00:00Z"
+                                                },
+                                                {
+                                                  "userId": "103",
+                                                  "name": "carol",
+                                                  "messageCount": 75,
+                                                  "bonusPoints": 0,
+                                                  "penaltyPoints": 25,
+                                                  "firstSeen": "2026-08-14T10:00:00Z",
+                                                  "lastSeen": "2026-09-01T18:00:00Z"
+                                                }
+                                              ]
+                                              """;
+
     private const string BlockersText = """
                                         # блокировка баннеров
                                         [data-a-target="community-highlight"]
@@ -49,6 +81,7 @@ internal static class GalleryTestProfile
         Write(Path.Combine(settingsDirectory, "settings.json"), SettingsJson);
         Write(Path.Combine(settingsDirectory, "broadcast-profiles.json"), BroadcastProfilesJson);
         Write(Path.Combine(directory, "chat-blockers.txt"), BlockersText);
+        Write(Path.Combine(directory, "users_statistics.json"), UserStatisticsJson);
 
         return directory;
     }

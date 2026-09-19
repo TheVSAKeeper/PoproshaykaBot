@@ -2,7 +2,9 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
+             xmlns:infrastructure="clr-namespace:PoproshaykaBot.Wpf.Infrastructure"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -10,307 +12,611 @@
              d:DesignHeight="720"
              d:DesignWidth="1100">
 
+    <UserControl.Resources>
+
+        <Style x:Key="DeltaText"
+               TargetType="TextBlock">
+            <Setter Property="FontSize"
+                    Value="{DynamicResource Font.Size.Caption}" />
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Muted}" />
+            <Setter Property="TextWrapping"
+                    Value="NoWrap" />
+            <Setter Property="Margin"
+                    Value="0,2,0,0" />
+            <Style.Triggers>
+                <Trigger Property="Tag"
+                         Value="{x:Static vm:TrendTone.Up}">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.SuccessText}" />
+                </Trigger>
+                <Trigger Property="Tag"
+                         Value="{x:Static vm:TrendTone.Down}">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.ErrorText}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="NumericHeader.Messages"
+               TargetType="DataGridColumnHeader"
+               BasedOn="{StaticResource NumericHeader}">
+            <Setter Property="ToolTip"
+                    Value="Сообщения" />
+        </Style>
+
+        <Style x:Key="NumericHeader.AverageViewers"
+               TargetType="DataGridColumnHeader"
+               BasedOn="{StaticResource NumericHeader}">
+            <Setter Property="ToolTip"
+                    Value="Средние зрители" />
+        </Style>
+
+        <Style x:Key="TrendBar"
+               TargetType="Button">
+            <Setter Property="Background"
+                    Value="{DynamicResource Accent.Soft}" />
+            <Setter Property="Cursor"
+                    Value="Hand" />
+            <Setter Property="Margin"
+                    Value="1,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="{Binding RestTrack}" />
+                                <RowDefinition Height="{Binding FillTrack}" />
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0"
+                                    Grid.RowSpan="2"
+                                    Background="{DynamicResource Bg.SurfaceMute}"
+                                    CornerRadius="2" />
+
+                            <Border x:Name="Fill"
+                                    Grid.Row="1"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="0"
+                                    CornerRadius="2,2,0,0" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="Fill"
+                                        Property="Background"
+                                        Value="{DynamicResource Accent.PrimaryHover}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused"
+                                     Value="True">
+                                <Setter TargetName="Fill"
+                                        Property="BorderThickness"
+                                        Value="1" />
+                                <Setter TargetName="Fill"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource Fg.Primary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}"
+                             Value="True">
+                    <Setter Property="Background"
+                            Value="{DynamicResource Accent.Primary}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate x:Key="ChatterRowTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*"
+                                      MinWidth="60" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ContentPresenter Grid.Column="0"
+                                  Content="{Binding}"
+                                  ContentTemplate="{StaticResource RatingPositionCell}" />
+
+                <TextBlock Grid.Column="1"
+                           Style="{StaticResource RatingName}"
+                           Text="{Binding DisplayName}"
+                           Margin="10,0,10,0" />
+
+                <TextBlock Grid.Column="2"
+                           Style="{StaticResource RatingNumber.Strong}"
+                           Text="{Binding MessageCountFormatted}" />
+            </Grid>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="2*" MinHeight="120" />
+            <RowDefinition Height="3*"
+                           MinHeight="160" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" MinHeight="160" />
+            <RowDefinition Height="2*"
+                           MinHeight="200" />
         </Grid.RowDefinitions>
 
         <DockPanel Grid.Row="0"
-                   Margin="0,0,0,12">
+                   Margin="0,0,0,8">
             <Button DockPanel.Dock="Right"
-                    Style="{StaticResource Button.Secondary}"
-                    Content="Обновить"
-                    Command="{Binding RefreshCommand}" />
-            <TextBlock VerticalAlignment="Center"
-                       Style="{StaticResource TextBlock.Subtle}"
-                       Text="{Binding Summary}" />
+                    Style="{StaticResource Button.Icon}"
+                    Command="{Binding RefreshCommand}"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Перечитать историю стримов"
+                    ToolTip="Перечитать историю стримов">
+                <iconPacks:PackIconLucide Kind="RefreshCw"
+                                          Width="14"
+                                          Height="14" />
+            </Button>
+
+            <WrapPanel Orientation="Horizontal">
+                <Border Style="{StaticResource StatCell.Lead}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource StatValue}"
+                                   Text="{Binding TotalSessionsText}" />
+                        <TextBlock Style="{StaticResource StatLabel}"
+                                   Text="{Binding TotalSessionsLabel}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource StatCell}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource StatValue}"
+                                   Text="{Binding TotalAirTimeText}" />
+                        <TextBlock Style="{StaticResource StatLabel}"
+                                   Text="в эфире" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource StatCell}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource StatValue}"
+                                   Text="{Binding LastStreamText}" />
+                        <TextBlock Style="{StaticResource StatLabel}"
+                                   Text="последний стрим" />
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
         </DockPanel>
 
         <Border Grid.Row="1"
                 Style="{StaticResource Card}"
                 Padding="0"
                 Visibility="{Binding HasSessions, Converter={StaticResource BoolToVisibility}}">
-            <DataGrid x:Name="SessionsGrid"
-                      BorderThickness="0"
-                      AutomationProperties.Name="Список сессий стрима"
-                      ItemsSource="{Binding Sessions}"
-                      SelectedItem="{Binding SelectedRow}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserSortColumns="True"
-                      CanUserReorderColumns="False"
-                      SelectionMode="Single"
-                      RowStyle="{StaticResource TableRow}"
-                      RowBackground="Transparent"
-                      AlternatingRowBackground="Transparent"
-                      GridLinesVisibility="None">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Начало"
-                                        Binding="{Binding StartedAtFormatted}"
-                                        SortMemberPath="StartedAt"
-                                        SortDirection="Descending"
-                                        ElementStyle="{StaticResource MonoCell}"
-                                        Width="Auto" />
-                    <DataGridTextColumn Header="Длительность"
-                                        Binding="{Binding DurationFormatted}"
-                                        SortMemberPath="Duration"
-                                        ElementStyle="{StaticResource RightCell}"
-                                        HeaderStyle="{StaticResource NumericHeader}"
-                                        Width="Auto" />
-                    <DataGridTextColumn Header="Игра"
-                                        Binding="{Binding GameFormatted}"
-                                        SortMemberPath="GameFormatted"
-                                        ElementStyle="{StaticResource EllipsisCell}"
-                                        Width="*"
-                                        MinWidth="140" />
-                    <DataGridTextColumn Header="Сообщ."
-                                        Binding="{Binding MessageCountFormatted}"
-                                        SortMemberPath="MessageCount"
-                                        ElementStyle="{StaticResource NumericCell}"
-                                        HeaderStyle="{StaticResource NumericHeader}"
-                                        Width="Auto" />
-                    <DataGridTextColumn Header="Чаттеры"
-                                        Binding="{Binding ChatterCountFormatted}"
-                                        SortMemberPath="ChatterCount"
-                                        ElementStyle="{StaticResource NumericCell}"
-                                        HeaderStyle="{StaticResource NumericHeader}"
-                                        Width="Auto" />
-                    <DataGridTextColumn Header="Пик зр."
-                                        Binding="{Binding PeakViewersFormatted}"
-                                        SortMemberPath="PeakViewers"
-                                        ElementStyle="{StaticResource NumericCell}"
-                                        HeaderStyle="{StaticResource NumericHeader}"
-                                        Width="Auto" />
-                    <DataGridTextColumn Header="Средн."
-                                        Binding="{Binding AverageViewersFormatted}"
-                                        SortMemberPath="AverageViewers"
-                                        ElementStyle="{StaticResource NumericCell}"
-                                        HeaderStyle="{StaticResource NumericHeader}"
-                                        Width="Auto" />
-                </DataGrid.Columns>
-            </DataGrid>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0"
+                      Margin="16,6,16,6"
+                      Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <ItemsControl Grid.Column="0"
+                                  ItemsSource="{Binding Trend}"
+                                  Height="36"
+                                  KeyboardNavigation.TabNavigation="Once"
+                                  KeyboardNavigation.DirectionalNavigation="Contained"
+                                  AutomationProperties.Name="Пик зрителей по последним стримам">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource TrendBar}"
+                                        Command="{Binding DataContext.SelectSessionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding Row}"
+                                        ToolTip="{Binding Label}"
+                                        AutomationProperties.Name="{Binding Label}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Grid.Column="1"
+                               Style="{StaticResource StatLabel}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Bottom"
+                               Text="{Binding TrendCaption}" />
+                </Grid>
+
+                <Border Grid.Row="1"
+                        Height="1"
+                        Background="{DynamicResource Border.Subtle}"
+                        Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}" />
+
+                <DataGrid x:Name="SessionsGrid"
+                          Grid.Row="2"
+                          BorderThickness="0"
+                          AutomationProperties.Name="Список сессий стрима"
+                          ItemsSource="{Binding Sessions}"
+                          SelectedItem="{Binding SelectedRow}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserSortColumns="True"
+                          CanUserReorderColumns="False"
+                          SelectionMode="Single"
+                          RowStyle="{StaticResource TableRow}"
+                          RowBackground="Transparent"
+                          AlternatingRowBackground="Transparent"
+                          GridLinesVisibility="None">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Начало"
+                                            Binding="{Binding StartedAtFormatted}"
+                                            SortMemberPath="StartedAt"
+                                            SortDirection="Descending"
+                                            ElementStyle="{StaticResource MonoCell}"
+                                            Width="Auto" />
+                        <DataGridTextColumn Header="Эфир"
+                                            Binding="{Binding DurationFormatted}"
+                                            SortMemberPath="Duration"
+                                            ElementStyle="{StaticResource RightCell}"
+                                            HeaderStyle="{StaticResource NumericHeader}"
+                                            Width="Auto" />
+                        <DataGridTextColumn Header="Стрим"
+                                            Binding="{Binding TitleFormatted}"
+                                            SortMemberPath="TitleFormatted"
+                                            ElementStyle="{StaticResource EllipsisCell}"
+                                            Width="2*"
+                                            MinWidth="90" />
+                        <DataGridTextColumn Header="Игра"
+                                            Binding="{Binding GameFormatted}"
+                                            SortMemberPath="GameFormatted"
+                                            ElementStyle="{StaticResource EllipsisCell}"
+                                            Width="*"
+                                            MinWidth="50"
+                                            MaxWidth="220" />
+                        <DataGridTextColumn Header="Сообщ."
+                                            Binding="{Binding MessageCountFormatted}"
+                                            SortMemberPath="MessageCount"
+                                            ElementStyle="{StaticResource NumericCell}"
+                                            HeaderStyle="{StaticResource NumericHeader.Messages}"
+                                            Width="Auto" />
+                        <DataGridTextColumn Header="Чаттеры"
+                                            Binding="{Binding ChatterCountFormatted}"
+                                            SortMemberPath="ChatterCount"
+                                            ElementStyle="{StaticResource NumericCell}"
+                                            HeaderStyle="{StaticResource NumericHeader}"
+                                            Width="Auto" />
+                        <DataGridTextColumn Header="Пик"
+                                            Binding="{Binding PeakViewersFormatted}"
+                                            SortMemberPath="PeakViewers"
+                                            ElementStyle="{StaticResource NumericCell}"
+                                            HeaderStyle="{StaticResource NumericHeader}"
+                                            Width="Auto" />
+                        <DataGridTextColumn Header="Средн."
+                                            Binding="{Binding AverageViewersFormatted}"
+                                            SortMemberPath="AverageViewers"
+                                            ElementStyle="{StaticResource NumericCell}"
+                                            HeaderStyle="{StaticResource NumericHeader.AverageViewers}"
+                                            Width="Auto" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
         </Border>
 
         <GridSplitter Grid.Row="2"
                       ResizeDirection="Rows"
-                      Height="12"
+                      Height="8"
                       Visibility="{Binding HasSessions, Converter={StaticResource BoolToVisibility}}" />
 
         <controls:EmptyState Grid.Row="3"
                              Icon="MousePointerClick"
-                             Heading="Выберите стрим, чтобы увидеть его детали, сегменты и чаттеров"
+                             Heading="Выберите стрим в списке"
+                             Description="Детали, сегменты и чаттеры появятся здесь."
+                             DescriptionMaxWidth="360"
                              IconSize="24"
                              Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}" />
 
-        <Grid Grid.Row="3"
-              Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220" MinWidth="160" />
-                <ColumnDefinition Width="12" />
-                <ColumnDefinition Width="*" MinWidth="160" />
-                <ColumnDefinition Width="12" />
-                <ColumnDefinition Width="180" MinWidth="120" />
-            </Grid.ColumnDefinitions>
+        <Border Grid.Row="3"
+                Style="{StaticResource Card}"
+                Padding="16"
+                Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-            <Border Grid.Column="0"
-                    Style="{StaticResource Card}"
-                    Padding="12">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                   FontSize="{DynamicResource Font.Size.XS}"
-                                   Text="Заголовок" />
-                        <TextBlock Foreground="{DynamicResource Fg.Secondary}"
-                                   TextTrimming="CharacterEllipsis"
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{Binding DetailTitle}"
+                                   FontSize="{DynamicResource Font.Size.L}"
+                                   FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                    TextWrapping="NoWrap"
-                                   Margin="0,1,0,8"
-                                   Text="{Binding DetailTitle}" />
-
-                        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                   FontSize="{DynamicResource Font.Size.XS}"
-                                   Text="Игра" />
-                        <TextBlock Foreground="{DynamicResource Fg.Secondary}"
                                    TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding DetailTitle}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource Fg.Primary}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDetailTitleMissing}"
+                                                     Value="True">
+                                            <Setter Property="Foreground"
+                                                    Value="{DynamicResource Fg.Muted}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <TextBlock Text="{Binding DetailGame}"
+                                   Foreground="{DynamicResource Fg.Secondary}"
+                                   FontSize="{DynamicResource Font.Size.Caption}"
                                    TextWrapping="NoWrap"
-                                   Margin="0,1,0,8"
-                                   Text="{Binding DetailGame}" />
-
-                        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                   FontSize="{DynamicResource Font.Size.XS}"
-                                   Text="Начало" />
-                        <TextBlock Foreground="{DynamicResource Fg.Secondary}"
-                                   FontFamily="{DynamicResource Font.Mono}"
-                                   Margin="0,1,0,8"
-                                   Text="{Binding DetailStarted}" />
-
-                        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                   FontSize="{DynamicResource Font.Size.XS}"
-                                   Text="Окончание" />
-                        <TextBlock Foreground="{DynamicResource Fg.Secondary}"
-                                   FontFamily="{DynamicResource Font.Mono}"
-                                   Margin="0,1,0,8"
-                                   Text="{Binding DetailEnded}" />
-
-                        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                   FontSize="{DynamicResource Font.Size.XS}"
-                                   Text="Длительность" />
-                        <TextBlock Foreground="{DynamicResource Fg.Secondary}"
-                                   Margin="0,1,0,8"
-                                   Text="{Binding DetailDuration}" />
-
-                        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                   FontSize="{DynamicResource Font.Size.XS}"
-                                   Text="Зрители (пик / средн.)" />
-                        <TextBlock Foreground="{DynamicResource Fg.Secondary}"
-                                   Margin="0,1,0,8"
-                                   Text="{Binding DetailViewers}" />
-
-                        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                   FontSize="{DynamicResource Font.Size.XS}"
-                                   Text="Сообщений" />
-                        <TextBlock Foreground="{DynamicResource Fg.Secondary}"
-                                   Margin="0,1,0,8"
-                                   Text="{Binding DetailMessages}" />
-
-                        <TextBlock Style="{StaticResource TextBlock.Subtle}"
-                                   FontSize="{DynamicResource Font.Size.XS}"
-                                   Text="Чаттеров" />
-                        <TextBlock Foreground="{DynamicResource Fg.Secondary}"
-                                   Margin="0,1,0,0"
-                                   Text="{Binding DetailChatters}" />
+                                   TextTrimming="CharacterEllipsis"
+                                   Margin="0,2,0,0" />
                     </StackPanel>
+
+                    <StackPanel Grid.Column="1"
+                                Margin="16,0,0,0">
+                        <TextBlock Text="{Binding DetailPeriodText}"
+                                   FontFamily="{DynamicResource Font.Mono}"
+                                   FontSize="{DynamicResource Font.Size.Caption}"
+                                   Foreground="{DynamicResource Fg.Secondary}"
+                                   TextWrapping="NoWrap"
+                                   HorizontalAlignment="Right" />
+                        <TextBlock Text="{Binding DetailDuration}"
+                                   FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                   Foreground="{DynamicResource Fg.Primary}"
+                                   TextWrapping="NoWrap"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer x:Name="DetailBodyScroll"
+                              Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*"
+                                           MinHeight="80" />
+                        </Grid.RowDefinitions>
+
+                        <WrapPanel Grid.Row="0"
+                                   Orientation="Horizontal"
+                                   Margin="0,14,0,0">
+                            <Border Style="{StaticResource StatCell.Lead}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource StatValue}"
+                                               Text="{Binding DetailMessages}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="сообщений" />
+                                    <TextBlock Style="{StaticResource DeltaText}"
+                                               Tag="{Binding DetailMessagesDeltaTone}"
+                                               Text="{Binding DetailMessagesDelta}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource StatCell}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource StatValue}"
+                                               Text="{Binding DetailChatters}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="чаттеров" />
+                                    <TextBlock Style="{StaticResource DeltaText}"
+                                               Tag="{Binding DetailChattersDeltaTone}"
+                                               Text="{Binding DetailChattersDelta}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource StatCell}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource StatValue}"
+                                               Text="{Binding DetailPeakViewers}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="пик зрителей" />
+                                    <TextBlock Style="{StaticResource DeltaText}"
+                                               Tag="{Binding DetailPeakViewersDeltaTone}"
+                                               Text="{Binding DetailPeakViewersDelta}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource StatCell}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource StatValue}"
+                                               Text="{Binding DetailAverageViewers}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="в среднем" />
+                                    <TextBlock Style="{StaticResource DeltaText}"
+                                               Tag="{Binding DetailAverageViewersDeltaTone}"
+                                               Text="{Binding DetailAverageViewersDelta}" />
+                                </StackPanel>
+                            </Border>
+                        </WrapPanel>
+
+                        <Border Grid.Row="1"
+                                Height="1"
+                                Background="{DynamicResource Border.Subtle}"
+                                Margin="0,14,0,0" />
+
+                        <Grid Grid.Row="2"
+                              Margin="0,12,0,0"
+                              MaxHeight="{Binding ViewportHeight, ElementName=DetailBodyScroll}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"
+                                                  MinWidth="220" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="Auto"
+                                                  MinWidth="240"
+                                                  MaxWidth="360" />
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0"
+                                           Style="{StaticResource TextBlock.Heading}"
+                                           FontSize="{DynamicResource Font.Size.L}"
+                                           Text="{Binding SegmentsHeading}" />
+
+                                <ItemsControl Grid.Row="1"
+                                              ItemsSource="{Binding Segments}"
+                                              Height="12"
+                                              Margin="0,10,0,0"
+                                              Focusable="False"
+                                              AutomationProperties.Name="Сегменты по длительности"
+                                              Visibility="{Binding HasSegmentTimeline, Converter={StaticResource BoolToVisibility}}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <infrastructure:ProportionalPanel Gap="2" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="infrastructure:ProportionalPanel.Share"
+                                                    Value="{Binding Share}" />
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="3"
+                                                    ToolTip="{Binding TimelineText}">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background"
+                                                                Value="{DynamicResource Accent.Primary}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsAlternate}"
+                                                                         Value="True">
+                                                                <Setter Property="Background"
+                                                                        Value="{DynamicResource Accent.Soft}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock Grid.Row="2"
+                                           Style="{StaticResource TextBlock.Subtle}"
+                                           VerticalAlignment="Top"
+                                           Margin="0,10,0,0"
+                                           Text="Сегментов нет"
+                                           Visibility="{Binding HasSegments, Converter={StaticResource InverseBoolToVisibility}}" />
+
+                                <DataGrid Grid.Row="2"
+                                          Margin="0,10,0,0"
+                                          ItemsSource="{Binding Segments}"
+                                          AutomationProperties.Name="Сегменты выбранного стрима"
+                                          Visibility="{Binding HasSegments, Converter={StaticResource BoolToVisibility}}"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          CanUserSortColumns="False"
+                                          SelectionMode="Single"
+                                          BorderThickness="0"
+                                          Background="Transparent"
+                                          RowStyle="{StaticResource TableRow}"
+                                          RowBackground="Transparent"
+                                          AlternatingRowBackground="Transparent"
+                                          GridLinesVisibility="None">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Игра"
+                                                            Binding="{Binding Game}"
+                                                            ElementStyle="{StaticResource EllipsisCell}"
+                                                            Width="*"
+                                                            MinWidth="90" />
+                                        <DataGridTextColumn Header="Длительность"
+                                                            Binding="{Binding Duration}"
+                                                            ElementStyle="{StaticResource RightCell}"
+                                                            HeaderStyle="{StaticResource NumericHeader}"
+                                                            Width="Auto" />
+                                        <DataGridTextColumn Header="Сообщения"
+                                                            Binding="{Binding Messages}"
+                                                            ElementStyle="{StaticResource NumericCell}"
+                                                            HeaderStyle="{StaticResource NumericHeader}"
+                                                            Width="Auto" />
+                                        <DataGridTextColumn Header="Пик"
+                                                            Binding="{Binding PeakViewers}"
+                                                            ElementStyle="{StaticResource NumericCell}"
+                                                            HeaderStyle="{StaticResource NumericHeader}"
+                                                            Width="Auto" />
+                                        <DataGridTextColumn Header="Средние"
+                                                            Binding="{Binding AverageViewers}"
+                                                            ElementStyle="{StaticResource NumericCell}"
+                                                            HeaderStyle="{StaticResource NumericHeader}"
+                                                            Width="Auto" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+
+                            <GridSplitter Grid.Column="1"
+                                          ResizeDirection="Columns" />
+
+                            <Grid Grid.Column="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0"
+                                           Style="{StaticResource TextBlock.Heading}"
+                                           FontSize="{DynamicResource Font.Size.L}"
+                                           Text="{Binding ChattersHeading}" />
+
+                                <TextBlock Grid.Row="1"
+                                           Style="{StaticResource TextBlock.Subtle}"
+                                           VerticalAlignment="Top"
+                                           Margin="0,10,0,0"
+                                           Text="Чаттеров нет"
+                                           Visibility="{Binding HasChatters, Converter={StaticResource InverseBoolToVisibility}}" />
+
+                                <ListBox Grid.Row="1"
+                                         Margin="0,10,0,0"
+                                         ItemsSource="{Binding Chatters}"
+                                         AutomationProperties.Name="Чаттеры выбранного стрима"
+                                         Visibility="{Binding HasChatters, Converter={StaticResource BoolToVisibility}}"
+                                         ItemContainerStyle="{StaticResource RatingRowItem}"
+                                         ItemTemplate="{StaticResource ChatterRowTemplate}"
+                                         SelectionMode="Single"
+                                         HorizontalContentAlignment="Stretch"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="0"
+                                         VirtualizingStackPanel.IsVirtualizing="True"
+                                         VirtualizingStackPanel.VirtualizationMode="Recycling"
+                                         ScrollViewer.CanContentScroll="True"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                            </Grid>
+                        </Grid>
+                    </Grid>
                 </ScrollViewer>
-            </Border>
-
-            <GridSplitter Grid.Column="1"
-                          ResizeDirection="Columns" />
-
-            <Border Grid.Column="2"
-                    Style="{StaticResource Card}"
-                    Padding="12">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0"
-                               Style="{StaticResource TextBlock.Subtle}"
-                               FontSize="{DynamicResource Font.Size.XS}"
-                               Margin="0,0,0,8"
-                               Text="Сегменты" />
-
-                    <TextBlock Grid.Row="1"
-                               Style="{StaticResource TextBlock.Subtle}"
-                               VerticalAlignment="Top"
-                               Text="Сегментов нет"
-                               TextWrapping="Wrap"
-                               Visibility="{Binding HasSegments, Converter={StaticResource InverseBoolToVisibility}}" />
-
-                    <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding Segments}"
-                              AutomationProperties.Name="Сегменты выбранного стрима"
-                              Visibility="{Binding HasSegments, Converter={StaticResource BoolToVisibility}}"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True"
-                              CanUserSortColumns="False"
-                              SelectionMode="Single"
-                              BorderThickness="0"
-                              Background="Transparent"
-                              RowStyle="{StaticResource TableRow}"
-                              RowBackground="Transparent"
-                              AlternatingRowBackground="Transparent"
-                              GridLinesVisibility="None">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Игра"
-                                                Binding="{Binding Game}"
-                                                ElementStyle="{StaticResource EllipsisCell}"
-                                                Width="*" />
-                            <DataGridTextColumn Header="Длит."
-                                                Binding="{Binding Duration}"
-                                                ElementStyle="{StaticResource RightCell}"
-                                                HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="Auto" />
-                            <DataGridTextColumn Header="Сообщ."
-                                                Binding="{Binding Messages}"
-                                                ElementStyle="{StaticResource NumericCell}"
-                                                HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="Auto" />
-                            <DataGridTextColumn Header="Пик зр."
-                                                Binding="{Binding PeakViewers}"
-                                                ElementStyle="{StaticResource NumericCell}"
-                                                HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="Auto" />
-                            <DataGridTextColumn Header="Средн."
-                                                Binding="{Binding AverageViewers}"
-                                                ElementStyle="{StaticResource NumericCell}"
-                                                HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="Auto" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </Grid>
-            </Border>
-
-            <GridSplitter Grid.Column="3"
-                          ResizeDirection="Columns" />
-
-            <Border Grid.Column="4"
-                    Style="{StaticResource Card}"
-                    Padding="12">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0"
-                               Style="{StaticResource TextBlock.Subtle}"
-                               FontSize="{DynamicResource Font.Size.XS}"
-                               Margin="0,0,0,8"
-                               Text="Чаттеры" />
-
-                    <TextBlock Grid.Row="1"
-                               Style="{StaticResource TextBlock.Subtle}"
-                               VerticalAlignment="Top"
-                               Text="Чаттеров нет"
-                               TextWrapping="Wrap"
-                               Visibility="{Binding HasChatters, Converter={StaticResource InverseBoolToVisibility}}" />
-
-                    <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding Chatters}"
-                              AutomationProperties.Name="Чаттеры выбранного стрима"
-                              Visibility="{Binding HasChatters, Converter={StaticResource BoolToVisibility}}"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True"
-                              CanUserSortColumns="True"
-                              SelectionMode="Single"
-                              BorderThickness="0"
-                              Background="Transparent"
-                              RowStyle="{StaticResource TableRow}"
-                              RowBackground="Transparent"
-                              AlternatingRowBackground="Transparent"
-                              GridLinesVisibility="None">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Ник"
-                                                Binding="{Binding DisplayName}"
-                                                SortMemberPath="DisplayName"
-                                                ElementStyle="{StaticResource EllipsisCell}"
-                                                Width="*" />
-                            <DataGridTextColumn Header="Сообщ."
-                                                Binding="{Binding MessageCountFormatted}"
-                                                SortMemberPath="MessageCount"
-                                                ElementStyle="{StaticResource NumericCell}"
-                                                HeaderStyle="{StaticResource NumericHeader}"
-                                                Width="Auto" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </Grid>
-            </Border>
-        </Grid>
+            </Grid>
+        </Border>
 
         <controls:EmptyState Grid.Row="1"
                              Grid.RowSpan="3"

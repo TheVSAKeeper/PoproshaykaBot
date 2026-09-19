@@ -87,6 +87,40 @@ public class GallerySmokeTests
     }
 
     [Test]
+    public void Gallery_ShouldCaptureUsersWithAndWithoutSelection()
+    {
+        var pages = string.Join(',', SectionKeys.UsersSelected, SectionKeys.Users);
+        var (exitCode, output) = RunGallery(pages, AppThemes.LightKey);
+
+        Assert.That(exitCode, Is.Zero, $"Прогон галереи должен завершиться кодом 0. Вывод процесса:{Environment.NewLine}{output}");
+
+        AssertNoBindingErrors();
+
+        using var index = JsonDocument.Parse(File.ReadAllText(Path.Combine(_outputDirectory, "index.json")));
+
+        var frames = index.RootElement.GetProperty("frames")
+            .EnumerateArray()
+            .Select(frame => (Name: frame.GetProperty("name").GetString(), File: frame.GetProperty("file").GetString()))
+            .ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(frames.Select(frame => frame.Name),
+                Is.EqualTo(new[] { SectionKeys.UsersSelected, SectionKeys.Users }),
+                "Кейс с выбранной строкой должен попасть в индекс своим именем");
+            Assert.That(frames.Select(frame => frame.File),
+                Is.EqualTo(new[] { "users-selected-light.png", "users-light.png" }),
+                "Двоеточие в имени кейса должно превращаться в дефис имени файла");
+        });
+
+        var selected = ReadFrame(frames[0].File);
+        var plain = ReadFrame(frames[1].File);
+
+        Assert.That(selected, Is.Not.EqualTo(plain),
+            "Кадры совпали: либо рейтинг пуст без подключения бота, либо выбор строки не поставился или не снялся после кадра");
+    }
+
+    [Test]
     public void Gallery_ShouldSkipUnknownKeysAndFinishSuccessfully()
     {
         var pages = string.Join(',', SectionKeys.Overview, "dialog:no-such-dialog", "no-such-page");

@@ -1,8 +1,22 @@
-﻿namespace PoproshaykaBot.Wpf.ViewModels;
+﻿using PoproshaykaBot.Wpf.Infrastructure;
+
+namespace PoproshaykaBot.Wpf.ViewModels;
 
 public static class UserStatisticsRanking
 {
     public const double MinimumShare = 0.02;
+
+    public static string DescribePlace(int position, int total)
+    {
+        return position > 0 && total > 0
+            ? string.Create(UiCulture.Russian, $"{position:N0}-е место из {total:N0}")
+            : string.Empty;
+    }
+
+    public static string DescribeVisibleCount(int visible, int total)
+    {
+        return string.Create(UiCulture.Russian, $"Показано {visible:N0} из {total:N0}");
+    }
 
     public static List<UserStatisticsRowViewModel> Arrange(
         IReadOnlyList<UserStatisticsRowViewModel> rows,
