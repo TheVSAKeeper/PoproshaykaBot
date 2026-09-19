@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Server.Endpoints;
+using PoproshaykaBot.Core.Server.Images;
 using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Server;
@@ -18,6 +19,17 @@ public static class ServerServiceCollectionExtensions
                 infrastructure.SseDropNotifyThreshold);
         });
 
+        services.AddHttpClient(ImageProxyEndpoint.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                UseProxy = false,
+                Credentials = null,
+                ConnectTimeout = ImageProxyEndpoint.RequestTimeout,
+                ConnectCallback = PublicAddressConnector.ConnectAsync,
+            });
+
         services.AddSingleton<SseDropMetrics>();
         services.AddSingleton<SseClientRegistry>();
         services.AddSingleton<SseService>();
@@ -32,6 +44,7 @@ public static class ServerServiceCollectionExtensions
         services.AddSingleton<IEndpointMapper, ChatSettingsEndpoint>();
         services.AddSingleton<IEndpointMapper, AnimationsEndpoint>();
         services.AddSingleton<IEndpointMapper, AvatarEndpoint>();
+        services.AddSingleton<IEndpointMapper, ImageProxyEndpoint>();
         services.AddSingleton<IEndpointMapper, StaticAssetsEndpoint>();
 
         return services;

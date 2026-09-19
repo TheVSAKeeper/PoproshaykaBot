@@ -68,7 +68,9 @@ public static class SettingsDescriber
         return $"сообщений на экране {settings.MaxMessages}, время {OnOff(settings.ShowTimestamp)}, "
             + $"аватары {OnOff(settings.ShowUserAvatars)}, анимации {OnOff(settings.EnableAnimations)}, "
             + $"затухание {OnOff(settings.EnableMessageFadeOut)} через {settings.MessageLifetimeSeconds} с, "
-            + $"кегль {settings.FontSize}, автопрокрутка {OnOff(settings.AutoScrollEnabled)}";
+            + $"кегль {settings.FontSize}, автопрокрутка {OnOff(settings.AutoScrollEnabled)}, "
+            + $"картинки из сообщений {OnOff(settings.ShowMessageImages)} (роли {settings.MessageImageRoles}, "
+            + $"хостов {settings.MessageImageAllowedHosts?.Count ?? 0}, высота {settings.MessageImageMaxHeightPixels} px)";
     }
 
     public static string Describe(UpdateSettings settings)

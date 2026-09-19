@@ -222,6 +222,17 @@ public sealed class JsonStoreFormatContractTests
               "badgeSizePixels": 18,
               "showUserAvatars": false,
               "userAvatarSizePixels": 32,
+              "showMessageImages": false,
+              "messageImageRoles": "Broadcaster, Moderator, Vip",
+              "messageImageAllowedHosts": [
+                "i.imgur.com",
+                "imgur.com",
+                "static-cdn.jtvnw.net",
+                "clips-media-assets2.twitch.tv",
+                "cdn.7tv.app",
+                "media.discordapp.net"
+              ],
+              "messageImageMaxHeightPixels": 160,
               "showUserTypeBorders": true,
               "highlightFirstTimeUsers": true,
               "highlightMentions": true,
