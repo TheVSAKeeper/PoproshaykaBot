@@ -52,6 +52,16 @@
                     Value="Средние зрители" />
         </Style>
 
+        <Style x:Key="TrendDate"
+               TargetType="TextBlock">
+            <Setter Property="FontSize"
+                    Value="{DynamicResource Font.Size.Caption}" />
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Muted}" />
+            <Setter Property="TextWrapping"
+                    Value="NoWrap" />
+        </Style>
+
         <Style x:Key="TrendBar"
                TargetType="Button">
             <Setter Property="Background"
@@ -65,23 +75,55 @@
                     <ControlTemplate TargetType="Button">
                         <Grid Background="Transparent">
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="{Binding RestTrack}" />
                                 <RowDefinition Height="{Binding FillTrack}" />
                             </Grid.RowDefinitions>
 
-                            <Border Grid.Row="0"
+                            <TextBlock x:Name="Value"
+                                       Grid.Row="0"
+                                       Text="{Binding ValueText}"
+                                       FontSize="{DynamicResource Font.Size.Caption}"
+                                       Foreground="{DynamicResource Fg.Secondary}"
+                                       TextWrapping="NoWrap"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,2"
+                                       Visibility="Hidden" />
+
+                            <Border Grid.Row="1"
                                     Grid.RowSpan="2"
                                     Background="{DynamicResource Bg.SurfaceMute}"
                                     CornerRadius="2" />
 
                             <Border x:Name="Fill"
-                                    Grid.Row="1"
+                                    Grid.Row="2"
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="Transparent"
                                     BorderThickness="0"
                                     CornerRadius="2,2,0,0" />
                         </Grid>
                         <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsPeak}"
+                                         Value="True">
+                                <Setter TargetName="Value"
+                                        Property="Visibility"
+                                        Value="Visible" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsSelected}"
+                                         Value="True">
+                                <Setter TargetName="Value"
+                                        Property="Visibility"
+                                        Value="Visible" />
+                                <Setter TargetName="Value"
+                                        Property="Foreground"
+                                        Value="{DynamicResource Accent.Text}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding DataContext.IsCompactLayout, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                         Value="True">
+                                <Setter TargetName="Value"
+                                        Property="Visibility"
+                                        Value="Collapsed" />
+                            </DataTrigger>
                             <Trigger Property="IsMouseOver"
                                      Value="True">
                                 <Setter TargetName="Fill"
@@ -106,6 +148,165 @@
                              Value="True">
                     <Setter Property="Background"
                             Value="{DynamicResource Accent.Primary}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="TrendOptionItem"
+               TargetType="MenuItem"
+               BasedOn="{StaticResource {x:Type MenuItem}}">
+            <Setter Property="Command"
+                    Value="{Binding Command}" />
+            <Setter Property="HeaderTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <iconPacks:PackIconLucide Grid.Column="0"
+                                                      Kind="Check"
+                                                      Width="12"
+                                                      Height="12"
+                                                      VerticalAlignment="Center"
+                                                      Visibility="{Binding IsChecked, Converter={StaticResource BoolToVisibility}}" />
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Caption}" />
+                        </Grid>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SegmentBlock"
+               TargetType="Border">
+            <Setter Property="CornerRadius"
+                    Value="3" />
+            <Setter Property="Padding"
+                    Value="6,0" />
+            <Setter Property="BorderBrush"
+                    Value="{DynamicResource Border.Strong}" />
+            <Setter Property="BorderThickness"
+                    Value="0" />
+            <Setter Property="Background"
+                    Value="{DynamicResource Bg.SurfaceMute}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="0">
+                    <Setter Property="Background"
+                            Value="{DynamicResource Accent.Soft}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="1">
+                    <Setter Property="Background"
+                            Value="{DynamicResource State.InfoSoft}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="2">
+                    <Setter Property="Background"
+                            Value="{DynamicResource State.SuccessSoft}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="3">
+                    <Setter Property="Background"
+                            Value="{DynamicResource State.WarningSoft}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="4">
+                    <Setter Property="Background"
+                            Value="{DynamicResource State.ErrorSoft}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ContinuesGame}"
+                             Value="True">
+                    <Setter Property="BorderThickness"
+                            Value="2,0,0,0" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SegmentCaption"
+               TargetType="TextBlock">
+            <Setter Property="FontSize"
+                    Value="{DynamicResource Font.Size.Caption}" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Setter Property="TextWrapping"
+                    Value="NoWrap" />
+            <Setter Property="TextTrimming"
+                    Value="CharacterEllipsis" />
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Secondary}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="0">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource Accent.Text}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="1">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.InfoText}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="2">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.SuccessText}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="3">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.WarningText}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="4">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.ErrorText}" />
+                </DataTrigger>
+                <DataTrigger Value="False"
+                             Binding="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Border}, Converter={StaticResource ScaledWidthFits}, ConverterParameter=56}">
+                    <Setter Property="Visibility"
+                            Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SegmentRow"
+               TargetType="DataGridRow"
+               BasedOn="{StaticResource TableRow}">
+            <Setter Property="ToolTip"
+                    Value="{Binding TimelineText}" />
+            <EventSetter Event="MouseLeftButtonUp"
+                         Handler="OnSegmentRowActivated" />
+            <EventSetter Event="KeyDown"
+                         Handler="OnSegmentRowKeyDown" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding CanFilter}"
+                             Value="True">
+                    <Setter Property="Cursor"
+                            Value="Hand" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ChatterRowItem"
+               TargetType="ListBoxItem"
+               BasedOn="{StaticResource RatingRowItem}">
+            <Setter Property="ToolTip"
+                    Value="{Binding Hint}" />
+            <Setter Property="AutomationProperties.Name"
+                    Value="{Binding Hint}" />
+            <EventSetter Event="MouseLeftButtonUp"
+                         Handler="OnChatterRowActivated" />
+            <EventSetter Event="KeyDown"
+                         Handler="OnChatterRowKeyDown" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding CanOpen}"
+                             Value="True">
+                    <Setter Property="Cursor"
+                            Value="Hand" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -136,7 +337,7 @@
 
     </UserControl.Resources>
 
-    <Grid>
+    <Grid x:Name="PageGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="3*"
@@ -146,7 +347,8 @@
                            MinHeight="200" />
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0"
+        <DockPanel x:Name="SummaryBar"
+                   Grid.Row="0"
                    Margin="0,0,0,8">
             <Button DockPanel.Dock="Right"
                     Style="{StaticResource Button.Icon}"
@@ -159,7 +361,45 @@
                                           Height="14" />
             </Button>
 
-            <WrapPanel Orientation="Horizontal">
+            <Border DockPanel.Dock="Right"
+                    Style="{StaticResource Badge}"
+                    VerticalAlignment="Center"
+                    Margin="12,0,8,0"
+                    Visibility="{Binding HasGameFilter, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding GameFilterText}"
+                               FontSize="{DynamicResource Font.Size.Caption}"
+                               Foreground="{DynamicResource Fg.Secondary}"
+                               VerticalAlignment="Center"
+                               TextWrapping="NoWrap"
+                               MaxWidth="240"
+                               TextTrimming="CharacterEllipsis" />
+
+                    <Button Style="{StaticResource Button.Icon}"
+                            Command="{Binding ClearGameFilterCommand}"
+                            Margin="6,0,-4,0"
+                            Width="20"
+                            Height="20"
+                            AutomationProperties.Name="Снять фильтр по игре"
+                            ToolTip="Снять фильтр по игре">
+                        <iconPacks:PackIconLucide Kind="X"
+                                                  Width="10"
+                                                  Height="10" />
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="{Binding SummaryLine}"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       Foreground="{DynamicResource Fg.Secondary}"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       AutomationProperties.Name="{Binding SummaryLine}"
+                       Visibility="{Binding IsCompactLayout, Converter={StaticResource BoolToVisibility}}" />
+
+            <WrapPanel Orientation="Horizontal"
+                       Visibility="{Binding HasWideSummary, Converter={StaticResource BoolToVisibility}}">
                 <Border Style="{StaticResource StatCell.Lead}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource StatValue}"
@@ -189,7 +429,8 @@
             </WrapPanel>
         </DockPanel>
 
-        <Border Grid.Row="1"
+        <Border x:Name="TableCard"
+                Grid.Row="1"
                 Style="{StaticResource Card}"
                 Padding="0"
                 Visibility="{Binding HasSessions, Converter={StaticResource BoolToVisibility}}">
@@ -197,23 +438,27 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0"
-                      Margin="16,6,16,6"
-                      Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}">
+                      Margin="16,6,10,0"
+                      Visibility="{Binding CanShowTrend, Converter={StaticResource BoolToVisibility}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <ItemsControl Grid.Column="0"
+                    <ItemsControl x:Name="TrendStrip"
+                                  Grid.Column="0"
                                   ItemsSource="{Binding Trend}"
-                                  Height="36"
+                                  Height="40"
                                   KeyboardNavigation.TabNavigation="Once"
                                   KeyboardNavigation.DirectionalNavigation="Contained"
-                                  AutomationProperties.Name="Пик зрителей по последним стримам">
+                                  AutomationProperties.Name="{Binding TrendCaption}"
+                                  Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <UniformGrid Rows="1" />
@@ -230,20 +475,77 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <TextBlock Grid.Column="1"
-                               Style="{StaticResource StatLabel}"
-                               Margin="12,0,0,0"
-                               VerticalAlignment="Bottom"
-                               Text="{Binding TrendCaption}" />
+                    <Button Grid.Column="1"
+                            x:Name="TrendMenuButton"
+                            Style="{StaticResource Button.Icon}"
+                            Click="OnTrendMenuClick"
+                            VerticalAlignment="Center"
+                            Margin="6,0,0,0"
+                            Width="22"
+                            Height="22"
+                            AutomationProperties.Name="Настройки полосы"
+                            ToolTip="Что показывать на полосе">
+                        <iconPacks:PackIconLucide Kind="Settings2"
+                                                  Width="14"
+                                                  Height="14" />
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Метрика"
+                                          ItemsSource="{Binding MetricOptions}"
+                                          ItemContainerStyle="{StaticResource TrendOptionItem}" />
+                                <MenuItem Header="Глубина"
+                                          ItemsSource="{Binding LengthOptions}"
+                                          ItemContainerStyle="{StaticResource TrendOptionItem}" />
+                                <Separator />
+                                <MenuItem Header="{Binding TrendVisibilityCaption}"
+                                          Command="{Binding ToggleTrendCommand}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </Grid>
 
                 <Border Grid.Row="1"
                         Height="1"
+                        Margin="16,0,10,0"
+                        Background="{DynamicResource Border.Default}"
+                        Visibility="{Binding HasTrendBaseline, Converter={StaticResource BoolToVisibility}}" />
+
+                <Grid Grid.Row="2"
+                      Margin="16,2,10,2"
+                      Visibility="{Binding HasTrendLabels, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Style="{StaticResource TrendDate}"
+                               VerticalAlignment="Center"
+                               Text="{Binding TrendFirstDate}"
+                               Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}" />
+
+                    <TextBlock Grid.Column="1"
+                               Style="{StaticResource StatLabel}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Margin="8,0,8,0"
+                               Text="{Binding TrendCaption}" />
+
+                    <TextBlock Grid.Column="2"
+                               Style="{StaticResource TrendDate}"
+                               VerticalAlignment="Center"
+                               Text="{Binding TrendLastDate}"
+                               Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}" />
+                </Grid>
+
+                <Border Grid.Row="3"
+                        Height="1"
                         Background="{DynamicResource Border.Subtle}"
-                        Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}" />
+                        Visibility="{Binding CanShowTrend, Converter={StaticResource BoolToVisibility}}" />
 
                 <DataGrid x:Name="SessionsGrid"
-                          Grid.Row="2"
+                          Grid.Row="4"
                           BorderThickness="0"
                           AutomationProperties.Name="Список сессий стрима"
                           ItemsSource="{Binding Sessions}"
@@ -312,12 +614,14 @@
             </Grid>
         </Border>
 
-        <GridSplitter Grid.Row="2"
+        <GridSplitter x:Name="LayoutSplitter"
+                      Grid.Row="2"
                       ResizeDirection="Rows"
                       Height="8"
                       Visibility="{Binding HasSessions, Converter={StaticResource BoolToVisibility}}" />
 
-        <controls:EmptyState Grid.Row="3"
+        <controls:EmptyState x:Name="DetailEmpty"
+                             Grid.Row="3"
                              Icon="MousePointerClick"
                              Heading="Выберите стрим в списке"
                              Description="Детали, сегменты и чаттеры появятся здесь."
@@ -325,7 +629,8 @@
                              IconSize="24"
                              Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}" />
 
-        <Border Grid.Row="3"
+        <Border x:Name="DetailCard"
+                Grid.Row="3"
                 Style="{StaticResource Card}"
                 Padding="16"
                 Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
@@ -363,12 +668,22 @@
                             </TextBlock.Style>
                         </TextBlock>
 
-                        <TextBlock Text="{Binding DetailGame}"
-                                   Foreground="{DynamicResource Fg.Secondary}"
-                                   FontSize="{DynamicResource Font.Size.Caption}"
-                                   TextWrapping="NoWrap"
-                                   TextTrimming="CharacterEllipsis"
-                                   Margin="0,2,0,0" />
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,2,0,0">
+                            <TextBlock Text="{Binding DetailGame}"
+                                       Foreground="{DynamicResource Fg.Secondary}"
+                                       FontSize="{DynamicResource Font.Size.Caption}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxWidth="260" />
+
+                            <TextBlock Text="{Binding DetailComposition}"
+                                       Foreground="{DynamicResource Fg.Muted}"
+                                       FontSize="{DynamicResource Font.Size.Caption}"
+                                       TextWrapping="NoWrap"
+                                       Margin="8,0,0,0"
+                                       Visibility="{Binding DetailComposition, Converter={StaticResource NullToVisibility}}" />
+                        </StackPanel>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1"
@@ -457,7 +772,8 @@
                                 Background="{DynamicResource Border.Subtle}"
                                 Margin="0,14,0,0" />
 
-                        <Grid Grid.Row="2"
+                        <Grid x:Name="DetailSplit"
+                              Grid.Row="2"
                               Margin="0,12,0,0"
                               MaxHeight="{Binding ViewportHeight, ElementName=DetailBodyScroll}">
                             <Grid.ColumnDefinitions>
@@ -469,7 +785,8 @@
                                                   MaxWidth="360" />
                             </Grid.ColumnDefinitions>
 
-                            <Grid Grid.Column="0">
+                            <Grid x:Name="SegmentsPane"
+                                  Grid.Column="0">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -483,7 +800,7 @@
 
                                 <ItemsControl Grid.Row="1"
                                               ItemsSource="{Binding Segments}"
-                                              Height="12"
+                                              MinHeight="22"
                                               Margin="0,10,0,0"
                                               Focusable="False"
                                               AutomationProperties.Name="Сегменты по длительности"
@@ -501,21 +818,10 @@
                                     </ItemsControl.ItemContainerStyle>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border CornerRadius="3"
+                                            <Border Style="{StaticResource SegmentBlock}"
                                                     ToolTip="{Binding TimelineText}">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background"
-                                                                Value="{DynamicResource Accent.Primary}" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsAlternate}"
-                                                                         Value="True">
-                                                                <Setter Property="Background"
-                                                                        Value="{DynamicResource Accent.Soft}" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
+                                                <TextBlock Style="{StaticResource SegmentCaption}"
+                                                           Text="{Binding Caption}" />
                                             </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -539,7 +845,7 @@
                                           SelectionMode="Single"
                                           BorderThickness="0"
                                           Background="Transparent"
-                                          RowStyle="{StaticResource TableRow}"
+                                          RowStyle="{StaticResource SegmentRow}"
                                           RowBackground="Transparent"
                                           AlternatingRowBackground="Transparent"
                                           GridLinesVisibility="None">
@@ -548,35 +854,46 @@
                                                             Binding="{Binding Game}"
                                                             ElementStyle="{StaticResource EllipsisCell}"
                                                             Width="*"
-                                                            MinWidth="90" />
-                                        <DataGridTextColumn Header="Длительность"
+                                                            MinWidth="80" />
+                                        <DataGridTextColumn Header="Название"
+                                                            Binding="{Binding Title}"
+                                                            ElementStyle="{StaticResource EllipsisCell}"
+                                                            Width="*"
+                                                            MinWidth="80" />
+                                        <DataGridTextColumn Header="Эфир"
                                                             Binding="{Binding Duration}"
                                                             ElementStyle="{StaticResource RightCell}"
                                                             HeaderStyle="{StaticResource NumericHeader}"
-                                                            Width="Auto" />
-                                        <DataGridTextColumn Header="Сообщения"
+                                                            Width="Auto"
+                                                            MinWidth="96" />
+                                        <DataGridTextColumn x:Name="SegmentMessagesColumn"
+                                                            Header="Сообщ."
                                                             Binding="{Binding Messages}"
                                                             ElementStyle="{StaticResource NumericCell}"
-                                                            HeaderStyle="{StaticResource NumericHeader}"
+                                                            HeaderStyle="{StaticResource NumericHeader.Messages}"
                                                             Width="Auto" />
-                                        <DataGridTextColumn Header="Пик"
+                                        <DataGridTextColumn x:Name="SegmentPeakColumn"
+                                                            Header="Пик"
                                                             Binding="{Binding PeakViewers}"
                                                             ElementStyle="{StaticResource NumericCell}"
                                                             HeaderStyle="{StaticResource NumericHeader}"
                                                             Width="Auto" />
-                                        <DataGridTextColumn Header="Средние"
+                                        <DataGridTextColumn x:Name="SegmentAverageColumn"
+                                                            Header="Средн."
                                                             Binding="{Binding AverageViewers}"
                                                             ElementStyle="{StaticResource NumericCell}"
-                                                            HeaderStyle="{StaticResource NumericHeader}"
+                                                            HeaderStyle="{StaticResource NumericHeader.AverageViewers}"
                                                             Width="Auto" />
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </Grid>
 
-                            <GridSplitter Grid.Column="1"
+                            <GridSplitter x:Name="DetailSplitter"
+                                          Grid.Column="1"
                                           ResizeDirection="Columns" />
 
-                            <Grid Grid.Column="2">
+                            <Grid x:Name="ChattersPane"
+                                  Grid.Column="2">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
@@ -599,7 +916,7 @@
                                          ItemsSource="{Binding Chatters}"
                                          AutomationProperties.Name="Чаттеры выбранного стрима"
                                          Visibility="{Binding HasChatters, Converter={StaticResource BoolToVisibility}}"
-                                         ItemContainerStyle="{StaticResource RatingRowItem}"
+                                         ItemContainerStyle="{StaticResource ChatterRowItem}"
                                          ItemTemplate="{StaticResource ChatterRowTemplate}"
                                          SelectionMode="Single"
                                          HorizontalContentAlignment="Stretch"
@@ -618,7 +935,8 @@
             </Grid>
         </Border>
 
-        <controls:EmptyState Grid.Row="1"
+        <controls:EmptyState x:Name="HistoryEmpty"
+                             Grid.Row="1"
                              Grid.RowSpan="3"
                              Icon="History"
                              Heading="Стримов пока нет"

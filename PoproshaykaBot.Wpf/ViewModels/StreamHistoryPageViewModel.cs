@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Statistics;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Collections.ObjectModel;
 using System.Windows;
@@ -12,8 +13,18 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPageHeader, IDisposable
 {
-    public const int TrendLength = 40;
+    public const int DefaultTrendLength = 40;
     public const double FlatDeltaPercent = 5;
+
+    public static readonly int[] TrendLengths = [20, 40, 80];
+
+    public static readonly StreamTrendMetric[] TrendMetrics =
+    [
+        StreamTrendMetric.PeakViewers,
+        StreamTrendMetric.AverageViewers,
+        StreamTrendMetric.Messages,
+        StreamTrendMetric.Chatters,
+    ];
 
     private const string Placeholder = "–";
 
@@ -24,8 +35,25 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         Many = "стримов",
     };
 
+    private static readonly PointTerm TitleTerm = new()
+    {
+        Singular = "название",
+        Few = "названия",
+        Many = "названий",
+    };
+
+    private static readonly PointTerm CategoryTerm = new()
+    {
+        Singular = "категория",
+        Few = "категории",
+        Many = "категорий",
+    };
+
     private readonly StreamSessionHistoryStore _historyStore;
+    private readonly IUserStatisticsRepository _userStatistics;
+    private readonly ISettingsStore _settings;
     private readonly List<IDisposable> _subs = [];
+    private readonly List<StreamSessionRowViewModel> _allSessions = [];
     private readonly ObservableCollection<StreamSessionRowViewModel> _sessions = [];
 
     private double _averageMessages;
@@ -38,15 +66,19 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private StreamSessionRowViewModel? _selectedRow;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _totalSessionsText = "0";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _totalSessionsLabel = "стримов";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _totalAirTimeText = Placeholder;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _lastStreamText = Placeholder;
 
     [ObservableProperty]
@@ -57,6 +89,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     [ObservableProperty]
     private string _detailGame = Placeholder;
+
+    [ObservableProperty]
+    private string _detailComposition = string.Empty;
 
     [ObservableProperty]
     private string _detailPeriodText = Placeholder;
@@ -100,14 +135,64 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     [ObservableProperty]
     private TrendTone _detailAverageViewersDeltaTone;
 
-    public StreamHistoryPageViewModel(StreamSessionHistoryStore historyStore, IEventBus eventBus)
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGameFilter))]
+    [NotifyPropertyChangedFor(nameof(GameFilterText))]
+    private string? _gameFilter;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TrendCaption))]
+    [NotifyPropertyChangedFor(nameof(TrendVisibilityCaption))]
+    private bool _isTrendVisible = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTrendLabels))]
+    [NotifyPropertyChangedFor(nameof(HasTrendBaseline))]
+    [NotifyPropertyChangedFor(nameof(HasWideSummary))]
+    private bool _isCompactLayout;
+
+    [ObservableProperty]
+    private string _trendFirstDate = string.Empty;
+
+    [ObservableProperty]
+    private string _trendLastDate = string.Empty;
+
+    private StreamTrendMetric _trendMetric;
+    private int _trendLength;
+
+    public StreamHistoryPageViewModel(
+        StreamSessionHistoryStore historyStore,
+        IUserStatisticsRepository userStatistics,
+        ISettingsStore settings,
+        IEventBus eventBus)
     {
         _historyStore = historyStore;
+        _userStatistics = userStatistics;
+        _settings = settings;
+
+        _trendMetric = NormalizeMetric(settings.GetEnum(SettingsKeys.StreamTrendMetric, StreamTrendMetric.PeakViewers));
+        _trendLength = NormalizeLength(settings.GetInt(SettingsKeys.StreamTrendLength, DefaultTrendLength));
+        _isTrendVisible = settings.GetBool(SettingsKeys.StreamTrendVisible, true);
+
+        foreach (var metric in TrendMetrics)
+        {
+            MetricOptions.Add(new(MetricName(metric), metric == _trendMetric, new RelayCommand(() => SetMetric(metric))));
+        }
+
+        foreach (var length in TrendLengths)
+        {
+            LengthOptions.Add(new(
+                string.Create(UiCulture.Russian, $"{length:N0} {SessionTerm.ForCount(length)}"),
+                length == _trendLength,
+                new RelayCommand(() => SetLength(length))));
+        }
 
         _subs.Add(eventBus.SubscribeOnUi<StreamSessionCompleted>(_ => RefreshCommand.Execute(null)));
 
         Refresh();
     }
+
+    public event EventHandler<string>? UserRequested;
 
     public string PageTitle => "История стримов";
     public string? PageDescription => "Сессии стримов, их сегменты и чаттеры";
@@ -116,21 +201,74 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public ObservableCollection<StreamTrendBarViewModel> Trend { get; } = [];
     public ObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];
     public ObservableCollection<StreamSessionChatterRowViewModel> Chatters { get; } = [];
+    public ObservableCollection<StreamTrendOptionViewModel> MetricOptions { get; } = [];
+    public ObservableCollection<StreamTrendOptionViewModel> LengthOptions { get; } = [];
 
     public bool HasSelection => SelectedRow is not null;
 
-    public bool HasSessions => _sessions.Count > 0;
-    public bool HasTrend => Trend.Count > 1;
+    public bool HasSessions => _allSessions.Count > 0;
+    public bool CanShowTrend => Trend.Count > 1;
+    public bool HasTrend => IsTrendVisible && CanShowTrend;
+    public bool HasTrendLabels => CanShowTrend && !IsCompactLayout;
+    public bool HasTrendBaseline => HasTrend && !IsCompactLayout;
+    public bool HasWideSummary => !IsCompactLayout;
     public bool HasSegments => Segments.Count > 0;
     public bool HasSegmentTimeline => Segments.Count > 1;
     public bool HasChatters => Chatters.Count > 0;
 
-    public string TrendCaption => string.Create(
+    public bool HasGameFilter => GameFilter is { Length: > 0 };
+
+    public string SummaryLine => string.Create(
         UiCulture.Russian,
-        $"Пик зрителей, последние {Trend.Count:N0} {SessionTerm.ForCount(Trend.Count)}");
+        $"{TotalSessionsText} {TotalSessionsLabel} · {TotalAirTimeText} в эфире · {LastStreamText}");
+
+    public string GameFilterText => HasGameFilter
+        ? string.Create(UiCulture.Russian, $"Игра: {GameFilter}")
+        : string.Empty;
+
+    public string TrendCaption => IsTrendVisible
+        ? string.Create(
+            UiCulture.Russian,
+            $"{MetricName(_trendMetric)}, последние {Trend.Count:N0} {SessionTerm.ForCount(Trend.Count)}")
+        : string.Create(UiCulture.Russian, $"{MetricName(_trendMetric)} – полоса скрыта");
+
+    public string TrendVisibilityCaption => IsTrendVisible ? "Скрыть полосу" : "Показать полосу";
 
     public string SegmentsHeading => string.Create(UiCulture.Russian, $"Сегменты ({Segments.Count:N0})");
     public string ChattersHeading => string.Create(UiCulture.Russian, $"Чаттеры ({Chatters.Count:N0})");
+
+    public static string MetricName(StreamTrendMetric metric)
+    {
+        return metric switch
+        {
+            StreamTrendMetric.AverageViewers => "Средние зрители",
+            StreamTrendMetric.Messages => "Сообщения",
+            StreamTrendMetric.Chatters => "Чаттеры",
+            _ => "Пик зрителей",
+        };
+    }
+
+    public static string MetricLabel(StreamTrendMetric metric)
+    {
+        return metric switch
+        {
+            StreamTrendMetric.AverageViewers => "средние зрители",
+            StreamTrendMetric.Messages => "сообщений",
+            StreamTrendMetric.Chatters => "чаттеров",
+            _ => "пик зрителей",
+        };
+    }
+
+    public static long MetricValue(StreamSessionRowViewModel row, StreamTrendMetric metric)
+    {
+        return metric switch
+        {
+            StreamTrendMetric.AverageViewers => row.AverageViewers,
+            StreamTrendMetric.Messages => row.MessageCount,
+            StreamTrendMetric.Chatters => row.ChatterCount,
+            _ => row.PeakViewers,
+        };
+    }
 
     public static string FormatDateTime(DateTimeOffset value)
     {
@@ -195,6 +333,35 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             : (string.Create(UiCulture.Russian, $"−{-rounded:N0} % к обычному"), TrendTone.Down);
     }
 
+    public static string DescribeComposition(StreamSessionRecord session)
+    {
+        var titles = session.Segments
+            .Select(segment => segment.Title)
+            .Where(title => title is { Length: > 0 })
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+
+        var games = session.Segments
+            .Select(segment => segment.Game)
+            .Where(game => game is { Length: > 0 })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        var parts = new List<string>(2);
+
+        if (titles > 1)
+        {
+            parts.Add(string.Create(UiCulture.Russian, $"{titles:N0} {TitleTerm.ForCount(titles)}"));
+        }
+
+        if (games > 1)
+        {
+            parts.Add(string.Create(UiCulture.Russian, $"{games:N0} {CategoryTerm.ForCount(games)}"));
+        }
+
+        return string.Join(" · ", parts);
+    }
+
     public void Dispose()
     {
         foreach (var sub in _subs)
@@ -203,6 +370,18 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         }
 
         _subs.Clear();
+    }
+
+    public bool TrySelectAt(int index)
+    {
+        if (index < 0 || index >= _sessions.Count)
+        {
+            return false;
+        }
+
+        SelectedRow = _sessions[index];
+
+        return true;
     }
 
     partial void OnSelectedRowChanged(StreamSessionRowViewModel? value)
@@ -230,16 +409,11 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         OnPropertyChanged(nameof(ChattersHeading));
     }
 
-    public bool TrySelectAt(int index)
+    partial void OnIsTrendVisibleChanged(bool value)
     {
-        if (index < 0 || index >= _sessions.Count)
-        {
-            return false;
-        }
-
-        SelectedRow = _sessions[index];
-
-        return true;
+        _settings.SetBool(SettingsKeys.StreamTrendVisible, value);
+        OnPropertyChanged(nameof(HasTrend));
+        OnPropertyChanged(nameof(HasTrendBaseline));
     }
 
     [RelayCommand]
@@ -252,21 +426,129 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     }
 
     [RelayCommand]
+    private void ToggleTrend()
+    {
+        IsTrendVisible = !IsTrendVisible;
+    }
+
+    [RelayCommand]
+    private void FilterByGame(StreamSessionSegmentRowViewModel? segment)
+    {
+        if (segment?.GameKey is not { Length: > 0 } game)
+        {
+            return;
+        }
+
+        GameFilter = string.Equals(GameFilter, game, StringComparison.OrdinalIgnoreCase) ? null : game;
+        RebuildView();
+    }
+
+    [RelayCommand]
+    private void ClearGameFilter()
+    {
+        if (!HasGameFilter)
+        {
+            return;
+        }
+
+        GameFilter = null;
+        RebuildView();
+    }
+
+    [RelayCommand]
+    private void OpenChatter(StreamSessionChatterRowViewModel? chatter)
+    {
+        if (chatter is { CanOpen: true })
+        {
+            UserRequested?.Invoke(this, chatter.UserId);
+        }
+    }
+
+    [RelayCommand]
     private void Refresh()
     {
         var history = _historyStore.Load();
+
+        _allSessions.Clear();
+
+        foreach (var record in history.Sessions.OrderByDescending(record => record.StartedAt))
+        {
+            _allSessions.Add(new(record));
+        }
+
+        RebuildView();
+    }
+
+    private static StreamTrendMetric NormalizeMetric(StreamTrendMetric metric)
+    {
+        return metric == StreamTrendMetric.None ? StreamTrendMetric.PeakViewers : metric;
+    }
+
+    private static int NormalizeLength(int length)
+    {
+        return TrendLengths.Contains(length) ? length : DefaultTrendLength;
+    }
+
+    private static bool Matches(StreamSessionRowViewModel row, string game)
+    {
+        foreach (var segment in row.Source.Segments)
+        {
+            if (string.Equals(segment.Game, game, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return row.Source.Segments.Count == 0
+               && string.Equals(row.Source.Game, game, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void SetMetric(StreamTrendMetric metric)
+    {
+        _trendMetric = NormalizeMetric(metric);
+        _settings.SetEnum(SettingsKeys.StreamTrendMetric, _trendMetric);
+
+        for (var index = 0; index < MetricOptions.Count; index++)
+        {
+            MetricOptions[index].IsChecked = TrendMetrics[index] == _trendMetric;
+        }
+
+        IsTrendVisible = true;
+        BuildTrend();
+    }
+
+    private void SetLength(int length)
+    {
+        _trendLength = NormalizeLength(length);
+        _settings.SetInt(SettingsKeys.StreamTrendLength, _trendLength);
+
+        for (var index = 0; index < LengthOptions.Count; index++)
+        {
+            LengthOptions[index].IsChecked = TrendLengths[index] == _trendLength;
+        }
+
+        IsTrendVisible = true;
+        BuildTrend();
+    }
+
+    private void RebuildView()
+    {
         var selectedId = SelectedRow?.Source.Id;
 
         _sessions.Clear();
 
-        foreach (var record in history.Sessions.OrderByDescending(record => record.StartedAt))
+        foreach (var row in _allSessions)
         {
-            _sessions.Add(new(record));
+            if (!HasGameFilter || Matches(row, GameFilter!))
+            {
+                _sessions.Add(row);
+            }
         }
 
         UpdateAverages();
         UpdateSummary();
         BuildTrend();
+
         OnPropertyChanged(nameof(HasSessions));
 
         SelectedRow = selectedId.HasValue
@@ -277,14 +559,18 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private void FillSegments(StreamSessionRecord session)
     {
         var longest = session.Segments.Aggregate(TimeSpan.Zero, (max, segment) => segment.Duration > max ? segment.Duration : max);
-        var index = 0;
+        StreamSessionSegment? previous = null;
 
         foreach (var segment in session.Segments)
         {
             var share = longest > TimeSpan.Zero ? segment.Duration / longest : 1;
 
-            Segments.Add(new(segment, share, index % 2 == 1));
-            index++;
+            var continuesGame = previous is not null
+                                && segment.Game is { Length: > 0 }
+                                && string.Equals(previous.Game, segment.Game, StringComparison.OrdinalIgnoreCase);
+
+            Segments.Add(new(segment, share, continuesGame));
+            previous = segment;
         }
     }
 
@@ -299,7 +585,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         for (var index = 0; index < ordered.Count; index++)
         {
-            Chatters.Add(new(ordered[index], index + 1, leader));
+            var known = ordered[index].UserId is { Length: > 0 } userId && _userStatistics.GetById(userId) is not null;
+
+            Chatters.Add(new(ordered[index], index + 1, leader, known));
         }
     }
 
@@ -310,6 +598,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             DetailTitle = Placeholder;
             IsDetailTitleMissing = false;
             DetailGame = Placeholder;
+            DetailComposition = string.Empty;
             DetailPeriodText = Placeholder;
             DetailDuration = Placeholder;
             DetailMessages = Placeholder;
@@ -330,6 +619,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         DetailTitle = row.TitleFormatted;
         IsDetailTitleMissing = !row.HasTitle;
         DetailGame = row.Source.Game is { Length: > 0 } game ? game : Placeholder;
+        DetailComposition = DescribeComposition(row.Source);
         DetailPeriodText = FormatPeriod(row.StartedAt, row.Source.EndedAt);
         DetailDuration = row.DurationFormatted;
         DetailMessages = row.MessageCountFormatted;
@@ -376,17 +666,45 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     {
         Trend.Clear();
 
-        var recent = _sessions.Take(TrendLength).Reverse().ToList();
-        var leader = recent.Count > 0 ? recent.Max(row => row.PeakViewers) : 0;
+        var recent = _sessions.Take(_trendLength).Reverse().ToList();
+        var leader = recent.Count > 0 ? recent.Max(row => MetricValue(row, _trendMetric)) : 0;
 
         foreach (var row in recent)
         {
-            Trend.Add(new(row, leader));
+            Trend.Add(new(row, leader, _trendMetric));
         }
 
+        foreach (var bar in Trend)
+        {
+            bar.IsPeak = leader > 0 && bar.Value == leader;
+            bar.IsSelected = SelectedRow is not null && ReferenceEquals(bar.Row, SelectedRow);
+        }
+
+        TrendFirstDate = recent.Count > 0 ? RelativeTime.FormatDate(recent[0].StartedAt) : string.Empty;
+        TrendLastDate = recent.Count > 0 ? RelativeTime.FormatDate(recent[^1].StartedAt) : string.Empty;
+
+        OnPropertyChanged(nameof(CanShowTrend));
         OnPropertyChanged(nameof(HasTrend));
+        OnPropertyChanged(nameof(HasTrendLabels));
+        OnPropertyChanged(nameof(HasTrendBaseline));
         OnPropertyChanged(nameof(TrendCaption));
     }
+}
+
+public sealed partial class StreamTrendOptionViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private bool _isChecked;
+
+    public StreamTrendOptionViewModel(string caption, bool isChecked, IRelayCommand command)
+    {
+        Caption = caption;
+        _isChecked = isChecked;
+        Command = command;
+    }
+
+    public string Caption { get; }
+    public IRelayCommand Command { get; }
 }
 
 public sealed class StreamSessionRowViewModel
@@ -427,7 +745,12 @@ public sealed class StreamSessionRowViewModel
     private static string BuildGameDisplay(StreamSessionRecord source)
     {
         var game = string.IsNullOrEmpty(source.Game) ? "–" : source.Game;
-        var extra = source.Segments.Count - 1;
+
+        var extra = source.Segments
+            .Select(segment => segment.Game)
+            .Where(value => value is { Length: > 0 })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count() - 1;
 
         return extra > 0 ? string.Create(UiCulture.Russian, $"{game} (+{extra:N0})") : game;
     }
@@ -440,72 +763,103 @@ public sealed partial class StreamTrendBarViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
 
-    public StreamTrendBarViewModel(StreamSessionRowViewModel row, int leaderPeakViewers)
+    [ObservableProperty]
+    private bool _isPeak;
+
+    public StreamTrendBarViewModel(StreamSessionRowViewModel row, long leaderValue, StreamTrendMetric metric)
     {
         Row = row;
-        Share = leaderPeakViewers > 0
-            ? Math.Clamp((double)row.PeakViewers / leaderPeakViewers, MinimumShare, 1)
+        Value = StreamHistoryPageViewModel.MetricValue(row, metric);
+        Share = leaderValue > 0
+            ? Math.Clamp((double)Value / leaderValue, MinimumShare, 1)
             : MinimumShare;
         FillTrack = new(Share, GridUnitType.Star);
         RestTrack = new(1 - Share, GridUnitType.Star);
+        ValueText = StreamHistoryPageViewModel.FormatNumber(Value);
         Label = string.Create(
             UiCulture.Russian,
-            $"{RelativeTime.FormatDate(row.StartedAt)}, пик зрителей {row.PeakViewersFormatted}");
+            $"{RelativeTime.FormatDate(row.StartedAt)}, {StreamHistoryPageViewModel.MetricLabel(metric)} {ValueText}");
     }
 
     public StreamSessionRowViewModel Row { get; }
+    public long Value { get; }
     public double Share { get; }
     public GridLength FillTrack { get; }
     public GridLength RestTrack { get; }
+    public string ValueText { get; }
     public string Label { get; }
 }
 
 public sealed class StreamSessionSegmentRowViewModel
 {
     public string Game { get; }
+    public string Title { get; }
+    public string? GameKey { get; }
     public string Duration { get; }
     public string Messages { get; }
     public string PeakViewers { get; }
     public string AverageViewers { get; }
     public double Share { get; }
-    public bool IsAlternate { get; }
+    public int PaletteIndex { get; }
+    public bool ContinuesGame { get; }
+    public bool CanFilter { get; }
+    public string Caption { get; }
     public string TimelineText { get; }
 
-    public StreamSessionSegmentRowViewModel(StreamSessionSegment segment, double share, bool isAlternate)
+    public StreamSessionSegmentRowViewModel(StreamSessionSegment segment, double share, bool continuesGame)
     {
-        Game = segment.Game is { Length: > 0 } game ? game : "–";
+        GameKey = segment.Game is { Length: > 0 } key ? key : null;
+        Game = GameKey ?? "–";
+        Title = segment.Title is { Length: > 0 } title ? title : "Без названия";
         Duration = StreamHistoryPageViewModel.FormatDuration(segment.Duration);
         Messages = StreamHistoryPageViewModel.FormatNumber(segment.MessageCount);
         PeakViewers = StreamHistoryPageViewModel.FormatNumber(segment.PeakViewers);
         AverageViewers = StreamHistoryPageViewModel.FormatNumber(segment.AverageViewers);
         Share = share;
-        IsAlternate = isAlternate;
-        TimelineText = $"{Game}, {Duration}";
+        PaletteIndex = StreamSegmentPalette.IndexOf(GameKey);
+        ContinuesGame = continuesGame;
+        CanFilter = GameKey is not null;
+        Caption = continuesGame ? Title : Game;
+        TimelineText = string.Create(
+            UiCulture.Russian,
+            $"{Game} · {Title}, {Duration} · {Messages} сообщ. · пик {PeakViewers}");
     }
 }
 
 public sealed class StreamSessionChatterRowViewModel
 {
+    public string UserId { get; }
     public string DisplayName { get; }
     public long MessageCount { get; }
     public string MessageCountFormatted { get; }
     public int Position { get; }
     public double Share { get; }
     public bool IsTopThree { get; }
+    public bool CanOpen { get; }
     public string Summary { get; }
+    public string Hint { get; }
 
-    public StreamSessionChatterRowViewModel(StreamSessionChatter chatter, int position, long leaderMessageCount)
+    public StreamSessionChatterRowViewModel(
+        StreamSessionChatter chatter,
+        int position,
+        long leaderMessageCount,
+        bool canOpen)
     {
+        UserId = chatter.UserId;
         DisplayName = chatter.DisplayName;
         MessageCount = chatter.MessageCount;
         MessageCountFormatted = StreamHistoryPageViewModel.FormatNumber(chatter.MessageCount);
         Position = position;
         IsTopThree = position is > 0 and <= 3;
+        CanOpen = canOpen;
         Share = leaderMessageCount > 0
             ? Math.Clamp((double)chatter.MessageCount / leaderMessageCount, UserStatisticsRanking.MinimumShare, 1)
             : UserStatisticsRanking.MinimumShare;
         Summary = string.Create(
             UiCulture.Russian,
             $"{position:N0}. {DisplayName}, {MessageCountFormatted} {ChatMessageTerm.Instance.ForCount(chatter.MessageCount)}");
+        Hint = canOpen
+            ? string.Create(UiCulture.Russian, $"{Summary}. Открыть в разделе «Пользователи»")
+            : string.Create(UiCulture.Russian, $"{Summary}. В статистике пользователей этой записи нет");
     }
 }

@@ -10,6 +10,10 @@ public static class SettingsKeys
     public const string SettingsSection = "ui.settings.section";
     public const string LegacyImportDismissed = "ui.migration.legacy_import_dismissed";
 
+    public const string StreamTrendMetric = "ui.streams.trend_metric";
+    public const string StreamTrendLength = "ui.streams.trend_length";
+    public const string StreamTrendVisible = "ui.streams.trend_visible";
+
     public const string WindowLeft = "ui.window.left";
     public const string WindowTop = "ui.window.top";
     public const string WindowWidth = "ui.window.width";

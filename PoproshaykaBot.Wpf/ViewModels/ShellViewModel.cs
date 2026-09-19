@@ -27,6 +27,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly IUiDispatcher _uiDispatcher;
     private readonly NavigationItem _statisticsSection;
     private readonly NavigationItem _streamHistorySection;
+    private readonly UserStatisticsPageViewModel _statisticsPage;
+    private readonly StreamHistoryPageViewModel _streamHistoryPage;
     private readonly NavigationItem _overviewSection;
     private NavigationItem? _current;
     private bool _returningToSettings;
@@ -79,8 +81,12 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _uiSettings.WriteFailed += OnUiSettingsWriteFailed;
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: ActivateSettings, key: SectionKeys.Settings);
 
+        _statisticsPage = statisticsPage;
         _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, key: SectionKeys.Users) { StartsGroup = true };
         _streamHistorySection = new("История стримов", PackIconLucideKind.History, streamHistoryPage, key: SectionKeys.Streams);
+
+        _streamHistoryPage = streamHistoryPage;
+        _streamHistoryPage.UserRequested += OnUserRequested;
 
         _overviewSection = new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter, key: SectionKeys.Overview);
 
@@ -149,6 +155,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     {
         _uiSettings.WriteFailed -= OnUiSettingsWriteFailed;
         _settingsPage.SettingsSaved -= OnSettingsSaved;
+        _streamHistoryPage.UserRequested -= OnUserRequested;
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
         foreach (var subscription in _subscriptions)
@@ -167,6 +174,17 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     [RelayCommand]
     private void NavigateToStatistics()
     {
+        Selected = _statisticsSection;
+    }
+
+    private void OnUserRequested(object? sender, string userId)
+    {
+        if (!_statisticsPage.TrySelect(userId))
+        {
+            SetStatus("Этого пользователя нет в статистике", StatusSeverity.Info);
+            return;
+        }
+
         Selected = _statisticsSection;
     }
 

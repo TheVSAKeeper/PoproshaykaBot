@@ -50,10 +50,10 @@
                         <Grid>
                             <DataGridCellsPresenter ItemsPanel="{TemplateBinding ItemsPanel}"
                                                     SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
-                            <Rectangle x:Name="Stripe"
-                                       Width="3"
-                                       HorizontalAlignment="Left"
-                                       Fill="Transparent" />
+                            <Border x:Name="Outline"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="1"
+                                    IsHitTestVisible="False" />
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -68,8 +68,11 @@
                             <Setter TargetName="Bd"
                                     Property="Background"
                                     Value="{DynamicResource Accent.Soft}" />
-                            <Setter TargetName="Stripe"
-                                    Property="Fill"
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin"
+                                 Value="True">
+                            <Setter TargetName="Outline"
+                                    Property="BorderBrush"
                                     Value="{DynamicResource Accent.Primary}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -89,6 +92,7 @@
             <Setter.Value>
                 <DataTemplate>
                     <TextBlock Text="{Binding}"
+                               TextWrapping="NoWrap"
                                Margin="0,0,14,0" />
                 </DataTemplate>
             </Setter.Value>

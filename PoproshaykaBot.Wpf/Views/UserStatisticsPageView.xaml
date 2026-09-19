@@ -213,7 +213,7 @@
                             Background="{DynamicResource Border.Subtle}" />
 
                     <Grid Grid.Row="2"
-                          Margin="15,6,24,6">
+                          Margin="12,6,24,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"
                                               SharedSizeGroup="RatingPosition" />
@@ -283,7 +283,8 @@
                         </Button>
                     </Grid>
 
-                    <ListBox Grid.Row="3"
+                    <ListBox x:Name="RatingList"
+                             Grid.Row="3"
                              ItemsSource="{Binding Users}"
                              AutomationProperties.Name="Рейтинг участников"
                              SelectedItem="{Binding SelectedRow, Mode=TwoWay}"

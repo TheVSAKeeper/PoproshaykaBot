@@ -522,35 +522,52 @@ public sealed class StreamSessionStatisticsHandler :
     {
         var current = _segments[^1];
 
-        if (!string.IsNullOrEmpty(game))
+        var nextGame = string.IsNullOrEmpty(game) ? current.Game : game;
+        var nextTitle = string.IsNullOrEmpty(title) ? current.Title : title;
+
+        var gameChanged = !string.IsNullOrEmpty(game)
+                          && !string.IsNullOrEmpty(current.Game)
+                          && !string.Equals(current.Game, game, StringComparison.OrdinalIgnoreCase);
+
+        var titleChanged = !string.IsNullOrEmpty(title)
+                           && !string.IsNullOrEmpty(current.Title)
+                           && !string.Equals(current.Title, title, StringComparison.Ordinal);
+
+        if (!gameChanged && !titleChanged)
         {
-            if (string.IsNullOrEmpty(current.Game))
-            {
-                current.Game = game;
-            }
-            else if (!string.Equals(current.Game, game, StringComparison.OrdinalIgnoreCase))
-            {
-                var now = _timeProvider.GetUtcNow();
-                current.EndedAt = now;
-
-                current = new()
-                {
-                    StartedAt = now,
-                    Title = current.Title,
-                    Game = game,
-                };
-
-                _segments.Add(current);
-
-                _logger.LogInformation("Категория стрима изменена на \"{Game}\" – открыт новый сегмент статистики (всего сегментов: {Count})",
-                    game,
-                    _segments.Count);
-            }
+            current.Game = nextGame;
+            current.Title = nextTitle;
+            return;
         }
 
-        if (!string.IsNullOrEmpty(title))
+        var now = _timeProvider.GetUtcNow();
+        current.EndedAt = now;
+
+        _segments.Add(new()
         {
-            current.Title = title;
+            StartedAt = now,
+            Title = nextTitle,
+            Game = nextGame,
+        });
+
+        if (gameChanged && titleChanged)
+        {
+            _logger.LogInformation("Категория и название стрима изменены на \"{Game}\" и \"{Title}\" – открыт новый сегмент статистики (всего сегментов: {Count})",
+                nextGame,
+                nextTitle,
+                _segments.Count);
+        }
+        else if (gameChanged)
+        {
+            _logger.LogInformation("Категория стрима изменена на \"{Game}\" – открыт новый сегмент статистики (всего сегментов: {Count})",
+                nextGame,
+                _segments.Count);
+        }
+        else
+        {
+            _logger.LogInformation("Название стрима изменено на \"{Title}\" – открыт новый сегмент статистики (всего сегментов: {Count})",
+                nextTitle,
+                _segments.Count);
         }
     }
 
