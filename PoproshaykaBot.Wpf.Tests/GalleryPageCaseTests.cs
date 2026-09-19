@@ -1,0 +1,23 @@
+﻿using PoproshaykaBot.Wpf.Bootstrap;
+
+namespace PoproshaykaBot.Wpf.Tests;
+
+[TestFixture]
+public class GalleryPageCaseTests
+{
+    [Test]
+    public void Кейс_с_выбранной_строкой_распознаётся_только_у_своих_страниц()
+    {
+        var requested = string.Join(',', SectionKeys.Users, SectionKeys.UsersSelected, SectionKeys.StreamsSelected, "logs:selected");
+        var arguments = GalleryHost.Parse(["--pages", requested], "gallery-out");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(arguments.Pages,
+                Is.EqualTo(new[] { SectionKeys.Users, SectionKeys.UsersSelected, SectionKeys.StreamsSelected }),
+                "Кейсы с выбранной строкой должны проходить разбор наравне со страницами");
+            Assert.That(arguments.Unknown, Is.EqualTo(new[] { "logs:selected" }),
+                "Суффикс :selected у страницы без выбора строки должен уходить в нераспознанное");
+        }
+    }
+}

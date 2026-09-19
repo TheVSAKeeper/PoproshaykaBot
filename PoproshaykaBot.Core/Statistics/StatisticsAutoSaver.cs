@@ -6,6 +6,7 @@ namespace PoproshaykaBot.Core.Statistics;
 public sealed class StatisticsAutoSaver(
     IUserStatisticsRepository userRepository,
     IBotStatisticsRepository botRepository,
+    UserStatisticsLoader userLoader,
     StatisticsFileStore fileStore,
     ILogger<StatisticsAutoSaver> logger)
     : IHostedComponent, IAsyncDisposable
@@ -19,7 +20,9 @@ public sealed class StatisticsAutoSaver(
     private CancellationTokenSource? _cts;
     private Task? _autoSaveTask;
     private bool _disposed;
-    private bool _loaded;
+    private bool _botLoaded;
+    private bool _statisticsRewrittenExternally;
+    private bool _statisticsRewriteReported;
 
     public string Name => "Инициализация статистики...";
 
@@ -38,7 +41,6 @@ public sealed class StatisticsAutoSaver(
         try
         {
             await LoadAsync(cancellationToken).ConfigureAwait(false);
-            _loaded = true;
             botRepository.ResetStartTime();
 
             _cts = new();
@@ -79,7 +81,7 @@ public sealed class StatisticsAutoSaver(
         _periodicTimer = null;
         _autoSaveTask = null;
 
-        if (!_loaded)
+        if (!_botLoaded && !userLoader.IsLoaded)
         {
             logger.LogDebug("Остановка автосохранения без финального сохранения: загрузка статистики не выполнялась");
             return;
@@ -94,6 +96,52 @@ public sealed class StatisticsAutoSaver(
         {
             logger.LogError(exception, "Ошибка при финальном сохранении статистики");
             throw new InvalidOperationException($"Ошибка остановки автосохранения статистики: {exception.Message}", exception);
+        }
+    }
+
+    public async Task<T> RunExternalWriteAsync<T>(
+        Func<T> write,
+        Func<T, bool> rewritesStatistics,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(write);
+        ArgumentNullException.ThrowIfNull(rewritesStatistics);
+
+        await _saveSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var invalidation = await InvalidateUnderSaveLockAsync(cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                var result = write();
+
+                if (rewritesStatistics(result))
+                {
+                    _statisticsRewrittenExternally = true;
+                }
+                else
+                {
+                    await RestoreUnderSaveLockAsync(invalidation, cancellationToken).ConfigureAwait(false);
+                }
+
+                return result;
+            }
+            catch (Exception exception)
+            {
+                _statisticsRewrittenExternally = true;
+
+                logger.LogWarning(
+                    exception,
+                    "Внешняя запись в файлы статистики оборвалась. Статистика этого сеанса до перезапуска сохраняться не будет: файлы могли остаться переписанными наполовину, и класть поверх них прочитанное до записи нельзя");
+
+                throw;
+            }
+        }
+        finally
+        {
+            _saveSemaphore.Release();
         }
     }
 
@@ -120,24 +168,81 @@ public sealed class StatisticsAutoSaver(
         GC.SuppressFinalize(this);
     }
 
+    private async Task<StatisticsInvalidation> InvalidateUnderSaveLockAsync(CancellationToken cancellationToken)
+    {
+        var users = await userLoader.InvalidateAsync(cancellationToken).ConfigureAwait(false);
+        var bot = _botLoaded;
+        _botLoaded = false;
+
+        if (bot)
+        {
+            logger.LogInformation(
+                "Статистика бота помечена непрочитанной: её файл меняют мимо приложения, счётчики этого сеанса сохраняться не будут");
+        }
+
+        return new(users, bot);
+    }
+
+    private async Task RestoreUnderSaveLockAsync(StatisticsInvalidation invalidation, CancellationToken cancellationToken)
+    {
+        await userLoader.RestoreAsync(invalidation.Users, cancellationToken).ConfigureAwait(false);
+
+        if (invalidation.Bot)
+        {
+            _botLoaded = true;
+
+            logger.LogInformation("Статистика бота снова считается прочитанной: её файл никто не менял");
+        }
+    }
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         logger.LogDebug("Начало загрузки статистики");
 
+        await _saveSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+
         try
         {
-            var users = await fileStore.LoadUsersAsync(cancellationToken).ConfigureAwait(false);
-            var bot = await fileStore.LoadBotAsync(cancellationToken).ConfigureAwait(false) ?? BotStatistics.Create();
+            await userLoader.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
 
-            userRepository.ReplaceAll(users);
-            botRepository.Replace(bot);
+            if (_statisticsRewrittenExternally)
+            {
+                if (!_statisticsRewriteReported)
+                {
+                    _statisticsRewriteReported = true;
 
-            logger.LogInformation("Статистика успешно загружена. Загружено пользователей: {UserCount}", users.Count);
+                    logger.LogInformation(
+                        "Файлы статистики переписаны мимо приложения. До перезапуска статистика бота не перечитывается и не сохраняется, чтобы не затереть перенесённое");
+                }
+
+                return;
+            }
+
+            var result = await fileStore.LoadBotAsync(cancellationToken).ConfigureAwait(false);
+
+            if (result.Failed)
+            {
+                _botLoaded = false;
+
+                logger.LogError(
+                    "Файл статистики бота не прочитан. Счётчики бота этого сеанса сохраняться не будут, чтобы не затереть файл; рядом с ним оставлена копия с суффиксом invalid");
+
+                return;
+            }
+
+            botRepository.Replace(result.Value ?? BotStatistics.Create());
+            _botLoaded = true;
+
+            logger.LogInformation("Статистика бота загружена");
         }
         catch (Exception exception)
         {
             logger.LogError(exception, "Сбой при комплексной загрузке статистики");
             throw new InvalidOperationException($"Ошибка загрузки статистики: {exception.Message}", exception);
+        }
+        finally
+        {
+            _saveSemaphore.Release();
         }
     }
 
@@ -168,8 +273,8 @@ public sealed class StatisticsAutoSaver(
 
         try
         {
-            var saveUsers = force || userRepository.HasChanges;
-            var saveBot = force || botRepository.HasChanges;
+            var saveUsers = (force || userRepository.HasChanges) && userLoader.IsLoaded;
+            var saveBot = (force || botRepository.HasChanges) && _botLoaded;
 
             if (!saveUsers && !saveBot)
             {

@@ -17,4 +17,8 @@ public sealed class LegacyImportResult
     public bool IsInPlaceMigration { get; init; }
 
     public IReadOnlyList<string> UnmigratedLegacyFiles { get; init; } = [];
+
+    public bool CopiedStatistics => CopiedFiles.Any(file =>
+        string.Equals(file, LegacyDataCatalog.UserStatisticsFileName, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(file, LegacyDataCatalog.BotStatisticsFileName, StringComparison.OrdinalIgnoreCase));
 }

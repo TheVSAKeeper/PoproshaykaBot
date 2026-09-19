@@ -80,10 +80,17 @@
 
             <Grid Grid.Column="0">
                 <TextBox Style="{StaticResource TextBox.IconField}"
-                         Padding="29,0,32,0"
+                         Padding="10,0,32,0"
                          Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         AutomationProperties.Name="Поиск участника по нику или идентификатору"
-                         keepshell:PlaceholderBehavior.Placeholder="Найти по нику или ID" />
+                         AutomationProperties.Name="Поиск участника по нику или идентификатору" />
+
+                <TextBlock Text="Найти по нику или ID"
+                           Margin="43,0,38,0"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource Fg.Muted}"
+                           IsHitTestVisible="False"
+                           Visibility="{Binding FilterText, Converter={StaticResource NullToVisibility}, ConverterParameter=Inverse}" />
 
                 <Button HorizontalAlignment="Right"
                         VerticalAlignment="Center"

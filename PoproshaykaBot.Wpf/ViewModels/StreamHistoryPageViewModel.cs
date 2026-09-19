@@ -230,6 +230,18 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         OnPropertyChanged(nameof(ChattersHeading));
     }
 
+    public bool TrySelectAt(int index)
+    {
+        if (index < 0 || index >= _sessions.Count)
+        {
+            return false;
+        }
+
+        SelectedRow = _sessions[index];
+
+        return true;
+    }
+
     [RelayCommand]
     private void SelectSession(StreamSessionRowViewModel? row)
     {

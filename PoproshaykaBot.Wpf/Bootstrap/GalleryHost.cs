@@ -56,24 +56,22 @@ public sealed class GalleryHost : IGalleryHost
 
     public async Task ArrangeAsync()
     {
+        await StatisticsBootstrap.LoadUserStatisticsAsync(_services).ConfigureAwait(true);
+
         try
         {
-            var fileStore = _services.GetRequiredService<StatisticsFileStore>();
-            var users = await fileStore.LoadUsersAsync().ConfigureAwait(true);
-            var bot = await fileStore.LoadBotAsync().ConfigureAwait(true);
+            var bot = await _services.GetRequiredService<StatisticsFileStore>().LoadBotAsync().ConfigureAwait(true);
 
-            _services.GetRequiredService<IUserStatisticsRepository>().ReplaceAll(users);
-
-            if (bot is not null)
+            if (bot.Value is { } statistics)
             {
-                _services.GetRequiredService<IBotStatisticsRepository>().Replace(bot);
+                _services.GetRequiredService<IBotStatisticsRepository>().Replace(statistics);
             }
 
             _services.GetRequiredService<UserStatisticsPageViewModel>().RefreshCommand.Execute(null);
         }
         catch (Exception exception)
         {
-            HostLog.Warning(exception, "Статистика профиля не прочитана – страница пользователей останется пустой");
+            HostLog.Warning(exception, "Статистика бота не прочитана – плитки со счётчиками бота останутся пустыми");
         }
     }
 
@@ -85,6 +83,11 @@ public sealed class GalleryHost : IGalleryHost
         if (GalleryDialogs.Find(item.Name) is { } dialog)
         {
             return await CaptureDialogAsync(dialog, context).ConfigureAwait(true);
+        }
+
+        if (SectionKeys.IsSelectedCase(item.Name))
+        {
+            return await CaptureSelectedAsync(item.Name, context).ConfigureAwait(true);
         }
 
         Navigate(item.Name);
@@ -129,7 +132,82 @@ public sealed class GalleryHost : IGalleryHost
             return GalleryDialogs.Find(requested)?.Key;
         }
 
-        return SectionKeys.All.FirstOrDefault(known => string.Equals(known, requested, StringComparison.OrdinalIgnoreCase));
+        return SectionKeys.All
+            .Concat(SectionKeys.Selected)
+            .FirstOrDefault(known => string.Equals(known, requested, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static int DetailedSessionIndex(IReadOnlyList<StreamSessionRowViewModel> sessions)
+    {
+        var detailed = IndexOf(sessions, session => session.Segments.Count > 1 && session.Chatters.Count > 0);
+
+        return detailed >= 0 ? detailed : Math.Max(IndexOf(sessions, session => session.Chatters.Count > 0), 0);
+    }
+
+    private static int IndexOf(IReadOnlyList<StreamSessionRowViewModel> sessions, Func<StreamSessionRecord, bool> predicate)
+    {
+        for (var index = 0; index < sessions.Count; index++)
+        {
+            if (predicate(sessions[index].Source))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static void WarnWhenNothingSelected(string name, bool selected)
+    {
+        if (!selected)
+        {
+            HostLog.Warning("Кейс «{Case}» снят без выбранной строки – в профиле нет подходящих записей", name);
+        }
+    }
+
+    private async Task<GalleryShot> CaptureSelectedAsync(string name, GalleryContext context)
+    {
+        Navigate(SectionKeys.PageOf(name));
+
+        await context.SettleAsync().ConfigureAwait(true);
+
+        var clearSelection = SelectPreviewRow(name);
+
+        try
+        {
+            await context.SettleAsync().ConfigureAwait(true);
+
+            return context.Save(ViewCapture.Slug(name));
+        }
+        finally
+        {
+            clearSelection();
+
+            await context.SettleAsync().ConfigureAwait(true);
+        }
+    }
+
+    private Action SelectPreviewRow(string name)
+    {
+        if (string.Equals(name, SectionKeys.UsersSelected, StringComparison.OrdinalIgnoreCase))
+        {
+            var users = _services.GetRequiredService<UserStatisticsPageViewModel>();
+
+            WarnWhenNothingSelected(name, users.TrySelectAt(0));
+
+            return () => users.SelectedRow = null;
+        }
+
+        if (string.Equals(name, SectionKeys.StreamsSelected, StringComparison.OrdinalIgnoreCase))
+        {
+            var streams = _services.GetRequiredService<StreamHistoryPageViewModel>();
+
+            WarnWhenNothingSelected(name, streams.TrySelectAt(DetailedSessionIndex(streams.Sessions)));
+
+            return () => streams.SelectedRow = null;
+        }
+
+        throw new InvalidOperationException($"Кейс «{name}» не умеет выбирать строку.");
     }
 
     private async Task<GalleryShot> CaptureDialogAsync(GalleryDialogCase item, GalleryContext context)

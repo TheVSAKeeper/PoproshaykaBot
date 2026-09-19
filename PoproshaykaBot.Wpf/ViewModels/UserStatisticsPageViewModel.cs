@@ -151,6 +151,18 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         }
     }
 
+    public bool TrySelectAt(int index)
+    {
+        if (index < 0 || index >= _rows.Count)
+        {
+            return false;
+        }
+
+        SelectedRow = _rows[index];
+
+        return true;
+    }
+
     partial void OnFilterTextChanged(string value)
     {
         RebuildView();

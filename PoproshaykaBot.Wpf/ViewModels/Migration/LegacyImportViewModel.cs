@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Statistics;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -13,6 +14,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private readonly IFilePicker _filePicker;
     private readonly ILogger _logger;
     private readonly bool _isSettingsEntry;
+    private readonly StatisticsAutoSaver? _statisticsAutoSaver;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
@@ -48,11 +50,13 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         bool hasOwnData,
         bool isSettingsEntry,
         IFilePicker filePicker,
-        ILogger logger)
+        ILogger logger,
+        StatisticsAutoSaver? statisticsAutoSaver = null)
     {
         _filePicker = filePicker;
         _logger = logger;
         _isSettingsEntry = isSettingsEntry;
+        _statisticsAutoSaver = statisticsAutoSaver;
         CanOverwriteExisting = hasOwnData;
         CanDismiss = !isSettingsEntry;
 
@@ -93,17 +97,26 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private bool HasSelection => SelectedSource is not null;
 
     [RelayCommand(CanExecute = nameof(HasSelection))]
-    private void Import()
+    private async Task ImportAsync()
     {
         if (SelectedSource is not { } source)
         {
             return;
         }
 
+        var path = source.Path;
+        var overwrite = OverwriteExisting;
+
         // TODO: перенос идёт на UI-потоке – окно не отвечает, пока копируются файлы, и прогресса не видно;
         // уводить в фоновую задачу с индикатором, когда появится источник, у которого статистика зрителей
         // и история стримов копируются достаточно долго, чтобы застывшее окно бросалось в глаза
-        var result = LegacyDataImporter.Import(source.Path, OverwriteExisting, _logger);
+        var result = _statisticsAutoSaver is null
+            ? LegacyDataImporter.Import(path, overwrite, _logger)
+            : await _statisticsAutoSaver
+                .RunExternalWriteAsync(
+                    () => LegacyDataImporter.Import(path, overwrite, _logger),
+                    static imported => imported.CopiedStatistics)
+                .ConfigureAwait(true);
 
         Result = result;
         ResultHeadline = LegacyImportText.BuildHeadline(result);
@@ -116,9 +129,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
 
         ResultUnmigratedNotice = LegacyImportText.DescribeUnmigrated(result);
 
-        ResultRestartNotice = _isSettingsEntry && result.CopiedFiles.Count > 0
-            ? "Перенесённые данные вступят в силу после перезапуска приложения."
-            : null;
+        ResultRestartNotice = LegacyImportText.BuildRestartNotice(result, _isSettingsEntry);
 
         IsCompleted = true;
     }

@@ -192,6 +192,7 @@ public partial class App : Application
 
             _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
             ReportConfiguration(_services);
+            StatisticsBootstrap.LoadUserStatistics(_services);
 
             _appLifetime = _services.GetRequiredService<AppLifetime>();
             _streamMonitoringHost = _services.GetRequiredService<StreamMonitoringHost>();

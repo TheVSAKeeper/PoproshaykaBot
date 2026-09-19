@@ -17,6 +17,8 @@ public static class StatisticsServiceCollectionExtensions
         services.AddSingleton<StreamSessionHistoryStore>();
         services.AddSingleton<ActiveStreamSessionStore>();
 
+        services.AddSingleton<UserStatisticsLoader>();
+
         services.AddSingleton<StatisticsAutoSaver>();
         services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<StatisticsAutoSaver>());
 

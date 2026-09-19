@@ -28,16 +28,14 @@ public sealed class StatisticsFileStore
         _botStatisticsFilePath = Path.Combine(baseDirectory, BotStatisticsFileName);
     }
 
-    public Task<List<UserStatistics>> LoadUsersAsync(CancellationToken cancellationToken = default)
+    public Task<StatisticsReadResult<List<UserStatistics>>> LoadUsersAsync(CancellationToken cancellationToken = default)
     {
-        var loaded = LoadFromFile<List<UserStatistics>>(_userStatisticsFilePath, "пользователей");
-        return Task.FromResult(loaded ?? []);
+        return Task.FromResult(LoadFromFile<List<UserStatistics>>(_userStatisticsFilePath, "пользователей"));
     }
 
-    public Task<BotStatistics?> LoadBotAsync(CancellationToken cancellationToken = default)
+    public Task<StatisticsReadResult<BotStatistics>> LoadBotAsync(CancellationToken cancellationToken = default)
     {
-        var loaded = LoadFromFile<BotStatistics>(_botStatisticsFilePath, "бота");
-        return Task.FromResult(loaded);
+        return Task.FromResult(LoadFromFile<BotStatistics>(_botStatisticsFilePath, "бота"));
     }
 
     public Task SaveUsersAsync(IReadOnlyList<UserStatistics> snapshot, CancellationToken cancellationToken = default)
@@ -50,7 +48,7 @@ public sealed class StatisticsFileStore
         return Task.Run(() => SaveToFile(snapshot, _botStatisticsFilePath, "бота"), cancellationToken);
     }
 
-    private T? LoadFromFile<T>(string filePath, string entityName)
+    private StatisticsReadResult<T> LoadFromFile<T>(string filePath, string entityName)
         where T : class
     {
         _logger.LogDebug("Загрузка статистики {EntityName} из файла {FilePath}", entityName, filePath);
@@ -58,7 +56,7 @@ public sealed class StatisticsFileStore
         if (!File.Exists(filePath))
         {
             _logger.LogWarning("Файл статистики {EntityName} не найден. Будут использованы значения по умолчанию", entityName);
-            return null;
+            return StatisticsReadResult<T>.NoFile;
         }
 
         try
@@ -68,16 +66,18 @@ public sealed class StatisticsFileStore
 
             if (data == null)
             {
-                _logger.LogWarning("Десериализация статистики {EntityName} вернула null", entityName);
+                _logger.LogError("Десериализация статистики {EntityName} вернула null – файл {FilePath} повреждён", entityName, filePath);
+                JsonStoreBackup.CreateBackup(filePath, "invalid", _logger);
+                return StatisticsReadResult<T>.Failure;
             }
 
-            return data;
+            return StatisticsReadResult<T>.FromFile(data);
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Ошибка чтения или десериализации файла статистики {EntityName}", entityName);
             JsonStoreBackup.CreateBackup(filePath, "invalid", _logger);
-            return null;
+            return StatisticsReadResult<T>.Failure;
         }
     }
 
