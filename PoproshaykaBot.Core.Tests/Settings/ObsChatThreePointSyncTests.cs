@@ -82,11 +82,31 @@ public sealed class ObsChatThreePointSyncTests
             .ToArray();
     }
 
+    private static readonly string[] ServerOnlyProperties =
+    [
+        nameof(ObsChatSettings.MessageImageRoles),
+        nameof(ObsChatSettings.MessageImageAllowedHosts),
+    ];
+
+    [Test]
+    public void ServerOnlyObsChatSettingsFields_StayOutOfObsChatCssSettings()
+    {
+        var cssNames = GetCssTargetProperties().Select(p => p.Name).ToArray();
+
+        foreach (var name in ServerOnlyProperties)
+        {
+            Assert.That(cssNames, Does.Not.Contain(name),
+                $"ObsChatSettings.{name} – политика картинок, её решает Core. "
+                + "В браузер она не отдаётся, иначе белый список и роли уезжают на страницу оверлея.");
+        }
+    }
+
     private static IEnumerable<PropertyInfo> GetMutableSourceProperties()
     {
         return typeof(ObsChatSettings)
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p is { CanRead: true, CanWrite: true });
+            .Where(p => p is { CanRead: true, CanWrite: true })
+            .Where(p => !ServerOnlyProperties.Contains(p.Name, StringComparer.Ordinal));
     }
 
     private static IEnumerable<PropertyInfo> GetCssTargetProperties()

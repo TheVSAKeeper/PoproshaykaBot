@@ -82,6 +82,32 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     private int _userAvatarSizePixels = Defaults.UserAvatarSizePixels;
 
     [ObservableProperty]
+    private bool _showMessageImages = Defaults.ShowMessageImages;
+
+    [ObservableProperty]
+    private bool _messageImagesFromBroadcaster;
+
+    [ObservableProperty]
+    private bool _messageImagesFromModerators;
+
+    [ObservableProperty]
+    private bool _messageImagesFromVips;
+
+    [ObservableProperty]
+    private bool _messageImagesFromSubscribers;
+
+    [ObservableProperty]
+    private bool _messageImagesFromEveryone;
+
+    [ObservableProperty]
+    [NotifyDataErrorInfo]
+    [CustomValidation(typeof(ObsChatSettingsSectionViewModel), nameof(ValidateMessageImageHosts))]
+    private string _messageImageAllowedHostsText = string.Empty;
+
+    [ObservableProperty]
+    private int _messageImageMaxHeightPixels = Defaults.MessageImageMaxHeightPixels;
+
+    [ObservableProperty]
     private bool _showUserTypeBorders = Defaults.ShowUserTypeBorders;
 
     [ObservableProperty]
@@ -188,6 +214,15 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
         ShowUserAvatars = settings.ShowUserAvatars;
         UserAvatarSizePixels = settings.UserAvatarSizePixels;
 
+        ShowMessageImages = settings.ShowMessageImages;
+        MessageImagesFromBroadcaster = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Broadcaster);
+        MessageImagesFromModerators = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Moderator);
+        MessageImagesFromVips = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Vip);
+        MessageImagesFromSubscribers = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Subscriber);
+        MessageImagesFromEveryone = settings.MessageImageRoles.HasFlag(MessageImageSenderRoles.Everyone);
+        MessageImageAllowedHostsText = string.Join(Environment.NewLine, settings.MessageImageAllowedHosts ?? []);
+        MessageImageMaxHeightPixels = settings.MessageImageMaxHeightPixels;
+
         ShowUserTypeBorders = settings.ShowUserTypeBorders;
         HighlightFirstTimeUsers = settings.HighlightFirstTimeUsers;
         HighlightMentions = settings.HighlightMentions;
@@ -244,6 +279,11 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
         target.ShowUserAvatars = current.ShowUserAvatars;
         target.UserAvatarSizePixels = current.UserAvatarSizePixels;
 
+        target.ShowMessageImages = current.ShowMessageImages;
+        target.MessageImageRoles = current.MessageImageRoles;
+        target.MessageImageAllowedHosts = current.MessageImageAllowedHosts;
+        target.MessageImageMaxHeightPixels = current.MessageImageMaxHeightPixels;
+
         target.ShowUserTypeBorders = current.ShowUserTypeBorders;
         target.HighlightFirstTimeUsers = current.HighlightFirstTimeUsers;
         target.HighlightMentions = current.HighlightMentions;
@@ -276,6 +316,21 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     public void Save()
     {
         _store.Save(BuildCurrent());
+    }
+
+    public static ValidationResult? ValidateMessageImageHosts(string? value, ValidationContext context)
+    {
+        var invalid = SplitHosts(value)
+            .Where(line => !MessageImageHosts.TryNormalizeHost(line, out _))
+            .Take(3)
+            .ToArray();
+
+        if (invalid.Length == 0)
+        {
+            return ValidationResult.Success;
+        }
+
+        return new($"Не похоже на имя хоста: {string.Join(", ", invalid)}. Нужно доменное имя без схемы и пути, например i.imgur.com");
     }
 
     public static ValidationResult? ValidateFontFamily(string? value, ValidationContext context)
@@ -405,6 +460,29 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     [RelayCommand]
     private void DecreaseFadeOutAnimationDuration() => FadeOutAnimationDurationMs = Step(FadeOutAnimationDurationMs, -100, ObsChatRanges.FadeOutAnimationDurationMin, ObsChatRanges.FadeOutAnimationDurationMax);
 
+    [RelayCommand]
+    private void IncreaseMessageImageMaxHeight() => MessageImageMaxHeightPixels = Step(MessageImageMaxHeightPixels, 10, ObsChatRanges.MessageImageMaxHeightMin, ObsChatRanges.MessageImageMaxHeightMax);
+
+    [RelayCommand]
+    private void DecreaseMessageImageMaxHeight() => MessageImageMaxHeightPixels = Step(MessageImageMaxHeightPixels, -10, ObsChatRanges.MessageImageMaxHeightMin, ObsChatRanges.MessageImageMaxHeightMax);
+
+    [RelayCommand]
+    private void ResetMessageImageHosts()
+    {
+        MessageImageAllowedHostsText = string.Join(Environment.NewLine, ObsChatSettings.DefaultMessageImageAllowedHosts);
+    }
+
+    private static IEnumerable<string> SplitHosts(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        return value
+            .Split(['\r', '\n', ',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
     private static int Step(int value, int delta, int min, int max)
     {
         return ObsChatRanges.Clamp(value + delta, min, max);
@@ -429,6 +507,38 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
             "Timestamp" => "Цвет времени",
             _ => "Цвет фона",
         };
+    }
+
+    private MessageImageSenderRoles BuildMessageImageRoles()
+    {
+        var roles = MessageImageSenderRoles.None;
+
+        if (MessageImagesFromBroadcaster)
+        {
+            roles |= MessageImageSenderRoles.Broadcaster;
+        }
+
+        if (MessageImagesFromModerators)
+        {
+            roles |= MessageImageSenderRoles.Moderator;
+        }
+
+        if (MessageImagesFromVips)
+        {
+            roles |= MessageImageSenderRoles.Vip;
+        }
+
+        if (MessageImagesFromSubscribers)
+        {
+            roles |= MessageImageSenderRoles.Subscriber;
+        }
+
+        if (MessageImagesFromEveryone)
+        {
+            roles |= MessageImageSenderRoles.Everyone;
+        }
+
+        return roles;
     }
 
     private ObsChatSettings BuildCurrent()
@@ -464,6 +574,11 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
             ShowUserAvatars = ShowUserAvatars,
             UserAvatarSizePixels = UserAvatarSizePixels,
+
+            ShowMessageImages = ShowMessageImages,
+            MessageImageRoles = BuildMessageImageRoles(),
+            MessageImageAllowedHosts = MessageImageHosts.Normalize(SplitHosts(MessageImageAllowedHostsText)),
+            MessageImageMaxHeightPixels = MessageImageMaxHeightPixels,
 
             ShowUserTypeBorders = ShowUserTypeBorders,
             HighlightFirstTimeUsers = HighlightFirstTimeUsers,

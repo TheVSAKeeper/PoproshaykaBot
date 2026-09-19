@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Server.Obs;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
+using PoproshaykaBot.Core.Settings.Stores;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -13,6 +14,7 @@ namespace PoproshaykaBot.Core.Server;
 public sealed class SseService : IAsyncDisposable
 {
     private readonly SettingsManager _settingsManager;
+    private readonly ObsChatStore _obsChatStore;
     private readonly ILogger<SseService> _logger;
     private readonly SseChannelOptions _options;
     private readonly SseClientRegistry _registry;
@@ -27,15 +29,18 @@ public sealed class SseService : IAsyncDisposable
     private Task? _keepAliveTask;
     private bool _isRunning;
     private TimeSpan _clientWriteTimeout = TimeSpan.FromSeconds(10);
+    private ObsChatSettings? _chatSettings;
 
     public SseService(
         SettingsManager settingsManager,
+        ObsChatStore obsChatStore,
         ILogger<SseService> logger,
         SseChannelOptions options,
         SseClientRegistry registry,
         SseDropMetrics metrics)
     {
         _settingsManager = settingsManager;
+        _obsChatStore = obsChatStore;
         _logger = logger;
         _options = options;
         _registry = registry;
@@ -188,7 +193,8 @@ public sealed class SseService : IAsyncDisposable
 
         try
         {
-            var json = JsonSerializer.Serialize(DtoMapper.ToServerMessage(chatMessage), ServerJsonOptions.Default);
+            var settings = _chatSettings ??= _obsChatStore.Load();
+            var json = JsonSerializer.Serialize(DtoMapper.ToServerMessage(chatMessage, settings), ServerJsonOptions.Default);
             Enqueue(new("message", json));
         }
         catch (Exception ex)
@@ -213,6 +219,7 @@ public sealed class SseService : IAsyncDisposable
 
     public void NotifyChatSettingsChanged(ObsChatSettings settings)
     {
+        _chatSettings = null;
         _logger.LogDebug("Подготовка уведомления об изменении настроек чата");
 
         try
@@ -231,6 +238,7 @@ public sealed class SseService : IAsyncDisposable
 
     public void NotifyChatSettingsChangedRaw(ObsChatSettings settings)
     {
+        _chatSettings = null;
         _logger.LogDebug("Подготовка raw-уведомления об изменении настроек чата");
 
         try

@@ -326,6 +326,70 @@
                                        DecreaseAutomationName="Уменьшить размер аватара"
                                        Margin="0,0,0,8" />
 
+        <TextBlock Text="Картинки в сообщениях"
+                   Style="{StaticResource SectionHeading}" />
+
+        <CheckBox Style="{StaticResource CheckBox.Default}"
+                  Content="Показывать картинку по ссылке из сообщения"
+                  IsChecked="{Binding ShowMessageImages, Mode=TwoWay}"
+                  Margin="0,0,0,8" />
+
+        <TextBlock Text="Чьи ссылки показывать"
+                   Style="{StaticResource RowLabel}"
+                   Width="Auto"
+                   HorizontalAlignment="Left"
+                   Margin="0,0,0,4" />
+
+        <StackPanel Margin="0,0,0,8">
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      Content="Стример"
+                      IsChecked="{Binding MessageImagesFromBroadcaster, Mode=TwoWay}"
+                      Margin="0,0,0,4" />
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      Content="Модераторы"
+                      IsChecked="{Binding MessageImagesFromModerators, Mode=TwoWay}"
+                      Margin="0,0,0,4" />
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      Content="VIP"
+                      IsChecked="{Binding MessageImagesFromVips, Mode=TwoWay}"
+                      Margin="0,0,0,4" />
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      Content="Подписчики"
+                      IsChecked="{Binding MessageImagesFromSubscribers, Mode=TwoWay}"
+                      Margin="0,0,0,4" />
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      Content="Все зрители"
+                      IsChecked="{Binding MessageImagesFromEveryone, Mode=TwoWay}" />
+        </StackPanel>
+
+        <DockPanel Margin="0,0,0,4">
+            <TextBlock Text="Разрешённые хосты"
+                       Style="{StaticResource RowLabel}"
+                       VerticalAlignment="Top" />
+            <TextBox Style="{StaticResource TextBox.Form}"
+                     AcceptsReturn="True"
+                     MinHeight="96"
+                     VerticalScrollBarVisibility="Auto"
+                     TextWrapping="NoWrap"
+                     AutomationProperties.Name="Разрешённые хосты для картинок, по одному в строке"
+                     keepshell:PlaceholderBehavior.Placeholder="По одному хосту в строке, например i.imgur.com"
+                     Text="{Binding MessageImageAllowedHostsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+        </DockPanel>
+
+        <Button Style="{StaticResource Button.Secondary}"
+                Content="Вернуть список по умолчанию"
+                HorizontalAlignment="Left"
+                Command="{Binding ResetMessageImageHostsCommand}"
+                Margin="0,0,0,8" />
+
+        <keepshell:NumericSettingField Label="Высота картинки, px"
+                                       Value="{Binding MessageImageMaxHeightPixels, Mode=TwoWay}"
+                                       IncreaseCommand="{Binding IncreaseMessageImageMaxHeightCommand}"
+                                       DecreaseCommand="{Binding DecreaseMessageImageMaxHeightCommand}"
+                                       IncreaseAutomationName="Увеличить высоту картинки"
+                                       DecreaseAutomationName="Уменьшить высоту картинки"
+                                       Margin="0,0,0,8" />
+
         <TextBlock Text="Подсветка и эффекты"
                    Style="{StaticResource SectionHeading}" />
 

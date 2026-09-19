@@ -15,6 +15,7 @@
     let enableMessageShadows = true;
     let enableSpecialEffects = true;
     let showUserAvatars = false;
+    let showMessageImages = false;
 
     let enableSmoothScroll = true;
     let scrollAnimationDuration = 300;
@@ -509,6 +510,7 @@
             [isHighlightMentions, 'no-mentions'],
             [showTimestamp, 'no-timestamp'],
             [showUserAvatars, 'no-avatars'],
+            [showMessageImages, 'no-message-images'],
         ];
         toggles.forEach(([enabled, className]) => {
             if (!enabled) messageDiv.classList.add(className);
@@ -567,11 +569,13 @@
             </div>`;
 
             const bodyHtml = `<div class="message-text">${messageWithEmotes}</div>`;
+            const imagesHtml = renderMessageImages(message.images);
 
             const contentHtml = `
             <div class="message-content">
                 ${headerHtml}
                 ${bodyHtml}
+                ${imagesHtml}
             </div>`;
 
             if (avatarHtml) {
@@ -584,6 +588,8 @@
             } else {
                 messageDiv.innerHTML = contentHtml;
             }
+
+            attachMessageImage(messageDiv);
         }
 
         chatContainer.appendChild(messageDiv);
@@ -629,6 +635,37 @@
             const version = escapeAttr(badge.version);
             return `<img src="${src}" alt="${type}" title="${type} ${version}" class="badge">`;
         }).join('');
+    }
+
+    const messageImageProxyPrefix = '/api/image?';
+
+    function renderMessageImages(images) {
+        if (!showMessageImages || !Array.isArray(images) || images.length === 0) {
+            return '';
+        }
+
+        const url = images[0];
+
+        if (typeof url !== 'string' || !url.startsWith(messageImageProxyPrefix)) {
+            return '';
+        }
+
+        return `<div class="message-images"><img class="message-image" src="${escapeAttr(url)}" alt="" loading="lazy"></div>`;
+    }
+
+    function attachMessageImage(messageDiv) {
+        const image = messageDiv.querySelector('.message-image');
+
+        if (!image) {
+            return;
+        }
+
+        image.addEventListener('error', () => {
+            const container = image.closest('.message-images');
+            if (container) container.remove();
+        }, { once: true });
+
+        image.addEventListener('load', () => image.classList.add('message-image-loaded'), { once: true });
     }
 
     function renderMessageWithEmotes(message, emotes) {
@@ -736,6 +773,7 @@
         ['emoteSize', '--emote-size'],
         ['badgeSize', '--badge-size'],
         ['userAvatarSize', '--avatar-size'],
+        ['messageImageMaxHeight', '--message-image-max-height'],
     ];
 
     const animationFieldMap = {
@@ -785,6 +823,7 @@
             ['enableSpecialEffects', '.message', 'no-special-effects', v => enableSpecialEffects = v, () => enableSpecialEffects],
             ['showTimestamp', '#chat .message', 'no-timestamp', v => showTimestamp = v, () => showTimestamp],
             ['showUserAvatars', '.message', 'no-avatars', v => showUserAvatars = v, () => showUserAvatars],
+            ['showMessageImages', '.message', 'no-message-images', v => showMessageImages = v, () => showMessageImages],
         ];
 
         toggles.forEach(([key, selector, className, setter, getter]) => {
