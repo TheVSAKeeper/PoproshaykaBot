@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
              xmlns:tiles="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
+             xmlns:dashboard="clr-namespace:PoproshaykaBot.Wpf.Infrastructure.Dashboard"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -150,6 +151,11 @@
                                                 Value="Stretch" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding GrowsWithSpace}"
+                                                 Value="True">
+                                        <Setter Property="VerticalAlignment"
+                                                Value="Stretch" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Path=(dashboard:DashboardTileSlot.Fills), RelativeSource={RelativeSource AncestorType=ContentControl}}"
                                                  Value="True">
                                         <Setter Property="VerticalAlignment"
                                                 Value="Stretch" />

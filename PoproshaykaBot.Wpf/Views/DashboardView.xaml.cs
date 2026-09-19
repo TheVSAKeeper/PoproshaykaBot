@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.Windows;
@@ -103,6 +104,15 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     private static double Floor(TrackSize track, double minimum)
     {
         return Floor(track.Length, track, minimum);
+    }
+
+    public static TrackSize StackedRow(TilePaneLayout leaf)
+    {
+        ArgumentNullException.ThrowIfNull(leaf);
+
+        var ceiling = leaf.ContentHeight;
+
+        return new(GridLength.Auto, ceiling, Math.Min(Floor(leaf.Height, ScaledStarBandMinHeight), ceiling));
     }
 
     public static double TrackFloor(PaneLayoutSlot slot, bool alongColumns)
@@ -418,15 +428,18 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             static () => new RowDefinition(),
             (definition, index) =>
             {
-                definition.Height = GridLength.Auto;
-                definition.MaxHeight = leaves[index].Height.Max;
-                definition.MinHeight = Floor(leaves[index].Height, ScaledStarBandMinHeight);
+                var row = StackedRow(leaves[index]);
+
+                definition.Height = row.Length;
+                definition.MaxHeight = row.Max;
+                definition.MinHeight = row.Min;
             });
 
         for (var index = 0; index < leaves.Count; index++)
         {
             var host = GetOrCreateHost(leaves[index].Tile);
 
+            DashboardTileSlot.SetFills(host, leaves[index].Fills);
             Grid.SetRow(host, index);
             BandsGrid.Children.Add(host);
         }
@@ -481,6 +494,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         {
             var host = GetOrCreateHost(leaf.Tile);
 
+            DashboardTileSlot.SetFills(host, leaf.Fills);
             _panePaths[host] = leaf.Path;
 
             return host;
@@ -833,8 +847,13 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         content.MaxHeight = pane.Height.Max;
         content.MinWidth = Math.Min(pane.Width.Min, pane.Width.Max);
         content.MinHeight = Math.Min(pane.Height.Min, pane.Height.Max);
-        content.HorizontalAlignment = pane.Width.Length.IsStar ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
-        content.VerticalAlignment = pane.Height.Length.IsStar ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+        content.HorizontalAlignment = Stretches(pane.FillsWidth, pane.Width) ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
+        content.VerticalAlignment = Stretches(pane.FillsHeight, pane.Height) ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+    }
+
+    private static bool Stretches(bool fills, TrackSize track)
+    {
+        return fills && double.IsPositiveInfinity(track.Max);
     }
 
     private static void ApplyCrossConstraints(FrameworkElement content, PaneLayout pane, bool alongColumns)
@@ -843,13 +862,13 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         {
             content.MaxHeight = pane.Height.Max;
             content.MinHeight = Math.Min(pane.Height.Min, pane.Height.Max);
-            content.VerticalAlignment = pane.Height.Length.IsStar ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+            content.VerticalAlignment = Stretches(pane.FillsHeight, pane.Height) ? VerticalAlignment.Stretch : VerticalAlignment.Top;
             return;
         }
 
         content.MaxWidth = pane.Width.Max;
         content.MinWidth = Math.Min(pane.Width.Min, pane.Width.Max);
-        content.HorizontalAlignment = pane.Width.Length.IsStar ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
+        content.HorizontalAlignment = Stretches(pane.FillsWidth, pane.Width) ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
     }
 
     private FrameworkElement BuildBandContent(TileBand band)
@@ -897,6 +916,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         {
             var host = GetOrCreateHost(slot.Tile);
 
+            DashboardTileSlot.SetFills(host, false);
             Grid.SetRow(host, slot.Row);
             Grid.SetColumn(host, slot.Column);
             Grid.SetRowSpan(host, slot.RowSpan);
