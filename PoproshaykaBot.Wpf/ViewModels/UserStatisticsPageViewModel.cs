@@ -28,6 +28,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(SelectedPlaceText))]
     [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
     private UserStatisticsRowViewModel? _selectedRow;
 
@@ -35,13 +36,20 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private string _filterText = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EmptyActionCommand))]
     private bool _isFilterActive;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PointsSortArrow))]
+    [NotifyPropertyChangedFor(nameof(MessagesSortArrow))]
+    [NotifyPropertyChangedFor(nameof(NameSortArrow))]
     private UserStatisticsSortKey _sortKey = UserStatisticsSortKey.Points;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SortDirectionArrow))]
+    [NotifyPropertyChangedFor(nameof(PointsSortArrow))]
+    [NotifyPropertyChangedFor(nameof(MessagesSortArrow))]
+    [NotifyPropertyChangedFor(nameof(NameSortArrow))]
     private bool _sortDescending = true;
 
     [ObservableProperty]
@@ -63,7 +71,10 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private string _totalPoints = "0";
 
     [ObservableProperty]
-    private string _totalBonusPenalty = "0 / 0";
+    private string _totalBonus = "+0";
+
+    [ObservableProperty]
+    private string _totalPenalty = "−0";
 
     public UserStatisticsPageViewModel(
         IUserStatisticsRepository userStatistics,
@@ -105,7 +116,25 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public bool HasSelectedRow => SelectedRow is not null;
 
+    public string? EmptyActionText => "Сбросить поиск";
+
+    public IRelayCommand? EmptyActionCommand => IsFilterActive ? ClearFilterCommand : null;
+
     public string SortDirectionArrow => SortDescending ? "↓" : "↑";
+
+    public string PointsSortArrow => ArrowFor(UserStatisticsSortKey.Points);
+
+    public string MessagesSortArrow => ArrowFor(UserStatisticsSortKey.Messages);
+
+    public string NameSortArrow => ArrowFor(UserStatisticsSortKey.Name);
+
+    public string VisibleCountText => IsFilterActive
+        ? UserStatisticsRanking.DescribeVisibleCount(_rows.Count, _allRows.Count)
+        : string.Empty;
+
+    public string SelectedPlaceText => SelectedRow is { } row
+        ? UserStatisticsRanking.DescribePlace(row.Position, _rows.Count)
+        : string.Empty;
 
     public string ActionButtonText
     {
@@ -161,6 +190,13 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         OnPropertyChanged(nameof(HasUsers));
         OnPropertyChanged(nameof(EmptyHeading));
         OnPropertyChanged(nameof(EmptyDescription));
+        OnPropertyChanged(nameof(VisibleCountText));
+        OnPropertyChanged(nameof(SelectedPlaceText));
+    }
+
+    private string ArrowFor(UserStatisticsSortKey key)
+    {
+        return SortKey == key ? SortDirectionArrow : string.Empty;
     }
 
     [RelayCommand]
@@ -187,6 +223,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     [RelayCommand]
     private void ClearFilter() => FilterText = string.Empty;
+
+    [RelayCommand]
+    private void SetAdjustment(double amount) => AdjustmentAmount = amount;
 
     [RelayCommand]
     private void Refresh() => Reload();
@@ -335,7 +374,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         TotalUsers = all.Count.ToString("N0", UiCulture.Russian);
         TotalMessages = totalMessages.ToString("N0", UiCulture.Russian);
         TotalPoints = totalPoints.ToString("N0", UiCulture.Russian);
-        TotalBonusPenalty = string.Create(UiCulture.Russian, $"{totalBonus:N0} / {totalPenalty:N0}");
+        TotalBonus = string.Create(UiCulture.Russian, $"+{totalBonus:N0}");
+        TotalPenalty = string.Create(UiCulture.Russian, $"−{totalPenalty:N0}");
 
         RebuildView();
     }

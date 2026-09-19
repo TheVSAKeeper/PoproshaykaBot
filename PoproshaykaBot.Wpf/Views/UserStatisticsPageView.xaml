@@ -5,6 +5,7 @@
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -14,156 +15,49 @@
 
     <UserControl.Resources>
 
-        <Style x:Key="RatingRowItem"
-               TargetType="ListBoxItem"
-               BasedOn="{StaticResource {x:Type ListBoxItem}}">
-            <Setter Property="HorizontalContentAlignment"
-                    Value="Stretch" />
-            <Setter Property="VerticalContentAlignment"
-                    Value="Center" />
-            <Setter Property="Padding"
-                    Value="12,7" />
-            <Setter Property="Margin"
-                    Value="0" />
-            <Setter Property="MinHeight"
-                    Value="56" />
-            <Setter Property="AutomationProperties.Name"
-                    Value="{Binding Summary}" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bd"
-                                Background="Transparent"
-                                BorderBrush="{DynamicResource Border.Subtle}"
-                                BorderThickness="0,0,0,1"
-                                SnapsToDevicePixels="True">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="3" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <Rectangle x:Name="Stripe"
-                                           Fill="Transparent" />
-
-                                <ContentPresenter Grid.Column="1"
-                                                  Margin="{TemplateBinding Padding}"
-                                                  VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver"
-                                     Value="True">
-                                <Setter TargetName="Bd"
-                                        Property="Background"
-                                        Value="{DynamicResource Bg.SurfaceMute}" />
-                            </Trigger>
-                            <Trigger Property="IsSelected"
-                                     Value="True">
-                                <Setter TargetName="Bd"
-                                        Property="Background"
-                                        Value="{DynamicResource Accent.Soft}" />
-                                <Setter TargetName="Stripe"
-                                        Property="Fill"
-                                        Value="{DynamicResource Accent.Primary}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <DataTemplate x:Key="RatingRowTemplate">
-            <Grid ToolTip="{Binding Summary}">
+        <DataTemplate x:Key="UserRatingRowTemplate">
+            <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="34" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto"
+                                      SharedSizeGroup="RatingPosition" />
+                    <ColumnDefinition Width="*"
+                                      MinWidth="60" />
+                    <ColumnDefinition Width="Auto"
+                                      SharedSizeGroup="RatingRank" />
+                    <ColumnDefinition Width="Auto"
+                                      SharedSizeGroup="RatingPoints" />
+                    <ColumnDefinition Width="Auto"
+                                      SharedSizeGroup="RatingMessages" />
                 </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
 
-                <TextBlock Grid.Column="0"
-                           Grid.Row="0"
-                           Grid.RowSpan="2"
-                           Text="{Binding Position}"
-                           Style="{StaticResource MonoCell}"
-                           FontSize="{DynamicResource Font.Size.S}"
-                           Foreground="{DynamicResource Fg.Muted}"
-                           HorizontalAlignment="Right"
-                           VerticalAlignment="Center"
-                           Margin="0,0,10,0" />
+                <ContentPresenter Grid.Column="0"
+                                  Content="{Binding}"
+                                  ContentTemplate="{StaticResource RatingPositionCell}" />
 
-                <DockPanel Grid.Column="1"
-                           Grid.Row="0"
-                           LastChildFill="True">
-                    <Border DockPanel.Dock="Right"
-                            Style="{StaticResource Badge}"
-                            VerticalAlignment="Center"
-                            Margin="10,0,0,0">
-                        <TextBlock Text="{Binding RankDisplay}"
-                                   FontSize="{DynamicResource Font.Size.Caption}"
-                                   Foreground="{DynamicResource Fg.Secondary}" />
-                    </Border>
+                <TextBlock Grid.Column="1"
+                           Style="{StaticResource RatingName}"
+                           Text="{Binding Name}"
+                           Margin="10,0,10,0" />
 
-                    <TextBlock Text="{Binding Name}"
-                               FontSize="{DynamicResource Font.Size.L}"
-                               FontWeight="{DynamicResource Font.Weight.SemiBold}"
-                               TextTrimming="CharacterEllipsis"
-                               VerticalAlignment="Center" />
-                </DockPanel>
+                <Border Grid.Column="2"
+                        Style="{StaticResource Badge}"
+                        VerticalAlignment="Center"
+                        Margin="10,0,0,0">
+                    <TextBlock Text="{Binding RankDisplay}"
+                               FontSize="{DynamicResource Font.Size.Caption}"
+                               Foreground="{DynamicResource Fg.Secondary}"
+                               TextWrapping="NoWrap" />
+                </Border>
 
-                <Grid Grid.Column="1"
-                      Grid.Row="1"
-                      Margin="0,6,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"
-                                          MinWidth="40" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="3"
+                           Style="{StaticResource RatingNumber.Strong}"
+                           Text="{Binding PointsDisplay}"
+                           Margin="10,0,0,0" />
 
-                    <ProgressBar Grid.Column="0"
-                                 Value="{Binding Share, Mode=OneWay}"
-                                 Maximum="1"
-                                 Height="8"
-                                 MinHeight="8"
-                                 VerticalAlignment="Center"
-                                 Margin="0,0,12,0"
-                                 Focusable="False"
-                                 IsHitTestVisible="False" />
-
-                    <StackPanel Grid.Column="1"
-                                Orientation="Horizontal"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center">
-                        <TextBlock Text="{Binding PointsDisplay}"
-                                   Style="{StaticResource MonoCell}"
-                                   FontSize="{DynamicResource Font.Size.S}"
-                                   MinWidth="58"
-                                   TextAlignment="Right" />
-                        <TextBlock Text="{Binding PointsUnit}"
-                                   Style="{StaticResource MonoCell}"
-                                   FontSize="{DynamicResource Font.Size.S}"
-                                   Foreground="{DynamicResource Fg.Muted}"
-                                   Margin="4,0,0,0" />
-                        <TextBlock Text="·"
-                                   Style="{StaticResource MonoCell}"
-                                   FontSize="{DynamicResource Font.Size.S}"
-                                   Foreground="{DynamicResource Fg.Muted}"
-                                   Margin="6,0,6,0" />
-                        <TextBlock Text="{Binding MessageCountDisplay}"
-                                   Style="{StaticResource MonoCell}"
-                                   FontSize="{DynamicResource Font.Size.S}"
-                                   MinWidth="58"
-                                   TextAlignment="Right" />
-                        <TextBlock Text="сообщ"
-                                   Style="{StaticResource MonoCell}"
-                                   FontSize="{DynamicResource Font.Size.S}"
-                                   Foreground="{DynamicResource Fg.Muted}"
-                                   Margin="4,0,0,0" />
-                    </StackPanel>
-                </Grid>
+                <TextBlock Grid.Column="4"
+                           Style="{StaticResource RatingNumber}"
+                           Text="{Binding MessageCountDisplay}"
+                           Margin="10,0,0,0" />
             </Grid>
         </DataTemplate>
 
@@ -172,7 +66,6 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -180,30 +73,17 @@
               Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"
-                                  MaxWidth="560" />
+                                  MaxWidth="420" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="2"
-                        Orientation="Horizontal">
-                <Button Content="Названия баллов"
-                        Style="{StaticResource Button.Secondary}"
-                        Command="{Binding EditPointTermCommand}"
-                        AutomationProperties.Name="Изменить названия баллов"
-                        Margin="16,0,8,0" />
-                <Button Content="Обновить"
-                        Style="{StaticResource Button.Secondary}"
-                        Command="{Binding RefreshCommand}"
-                        AutomationProperties.Name="Перечитать статистику" />
-            </StackPanel>
-
             <Grid Grid.Column="0">
-                <TextBox Style="{StaticResource TextBox.Form}"
-                         Padding="8,0,32,0"
+                <TextBox Style="{StaticResource TextBox.IconField}"
+                         Padding="29,0,32,0"
                          Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         AutomationProperties.Name="Поиск пользователя по имени или идентификатору"
-                         keepshell:PlaceholderBehavior.Placeholder="Поиск пользователя (имя или ID)..." />
+                         AutomationProperties.Name="Поиск участника по нику или идентификатору"
+                         keepshell:PlaceholderBehavior.Placeholder="Найти по нику или ID" />
 
                 <Button HorizontalAlignment="Right"
                         VerticalAlignment="Center"
@@ -218,63 +98,30 @@
                                               Height="14" />
                 </Button>
             </Grid>
+
+            <StackPanel Grid.Column="2"
+                        Orientation="Horizontal">
+                <Button Content="Названия баллов"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding EditPointTermCommand}"
+                        AutomationProperties.Name="Изменить названия баллов"
+                        Margin="16,0,8,0" />
+                <Button Style="{StaticResource Button.Icon}"
+                        Command="{Binding RefreshCommand}"
+                        AutomationProperties.Name="Перечитать статистику"
+                        ToolTip="Перечитать статистику">
+                    <iconPacks:PackIconLucide Kind="RefreshCw"
+                                              Width="14"
+                                              Height="14" />
+                </Button>
+            </StackPanel>
         </Grid>
 
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,12">
-            <TextBlock Text="Сортировка"
-                       Style="{StaticResource TextBlock.Subtle}"
-                       VerticalAlignment="Center"
-                       Margin="0,0,10,0" />
-
-            <ToggleButton Style="{StaticResource ToggleButton.Toolbar}"
-                          Command="{Binding SortByCommand}"
-                          CommandParameter="{x:Static vm:UserStatisticsSortKey.Points}"
-                          IsChecked="{Binding SortKey, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Points}"
-                          AutomationProperties.Name="Сортировать по баллам"
-                          Margin="0,0,6,0">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Баллы" />
-                    <TextBlock Text="{Binding SortDirectionArrow}"
-                               Margin="6,0,0,0"
-                               Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}, Converter={StaticResource BoolToVisibility}}" />
-                </StackPanel>
-            </ToggleButton>
-
-            <ToggleButton Style="{StaticResource ToggleButton.Toolbar}"
-                          Command="{Binding SortByCommand}"
-                          CommandParameter="{x:Static vm:UserStatisticsSortKey.Messages}"
-                          IsChecked="{Binding SortKey, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Messages}"
-                          AutomationProperties.Name="Сортировать по сообщениям"
-                          Margin="0,0,6,0">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Сообщения" />
-                    <TextBlock Text="{Binding SortDirectionArrow}"
-                               Margin="6,0,0,0"
-                               Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}, Converter={StaticResource BoolToVisibility}}" />
-                </StackPanel>
-            </ToggleButton>
-
-            <ToggleButton Style="{StaticResource ToggleButton.Toolbar}"
-                          Command="{Binding SortByCommand}"
-                          CommandParameter="{x:Static vm:UserStatisticsSortKey.Name}"
-                          IsChecked="{Binding SortKey, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Name}"
-                          AutomationProperties.Name="Сортировать по имени">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Имя" />
-                    <TextBlock Text="{Binding SortDirectionArrow}"
-                               Margin="6,0,0,0"
-                               Visibility="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}, Converter={StaticResource BoolToVisibility}}" />
-                </StackPanel>
-            </ToggleButton>
-        </StackPanel>
-
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*" />
                 <ColumnDefinition Width="2*"
-                                  MinWidth="260"
+                                  MinWidth="300"
                                   MaxWidth="380" />
             </Grid.ColumnDefinitions>
 
@@ -284,6 +131,8 @@
                                  Heading="{Binding EmptyHeading}"
                                  Description="{Binding EmptyDescription}"
                                  DescriptionMaxWidth="320"
+                                 ActionText="{Binding EmptyActionText}"
+                                 ActionCommand="{Binding EmptyActionCommand}"
                                  Visibility="{Binding HasUsers, Converter={StaticResource InverseBoolToVisibility}}" />
 
             <Border Grid.Column="0"
@@ -291,166 +140,335 @@
                     Padding="0"
                     Margin="0,0,16,0"
                     Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}">
-                <ListBox ItemsSource="{Binding Users}"
-                         AutomationProperties.Name="Статистика пользователей"
-                         SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
-                         ItemContainerStyle="{StaticResource RatingRowItem}"
-                         ItemTemplate="{StaticResource RatingRowTemplate}"
-                         SelectionMode="Single"
-                         HorizontalContentAlignment="Stretch"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         Padding="0"
-                         VirtualizingStackPanel.IsVirtualizing="True"
-                         VirtualizingStackPanel.VirtualizationMode="Recycling"
-                         ScrollViewer.CanContentScroll="True"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                <Grid Grid.IsSharedSizeScope="True">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0"
+                                Margin="16,16,16,12">
+                        <WrapPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource StatCell.Lead}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource StatValue}"
+                                               Text="{Binding TotalUsers}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="участников" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource StatCell}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource StatValue}"
+                                               Text="{Binding TotalMessages}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="сообщений" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource StatCell}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource StatValue}"
+                                               Text="{Binding TotalPoints}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="баллов" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource StatCell}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource StatValue.Small}"
+                                                   Foreground="{DynamicResource State.SuccessText}"
+                                                   Text="{Binding TotalBonus}" />
+                                        <TextBlock Style="{StaticResource StatValue.Small}"
+                                                   Foreground="{DynamicResource State.ErrorText}"
+                                                   Text="{Binding TotalPenalty}"
+                                                   Margin="10,0,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="бонус и штраф" />
+                                </StackPanel>
+                            </Border>
+                        </WrapPanel>
+
+                        <TextBlock Style="{StaticResource StatLabel}"
+                                   Margin="0,10,0,0"
+                                   Text="{Binding VisibleCountText}"
+                                   Visibility="{Binding IsFilterActive, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+
+                    <Border Grid.Row="1"
+                            Height="1"
+                            Background="{DynamicResource Border.Subtle}" />
+
+                    <Grid Grid.Row="2"
+                          Margin="15,6,24,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"
+                                              SharedSizeGroup="RatingPosition" />
+                            <ColumnDefinition Width="*"
+                                              MinWidth="60" />
+                            <ColumnDefinition Width="Auto"
+                                              SharedSizeGroup="RatingRank" />
+                            <ColumnDefinition Width="Auto"
+                                              SharedSizeGroup="RatingPoints" />
+                            <ColumnDefinition Width="Auto"
+                                              SharedSizeGroup="RatingMessages" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Style="{StaticResource RatingHeaderText}"
+                                   Text="#"
+                                   HorizontalAlignment="Center" />
+
+                        <Button Grid.Column="1"
+                                Style="{StaticResource RatingSortButton}"
+                                HorizontalAlignment="Left"
+                                Margin="10,0,0,0"
+                                Padding="0,2,8,2"
+                                Command="{Binding SortByCommand}"
+                                CommandParameter="{x:Static vm:UserStatisticsSortKey.Name}"
+                                AutomationProperties.Name="Сортировать по нику">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Участник" />
+                                <TextBlock Text="{Binding NameSortArrow}"
+                                           Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Button>
+
+                        <TextBlock Grid.Column="2"
+                                   Style="{StaticResource RatingHeaderText}"
+                                   Text="Ранг"
+                                   Margin="10,0,0,0" />
+
+                        <Button Grid.Column="3"
+                                Style="{StaticResource RatingSortButton}"
+                                HorizontalAlignment="Right"
+                                Margin="10,0,0,0"
+                                Padding="8,2,0,2"
+                                Command="{Binding SortByCommand}"
+                                CommandParameter="{x:Static vm:UserStatisticsSortKey.Points}"
+                                AutomationProperties.Name="Сортировать по баллам">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Баллы" />
+                                <TextBlock Text="{Binding PointsSortArrow}"
+                                           Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="4"
+                                Style="{StaticResource RatingSortButton}"
+                                HorizontalAlignment="Right"
+                                Margin="10,0,0,0"
+                                Padding="8,2,0,2"
+                                Command="{Binding SortByCommand}"
+                                CommandParameter="{x:Static vm:UserStatisticsSortKey.Messages}"
+                                AutomationProperties.Name="Сортировать по сообщениям">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Сообщения" />
+                                <TextBlock Text="{Binding MessagesSortArrow}"
+                                           Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <ListBox Grid.Row="3"
+                             ItemsSource="{Binding Users}"
+                             AutomationProperties.Name="Рейтинг участников"
+                             SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                             ItemContainerStyle="{StaticResource RatingRowItem}"
+                             ItemTemplate="{StaticResource UserRatingRowTemplate}"
+                             SelectionMode="Single"
+                             HorizontalContentAlignment="Stretch"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Padding="0"
+                             VirtualizingStackPanel.IsVirtualizing="True"
+                             VirtualizingStackPanel.VirtualizationMode="Recycling"
+                             ScrollViewer.CanContentScroll="True"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Visible" />
+                </Grid>
             </Border>
 
-            <ScrollViewer Grid.Column="1"
-                          Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-                <StackPanel>
-
-                    <Border Style="{StaticResource Card}"
-                            Margin="0,0,0,12">
+            <Border Grid.Column="1"
+                    Style="{StaticResource Card}"
+                    Padding="16"
+                    Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Visibility="{Binding HasSelectedRow, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
-                            <TextBlock Text="Общая статистика"
-                                       Style="{StaticResource TextBlock.Heading}"
-                                       Margin="0,0,0,8" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
-                            <DockPanel Margin="0,0,0,4">
-                                <TextBlock DockPanel.Dock="Right"
-                                           Text="{Binding TotalUsers}"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Fg.Primary}" />
-                                <TextBlock Text="Пользователей"
-                                           Style="{StaticResource TextBlock.Subtle}" />
-                            </DockPanel>
-
-                            <DockPanel Margin="0,0,0,4">
-                                <TextBlock DockPanel.Dock="Right"
-                                           Text="{Binding TotalMessages}"
-                                           Foreground="{DynamicResource Fg.Secondary}" />
-                                <TextBlock Text="Сообщений"
-                                           Style="{StaticResource TextBlock.Subtle}" />
-                            </DockPanel>
-
-                            <DockPanel Margin="0,0,0,4">
-                                <TextBlock DockPanel.Dock="Right"
-                                           Text="{Binding TotalPoints}"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Fg.Primary}" />
-                                <TextBlock Text="Баллов"
-                                           Style="{StaticResource TextBlock.Subtle}" />
-                            </DockPanel>
-
-                            <DockPanel>
-                                <TextBlock DockPanel.Dock="Right"
-                                           Text="{Binding TotalBonusPenalty}"
-                                           FontSize="{DynamicResource Font.Size.XS}"
-                                           Foreground="{DynamicResource Fg.Secondary}" />
-                                <TextBlock Text="Бонус / Штраф"
-                                           Style="{StaticResource TextBlock.Subtle}" />
-                            </DockPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}"
-                            Margin="0,0,0,12">
-                        <StackPanel>
-                            <TextBlock Text="Пользователь"
-                                       Style="{StaticResource TextBlock.Heading}"
-                                       Margin="0,0,0,8" />
-
-                            <StackPanel Visibility="{Binding HasSelectedRow, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="{Binding SelectedRow.Name}"
-                                           FontWeight="SemiBold"
-                                           FontSize="{DynamicResource Font.Size.L}"
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding SelectedRow.Name}"
+                                           FontSize="{DynamicResource Font.Size.XL}"
+                                           FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                            Foreground="{DynamicResource Fg.Primary}"
+                                           TextWrapping="NoWrap"
                                            TextTrimming="CharacterEllipsis"
-                                           Margin="0,0,0,2" />
-                                <TextBlock Text="{Binding SelectedRow.UserId}"
-                                           Style="{StaticResource TextBlock.Subtle}"
-                                           FontFamily="{DynamicResource Font.Mono}"
-                                           Margin="0,0,0,4" />
-                                <TextBlock Text="{Binding SelectedRow.RankDisplay}"
+                                           ToolTip="{Binding SelectedRow.Name}"
+                                           VerticalAlignment="Center" />
+
+                                <Border Grid.Column="1"
+                                        Style="{StaticResource Badge}"
+                                        VerticalAlignment="Center"
+                                        Margin="10,0,0,0">
+                                    <TextBlock Text="{Binding SelectedRow.RankDisplay}"
+                                               FontSize="{DynamicResource Font.Size.Caption}"
+                                               Foreground="{DynamicResource Fg.Secondary}"
+                                               TextWrapping="NoWrap" />
+                                </Border>
+                            </Grid>
+
+                            <TextBlock Text="{Binding SelectedRow.UserId}"
+                                       FontFamily="{DynamicResource Font.Mono}"
+                                       FontSize="{DynamicResource Font.Size.Caption}"
+                                       Foreground="{DynamicResource Fg.Muted}"
+                                       TextWrapping="NoWrap"
+                                       Margin="0,4,0,0" />
+
+                            <TextBlock Text="{Binding SelectedPlaceText}"
+                                       Foreground="{DynamicResource Fg.Secondary}"
+                                       Margin="0,2,0,0" />
+
+                            <Border Background="{DynamicResource Bg.SurfaceMute}"
+                                    CornerRadius="5"
+                                    Height="10"
+                                    Margin="0,14,0,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="{Binding SelectedRow.MessagesTrack}" />
+                                        <ColumnDefinition Width="{Binding SelectedRow.BonusTrack}" />
+                                        <ColumnDefinition Width="{Binding SelectedRow.PenaltyTrack}" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0"
+                                            Background="{DynamicResource Accent.Primary}"
+                                            CornerRadius="5"
+                                            Margin="0,0,2,0" />
+                                    <Border Grid.Column="1"
+                                            Background="{DynamicResource State.Success}"
+                                            CornerRadius="5"
+                                            Margin="0,0,2,0" />
+                                    <Border Grid.Column="2"
+                                            Background="{DynamicResource State.Error}"
+                                            CornerRadius="5" />
+                                </Grid>
+                            </Border>
+
+                            <WrapPanel Orientation="Horizontal"
+                                       Margin="0,8,0,0">
+                                <TextBlock Text="{Binding SelectedRow.MessagesPartText}"
+                                           FontSize="{DynamicResource Font.Size.Caption}"
                                            Foreground="{DynamicResource Fg.Secondary}"
-                                           Margin="0,0,0,10" />
+                                           Margin="0,0,12,0" />
+                                <TextBlock Text="{Binding SelectedRow.BonusPartText}"
+                                           FontSize="{DynamicResource Font.Size.Caption}"
+                                           Foreground="{DynamicResource State.SuccessText}"
+                                           Margin="0,0,12,0" />
+                                <TextBlock Text="{Binding SelectedRow.PenaltyPartText}"
+                                           FontSize="{DynamicResource Font.Size.Caption}"
+                                           Foreground="{DynamicResource State.ErrorText}" />
+                            </WrapPanel>
 
-                                <DockPanel Margin="0,0,0,4">
-                                    <TextBlock DockPanel.Dock="Right"
-                                               Text="{Binding SelectedRow.Points, StringFormat=N0}"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Fg.Primary}" />
-                                    <TextBlock Text="Баллы"
-                                               Style="{StaticResource TextBlock.Subtle}" />
-                                </DockPanel>
+                            <TextBlock Text="{Binding SelectedRow.FirstSeenText}"
+                                       Style="{StaticResource TextBlock.Subtle}"
+                                       Margin="0,12,0,0" />
+                            <TextBlock Text="{Binding SelectedRow.LastSeenText}"
+                                       Style="{StaticResource TextBlock.Subtle}"
+                                       Margin="0,2,0,0" />
 
-                                <DockPanel Margin="0,0,0,4">
-                                    <TextBlock DockPanel.Dock="Right"
-                                               Text="{Binding SelectedRow.MessageCount, StringFormat=N0}"
-                                               Foreground="{DynamicResource Fg.Secondary}" />
-                                    <TextBlock Text="Сообщения"
-                                               Style="{StaticResource TextBlock.Subtle}" />
-                                </DockPanel>
+                            <Border Height="1"
+                                    Background="{DynamicResource Border.Subtle}"
+                                    Margin="0,16,0,0" />
 
-                                <DockPanel Margin="0,0,0,2">
-                                    <TextBlock DockPanel.Dock="Right"
-                                               Text="{Binding SelectedRow.BonusPoints, StringFormat=N0}"
-                                               Foreground="{DynamicResource State.SuccessText}" />
-                                    <TextBlock Text="Бонус"
-                                               Style="{StaticResource TextBlock.Subtle}" />
-                                </DockPanel>
+                            <TextBlock Text="Баланс"
+                                       Style="{StaticResource TextBlock.Heading}"
+                                       FontSize="{DynamicResource Font.Size.L}"
+                                       Margin="0,14,0,10" />
 
-                                <DockPanel>
-                                    <TextBlock DockPanel.Dock="Right"
-                                               Text="{Binding SelectedRow.PenaltyPoints, StringFormat=N0}"
-                                               Foreground="{DynamicResource State.ErrorText}" />
-                                    <TextBlock Text="Штраф"
-                                               Style="{StaticResource TextBlock.Subtle}" />
-                                </DockPanel>
+                            <UniformGrid Columns="4"
+                                         Margin="0,0,0,10">
+                                <Button Style="{StaticResource QuickAmountButton}"
+                                        Command="{Binding SetAdjustmentCommand}"
+                                        Content="−100"
+                                        Margin="0,0,6,0"
+                                        AutomationProperties.Name="Поставить минус сто баллов">
+                                    <Button.CommandParameter>
+                                        <sys:Double>-100</sys:Double>
+                                    </Button.CommandParameter>
+                                </Button>
+                                <Button Style="{StaticResource QuickAmountButton}"
+                                        Command="{Binding SetAdjustmentCommand}"
+                                        Content="−10"
+                                        Margin="0,0,6,0"
+                                        AutomationProperties.Name="Поставить минус десять баллов">
+                                    <Button.CommandParameter>
+                                        <sys:Double>-10</sys:Double>
+                                    </Button.CommandParameter>
+                                </Button>
+                                <Button Style="{StaticResource QuickAmountButton}"
+                                        Command="{Binding SetAdjustmentCommand}"
+                                        Content="+10"
+                                        Margin="0,0,6,0"
+                                        AutomationProperties.Name="Поставить плюс десять баллов">
+                                    <Button.CommandParameter>
+                                        <sys:Double>10</sys:Double>
+                                    </Button.CommandParameter>
+                                </Button>
+                                <Button Style="{StaticResource QuickAmountButton}"
+                                        Command="{Binding SetAdjustmentCommand}"
+                                        Content="+100"
+                                        AutomationProperties.Name="Поставить плюс сто баллов">
+                                    <Button.CommandParameter>
+                                        <sys:Double>100</sys:Double>
+                                    </Button.CommandParameter>
+                                </Button>
+                            </UniformGrid>
 
-                                <TextBlock Text="Управление баллами"
-                                           Style="{StaticResource TextBlock.Heading}"
-                                           Margin="0,16,0,12" />
+                            <keepshell:NumericSettingField Label="Изменение баланса"
+                                                           Value="{Binding AdjustmentAmount, Mode=TwoWay}"
+                                                           IncreaseCommand="{Binding IncreaseAdjustmentCommand}"
+                                                           DecreaseCommand="{Binding DecreaseAdjustmentCommand}"
+                                                           IncreaseAutomationName="Увеличить"
+                                                           DecreaseAutomationName="Уменьшить"
+                                                           Margin="0,0,0,12" />
 
-                                <keepshell:NumericSettingField Label="Изменение баланса"
-                                                              Value="{Binding AdjustmentAmount, Mode=TwoWay}"
-                                                              IncreaseCommand="{Binding IncreaseAdjustmentCommand}"
-                                                              DecreaseCommand="{Binding DecreaseAdjustmentCommand}"
-                                                              IncreaseAutomationName="Увеличить"
-                                                              DecreaseAutomationName="Уменьшить"
-                                                              Margin="0,0,0,12" />
-
-                                <Button Content="{Binding ActionButtonText}"
-                                        Command="{Binding ApplyAdjustmentCommand}"
-                                        Style="{StaticResource Button.Primary}"
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Center" />
-                            </StackPanel>
-
-                            <StackPanel Margin="0,12,0,4"
-                                        Visibility="{Binding HasSelectedRow, Converter={StaticResource InverseBoolToVisibility}}">
-                                <iconPacks:PackIconLucide Kind="MousePointerClick"
-                                                          Width="20"
-                                                          Height="20"
-                                                          HorizontalAlignment="Center"
-                                                          Foreground="{DynamicResource Fg.Muted}" />
-                                <TextBlock Text="Выберите пользователя в списке"
-                                           Style="{StaticResource TextBlock.Subtle}"
-                                           HorizontalAlignment="Center"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           Margin="0,8,0,0" />
-                            </StackPanel>
+                            <Button Content="{Binding ActionButtonText}"
+                                    Command="{Binding ApplyAdjustmentCommand}"
+                                    Style="{StaticResource Button.Primary}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center" />
                         </StackPanel>
-                    </Border>
+                    </ScrollViewer>
 
-                </StackPanel>
-            </ScrollViewer>
+                    <StackPanel VerticalAlignment="Center"
+                                Visibility="{Binding HasSelectedRow, Converter={StaticResource InverseBoolToVisibility}}">
+                        <iconPacks:PackIconLucide Kind="MousePointerClick"
+                                                  Width="20"
+                                                  Height="20"
+                                                  HorizontalAlignment="Center"
+                                                  Foreground="{DynamicResource Fg.Muted}" />
+                        <TextBlock Text="Выберите участника в списке"
+                                   Style="{StaticResource TextBlock.Subtle}"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Margin="0,8,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>
