@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using System.Text;
 
 namespace PoproshaykaBot.Core.Infrastructure.Persistence;
@@ -10,6 +10,19 @@ public static class AtomicFile
         ArgumentException.ThrowIfNullOrEmpty(targetPath);
         ArgumentNullException.ThrowIfNull(content);
 
+        Save(targetPath, tempPath => File.WriteAllText(tempPath, content, Encoding.UTF8), logger);
+    }
+
+    public static void Save(string targetPath, byte[] content, ILogger? logger = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(targetPath);
+        ArgumentNullException.ThrowIfNull(content);
+
+        Save(targetPath, tempPath => File.WriteAllBytes(tempPath, content), logger);
+    }
+
+    private static void Save(string targetPath, Action<string> writeTemporary, ILogger? logger)
+    {
         var directory = Path.GetDirectoryName(targetPath);
 
         if (!string.IsNullOrEmpty(directory))
@@ -19,7 +32,7 @@ public static class AtomicFile
 
         try
         {
-            WriteAtomic(targetPath, content, logger);
+            WriteAtomic(targetPath, writeTemporary, logger);
         }
         catch
         {
@@ -28,11 +41,11 @@ public static class AtomicFile
         }
     }
 
-    private static void WriteAtomic(string targetPath, string content, ILogger? logger)
+    private static void WriteAtomic(string targetPath, Action<string> writeTemporary, ILogger? logger)
     {
         var tempPath = targetPath + ".tmp";
 
-        File.WriteAllText(tempPath, content, Encoding.UTF8);
+        writeTemporary(tempPath);
 
         if (File.Exists(targetPath))
         {

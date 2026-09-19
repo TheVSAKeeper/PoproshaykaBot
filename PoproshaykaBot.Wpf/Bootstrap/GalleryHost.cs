@@ -56,6 +56,8 @@ public sealed class GalleryHost : IGalleryHost
 
     public async Task ArrangeAsync()
     {
+        _shell.OnboardingBanner.Suppress();
+
         await StatisticsBootstrap.LoadUserStatisticsAsync(_services).ConfigureAwait(true);
 
         try
@@ -88,6 +90,11 @@ public sealed class GalleryHost : IGalleryHost
         if (SectionKeys.IsSelectedCase(item.Name))
         {
             return await CaptureSelectedAsync(item.Name, context).ConfigureAwait(true);
+        }
+
+        if (SectionKeys.IsCardsCase(item.Name))
+        {
+            return await CaptureCardsAsync(item.Name, context).ConfigureAwait(true);
         }
 
         Navigate(item.Name);
@@ -134,6 +141,7 @@ public sealed class GalleryHost : IGalleryHost
 
         return SectionKeys.All
             .Concat(SectionKeys.Selected)
+            .Concat(SectionKeys.Cards)
             .FirstOrDefault(known => string.Equals(known, requested, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -182,6 +190,34 @@ public sealed class GalleryHost : IGalleryHost
         finally
         {
             clearSelection();
+
+            await context.SettleAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task<GalleryShot> CaptureCardsAsync(string name, GalleryContext context)
+    {
+        Navigate(SectionKeys.PageOf(name));
+
+        var streams = _services.GetRequiredService<StreamHistoryPageViewModel>();
+        var wasTable = streams.IsTableView;
+
+        streams.IsCardsView = true;
+
+        await context.SettleAsync().ConfigureAwait(true);
+
+        WarnWhenNothingSelected(name, streams.TrySelectAt(DetailedSessionIndex(streams.Sessions)));
+
+        try
+        {
+            await context.SettleAsync().ConfigureAwait(true);
+
+            return context.Save(ViewCapture.Slug(name));
+        }
+        finally
+        {
+            streams.SelectedRow = null;
+            streams.IsTableView = wasTable;
 
             await context.SettleAsync().ConfigureAwait(true);
         }

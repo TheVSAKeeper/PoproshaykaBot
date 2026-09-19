@@ -4,6 +4,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views;
 
@@ -13,11 +15,17 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double StackedWidth = 1200;
     public const double DetailMinWidth = 360;
     public const double TableMinWidth = 720;
-    public const double DetailSplitWidth = 710;
-    public const double DetailStackWidth = 670;
+    public const double DetailSplitWidth = 740;
+    public const double DetailStackWidth = 700;
     public const double ChattersMinWidth = 240;
     public const double TrendStripHeight = 40;
     public const double TrendStripCompactHeight = 36;
+    public const double CardHeight = 96;
+    public const double DetailRowMinHeight = 200;
+    public const double DetailCardsRowMinHeight = 150;
+    public const double ListRowShare = 3;
+    public const double DetailRowShare = 2;
+    public const double DetailCardsRowShare = 1;
 
     private bool _sideBySide;
     private bool _layoutApplied;
@@ -49,6 +57,11 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         FontScaleManager.Changed += OnFontScaleChanged;
         _layoutApplied = false;
         UpdateLayoutMode();
+
+        if (DataContext is StreamHistoryPageViewModel viewModel)
+        {
+            ScrollToSelection(viewModel);
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -188,10 +201,16 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         PageGrid.ColumnDefinitions.Clear();
         PageGrid.RowDefinitions.Clear();
 
+        var cards = DataContext is StreamHistoryPageViewModel { IsCardsView: true };
+
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        PageGrid.RowDefinitions.Add(new() { Height = new(3, GridUnitType.Star), MinHeight = 160 });
+        PageGrid.RowDefinitions.Add(new() { Height = new(ListRowShare, GridUnitType.Star), MinHeight = 160 });
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        PageGrid.RowDefinitions.Add(new() { Height = new(2, GridUnitType.Star), MinHeight = 200 });
+        PageGrid.RowDefinitions.Add(new()
+        {
+            Height = new(cards ? DetailCardsRowShare : DetailRowShare, GridUnitType.Star),
+            MinHeight = cards ? DetailCardsRowMinHeight : DetailRowMinHeight,
+        });
 
         Place(HeaderStack, 0, 0);
         Place(TableCard, 1, 0);
@@ -241,23 +260,109 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
             newViewModel.PropertyChanged += OnViewModelPropertyChanged;
             _layoutApplied = false;
             UpdateLayoutMode();
+            ScrollToSelection(newViewModel);
         }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(StreamHistoryPageViewModel.SelectedRow))
+        if (sender is not StreamHistoryPageViewModel viewModel)
         {
             return;
         }
 
-        if (sender is StreamHistoryPageViewModel { SelectedRow: { } row })
+        if (e.PropertyName is nameof(StreamHistoryPageViewModel.IsCardsView))
         {
-            SessionsGrid.ScrollIntoView(row);
+            _layoutApplied = false;
+            UpdateLayoutMode();
+        }
+
+        if (e.PropertyName is nameof(StreamHistoryPageViewModel.SelectedRow)
+            or nameof(StreamHistoryPageViewModel.IsCardsView))
+        {
+            ScrollToSelection(viewModel);
         }
     }
 
+    private void ScrollToSelection(StreamHistoryPageViewModel viewModel)
+    {
+        if (viewModel.SelectedRow is not { } row)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                if (viewModel.IsCardsView)
+                {
+                    SessionCards.ScrollIntoView(row);
+                    RevealFully(SessionCards, row);
+                }
+                else
+                {
+                    SessionsGrid.ScrollIntoView(row);
+                    RevealFully(SessionsGrid, row);
+                }
+            },
+            DispatcherPriority.Background);
+    }
+
+    private static void RevealFully(ItemsControl list, object item)
+    {
+        if (list.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement container)
+        {
+            return;
+        }
+
+        if (FindScrollViewer(list) is not { } viewer)
+        {
+            return;
+        }
+
+        var top = container.TransformToAncestor(viewer).Transform(default(Point)).Y;
+        var bottom = top + container.ActualHeight;
+        if (bottom > viewer.ViewportHeight + 0.5)
+        {
+            var down = viewer.CanContentScroll ? 1 : bottom - viewer.ViewportHeight;
+            viewer.ScrollToVerticalOffset(viewer.VerticalOffset + down);
+        }
+        else if (top < -0.5)
+        {
+            var up = viewer.CanContentScroll ? 1 : -top;
+            viewer.ScrollToVerticalOffset(Math.Max(0, viewer.VerticalOffset - up));
+        }
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is ScrollViewer found)
+        {
+            return found;
+        }
+
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            if (FindScrollViewer(VisualTreeHelper.GetChild(root, index)) is { } viewer)
+            {
+                return viewer;
+            }
+        }
+
+        return null;
+    }
+
     private void OnTrendMenuClick(object sender, RoutedEventArgs e)
+    {
+        OpenMenu(sender);
+    }
+
+    private void OnSortMenuClick(object sender, RoutedEventArgs e)
+    {
+        OpenMenu(sender);
+    }
+
+    private static void OpenMenu(object sender)
     {
         if (sender is not Button { ContextMenu: { } menu } button)
         {

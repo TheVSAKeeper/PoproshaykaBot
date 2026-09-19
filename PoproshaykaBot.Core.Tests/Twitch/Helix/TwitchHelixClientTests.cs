@@ -416,6 +416,44 @@ public sealed class TwitchHelixClientTests
     }
 
     [Test]
+    public async Task GetGamesByNamesAsync_SendsOneNameParameterPerGame_AndDropsBlanks()
+    {
+        const string Body = """
+                            {
+                              "data": [
+                                { "id": "509658", "name": "Just Chatting", "box_art_url": "https://cdn/{width}x{height}.jpg", "igdb_id": "" }
+                              ]
+                            }
+                            """;
+
+        var (client, handler) = Build(StubHttpMessageHandler.ReturnsJson(HttpStatusCode.OK, Body));
+
+        var games = await client.GetGamesByNamesAsync(["Just Chatting", "just chatting", "  ", "Dota 2"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(games, Has.Count.EqualTo(1));
+            Assert.That(games[0].BoxArtUrl, Is.EqualTo("https://cdn/{width}x{height}.jpg"));
+            Assert.That(handler.Requests[0].RequestUri!.AbsoluteUri,
+                Is.EqualTo(HelixBaseUrl + "helix/games?name=Just%20Chatting&name=Dota%202"));
+        }
+    }
+
+    [Test]
+    public async Task GetGamesByNamesAsync_NoNames_ReturnsEmpty_WithoutHttpCall()
+    {
+        var (client, handler) = Build();
+
+        var games = await client.GetGamesByNamesAsync(["", "   "]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(games, Is.Empty);
+            Assert.That(handler.Requests, Is.Empty);
+        }
+    }
+
+    [Test]
     public async Task TwitchHelixClient_RequestsHttpClientUnderConfiguredName()
     {
         var stub = StubHttpMessageHandler.ReturnsJson(HttpStatusCode.OK, """{"data":[]}""");

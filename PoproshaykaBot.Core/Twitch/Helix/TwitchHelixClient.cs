@@ -7,6 +7,8 @@ namespace PoproshaykaBot.Core.Twitch.Helix;
 
 public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILogger<TwitchHelixClient> logger) : ITwitchHelixClient
 {
+    public const int MaxGamesPerRequest = 100;
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     protected abstract string HttpClientName { get; }
@@ -107,6 +109,25 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
             cancellationToken);
 
         return dto is null ? null : new GameInfo(dto.Id, dto.Name, dto.BoxArtUrl, dto.IgdbId);
+    }
+
+    public async Task<IReadOnlyList<GameInfo>> GetGamesByNamesAsync(IEnumerable<string> names, CancellationToken cancellationToken = default)
+    {
+        var nameList = names
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(MaxGamesPerRequest)
+            .ToArray();
+
+        if (nameList.Length == 0)
+        {
+            return [];
+        }
+
+        var query = string.Join('&', nameList.Select(name => $"name={Uri.EscapeDataString(name)}"));
+        var data = await GetCollectionAsync<HelixGameDto>($"{TwitchEndpoints.HelixGames}?{query}", cancellationToken);
+
+        return data.Select(dto => new GameInfo(dto.Id, dto.Name, dto.BoxArtUrl, dto.IgdbId)).ToArray();
     }
 
     public async Task SendChatMessageAsync(

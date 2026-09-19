@@ -17,6 +17,7 @@ using PoproshaykaBot.Core.Settings.Migrations;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
+using PoproshaykaBot.Core.Twitch.GameArt;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -346,6 +347,7 @@ public partial class App : Application
             .AddSettingsStores()
             .AddDebugChannel(DebugChannel)
             .AddTwitchClients()
+            .AddGameBoxArt(cacheOnly: IsGallery)
             .AddChatPipeline()
             .AddStreamMonitoring()
             .AddBroadcasting()
@@ -390,6 +392,7 @@ public partial class App : Application
         services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<LogsViewModel>();
         services.AddSingleton<UserStatisticsPageViewModel>();
+        services.AddSingleton<GameBoxArtProvider>();
         services.AddSingleton<StreamHistoryPageViewModel>();
         services.AddSingleton<ThemeViewModel>();
         services.AddSingleton<ShellPreferences>();

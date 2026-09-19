@@ -13,6 +13,8 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
     private readonly IOnboardingWizardLauncher _wizardLauncher;
     private readonly List<IDisposable> _subscriptions = [];
 
+    private bool _suppressed;
+
     [ObservableProperty]
     private bool _isVisible;
 
@@ -34,8 +36,20 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
         Refresh();
     }
 
+    public void Suppress()
+    {
+        _suppressed = true;
+        IsVisible = false;
+    }
+
     public void Refresh()
     {
+        if (_suppressed)
+        {
+            IsVisible = false;
+            return;
+        }
+
         var missing = _checklist.GetMissingItems();
 
         if (missing.Count == 0)

@@ -20,4 +20,18 @@ public class GalleryPageCaseTests
                 "Суффикс :selected у страницы без выбора строки должен уходить в нераспознанное");
         }
     }
+
+    [Test]
+    public void Кейс_карточек_распознаётся_только_у_истории_стримов()
+    {
+        var requested = string.Join(',', SectionKeys.StreamsCards, "users:cards");
+        var arguments = GalleryHost.Parse(["--pages", requested], "gallery-out");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(arguments.Pages, Is.EqualTo(new[] { SectionKeys.StreamsCards }));
+            Assert.That(arguments.Unknown, Is.EqualTo(new[] { "users:cards" }));
+            Assert.That(SectionKeys.PageOf(SectionKeys.StreamsCards), Is.EqualTo(SectionKeys.Streams));
+        }
+    }
 }
