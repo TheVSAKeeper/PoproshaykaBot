@@ -22,9 +22,9 @@
       },
       "KeepShell": {
         "type": "Direct",
-        "requested": "[0.1.186, )",
-        "resolved": "0.1.186",
-        "contentHash": "cn9fN+VWsqLaDTebSDZkJS5JjZ7G5yiQNOASGUVv/tDTvKV/7dguVRAWdRqaYqsmHnwYZTfrtyEBVeFNFEpwpg==",
+        "requested": "[0.1.190, )",
+        "resolved": "0.1.190",
+        "contentHash": "0bQJtVOhKpPaKaXLQ4tWR7z7gj5cuutm8GqRa9ezOt7Kk+eHG4AEtnzipaZK3QC+IkPGnRVC1f2c3zaLapM10w==",
         "dependencies": {
           "CommunityToolkit.Mvvm": "8.3.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",
@@ -37,20 +37,20 @@
       },
       "KeepShell.Automation": {
         "type": "Direct",
-        "requested": "[0.1.186, )",
-        "resolved": "0.1.186",
-        "contentHash": "yYx703nZzhZnH5NPBXYStjT/tXzQ5Q7dN7XDQUPWJtLcS+rMDSak1Tc5wuw0AIYL3KECAYe0MwkYUTjzJ0aAEQ==",
+        "requested": "[0.1.190, )",
+        "resolved": "0.1.190",
+        "contentHash": "EQlsGdoP/fBDUZ7JvaqM/vC/Hcc/x+MiLAEPWN/2/PHaFtfKwO+x5XSVtoNO/YC9ccYcxjnf5GK45zKDyMUH7Q==",
         "dependencies": {
-          "KeepShell": "0.1.186"
+          "KeepShell": "0.1.190"
         }
       },
       "KeepShell.Mcp": {
         "type": "Direct",
-        "requested": "[0.1.186, )",
-        "resolved": "0.1.186",
-        "contentHash": "z9hg5kI2uUU3C3SE0ey7gokUxs2hedGoO/SWRdaxOTGI/oJYsBR7z0N59MGyaDnX49yxqtVMnrlR82ZYJWtsYQ==",
+        "requested": "[0.1.190, )",
+        "resolved": "0.1.190",
+        "contentHash": "fnANtFgqeMxlcJJQV6rp1tOHn/9eEbr0nAVxYqDkFZ/R+Pfcx5RTLtTtSHxZVGps1k7ho6ONMjV36Kn8TrKm0w==",
         "dependencies": {
-          "KeepShell": "0.1.186",
+          "KeepShell": "0.1.190",
           "ModelContextProtocol.AspNetCore": "1.4.1"
         }
       },
