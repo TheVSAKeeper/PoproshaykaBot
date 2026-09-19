@@ -56,6 +56,8 @@ public sealed class GalleryHost : IGalleryHost
 
     public async Task ArrangeAsync()
     {
+        _shell.OnboardingBanner.Suppress();
+
         await StatisticsBootstrap.LoadUserStatisticsAsync(_services).ConfigureAwait(true);
 
         try
