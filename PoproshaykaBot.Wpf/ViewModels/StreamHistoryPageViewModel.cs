@@ -26,6 +26,18 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         StreamTrendMetric.Chatters,
     ];
 
+    public static readonly StreamSortKey[] SortKeys =
+    [
+        StreamSortKey.StartedAt,
+        StreamSortKey.Duration,
+        StreamSortKey.Title,
+        StreamSortKey.Game,
+        StreamSortKey.Messages,
+        StreamSortKey.Chatters,
+        StreamSortKey.PeakViewers,
+        StreamSortKey.AverageViewers,
+    ];
+
     private const string Placeholder = "–";
 
     private static readonly PointTerm SessionTerm = new()
@@ -56,6 +68,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private readonly List<IDisposable> _subs = [];
     private readonly List<StreamSessionRowViewModel> _allSessions = [];
     private readonly ObservableCollection<StreamSessionRowViewModel> _sessions = [];
+    private readonly ObservableCollection<StreamSessionRowViewModel> _cards = [];
 
     private CancellationTokenSource? _boxArtCancellation;
 
@@ -170,6 +183,11 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     private StreamTrendMetric _trendMetric;
     private int _trendLength;
+    private StreamListView _listView;
+    private StreamSortKey _sortKey;
+    private bool _sortDescending;
+
+    private bool _rebuildingCards;
 
     public StreamHistoryPageViewModel(
         StreamSessionHistoryStore historyStore,
@@ -187,6 +205,22 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         _trendLength = NormalizeLength(settings.GetInt(SettingsKeys.StreamTrendLength, DefaultTrendLength));
         _isTrendVisible = settings.GetBool(SettingsKeys.StreamTrendVisible, true);
         _isSummaryExpanded = settings.GetBool(SettingsKeys.StreamSummaryExpanded, false);
+        _listView = NormalizeListView(settings.GetEnum(SettingsKeys.StreamListView, StreamListView.Table));
+        _sortKey = NormalizeSortKey(settings.GetEnum(SettingsKeys.StreamSortKey, StreamSortKey.StartedAt));
+        _sortDescending = settings.GetBool(SettingsKeys.StreamSortDescending, true);
+
+        foreach (var key in SortKeys)
+        {
+            SortOptions.Add(new(SortName(key), key == _sortKey, new RelayCommand(() => SetSortKey(key))));
+        }
+
+        foreach (var descending in new[] { true, false })
+        {
+            SortDirectionOptions.Add(new(
+                DirectionName(descending),
+                descending == _sortDescending,
+                new RelayCommand(() => SetSortDirection(descending))));
+        }
 
         foreach (var metric in TrendMetrics)
         {
@@ -212,6 +246,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public string? PageDescription => "Сессии стримов, их сегменты и чаттеры";
 
     public ObservableCollection<StreamSessionRowViewModel> Sessions => _sessions;
+    public ObservableCollection<StreamSessionRowViewModel> Cards => _cards;
     public ObservableCollection<StreamTrendBarViewModel> Trend { get; } = [];
     public ObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];
     public ObservableCollection<StreamSessionChatterRowViewModel> Chatters { get; } = [];
@@ -219,6 +254,36 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public ObservableCollection<StreamRecordCardViewModel> Records { get; } = [];
     public ObservableCollection<StreamTrendOptionViewModel> MetricOptions { get; } = [];
     public ObservableCollection<StreamTrendOptionViewModel> LengthOptions { get; } = [];
+    public ObservableCollection<StreamTrendOptionViewModel> SortOptions { get; } = [];
+    public ObservableCollection<StreamTrendOptionViewModel> SortDirectionOptions { get; } = [];
+
+    public bool IsTableView
+    {
+        get => _listView != StreamListView.Cards;
+        set
+        {
+            if (value)
+            {
+                SetListView(StreamListView.Table);
+            }
+        }
+    }
+
+    public bool IsCardsView
+    {
+        get => _listView == StreamListView.Cards;
+        set
+        {
+            if (value)
+            {
+                SetListView(StreamListView.Cards);
+            }
+        }
+    }
+
+    public string SortCaption => string.Create(
+        UiCulture.Russian,
+        $"Сортировка: {SortName(_sortKey)}, {DirectionName(_sortDescending).ToLower(UiCulture.Russian)}");
 
     public bool HasSelection => SelectedRow is not null;
 
@@ -271,6 +336,26 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             StreamTrendMetric.Chatters => "Чаттеры",
             _ => "Пик зрителей",
         };
+    }
+
+    public static string SortName(StreamSortKey key)
+    {
+        return key switch
+        {
+            StreamSortKey.Duration => "Эфир",
+            StreamSortKey.Title => "Название",
+            StreamSortKey.Game => "Игра",
+            StreamSortKey.Messages => "Сообщения",
+            StreamSortKey.Chatters => "Чаттеры",
+            StreamSortKey.PeakViewers => "Пик зрителей",
+            StreamSortKey.AverageViewers => "Средние зрители",
+            _ => "Начало",
+        };
+    }
+
+    public static string DirectionName(bool descending)
+    {
+        return descending ? "По убыванию" : "По возрастанию";
     }
 
     public static string MetricLabel(StreamTrendMetric metric)
@@ -434,6 +519,11 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     partial void OnSelectedRowChanged(StreamSessionRowViewModel? value)
     {
+        if (_rebuildingCards && value is null)
+        {
+            return;
+        }
+
         Segments.Clear();
         Chatters.Clear();
 
@@ -555,6 +645,16 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         return TrendLengths.Contains(length) ? length : DefaultTrendLength;
     }
 
+    private static StreamListView NormalizeListView(StreamListView view)
+    {
+        return view == StreamListView.Cards ? StreamListView.Cards : StreamListView.Table;
+    }
+
+    private static StreamSortKey NormalizeSortKey(StreamSortKey key)
+    {
+        return SortKeys.Contains(key) ? key : StreamSortKey.StartedAt;
+    }
+
     private static bool Matches(StreamSessionRowViewModel row, string game)
     {
         foreach (var segment in row.Source.Segments)
@@ -581,6 +681,48 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         IsTrendVisible = true;
         BuildTrend();
+    }
+
+    private void SetListView(StreamListView view)
+    {
+        if (_listView == view)
+        {
+            return;
+        }
+
+        _listView = view;
+        _settings.SetEnum(SettingsKeys.StreamListView, view);
+
+        OnPropertyChanged(nameof(IsTableView));
+        OnPropertyChanged(nameof(IsCardsView));
+    }
+
+    private void SetSortKey(StreamSortKey key)
+    {
+        _sortKey = NormalizeSortKey(key);
+        _settings.SetEnum(SettingsKeys.StreamSortKey, _sortKey);
+
+        for (var index = 0; index < SortOptions.Count; index++)
+        {
+            SortOptions[index].IsChecked = SortKeys[index] == _sortKey;
+        }
+
+        RebuildCards();
+        OnPropertyChanged(nameof(SortCaption));
+    }
+
+    private void SetSortDirection(bool descending)
+    {
+        _sortDescending = descending;
+        _settings.SetBool(SettingsKeys.StreamSortDescending, descending);
+
+        foreach (var option in SortDirectionOptions)
+        {
+            option.IsChecked = string.Equals(option.Caption, DirectionName(descending), StringComparison.Ordinal);
+        }
+
+        RebuildCards();
+        OnPropertyChanged(nameof(SortCaption));
     }
 
     private void SetLength(int length)
@@ -612,16 +754,85 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         }
 
         UpdateAverages();
+        UpdateRowDeltas();
         UpdateSummary();
         UpdateInsights();
         BuildTrend();
         RefreshBoxArt();
+        RebuildCards();
 
         OnPropertyChanged(nameof(HasSessions));
 
         SelectedRow = selectedId.HasValue
             ? _sessions.FirstOrDefault(row => row.Source.Id == selectedId)
             : null;
+    }
+
+    private void RebuildCards()
+    {
+        var selected = SelectedRow;
+
+        _rebuildingCards = true;
+
+        try
+        {
+            _cards.Clear();
+
+            foreach (var row in SortRows(_sessions))
+            {
+                _cards.Add(row);
+            }
+        }
+        finally
+        {
+            _rebuildingCards = false;
+        }
+
+        if (selected is not null && _cards.Contains(selected))
+        {
+            SelectedRow = selected;
+        }
+        else if (SelectedRow is null)
+        {
+            OnSelectedRowChanged(null);
+        }
+    }
+
+    private IEnumerable<StreamSessionRowViewModel> SortRows(IEnumerable<StreamSessionRowViewModel> rows)
+    {
+        return _sortKey switch
+        {
+            StreamSortKey.Duration => Order(rows, row => row.Duration),
+            StreamSortKey.Title => Order(rows, row => row.TitleFormatted, StringComparer.CurrentCultureIgnoreCase),
+            StreamSortKey.Game => Order(rows, row => row.GameFormatted, StringComparer.CurrentCultureIgnoreCase),
+            StreamSortKey.Messages => Order(rows, row => row.MessageCount),
+            StreamSortKey.Chatters => Order(rows, row => row.ChatterCount),
+            StreamSortKey.PeakViewers => Order(rows, row => row.PeakViewers),
+            StreamSortKey.AverageViewers => Order(rows, row => row.AverageViewers),
+            _ => Order(rows, row => row.StartedAt),
+        };
+    }
+
+    private IOrderedEnumerable<StreamSessionRowViewModel> Order<TKey>(
+        IEnumerable<StreamSessionRowViewModel> rows,
+        Func<StreamSessionRowViewModel, TKey> selector,
+        IComparer<TKey>? comparer = null)
+    {
+        return _sortDescending
+            ? rows.OrderByDescending(selector, comparer)
+            : rows.OrderBy(selector, comparer);
+    }
+
+    private void UpdateRowDeltas()
+    {
+        foreach (var row in _sessions)
+        {
+            row.ApplyDeltas(
+                DescribeDelta(row.MessageCount, _averageMessages, _sessions.Count),
+                DescribeDelta(row.ChatterCount, _averageChatters, _sessions.Count),
+                DescribeDelta(row.PeakViewers, _averagePeakViewers, _sessions.Count),
+                DescribeDelta(row.AverageViewers, _averageViewers, _sessions.Count));
+        }
     }
 
     private void RefreshBoxArt()
@@ -859,8 +1070,32 @@ public sealed partial class StreamTrendOptionViewModel : ObservableObject
     public IRelayCommand Command { get; }
 }
 
-public sealed class StreamSessionRowViewModel
+public sealed partial class StreamSessionRowViewModel : ObservableObject
 {
+    [ObservableProperty]
+    private string _messagesDelta = string.Empty;
+
+    [ObservableProperty]
+    private TrendTone _messagesDeltaTone;
+
+    [ObservableProperty]
+    private string _chattersDelta = string.Empty;
+
+    [ObservableProperty]
+    private TrendTone _chattersDeltaTone;
+
+    [ObservableProperty]
+    private string _peakViewersDelta = string.Empty;
+
+    [ObservableProperty]
+    private TrendTone _peakViewersDeltaTone;
+
+    [ObservableProperty]
+    private string _averageViewersDelta = string.Empty;
+
+    [ObservableProperty]
+    private TrendTone _averageViewersDeltaTone;
+
     public StreamSessionRecord Source { get; }
 
     public DateTimeOffset StartedAt => Source.StartedAt;
@@ -883,6 +1118,11 @@ public sealed class StreamSessionRowViewModel
     public string PeakViewersFormatted { get; }
     public string AverageViewersFormatted { get; }
 
+    public IReadOnlyList<StreamSessionStripeViewModel> Stripes { get; }
+
+    public string CardMetaText { get; }
+    public string CardSummary { get; }
+
     public StreamSessionRowViewModel(StreamSessionRecord source)
     {
         Source = source;
@@ -895,6 +1135,46 @@ public sealed class StreamSessionRowViewModel
         ChatterCountFormatted = StreamHistoryPageViewModel.FormatNumber(source.ChatterCount);
         PeakViewersFormatted = StreamHistoryPageViewModel.FormatNumber(source.PeakViewers);
         AverageViewersFormatted = StreamHistoryPageViewModel.FormatNumber(source.AverageViewers);
+        Stripes = BuildStripes(source);
+
+        CardMetaText = string.Create(UiCulture.Russian, $"{StartedAtFormatted} · {DurationFormatted}");
+
+        CardSummary = string.Create(
+            UiCulture.Russian,
+            $"{TitleFormatted}, {GameFormatted}, {StartedAtFormatted}, эфир {DurationFormatted}, "
+            + $"сообщений {MessageCountFormatted}, чаттеров {ChatterCountFormatted}, "
+            + $"пик {PeakViewersFormatted}, средние {AverageViewersFormatted}");
+    }
+
+    public void ApplyDeltas(
+        (string Text, TrendTone Tone) messages,
+        (string Text, TrendTone Tone) chatters,
+        (string Text, TrendTone Tone) peakViewers,
+        (string Text, TrendTone Tone) averageViewers)
+    {
+        (MessagesDelta, MessagesDeltaTone) = messages;
+        (ChattersDelta, ChattersDeltaTone) = chatters;
+        (PeakViewersDelta, PeakViewersDeltaTone) = peakViewers;
+        (AverageViewersDelta, AverageViewersDeltaTone) = averageViewers;
+    }
+
+    private static IReadOnlyList<StreamSessionStripeViewModel> BuildStripes(StreamSessionRecord source)
+    {
+        var total = source.Segments.Aggregate(TimeSpan.Zero, (sum, segment) => sum + segment.Duration);
+
+        if (source.Segments.Count == 0 || total <= TimeSpan.Zero)
+        {
+            return [new(source.Game, 1)];
+        }
+
+        var stripes = new List<StreamSessionStripeViewModel>(source.Segments.Count);
+
+        foreach (var segment in source.Segments)
+        {
+            stripes.Add(new(segment.Game, segment.Duration / total));
+        }
+
+        return stripes;
     }
 
     private static string BuildGameDisplay(StreamSessionRecord source)
@@ -908,6 +1188,18 @@ public sealed class StreamSessionRowViewModel
             .Count() - 1;
 
         return extra > 0 ? string.Create(UiCulture.Russian, $"{game} (+{extra:N0})") : game;
+    }
+}
+
+public sealed class StreamSessionStripeViewModel
+{
+    public double Share { get; }
+    public int PaletteIndex { get; }
+
+    public StreamSessionStripeViewModel(string? game, double share)
+    {
+        PaletteIndex = StreamSegmentPalette.IndexOf(game);
+        Share = share;
     }
 }
 

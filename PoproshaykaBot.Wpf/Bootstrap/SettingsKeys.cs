@@ -14,6 +14,9 @@ public static class SettingsKeys
     public const string StreamTrendLength = "ui.streams.trend_length";
     public const string StreamTrendVisible = "ui.streams.trend_visible";
     public const string StreamSummaryExpanded = "ui.streams.summary_expanded";
+    public const string StreamListView = "ui.streams.list_view";
+    public const string StreamSortKey = "ui.streams.sort_key";
+    public const string StreamSortDescending = "ui.streams.sort_descending";
 
     public const string WindowLeft = "ui.window.left";
     public const string WindowTop = "ui.window.top";

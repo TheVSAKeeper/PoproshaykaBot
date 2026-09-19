@@ -272,6 +272,90 @@ public class StreamHistoryPageTests
         }
     }
 
+    [Test]
+    public void Вид_карточками_переживает_перезапуск()
+    {
+        ISettingsStore settings = new MemorySettings();
+        var page = Create(settings, Session(0, "Just Chatting"), Session(1, "Minecraft"));
+
+        Assert.That(page.IsTableView, Is.True);
+
+        page.IsCardsView = true;
+
+        var restarted = Create(settings, Session(0, "Just Chatting"), Session(1, "Minecraft"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(restarted.IsCardsView, Is.True);
+            Assert.That(restarted.IsTableView, Is.False);
+            Assert.That(restarted.Cards, Has.Count.EqualTo(2));
+        }
+    }
+
+    [Test]
+    public void Сортировка_карточек_не_трогает_таблицу_и_тренд()
+    {
+        ISettingsStore settings = new MemorySettings();
+        var page = Create(settings, Session(0, "Just Chatting", messages: 900), Session(1, "Minecraft", messages: 10));
+
+        page.SortOptions[Array.IndexOf(StreamHistoryPageViewModel.SortKeys, StreamSortKey.Messages)].Command.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Cards.Select(card => card.MessageCount), Is.EqualTo(new long[] { 900, 10 }));
+            Assert.That(page.Sessions.Select(row => row.MessageCount), Is.EqualTo(new long[] { 10, 900 }),
+                "Таблица и тренд остаются в порядке по дате – сортировка принадлежит только карточкам");
+            Assert.That(page.Trend.Select(bar => bar.Row.MessageCount), Is.EqualTo(new long[] { 900, 10 }));
+            Assert.That(page.SortCaption, Is.EqualTo("Сортировка: Сообщения, по убыванию"));
+        }
+
+        page.SortDirectionOptions[1].Command.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Cards.Select(card => card.MessageCount), Is.EqualTo(new long[] { 10, 900 }));
+            Assert.That(page.SortCaption, Is.EqualTo("Сортировка: Сообщения, по возрастанию"));
+        }
+
+        var restarted = Create(settings, Session(0, "Just Chatting", messages: 900), Session(1, "Minecraft", messages: 10));
+
+        Assert.That(restarted.Cards.Select(card => card.MessageCount), Is.EqualTo(new long[] { 10, 900 }));
+    }
+
+    [Test]
+    public void Смена_сортировки_сохраняет_выбранную_сессию()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting", messages: 900), Session(1, "Minecraft", messages: 10));
+
+        page.TrySelectAt(0);
+
+        var selected = page.SelectedRow;
+
+        page.SortOptions[Array.IndexOf(StreamHistoryPageViewModel.SortKeys, StreamSortKey.Messages)].Command.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.SelectedRow, Is.SameAs(selected));
+            Assert.That(page.Cards, Does.Contain(selected));
+        }
+    }
+
+    [Test]
+    public void Карточка_получает_отклонения_и_полосу_сегментов()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting", messages: 100), Session(1, "Minecraft", messages: 900));
+
+        var quiet = page.Cards.Single(card => card.MessageCount == 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(quiet.MessagesDelta, Is.EqualTo("−80 % к обычному"));
+            Assert.That(quiet.MessagesDeltaTone, Is.EqualTo(TrendTone.Down));
+            Assert.That(quiet.Stripes.Sum(stripe => stripe.Share), Is.EqualTo(1).Within(0.001));
+            Assert.That(quiet.CardSummary, Does.Contain("Just Chatting"));
+        }
+    }
+
     private static StreamSessionRecord Session(int index, string? game, long messages = 100, string chatterId = "42")
     {
         var started = Start.AddDays(index);

@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views;
 
@@ -18,6 +19,9 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double ChattersMinWidth = 240;
     public const double TrendStripHeight = 40;
     public const double TrendStripCompactHeight = 36;
+    public const double CardHeight = 96;
+    public const double DetailRowMinHeight = 200;
+    public const double DetailCardsRowMinHeight = 150;
 
     private bool _sideBySide;
     private bool _layoutApplied;
@@ -49,6 +53,11 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         FontScaleManager.Changed += OnFontScaleChanged;
         _layoutApplied = false;
         UpdateLayoutMode();
+
+        if (DataContext is StreamHistoryPageViewModel viewModel)
+        {
+            ScrollToSelection(viewModel);
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -241,23 +250,57 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
             newViewModel.PropertyChanged += OnViewModelPropertyChanged;
             _layoutApplied = false;
             UpdateLayoutMode();
+            ScrollToSelection(newViewModel);
         }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(StreamHistoryPageViewModel.SelectedRow))
+        if (sender is not StreamHistoryPageViewModel viewModel)
         {
             return;
         }
 
-        if (sender is StreamHistoryPageViewModel { SelectedRow: { } row })
+        if (e.PropertyName is nameof(StreamHistoryPageViewModel.SelectedRow)
+            or nameof(StreamHistoryPageViewModel.IsCardsView))
         {
-            SessionsGrid.ScrollIntoView(row);
+            ScrollToSelection(viewModel);
         }
     }
 
+    private void ScrollToSelection(StreamHistoryPageViewModel viewModel)
+    {
+        if (viewModel.SelectedRow is not { } row)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                if (viewModel.IsCardsView)
+                {
+                    SessionCards.ScrollIntoView(row);
+                }
+                else
+                {
+                    SessionsGrid.ScrollIntoView(row);
+                }
+            },
+            DispatcherPriority.Background);
+    }
+
     private void OnTrendMenuClick(object sender, RoutedEventArgs e)
+    {
+        OpenMenu(sender);
+    }
+
+    private void OnSortMenuClick(object sender, RoutedEventArgs e)
+    {
+        OpenMenu(sender);
+    }
+
+    private static void OpenMenu(object sender)
     {
         if (sender is not Button { ContextMenu: { } menu } button)
         {

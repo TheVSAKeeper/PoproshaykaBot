@@ -18,6 +18,11 @@ public class StreamHistoryMetricsTests
     private const double TableShare = 3d / 5;
     private const double NumericHeaderChrome = 8 + 10 + 14;
     private const double CellMargin = 10;
+    private const double WindowMinHeight = 640;
+    private const double TitleBarHeight = 37;
+    private const double StatusBarHeight = 30;
+    private const double PageHeaderHeight = 40 + 40 + 48;
+    private const double SplitterHeight = 8;
 
     [Test]
     [Apartment(ApartmentState.STA)]
@@ -93,6 +98,23 @@ public class StreamHistoryMetricsTests
             Assert.That(StreamHistoryPageView.TableMinWidth + StreamHistoryPageView.DetailMinWidth,
                 Is.LessThan(StreamHistoryPageView.SideBySideWidth),
                 "полы колонок не должны превышать порог, иначе сетка пересилит их сразу после переключения");
+        });
+    }
+
+    [Test]
+    public void Список_карточек_на_минимальном_окне_не_вырождается_в_одну_карточку()
+    {
+        var content = WindowMinHeight - TitleBarHeight - StatusBarHeight;
+        var list = content - PageHeaderHeight - SplitterHeight - StreamHistoryPageView.TrendStripHeight
+                   - StreamHistoryPageView.DetailCardsRowMinHeight;
+        var cards = list / StreamHistoryPageView.CardHeight;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(StreamHistoryPageView.DetailCardsRowMinHeight, Is.LessThan(StreamHistoryPageView.DetailRowMinHeight),
+                "в виде карточками карточка стрима дублирует цифры списка, поэтому её пол ниже табличного – иначе списку не остаётся высоты");
+            Assert.That(cards, Is.GreaterThanOrEqualTo(2.5),
+                $"при окне {WindowMinHeight} DIP списку карточек остаётся {list:F1} DIP, то есть {cards:F1} карточки по {StreamHistoryPageView.CardHeight} – вид карточками вырождается в одну строку с обрезком");
         });
     }
 

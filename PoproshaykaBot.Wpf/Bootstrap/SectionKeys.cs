@@ -9,13 +9,17 @@ public static class SectionKeys
     public const string Settings = "settings";
 
     public const string SelectedSuffix = ":selected";
+    public const string CardsSuffix = ":cards";
 
     public const string UsersSelected = Users + SelectedSuffix;
     public const string StreamsSelected = Streams + SelectedSuffix;
+    public const string StreamsCards = Streams + CardsSuffix;
 
     public static IReadOnlyList<string> All { get; } = [Overview, Users, Streams, Logs, Settings];
 
     public static IReadOnlyList<string> Selected { get; } = [UsersSelected, StreamsSelected];
+
+    public static IReadOnlyList<string> Cards { get; } = [StreamsCards];
 
     public static IReadOnlyDictionary<string, string> LegacyTitles { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -33,10 +37,22 @@ public static class SectionKeys
         return Selected.Contains(key, StringComparer.OrdinalIgnoreCase);
     }
 
+    public static bool IsCardsCase(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        return Cards.Contains(key, StringComparer.OrdinalIgnoreCase);
+    }
+
     public static string PageOf(string key)
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        return IsSelectedCase(key) ? key[..^SelectedSuffix.Length] : key;
+        if (IsSelectedCase(key))
+        {
+            return key[..^SelectedSuffix.Length];
+        }
+
+        return IsCardsCase(key) ? key[..^CardsSuffix.Length] : key;
     }
 }
