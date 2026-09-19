@@ -146,6 +146,11 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private bool _isTrendVisible = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSummaryOpen))]
+    [NotifyPropertyChangedFor(nameof(SummaryToggleCaption))]
+    private bool _isSummaryExpanded;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTrendLabels))]
     [NotifyPropertyChangedFor(nameof(HasTrendBaseline))]
     [NotifyPropertyChangedFor(nameof(HasWideSummary))]
@@ -173,6 +178,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         _trendMetric = NormalizeMetric(settings.GetEnum(SettingsKeys.StreamTrendMetric, StreamTrendMetric.PeakViewers));
         _trendLength = NormalizeLength(settings.GetInt(SettingsKeys.StreamTrendLength, DefaultTrendLength));
         _isTrendVisible = settings.GetBool(SettingsKeys.StreamTrendVisible, true);
+        _isSummaryExpanded = settings.GetBool(SettingsKeys.StreamSummaryExpanded, false);
 
         foreach (var metric in TrendMetrics)
         {
@@ -201,6 +207,8 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public ObservableCollection<StreamTrendBarViewModel> Trend { get; } = [];
     public ObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];
     public ObservableCollection<StreamSessionChatterRowViewModel> Chatters { get; } = [];
+    public ObservableCollection<StreamCategoryRowViewModel> TopCategories { get; } = [];
+    public ObservableCollection<StreamRecordCardViewModel> Records { get; } = [];
     public ObservableCollection<StreamTrendOptionViewModel> MetricOptions { get; } = [];
     public ObservableCollection<StreamTrendOptionViewModel> LengthOptions { get; } = [];
 
@@ -217,6 +225,15 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public bool HasChatters => Chatters.Count > 0;
 
     public bool HasGameFilter => GameFilter is { Length: > 0 };
+
+    public bool HasTopCategories => TopCategories.Count > 0;
+    public bool HasRecords => Records.Count > 0;
+    public bool HasSummaryStrip => HasTopCategories || HasRecords;
+    public bool IsSummaryOpen => IsSummaryExpanded && HasSummaryStrip;
+
+    public string SummaryToggleCaption => IsSummaryExpanded ? "Скрыть сводку" : "Показать сводку";
+
+    public string TopCategoriesHeading => string.Create(UiCulture.Russian, $"Топ категорий ({TopCategories.Count:N0})");
 
     public string SummaryLine => string.Create(
         UiCulture.Russian,
@@ -301,6 +318,27 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     }
 
     public static string FormatNumber(long value) => value.ToString("N0", UiCulture.Russian);
+
+    public static string FormatSessions(int count)
+    {
+        return string.Create(UiCulture.Russian, $"{count:N0} {SessionTerm.ForCount(count)}");
+    }
+
+    public static string FormatShare(double share)
+    {
+        return string.Create(UiCulture.Russian, $"{share * 100:N0} %");
+    }
+
+    public static string RecordCaption(StreamRecordKind kind)
+    {
+        return kind switch
+        {
+            StreamRecordKind.PeakViewers => "рекорд зрителей",
+            StreamRecordKind.Messages => "больше всего сообщений",
+            StreamRecordKind.Chatters => "больше всего чаттеров",
+            _ => "самый долгий стрим",
+        };
+    }
 
     public static string FormatPeriod(DateTimeOffset started, DateTimeOffset ended)
     {
@@ -409,6 +447,11 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         OnPropertyChanged(nameof(ChattersHeading));
     }
 
+    partial void OnIsSummaryExpandedChanged(bool value)
+    {
+        _settings.SetBool(SettingsKeys.StreamSummaryExpanded, value);
+    }
+
     partial void OnIsTrendVisibleChanged(bool value)
     {
         _settings.SetBool(SettingsKeys.StreamTrendVisible, value);
@@ -432,9 +475,22 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     }
 
     [RelayCommand]
-    private void FilterByGame(StreamSessionSegmentRowViewModel? segment)
+    private void ToggleSummary()
     {
-        if (segment?.GameKey is not { Length: > 0 } game)
+        IsSummaryExpanded = !IsSummaryExpanded;
+    }
+
+    [RelayCommand]
+    private void FilterByGame(object? source)
+    {
+        var key = source switch
+        {
+            StreamSessionSegmentRowViewModel segment => segment.GameKey,
+            StreamCategoryRowViewModel category => category.Game,
+            _ => null,
+        };
+
+        if (key is not { Length: > 0 } game)
         {
             return;
         }
@@ -547,6 +603,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         UpdateAverages();
         UpdateSummary();
+        UpdateInsights();
         BuildTrend();
 
         OnPropertyChanged(nameof(HasSessions));
@@ -660,6 +717,32 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         LastStreamText = _sessions.Count > 0
             ? RelativeTime.Describe(_sessions[0].StartedAt, DateTimeOffset.Now)
             : Placeholder;
+    }
+
+    private void UpdateInsights()
+    {
+        var summary = StreamHistorySummary.Build(_sessions.Select(row => row.Source).ToList());
+
+        TopCategories.Clear();
+        Records.Clear();
+
+        var leaderAirTime = summary.Categories.Count > 0 ? summary.Categories[0].AirTime : TimeSpan.Zero;
+
+        for (var index = 0; index < summary.Categories.Count; index++)
+        {
+            TopCategories.Add(new(summary.Categories[index], index + 1, leaderAirTime));
+        }
+
+        foreach (var stat in summary.Records)
+        {
+            Records.Add(new(stat, _sessions.FirstOrDefault(row => row.Source.Id == stat.Session.Id)));
+        }
+
+        OnPropertyChanged(nameof(HasTopCategories));
+        OnPropertyChanged(nameof(HasRecords));
+        OnPropertyChanged(nameof(HasSummaryStrip));
+        OnPropertyChanged(nameof(IsSummaryOpen));
+        OnPropertyChanged(nameof(TopCategoriesHeading));
     }
 
     private void BuildTrend()
@@ -823,6 +906,65 @@ public sealed class StreamSessionSegmentRowViewModel
         TimelineText = string.Create(
             UiCulture.Russian,
             $"{Game} · {Title}, {Duration} · {Messages} сообщ. · пик {PeakViewers}");
+    }
+}
+
+public sealed class StreamCategoryRowViewModel
+{
+    public string Game { get; }
+    public int Position { get; }
+    public bool IsTopThree { get; }
+    public double Share { get; }
+    public string AirTimeText { get; }
+    public string SessionsText { get; }
+    public string ShareText { get; }
+    public string Summary { get; }
+
+    public StreamCategoryRowViewModel(StreamCategoryStat stat, int position, TimeSpan leaderAirTime)
+    {
+        Game = stat.Game;
+        Position = position;
+        IsTopThree = position is > 0 and <= 3;
+        Share = leaderAirTime > TimeSpan.Zero
+            ? Math.Clamp(stat.AirTime / leaderAirTime, UserStatisticsRanking.MinimumShare, 1)
+            : UserStatisticsRanking.MinimumShare;
+        AirTimeText = StreamHistoryPageViewModel.FormatAirTime(stat.AirTime);
+        SessionsText = StreamHistoryPageViewModel.FormatSessions(stat.SessionCount);
+        ShareText = StreamHistoryPageViewModel.FormatShare(stat.Share);
+        Summary = string.Create(
+            UiCulture.Russian,
+            $"{position:N0}. {Game}, {AirTimeText} в эфире, {SessionsText}, {ShareText} эфира. Отфильтровать историю по этой игре");
+    }
+}
+
+public sealed class StreamRecordCardViewModel
+{
+    public StreamRecordKind Kind { get; }
+    public StreamSessionRowViewModel? Row { get; }
+    public bool CanSelect { get; }
+    public string Caption { get; }
+    public string ValueText { get; }
+    public string DateText { get; }
+    public string TitleText { get; }
+    public string Summary { get; }
+
+    public StreamRecordCardViewModel(StreamRecordStat stat, StreamSessionRowViewModel? row)
+    {
+        Kind = stat.Kind;
+        Row = row;
+        CanSelect = row is not null;
+        Caption = StreamHistoryPageViewModel.RecordCaption(stat.Kind);
+        ValueText = stat.Kind == StreamRecordKind.Duration
+            ? StreamHistoryPageViewModel.FormatDuration(stat.Session.Duration)
+            : StreamHistoryPageViewModel.FormatNumber(stat.Value);
+        DateText = RelativeTime.FormatDate(stat.Session.StartedAt);
+        TitleText = stat.Session.Title is { Length: > 0 } title ? title : "Без названия";
+
+        var summary = string.Create(UiCulture.Russian, $"{Caption}: {ValueText}. {DateText}, {TitleText}");
+
+        Summary = CanSelect
+            ? string.Create(UiCulture.Russian, $"{summary}. Выбрать этот стрим в таблице")
+            : summary;
     }
 }
 

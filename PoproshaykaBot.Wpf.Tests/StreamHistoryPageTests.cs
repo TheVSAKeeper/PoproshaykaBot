@@ -154,6 +154,89 @@ public class StreamHistoryPageTests
     }
 
     [Test]
+    public void Топ_категорий_считается_по_отфильтрованному_набору()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting"), Session(1, "Minecraft"), Session(2, "Just Chatting"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.TopCategories.Select(category => category.Game), Is.EqualTo(new[] { "Just Chatting", "Minecraft" }));
+            Assert.That(page.TopCategories[0].SessionsText, Is.EqualTo("2 стрима"));
+            Assert.That(page.HasSummaryStrip, Is.True);
+        }
+
+        page.FilterByGameCommand.Execute(page.TopCategories[1]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.GameFilter, Is.EqualTo("Minecraft"));
+            Assert.That(page.TopCategories.Select(category => category.Game), Is.EqualTo(new[] { "Minecraft" }));
+            Assert.That(page.TopCategories[0].ShareText, Is.EqualTo("100 %"));
+            Assert.That(page.Records, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void Повторный_клик_по_той_же_категории_снимает_фильтр()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting"), Session(1, "Minecraft"));
+
+        page.FilterByGameCommand.Execute(page.TopCategories[0]);
+        page.FilterByGameCommand.Execute(page.TopCategories[0]);
+
+        Assert.That(page.HasGameFilter, Is.False);
+    }
+
+    [Test]
+    public void Карточка_рекорда_выбирает_свою_сессию()
+    {
+        var page = Create(
+            new MemorySettings(),
+            Session(0, "Just Chatting", messages: 10),
+            Session(1, "Minecraft", messages: 900));
+
+        var record = page.Records.Single(card => card.Kind == StreamRecordKind.Messages);
+
+        page.SelectSessionCommand.Execute(record.Row);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record.CanSelect, Is.True);
+            Assert.That(record.ValueText, Is.EqualTo("900"));
+            Assert.That(page.SelectedRow?.MessageCount, Is.EqualTo(900));
+        }
+    }
+
+    [Test]
+    public void Свёрнутость_сводки_переживает_перезапуск()
+    {
+        ISettingsStore settings = new MemorySettings();
+        var page = Create(settings, Session(0, "Just Chatting"), Session(1, "Minecraft"));
+
+        Assert.That(page.IsSummaryExpanded, Is.False);
+
+        page.ToggleSummaryCommand.Execute(null);
+
+        var restarted = Create(settings, Session(0, "Just Chatting"), Session(1, "Minecraft"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(settings.GetBool(SettingsKeys.StreamSummaryExpanded, false), Is.True);
+            Assert.That(restarted.IsSummaryExpanded, Is.True);
+            Assert.That(restarted.IsSummaryOpen, Is.True);
+            Assert.That(restarted.HasSummaryStrip, Is.True);
+        }
+
+        restarted.ToggleSummaryCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(restarted.IsSummaryOpen, Is.False);
+            Assert.That(Create(settings, Session(0, "Just Chatting")).IsSummaryExpanded, Is.False);
+        }
+    }
+
+    [Test]
     public void Клик_по_известному_чаттеру_просит_открыть_пользователя()
     {
         var page = Create(new MemorySettings(), Session(0, "Just Chatting", chatterId: "42"));

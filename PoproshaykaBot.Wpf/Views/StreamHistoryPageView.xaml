@@ -335,6 +335,106 @@
             </Grid>
         </DataTemplate>
 
+        <Style x:Key="SummaryChevron"
+               TargetType="iconPacks:PackIconLucide">
+            <Setter Property="Kind"
+                    Value="ChevronRight" />
+            <Setter Property="Width"
+                    Value="12" />
+            <Setter Property="Height"
+                    Value="12" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSummaryExpanded}"
+                             Value="True">
+                    <Setter Property="Kind"
+                            Value="ChevronDown" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="CategoryRowItem"
+               TargetType="ListBoxItem"
+               BasedOn="{StaticResource RatingRowItem}">
+            <Setter Property="MinHeight"
+                    Value="32" />
+            <Setter Property="Padding"
+                    Value="8,0" />
+            <Setter Property="Cursor"
+                    Value="Hand" />
+            <EventSetter Event="MouseLeftButtonUp"
+                         Handler="OnCategoryRowActivated" />
+            <EventSetter Event="KeyDown"
+                         Handler="OnCategoryRowKeyDown" />
+        </Style>
+
+        <DataTemplate x:Key="CategoryRowTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*"
+                                      MinWidth="60" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ContentPresenter Grid.Column="0"
+                                  Content="{Binding}"
+                                  ContentTemplate="{StaticResource RatingPositionCell}" />
+
+                <TextBlock Grid.Column="1"
+                           Style="{StaticResource RatingName}"
+                           Text="{Binding Game}"
+                           Margin="10,0,10,0" />
+
+                <TextBlock Grid.Column="2"
+                           Style="{StaticResource RatingNumber}"
+                           Text="{Binding SessionsText}"
+                           Margin="0,0,12,0" />
+
+                <TextBlock Grid.Column="3"
+                           Style="{StaticResource RatingNumber.Strong}"
+                           MinWidth="76"
+                           Text="{Binding AirTimeText}" />
+
+                <TextBlock Grid.Column="4"
+                           Style="{StaticResource RatingNumber}"
+                           MinWidth="44"
+                           Margin="10,0,0,0"
+                           Text="{Binding ShareText}" />
+            </Grid>
+        </DataTemplate>
+
+        <Style x:Key="RecordCard"
+               TargetType="Button"
+               BasedOn="{StaticResource Button.Ghost}">
+            <Setter Property="Width"
+                    Value="164" />
+            <Setter Property="Margin"
+                    Value="0,0,8,8" />
+            <Setter Property="Padding"
+                    Value="10,6" />
+            <Setter Property="HorizontalContentAlignment"
+                    Value="Stretch" />
+            <Setter Property="BorderBrush"
+                    Value="{DynamicResource Border.Subtle}" />
+            <Setter Property="BorderThickness"
+                    Value="1" />
+            <Setter Property="ToolTip"
+                    Value="{Binding Summary}" />
+            <Setter Property="AutomationProperties.Name"
+                    Value="{Binding Summary}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding CanSelect}"
+                             Value="False">
+                    <Setter Property="IsEnabled"
+                            Value="False" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
     </UserControl.Resources>
 
     <Grid x:Name="PageGrid">
@@ -347,8 +447,10 @@
                            MinHeight="200" />
         </Grid.RowDefinitions>
 
+        <StackPanel x:Name="HeaderStack"
+                    Grid.Row="0">
+
         <DockPanel x:Name="SummaryBar"
-                   Grid.Row="0"
                    Margin="0,0,0,8">
             <Button DockPanel.Dock="Right"
                     Style="{StaticResource Button.Icon}"
@@ -428,6 +530,144 @@
                 </Border>
             </WrapPanel>
         </DockPanel>
+
+        <Border x:Name="SummaryStrip"
+                Style="{StaticResource Card}"
+                Padding="0"
+                Margin="0,0,0,8"
+                Visibility="{Binding HasSummaryStrip, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Button Grid.Row="0"
+                        Style="{StaticResource Button.Ghost}"
+                        Command="{Binding ToggleSummaryCommand}"
+                        HorizontalAlignment="Left"
+                        Margin="6,4,0,0"
+                        Padding="8,4"
+                        AutomationProperties.Name="{Binding SummaryToggleCaption}"
+                        ToolTip="{Binding SummaryToggleCaption}">
+                    <StackPanel Orientation="Horizontal">
+                        <iconPacks:PackIconLucide Style="{StaticResource SummaryChevron}" />
+
+                        <TextBlock Text="Сводка"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <Grid Grid.Row="1"
+                      Margin="12,2,12,10"
+                      Visibility="{Binding IsSummaryOpen, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition>
+                            <ColumnDefinition.Style>
+                                <Style TargetType="ColumnDefinition">
+                                    <Setter Property="Width"
+                                            Value="*" />
+                                    <Setter Property="MinWidth"
+                                            Value="220" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasTopCategories}"
+                                                     Value="False">
+                                            <Setter Property="Width"
+                                                    Value="Auto" />
+                                            <Setter Property="MinWidth"
+                                                    Value="0" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ColumnDefinition.Style>
+                        </ColumnDefinition>
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0"
+                          Margin="0,0,16,0"
+                          Visibility="{Binding HasTopCategories, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                                   Style="{StaticResource StatLabel}"
+                                   Margin="8,0,0,4"
+                                   Text="{Binding TopCategoriesHeading}" />
+
+                        <ListBox Grid.Row="1"
+                                 x:Name="CategoriesList"
+                                 ItemsSource="{Binding TopCategories}"
+                                 AutomationProperties.Name="Топ категорий по эфиру"
+                                 ItemContainerStyle="{StaticResource CategoryRowItem}"
+                                 ItemTemplate="{StaticResource CategoryRowTemplate}"
+                                 SelectionMode="Single"
+                                 HorizontalContentAlignment="Stretch"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Disabled" />
+                    </Grid>
+
+                    <Grid Grid.Column="1"
+                          Visibility="{Binding HasRecords, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                                   Style="{StaticResource StatLabel}"
+                                   Margin="0,0,0,4"
+                                   Text="Рекорды" />
+
+                        <ItemsControl Grid.Row="1"
+                                      ItemsSource="{Binding Records}"
+                                      KeyboardNavigation.TabNavigation="Continue">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="2" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource RecordCard}"
+                                            Command="{Binding DataContext.SelectSessionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding Row}">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource StatValue.Small}"
+                                                       FontSize="{DynamicResource Font.Size.M}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding ValueText}" />
+
+                                            <TextBlock Style="{StaticResource StatLabel}"
+                                                       Text="{Binding Caption}"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Style="{StaticResource StatLabel}"
+                                                       Margin="0,4,0,0"
+                                                       Text="{Binding DateText}" />
+
+                                            <TextBlock Style="{StaticResource StatLabel}"
+                                                       Margin="0,1,0,0"
+                                                       Text="{Binding TitleText}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Border>
+
+        </StackPanel>
 
         <Border x:Name="TableCard"
                 Grid.Row="1"

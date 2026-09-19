@@ -13,6 +13,7 @@ public static class SettingsKeys
     public const string StreamTrendMetric = "ui.streams.trend_metric";
     public const string StreamTrendLength = "ui.streams.trend_length";
     public const string StreamTrendVisible = "ui.streams.trend_visible";
+    public const string StreamSummaryExpanded = "ui.streams.summary_expanded";
 
     public const string WindowLeft = "ui.window.left";
     public const string WindowTop = "ui.window.top";

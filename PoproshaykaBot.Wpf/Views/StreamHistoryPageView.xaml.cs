@@ -193,7 +193,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
         PageGrid.RowDefinitions.Add(new() { Height = new(2, GridUnitType.Star), MinHeight = 200 });
 
-        Place(SummaryBar, 0, 0);
+        Place(HeaderStack, 0, 0);
         Place(TableCard, 1, 0);
         Place(LayoutSplitter, 2, 0);
         Place(DetailEmpty, 3, 0);
@@ -217,7 +217,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         PageGrid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         PageGrid.ColumnDefinitions.Add(new() { Width = new(2, GridUnitType.Star), MinWidth = DetailMinWidth * scale });
 
-        Place(SummaryBar, 0, 0, columnSpan: 3);
+        Place(HeaderStack, 0, 0, columnSpan: 3);
         Place(TableCard, 1, 0);
         Place(LayoutSplitter, 1, 1);
         Place(DetailEmpty, 1, 2);
@@ -297,6 +297,37 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         }
 
         viewModel.FilterByGameCommand.Execute(segment);
+
+        return true;
+    }
+
+    private void OnCategoryRowActivated(object sender, MouseButtonEventArgs e)
+    {
+        FilterByCategory(sender);
+    }
+
+    private void OnCategoryRowKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Space))
+        {
+            return;
+        }
+
+        if (FilterByCategory(sender))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private bool FilterByCategory(object sender)
+    {
+        if (sender is not ListBoxItem { DataContext: StreamCategoryRowViewModel category }
+            || DataContext is not StreamHistoryPageViewModel viewModel)
+        {
+            return false;
+        }
+
+        viewModel.FilterByGameCommand.Execute(category);
 
         return true;
     }
