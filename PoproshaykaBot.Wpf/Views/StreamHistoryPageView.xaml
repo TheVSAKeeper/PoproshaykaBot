@@ -734,21 +734,8 @@
             <RowDefinition Height="3*"
                            MinHeight="160" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="2*">
-                <RowDefinition.Style>
-                    <Style TargetType="RowDefinition">
-                        <Setter Property="MinHeight"
-                                Value="{x:Static views:StreamHistoryPageView.DetailRowMinHeight}" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsCardsView}"
-                                         Value="True">
-                                <Setter Property="MinHeight"
-                                        Value="{x:Static views:StreamHistoryPageView.DetailCardsRowMinHeight}" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </RowDefinition.Style>
-            </RowDefinition>
+            <RowDefinition Height="2*"
+                           MinHeight="200" />
         </Grid.RowDefinitions>
 
         <StackPanel x:Name="HeaderStack"

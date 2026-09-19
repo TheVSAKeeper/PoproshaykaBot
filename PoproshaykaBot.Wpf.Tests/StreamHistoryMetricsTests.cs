@@ -105,14 +105,19 @@ public class StreamHistoryMetricsTests
     public void Список_карточек_на_минимальном_окне_не_вырождается_в_одну_карточку()
     {
         var content = WindowMinHeight - TitleBarHeight - StatusBarHeight;
-        var list = content - PageHeaderHeight - SplitterHeight - StreamHistoryPageView.TrendStripHeight
-                   - StreamHistoryPageView.DetailCardsRowMinHeight;
+        var shared = content - PageHeaderHeight - SplitterHeight;
+        var share = StreamHistoryPageView.DetailCardsRowShare
+                    / (StreamHistoryPageView.ListRowShare + StreamHistoryPageView.DetailCardsRowShare);
+        var detail = Math.Max(shared * share, StreamHistoryPageView.DetailCardsRowMinHeight);
+        var list = shared - detail - StreamHistoryPageView.TrendStripHeight;
         var cards = list / StreamHistoryPageView.CardHeight;
 
         Assert.Multiple(() =>
         {
+            Assert.That(StreamHistoryPageView.DetailCardsRowShare, Is.LessThan(StreamHistoryPageView.DetailRowShare),
+                "в виде карточками карточка стрима дублирует цифры списка, поэтому её доля меньше табличной – иначе списку не остаётся высоты");
             Assert.That(StreamHistoryPageView.DetailCardsRowMinHeight, Is.LessThan(StreamHistoryPageView.DetailRowMinHeight),
-                "в виде карточками карточка стрима дублирует цифры списка, поэтому её пол ниже табличного – иначе списку не остаётся высоты");
+                "пол карточки стрима в виде карточками тоже ниже: доля без пола на высоком окне ужала бы её до нечитаемой");
             Assert.That(cards, Is.GreaterThanOrEqualTo(2.5),
                 $"при окне {WindowMinHeight} DIP списку карточек остаётся {list:F1} DIP, то есть {cards:F1} карточки по {StreamHistoryPageView.CardHeight} – вид карточками вырождается в одну строку с обрезком");
         });

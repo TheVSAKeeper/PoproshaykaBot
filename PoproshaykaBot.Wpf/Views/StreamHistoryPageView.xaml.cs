@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views;
@@ -22,6 +23,9 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double CardHeight = 96;
     public const double DetailRowMinHeight = 200;
     public const double DetailCardsRowMinHeight = 150;
+    public const double ListRowShare = 3;
+    public const double DetailRowShare = 2;
+    public const double DetailCardsRowShare = 1;
 
     private bool _sideBySide;
     private bool _layoutApplied;
@@ -197,10 +201,16 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         PageGrid.ColumnDefinitions.Clear();
         PageGrid.RowDefinitions.Clear();
 
+        var cards = DataContext is StreamHistoryPageViewModel { IsCardsView: true };
+
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        PageGrid.RowDefinitions.Add(new() { Height = new(3, GridUnitType.Star), MinHeight = 160 });
+        PageGrid.RowDefinitions.Add(new() { Height = new(ListRowShare, GridUnitType.Star), MinHeight = 160 });
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        PageGrid.RowDefinitions.Add(new() { Height = new(2, GridUnitType.Star), MinHeight = 200 });
+        PageGrid.RowDefinitions.Add(new()
+        {
+            Height = new(cards ? DetailCardsRowShare : DetailRowShare, GridUnitType.Star),
+            MinHeight = cards ? DetailCardsRowMinHeight : DetailRowMinHeight,
+        });
 
         Place(HeaderStack, 0, 0);
         Place(TableCard, 1, 0);
@@ -261,6 +271,12 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
             return;
         }
 
+        if (e.PropertyName is nameof(StreamHistoryPageViewModel.IsCardsView))
+        {
+            _layoutApplied = false;
+            UpdateLayoutMode();
+        }
+
         if (e.PropertyName is nameof(StreamHistoryPageViewModel.SelectedRow)
             or nameof(StreamHistoryPageViewModel.IsCardsView))
         {
@@ -281,13 +297,59 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
                 if (viewModel.IsCardsView)
                 {
                     SessionCards.ScrollIntoView(row);
+                    RevealFully(SessionCards, row);
                 }
                 else
                 {
                     SessionsGrid.ScrollIntoView(row);
+                    RevealFully(SessionsGrid, row);
                 }
             },
             DispatcherPriority.Background);
+    }
+
+    private static void RevealFully(ItemsControl list, object item)
+    {
+        if (list.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement container)
+        {
+            return;
+        }
+
+        if (FindScrollViewer(list) is not { } viewer)
+        {
+            return;
+        }
+
+        var top = container.TransformToAncestor(viewer).Transform(default(Point)).Y;
+        var bottom = top + container.ActualHeight;
+        if (bottom > viewer.ViewportHeight + 0.5)
+        {
+            var down = viewer.CanContentScroll ? 1 : bottom - viewer.ViewportHeight;
+            viewer.ScrollToVerticalOffset(viewer.VerticalOffset + down);
+        }
+        else if (top < -0.5)
+        {
+            var up = viewer.CanContentScroll ? 1 : -top;
+            viewer.ScrollToVerticalOffset(Math.Max(0, viewer.VerticalOffset - up));
+        }
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is ScrollViewer found)
+        {
+            return found;
+        }
+
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            if (FindScrollViewer(VisualTreeHelper.GetChild(root, index)) is { } viewer)
+            {
+                return viewer;
+            }
+        }
+
+        return null;
     }
 
     private void OnTrendMenuClick(object sender, RoutedEventArgs e)
