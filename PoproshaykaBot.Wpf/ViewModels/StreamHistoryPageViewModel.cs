@@ -52,9 +52,12 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private readonly StreamSessionHistoryStore _historyStore;
     private readonly IUserStatisticsRepository _userStatistics;
     private readonly ISettingsStore _settings;
+    private readonly GameBoxArtProvider _boxArt;
     private readonly List<IDisposable> _subs = [];
     private readonly List<StreamSessionRowViewModel> _allSessions = [];
     private readonly ObservableCollection<StreamSessionRowViewModel> _sessions = [];
+
+    private CancellationTokenSource? _boxArtCancellation;
 
     private double _averageMessages;
     private double _averageChatters;
@@ -89,6 +92,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     [ObservableProperty]
     private string _detailGame = Placeholder;
+
+    [ObservableProperty]
+    private GameBoxArtViewModel _detailBoxArt = GameBoxArtViewModel.None;
 
     [ObservableProperty]
     private string _detailComposition = string.Empty;
@@ -169,11 +175,13 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         StreamSessionHistoryStore historyStore,
         IUserStatisticsRepository userStatistics,
         ISettingsStore settings,
+        GameBoxArtProvider boxArt,
         IEventBus eventBus)
     {
         _historyStore = historyStore;
         _userStatistics = userStatistics;
         _settings = settings;
+        _boxArt = boxArt;
 
         _trendMetric = NormalizeMetric(settings.GetEnum(SettingsKeys.StreamTrendMetric, StreamTrendMetric.PeakViewers));
         _trendLength = NormalizeLength(settings.GetInt(SettingsKeys.StreamTrendLength, DefaultTrendLength));
@@ -408,6 +416,8 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         }
 
         _subs.Clear();
+
+        CancelBoxArt();
     }
 
     public bool TrySelectAt(int index)
@@ -529,7 +539,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         foreach (var record in history.Sessions.OrderByDescending(record => record.StartedAt))
         {
-            _allSessions.Add(new(record));
+            _allSessions.Add(new(record) { BoxArt = _boxArt.For(record.Game) });
         }
 
         RebuildView();
@@ -605,12 +615,67 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         UpdateSummary();
         UpdateInsights();
         BuildTrend();
+        RefreshBoxArt();
 
         OnPropertyChanged(nameof(HasSessions));
 
         SelectedRow = selectedId.HasValue
             ? _sessions.FirstOrDefault(row => row.Source.Id == selectedId)
             : null;
+    }
+
+    private void RefreshBoxArt()
+    {
+        CancelBoxArt();
+
+        var games = CollectGames();
+
+        if (games.Count == 0)
+        {
+            return;
+        }
+
+        _boxArt.ApplyCached(games);
+
+        var cancellation = new CancellationTokenSource();
+        _boxArtCancellation = cancellation;
+
+        _ = _boxArt.LoadAsync(games, cancellation.Token);
+    }
+
+    private void CancelBoxArt()
+    {
+        if (_boxArtCancellation is not { } cancellation)
+        {
+            return;
+        }
+
+        _boxArtCancellation = null;
+        cancellation.Cancel();
+        cancellation.Dispose();
+    }
+
+    private List<string> CollectGames()
+    {
+        var games = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in _sessions)
+        {
+            if (row.Source.Game is { Length: > 0 } game)
+            {
+                games.Add(game);
+            }
+
+            foreach (var segment in row.Source.Segments)
+            {
+                if (segment.Game is { Length: > 0 } segmentGame)
+                {
+                    games.Add(segmentGame);
+                }
+            }
+        }
+
+        return [.. games];
     }
 
     private void FillSegments(StreamSessionRecord session)
@@ -626,7 +691,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
                                 && segment.Game is { Length: > 0 }
                                 && string.Equals(previous.Game, segment.Game, StringComparison.OrdinalIgnoreCase);
 
-            Segments.Add(new(segment, share, continuesGame));
+            Segments.Add(new(segment, share, continuesGame) { BoxArt = _boxArt.For(segment.Game) });
             previous = segment;
         }
     }
@@ -655,6 +720,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             DetailTitle = Placeholder;
             IsDetailTitleMissing = false;
             DetailGame = Placeholder;
+            DetailBoxArt = GameBoxArtViewModel.None;
             DetailComposition = string.Empty;
             DetailPeriodText = Placeholder;
             DetailDuration = Placeholder;
@@ -676,6 +742,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         DetailTitle = row.TitleFormatted;
         IsDetailTitleMissing = !row.HasTitle;
         DetailGame = row.Source.Game is { Length: > 0 } game ? game : Placeholder;
+        DetailBoxArt = row.BoxArt;
         DetailComposition = DescribeComposition(row.Source);
         DetailPeriodText = FormatPeriod(row.StartedAt, row.Source.EndedAt);
         DetailDuration = row.DurationFormatted;
@@ -730,7 +797,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         for (var index = 0; index < summary.Categories.Count; index++)
         {
-            TopCategories.Add(new(summary.Categories[index], index + 1, leaderAirTime));
+            var stat = summary.Categories[index];
+
+            TopCategories.Add(new(stat, index + 1, leaderAirTime) { BoxArt = _boxArt.For(stat.Game) });
         }
 
         foreach (var stat in summary.Records)
@@ -801,11 +870,14 @@ public sealed class StreamSessionRowViewModel
     public int PeakViewers => Source.PeakViewers;
     public int AverageViewers => Source.AverageViewers;
 
+    public GameBoxArtViewModel BoxArt { get; init; } = GameBoxArtViewModel.None;
+
     public bool HasTitle { get; }
     public string TitleFormatted { get; }
     public string StartedAtFormatted { get; }
     public string DurationFormatted { get; }
     public string GameFormatted { get; }
+    public string GameCellText => GameFormatted;
     public string MessageCountFormatted { get; }
     public string ChatterCountFormatted { get; }
     public string PeakViewersFormatted { get; }
@@ -875,7 +947,10 @@ public sealed partial class StreamTrendBarViewModel : ObservableObject
 
 public sealed class StreamSessionSegmentRowViewModel
 {
+    public GameBoxArtViewModel BoxArt { get; init; } = GameBoxArtViewModel.None;
+
     public string Game { get; }
+    public string GameCellText => Game;
     public string Title { get; }
     public string? GameKey { get; }
     public string Duration { get; }
@@ -911,6 +986,8 @@ public sealed class StreamSessionSegmentRowViewModel
 
 public sealed class StreamCategoryRowViewModel
 {
+    public GameBoxArtViewModel BoxArt { get; init; } = GameBoxArtViewModel.None;
+
     public string Game { get; }
     public int Position { get; }
     public bool IsTopThree { get; }

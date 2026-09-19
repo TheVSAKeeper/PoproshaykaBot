@@ -9,6 +9,9 @@ namespace PoproshaykaBot.Wpf.Tests;
 [TestFixture]
 public class StreamHistoryMetricsTests
 {
+    private const double GameColumnMinWidth = 90;
+    private const double SegmentGameColumnMinWidth = 110;
+    private const double SegmentTitleColumnMinWidth = 80;
     private const double SegmentCaptionWidth = 56;
     private const double SegmentPadding = 12;
     private const double SplitterWidth = 12;
@@ -36,7 +39,7 @@ public class StreamHistoryMetricsTests
         var required = Column(root, "Начало", "06.09.2026 08:34", mono: true)
                        + Column(root, "Эфир", "2 ч 54 мин")
                        + 90
-                       + 50
+                       + GameColumnMinWidth
                        + Column(root, "Сообщ.", "175")
                        + Column(root, "Чаттеры", "9")
                        + Column(root, "Пик", "13")
@@ -59,14 +62,14 @@ public class StreamHistoryMetricsTests
     {
         var root = Themed();
 
-        var full = 80
-                   + 80
+        var full = SegmentGameColumnMinWidth
+                   + SegmentTitleColumnMinWidth
                    + Column(root, "Эфир", "1 ч 25 мин")
                    + Column(root, "Сообщ.", "175")
                    + Column(root, "Пик", "13")
                    + Column(root, "Средн.", "12");
 
-        var compact = 80 + 80 + Column(root, "Эфир", "1 ч 25 мин");
+        var compact = SegmentGameColumnMinWidth + SegmentTitleColumnMinWidth + Column(root, "Эфир", "1 ч 25 мин");
 
         Assert.Multiple(() =>
         {

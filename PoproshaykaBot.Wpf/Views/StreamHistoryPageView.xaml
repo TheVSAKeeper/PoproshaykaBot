@@ -14,6 +14,93 @@
 
     <UserControl.Resources>
 
+        <Style x:Key="BoxArtSlot"
+               TargetType="Border">
+            <Setter Property="Width"
+                    Value="24" />
+            <Setter Property="Height"
+                    Value="32" />
+            <Setter Property="CornerRadius"
+                    Value="3" />
+            <Setter Property="Background"
+                    Value="{DynamicResource Bg.SurfaceMute}" />
+            <Setter Property="BorderBrush"
+                    Value="{DynamicResource Border.Default}" />
+            <Setter Property="BorderThickness"
+                    Value="1" />
+            <Setter Property="ClipToBounds"
+                    Value="True" />
+            <Setter Property="SnapsToDevicePixels"
+                    Value="True" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Setter Property="Visibility"
+                    Value="{Binding HasImage, Converter={StaticResource BoolToVisibility}}" />
+        </Style>
+
+        <Style x:Key="BoxArtSlot.Large"
+               TargetType="Border"
+               BasedOn="{StaticResource BoxArtSlot}">
+            <Setter Property="Width"
+                    Value="52" />
+            <Setter Property="Height"
+                    Value="72" />
+            <Setter Property="CornerRadius"
+                    Value="4" />
+            <Setter Property="VerticalAlignment"
+                    Value="Top" />
+        </Style>
+
+        <Style x:Key="BoxArtImage"
+               TargetType="Image">
+            <Setter Property="Stretch"
+                    Value="UniformToFill" />
+            <Setter Property="Visibility"
+                    Value="{Binding HasImage, Converter={StaticResource BoolToVisibility}}" />
+            <Setter Property="AutomationProperties.Name"
+                    Value="{Binding AutomationName}" />
+        </Style>
+
+        <DataTemplate x:Key="BoxArtThumb">
+            <Border Style="{StaticResource BoxArtSlot}">
+                <Image Style="{StaticResource BoxArtImage}"
+                       Source="{Binding Image}" />
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="BoxArtCover">
+            <Border Style="{StaticResource BoxArtSlot.Large}">
+                <Image Style="{StaticResource BoxArtImage}"
+                       Source="{Binding Image}" />
+            </Border>
+        </DataTemplate>
+
+        <Style x:Key="GameCellContainer"
+               TargetType="DataGridCell"
+               BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Setter Property="Padding"
+                    Value="10,1" />
+        </Style>
+
+        <DataTemplate x:Key="GameCell">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <ContentPresenter Grid.Column="0"
+                                  Content="{Binding BoxArt}"
+                                  ContentTemplate="{StaticResource BoxArtThumb}" />
+
+                <TextBlock Grid.Column="1"
+                           Style="{StaticResource EllipsisCell}"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Text="{Binding GameCellText}" />
+            </Grid>
+        </DataTemplate>
+
         <Style x:Key="DeltaText"
                TargetType="TextBlock">
             <Setter Property="FontSize"
@@ -384,10 +471,22 @@
                                   Content="{Binding}"
                                   ContentTemplate="{StaticResource RatingPositionCell}" />
 
-                <TextBlock Grid.Column="1"
-                           Style="{StaticResource RatingName}"
-                           Text="{Binding Game}"
-                           Margin="10,0,10,0" />
+                <Grid Grid.Column="1"
+                      Margin="10,0,10,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <ContentPresenter Grid.Column="0"
+                                      Content="{Binding BoxArt}"
+                                      ContentTemplate="{StaticResource BoxArtThumb}" />
+
+                    <TextBlock Grid.Column="1"
+                               Style="{StaticResource RatingName}"
+                               Margin="8,0,0,0"
+                               Text="{Binding Game}" />
+                </Grid>
 
                 <TextBlock Grid.Column="2"
                            Style="{StaticResource RatingNumber}"
@@ -818,13 +917,14 @@
                                             ElementStyle="{StaticResource EllipsisCell}"
                                             Width="2*"
                                             MinWidth="90" />
-                        <DataGridTextColumn Header="Игра"
-                                            Binding="{Binding GameFormatted}"
-                                            SortMemberPath="GameFormatted"
-                                            ElementStyle="{StaticResource EllipsisCell}"
-                                            Width="*"
-                                            MinWidth="50"
-                                            MaxWidth="220" />
+                        <DataGridTemplateColumn Header="Игра"
+                                                SortMemberPath="GameFormatted"
+                                                ClipboardContentBinding="{Binding GameCellText}"
+                                                CellTemplate="{StaticResource GameCell}"
+                                                CellStyle="{StaticResource GameCellContainer}"
+                                                Width="*"
+                                                MinWidth="90"
+                                                MaxWidth="260" />
                         <DataGridTextColumn Header="Сообщ."
                                             Binding="{Binding MessageCountFormatted}"
                                             SortMemberPath="MessageCount"
@@ -882,11 +982,17 @@
 
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0">
+                    <ContentPresenter Grid.Column="0"
+                                      Margin="0,0,12,0"
+                                      Content="{Binding DetailBoxArt}"
+                                      ContentTemplate="{StaticResource BoxArtCover}" />
+
+                    <StackPanel Grid.Column="1">
                         <TextBlock Text="{Binding DetailTitle}"
                                    FontSize="{DynamicResource Font.Size.L}"
                                    FontWeight="{DynamicResource Font.Weight.SemiBold}"
@@ -926,7 +1032,7 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="1"
+                    <StackPanel Grid.Column="2"
                                 Margin="16,0,0,0">
                         <TextBlock Text="{Binding DetailPeriodText}"
                                    FontFamily="{DynamicResource Font.Mono}"
@@ -1090,11 +1196,12 @@
                                           AlternatingRowBackground="Transparent"
                                           GridLinesVisibility="None">
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Игра"
-                                                            Binding="{Binding Game}"
-                                                            ElementStyle="{StaticResource EllipsisCell}"
-                                                            Width="*"
-                                                            MinWidth="80" />
+                                        <DataGridTemplateColumn Header="Игра"
+                                                                ClipboardContentBinding="{Binding GameCellText}"
+                                                                CellTemplate="{StaticResource GameCell}"
+                                                                CellStyle="{StaticResource GameCellContainer}"
+                                                                Width="*"
+                                                                MinWidth="110" />
                                         <DataGridTextColumn Header="Название"
                                                             Binding="{Binding Title}"
                                                             ElementStyle="{StaticResource EllipsisCell}"

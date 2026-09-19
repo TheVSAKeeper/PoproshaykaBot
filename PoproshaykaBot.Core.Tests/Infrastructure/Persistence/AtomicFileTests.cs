@@ -123,7 +123,21 @@ public sealed class AtomicFileTests
     {
         Assert.Throws<ArgumentException>(() => AtomicFile.Save("", "content"));
         Assert.Throws<ArgumentNullException>(() => AtomicFile.Save(null!, "content"));
-        Assert.Throws<ArgumentNullException>(() => AtomicFile.Save(_targetPath, null!));
+        Assert.Throws<ArgumentNullException>(() => AtomicFile.Save(_targetPath, (string)null!));
+        Assert.Throws<ArgumentNullException>(() => AtomicFile.Save(_targetPath, (byte[])null!));
+    }
+
+    [Test]
+    public void Save_Bytes_WritesWholeFile_AndReplacesPreviousContent()
+    {
+        AtomicFile.Save(_targetPath, "старое"u8.ToArray());
+        AtomicFile.Save(_targetPath, new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllBytes(_targetPath), Is.EqualTo(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }));
+            Assert.That(File.Exists(_targetPath + ".tmp"), Is.False);
+        }
     }
 
     [Test]

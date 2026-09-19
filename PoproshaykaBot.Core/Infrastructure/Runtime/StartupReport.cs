@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.GameArt;
 using PoproshaykaBot.Core.Update;
 using System.Diagnostics;
 using System.Reflection;
@@ -88,6 +89,23 @@ public static class StartupReport
         {
             LogSnapshot(logger, "PollsSettings", SettingsDescriber.Describe(pollsStore.Load()));
         }
+
+        if (services.GetService<IGameBoxArtCache>() is { } boxArtCache)
+        {
+            LogBoxArtCache(logger, boxArtCache.GetStatus());
+        }
+    }
+
+    private static void LogBoxArtCache(ILogger logger, GameBoxArtCacheStatus status)
+    {
+        logger.LogInformation(
+            "Кеш обложек игр: каталог {Directory}, обложек {Images}, неизвестных категорий {Misses}, "
+            + "повтор запроса через {MissLifetimeDays} д, только из кеша {CacheOnly}",
+            status.Directory,
+            status.ImageCount,
+            status.MissCount,
+            (int)status.MissLifetime.TotalDays,
+            status.CacheOnly ? "да" : "нет");
     }
 
     private static void LogSnapshot(ILogger logger, string store, string description)

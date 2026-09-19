@@ -200,4 +200,10 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1502, Level = LogLevel.Information, Message = "Версия {Version} пропущена")]
     public static partial void UpdateVersionSkipped(this ILogger logger, string version);
+
+    [LoggerMessage(EventId = 1320, Level = LogLevel.Warning, Message = "Не удалось получить обложки игр, категории останутся без картинок")]
+    public static partial void BoxArtLoadFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1321, Level = LogLevel.Debug, Message = "Обложка игры не прочитана из кеша: {Path}")]
+    public static partial void BoxArtDecodeFailed(this ILogger logger, Exception? exception, string path);
 }

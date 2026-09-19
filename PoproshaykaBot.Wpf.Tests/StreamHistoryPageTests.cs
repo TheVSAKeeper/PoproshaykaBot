@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using System.IO;
 
@@ -318,6 +319,8 @@ public class StreamHistoryPageTests
         var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         users.ReplaceAll([new() { UserId = "42", Name = "qp_illson" }]);
 
-        return new(store, users, settings, new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
+        var boxArt = new GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<GameBoxArtProvider>.Instance);
+
+        return new(store, users, settings, boxArt, new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
     }
 }
