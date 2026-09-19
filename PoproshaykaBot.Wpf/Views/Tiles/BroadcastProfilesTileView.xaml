@@ -7,14 +7,14 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:BroadcastProfilesTileViewModel}"
              d:DesignHeight="320"
-             d:DesignWidth="380">
+             d:DesignWidth="780">
 
     <UserControl.Resources>
         <Style x:Key="ProfileCard"
                TargetType="Border"
                BasedOn="{StaticResource Card.Inset}">
             <Setter Property="Margin"
-                    Value="0,0,0,8" />
+                    Value="0,0,8,8" />
             <Setter Property="Padding"
                     Value="10" />
             <Style.Triggers>
@@ -74,7 +74,32 @@
             <ScrollViewer Grid.Row="1"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl ItemsSource="{Binding Items}">
+                <ItemsControl ItemsSource="{Binding Items}"
+                              Margin="0,0,-8,0"
+                              SizeChanged="OnCardsSizeChanged">
+                    <ItemsControl.Style>
+                        <Style TargetType="ItemsControl">
+                            <Setter Property="ItemsPanel">
+                                <Setter.Value>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="{Binding CardColumns, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    </ItemsPanelTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CardColumns, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                             Value="1">
+                                    <Setter Property="ItemsPanel">
+                                        <Setter.Value>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel />
+                                            </ItemsPanelTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ItemsControl.Style>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:BroadcastProfileItemViewModel}">
                             <Border Style="{StaticResource ProfileCard}">
@@ -89,58 +114,69 @@
                                     </ContextMenu>
                                 </Border.ContextMenu>
 
-                                <StackPanel>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                                    <Grid Margin="0,0,0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" MinWidth="64" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Row="0">
 
-                                        <StackPanel Grid.Column="1"
-                                                    Orientation="Horizontal"
-                                                    VerticalAlignment="Center">
-                                            <Border Style="{StaticResource Badge}"
-                                                    Margin="4,0,0,0"
-                                                    Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
-                                                <TextBlock Text="{Binding NumberBadge}"
-                                                           FontFamily="{DynamicResource Font.Mono}" />
-                                            </Border>
-                                            <Border Style="{StaticResource Badge.Success}"
-                                                    Margin="4,0,0,0"
-                                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
-                                                <TextBlock Text="Активен" />
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="0"
-                                                   Text="{Binding Name}"
-                                                   FontSize="{DynamicResource Font.Size.M}"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource Fg.Primary}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding Name}"
-                                                   VerticalAlignment="Center" />
-                                    </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" MinWidth="64" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
 
-                                    <TextBlock Text="{Binding TitleDisplay}"
-                                               Style="{StaticResource ProfileCardMeta}"
-                                               FontStyle="Italic"
-                                               ToolTip="{Binding TitleDisplay}"
-                                               Visibility="{Binding HasTitleDisplay, Converter={StaticResource BoolToVisibility}}" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
+                                                <Border Style="{StaticResource Badge}"
+                                                        Margin="4,0,0,0"
+                                                        Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
+                                                    <TextBlock Text="{Binding NumberBadge}"
+                                                               FontFamily="{DynamicResource Font.Mono}" />
+                                                </Border>
+                                                <Border Style="{StaticResource Badge.Success}"
+                                                        Margin="4,0,0,0"
+                                                        Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
+                                                    <TextBlock Text="Активен" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding Name}"
+                                                       FontSize="{DynamicResource Font.Size.M}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Fg.Primary}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Name}"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
 
-                                    <TextBlock Text="{Binding MetaLine}"
-                                               Style="{StaticResource ProfileCardMeta}"
-                                               Margin="0,2,0,0"
-                                               ToolTip="{Binding MetaLine}"
-                                               Visibility="{Binding HasMetaLine, Converter={StaticResource BoolToVisibility}}" />
+                                        <TextBlock Text="{Binding TitleDisplay}"
+                                                   Style="{StaticResource ProfileCardMeta}"
+                                                   FontStyle="Italic"
+                                                   ToolTip="{Binding TitleDisplay}"
+                                                   Visibility="{Binding HasTitleDisplay, Converter={StaticResource BoolToVisibility}}" />
 
-                                    <TextBlock Text="Расходится с текущим стримом"
-                                               Foreground="{DynamicResource State.WarningText}"
-                                               FontSize="{DynamicResource Font.Size.XS}"
-                                               Margin="0,2,0,0"
-                                               Visibility="{Binding HasDrift, Converter={StaticResource BoolToVisibility}}" />
+                                        <TextBlock Text="{Binding MetaLine}"
+                                                   Style="{StaticResource ProfileCardMeta}"
+                                                   Margin="0,2,0,0"
+                                                   ToolTip="{Binding MetaLine}"
+                                                   Visibility="{Binding HasMetaLine, Converter={StaticResource BoolToVisibility}}" />
 
-                                    <WrapPanel Margin="0,4,0,0">
+                                        <TextBlock Text="Расходится с текущим стримом"
+                                                   Foreground="{DynamicResource State.WarningText}"
+                                                   FontSize="{DynamicResource Font.Size.XS}"
+                                                   Margin="0,2,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="{Binding HasDrift, Converter={StaticResource BoolToVisibility}}" />
+
+                                    </StackPanel>
+
+                                    <WrapPanel Grid.Row="1"
+                                               Margin="0,4,0,0"
+                                               VerticalAlignment="Bottom">
                                         <Button Content="Применить"
                                                 Command="{Binding ApplyCommand}"
                                                 Style="{StaticResource Button.Secondary}"
@@ -171,7 +207,7 @@
                                                      Visibility="{Binding IsApplyInFlight, Converter={StaticResource BoolToVisibility}}" />
                                     </WrapPanel>
 
-                                </StackPanel>
+                                </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

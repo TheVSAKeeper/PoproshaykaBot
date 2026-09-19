@@ -22,7 +22,6 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
     private PollSnapshot? _currentSnapshot;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(GrowsWithSpace))]
     private bool _hasSnapshot;
 
     [ObservableProperty]

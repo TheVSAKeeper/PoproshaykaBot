@@ -163,6 +163,28 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         return true;
     }
 
+    public bool TrySelect(string? userId)
+    {
+        if (userId is not { Length: > 0 })
+        {
+            return false;
+        }
+
+        if (_allRows.All(row => !string.Equals(row.UserId, userId, StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        if (_rows.All(row => !string.Equals(row.UserId, userId, StringComparison.Ordinal)))
+        {
+            FilterText = string.Empty;
+        }
+
+        SelectedRow = _rows.FirstOrDefault(row => string.Equals(row.UserId, userId, StringComparison.Ordinal));
+
+        return SelectedRow is not null;
+    }
+
     partial void OnFilterTextChanged(string value)
     {
         RebuildView();

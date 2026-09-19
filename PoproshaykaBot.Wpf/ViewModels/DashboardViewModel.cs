@@ -143,7 +143,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             ? session.PreviewSwap(sourcePath, targetPath)
             : session.PreviewMove(sourcePath, targetPath, side);
 
-        return root is null ? null : BuildPane(root, _placements, [], false);
+        return root is null ? null : BuildPane(root, _placements, [], false, starred: true);
     }
 
     public void ReportMove(DashboardEditStatus status)
@@ -393,12 +393,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         return placement.Tile.GrowsWithSpace && !placement.IsCollapsed;
     }
 
-    private static PaneLayout? BuildPane(DashboardPane pane, IReadOnlyDictionary<string, Placement> placements, int[] path, bool alongColumns)
+    private static PaneLayout? BuildPane(DashboardPane pane, IReadOnlyDictionary<string, Placement> placements, int[] path, bool alongColumns, bool starred)
     {
         return pane switch
         {
             TilePane tile when DashboardLayoutTree.IsEmptySlot(tile.TypeId) => BuildEmpty(path),
-            TilePane tile => placements.TryGetValue(tile.TypeId, out var placement) ? BuildLeaf(placement, path, alongColumns) : null,
+            TilePane tile => placements.TryGetValue(tile.TypeId, out var placement) ? BuildLeaf(placement, path, alongColumns, starred) : null,
             SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 0 } split => BuildSplit(split, placements, path),
             _ => null,
         };
@@ -411,31 +411,52 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         return new EmptyPaneLayout(star, star, path);
     }
 
-    private static PaneLayout BuildLeaf(Placement placement, int[] path, bool alongColumns)
+    private static PaneLayout BuildLeaf(Placement placement, int[] path, bool alongColumns, bool starred)
     {
-        var star = new GridLength(1, GridUnitType.Star);
-        var maxWidth = placement.ScaledMaxWidth ?? double.PositiveInfinity;
-        var maxHeight = placement.ScaledMaxHeight ?? double.PositiveInfinity;
-        var minWidth = placement.IsCollapsed && alongColumns
-            ? Math.Min(DashboardTileViewModel.ScaledCollapsedStripWidth, maxWidth)
-            : Math.Min(placement.Tile.ScaledMinWidth, maxWidth);
-        var minHeight = placement.IsCollapsed
-            ? Math.Min(DashboardTileViewModel.ScaledCollapsedHeaderHeight, maxHeight)
-            : Math.Min(placement.Tile.ScaledMinHeight, maxHeight);
+        var contentWidth = placement.ScaledMaxWidth ?? double.PositiveInfinity;
+        var contentHeight = placement.ScaledMaxHeight ?? double.PositiveInfinity;
 
-        if (Stretches(placement))
+        if (placement.IsCollapsed)
         {
+            var strip = alongColumns
+                ? Math.Min(DashboardTileViewModel.ScaledCollapsedStripWidth, contentWidth)
+                : Math.Min(placement.Tile.ScaledMinWidth, contentWidth);
+
             return new TilePaneLayout(
                 placement.Tile,
-                new(star, double.PositiveInfinity, minWidth),
-                new(star, double.PositiveInfinity, minHeight),
-                path);
+                new(GridLength.Auto, contentWidth, strip),
+                new(GridLength.Auto, contentHeight, Math.Min(DashboardTileViewModel.ScaledCollapsedHeaderHeight, contentHeight)),
+                path,
+                false,
+                contentHeight);
         }
 
-        var width = new TrackSize(GridLength.Auto, maxWidth, minWidth);
-        var height = new TrackSize(Grows(placement) ? star : GridLength.Auto, maxHeight, minHeight);
+        var star = new GridLength(1, GridUnitType.Star);
+        var widthStar = Stretches(placement);
+        var heightStar = Stretches(placement) || Grows(placement);
+        var maxWidth = alongColumns && !widthStar && !starred ? contentWidth : placement.ScaledAuthoredMaxWidth ?? double.PositiveInfinity;
+        var maxHeight = !alongColumns && !heightStar && !starred ? contentHeight : placement.ScaledAuthoredMaxHeight ?? double.PositiveInfinity;
 
-        return new TilePaneLayout(placement.Tile, width, height, path);
+        return new TilePaneLayout(
+            placement.Tile,
+            new(widthStar ? star : GridLength.Auto, maxWidth, Math.Min(placement.Tile.ScaledMinWidth, maxWidth)),
+            new(heightStar ? star : GridLength.Auto, maxHeight, Math.Min(placement.Tile.ScaledMinHeight, maxHeight)),
+            path,
+            true,
+            contentHeight);
+    }
+
+    private static PaneLayout Fill(PaneLayout pane, IReadOnlyDictionary<string, Placement> placements, bool alongColumns)
+    {
+        var star = new GridLength(1, GridUnitType.Star);
+
+        var target = pane is TilePaneLayout leaf
+            ? BuildLeaf(placements[leaf.Tile.TypeId], leaf.Path, alongColumns, starred: true)
+            : pane;
+
+        return alongColumns
+            ? target with { Width = target.Width with { Length = star } }
+            : target with { Height = target.Height with { Length = star } };
     }
 
     private static PaneLayout? BuildSplit(SplitPane split, IReadOnlyDictionary<string, Placement> placements, int[] path)
@@ -452,7 +473,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         {
             var slot = split.Children[index];
 
-            if (BuildPane(slot.Pane, placements, [.. path, index], alongColumns) is { } child)
+            if (BuildPane(slot.Pane, placements, [.. path, index], alongColumns, Starred(slot, placements, alongColumns)) is { } child)
             {
                 var sizesToContent = SizesToContent(child, alongColumns);
 
@@ -470,12 +491,101 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             return children[0].Pane;
         }
 
+        if (path.Length > 0)
+        {
+            GiveRemainder(children, placements, alongColumns);
+        }
+
         var authored = children.Exists(child => child.HasWeight);
 
         var width = MergeTracks(children, static pane => pane.Width, alongColumns, alongColumns && authored);
         var height = MergeTracks(children, static pane => pane.Height, !alongColumns, !alongColumns && authored);
 
         return new SplitPaneLayout(split.Orientation, children, width, height, path, children.Count == split.Children.Count);
+    }
+
+    private static void GiveRemainder(List<PaneLayoutSlot> children, IReadOnlyDictionary<string, Placement> placements, bool alongColumns)
+    {
+        if (children.Exists(child => child.HasWeight || (alongColumns ? child.Pane.Width : child.Pane.Height).Length.IsStar))
+        {
+            return;
+        }
+
+        var last = -1;
+        var growing = -1;
+
+        for (var index = 0; index < children.Count; index++)
+        {
+            if (!TakesRemainder(children[index].Pane, placements, alongColumns))
+            {
+                continue;
+            }
+
+            last = index;
+
+            if (Grows(children[index].Pane, placements))
+            {
+                growing = index;
+            }
+        }
+
+        var taker = growing >= 0 ? growing : last;
+
+        if (taker < 0)
+        {
+            return;
+        }
+
+        children[taker] = children[taker] with
+        {
+            Pane = Fill(children[taker].Pane, placements, alongColumns),
+            SizesToContent = false,
+        };
+    }
+
+    private static bool TakesRemainder(PaneLayout pane, IReadOnlyDictionary<string, Placement> placements, bool alongColumns)
+    {
+        return pane switch
+        {
+            TilePaneLayout leaf => leaf.Fills && placements.ContainsKey(leaf.Tile.TypeId),
+            SplitPaneLayout split => Across(split, alongColumns)
+                && split.Children.Any(child => TakesRemainder(child.Pane, placements, alongColumns)),
+            _ => false,
+        };
+    }
+
+    private static bool Across(SplitPaneLayout split, bool alongColumns)
+    {
+        return (split.Orientation == SplitOrientation.Columns) != alongColumns;
+    }
+
+    private static bool Grows(PaneLayout pane, IReadOnlyDictionary<string, Placement> placements)
+    {
+        return pane switch
+        {
+            TilePaneLayout leaf => placements.TryGetValue(leaf.Tile.TypeId, out var placement) && Grows(placement),
+            SplitPaneLayout split => split.Children.Any(child => Grows(child.Pane, placements)),
+            _ => false,
+        };
+    }
+
+    private static bool Starred(PaneSlot slot, IReadOnlyDictionary<string, Placement> placements, bool alongColumns)
+    {
+        if (!HasWeight(slot, placements))
+        {
+            return false;
+        }
+
+        return slot.Pane is not TilePane tile
+            || !placements.TryGetValue(tile.TypeId, out var placement)
+            || !SizesToContent(placement, alongColumns);
+    }
+
+    private static bool SizesToContent(Placement placement, bool alongColumns)
+    {
+        return placement.Tile.SizesToContent
+            && !Stretches(placement)
+            && (alongColumns || !Grows(placement));
     }
 
     private static bool SizesToContent(PaneLayout pane, bool alongColumns)
@@ -671,7 +781,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         Pane = layout.Root is null
             ? null
-            : BuildPane(layout.Root, _placements, [], false);
+            : BuildPane(layout.Root, _placements, [], false, starred: true);
 
         ApplyCollapsedStrips(Pane, false);
 
@@ -727,6 +837,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             placements.Add(new(vm, row, column, columnSpan, rowSpan,
                 ResolveMaxSize(tile.MaxWidth, vm.MaxWidth),
                 ResolveMaxSize(tile.MaxHeight, vm.MaxHeight),
+                ResolveMaxSize(tile.MaxWidth, null),
+                ResolveMaxSize(tile.MaxHeight, null),
                 !IsEditing && tile.IsCollapsed));
         }
 
@@ -838,11 +950,17 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         int RowSpan,
         int? MaxWidth,
         int? MaxHeight,
+        int? AuthoredMaxWidth,
+        int? AuthoredMaxHeight,
         bool IsCollapsed)
     {
         public double? ScaledMaxWidth => MaxWidth * FontScaleManager.Current;
 
         public double? ScaledMaxHeight => MaxHeight * FontScaleManager.Current;
+
+        public double? ScaledAuthoredMaxWidth => AuthoredMaxWidth * FontScaleManager.Current;
+
+        public double? ScaledAuthoredMaxHeight => AuthoredMaxHeight * FontScaleManager.Current;
     }
 }
 
@@ -870,6 +988,24 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
 {
     public bool Scrollable => Width.Length.IsAuto && Height.Length.IsAuto;
 
+    public bool FillsWidth => this switch
+    {
+        TilePaneLayout leaf => leaf.Fills,
+        EmptyPaneLayout => true,
+        SplitPaneLayout { Orientation: SplitOrientation.Columns } => Width.Length.IsStar,
+        SplitPaneLayout split => split.Children.Any(child => child.Pane.FillsWidth),
+        _ => false,
+    };
+
+    public bool FillsHeight => this switch
+    {
+        TilePaneLayout leaf => leaf.Fills,
+        EmptyPaneLayout => true,
+        SplitPaneLayout { Orientation: SplitOrientation.Rows } => Height.Length.IsStar,
+        SplitPaneLayout split => split.Children.Any(child => child.Pane.FillsHeight),
+        _ => false,
+    };
+
     public double MinWidth(double leafMinimum)
     {
         return this switch
@@ -893,7 +1029,7 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
     }
 }
 
-public sealed record TilePaneLayout(DashboardTileViewModel Tile, TrackSize Width, TrackSize Height, int[] Path)
+public sealed record TilePaneLayout(DashboardTileViewModel Tile, TrackSize Width, TrackSize Height, int[] Path, bool Fills, double ContentHeight)
     : PaneLayout(Width, Height, Path);
 
 public sealed record EmptyPaneLayout(TrackSize Width, TrackSize Height, int[] Path)

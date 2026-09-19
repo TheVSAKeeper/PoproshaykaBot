@@ -48,7 +48,7 @@ public class StreamHistoryRowTests
     [TestCase(7, 0, StreamTrendBarViewModel.MinimumShare)]
     public void Scales_a_trend_bar_against_the_peak_leader(int peakViewers, int leader, double expectedShare)
     {
-        var bar = new StreamTrendBarViewModel(Row(peakViewers), leader);
+        var bar = new StreamTrendBarViewModel(Row(peakViewers), leader, StreamTrendMetric.PeakViewers);
 
         Assert.Multiple(() =>
         {
@@ -71,7 +71,8 @@ public class StreamHistoryRowTests
         var row = new StreamSessionChatterRowViewModel(
             new() { UserId = "42", DisplayName = "qp_illson", MessageCount = messageCount },
             position,
-            leader);
+            leader,
+            canOpen: true);
 
         Assert.Multiple(() =>
         {
@@ -101,5 +102,90 @@ public class StreamHistoryRowTests
         var period = StreamHistoryPageViewModel.FormatPeriod(Start, Start.AddHours(3).AddMinutes(42));
 
         Assert.That(period, Is.EqualTo("06.09.2026, 17:37 – 21:19"));
+    }
+
+    [Test]
+    public void Сегмент_с_новым_названием_при_той_же_игре_подписан_названием()
+    {
+        var segment = new StreamSessionSegmentRowViewModel(
+            new() { StartedAt = Start, EndedAt = Start.AddHours(1), Game = "Just Chatting", Title = "вторая часть" },
+            0.5,
+            continuesGame: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(segment.Caption, Is.EqualTo("вторая часть"));
+            Assert.That(segment.ContinuesGame, Is.True);
+            Assert.That(segment.TimelineText, Is.EqualTo("Just Chatting · вторая часть, 1 ч 0 мин · 0 сообщ. · пик 0"));
+            Assert.That(segment.CanFilter, Is.True);
+        });
+    }
+
+    [Test]
+    public void Первый_сегмент_игры_подписан_игрой()
+    {
+        var segment = new StreamSessionSegmentRowViewModel(
+            new() { StartedAt = Start, EndedAt = Start.AddHours(1), Game = "Just Chatting", Title = "эфир" },
+            1,
+            continuesGame: false);
+
+        Assert.That(segment.Caption, Is.EqualTo("Just Chatting"));
+    }
+
+    [Test]
+    public void Сегмент_без_категории_не_фильтрует_и_зовётся_прочерком()
+    {
+        var segment = new StreamSessionSegmentRowViewModel(
+            new() { StartedAt = Start, EndedAt = Start.AddHours(1), Title = null },
+            1,
+            continuesGame: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(segment.Game, Is.EqualTo("–"));
+            Assert.That(segment.Title, Is.EqualTo("Без названия"));
+            Assert.That(segment.CanFilter, Is.False);
+        });
+    }
+
+    [TestCase(1, 1, "")]
+    [TestCase(3, 1, "3 названия")]
+    [TestCase(1, 2, "2 категории")]
+    [TestCase(3, 2, "3 названия · 2 категории")]
+    public void Шапка_называет_состав_сессии(int titles, int games, string expected)
+    {
+        var session = new StreamSessionRecord { StartedAt = Start, EndedAt = Start.AddHours(3) };
+
+        for (var index = 0; index < Math.Max(titles, games); index++)
+        {
+            session.Segments.Add(new()
+            {
+                StartedAt = Start.AddHours(index),
+                EndedAt = Start.AddHours(index + 1),
+                Title = "название " + Math.Min(index, titles - 1),
+                Game = "игра " + Math.Min(index, games - 1),
+            });
+        }
+
+        Assert.That(StreamHistoryPageViewModel.DescribeComposition(session), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Колонка_игры_считает_категории_а_не_сегменты()
+    {
+        var session = new StreamSessionRecord
+        {
+            StartedAt = Start,
+            EndedAt = Start.AddHours(3),
+            Game = "Just Chatting",
+            Segments =
+            [
+                new() { StartedAt = Start, EndedAt = Start.AddHours(1), Game = "Just Chatting", Title = "первая часть" },
+                new() { StartedAt = Start.AddHours(1), EndedAt = Start.AddHours(2), Game = "Just Chatting", Title = "вторая часть" },
+                new() { StartedAt = Start.AddHours(2), EndedAt = Start.AddHours(3), Game = "Minecraft", Title = "вторая часть" },
+            ],
+        };
+
+        Assert.That(new StreamSessionRowViewModel(session).GameFormatted, Is.EqualTo("Just Chatting (+1)"));
     }
 }

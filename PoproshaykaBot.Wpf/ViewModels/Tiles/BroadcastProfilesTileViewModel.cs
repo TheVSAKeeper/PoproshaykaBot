@@ -67,7 +67,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         IDialogService dialogService,
         IServiceScopeFactory scopeFactory,
         IEventBus bus)
-        : base("broadcast-profiles", "Профили рассылки", maxWidth: 500, maxHeight: 320, minHeight: 144)
+        : base("broadcast-profiles", "Профиль трансляции", maxWidth: 500, maxHeight: 320, minHeight: 144)
     {
         _manager = manager;
         _profiles = profiles;

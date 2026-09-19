@@ -358,10 +358,14 @@ public class DashboardPaneLayoutTests
     [Test]
     public void Tile_minimums_add_up_along_the_split_and_never_pass_the_ceiling()
     {
+        var layout = SideBySideLayout();
+
+        Cap(layout, "broadcast-status", 100);
+
         using var dashboard = CreateDashboard(
-            SideBySideLayout(),
+            layout,
             new FakeTile("stream-info", minWidth: 200, minHeight: 150),
-            new FakeTile("broadcast-status", maxHeight: 100, minWidth: 180, minHeight: 180),
+            new FakeTile("broadcast-status", minWidth: 180, minHeight: 180),
             new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220));
 
         var root = dashboard.Pane as SplitPaneLayout;
@@ -371,7 +375,7 @@ public class DashboardPaneLayoutTests
         Assert.Multiple(() =>
         {
             Assert.That(status?.Height.Min, Is.EqualTo(100),
-                "Пол не пробивает потолок: у плитки с MaxHeight 100 минимум обязан ужаться до него.");
+                "Пол не пробивает потолок: у плитки с заданной пользователем MaxHeight 100 минимум обязан ужаться до него.");
             Assert.That(column?.Height.Min, Is.EqualTo(250),
                 "Вдоль разреза минимумы складываются – столбцу нужно место под обе плитки.");
             Assert.That(column?.Width.Min, Is.EqualTo(200),
@@ -384,7 +388,7 @@ public class DashboardPaneLayoutTests
     [Test]
     public void Hole_in_the_grid_goes_through_the_tree_and_carries_the_tile_floors()
     {
-        using var dashboard = CreateDashboard(HoleLayout(), UserLayoutTiles(420));
+        using var dashboard = CreateDashboard(HoleLayout(), UserLayoutTiles());
 
         var hole = RightColumnOfTheHoleLayout(dashboard).Children[1];
 
@@ -404,7 +408,7 @@ public class DashboardPaneLayoutTests
     [Test]
     public void Track_of_a_hole_gets_no_floor_while_its_neighbour_keeps_one()
     {
-        using var dashboard = CreateDashboard(HoleLayout(), UserLayoutTiles(420));
+        using var dashboard = CreateDashboard(HoleLayout(), UserLayoutTiles());
 
         var right = RightColumnOfTheHoleLayout(dashboard);
 
@@ -426,7 +430,9 @@ public class DashboardPaneLayoutTests
 
         layout.Tiles.Single(tile => string.Equals(tile.TypeId, "stream-info", StringComparison.Ordinal)).IsCollapsed = true;
 
-        using var dashboard = CreateDashboard(layout, UserLayoutTiles(100));
+        Cap(layout, "obs-info", 100);
+
+        using var dashboard = CreateDashboard(layout, UserLayoutTiles());
 
         var right = RightColumnOfTheHoleLayout(dashboard);
         var left = (SplitPaneLayout)((SplitPaneLayout)((SplitPaneLayout)dashboard.Pane!).Children[0].Pane).Children[0].Pane;
@@ -437,7 +443,7 @@ public class DashboardPaneLayoutTests
                 Is.EqualTo(DashboardTileViewModel.ScaledCollapsedHeaderHeight).Within(0.001),
                 "Свёрнутая плитка просит ровно свою шапку – место она освобождает, но не исчезает из подсчёта высоты.");
             Assert.That(left.Children[1].Pane.MinHeight(96), Is.EqualTo(100),
-                "Пол не пробивает потолок и на дереве: MaxHeight 100 сильнее MinHeight 140.");
+                "Пол не пробивает потолок и на дереве: заданная пользователем MaxHeight 100 сильнее MinHeight 140.");
             Assert.That(right.MinHeight(96), Is.EqualTo(130), "Дыра рядом не добавляет к полу колонки ничего.");
         });
     }
@@ -502,8 +508,12 @@ public class DashboardPaneLayoutTests
         {
             FontScaleManager.Apply(scale);
 
+            var cappedLayout = HoleLayout();
+
+            Cap(cappedLayout, "obs-info", 100);
+
             using var column = CreateDashboard(DefaultColumnLayout(), DefaultColumnTiles());
-            using var hole = CreateDashboard(HoleLayout(), UserLayoutTiles(100));
+            using var hole = CreateDashboard(cappedLayout, UserLayoutTiles());
 
             var left = (SplitPaneLayout)((SplitPaneLayout)((SplitPaneLayout)hole.Pane!).Children[0].Pane).Children[0].Pane;
 
@@ -759,15 +769,20 @@ public class DashboardPaneLayoutTests
         ];
     }
 
-    private static DashboardTileViewModel[] UserLayoutTiles(int obsMaxHeight)
+    private static DashboardTileViewModel[] UserLayoutTiles()
     {
         return
         [
             new FakeTile("stream-info", maxWidth: 420, maxHeight: 400, minHeight: 200),
             new FakeTile("broadcast-profiles", grows: true, maxWidth: 500, maxHeight: 320, minHeight: 130),
-            new FakeTile("obs-info", maxWidth: 380, maxHeight: obsMaxHeight, minHeight: 140),
+            new FakeTile("obs-info", maxWidth: 380, maxHeight: 420, minHeight: 140),
             new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220),
         ];
+    }
+
+    private static void Cap(DashboardLayoutSettings layout, string typeId, int maxHeight)
+    {
+        layout.Tiles.Single(tile => string.Equals(tile.TypeId, typeId, StringComparison.Ordinal)).MaxHeight = maxHeight;
     }
 
     private static DashboardLayoutSettings SideBySideLayout()
@@ -810,7 +825,13 @@ public class DashboardPaneLayoutTests
     [Test]
     public void Splitter_hint_tells_a_shared_ceiling_from_a_single_one()
     {
-        using var dashboard = CreateDashboard(StackedNeighbourLayout(), StackedNeighbourTiles());
+        var layout = StackedNeighbourLayout();
+
+        Cap(layout, "stream-info", 400);
+        Cap(layout, "broadcast-profiles", 320);
+        Cap(layout, "obs-info", 420);
+
+        using var dashboard = CreateDashboard(layout, StackedNeighbourTiles());
 
         var root = (SplitPaneLayout)dashboard.Pane!;
         var below = (SplitPaneLayout)root.Children[1].Pane;
@@ -819,7 +840,7 @@ public class DashboardPaneLayoutTests
         {
             Assert.That(DashboardView.CeilingObstacle(below.Children[0].Pane, alongColumns: false),
                 Is.EqualTo("плитки одна под другой вместе не выше 740 px"),
-                "Потолок колонки – сумма потолков её плиток, и одной плиткой он не объясняется.");
+                "Потолок колонки – сумма заданных пользователем потолков её плиток, и одной плиткой он не объясняется.");
             Assert.That(DashboardView.CeilingObstacle(root.Children[0].Pane, alongColumns: false),
                 Is.EqualTo("плитка «stream-info» не выше 400 px"));
             Assert.That(DashboardView.CeilingObstacle(below.Children[1].Pane, alongColumns: true),
@@ -967,7 +988,7 @@ public class DashboardPaneLayoutTests
     [TestCase(PaneSide.None)]
     public void Drop_hint_measures_an_empty_cell_like_any_other_target(PaneSide side)
     {
-        var tiles = UserLayoutTiles(420);
+        var tiles = UserLayoutTiles();
 
         using var dashboard = CreateDashboard(HoleLayout(), tiles);
 
@@ -1052,34 +1073,357 @@ public class DashboardPaneLayoutTests
     [Apartment(ApartmentState.STA)]
     [TestCase(SplitOrientation.Columns)]
     [TestCase(SplitOrientation.Rows)]
-    public void Child_of_a_split_keeps_its_ceiling_across_the_cut_and_stands_in_the_corner(SplitOrientation orientation)
+    public void Child_of_a_split_fills_its_slot_across_the_cut(SplitOrientation orientation)
     {
-        const double Ceiling = 300;
+        const int Ceiling = 300;
 
         var alongColumns = orientation == SplitOrientation.Columns;
 
-        var fixedTile = new FakeTile(
+        var tile = new FakeTile(
             "stream-info",
-            maxWidth: alongColumns ? null : (int)Ceiling,
-            maxHeight: alongColumns ? (int)Ceiling : null);
+            sizesToContent: true,
+            maxWidth: alongColumns ? null : Ceiling,
+            maxHeight: alongColumns ? Ceiling : null);
 
         var chat = new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220);
 
-        using var dashboard = CreateDashboard(CrossAxisLayout(orientation), fixedTile, chat);
+        using var dashboard = CreateDashboard(CrossAxisLayout(orientation), tile, chat);
 
-        var measured = Measure(dashboard.Pane!, fixedTile, _ => PreviewSize);
-
-        var across = alongColumns ? measured.Height : measured.Width;
-        var corner = alongColumns ? measured.Y : measured.X;
+        var measured = Measure(dashboard.Pane!, tile, _ => PreviewSize);
 
         Assert.Multiple(() =>
         {
-            Assert.That(across, Is.EqualTo(Ceiling).Within(0.5),
-                "Поперёк разреза потолок ставится самому потомку: трек сетки ограничивает только ось разреза, и плитка по содержимому растягивалась на всё место узла.");
+            Assert.That(
+                alongColumns ? measured.Height : measured.Width,
+                Is.EqualTo(alongColumns ? PreviewSize.Height : PreviewSize.Width).Within(0.5),
+                "Поперёк разреза лист занимает слот целиком: потолок из конструктора плитки остаётся мерой содержимого вдоль оси разреза, а размером плитки быть перестаёт.");
 
-            Assert.That(corner, Is.Zero.Within(0.5),
-                "Панель по содержимому прижимается к началу своего места, а не висит по центру остатка.");
+            Assert.That(alongColumns ? measured.Y : measured.X, Is.Zero.Within(0.5),
+                "Начало места у листа то же, что у слота.");
         });
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    [TestCase(SplitOrientation.Columns)]
+    [TestCase(SplitOrientation.Rows)]
+    public void Ceiling_set_by_the_user_holds_across_the_cut_and_keeps_the_leaf_in_the_corner(SplitOrientation orientation)
+    {
+        const int Ceiling = 300;
+
+        var alongColumns = orientation == SplitOrientation.Columns;
+        var layout = CrossAxisLayout(orientation);
+        var record = layout.Tiles.Single(tile => string.Equals(tile.TypeId, "stream-info", StringComparison.Ordinal));
+
+        if (alongColumns)
+        {
+            record.MaxHeight = Ceiling;
+        }
+        else
+        {
+            record.MaxWidth = Ceiling;
+        }
+
+        var capped = new FakeTile("stream-info", sizesToContent: true);
+        var chat = new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220);
+
+        using var dashboard = CreateDashboard(layout, capped, chat);
+
+        var measured = Measure(dashboard.Pane!, capped, _ => PreviewSize);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(alongColumns ? measured.Height : measured.Width, Is.EqualTo((double)Ceiling).Within(0.5),
+                "Потолок, заданный пользователем в настройках раскладки, заполнением слота не отменяется.");
+
+            Assert.That(alongColumns ? measured.Y : measured.X, Is.Zero.Within(0.5),
+                "Плитка с потолком встаёт в начало слота: при Stretch с конечным потолком WPF повесил бы её по центру остатка.");
+        });
+    }
+
+    [TestCase(1.0)]
+    [TestCase(1.6)]
+    public void Column_of_capped_tiles_takes_the_width_of_its_slot(double scale)
+    {
+        try
+        {
+            FontScaleManager.Apply(scale);
+
+            using var dashboard = CreateDashboard(UserStandLayout(), UserStandTiles());
+
+            var column = (SplitPaneLayout)((SplitPaneLayout)dashboard.Pane!).Children[0].Pane;
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(column.Width.Max, Is.EqualTo(double.PositiveInfinity),
+                    "Ширину колонки задаёт её доля, а не самая широкая плитка: иначе правые края плиток колонки не сходятся.");
+                Assert.That(column.Children.Select(child => child.Pane.FillsWidth), Is.All.True,
+                    "Несвёрнутый лист занимает свой слот целиком по обеим осям.");
+                Assert.That(column.Children[2].Pane.Height.Max, Is.EqualTo(double.PositiveInfinity),
+                    "Плитка, растущая с местом, забирает остаток колонки: потолок из конструктора её больше не режет, и под ней не остаётся пустой полосы.");
+                Assert.That(column.Height.Length.IsStar, Is.True,
+                    "Колонка с растущей плиткой тянется на всю высоту своего слота.");
+            });
+        }
+        finally
+        {
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+        }
+    }
+
+    [TestCase(true, "broadcast-status")]
+    [TestCase(false, "broadcast-profiles")]
+    public void Node_of_content_sized_tiles_hands_its_remainder_to_one_child(bool grows, string taker)
+    {
+        using var dashboard = CreateDashboard(
+            UnweightedColumnLayout(),
+            new FakeTile("stream-info"),
+            new FakeTile("broadcast-status", grows: grows),
+            new FakeTile("broadcast-profiles"),
+            new FakeTile("twitch-chat", fills: true));
+
+        var column = (SplitPaneLayout)((SplitPaneLayout)dashboard.Pane!).Children[0].Pane;
+
+        var stretched = column.Children
+            .Select(child => (TilePaneLayout)child.Pane)
+            .Where(leaf => leaf.Height.Length.IsStar)
+            .Select(leaf => leaf.Tile.TypeId)
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(stretched, Is.EqualTo(new[] { taker }),
+                "Остаток узла, где все дети идут по содержимому, достаётся растущей плитке, а без неё – последней: иначе низ колонки остаётся пустым.");
+            Assert.That(column.Height.Length.IsStar, Is.True,
+                "Узел, раздавший остаток, сам тянется на всю высоту слота.");
+        });
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    [TestCase(false, 1)]
+    [TestCase(true, 0)]
+    public void Node_hands_its_remainder_down_into_a_nested_split_across_the_cut(bool grows, int taker)
+    {
+        var streamInfo = new FakeTile("stream-info");
+
+        using var dashboard = CreateDashboard(
+            NestedSplitColumnLayout(),
+            new FakeTile("broadcast-profiles", grows: grows),
+            streamInfo,
+            new FakeTile("broadcast-status"),
+            new FakeTile("twitch-chat", fills: true));
+
+        var column = (SplitPaneLayout)((SplitPaneLayout)dashboard.Pane!).Children[0].Pane;
+        var nested = (SplitPaneLayout)column.Children[1].Pane;
+
+        Assert.That(column.Children.Select(child => child.Pane.Height.Length.IsStar), Is.EqualTo(new[] { taker == 0, taker == 1 }),
+            "Остаток узла берёт и вложенный разрез, целиком идущий по содержимому: без этого пустая полоса возвращается после обычного «Разрезать».");
+
+        if (grows)
+        {
+            return;
+        }
+
+        var measured = Measure(dashboard.Pane!, streamInfo, _ => new Size(200, 150));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(nested.Children.Select(child => child.Pane.FillsHeight), Is.All.True,
+                "Разрез поперёк оси остатка раздаёт его своим детям выравниванием, а не треком: доставшуюся высоту берут все его плитки.");
+
+            Assert.That(measured.Bottom, Is.EqualTo(PreviewSize.Height).Within(0.5),
+                "Плитка внутри вложенного разреза доходит до низа колонки – остаток спустился к листу, а не остался у узла.");
+        });
+    }
+
+    [Test]
+    [TestCase(true, null)]
+    [TestCase(false, "broadcast-status")]
+    public void Node_with_a_weighted_or_already_stretching_child_hands_out_no_remainder(bool weighted, string? stretching)
+    {
+        using var dashboard = CreateDashboard(
+            UnweightedColumnLayout(weighted ? 1.0 / 3 : null),
+            new FakeTile("stream-info"),
+            new FakeTile("broadcast-status", fills: !weighted),
+            new FakeTile("broadcast-profiles"),
+            new FakeTile("twitch-chat", fills: true));
+
+        var column = (SplitPaneLayout)((SplitPaneLayout)dashboard.Pane!).Children[0].Pane;
+
+        var stretched = column.Children
+            .Select(child => (TilePaneLayout)child.Pane)
+            .Where(leaf => leaf.Height.Length.IsStar)
+            .Select(leaf => leaf.Tile.TypeId)
+            .ToList();
+
+        Assert.That(stretched, Is.EqualTo(stretching is null ? Array.Empty<string>() : [stretching]),
+            "Раздавать нечего там, где место уже разобрано: доля из файла и растягивающаяся плитка сами держат трек, и никто сверх них остатка не получает.");
+    }
+
+    [Test]
+    public void Root_of_content_sized_leaves_keeps_the_remainder_and_its_scrollbar()
+    {
+        using var dashboard = CreateDashboard(
+            ContentSizedRowsLayout(),
+            new FakeTile("stream-info", sizesToContent: true),
+            new FakeTile("broadcast-status", sizesToContent: true));
+
+        var root = (SplitPaneLayout)dashboard.Pane!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root.Children.Select(child => child.Pane.Height.Length.IsStar), Is.All.False,
+                "Корень остаток не раздаёт: звёздочный ребёнок снял бы с корня обёртку ScrollViewer, а она – единственная прокрутка дерева из одних Auto-листьев.");
+
+            Assert.That(root.Scrollable, Is.True,
+                "Переполнение по высоте ApplyVerticalOverflow считает по полам (PaneLayout.MinHeight), а не по содержимому, поэтому колонку выше окна ловит только эта обёртка.");
+        });
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void Stacked_row_keeps_the_ceiling_of_the_content_the_tree_no_longer_holds(bool grows)
+    {
+        using var dashboard = CreateDashboard(
+            UnweightedColumnLayout(),
+            new FakeTile("stream-info", maxHeight: 400, minHeight: 200),
+            new FakeTile("broadcast-status", maxHeight: 360),
+            new FakeTile("broadcast-profiles", grows: grows, maxHeight: 320, minHeight: 130),
+            new FakeTile("twitch-chat", fills: true));
+
+        var column = (SplitPaneLayout)((SplitPaneLayout)dashboard.Pane!).Children[0].Pane;
+        var stretched = (TilePaneLayout)column.Children[2].Pane;
+        var plain = (TilePaneLayout)column.Children[0].Pane;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(stretched.Height.Max, Is.EqualTo(double.PositiveInfinity),
+                "В дереве плитка, растущая с местом или получившая остаток, потолка из конструктора не несёт – в этом и была задача.");
+
+            Assert.That(DashboardView.StackedRow(stretched).Max, Is.EqualTo(320),
+                "В стопке остаток делить не для кого – строки Auto под общей прокруткой, – поэтому там действует потолок содержимого, а не бесконечность из дерева.");
+
+            Assert.That(DashboardView.StackedRow(stretched).Min, Is.EqualTo(130),
+                "Пол строки в стопке не тронут: он и раньше приходил из плитки, а потолок его только подрезает.");
+
+            Assert.That(DashboardView.StackedRow(plain).Max, Is.EqualTo(400),
+                "Строка обычной плитки в стопке не изменилась.");
+        });
+    }
+
+    [Test]
+    public void Slot_of_the_remainder_taker_stops_sizing_to_content()
+    {
+        using var dashboard = CreateDashboard(
+            UnweightedColumnLayout(),
+            new FakeTile("stream-info", sizesToContent: true),
+            new FakeTile("broadcast-status", sizesToContent: true),
+            new FakeTile("broadcast-profiles", sizesToContent: true),
+            new FakeTile("twitch-chat", fills: true));
+
+        var column = (SplitPaneLayout)((SplitPaneLayout)dashboard.Pane!).Children[0].Pane;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(column.Children[2].Pane.Height.Length.IsStar, Is.True,
+                "Остаток колонки достался последней плитке.");
+
+            Assert.That(column.Children.Select(child => child.SizesToContent), Is.EqualTo(new[] { true, true, false }),
+                "Получатель остатка растягивается, и флаг слота обязан это отражать: по нему HasSplitter решает, ставить ли разделитель, а AdjustShare – отказывать ли клавиатурному ресайзу.");
+        });
+    }
+
+    private static DashboardLayoutSettings NestedSplitColumnLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 4,
+            RowCount = 2,
+            Root = new SplitPane(SplitOrientation.Columns,
+            [
+                new(new SplitPane(SplitOrientation.Rows,
+                [
+                    new(new TilePane("broadcast-profiles"), null),
+                    new(new SplitPane(SplitOrientation.Columns,
+                    [
+                        new(new TilePane("stream-info"), null),
+                        new(new TilePane("broadcast-status"), null),
+                    ]), null),
+                ]), 0.5),
+                new(new TilePane("twitch-chat"), 0.5),
+            ]),
+        };
+
+        AddTile(layout, "broadcast-profiles", 0, 0, 1, 2);
+        AddTile(layout, "stream-info", 1, 0, 1, 1);
+        AddTile(layout, "broadcast-status", 1, 1, 1, 1);
+        AddTile(layout, "twitch-chat", 0, 2, 2, 2);
+
+        return layout;
+    }
+
+    private static DashboardLayoutSettings UserStandLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 3,
+            Root = new SplitPane(SplitOrientation.Columns,
+            [
+                new(new SplitPane(SplitOrientation.Rows,
+                [
+                    new(new TilePane("stream-info"), null),
+                    new(new TilePane("broadcast-status"), null),
+                    new(new TilePane("broadcast-profiles"), 0.4),
+                ]), 0.4),
+                new(new TilePane("twitch-chat"), 0.6),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "broadcast-status", 1, 0, 1, 1);
+        AddTile(layout, "broadcast-profiles", 2, 0, 1, 1);
+        AddTile(layout, "twitch-chat", 0, 1, 3, 1);
+
+        return layout;
+    }
+
+    private static DashboardTileViewModel[] UserStandTiles()
+    {
+        return
+        [
+            new FakeTile("stream-info", sizesToContent: true, maxWidth: 420, maxHeight: 400, minHeight: 200),
+            new FakeTile("broadcast-status", sizesToContent: true, maxWidth: 360, minHeight: 130),
+            new FakeTile("broadcast-profiles", grows: true, maxWidth: 500, maxHeight: 320, minHeight: 130),
+            new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220),
+        ];
+    }
+
+    private static DashboardLayoutSettings UnweightedColumnLayout(double? weight = null)
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 3,
+            Root = new SplitPane(SplitOrientation.Columns,
+            [
+                new(new SplitPane(SplitOrientation.Rows,
+                [
+                    new(new TilePane("stream-info"), weight),
+                    new(new TilePane("broadcast-status"), weight),
+                    new(new TilePane("broadcast-profiles"), weight),
+                ]), 0.4),
+                new(new TilePane("twitch-chat"), 0.6),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 1, 1);
+        AddTile(layout, "broadcast-status", 1, 0, 1, 1);
+        AddTile(layout, "broadcast-profiles", 2, 0, 1, 1);
+        AddTile(layout, "twitch-chat", 0, 1, 3, 1);
+
+        return layout;
     }
 
     private static DashboardLayoutSettings CrossAxisLayout(SplitOrientation orientation)

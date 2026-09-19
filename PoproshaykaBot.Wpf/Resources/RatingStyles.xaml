@@ -54,25 +54,13 @@
                             BorderThickness="0,0,0,1"
                             SnapsToDevicePixels="True">
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="3" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <Rectangle x:Name="Stripe"
-                                       Fill="Transparent" />
-
-                            <ProgressBar Grid.Column="1"
-                                         Style="{StaticResource RatingShareBar}"
+                            <ProgressBar Style="{StaticResource RatingShareBar}"
                                          Value="{Binding Share, Mode=OneWay}" />
 
-                            <ContentPresenter Grid.Column="1"
-                                              Margin="{TemplateBinding Padding}"
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
                                               VerticalAlignment="Center" />
 
                             <Border x:Name="Outline"
-                                    Grid.Column="0"
-                                    Grid.ColumnSpan="2"
                                     BorderBrush="Transparent"
                                     BorderThickness="1"
                                     IsHitTestVisible="False" />
@@ -90,9 +78,9 @@
                             <Setter TargetName="Bd"
                                     Property="Background"
                                     Value="{DynamicResource Bg.SurfaceMute}" />
-                            <Setter TargetName="Stripe"
-                                    Property="Fill"
-                                    Value="{DynamicResource Accent.Primary}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin"
+                                 Value="True">
                             <Setter TargetName="Outline"
                                     Property="BorderBrush"
                                     Value="{DynamicResource Accent.Primary}" />
