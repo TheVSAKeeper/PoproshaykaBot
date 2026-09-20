@@ -64,11 +64,13 @@
 
             <keepshell:SettingsRail Sections="{Binding Sections}" />
 
-            <ScrollViewer Grid.Column="1"
+            <ScrollViewer x:Name="SectionScroll"
+                          Grid.Column="1"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           Margin="16,0,0,0"
-                          Padding="0,0,12,0">
+                          Padding="0,0,12,0"
+                          ScrollChanged="SectionScroll_OnScrollChanged">
                 <Grid RequestBringIntoView="SuppressAutoScroll">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -77,23 +79,43 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[basic].Title}"
-                                                Visibility="{Binding Sections[basic].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <StackPanel>
-                                <ContentControl Content="{Binding Basic}" />
+                        <StackPanel Visibility="{Binding Sections[basic].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding Sections[basic].Title}"
+                                       Style="{StaticResource Setting.SectionTitle}" />
 
-                                <Border Style="{StaticResource Setting.Divider}" />
-                                <TextBlock Text="Ограничения отправки"
-                                           Style="{StaticResource Setting.GroupTitle}" />
-                                <ContentControl Content="{Binding RateLimiting}" />
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Канал и аккаунт"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="basic/channel">
+                                <StackPanel>
+                                    <TextBlock Text="Канал Twitch и аккаунт, от имени которого бот показывает чат."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding Basic}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
 
-                                <Border Style="{StaticResource Setting.Divider}" />
-                                <TextBlock Text="Шаблоны сообщений"
-                                           Style="{StaticResource Setting.GroupTitle}" />
-                                <ContentControl Content="{Binding Messages}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Ограничения отправки"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="basic/limits">
+                                <StackPanel>
+                                    <TextBlock Text="Паузы и лимиты, за которыми Twitch перестаёт считать бота спамом."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding RateLimiting}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Шаблоны сообщений"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="basic/messages">
+                                <StackPanel>
+                                    <TextBlock Text="Тексты, которыми бот здоровается, прощается и отвечает."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding Messages}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
 
                         <HeaderedContentControl Style="{StaticResource Form.Panel}"
                                                 Header="{Binding Sections[oauth].Title}"
@@ -101,26 +123,43 @@
                             <ContentControl Content="{Binding OAuth}" />
                         </HeaderedContentControl>
 
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[stream].Title}"
-                                                Visibility="{Binding Sections[stream].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <StackPanel>
-                                <TextBlock Text="Автоматический режим"
-                                           Style="{StaticResource Setting.GroupTitle}"
-                                           Margin="0,0,0,10" />
-                                <ContentControl Content="{Binding AutoBroadcast}" />
+                        <StackPanel Visibility="{Binding Sections[stream].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding Sections[stream].Title}"
+                                       Style="{StaticResource Setting.SectionTitle}" />
 
-                                <Border Style="{StaticResource Setting.Divider}" />
-                                <TextBlock Text="Автозапуск бота"
-                                           Style="{StaticResource Setting.GroupTitle}" />
-                                <ContentControl Content="{Binding BotLifecycle}" />
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Автоматический режим"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="stream/auto">
+                                <StackPanel>
+                                    <TextBlock Text="Что бот делает сам, когда стрим начинается и заканчивается."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding AutoBroadcast}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
 
-                                <Border Style="{StaticResource Setting.Divider}" />
-                                <TextBlock Text="Опросы"
-                                           Style="{StaticResource Setting.GroupTitle}" />
-                                <ContentControl Content="{Binding Polls}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Автозапуск бота"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="stream/lifecycle">
+                                <StackPanel>
+                                    <TextBlock Text="Когда бот подключается к чату и когда отключается без вашего участия."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding BotLifecycle}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Опросы"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="stream/polls">
+                                <StackPanel>
+                                    <TextBlock Text="Заготовки голосований и правила их запуска в чате."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding Polls}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
 
                         <HeaderedContentControl Style="{StaticResource Form.Panel}"
                                                 Header="{Binding Sections[update].Title}"
@@ -153,26 +192,43 @@
                         </HeaderedContentControl>
                     </Grid>
 
-                    <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                            Header="{Binding Sections[obs].Title}"
-                                            Visibility="{Binding Sections[obs].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel>
-                            <TextBlock Text="Подключение к OBS"
-                                       Style="{StaticResource Setting.GroupTitle}"
-                                       Margin="0,0,0,10" />
-                            <ContentControl Content="{Binding ObsIntegration}" />
+                    <StackPanel Visibility="{Binding Sections[obs].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding Sections[obs].Title}"
+                                   Style="{StaticResource Setting.SectionTitle}" />
 
-                            <Border Style="{StaticResource Setting.Divider}" />
-                            <TextBlock Text="Оформление чат-оверлея"
-                                       Style="{StaticResource Setting.GroupTitle}" />
-                            <ContentControl Content="{Binding ObsChat}" />
+                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                Header="Подключение к OBS"
+                                                Margin="{StaticResource Setting.BlockGap}"
+                                                settings:SettingsBlock.Key="obs/connection">
+                            <StackPanel>
+                                <TextBlock Text="Адрес и пароль WebSocket, через который приложение управляет OBS."
+                                           Style="{StaticResource Setting.BlockHint}" />
+                                <ContentControl Content="{Binding ObsIntegration}" />
+                            </StackPanel>
+                        </HeaderedContentControl>
 
-                            <Border Style="{StaticResource Setting.Divider}" />
-                            <TextBlock Text="HTTP сервер оверлея"
-                                       Style="{StaticResource Setting.GroupTitle}" />
-                            <ContentControl Content="{Binding HttpServer}" />
-                        </StackPanel>
-                    </HeaderedContentControl>
+                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                Header="Оформление чат-оверлея"
+                                                Margin="{StaticResource Setting.BlockGap}"
+                                                settings:SettingsBlock.Key="obs/overlay">
+                            <StackPanel>
+                                <TextBlock Text="Как чат выглядит в браузерном источнике на трансляции."
+                                           Style="{StaticResource Setting.BlockHint}" />
+                                <ContentControl Content="{Binding ObsChat}" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                Header="HTTP сервер оверлея"
+                                                Margin="{StaticResource Setting.BlockGap}"
+                                                settings:SettingsBlock.Key="obs/server">
+                            <StackPanel>
+                                <TextBlock Text="Порт и адреса страниц, которые открывает браузерный источник."
+                                           Style="{StaticResource Setting.BlockHint}" />
+                                <ContentControl Content="{Binding HttpServer}" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+                    </StackPanel>
 
                     <HeaderedContentControl Style="{StaticResource Form.Panel}"
                                             Header="{Binding Sections[dashboard].Title}"

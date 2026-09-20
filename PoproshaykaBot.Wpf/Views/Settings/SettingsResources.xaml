@@ -4,6 +4,32 @@
 
     <sys:Double x:Key="Setting.ContentWidth">780</sys:Double>
 
+    <Style x:Key="Setting.SectionTitle"
+           TargetType="TextBlock">
+        <Setter Property="Foreground"
+                Value="{DynamicResource Fg.Primary}" />
+        <Setter Property="FontSize"
+                Value="{DynamicResource Font.Size.XL}" />
+        <Setter Property="FontWeight"
+                Value="{DynamicResource Font.Weight.SemiBold}" />
+        <Setter Property="Margin"
+                Value="0,0,0,12" />
+    </Style>
+
+    <Style x:Key="Setting.BlockHint"
+           TargetType="TextBlock">
+        <Setter Property="Foreground"
+                Value="{DynamicResource Fg.Muted}" />
+        <Setter Property="FontSize"
+                Value="{DynamicResource Font.Size.S}" />
+        <Setter Property="TextWrapping"
+                Value="Wrap" />
+        <Setter Property="Margin"
+                Value="0,0,0,14" />
+    </Style>
+
+    <Thickness x:Key="Setting.BlockGap">0,0,0,16</Thickness>
+
     <Style x:Key="Setting.GroupTitle"
            TargetType="TextBlock">
         <Setter Property="Foreground"
@@ -19,16 +45,6 @@
            BasedOn="{StaticResource Setting.GroupTitle}">
         <Setter Property="Margin"
                 Value="0,20,0,10" />
-    </Style>
-
-    <Style x:Key="Setting.Divider"
-           TargetType="Border">
-        <Setter Property="Height"
-                Value="1" />
-        <Setter Property="Background"
-                Value="{DynamicResource Border.Subtle}" />
-        <Setter Property="Margin"
-                Value="0,24,0,0" />
     </Style>
 
 </ResourceDictionary>
