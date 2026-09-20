@@ -51,7 +51,7 @@
                    FontSize="{DynamicResource Font.Size.M}"
                    Margin="0,0,0,8" />
 
-        <Grid Margin="0,0,0,8">
+        <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
@@ -93,13 +93,5 @@
                            Text="{Binding Uptime, Converter={StaticResource Timecode}}" />
             </StackPanel>
         </Grid>
-
-        <Image Source="{Binding Thumbnail}"
-               Stretch="Uniform"
-               MaxHeight="160"
-               HorizontalAlignment="Center"
-               Margin="0,4,0,0"
-               RenderOptions.BitmapScalingMode="HighQuality"
-               Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibility}}" />
     </StackPanel>
 </UserControl>

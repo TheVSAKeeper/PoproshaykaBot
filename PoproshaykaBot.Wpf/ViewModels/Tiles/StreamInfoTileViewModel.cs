@@ -6,7 +6,6 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
-using System.Windows.Media.Imaging;
 using PoproshaykaBot.Wpf.Bootstrap;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -19,7 +18,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private readonly IUiTimer _refreshTimer;
     private readonly IShellLauncher _shellLauncher;
     private readonly ToolbarItemViewModel _openChannelToolbarItem;
-    private string? _lastThumbnailRawUrl;
     private bool _refreshTimerRunning;
 
     [ObservableProperty]
@@ -38,9 +36,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private TimeSpan _uptime = TimeSpan.Zero;
 
     [ObservableProperty]
-    private BitmapImage? _thumbnail;
-
-    [ObservableProperty]
     private string? _channelLogin;
 
     [ObservableProperty]
@@ -55,7 +50,7 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         ILogger<StreamInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher,
         IShellLauncher shellLauncher)
-        : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 380, minHeight: 194)
+        : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 260, minHeight: 194)
     {
         _stream = stream;
         _logger = logger;
@@ -138,8 +133,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
             var elapsed = DateTime.UtcNow - info.StartedAt;
             Uptime = elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed;
 
-            LoadThumbnail(info.ThumbnailUrl);
-
             ChannelLogin = info.UserLogin;
             _openChannelToolbarItem.IsVisible = !string.IsNullOrWhiteSpace(info.UserLogin);
         }
@@ -154,8 +147,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
             Game = "–";
             ViewerCount = 0;
             Uptime = TimeSpan.Zero;
-            Thumbnail = null;
-            _lastThumbnailRawUrl = null;
             ChannelLogin = null;
             _openChannelToolbarItem.IsVisible = false;
         }
@@ -196,39 +187,6 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         {
             _logger.StreamInfoAutoUpdateFailed(ex);
         }
-    }
-
-    private void LoadThumbnail(string raw)
-    {
-        if (string.IsNullOrEmpty(raw))
-        {
-            Thumbnail = null;
-            _lastThumbnailRawUrl = null;
-            return;
-        }
-
-        if (raw == _lastThumbnailRawUrl)
-        {
-            return;
-        }
-
-        _lastThumbnailRawUrl = raw;
-
-        const int decodeWidth = 320;
-        var height = (int)Math.Round(decodeWidth * 9.0 / 16.0);
-        var resolved = raw
-            .Replace("{width}", decodeWidth.ToString())
-            .Replace("{height}", height.ToString());
-
-        var uri = new Uri(resolved, UriKind.Absolute);
-        var bmp = new BitmapImage();
-        bmp.BeginInit();
-        bmp.UriSource = uri;
-        bmp.DecodePixelWidth = decodeWidth;
-        bmp.CreateOptions = BitmapCreateOptions.None;
-        bmp.CacheOption = BitmapCacheOption.Default;
-        bmp.EndInit();
-        Thumbnail = bmp;
     }
 
     public void Dispose()
