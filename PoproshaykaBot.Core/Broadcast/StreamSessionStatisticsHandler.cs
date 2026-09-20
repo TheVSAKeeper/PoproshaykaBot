@@ -24,7 +24,7 @@ public sealed class StreamSessionStatisticsHandler :
     private const string MissingValuePlaceholder = "–";
     private static readonly TimeSpan ViewerSampleInterval = TimeSpan.FromMinutes(1);
 
-    private static readonly TimeSpan StreamMatchTolerance = TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan StreamMatchTolerance = TimeSpan.FromMinutes(5);
 
     private readonly IChatMessenger _messenger;
     private readonly IStreamStatus _streamStatus;

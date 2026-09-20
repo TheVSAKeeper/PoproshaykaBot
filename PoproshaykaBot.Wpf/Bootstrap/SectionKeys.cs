@@ -12,16 +12,20 @@ public static class SectionKeys
 
     public const string SelectedSuffix = ":selected";
     public const string CardsSuffix = ":cards";
+    public const string HiddenSuffix = ":hidden";
 
     public const string UsersSelected = Users + SelectedSuffix;
     public const string StreamsSelected = Streams + SelectedSuffix;
     public const string StreamsCards = Streams + CardsSuffix;
+    public const string StreamsHidden = Streams + HiddenSuffix;
 
     public static IReadOnlyList<string> All { get; } = [Overview, Users, Streams, Commands, Logs, Diagnostics, Settings];
 
     public static IReadOnlyList<string> Selected { get; } = [UsersSelected, StreamsSelected];
 
     public static IReadOnlyList<string> Cards { get; } = [StreamsCards];
+
+    public static IReadOnlyList<string> Hidden { get; } = [StreamsHidden];
 
     public static IReadOnlyDictionary<string, string> LegacyTitles { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -47,6 +51,13 @@ public static class SectionKeys
         return Cards.Contains(key, StringComparer.OrdinalIgnoreCase);
     }
 
+    public static bool IsHiddenCase(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        return Hidden.Contains(key, StringComparer.OrdinalIgnoreCase);
+    }
+
     public static string PageOf(string key)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -56,6 +67,11 @@ public static class SectionKeys
             return key[..^SelectedSuffix.Length];
         }
 
-        return IsCardsCase(key) ? key[..^CardsSuffix.Length] : key;
+        if (IsCardsCase(key))
+        {
+            return key[..^CardsSuffix.Length];
+        }
+
+        return IsHiddenCase(key) ? key[..^HiddenSuffix.Length] : key;
     }
 }

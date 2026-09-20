@@ -361,20 +361,44 @@
             </Style.Triggers>
         </Style>
 
+        <ContextMenu x:Key="SessionRowMenu"
+                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="{Binding HiddenMenuCaption}"
+                      Click="OnSessionHiddenClick" />
+        </ContextMenu>
+
+        <Style x:Key="SessionRow"
+               TargetType="DataGridRow"
+               BasedOn="{StaticResource TableRow}">
+            <Setter Property="ContextMenu"
+                    Value="{StaticResource SessionRowMenu}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHidden}"
+                             Value="True">
+                    <Setter Property="Opacity"
+                            Value="0.55" />
+                    <Setter Property="ToolTip"
+                            Value="{Binding HiddenHint}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <ContextMenu x:Key="SegmentRowMenu"
+                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="{Binding FilterCaption}"
+                      Click="OnSegmentFilterClick" />
+        </ContextMenu>
+
         <Style x:Key="SegmentRow"
                TargetType="DataGridRow"
                BasedOn="{StaticResource TableRow}">
             <Setter Property="ToolTip"
                     Value="{Binding TimelineText}" />
-            <EventSetter Event="MouseLeftButtonUp"
-                         Handler="OnSegmentRowActivated" />
-            <EventSetter Event="KeyDown"
-                         Handler="OnSegmentRowKeyDown" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding CanFilter}"
                              Value="True">
-                    <Setter Property="Cursor"
-                            Value="Hand" />
+                    <Setter Property="ContextMenu"
+                            Value="{StaticResource SegmentRowMenu}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -528,6 +552,17 @@
                     Value="{Binding CardSummary}" />
             <Setter Property="ToolTip"
                     Value="{Binding CardSummary}" />
+            <Setter Property="ContextMenu"
+                    Value="{StaticResource SessionRowMenu}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHidden}"
+                             Value="True">
+                    <Setter Property="Opacity"
+                            Value="0.55" />
+                    <Setter Property="ToolTip"
+                            Value="{Binding HiddenHint}" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="SessionCardStripe"
@@ -742,6 +777,7 @@
                     Grid.Row="0">
 
         <DockPanel x:Name="SummaryBar"
+                   LastChildFill="False"
                    Margin="0,0,0,8">
             <StackPanel DockPanel.Dock="Right"
                         Orientation="Horizontal"
@@ -816,6 +852,52 @@
                                           Height="14" />
             </Button>
 
+            <Button DockPanel.Dock="Right"
+                    x:Name="TrendMenuButton"
+                    Style="{StaticResource Button.Icon}"
+                    Click="OnTrendMenuClick"
+                    VerticalAlignment="Center"
+                    Margin="6,0,0,0"
+                    AutomationProperties.Name="Настройки полосы зрителей"
+                    ToolTip="Что показывать на полосе зрителей"
+                    Visibility="{Binding CanShowTrend, Converter={StaticResource BoolToVisibility}}">
+                <iconPacks:PackIconLucide Kind="Settings2"
+                                          Width="14"
+                                          Height="14" />
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Метрика"
+                                  ItemsSource="{Binding MetricOptions}"
+                                  ItemContainerStyle="{StaticResource TrendOptionItem}" />
+                        <MenuItem Header="Глубина"
+                                  ItemsSource="{Binding LengthOptions}"
+                                  ItemContainerStyle="{StaticResource TrendOptionItem}" />
+                        <Separator />
+                        <MenuItem Header="{Binding TrendVisibilityCaption}"
+                                  Command="{Binding ToggleTrendCommand}" />
+                    </ContextMenu>
+                </Button.ContextMenu>
+            </Button>
+
+            <ToggleButton DockPanel.Dock="Right"
+                          Style="{StaticResource ToggleButton.Toolbar}"
+                          IsChecked="{Binding ShowHidden, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          Margin="6,0,0,0"
+                          AutomationProperties.Name="{Binding HiddenToggleHint}"
+                          ToolTip="{Binding HiddenToggleHint}"
+                          Visibility="{Binding HasHiddenSessions, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <iconPacks:PackIconLucide Kind="EyeOff"
+                                              Width="13"
+                                              Height="13"
+                                              VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding HiddenToggleCaption}"
+                               Margin="6,0,0,0"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </ToggleButton>
+
             <Border DockPanel.Dock="Right"
                     Style="{StaticResource Badge}"
                     VerticalAlignment="Center"
@@ -844,74 +926,106 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock Text="{Binding SummaryLine}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       Foreground="{DynamicResource Fg.Secondary}"
-                       VerticalAlignment="Center"
-                       TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis"
-                       AutomationProperties.Name="{Binding SummaryLine}"
-                       Visibility="{Binding IsCompactLayout, Converter={StaticResource BoolToVisibility}}" />
-
-            <WrapPanel Orientation="Horizontal"
-                       Visibility="{Binding HasWideSummary, Converter={StaticResource BoolToVisibility}}">
-                <Border Style="{StaticResource StatCell.Lead}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource StatValue}"
-                                   Text="{Binding TotalSessionsText}" />
-                        <TextBlock Style="{StaticResource StatLabel}"
-                                   Text="{Binding TotalSessionsLabel}" />
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource StatCell}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource StatValue}"
-                                   Text="{Binding TotalAirTimeText}" />
-                        <TextBlock Style="{StaticResource StatLabel}"
-                                   Text="в эфире" />
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource StatCell}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource StatValue}"
-                                   Text="{Binding LastStreamText}" />
-                        <TextBlock Style="{StaticResource StatLabel}"
-                                   Text="последний стрим" />
-                    </StackPanel>
-                </Border>
-            </WrapPanel>
         </DockPanel>
+
+        <Border x:Name="NoticeStrip"
+                Margin="0,0,0,8"
+                Padding="12,8"
+                CornerRadius="{DynamicResource Radius.M}"
+                Background="{DynamicResource State.ErrorSoft}"
+                Visibility="{Binding Notice, Converter={StaticResource NullToVisibility}}"
+                AutomationProperties.LiveSetting="Assertive">
+            <TextBlock x:Name="NoticeText"
+                       Text="{Binding Notice}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource State.ErrorText}" />
+        </Border>
 
         <Border x:Name="SummaryStrip"
                 Style="{StaticResource Card}"
                 Padding="0"
                 Margin="0,0,0,8"
-                Visibility="{Binding HasSummaryStrip, Converter={StaticResource BoolToVisibility}}">
+                Visibility="{Binding HasSessions, Converter={StaticResource BoolToVisibility}}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Button Grid.Row="0"
-                        Style="{StaticResource Button.Ghost}"
-                        Command="{Binding ToggleSummaryCommand}"
-                        HorizontalAlignment="Left"
-                        Margin="6,4,0,0"
-                        Padding="8,4"
-                        AutomationProperties.Name="{Binding SummaryToggleCaption}"
-                        ToolTip="{Binding SummaryToggleCaption}">
-                    <StackPanel Orientation="Horizontal">
-                        <iconPacks:PackIconLucide Style="{StaticResource SummaryChevron}" />
+                <Grid x:Name="SummaryHeader"
+                      Grid.Row="0"
+                      Margin="6,6,12,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="Сводка"
-                                   FontSize="{DynamicResource Font.Size.S}"
-                                   Margin="8,0,0,0"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
+                    <Button Grid.Column="0"
+                            Style="{StaticResource Button.Ghost}"
+                            Command="{Binding ToggleSummaryCommand}"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Padding="8,4"
+                            AutomationProperties.Name="{Binding SummaryToggleCaption}"
+                            ToolTip="{Binding SummaryToggleCaption}"
+                            Visibility="{Binding HasSummaryStrip, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel Orientation="Horizontal">
+                            <iconPacks:PackIconLucide Style="{StaticResource SummaryChevron}" />
+
+                            <TextBlock Text="Сводка"
+                                       FontSize="{DynamicResource Font.Size.S}"
+                                       Margin="8,0,0,0"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding SummaryLine}"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               Foreground="{DynamicResource Fg.Secondary}"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               AutomationProperties.Name="{Binding SummaryLine}"
+                               Visibility="{Binding IsCompactLayout, Converter={StaticResource BoolToVisibility}}" />
+
+                    <WrapPanel Grid.Column="1"
+                               x:Name="SummaryStats"
+                               Orientation="Horizontal"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               Margin="12,0,-16,0"
+                               Visibility="{Binding HasWideSummary, Converter={StaticResource BoolToVisibility}}">
+                        <Border Style="{StaticResource StatCell.Lead}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource StatValue}"
+                                           Text="{Binding TotalSessionsText}" />
+                                <TextBlock Style="{StaticResource StatLabel}"
+                                           Text="{Binding TotalSessionsLabel}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource StatCell}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource StatValue}"
+                                           Text="{Binding TotalAirTimeText}" />
+                                <TextBlock Style="{StaticResource StatLabel}"
+                                           Text="в эфире" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource StatCell}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource StatValue}"
+                                           Text="{Binding LastStreamText}" />
+                                <TextBlock Style="{StaticResource StatLabel}"
+                                           Text="последний стрим" />
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+                </Grid>
 
                 <Grid Grid.Row="1"
                       Margin="12,2,12,10"
@@ -1036,74 +1150,39 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0"
-                      Margin="16,6,10,0"
-                      Visibility="{Binding CanShowTrend, Converter={StaticResource BoolToVisibility}}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                <ItemsControl x:Name="TrendStrip"
+                              Grid.Row="0"
+                              ItemsSource="{Binding Trend}"
+                              Height="40"
+                              KeyboardNavigation.TabNavigation="Once"
+                              KeyboardNavigation.DirectionalNavigation="Contained"
+                              AutomationProperties.Name="{Binding TrendCaption}"
+                              Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource TrendBar}"
+                                    Command="{Binding DataContext.SelectSessionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding Row}"
+                                    ToolTip="{Binding Label}"
+                                    AutomationProperties.Name="{Binding Label}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
-                    <ItemsControl x:Name="TrendStrip"
-                                  Grid.Column="0"
-                                  ItemsSource="{Binding Trend}"
-                                  Height="40"
-                                  KeyboardNavigation.TabNavigation="Once"
-                                  KeyboardNavigation.DirectionalNavigation="Contained"
-                                  AutomationProperties.Name="{Binding TrendCaption}"
-                                  Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Rows="1" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Style="{StaticResource TrendBar}"
-                                        Command="{Binding DataContext.SelectSessionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                        CommandParameter="{Binding Row}"
-                                        ToolTip="{Binding Label}"
-                                        AutomationProperties.Name="{Binding Label}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <Button Grid.Column="1"
-                            x:Name="TrendMenuButton"
-                            Style="{StaticResource Button.Icon}"
-                            Click="OnTrendMenuClick"
-                            VerticalAlignment="Center"
-                            Margin="6,0,0,0"
-                            Width="22"
-                            Height="22"
-                            AutomationProperties.Name="Настройки полосы"
-                            ToolTip="Что показывать на полосе">
-                        <iconPacks:PackIconLucide Kind="Settings2"
-                                                  Width="14"
-                                                  Height="14" />
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="Метрика"
-                                          ItemsSource="{Binding MetricOptions}"
-                                          ItemContainerStyle="{StaticResource TrendOptionItem}" />
-                                <MenuItem Header="Глубина"
-                                          ItemsSource="{Binding LengthOptions}"
-                                          ItemContainerStyle="{StaticResource TrendOptionItem}" />
-                                <Separator />
-                                <MenuItem Header="{Binding TrendVisibilityCaption}"
-                                          Command="{Binding ToggleTrendCommand}" />
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-                </Grid>
-
-                <Border Grid.Row="1"
+                <Border x:Name="TrendBaseline"
+                        Grid.Row="1"
                         Height="1"
                         Margin="16,0,10,0"
                         Background="{DynamicResource Border.Default}"
                         Visibility="{Binding HasTrendBaseline, Converter={StaticResource BoolToVisibility}}" />
 
-                <Grid Grid.Row="2"
+                <Grid x:Name="TrendLabels"
+                      Grid.Row="2"
                       Margin="16,2,10,2"
                       Visibility="{Binding HasTrendLabels, Converter={StaticResource BoolToVisibility}}">
                     <Grid.ColumnDefinitions>
@@ -1132,10 +1211,11 @@
                                Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}" />
                 </Grid>
 
-                <Border Grid.Row="3"
+                <Border x:Name="TrendDivider"
+                        Grid.Row="3"
                         Height="1"
                         Background="{DynamicResource Border.Subtle}"
-                        Visibility="{Binding CanShowTrend, Converter={StaticResource BoolToVisibility}}" />
+                        Visibility="{Binding HasTrend, Converter={StaticResource BoolToVisibility}}" />
 
                 <ListBox x:Name="SessionCards"
                          Grid.Row="4"
@@ -1168,7 +1248,7 @@
                           CanUserSortColumns="True"
                           CanUserReorderColumns="False"
                           SelectionMode="Single"
-                          RowStyle="{StaticResource TableRow}"
+                          RowStyle="{StaticResource SessionRow}"
                           RowBackground="Transparent"
                           AlternatingRowBackground="Transparent"
                           GridLinesVisibility="None">
@@ -1454,7 +1534,8 @@
                                            Text="Сегментов нет"
                                            Visibility="{Binding HasSegments, Converter={StaticResource InverseBoolToVisibility}}" />
 
-                                <DataGrid Grid.Row="2"
+                                <DataGrid x:Name="SegmentsGrid"
+                                          Grid.Row="2"
                                           Margin="0,10,0,0"
                                           ItemsSource="{Binding Segments}"
                                           AutomationProperties.Name="Сегменты выбранного стрима"
@@ -1560,8 +1641,8 @@
                              Grid.Row="1"
                              Grid.RowSpan="3"
                              Icon="History"
-                             Heading="Стримов пока нет"
-                             Description="Сессия появится здесь после первого завершённого стрима."
+                             Heading="{Binding EmptyHeading}"
+                             Description="{Binding EmptyDescription}"
                              DescriptionMaxWidth="360"
                              Visibility="{Binding HasSessions, Converter={StaticResource InverseBoolToVisibility}}" />
     </Grid>

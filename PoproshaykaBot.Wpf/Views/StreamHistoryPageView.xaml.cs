@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Wpf.ViewModels;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -60,6 +61,9 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
 
         if (DataContext is StreamHistoryPageViewModel viewModel)
         {
+            viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
             ScrollToSelection(viewModel);
         }
     }
@@ -188,7 +192,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     private void ApplyCompactMode(bool compact, double scale)
     {
         TrendStrip.Height = (compact ? TrendStripCompactHeight : TrendStripHeight) * scale;
-        TrendStrip.Margin = new(0, 0, 0, compact ? 6 : 0);
+        TrendStrip.Margin = new(16, 6, 10, compact ? 6 : 0);
 
         if (DataContext is StreamHistoryPageViewModel viewModel)
         {
@@ -282,6 +286,20 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         {
             ScrollToSelection(viewModel);
         }
+
+        if (e.PropertyName is nameof(StreamHistoryPageViewModel.Notice)
+            && !string.IsNullOrEmpty(viewModel.Notice))
+        {
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(AnnounceNotice));
+        }
+    }
+
+    private void AnnounceNotice()
+    {
+        var peer = UIElementAutomationPeer.FromElement(NoticeText)
+                   ?? UIElementAutomationPeer.CreatePeerForElement(NoticeText);
+
+        peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
     private void ScrollToSelection(StreamHistoryPageViewModel viewModel)
@@ -374,36 +392,27 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         menu.IsOpen = true;
     }
 
-    private void OnSegmentRowActivated(object sender, MouseButtonEventArgs e)
+    private void OnSegmentFilterClick(object sender, RoutedEventArgs e)
     {
-        FilterBySegment(sender);
-    }
-
-    private void OnSegmentRowKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key is not (Key.Enter or Key.Space))
+        if (sender is not MenuItem { DataContext: StreamSessionSegmentRowViewModel segment }
+            || DataContext is not StreamHistoryPageViewModel viewModel
+            || !segment.CanFilter)
         {
             return;
         }
 
-        if (FilterBySegment(sender))
-        {
-            e.Handled = true;
-        }
+        viewModel.FilterByGameCommand.Execute(segment);
     }
 
-    private bool FilterBySegment(object sender)
+    private void OnSessionHiddenClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not DataGridRow { Item: StreamSessionSegmentRowViewModel segment }
-            || DataContext is not StreamHistoryPageViewModel viewModel
-            || !segment.CanFilter)
+        if (sender is not MenuItem { DataContext: StreamSessionRowViewModel row }
+            || DataContext is not StreamHistoryPageViewModel viewModel)
         {
-            return false;
+            return;
         }
 
-        viewModel.FilterByGameCommand.Execute(segment);
-
-        return true;
+        viewModel.SetSessionHiddenCommand.Execute(row);
     }
 
     private void OnCategoryRowActivated(object sender, MouseButtonEventArgs e)

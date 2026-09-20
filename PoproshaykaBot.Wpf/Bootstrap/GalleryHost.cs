@@ -111,6 +111,11 @@ public sealed class GalleryHost : IGalleryHost
             return await CaptureCardsAsync(item.Name, context).ConfigureAwait(true);
         }
 
+        if (SectionKeys.IsHiddenCase(item.Name))
+        {
+            return await CaptureHiddenAsync(item.Name, context).ConfigureAwait(true);
+        }
+
         Navigate(item.Name);
 
         await context.SettleAsync().ConfigureAwait(true);
@@ -156,6 +161,7 @@ public sealed class GalleryHost : IGalleryHost
         return SectionKeys.All
             .Concat(SectionKeys.Selected)
             .Concat(SectionKeys.Cards)
+            .Concat(SectionKeys.Hidden)
             .FirstOrDefault(known => string.Equals(known, requested, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -232,6 +238,33 @@ public sealed class GalleryHost : IGalleryHost
         {
             streams.SelectedRow = null;
             streams.IsTableView = wasTable;
+
+            await context.SettleAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task<GalleryShot> CaptureHiddenAsync(string name, GalleryContext context)
+    {
+        Navigate(SectionKeys.PageOf(name));
+
+        var streams = _services.GetRequiredService<StreamHistoryPageViewModel>();
+
+        if (streams.HiddenCount == 0)
+        {
+            HostLog.Warning("Кейс «{Case}» снят без убранных стримов – в профиле нет таких записей", name);
+        }
+
+        streams.ShowHidden = true;
+
+        try
+        {
+            await context.SettleAsync().ConfigureAwait(true);
+
+            return context.Save(ViewCapture.Slug(name));
+        }
+        finally
+        {
+            streams.ShowHidden = false;
 
             await context.SettleAsync().ConfigureAwait(true);
         }

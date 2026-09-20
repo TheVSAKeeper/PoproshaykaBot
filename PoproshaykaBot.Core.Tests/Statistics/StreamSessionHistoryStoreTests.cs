@@ -30,7 +30,7 @@ public sealed class StreamSessionHistoryStoreTests
         var directory = Path.GetDirectoryName(_tempFile)!;
         var prefix = Path.GetFileNameWithoutExtension(_tempFile);
 
-        foreach (var backup in Directory.GetFiles(directory, prefix + ".invalid-*"))
+        foreach (var backup in Directory.GetFiles(directory, prefix + ".*-*"))
         {
             File.Delete(backup);
         }
@@ -138,6 +138,182 @@ public sealed class StreamSessionHistoryStoreTests
         {
             Assert.That(store.Load().Sessions, Is.Empty);
             Assert.That(backups, Is.Not.Empty);
+            Assert.That(store.IsLoaded, Is.False);
+        }
+    }
+
+    [Test]
+    public void FailedRead_BlocksEveryWritePath()
+    {
+        const string Broken = "{ this is not valid json";
+        File.WriteAllText(_tempFile, Broken);
+
+        var store = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, _tempFile);
+        store.Append(Record("chan", 10));
+        var hidden = store.TrySetHidden(Guid.NewGuid(), true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.IsLoaded, Is.False);
+            Assert.That(hidden, Is.False);
+            Assert.That(store.Load().Sessions, Is.Empty);
+            Assert.That(File.ReadAllText(_tempFile), Is.EqualTo(Broken));
+        }
+    }
+
+    [Test]
+    public void Append_SameChannelAndStart_IsRejected()
+    {
+        var first = Record("chan", 10);
+        _store.Append(first);
+
+        var duplicate = Record("CHAN", 999);
+        duplicate.StartedAt = first.StartedAt;
+        duplicate.EndedAt = first.EndedAt.AddMinutes(3);
+        _store.Append(duplicate);
+
+        var sessions = _store.Load().Sessions;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sessions, Has.Count.EqualTo(1));
+            Assert.That(sessions[0].MessageCount, Is.EqualTo(10));
+        }
+    }
+
+    [Test]
+    public void Load_InterruptedStream_IsMergedOnceAndBackedUp()
+    {
+        var startedAt = new DateTimeOffset(2026, 8, 17, 6, 12, 53, TimeSpan.Zero);
+
+        var helix = Record("bobito217", 120);
+        helix.StartedAt = startedAt;
+        helix.EndedAt = startedAt.AddMinutes(47);
+        helix.PeakViewers = 31;
+
+        var local = Record("bobito217", 34);
+        local.StartedAt = startedAt.AddSeconds(13);
+        local.EndedAt = startedAt.AddMinutes(6);
+        local.PeakViewers = 44;
+
+        var history = new StreamSessionHistory { Sessions = [helix, local] };
+        File.WriteAllText(_tempFile, JsonSerializer.Serialize(history, JsonStoreOptions.Default));
+
+        var store = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, _tempFile);
+        var merged = store.Load().Sessions.Single();
+
+        var onDisk = JsonSerializer.Deserialize<StreamSessionHistory>(File.ReadAllText(_tempFile), JsonStoreOptions.Default)!;
+
+        var directory = Path.GetDirectoryName(_tempFile)!;
+        var prefix = Path.GetFileNameWithoutExtension(_tempFile);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(merged.Id, Is.EqualTo(helix.Id));
+            Assert.That(merged.MessageCount, Is.EqualTo(154));
+            Assert.That(merged.PeakViewers, Is.EqualTo(44));
+            Assert.That(merged.EndedAt, Is.EqualTo(helix.EndedAt));
+            Assert.That(onDisk.Sessions, Has.Count.EqualTo(1));
+            Assert.That(Directory.GetFiles(directory, prefix + ".premerge-*"), Is.Not.Empty);
+        }
+    }
+
+    [Test]
+    public void Load_LegacyRecordWithoutHiddenFlag_ReadsAsVisible()
+    {
+        File.WriteAllText(_tempFile,
+            """
+            {
+              "sessions": [
+                {
+                  "id": "8f2b1f6a-6d0e-4a58-9a6c-7d2f0c3a1b44",
+                  "channel": "bobito217",
+                  "startedAt": "2026-08-17T06:12:53+00:00",
+                  "endedAt": "2026-08-17T07:00:37+00:00",
+                  "title": "эфир",
+                  "game": "Minecraft",
+                  "messageCount": 120,
+                  "chatterCount": 2,
+                  "peakViewers": 31,
+                  "averageViewers": 12
+                }
+              ]
+            }
+            """);
+
+        var store = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, _tempFile);
+        var session = store.Load().Sessions.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.IsLoaded, Is.True);
+            Assert.That(session.IsHidden, Is.False);
+            Assert.That(session.Game, Is.EqualTo("Minecraft"));
+            Assert.That(session.MessageCount, Is.EqualTo(120));
+            Assert.That(session.Segments, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void TrySetHidden_SurvivesReload()
+    {
+        var record = Record("chan", 10);
+        _store.Append(record);
+
+        var hidden = _store.TrySetHidden(record.Id, true);
+
+        var reloaded = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, _tempFile);
+        var restored = reloaded.Load().Sessions.Single();
+
+        var shown = reloaded.TrySetHidden(record.Id, false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hidden, Is.True);
+            Assert.That(restored.IsHidden, Is.True);
+            Assert.That(shown, Is.True);
+            Assert.That(reloaded.Load().Sessions.Single().IsHidden, Is.False);
+        }
+    }
+
+    [Test]
+    public void TrySetHidden_WriteFails_RollsBackFlagAndReportsFailure()
+    {
+        var record = Record("chan", 10);
+        _store.Append(record);
+
+        var blocker = _tempFile + ".tmp";
+        Directory.CreateDirectory(blocker);
+
+        try
+        {
+            var result = _store.TrySetHidden(record.Id, true);
+            var reloaded = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, _tempFile);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result, Is.False, "Отказ записи виден вызывающему, а не летит исключением в интерфейс");
+                Assert.That(_store.Load().Sessions.Single().IsHidden, Is.False, "Память откачена – страница не показывает убранным то, что на диске осталось видимым");
+                Assert.That(reloaded.Load().Sessions.Single().IsHidden, Is.False);
+            }
+        }
+        finally
+        {
+            Directory.Delete(blocker);
+        }
+    }
+
+    [Test]
+    public void TrySetHidden_UnknownId_ChangesNothing()
+    {
+        _store.Append(Record("chan", 10));
+
+        var result = _store.TrySetHidden(Guid.NewGuid(), true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(_store.Load().Sessions.Single().IsHidden, Is.False);
         }
     }
 }

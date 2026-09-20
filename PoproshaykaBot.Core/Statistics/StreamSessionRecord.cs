@@ -14,6 +14,7 @@ public sealed class StreamSessionRecord
     public int ChatterCount { get; set; }
     public int PeakViewers { get; set; }
     public int AverageViewers { get; set; }
+    public bool IsHidden { get; set; }
     public List<StreamSessionChatter> Chatters { get; set; } = [];
 
     public List<StreamSessionSegment> Segments { get; set; } = [];

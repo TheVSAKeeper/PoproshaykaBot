@@ -16,6 +16,7 @@ public class StreamHistoryPageTests
     private static readonly DateTimeOffset Start = new(new DateTime(2026, 9, 1, 18, 0, 0, DateTimeKind.Local));
 
     private string _directory = null!;
+    private StreamSessionHistoryStore _store = null!;
 
     [SetUp]
     public void SetUp()
@@ -138,7 +139,7 @@ public class StreamHistoryPageTests
     }
 
     [Test]
-    public void Скрытая_полоса_уходит_но_меню_остаётся_на_месте()
+    public void Скрытая_полоса_уносит_подписи_и_черту_а_меню_остаётся_на_месте()
     {
         ISettingsStore settings = new MemorySettings();
         var page = Create(settings, Session(0, "Just Chatting"), Session(1, "Minecraft"));
@@ -148,9 +149,20 @@ public class StreamHistoryPageTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(page.HasTrend, Is.False);
-            Assert.That(page.CanShowTrend, Is.True);
-            Assert.That(page.TrendCaption, Does.Contain("скрыта"));
+            Assert.That(page.HasTrendLabels, Is.False);
+            Assert.That(page.HasTrendBaseline, Is.False);
+            Assert.That(page.CanShowTrend, Is.True, "Меню полосы живёт по этому признаку и остаётся в тулбаре");
+            Assert.That(page.TrendVisibilityCaption, Is.EqualTo("Показать полосу"));
             Assert.That(settings.GetBool(SettingsKeys.StreamTrendVisible, true), Is.False);
+        }
+
+        page.ToggleTrendCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.HasTrend, Is.True);
+            Assert.That(page.HasTrendLabels, Is.True);
+            Assert.That(page.HasTrendBaseline, Is.True);
         }
     }
 
@@ -209,12 +221,16 @@ public class StreamHistoryPageTests
     }
 
     [Test]
-    public void Свёрнутость_сводки_переживает_перезапуск()
+    public void Сводка_открыта_при_первом_заходе_и_свёртка_переживает_перезапуск()
     {
         ISettingsStore settings = new MemorySettings();
         var page = Create(settings, Session(0, "Just Chatting"), Session(1, "Minecraft"));
 
-        Assert.That(page.IsSummaryExpanded, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.IsSummaryExpanded, Is.True);
+            Assert.That(page.IsSummaryOpen, Is.True);
+        }
 
         page.ToggleSummaryCommand.Execute(null);
 
@@ -222,9 +238,9 @@ public class StreamHistoryPageTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(settings.GetBool(SettingsKeys.StreamSummaryExpanded, false), Is.True);
-            Assert.That(restarted.IsSummaryExpanded, Is.True);
-            Assert.That(restarted.IsSummaryOpen, Is.True);
+            Assert.That(settings.GetBool(SettingsKeys.StreamSummaryExpanded, true), Is.False);
+            Assert.That(restarted.IsSummaryExpanded, Is.False);
+            Assert.That(restarted.IsSummaryOpen, Is.False);
             Assert.That(restarted.HasSummaryStrip, Is.True);
         }
 
@@ -232,8 +248,44 @@ public class StreamHistoryPageTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(restarted.IsSummaryOpen, Is.False);
-            Assert.That(Create(settings, Session(0, "Just Chatting")).IsSummaryExpanded, Is.False);
+            Assert.That(restarted.IsSummaryOpen, Is.True);
+            Assert.That(Create(settings, Session(0, "Just Chatting")).IsSummaryExpanded, Is.True);
+        }
+    }
+
+    [Test]
+    public void Числа_сводки_живут_и_без_категорий_с_рекордами()
+    {
+        var page = Create(new MemorySettings(), Session(0, game: null));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.HasSessions, Is.True, "Шапка сводки с числами держится на этом признаке");
+            Assert.That(page.HasSummaryStrip, Is.False, "Ни категорий, ни рекордов – раскрывающейся части и шеврона нет");
+            Assert.That(page.IsSummaryOpen, Is.False);
+            Assert.That(page.TotalSessionsText, Is.EqualTo("1"));
+            Assert.That(page.SummaryLine, Does.Contain("в эфире"));
+        }
+    }
+
+    [TestCase(false, "Фильтровать по игре «Just Chatting»")]
+    [TestCase(true, "Снять фильтр по игре «Just Chatting»")]
+    public void Меню_сегмента_называет_действие_по_текущему_фильтру(bool filtered, string expected)
+    {
+        var page = Create(new MemorySettings(), Session(0, "Minecraft"), Session(1, "Just Chatting"));
+
+        page.TrySelectAt(0);
+
+        if (filtered)
+        {
+            page.FilterByGameCommand.Execute(page.Segments[0]);
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Segments[0].CanFilter, Is.True);
+            Assert.That(page.Segments[0].IsFiltered, Is.EqualTo(filtered));
+            Assert.That(page.Segments[0].FilterCaption, Is.EqualTo(expected));
         }
     }
 
@@ -356,7 +408,153 @@ public class StreamHistoryPageTests
         }
     }
 
-    private static StreamSessionRecord Session(int index, string? game, long messages = 100, string chatterId = "42")
+    [TestCase(false, 2)]
+    [TestCase(true, 3)]
+    public void Убранный_стрим_не_идёт_в_агрегаты_ни_в_одном_режиме(bool showHidden, int expectedRows)
+    {
+        var page = Create(
+            new MemorySettings(),
+            Session(0, "Just Chatting"),
+            Session(1, "Minecraft", messages: 1000, hidden: true),
+            Session(2, "Just Chatting"));
+
+        page.ShowHidden = showHidden;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Sessions, Has.Count.EqualTo(expectedRows));
+            Assert.That(page.Sessions.Any(row => row.IsHidden), Is.EqualTo(showHidden));
+            Assert.That(page.TotalSessionsText, Is.EqualTo("2"));
+            Assert.That(page.TotalAirTimeText, Is.EqualTo("6 ч 0 мин"));
+            Assert.That(page.Trend, Has.Count.EqualTo(2));
+            Assert.That(page.Trend.All(bar => !bar.Row.IsHidden), Is.True);
+            Assert.That(page.Sessions.First(row => !row.IsHidden).MessagesDelta, Is.EqualTo("как обычно"));
+            Assert.That(page.HasHiddenSessions, Is.True);
+            Assert.That(page.HiddenToggleCaption, Is.EqualTo("Убранные: 1"));
+        }
+    }
+
+    [Test]
+    public void Стрим_убирается_из_статистики_и_возвращается_обратно()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting"), Session(1, "Minecraft"));
+
+        var target = page.Sessions.First(row => row.Source.Game == "Minecraft");
+
+        page.SetSessionHiddenCommand.Execute(target);
+
+        var afterHide = _store.Load().Sessions.Single(session => session.Id == target.Source.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(afterHide.IsHidden, Is.True);
+            Assert.That(page.Sessions, Has.Count.EqualTo(1));
+            Assert.That(page.HiddenCount, Is.EqualTo(1));
+            Assert.That(page.Notice, Is.Null);
+        }
+
+        page.ShowHidden = true;
+
+        var hiddenRow = page.Sessions.Single(row => row.IsHidden);
+
+        page.SetSessionHiddenCommand.Execute(hiddenRow);
+
+        var afterRestore = _store.Load().Sessions.Single(session => session.Id == target.Source.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(afterRestore.IsHidden, Is.False);
+            Assert.That(page.Sessions, Has.Count.EqualTo(2));
+            Assert.That(page.HasHiddenSessions, Is.False);
+        }
+    }
+
+    [Test]
+    public void Вход_на_страницу_гасит_показ_убранных()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting"), Session(1, "Minecraft", hidden: true));
+
+        page.ShowHidden = true;
+        page.OnEnter();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.ShowHidden, Is.False);
+            Assert.That(page.Sessions, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void Фильтр_по_игре_не_уносит_доступ_к_убранным()
+    {
+        var page = Create(
+            new MemorySettings(),
+            Session(0, "Just Chatting"),
+            Session(1, "Minecraft", hidden: true),
+            Session(2, "Just Chatting"));
+
+        page.TrySelectAt(0);
+        page.FilterByGameCommand.Execute(page.Segments[0]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.HasGameFilter, Is.True);
+            Assert.That(page.Sessions.Any(row => row.IsHidden), Is.False);
+            Assert.That(page.HasHiddenSessions, Is.True, "Убранный стрим вне фильтра – не повод терять кнопку, которой его возвращают");
+            Assert.That(page.HiddenToggleCaption, Is.EqualTo("Убранные: 1"));
+        }
+    }
+
+    [Test]
+    public void История_из_одних_убранных_объясняет_пустой_список()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting", hidden: true), Session(1, "Minecraft", hidden: true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Sessions, Is.Empty);
+            Assert.That(page.HasSessions, Is.False, "Иначе на экране пустая таблица без единого слова");
+            Assert.That(page.IsEverythingHidden, Is.True);
+            Assert.That(page.EmptyHeading, Is.EqualTo("Все стримы убраны из статистики"));
+            Assert.That(page.EmptyDescription, Does.Contain("убранных"), "Текст ведёт к кнопке в панели сверху");
+            Assert.That(page.HasHiddenSessions, Is.True, "Кнопка возврата на месте – доступ не потерян");
+        }
+
+        page.ShowHidden = true;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Sessions, Has.Count.EqualTo(2));
+            Assert.That(page.HasSessions, Is.True);
+            Assert.That(page.EmptyHeading, Is.EqualTo("Стримов пока нет"));
+        }
+    }
+
+    [Test]
+    public void Фильтр_без_единой_строки_пустое_состояние_не_подменяет()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting"), Session(1, "Minecraft"));
+
+        page.TrySelectAt(0);
+        page.FilterByGameCommand.Execute(page.Segments[0]);
+        page.SetSessionHiddenCommand.Execute(page.Sessions.Single());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Sessions, Is.Empty);
+            Assert.That(page.HasGameFilter, Is.True);
+            Assert.That(page.IsEverythingHidden, Is.False, "Убран не весь список – это случай фильтра, а не пустой истории");
+            Assert.That(page.HasSessions, Is.True, "Страница остаётся такой же, какой была до правки");
+            Assert.That(page.EmptyHeading, Is.EqualTo("Стримов пока нет"));
+        }
+    }
+
+    private static StreamSessionRecord Session(
+        int index,
+        string? game,
+        long messages = 100,
+        string chatterId = "42",
+        bool hidden = false)
     {
         var started = Start.AddDays(index);
 
@@ -371,6 +569,7 @@ public class StreamHistoryPageTests
             ChatterCount = 1,
             PeakViewers = 10 + index,
             AverageViewers = 5,
+            IsHidden = hidden,
             Chatters =
             [
                 new() { UserId = chatterId, DisplayName = "qp_illson", MessageCount = messages },
@@ -399,6 +598,8 @@ public class StreamHistoryPageTests
         {
             store.Append(session);
         }
+
+        _store = store;
 
         var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         users.ReplaceAll([new() { UserId = "42", Name = "qp_illson" }]);
