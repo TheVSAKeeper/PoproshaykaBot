@@ -407,3 +407,6 @@ FodyWeavers.xsd
 
 # Локальные legacy-данные для ручных миграций (содержат секреты)
 old/
+
+# Отметка локальной сборки рядом с exe (scripts/write-build-stamp.ps1)
+build-stamp.json

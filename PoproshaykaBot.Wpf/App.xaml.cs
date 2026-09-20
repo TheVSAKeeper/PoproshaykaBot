@@ -382,6 +382,7 @@ public partial class App : Application
         services.AddSingleton<ErrorReportService>();
 
         services.AddSingleton<DashboardTileViewModel, StreamInfoTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel, StreamPreviewTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, BroadcastStatusTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, BroadcastProfilesTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, PollsTileViewModel>();

@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Update;
+using PoproshaykaBot.Wpf.Bootstrap;
 using Serilog;
 using Serilog.Extensions.Logging;
 using System.Windows;
@@ -59,7 +60,7 @@ public partial class App
     private static void ReportEnvironment(IReadOnlyList<string> arguments)
     {
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
-        StartupReport.LogEnvironment(loggerFactory.CreateLogger(nameof(StartupReport)), arguments);
+        StartupReport.LogEnvironment(loggerFactory.CreateLogger(nameof(StartupReport)), arguments, AppBuildBadge.StartupLine);
     }
 
     private static void ReportConfiguration(IServiceProvider serviceProvider)

@@ -70,6 +70,70 @@ public sealed class StreamStateMachineTests
     }
 
     [Test]
+    public void ApplyOnlineSnapshot_SameContent_DoesNotReportSnapshotChange()
+    {
+        var machine = new StreamStateMachine();
+
+        machine.ApplyOnlineSnapshot(SampleStream());
+        var second = machine.ApplyOnlineSnapshot(SampleStream());
+
+        Assert.That(second.SnapshotChanged, Is.False,
+            "повторный одинаковый снимок не должен превращаться в событие шины каждые 30 секунд");
+    }
+
+    [Test]
+    public void ApplyOnlineSnapshot_MetadataFilledIn_ReportsSnapshotChange()
+    {
+        var machine = new StreamStateMachine();
+
+        machine.MarkOnline("stream-1", new(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc));
+        var second = machine.ApplyOnlineSnapshot(SampleStream());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(second.Transitioned, Is.False);
+            Assert.That(second.SnapshotChanged, Is.True);
+            Assert.That(machine.CurrentStream!.ThumbnailUrl, Is.EqualTo("https://example.com/{width}x{height}.jpg"));
+        }
+    }
+
+    [Test]
+    public void ApplyOnlineSnapshot_OnlyViewerCountChanged_DoesNotReportSnapshotChange()
+    {
+        var machine = new StreamStateMachine();
+
+        machine.ApplyOnlineSnapshot(SampleStream());
+
+        var next = SampleStream();
+        next.ViewerCount += 17;
+
+        var second = machine.ApplyOnlineSnapshot(next);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(second.SnapshotChanged, Is.False);
+            Assert.That(machine.CurrentStream!.ViewerCount, Is.EqualTo(59),
+                "счётчик зрителей обновляется в состоянии, но событием метаданных не считается");
+        }
+    }
+
+    [Test]
+    public void ApplyOffline_FromOnline_ReportsSnapshotChange()
+    {
+        var machine = new StreamStateMachine();
+
+        machine.ApplyOnlineSnapshot(SampleStream());
+        var offline = machine.ApplyOffline();
+        var second = machine.ApplyOffline();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(offline.SnapshotChanged, Is.True);
+            Assert.That(second.SnapshotChanged, Is.False);
+        }
+    }
+
+    [Test]
     public void MarkOnline_WithoutEventPayload_LeavesStreamUntouched()
     {
         var machine = new StreamStateMachine();

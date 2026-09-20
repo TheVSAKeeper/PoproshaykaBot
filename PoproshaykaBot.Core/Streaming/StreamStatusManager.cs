@@ -16,6 +16,7 @@ namespace PoproshaykaBot.Core.Streaming;
 public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly TimeSpan RefreshGateDrainTimeout = TimeSpan.FromSeconds(2);
 
     private readonly ITwitchEventSubClient _eventSubClient;
     private readonly ITwitchHelixClient _helix;
@@ -29,6 +30,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private readonly StreamStateMachine _state = new();
     private readonly StreamMetadataRetryLoop _metadataRetryLoop;
     private readonly CancellationTokenSource _disposeCts = new();
+    private readonly SemaphoreSlim _refreshGate = new(1, 1);
 
     private IDisposable? _channelUpdatedSubscription;
     private CancellationTokenSource? _runCts;
@@ -144,6 +146,15 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         await _metadataRetryLoop.DisposeAsync().ConfigureAwait(false);
 
+        if (await _refreshGate.WaitAsync(RefreshGateDrainTimeout).ConfigureAwait(false))
+        {
+            _refreshGate.Dispose();
+        }
+        else
+        {
+            _logger.LogDebug("Опрос Helix не завершился за {Timeout} – семафор опроса оставлен сборщику мусора", RefreshGateDrainTimeout);
+        }
+
         _disposeCts.Dispose();
         _runCts?.Dispose();
         _runCts = null;
@@ -170,6 +181,16 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         try
         {
+            await _refreshGate.WaitAsync(token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogDebug(ex, "Live-snapshot отменён в очереди: StreamStatusManager уничтожается");
+            return;
+        }
+
+        try
+        {
             var broadcasterId = await _broadcasterIdProvider.GetAsync(token);
 
             if (string.IsNullOrEmpty(broadcasterId))
@@ -193,6 +214,12 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                         stream.StartedAt);
 
                     await PublishStatusTransitionAsync(StreamStatus.Online, true).ConfigureAwait(false);
+                }
+                else if (transition.SnapshotChanged)
+                {
+                    _logger.LogInformation("Live-snapshot: метаданные стрима {StreamId} обновлены без смены статуса", stream.Id);
+
+                    await PublishMetadataResolvedAsync().ConfigureAwait(false);
                 }
 
                 return;
@@ -226,6 +253,10 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         catch (Exception ex)
         {
             _logger.LogError(ex, "Не удалось обновить live-snapshot стрима: {Reason}", StreamingErrorMessages.SafeMessage(ex));
+        }
+        finally
+        {
+            _refreshGate.Release();
         }
     }
 
@@ -331,6 +362,16 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         try
         {
+            await _refreshGate.WaitAsync(token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogDebug(ex, "Инициализация по API отменена в очереди опроса");
+            return;
+        }
+
+        try
+        {
             var broadcasterId = await _broadcasterIdProvider.GetAsync(token);
 
             if (string.IsNullOrEmpty(broadcasterId))
@@ -376,6 +417,13 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                     newStatus,
                     broadcasterId,
                     stream?.Id);
+
+                if (transition.SnapshotChanged && newStatus == StreamStatus.Online)
+                {
+                    _logger.LogInformation("Инициализация: метаданные стрима {StreamId} обновлены без смены статуса", stream?.Id);
+
+                    await PublishMetadataResolvedAsync().ConfigureAwait(false);
+                }
             }
 
             if (stream != null)
@@ -395,6 +443,10 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         catch (Exception ex)
         {
             _logger.LogError(ex, "Не удалось получить начальный статус стрима: {Reason}", StreamingErrorMessages.SafeMessage(ex));
+        }
+        finally
+        {
+            _refreshGate.Release();
         }
     }
 
@@ -462,29 +514,38 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         try
         {
-            var broadcasterId = await _broadcasterIdProvider.GetAsync(cancellationToken);
+            await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-            if (string.IsNullOrEmpty(broadcasterId))
+            try
             {
-                return false;
+                var broadcasterId = await _broadcasterIdProvider.GetAsync(cancellationToken);
+
+                if (string.IsNullOrEmpty(broadcasterId))
+                {
+                    return false;
+                }
+
+                var stream = await _helix.GetStreamAsync(broadcasterId, cancellationToken);
+
+                if (stream == null)
+                {
+                    return false;
+                }
+
+                _state.UpdateStreamSnapshot(StreamInfoMapper.MapFromHelix(stream));
+
+                if (_state.CurrentStream == null)
+                {
+                    return false;
+                }
+
+                await PublishMetadataResolvedAsync().ConfigureAwait(false);
+                return true;
             }
-
-            var stream = await _helix.GetStreamAsync(broadcasterId, cancellationToken);
-
-            if (stream == null)
+            finally
             {
-                return false;
+                _refreshGate.Release();
             }
-
-            _state.UpdateStreamSnapshot(StreamInfoMapper.MapFromHelix(stream));
-
-            if (_state.CurrentStream == null)
-            {
-                return false;
-            }
-
-            await PublishMetadataResolvedAsync().ConfigureAwait(false);
-            return true;
         }
         catch (OperationCanceledException)
         {
