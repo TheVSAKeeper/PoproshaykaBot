@@ -21,6 +21,7 @@ public sealed class StreamStatusManagerTests
     [SetUp]
     public void SetUp()
     {
+        _apiStream = null;
         _eventSubClient = Substitute.For<ITwitchEventSubClient>();
 
         _helix = Substitute.For<ITwitchHelixClient>();
@@ -80,6 +81,7 @@ public sealed class StreamStatusManagerTests
     private InMemoryEventBus _eventBus = null!;
     private TestTimeProvider _clock = null!;
     private StreamStatusManager _manager = null!;
+    private HelixStreamInfo? _apiStream;
 
     private static EventSubNotificationArgs StreamOnlineNotification()
     {
@@ -110,7 +112,7 @@ public sealed class StreamStatusManagerTests
             }));
     }
 
-    private static HelixStreamInfo SampleStream(string id = "stream-1")
+    private static HelixStreamInfo SampleStream(string id = "stream-1", string title = "Тест")
     {
         return new(id,
             BroadcasterId,
@@ -119,7 +121,7 @@ public sealed class StreamStatusManagerTests
             "509658",
             "Just Chatting",
             "live",
-            "Тест",
+            title,
             42,
             DateTime.UtcNow,
             "ru",
@@ -555,6 +557,147 @@ public sealed class StreamStatusManagerTests
             Assert.That(received!.Stream.Id, Is.EqualTo("stream-online-1"));
             Assert.That(received.Channel, Is.EqualTo(_settings.Twitch.Channel));
         }
+    }
+
+    [Test]
+    public async Task RefreshLiveSnapshot_AfterBareStreamOnline_PublishesStreamMetadataResolved()
+    {
+        var stream = SampleStream("stream-bare-1");
+        var received = new TaskCompletionSource<StreamMetadataResolved>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamMetadataResolved>(@event => received.TrySetResult(@event));
+
+        await StartWithBareOnlineAsync();
+
+        _apiStream = stream;
+
+        await _manager.RefreshLiveSnapshotAsync();
+
+        var resolved = await received.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resolved.Stream.Id, Is.EqualTo("stream-bare-1"));
+            Assert.That(resolved.Stream.ThumbnailUrl, Is.EqualTo("https://example.com/{width}x{height}.jpg"),
+                "догон метаданных без смены статуса обязан доехать до подписчиков шины, иначе плитка превью остаётся пустой");
+
+            Assert.That(resolved.Channel, Is.EqualTo(_settings.Twitch.Channel));
+        }
+    }
+
+    [Test]
+    public async Task RefreshLiveSnapshot_WithoutSnapshotChange_DoesNotPublishMetadataResolved()
+    {
+        var stream = SampleStream();
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>()).Returns(stream);
+
+        var metadataEvents = 0;
+        _eventBus.Subscribe<StreamMetadataResolved>(_ => Interlocked.Increment(ref metadataEvents));
+
+        var onlineSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamWentOnline>(_ => onlineSignal.TrySetResult());
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await onlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await _manager.RefreshLiveSnapshotAsync();
+        await _manager.RefreshLiveSnapshotAsync();
+
+        Assert.That(metadataEvents, Is.Zero,
+            "снимок не изменился – опрос по таймеру не должен превращаться в событие шины каждые 30 секунд");
+    }
+
+    [Test]
+    public async Task RefreshLiveSnapshot_ConcurrentCalls_PublishMetadataResolvedOnce()
+    {
+        var metadataEvents = 0;
+        _eventBus.Subscribe<StreamMetadataResolved>(_ => Interlocked.Increment(ref metadataEvents));
+
+        await StartWithBareOnlineAsync();
+
+        _apiStream = SampleStream("stream-bare-2");
+
+        await Task.WhenAll(Task.Run(() => _manager.RefreshLiveSnapshotAsync()),
+            Task.Run(() => _manager.RefreshLiveSnapshotAsync()));
+
+        Assert.That(metadataEvents, Is.EqualTo(1),
+            "одновременные опросы из таймера и кнопки дают одно событие: снимок сравнивается и подменяется под замком состояния");
+    }
+
+    [Test]
+    public async Task InitializeFromApi_OverlappedByRefresh_DoesNotLetTheStaleSnapshotWin()
+    {
+        var stale = SampleStream(title: "Старый заголовок");
+        var fresh = SampleStream(title: "Свежий заголовок");
+
+        var calls = 0;
+        var initializeReachedHelix = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var staleAnswer = new TaskCompletionSource<HelixStreamInfo?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref calls) == 1)
+                {
+                    initializeReachedHelix.TrySetResult();
+                    return staleAnswer.Task;
+                }
+
+                return Task.FromResult<HelixStreamInfo?>(fresh);
+            });
+
+        StreamMetadataResolved? lastMetadata = null;
+        var metadataReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventBus.Subscribe<StreamMetadataResolved>(@event =>
+        {
+            lastMetadata = @event;
+            metadataReceived.TrySetResult();
+        });
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await initializeReachedHelix.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var refreshTask = _manager.RefreshLiveSnapshotAsync();
+
+        staleAnswer.SetResult(stale);
+
+        await refreshTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await metadataReceived.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_manager.CurrentStream!.Title, Is.EqualTo("Свежий заголовок"),
+                "ответ Helix, начатый раньше, не должен лечь поверх более свежего: опрос из welcome и опрос по таймеру идут через один замок");
+
+            Assert.That(lastMetadata!.Stream.Title, Is.EqualTo("Свежий заголовок"),
+                "устаревшие метаданные не должны уехать подписчикам последними");
+        }
+    }
+
+    private async Task StartWithBareOnlineAsync()
+    {
+        var firstAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _helix.GetStreamAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                firstAttempt.TrySetResult();
+                return Task.FromResult(_apiStream);
+            });
+
+        await _manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnNotification +=
+            Raise.Event<EventSubAsyncHandler<EventSubNotificationArgs>>(StreamOnlineNotification(), CancellationToken.None);
+
+        await firstAttempt.Task.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
     [Test]
