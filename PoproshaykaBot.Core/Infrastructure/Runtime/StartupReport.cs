@@ -90,6 +90,11 @@ public static class StartupReport
             LogSnapshot(logger, "PollsSettings", SettingsDescriber.Describe(pollsStore.Load()));
         }
 
+        if (services.GetService<CommandSettingsStore>() is { } commandSettingsStore)
+        {
+            LogSnapshot(logger, "CommandSettings", SettingsDescriber.Describe(commandSettingsStore.Load()));
+        }
+
         if (services.GetService<IGameBoxArtCache>() is { } boxArtCache)
         {
             LogBoxArtCache(logger, boxArtCache.GetStatus());

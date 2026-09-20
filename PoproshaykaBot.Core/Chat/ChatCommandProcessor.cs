@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics;
 
 namespace PoproshaykaBot.Core.Chat;
 
@@ -9,10 +11,19 @@ public sealed class ChatCommandProcessor
     private readonly string _unknownCommandsFilePath;
     private readonly Dictionary<string, IChatCommand> _tokenToCommand;
     private readonly string _prefix;
+    private readonly CommandSettingsStore _commandSettingsStore;
+    private readonly CommandUsageRepository _usageRepository;
     private readonly ILogger<ChatCommandProcessor> _logger;
 
-    public ChatCommandProcessor(IEnumerable<IChatCommand> commands, ILogger<ChatCommandProcessor> logger, string prefix = "!")
+    public ChatCommandProcessor(
+        IEnumerable<IChatCommand> commands,
+        CommandSettingsStore commandSettingsStore,
+        CommandUsageRepository usageRepository,
+        ILogger<ChatCommandProcessor> logger,
+        string prefix = "!")
     {
+        _commandSettingsStore = commandSettingsStore;
+        _usageRepository = usageRepository;
         _logger = logger;
 
         Directory.CreateDirectory(AppPaths.BaseDirectory);
@@ -43,6 +54,15 @@ public sealed class ChatCommandProcessor
             .Values
             .GroupBy(x => x.Canonical, StringComparer.OrdinalIgnoreCase)
             .Select(x => x.First())
+            .ToList();
+    }
+
+    public IReadOnlyCollection<IChatCommand> GetEnabledCommands()
+    {
+        var settings = _commandSettingsStore.Load();
+
+        return GetAllCommands()
+            .Where(command => settings.IsEnabled(command.Canonical))
             .ToList();
     }
 
@@ -77,6 +97,15 @@ public sealed class ChatCommandProcessor
             return ChatCommandResult.NotHandled;
         }
 
+        if (!_commandSettingsStore.Load().IsEnabled(command.Canonical))
+        {
+            _logger.LogDebug("Команда {Canonical} выключена в настройках, сообщение от {Username} пропущено",
+                command.Canonical,
+                context.Username);
+
+            return ChatCommandResult.NotHandled;
+        }
+
         var args = string.IsNullOrWhiteSpace(argsString)
             ? []
             : argsString.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -106,6 +135,8 @@ public sealed class ChatCommandProcessor
         {
             var response = await command.ExecuteAsync(enrichedContext, cancellationToken);
 
+            _usageRepository.Track(command.Canonical, enrichedContext.DisplayName);
+
             if (response is null)
             {
                 _logger.LogInformation("Команда {Canonical} выполнена для {Username}, ответа нет", command.Canonical, enrichedContext.Username);
@@ -119,12 +150,12 @@ public sealed class ChatCommandProcessor
                     response.Text.Length);
             }
 
-            return ChatCommandResult.Handled(response);
+            return ChatCommandResult.Succeeded(command.Canonical, response);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Команда {Canonical} упала на сообщении от {Username}", command.Canonical, enrichedContext.Username);
-            return ChatCommandResult.Handled(null);
+            return ChatCommandResult.Failed(command.Canonical);
         }
     }
 
@@ -142,13 +173,18 @@ public sealed class ChatCommandProcessor
     }
 }
 
-public readonly record struct ChatCommandResult(bool IsCommand, OutgoingMessage? Response)
+public readonly record struct ChatCommandResult(bool IsCommand, OutgoingMessage? Response, string? Canonical, bool Executed)
 {
-    public static ChatCommandResult NotHandled { get; } = new(false, null);
+    public static ChatCommandResult NotHandled { get; } = new(false, null, null, false);
 
-    public static ChatCommandResult Handled(OutgoingMessage? response)
+    public static ChatCommandResult Succeeded(string canonical, OutgoingMessage? response)
     {
-        return new(true, response);
+        return new(true, response, canonical, true);
+    }
+
+    public static ChatCommandResult Failed(string canonical)
+    {
+        return new(true, null, canonical, false);
     }
 }
 

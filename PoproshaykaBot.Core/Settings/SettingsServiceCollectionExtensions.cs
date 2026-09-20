@@ -11,6 +11,7 @@ public static class SettingsServiceCollectionExtensions
     {
         services.AddSingleton<SettingsManager>();
         services.AddSingleton<AccountsStore>();
+        services.AddSingleton<CommandSettingsStore>();
         services.AddSingleton<BroadcastProfilesStore>();
         services.AddSingleton<PollsStore>();
         services.AddSingleton<RecentCategoriesStore>();

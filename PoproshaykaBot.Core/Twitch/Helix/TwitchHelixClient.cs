@@ -130,7 +130,7 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
         return data.Select(dto => new GameInfo(dto.Id, dto.Name, dto.BoxArtUrl, dto.IgdbId)).ToArray();
     }
 
-    public async Task SendChatMessageAsync(
+    public async Task<string?> SendChatMessageAsync(
         string broadcasterId,
         string senderId,
         string message,
@@ -157,6 +157,8 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
             var reason = item.DropReason?.Message ?? string.Empty;
             throw new HelixMessageDroppedException(code, reason);
         }
+
+        return item?.MessageId;
     }
 
     public async Task<IReadOnlyDictionary<string, GlobalBadgeInfo>> GetGlobalChatBadgesAsync(CancellationToken cancellationToken = default)

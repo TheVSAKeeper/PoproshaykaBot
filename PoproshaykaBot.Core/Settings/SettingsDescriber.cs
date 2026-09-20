@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Debugging;
 using PoproshaykaBot.Core.Settings.Obs;
@@ -102,6 +103,18 @@ public static class SettingsDescriber
         var lastApplied = settings.LastAppliedProfileId is { } id ? id.ToString() : Unset;
 
         return $"профилей {settings.Profiles.Count}, последний применённый {lastApplied}";
+    }
+
+    public static string Describe(CommandSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var overrides = settings.Commands.Values.Where(x => x is not null).ToList();
+        var disabled = overrides.Count(x => !x.Enabled);
+        var retargeted = overrides.Count(x => x.ResponseTarget is not null);
+
+        return $"цель ответа по умолчанию {settings.DefaultResponseTarget}, переопределений {overrides.Count} "
+            + $"(выключено {disabled}, со своей целью {retargeted})";
     }
 
     public static string Describe(PollsSettings settings)

@@ -13,6 +13,8 @@ public static class StatisticsServiceCollectionExtensions
         services.AddSingleton<BotStatisticsRepository>();
         services.AddSingleton<IBotStatisticsRepository>(sp => sp.GetRequiredService<BotStatisticsRepository>());
 
+        services.AddSingleton<CommandUsageRepository>();
+
         services.AddSingleton<StatisticsFileStore>();
         services.AddSingleton<StreamSessionHistoryStore>();
         services.AddSingleton<ActiveStreamSessionStore>();

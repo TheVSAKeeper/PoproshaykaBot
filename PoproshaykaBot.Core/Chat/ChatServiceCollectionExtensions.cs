@@ -4,6 +4,8 @@ using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
 
@@ -32,12 +34,16 @@ public static class ChatServiceCollectionExtensions
 
         RegisterChatCommands(services);
 
+        services.AddSingleton<CommandResponseTracker>();
+
         services.AddSingleton<ChatCommandProcessor>(sp =>
         {
             var commands = sp.GetServices<IChatCommand>().ToList();
+            var commandSettingsStore = sp.GetRequiredService<CommandSettingsStore>();
+            var usageRepository = sp.GetRequiredService<CommandUsageRepository>();
             var logger = sp.GetRequiredService<ILogger<ChatCommandProcessor>>();
-            var processor = new ChatCommandProcessor(commands, logger);
-            processor.Register(new HelpCommand(processor.GetAllCommands));
+            var processor = new ChatCommandProcessor(commands, commandSettingsStore, usageRepository, logger);
+            processor.Register(new HelpCommand(processor.GetEnabledCommands));
             return processor;
         });
 
