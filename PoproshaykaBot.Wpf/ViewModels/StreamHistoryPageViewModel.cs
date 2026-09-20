@@ -67,6 +67,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private readonly GameBoxArtProvider _boxArt;
     private readonly List<IDisposable> _subs = [];
     private readonly List<StreamSessionRowViewModel> _allSessions = [];
+    private readonly List<StreamSessionRowViewModel> _visibleSessions = [];
     private readonly ObservableCollection<StreamSessionRowViewModel> _sessions = [];
     private readonly ObservableCollection<StreamSessionRowViewModel> _cards = [];
 
@@ -160,7 +161,13 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private string? _gameFilter;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TrendCaption))]
+    private string? _notice;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HiddenToggleHint))]
+    private bool _showHidden;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TrendVisibilityCaption))]
     private bool _isTrendVisible = true;
 
@@ -204,7 +211,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         _trendMetric = NormalizeMetric(settings.GetEnum(SettingsKeys.StreamTrendMetric, StreamTrendMetric.PeakViewers));
         _trendLength = NormalizeLength(settings.GetInt(SettingsKeys.StreamTrendLength, DefaultTrendLength));
         _isTrendVisible = settings.GetBool(SettingsKeys.StreamTrendVisible, true);
-        _isSummaryExpanded = settings.GetBool(SettingsKeys.StreamSummaryExpanded, false);
+        _isSummaryExpanded = settings.GetBool(SettingsKeys.StreamSummaryExpanded, true);
         _listView = NormalizeListView(settings.GetEnum(SettingsKeys.StreamListView, StreamListView.Table));
         _sortKey = NormalizeSortKey(settings.GetEnum(SettingsKeys.StreamSortKey, StreamSortKey.StartedAt));
         _sortDescending = settings.GetBool(SettingsKeys.StreamSortDescending, true);
@@ -287,17 +294,36 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     public bool HasSelection => SelectedRow is not null;
 
-    public bool HasSessions => _allSessions.Count > 0;
+    public bool HasSessions => _allSessions.Count > 0 && !IsEverythingHidden;
+    public bool IsEverythingHidden => _allSessions.Count > 0 && !ShowHidden && HiddenCount == _allSessions.Count;
+
+    public string EmptyHeading => IsEverythingHidden
+        ? "Все стримы убраны из статистики"
+        : "Стримов пока нет";
+
+    public string EmptyDescription => IsEverythingHidden
+        ? "Список пуст: каждый стрим убран вручную. Кнопка со счётчиком убранных в панели сверху вернёт их на экран."
+        : "Сессия появится здесь после первого завершённого стрима.";
+
+    public int HiddenCount { get; private set; }
     public bool CanShowTrend => Trend.Count > 1;
     public bool HasTrend => IsTrendVisible && CanShowTrend;
-    public bool HasTrendLabels => CanShowTrend && !IsCompactLayout;
-    public bool HasTrendBaseline => HasTrend && !IsCompactLayout;
+    public bool HasTrendLabels => HasTrend && !IsCompactLayout;
+    public bool HasTrendBaseline => HasTrendLabels;
     public bool HasWideSummary => !IsCompactLayout;
     public bool HasSegments => Segments.Count > 0;
     public bool HasSegmentTimeline => Segments.Count > 1;
     public bool HasChatters => Chatters.Count > 0;
 
     public bool HasGameFilter => GameFilter is { Length: > 0 };
+
+    public bool HasHiddenSessions => HiddenCount > 0;
+
+    public string HiddenToggleCaption => string.Create(UiCulture.Russian, $"Убранные: {HiddenCount:N0}");
+
+    public string HiddenToggleHint => ShowHidden
+        ? "Не показывать убранные стримы в списке"
+        : "Показать убранные стримы в списке";
 
     public bool HasTopCategories => TopCategories.Count > 0;
     public bool HasRecords => Records.Count > 0;
@@ -316,11 +342,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         ? string.Create(UiCulture.Russian, $"Игра: {GameFilter}")
         : string.Empty;
 
-    public string TrendCaption => IsTrendVisible
-        ? string.Create(
-            UiCulture.Russian,
-            $"{MetricName(_trendMetric)}, последние {Trend.Count:N0} {SessionTerm.ForCount(Trend.Count)}")
-        : string.Create(UiCulture.Russian, $"{MetricName(_trendMetric)} – полоса скрыта");
+    public string TrendCaption => string.Create(
+        UiCulture.Russian,
+        $"{MetricName(_trendMetric)}, последние {Trend.Count:N0} {SessionTerm.ForCount(Trend.Count)}");
 
     public string TrendVisibilityCaption => IsTrendVisible ? "Скрыть полосу" : "Показать полосу";
 
@@ -505,6 +529,12 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         CancelBoxArt();
     }
 
+    public void OnEnter()
+    {
+        Notice = null;
+        ShowHidden = false;
+    }
+
     public bool TrySelectAt(int index)
     {
         if (index < 0 || index >= _sessions.Count)
@@ -552,10 +582,16 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         _settings.SetBool(SettingsKeys.StreamSummaryExpanded, value);
     }
 
+    partial void OnShowHiddenChanged(bool value)
+    {
+        RebuildView();
+    }
+
     partial void OnIsTrendVisibleChanged(bool value)
     {
         _settings.SetBool(SettingsKeys.StreamTrendVisible, value);
         OnPropertyChanged(nameof(HasTrend));
+        OnPropertyChanged(nameof(HasTrendLabels));
         OnPropertyChanged(nameof(HasTrendBaseline));
     }
 
@@ -597,6 +633,30 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         GameFilter = string.Equals(GameFilter, game, StringComparison.OrdinalIgnoreCase) ? null : game;
         RebuildView();
+    }
+
+    [RelayCommand]
+    private void SetSessionHidden(StreamSessionRowViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        var hide = !row.IsHidden;
+
+        if (!_historyStore.TrySetHidden(row.Source.Id, hide))
+        {
+            Notice = hide
+                ? "Стрим не удалось убрать из статистики. История осталась прежней, подробности в журнале."
+                : "Стрим не удалось вернуть в статистику. История осталась прежней, подробности в журнале.";
+
+            return;
+        }
+
+        Notice = null;
+
+        Refresh();
     }
 
     [RelayCommand]
@@ -744,14 +804,36 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         var selectedId = SelectedRow?.Source.Id;
 
         _sessions.Clear();
+        _visibleSessions.Clear();
+
+        var hidden = _allSessions.Count(static row => row.IsHidden);
 
         foreach (var row in _allSessions)
         {
-            if (!HasGameFilter || Matches(row, GameFilter!))
+            if (HasGameFilter && !Matches(row, GameFilter!))
             {
-                _sessions.Add(row);
+                continue;
             }
+
+            if (row.IsHidden)
+            {
+                if (ShowHidden)
+                {
+                    _sessions.Add(row);
+                }
+
+                continue;
+            }
+
+            _visibleSessions.Add(row);
+            _sessions.Add(row);
         }
+
+        HiddenCount = hidden;
+
+        OnPropertyChanged(nameof(HiddenCount));
+        OnPropertyChanged(nameof(HasHiddenSessions));
+        OnPropertyChanged(nameof(HiddenToggleCaption));
 
         UpdateAverages();
         UpdateRowDeltas();
@@ -762,10 +844,15 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         RebuildCards();
 
         OnPropertyChanged(nameof(HasSessions));
+        OnPropertyChanged(nameof(IsEverythingHidden));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyDescription));
 
         SelectedRow = selectedId.HasValue
             ? _sessions.FirstOrDefault(row => row.Source.Id == selectedId)
             : null;
+
+        RefreshSegmentFilterState();
     }
 
     private void RebuildCards()
@@ -828,10 +915,10 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         foreach (var row in _sessions)
         {
             row.ApplyDeltas(
-                DescribeDelta(row.MessageCount, _averageMessages, _sessions.Count),
-                DescribeDelta(row.ChatterCount, _averageChatters, _sessions.Count),
-                DescribeDelta(row.PeakViewers, _averagePeakViewers, _sessions.Count),
-                DescribeDelta(row.AverageViewers, _averageViewers, _sessions.Count));
+                DescribeDelta(row.MessageCount, _averageMessages, _visibleSessions.Count),
+                DescribeDelta(row.ChatterCount, _averageChatters, _visibleSessions.Count),
+                DescribeDelta(row.PeakViewers, _averagePeakViewers, _visibleSessions.Count),
+                DescribeDelta(row.AverageViewers, _averageViewers, _visibleSessions.Count));
         }
     }
 
@@ -905,6 +992,18 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             Segments.Add(new(segment, share, continuesGame) { BoxArt = _boxArt.For(segment.Game) });
             previous = segment;
         }
+
+        RefreshSegmentFilterState();
+    }
+
+    private void RefreshSegmentFilterState()
+    {
+        foreach (var segment in Segments)
+        {
+            segment.IsFiltered = HasGameFilter
+                                 && segment.GameKey is { } game
+                                 && string.Equals(game, GameFilter, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private void FillChatters(StreamSessionRecord session)
@@ -962,15 +1061,15 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         DetailPeakViewers = row.PeakViewersFormatted;
         DetailAverageViewers = row.AverageViewersFormatted;
 
-        (DetailMessagesDelta, DetailMessagesDeltaTone) = DescribeDelta(row.MessageCount, _averageMessages, _sessions.Count);
-        (DetailChattersDelta, DetailChattersDeltaTone) = DescribeDelta(row.ChatterCount, _averageChatters, _sessions.Count);
-        (DetailPeakViewersDelta, DetailPeakViewersDeltaTone) = DescribeDelta(row.PeakViewers, _averagePeakViewers, _sessions.Count);
-        (DetailAverageViewersDelta, DetailAverageViewersDeltaTone) = DescribeDelta(row.AverageViewers, _averageViewers, _sessions.Count);
+        (DetailMessagesDelta, DetailMessagesDeltaTone) = DescribeDelta(row.MessageCount, _averageMessages, _visibleSessions.Count);
+        (DetailChattersDelta, DetailChattersDeltaTone) = DescribeDelta(row.ChatterCount, _averageChatters, _visibleSessions.Count);
+        (DetailPeakViewersDelta, DetailPeakViewersDeltaTone) = DescribeDelta(row.PeakViewers, _averagePeakViewers, _visibleSessions.Count);
+        (DetailAverageViewersDelta, DetailAverageViewersDeltaTone) = DescribeDelta(row.AverageViewers, _averageViewers, _visibleSessions.Count);
     }
 
     private void UpdateAverages()
     {
-        if (_sessions.Count == 0)
+        if (_visibleSessions.Count == 0)
         {
             _averageMessages = 0;
             _averageChatters = 0;
@@ -979,27 +1078,27 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             return;
         }
 
-        _averageMessages = _sessions.Average(row => (double)row.MessageCount);
-        _averageChatters = _sessions.Average(row => (double)row.ChatterCount);
-        _averagePeakViewers = _sessions.Average(row => (double)row.PeakViewers);
-        _averageViewers = _sessions.Average(row => (double)row.AverageViewers);
+        _averageMessages = _visibleSessions.Average(row => (double)row.MessageCount);
+        _averageChatters = _visibleSessions.Average(row => (double)row.ChatterCount);
+        _averagePeakViewers = _visibleSessions.Average(row => (double)row.PeakViewers);
+        _averageViewers = _visibleSessions.Average(row => (double)row.AverageViewers);
     }
 
     private void UpdateSummary()
     {
-        var totalDuration = _sessions.Aggregate(TimeSpan.Zero, (sum, row) => sum + row.Duration);
+        var totalDuration = _visibleSessions.Aggregate(TimeSpan.Zero, (sum, row) => sum + row.Duration);
 
-        TotalSessionsText = FormatNumber(_sessions.Count);
-        TotalSessionsLabel = SessionTerm.ForCount(_sessions.Count);
-        TotalAirTimeText = _sessions.Count > 0 ? FormatAirTime(totalDuration) : Placeholder;
-        LastStreamText = _sessions.Count > 0
-            ? RelativeTime.Describe(_sessions[0].StartedAt, DateTimeOffset.Now)
+        TotalSessionsText = FormatNumber(_visibleSessions.Count);
+        TotalSessionsLabel = SessionTerm.ForCount(_visibleSessions.Count);
+        TotalAirTimeText = _visibleSessions.Count > 0 ? FormatAirTime(totalDuration) : Placeholder;
+        LastStreamText = _visibleSessions.Count > 0
+            ? RelativeTime.Describe(_visibleSessions[0].StartedAt, DateTimeOffset.Now)
             : Placeholder;
     }
 
     private void UpdateInsights()
     {
-        var summary = StreamHistorySummary.Build(_sessions.Select(row => row.Source).ToList());
+        var summary = StreamHistorySummary.Build(_visibleSessions.Select(row => row.Source).ToList());
 
         TopCategories.Clear();
         Records.Clear();
@@ -1015,7 +1114,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         foreach (var stat in summary.Records)
         {
-            Records.Add(new(stat, _sessions.FirstOrDefault(row => row.Source.Id == stat.Session.Id)));
+            Records.Add(new(stat, _visibleSessions.FirstOrDefault(row => row.Source.Id == stat.Session.Id)));
         }
 
         OnPropertyChanged(nameof(HasTopCategories));
@@ -1029,7 +1128,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     {
         Trend.Clear();
 
-        var recent = _sessions.Take(_trendLength).Reverse().ToList();
+        var recent = _visibleSessions.Take(_trendLength).Reverse().ToList();
         var leader = recent.Count > 0 ? recent.Max(row => MetricValue(row, _trendMetric)) : 0;
 
         foreach (var row in recent)
@@ -1099,6 +1198,7 @@ public sealed partial class StreamSessionRowViewModel : ObservableObject
     public StreamSessionRecord Source { get; }
 
     public DateTimeOffset StartedAt => Source.StartedAt;
+    public bool IsHidden => Source.IsHidden;
     public TimeSpan Duration => Source.Duration;
     public long MessageCount => Source.MessageCount;
     public int ChatterCount => Source.ChatterCount;
@@ -1106,6 +1206,10 @@ public sealed partial class StreamSessionRowViewModel : ObservableObject
     public int AverageViewers => Source.AverageViewers;
 
     public GameBoxArtViewModel BoxArt { get; init; } = GameBoxArtViewModel.None;
+
+    public string HiddenMenuCaption => IsHidden ? "Вернуть в статистику" : "Убрать из статистики";
+
+    public string HiddenHint => "Стрим убран из статистики. В сводке, средних и полосе зрителей его нет.";
 
     public bool HasTitle { get; }
     public string TitleFormatted { get; }
@@ -1237,8 +1341,12 @@ public sealed partial class StreamTrendBarViewModel : ObservableObject
     public string Label { get; }
 }
 
-public sealed class StreamSessionSegmentRowViewModel
+public sealed partial class StreamSessionSegmentRowViewModel : ObservableObject
 {
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilterCaption))]
+    private bool _isFiltered;
+
     public GameBoxArtViewModel BoxArt { get; init; } = GameBoxArtViewModel.None;
 
     public string Game { get; }
@@ -1255,6 +1363,10 @@ public sealed class StreamSessionSegmentRowViewModel
     public bool CanFilter { get; }
     public string Caption { get; }
     public string TimelineText { get; }
+
+    public string FilterCaption => IsFiltered
+        ? string.Create(UiCulture.Russian, $"Снять фильтр по игре «{Game}»")
+        : string.Create(UiCulture.Russian, $"Фильтровать по игре «{Game}»");
 
     public StreamSessionSegmentRowViewModel(StreamSessionSegment segment, double share, bool continuesGame)
     {

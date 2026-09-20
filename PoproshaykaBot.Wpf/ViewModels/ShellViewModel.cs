@@ -86,7 +86,12 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         _statisticsPage = statisticsPage;
         _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, key: SectionKeys.Users) { StartsGroup = true };
-        _streamHistorySection = new("История стримов", PackIconLucideKind.History, streamHistoryPage, key: SectionKeys.Streams);
+        _streamHistorySection = new(
+            "История стримов",
+            PackIconLucideKind.History,
+            streamHistoryPage,
+            activate: streamHistoryPage.OnEnter,
+            key: SectionKeys.Streams);
         _commandsSection = new("Команды", PackIconLucideKind.Terminal, commandsPage, activate: commandsPage.OnEnter, key: SectionKeys.Commands);
 
         _streamHistoryPage = streamHistoryPage;
