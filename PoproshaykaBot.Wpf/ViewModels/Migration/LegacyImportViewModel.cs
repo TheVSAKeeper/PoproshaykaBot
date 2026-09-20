@@ -115,7 +115,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
             : await _statisticsAutoSaver
                 .RunExternalWriteAsync(
                     () => LegacyDataImporter.Import(path, overwrite, _logger),
-                    static imported => imported.CopiedStatistics)
+                    static imported => imported.ExternalWrite)
                 .ConfigureAwait(true);
 
         Result = result;

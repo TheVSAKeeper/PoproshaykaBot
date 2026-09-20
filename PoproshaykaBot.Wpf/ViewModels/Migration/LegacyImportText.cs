@@ -115,9 +115,17 @@ public static class LegacyImportText
             return null;
         }
 
-        return result.CopiedStatistics
-            ? "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска статистика не сохраняется – чтобы не затереть перенесённое."
-            : "Перенесённые данные вступят в силу после перезапуска приложения.";
+        const string Restart = "Перенесённые данные вступят в силу после перезапуска приложения.";
+
+        var frozen = (result.CopiedStatistics, result.CopiedStreamHistory) switch
+        {
+            (true, true) => "статистика и история стримов не сохраняются",
+            (true, false) => "статистика не сохраняется",
+            (false, true) => "история стримов не сохраняется",
+            _ => null,
+        };
+
+        return frozen is null ? Restart : $"{Restart} До перезапуска {frozen} – чтобы не затереть перенесённое.";
     }
 
     public static IReadOnlyList<string> BuildCounts(LegacyImportResult result)

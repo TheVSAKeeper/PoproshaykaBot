@@ -7,12 +7,13 @@ internal static class LegacyDataCatalog
     public const string AccountsFileName = "accounts.json";
     public const string UserStatisticsFileName = "users_statistics.json";
     public const string BotStatisticsFileName = "bot_statistics.json";
+    public const string StreamSessionsFileName = "stream_sessions.json";
 
     public static readonly string[] RootFiles =
     [
         UserStatisticsFileName,
         BotStatisticsFileName,
-        "stream_sessions.json",
+        StreamSessionsFileName,
         "polls-history.json",
         "unknown_commands.txt",
         "chat-blockers.txt",

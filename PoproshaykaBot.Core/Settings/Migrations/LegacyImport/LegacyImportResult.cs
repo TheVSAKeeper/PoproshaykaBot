@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+﻿using PoproshaykaBot.Core.Statistics;
+
+namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 
 public sealed class LegacyImportResult
 {
@@ -18,7 +20,15 @@ public sealed class LegacyImportResult
 
     public IReadOnlyList<string> UnmigratedLegacyFiles { get; init; } = [];
 
-    public bool CopiedStatistics => CopiedFiles.Any(file =>
-        string.Equals(file, LegacyDataCatalog.UserStatisticsFileName, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(file, LegacyDataCatalog.BotStatisticsFileName, StringComparison.OrdinalIgnoreCase));
+    public bool CopiedStatistics => Copied(LegacyDataCatalog.UserStatisticsFileName)
+        || Copied(LegacyDataCatalog.BotStatisticsFileName);
+
+    public bool CopiedStreamHistory => Copied(LegacyDataCatalog.StreamSessionsFileName);
+
+    public StatisticsExternalWrite ExternalWrite => new(CopiedStatistics, CopiedStreamHistory);
+
+    private bool Copied(string fileName)
+    {
+        return CopiedFiles.Any(file => string.Equals(file, fileName, StringComparison.OrdinalIgnoreCase));
+    }
 }

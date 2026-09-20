@@ -16,6 +16,10 @@ public class StreamSessionHistoryStore
 
     private readonly StreamSessionHistory _state;
 
+    private bool _isLoaded;
+    private bool _rewrittenExternally;
+    private bool _hasUnsavedChanges;
+
     public StreamSessionHistoryStore(ILogger<StreamSessionHistoryStore>? logger = null, string? filePath = null)
     {
         _logger = logger;
@@ -23,9 +27,9 @@ public class StreamSessionHistoryStore
 
         var read = ReadFile();
         _state = read.Value ?? new();
-        IsLoaded = !read.Failed;
+        _isLoaded = !read.Failed;
 
-        if (IsLoaded)
+        if (_isLoaded)
         {
             MergeInterruptedSessions();
         }
@@ -33,10 +37,65 @@ public class StreamSessionHistoryStore
         _logger?.LogDebug("StreamSessionHistoryStore инициализирован из {FilePath} (сессий: {SessionCount}, чтение удалось: {IsLoaded})",
             _filePath,
             _state.Sessions.Count,
-            IsLoaded);
+            _isLoaded);
     }
 
-    public bool IsLoaded { get; }
+    public bool IsLoaded
+    {
+        get
+        {
+            lock (_syncLock)
+            {
+                return _isLoaded;
+            }
+        }
+    }
+
+    public virtual bool Invalidate()
+    {
+        lock (_syncLock)
+        {
+            if (!_isLoaded)
+            {
+                return false;
+            }
+
+            _isLoaded = false;
+            _rewrittenExternally = true;
+
+            _logger?.LogInformation(
+                "StreamSessionHistoryStore: файл {FilePath} меняют мимо приложения, история этого сеанса до перезапуска не сохраняется",
+                _filePath);
+
+            return true;
+        }
+    }
+
+    public virtual void Restore(bool wasLoaded)
+    {
+        if (!wasLoaded)
+        {
+            return;
+        }
+
+        lock (_syncLock)
+        {
+            _isLoaded = true;
+            _rewrittenExternally = false;
+
+            _logger?.LogInformation("StreamSessionHistoryStore: файл {FilePath} никто не менял, история снова сохраняется", _filePath);
+
+            FlushUnsavedChanges();
+        }
+    }
+
+    public virtual bool TryFlush()
+    {
+        lock (_syncLock)
+        {
+            return _isLoaded ? FlushUnsavedChanges() : !_hasUnsavedChanges;
+        }
+    }
 
     public virtual StreamSessionHistory Load()
     {
@@ -62,16 +121,6 @@ public class StreamSessionHistoryStore
 
         lock (_syncLock)
         {
-            if (!IsLoaded)
-            {
-                _logger?.LogWarning(
-                    "StreamSessionHistoryStore: чтение {FilePath} сорвалось, история этого сеанса не сохраняется – сессия {SessionId} не записана",
-                    _filePath,
-                    record.Id);
-
-                return;
-            }
-
             var duplicate = _state.Sessions.Find(session =>
                 string.Equals(session.Channel, record.Channel, StringComparison.OrdinalIgnoreCase)
                 && session.StartedAt == record.StartedAt);
@@ -91,6 +140,19 @@ public class StreamSessionHistoryStore
             var stored = JsonStoreClone.DeepClone(record);
             stored.EnsureSegments();
             _state.Sessions.Add(stored);
+            _hasUnsavedChanges = true;
+
+            if (!_isLoaded)
+            {
+                _logger?.LogWarning(
+                    "StreamSessionHistoryStore: {Reason} ({FilePath}), файл не переписывается – сессия {SessionId} остаётся в памяти и попадёт в файл, только если право записи вернётся до перезапуска",
+                    DescribeLostWriteRight(),
+                    _filePath,
+                    record.Id);
+
+                return;
+            }
+
             PersistInternal();
 
             _logger?.LogInformation("StreamSessionHistoryStore: добавлена сессия {SessionId} (всего сессий: {SessionCount})",
@@ -103,16 +165,6 @@ public class StreamSessionHistoryStore
     {
         lock (_syncLock)
         {
-            if (!IsLoaded)
-            {
-                _logger?.LogWarning(
-                    "StreamSessionHistoryStore: чтение {FilePath} сорвалось, история этого сеанса не сохраняется – признак скрытия сессии {SessionId} не изменён",
-                    _filePath,
-                    id);
-
-                return false;
-            }
-
             var session = _state.Sessions.Find(item => item.Id == id);
 
             if (session == null)
@@ -127,7 +179,21 @@ public class StreamSessionHistoryStore
             }
 
             var previous = session.IsHidden;
+            var hadUnsavedChanges = _hasUnsavedChanges;
+
             session.IsHidden = isHidden;
+            _hasUnsavedChanges = true;
+
+            if (!_isLoaded)
+            {
+                _logger?.LogWarning(
+                    "StreamSessionHistoryStore: {Reason} ({FilePath}), файл не переписывается – признак скрытия сессии {SessionId} остаётся в памяти и попадёт в файл, только если право записи вернётся до перезапуска",
+                    DescribeLostWriteRight(),
+                    _filePath,
+                    id);
+
+                return true;
+            }
 
             try
             {
@@ -136,9 +202,10 @@ public class StreamSessionHistoryStore
             catch (Exception exception)
             {
                 session.IsHidden = previous;
+                _hasUnsavedChanges = hadUnsavedChanges;
 
                 _logger?.LogError(exception,
-                    "Не удалось записать {FilePath}: признак скрытия сессии {SessionId} возвращён к прежнему, история в памяти совпадает с файлом",
+                    "Не удалось записать {FilePath}: признак скрытия сессии {SessionId} возвращён к прежнему",
                     _filePath,
                     id);
 
@@ -153,6 +220,11 @@ public class StreamSessionHistoryStore
         }
     }
 
+    private string DescribeLostWriteRight()
+    {
+        return _rewrittenExternally ? "файл переписан мимо приложения" : "чтение файла сорвалось";
+    }
+
     private void MergeInterruptedSessions()
     {
         var result = StreamSessionMerge.Merge(_state.Sessions);
@@ -164,6 +236,7 @@ public class StreamSessionHistoryStore
 
         JsonStoreBackup.CreateBackup(_filePath, "premerge", _logger);
         _state.Sessions = [.. result.Sessions];
+        _hasUnsavedChanges = true;
 
         try
         {
@@ -184,10 +257,39 @@ public class StreamSessionHistoryStore
             _state.Sessions.Count);
     }
 
+    private bool FlushUnsavedChanges()
+    {
+        if (!_hasUnsavedChanges)
+        {
+            return true;
+        }
+
+        try
+        {
+            PersistInternal();
+        }
+        catch (Exception exception)
+        {
+            _logger?.LogError(exception,
+                "Не удалось записать {FilePath}: несохранённое осталось в памяти до следующей попытки",
+                _filePath);
+
+            return false;
+        }
+
+        _logger?.LogInformation(
+            "StreamSessionHistoryStore: несохранённое дописано в {FilePath} (всего сессий: {SessionCount})",
+            _filePath,
+            _state.Sessions.Count);
+
+        return true;
+    }
+
     private void PersistInternal()
     {
         var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
         AtomicFile.Save(_filePath, json, _logger);
+        _hasUnsavedChanges = false;
     }
 
     private StatisticsReadResult<StreamSessionHistory> ReadFile()
