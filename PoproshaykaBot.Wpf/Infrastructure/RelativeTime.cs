@@ -22,6 +22,38 @@ public static class RelativeTime
         return Describe(ToOffset(value), now);
     }
 
+    public static string DescribeMoment(DateTimeOffset value, DateTimeOffset now)
+    {
+        var elapsed = now - value;
+
+        if (elapsed < TimeSpan.Zero)
+        {
+            elapsed = TimeSpan.Zero;
+        }
+
+        if (elapsed < TimeSpan.FromMinutes(1))
+        {
+            return "только что";
+        }
+
+        if (elapsed < TimeSpan.FromHours(1))
+        {
+            return string.Create(UiCulture.Russian, $"{(int)elapsed.TotalMinutes} мин. назад");
+        }
+
+        if (elapsed < TimeSpan.FromHours(24))
+        {
+            return string.Create(UiCulture.Russian, $"{(int)elapsed.TotalHours} ч. назад");
+        }
+
+        return Describe(value, now);
+    }
+
+    public static string FormatMoment(DateTimeOffset value)
+    {
+        return value.ToLocalTime().ToString("dd.MM.yyyy HH:mm", UiCulture.Russian);
+    }
+
     public static string FormatDate(DateTimeOffset value)
     {
         return value.ToLocalTime().ToString("dd.MM.yyyy", UiCulture.Russian);

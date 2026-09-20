@@ -206,4 +206,16 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1321, Level = LogLevel.Debug, Message = "Обложка игры не прочитана из кеша: {Path}")]
     public static partial void BoxArtDecodeFailed(this ILogger logger, Exception? exception, string path);
+
+    [LoggerMessage(EventId = 1600, Level = LogLevel.Information, Message = "Команда {Command} {State} на странице «Команды»")]
+    public static partial void CommandEnabledChanged(this ILogger logger, string command, string state);
+
+    [LoggerMessage(EventId = 1601, Level = LogLevel.Information, Message = "Цель ответа команды {Command} на странице «Команды»: {Target}")]
+    public static partial void CommandTargetChanged(this ILogger logger, string command, string target);
+
+    [LoggerMessage(EventId = 1602, Level = LogLevel.Information, Message = "Общая цель ответа команд на странице «Команды»: {Target}")]
+    public static partial void CommandDefaultTargetChanged(this ILogger logger, string target);
+
+    [LoggerMessage(EventId = 1603, Level = LogLevel.Error, Message = "Не удалось сохранить настройки команд, правка отменена")]
+    public static partial void CommandSettingsSaveFailed(this ILogger logger, Exception? exception);
 }
