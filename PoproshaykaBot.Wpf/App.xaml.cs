@@ -1,5 +1,7 @@
-﻿using KeepShell.Mcp;
+﻿using KeepShell.Diagnostics;
+using KeepShell.Mcp;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
@@ -22,8 +24,10 @@ using PoproshaykaBot.Core.Twitch.GameArt;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 using PoproshaykaBot.Wpf.Mcp;
 using PoproshaykaBot.Wpf.ViewModels;
+using PoproshaykaBot.Wpf.ViewModels.Diagnostics;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -364,6 +368,30 @@ public partial class App : Application
         services.AddSingleton<IBotConnectionController>(provider => provider.GetRequiredService<BotConnectionManager>());
 
         services.AddKeepShell();
+
+        services.AddKeepShellDiagnostics(new DiagnosticsOptions
+        {
+            AppName = AppInfo.Name,
+            AppVersion = AppInfo.Version,
+            DataDirectory = AppPaths.BaseDirectory,
+            PortableStorage = AppPaths.IsPortable,
+        });
+
+        services.AddSingleton(static provider => new DiagnosticsSnapshotPublisher(
+            provider.GetRequiredService<IUiDispatcher>(),
+            provider.GetRequiredService<DiagnosticsSnapshotSource>().Capture,
+            provider.GetRequiredService<ILogger<DiagnosticsSnapshotPublisher>>()));
+
+        services.AddSingleton<IDiagnosticsBundleSource, BotDiagnosticsBundleSource>();
+        services.AddSingleton<IDiagnosticsSecretSource, BotDiagnosticsSecretSource>();
+
+        services.AddSingleton<IDiagnosticsCard, MemoryDiagnosticsCardViewModel>();
+        services.AddSingleton<IDiagnosticsCard, EventSubDiagnosticsCardViewModel>();
+        services.AddSingleton<IDiagnosticsCard, ChatDiagnosticsCardViewModel>();
+        services.AddSingleton<IDiagnosticsCard, ObsDiagnosticsCardViewModel>();
+        services.AddSingleton<IDiagnosticsCard, SseDiagnosticsCardViewModel>();
+        services.AddSingleton<IDiagnosticsCard, QueueDiagnosticsCardViewModel>();
+        services.AddSingleton<IDiagnosticsCard, EventBusDiagnosticsCardViewModel>();
 
         services.AddSingleton<BotAutomation>();
         services.AddKeepShellMcp<ShellViewModel>(new McpServerOptions
