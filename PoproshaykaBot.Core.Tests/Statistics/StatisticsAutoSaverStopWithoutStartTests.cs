@@ -50,7 +50,7 @@ public sealed class StatisticsAutoSaverStopWithoutStartTests
         var botRepo = new BotStatisticsRepository();
         var fileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _tempDir);
         var loader = new UserStatisticsLoader(userRepo, fileStore, NullLogger<UserStatisticsLoader>.Instance);
-        var saver = new StatisticsAutoSaver(userRepo, botRepo, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(userRepo, botRepo, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await saver.StopAsync(new Progress<string>(), CancellationToken.None);
 
@@ -71,7 +71,7 @@ public sealed class StatisticsAutoSaverStopWithoutStartTests
         var botRepo = new BotStatisticsRepository();
         var fileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _tempDir);
         var loader = new UserStatisticsLoader(userRepo, fileStore, NullLogger<UserStatisticsLoader>.Instance);
-        var saver = new StatisticsAutoSaver(userRepo, botRepo, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(userRepo, botRepo, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await saver.DisposeAsync();
 

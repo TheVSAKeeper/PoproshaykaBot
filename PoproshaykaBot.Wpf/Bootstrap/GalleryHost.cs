@@ -75,6 +75,20 @@ public sealed class GalleryHost : IGalleryHost
         {
             HostLog.Warning(exception, "Статистика бота не прочитана – плитки со счётчиками бота останутся пустыми");
         }
+
+        try
+        {
+            var usage = await _services.GetRequiredService<StatisticsFileStore>().LoadCommandUsageAsync().ConfigureAwait(true);
+
+            if (usage.Value is { } records)
+            {
+                _services.GetRequiredService<CommandUsageRepository>().Replace(records);
+            }
+        }
+        catch (Exception exception)
+        {
+            HostLog.Warning(exception, "Статистика команд не прочитана – страница «Команды» останется без счётчиков");
+        }
     }
 
     public async Task<GalleryShot> CaptureAsync(GalleryCase item, GalleryContext context)

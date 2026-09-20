@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -14,6 +15,7 @@ public sealed class ChatSender(
     IBroadcasterIdProvider broadcasterIdProvider,
     IBotUserIdProvider botUserIdProvider,
     ITargetChannelProvider targetChannelProvider,
+    CommandResponseTracker commandResponseTracker,
     ILogger<ChatSender> logger)
     : IHostedComponent
 {
@@ -109,6 +111,7 @@ public sealed class ChatSender(
     public async Task EnqueueAsync(
         string message,
         string? replyParentMessageId,
+        CommandResponseMark? commandResponse,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -131,7 +134,7 @@ public sealed class ChatSender(
 
         foreach (var chunk in SplitByLength(message, MaxMessageLength))
         {
-            var item = new ChatSendItem(chunk, replyParentMessageId, target.Login);
+            var item = new ChatSendItem(chunk, replyParentMessageId, target.Login, commandResponse);
 
             if (channel.Writer.TryWrite(item))
             {
@@ -278,7 +281,12 @@ public sealed class ChatSender(
                 return SendOutcome.Done;
             }
 
-            await helix.SendChatMessageAsync(broadcasterId, senderId, item.Message, item.ReplyParentMessageId, ct);
+            var messageId = await helix.SendChatMessageAsync(broadcasterId, senderId, item.Message, item.ReplyParentMessageId, ct);
+
+            if (item.CommandResponse is { } commandResponse && !string.IsNullOrEmpty(messageId))
+            {
+                commandResponseTracker.Expect(messageId, commandResponse);
+            }
 
             if (string.IsNullOrEmpty(item.ReplyParentMessageId))
             {
@@ -343,5 +351,9 @@ public sealed class ChatSender(
         }
     }
 
-    private sealed record ChatSendItem(string Message, string? ReplyParentMessageId, string TargetLogin);
+    private sealed record ChatSendItem(
+        string Message,
+        string? ReplyParentMessageId,
+        string TargetLogin,
+        CommandResponseMark? CommandResponse);
 }

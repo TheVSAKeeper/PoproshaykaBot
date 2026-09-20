@@ -414,11 +414,11 @@ public class DashboardPaneLayoutTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(DashboardView.TrackFloor(right.Children[1], alongColumns: false), Is.Zero,
+            Assert.That(DashboardPaneSurface.TrackFloor(right.Children[1], alongColumns: false), Is.Zero,
                 "Дыра высоты не просит: общий пол растягивающегося листа толкал бы настоящие плитки вверх.");
-            Assert.That(DashboardView.TrackFloor(right.Children[1], alongColumns: true), Is.Zero,
+            Assert.That(DashboardPaneSurface.TrackFloor(right.Children[1], alongColumns: true), Is.Zero,
                 "По ширине то же самое – иначе пустая ячейка упирается в 320 px и гонит раскладку в стопку.");
-            Assert.That(DashboardView.TrackFloor(right.Children[0], alongColumns: false), Is.EqualTo(130),
+            Assert.That(DashboardPaneSurface.TrackFloor(right.Children[0], alongColumns: false), Is.EqualTo(130),
                 "Настоящий сосед свой пол сохраняет.");
         });
     }
@@ -810,13 +810,13 @@ public class DashboardPaneLayoutTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(DashboardView.FloorObstacle(root.Children[1], alongColumns: false),
+            Assert.That(DashboardPaneSurface.FloorObstacle(root.Children[1], alongColumns: false),
                 Is.EqualTo("несколько плиток одна под другой уже на минимуме высоты"),
                 "Высоту держит сумма полов колонки, а не самая высокая плитка ветки – называть одну из них нечестно.");
-            Assert.That(DashboardView.FloorObstacle(root.Children[0], alongColumns: false),
+            Assert.That(DashboardPaneSurface.FloorObstacle(root.Children[0], alongColumns: false),
                 Is.EqualTo("плитка «stream-info» уже на минимуме"),
                 "Один лист – один виновник, как и было.");
-            Assert.That(DashboardView.FloorObstacle(below.Children[1], alongColumns: true),
+            Assert.That(DashboardPaneSurface.FloorObstacle(below.Children[1], alongColumns: true),
                 Is.EqualTo("колонка не бывает уже 320 px"),
                 "Колонку держит общий пол растягивающегося листа, а не собственный минимум чата в 280 px.");
         });
@@ -838,12 +838,12 @@ public class DashboardPaneLayoutTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(DashboardView.CeilingObstacle(below.Children[0].Pane, alongColumns: false),
+            Assert.That(DashboardPaneSurface.CeilingObstacle(below.Children[0].Pane, alongColumns: false),
                 Is.EqualTo("плитки одна под другой вместе не выше 740 px"),
                 "Потолок колонки – сумма заданных пользователем потолков её плиток, и одной плиткой он не объясняется.");
-            Assert.That(DashboardView.CeilingObstacle(root.Children[0].Pane, alongColumns: false),
+            Assert.That(DashboardPaneSurface.CeilingObstacle(root.Children[0].Pane, alongColumns: false),
                 Is.EqualTo("плитка «stream-info» не выше 400 px"));
-            Assert.That(DashboardView.CeilingObstacle(below.Children[1].Pane, alongColumns: true),
+            Assert.That(DashboardPaneSurface.CeilingObstacle(below.Children[1].Pane, alongColumns: true),
                 Is.Null,
                 "У чата потолка нет, и упираться в него нечем.");
         });
@@ -862,18 +862,18 @@ public class DashboardPaneLayoutTests
             },
         };
 
-        Assert.That(DashboardView.HasReliableLayout(grid), Is.False,
+        Assert.That(DashboardPaneSurface.HasReliableLayout(grid), Is.False,
             "До прохода раскладки дорожки нулевые, и любой упор по ним – выдуманный.");
 
         grid.Measure(new(800, 400));
         grid.Arrange(new(0, 0, 800, 400));
 
-        Assert.That(DashboardView.HasReliableLayout(grid), Is.True,
+        Assert.That(DashboardPaneSurface.HasReliableLayout(grid), Is.True,
             "Размеченная сетка – единственное состояние, в котором об упоре можно судить.");
 
         grid.InvalidateArrange();
 
-        Assert.That(DashboardView.HasReliableLayout(grid), Is.False,
+        Assert.That(DashboardPaneSurface.HasReliableLayout(grid), Is.False,
             "Перестроение дерева и автоповтор Ctrl+стрелки опережают Arrange, и прежние размеры дорожек уже не про эту раскладку.");
     }
 
@@ -889,22 +889,22 @@ public class DashboardPaneLayoutTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(DashboardView.NearestPane(panes, new(200, 150), 24), Is.Zero,
+            Assert.That(DashboardPaneSurface.NearestPane(panes, new(200, 150), 24), Is.Zero,
                 "Точка внутри панели берёт её саму.");
 
-            Assert.That(DashboardView.NearestPane(panes, new(399, 150), 24), Is.Zero,
+            Assert.That(DashboardPaneSurface.NearestPane(panes, new(399, 150), 24), Is.Zero,
                 "Разделитель лежит поверх шва, и подсказка обязана держаться за ближнюю панель, а не гаснуть под ним.");
 
-            Assert.That(DashboardView.NearestPane(panes, new(401, 150), 24), Is.EqualTo(1),
+            Assert.That(DashboardPaneSurface.NearestPane(panes, new(401, 150), 24), Is.EqualTo(1),
                 "На другой половине шва ближняя панель уже правая.");
 
-            Assert.That(DashboardView.NearestPane(panes, new(200, 302), 24), Is.Zero,
+            Assert.That(DashboardPaneSurface.NearestPane(panes, new(200, 302), 24), Is.Zero,
                 "Щель между рядами тоже отдаёт ближнюю панель.");
 
-            Assert.That(DashboardView.NearestPane(panes, new(200, 700), 24), Is.EqualTo(-1),
+            Assert.That(DashboardPaneSurface.NearestPane(panes, new(200, 700), 24), Is.EqualTo(-1),
                 "Курсор, уехавший за дашборд, цели не имеет.");
 
-            Assert.That(DashboardView.NearestPane(panes, new(399, 150), 24, skip: 0), Is.EqualTo(1),
+            Assert.That(DashboardPaneSurface.NearestPane(panes, new(399, 150), 24, skip: 0), Is.EqualTo(1),
                 "Плитку-источник из целей выбрасывают: иначе на шве она выигрывает ничью у соседа и гасит подсказку у собственного края.");
         });
     }
@@ -1301,13 +1301,13 @@ public class DashboardPaneLayoutTests
             Assert.That(stretched.Height.Max, Is.EqualTo(double.PositiveInfinity),
                 "В дереве плитка, растущая с местом или получившая остаток, потолка из конструктора не несёт – в этом и была задача.");
 
-            Assert.That(DashboardView.StackedRow(stretched).Max, Is.EqualTo(320),
+            Assert.That(DashboardPaneSurface.StackedRow(stretched).Max, Is.EqualTo(320),
                 "В стопке остаток делить не для кого – строки Auto под общей прокруткой, – поэтому там действует потолок содержимого, а не бесконечность из дерева.");
 
-            Assert.That(DashboardView.StackedRow(stretched).Min, Is.EqualTo(130),
+            Assert.That(DashboardPaneSurface.StackedRow(stretched).Min, Is.EqualTo(130),
                 "Пол строки в стопке не тронут: он и раньше приходил из плитки, а потолок его только подрезает.");
 
-            Assert.That(DashboardView.StackedRow(plain).Max, Is.EqualTo(400),
+            Assert.That(DashboardPaneSurface.StackedRow(plain).Max, Is.EqualTo(400),
                 "Строка обычной плитки в стопке не изменилась.");
         });
     }
@@ -1460,11 +1460,11 @@ public class DashboardPaneLayoutTests
 
     private static Rect Measure(PaneLayout pane, DashboardTileViewModel tile, Func<DashboardTileViewModel, Size>? content = null)
     {
-        var leaf = DashboardView.LeafOf(pane, tile);
+        var leaf = DashboardPaneSurface.LeafOf(pane, tile);
 
         Assert.That(leaf, Is.Not.Null, "Перетаскиваемая плитка обязана найтись в получившемся дереве.");
 
-        var rect = DashboardView.MeasurePane(pane, leaf!, PreviewSize, content);
+        var rect = DashboardPaneSurface.MeasurePane(pane, leaf!, PreviewSize, content);
 
         Assert.That(rect, Is.Not.Null, "Раскладка меряется на фактический размер панели.");
 
@@ -1473,7 +1473,7 @@ public class DashboardPaneLayoutTests
 
     private static int[] PathOf(DashboardViewModel dashboard, DashboardTileViewModel tile)
     {
-        var leaf = DashboardView.LeafOf(dashboard.Pane!, tile);
+        var leaf = DashboardPaneSurface.LeafOf(dashboard.Pane!, tile);
 
         Assert.That(leaf, Is.Not.Null, $"Плитка {tile.TypeId} обязана быть на панели.");
 

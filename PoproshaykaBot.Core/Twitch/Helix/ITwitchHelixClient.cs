@@ -20,7 +20,7 @@ public interface ITwitchHelixClient
 
     Task<IReadOnlyList<GameInfo>> GetGamesByNamesAsync(IEnumerable<string> names, CancellationToken cancellationToken = default);
 
-    Task SendChatMessageAsync(
+    Task<string?> SendChatMessageAsync(
         string broadcasterId,
         string senderId,
         string message,

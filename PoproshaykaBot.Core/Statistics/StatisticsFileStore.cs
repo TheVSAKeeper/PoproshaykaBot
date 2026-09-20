@@ -11,10 +11,12 @@ public sealed class StatisticsFileStore
 {
     private const string UserStatisticsFileName = "users_statistics.json";
     private const string BotStatisticsFileName = "bot_statistics.json";
+    private const string CommandUsageFileName = "command-usage.json";
 
     private readonly ILogger<StatisticsFileStore> _logger;
     private readonly string _userStatisticsFilePath;
     private readonly string _botStatisticsFilePath;
+    private readonly string _commandUsageFilePath;
 
     public StatisticsFileStore(ILogger<StatisticsFileStore> logger)
         : this(logger, AppPaths.BaseDirectory)
@@ -26,6 +28,7 @@ public sealed class StatisticsFileStore
         _logger = logger;
         _userStatisticsFilePath = Path.Combine(baseDirectory, UserStatisticsFileName);
         _botStatisticsFilePath = Path.Combine(baseDirectory, BotStatisticsFileName);
+        _commandUsageFilePath = Path.Combine(baseDirectory, CommandUsageFileName);
     }
 
     public Task<StatisticsReadResult<List<UserStatistics>>> LoadUsersAsync(CancellationToken cancellationToken = default)
@@ -36,6 +39,16 @@ public sealed class StatisticsFileStore
     public Task<StatisticsReadResult<BotStatistics>> LoadBotAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult(LoadFromFile<BotStatistics>(_botStatisticsFilePath, "бота"));
+    }
+
+    public Task<StatisticsReadResult<CommandUsageData>> LoadCommandUsageAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(LoadFromFile<CommandUsageData>(_commandUsageFilePath, "команд"));
+    }
+
+    public Task SaveCommandUsageAsync(CommandUsageData snapshot, CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => SaveToFile(snapshot, _commandUsageFilePath, "команд"), cancellationToken);
     }
 
     public Task SaveUsersAsync(IReadOnlyList<UserStatistics> snapshot, CancellationToken cancellationToken = default)

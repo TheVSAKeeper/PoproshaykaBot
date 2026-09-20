@@ -5,6 +5,7 @@ public static class SectionKeys
     public const string Overview = "overview";
     public const string Users = "users";
     public const string Streams = "streams";
+    public const string Commands = "commands";
     public const string Logs = "logs";
     public const string Settings = "settings";
 
@@ -15,7 +16,7 @@ public static class SectionKeys
     public const string StreamsSelected = Streams + SelectedSuffix;
     public const string StreamsCards = Streams + CardsSuffix;
 
-    public static IReadOnlyList<string> All { get; } = [Overview, Users, Streams, Logs, Settings];
+    public static IReadOnlyList<string> All { get; } = [Overview, Users, Streams, Commands, Logs, Settings];
 
     public static IReadOnlyList<string> Selected { get; } = [UsersSelected, StreamsSelected];
 
@@ -26,6 +27,7 @@ public static class SectionKeys
         ["Обзор"] = Overview,
         ["Пользователи"] = Users,
         ["История стримов"] = Streams,
+        ["Команды"] = Commands,
         ["Логи"] = Logs,
         ["Настройки"] = Settings,
     };

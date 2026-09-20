@@ -1,320 +1,360 @@
-﻿using PoproshaykaBot.Core.Dashboard;
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.Bootstrap;
+using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
+using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
+using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
 public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 {
+    private const string NoRootNotice = "Эту раскладку нельзя править деревом: сетку не режет ни один сквозной шов. Сбросьте раскладку, чтобы начать заново.";
+
     private readonly Dictionary<string, TileMeta> _catalog;
-    private readonly Dictionary<string, PlacedTile> _placed = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
-    private readonly List<DashboardTileSettings> _preserved = [];
-    private DashboardPane? _root;
-    private bool _suppress;
+    private readonly Dictionary<string, DashboardTileViewModel> _previewTiles = new(StringComparer.Ordinal);
+    private readonly bool _navCollapsed;
 
-    [ObservableProperty]
-    private int _columnCount = DashboardLayoutDefaults.DefaultColumnCount;
-
-    [ObservableProperty]
-    private int _rowCount = DashboardLayoutDefaults.DefaultRowCount;
+    private DashboardLayoutDraft _draft = new(DashboardLayoutDefaults.Create());
+    private IReadOnlyDictionary<string, DashboardTilePlacement> _placements = new Dictionary<string, DashboardTilePlacement>(StringComparer.Ordinal);
+    private double _scale = 1;
 
     [ObservableProperty]
     private string _notice = string.Empty;
 
-    public DashboardLayoutSectionViewModel(IEnumerable<DashboardTileViewModel> tiles)
+    [ObservableProperty]
+    private DashboardPreviewReference _reference;
+
+    public DashboardLayoutSectionViewModel(
+        IEnumerable<DashboardTileViewModel> tiles,
+        ISettingsStore? settings = null,
+        DashboardLayoutStore? layoutStore = null)
     {
-        _catalog = tiles.ToDictionary(
-            tile => tile.TypeId,
-            tile => new TileMeta(tile.TypeId, tile.Title, tile.MaxWidth, tile.MaxHeight),
-            StringComparer.Ordinal);
+        ArgumentNullException.ThrowIfNull(tiles);
+
+        _catalog = new(StringComparer.Ordinal);
+
+        foreach (var tile in tiles)
+        {
+            _catalog[tile.TypeId] = new(tile.TypeId, tile.Title, tile.MaxWidth, tile.MaxHeight);
+            _previewTiles[tile.TypeId] = new DashboardPreviewTileViewModel(tile);
+        }
+
+        _navCollapsed = settings?.GetBool(SettingsKeys.NavCollapsed) == true;
+
+        References =
+        [
+            DashboardPreviewReference.Current(RestoreWindowSize(settings, layoutStore)),
+            DashboardPreviewReference.Window1024,
+            DashboardPreviewReference.Window1920,
+        ];
+
+        _reference = References[0];
+
+        Refresh();
     }
 
     public event EventHandler? LayoutChanged;
 
     public event EventHandler? Edited;
 
-    public int MinColumnCount => DashboardLayoutDefaults.MinColumnCount;
+    public IReadOnlyList<DashboardPreviewReference> References { get; }
 
-    public int MaxColumnCount => DashboardLayoutDefaults.MaxColumnCount;
+    public PaneLayout? Pane { get; private set; }
 
-    public int MinRowCount => DashboardLayoutDefaults.MinRowCount;
+    public IReadOnlyList<TileBand> Bands { get; private set; } = [];
 
-    public int MaxRowCount => DashboardLayoutDefaults.MaxRowCount;
+    public bool Stacked { get; private set; }
+
+    public Size ContentArea { get; private set; }
+
+    public bool CanUndo => _draft.CanUndo;
+
+    public bool CanEditTree => Pane is not null;
+
+    public bool TreeEdited => _draft.Version > 0;
+
+    public double Scale
+    {
+        get => _scale;
+        set
+        {
+            if (Math.Abs(_scale - value) < 0.0001 || value <= 0 || !double.IsFinite(value))
+            {
+                return;
+            }
+
+            _scale = value;
+
+            OnPropertyChanged(nameof(Scale));
+            OnPropertyChanged(nameof(ReferenceCaption));
+        }
+    }
+
+    public string ReferenceCaption => Reference.Describe(Scale);
 
     public IReadOnlyList<int> MaxWidthPresets { get; } = [200, 300, 400, 500, 600, 800];
 
     public IReadOnlyList<int> MaxHeightPresets { get; } = [100, 150, 200, 250, 300, 400, 500];
 
-    public IReadOnlyCollection<PlacedTile> PlacedTiles => _placed.Values;
-
     public IReadOnlyList<TileMeta> AvailablePalette =>
-        _catalog.Values.Where(meta => !_placed.ContainsKey(meta.TypeId)).ToList();
+        _catalog.Values.Where(meta => !IsPlaced(meta.TypeId)).ToList();
 
     public TileMeta? Meta(string typeId)
     {
         return _catalog.GetValueOrDefault(typeId);
     }
 
-    public PlacedTile? Placed(string typeId)
+    public DashboardTileSettings? Record(string typeId)
     {
-        return _placed.GetValueOrDefault(typeId);
+        return _draft.Layout.Tiles.FirstOrDefault(tile => string.Equals(tile.TypeId, typeId, StringComparison.Ordinal));
     }
 
     public void LoadSettings(DashboardLayoutSettings? draft)
     {
-        _preserved.Clear();
+        _draft = new(draft is { Tiles.Count: > 0 } ? draft : DashboardLayoutDefaults.Create());
 
-        if (draft is not { Tiles.Count: > 0 })
-        {
-            LoadFrom(DashboardLayoutDefaults.Create());
-            return;
-        }
+        Notice = string.Empty;
 
-        _preserved.AddRange(draft.Tiles.Where(tile => !tile.IsVisible || !_catalog.ContainsKey(tile.TypeId)));
-
-        LoadFrom(draft);
+        Refresh();
     }
 
     public DashboardLayoutSettings BuildLayout()
     {
-        var layout = new DashboardLayoutSettings
-        {
-            ColumnCount = ColumnCount,
-            RowCount = RowCount,
-            Root = _root,
-        };
-
-        var order = 0;
-
-        foreach (var placed in _placed.Values.OrderBy(tile => tile.Row).ThenBy(tile => tile.Column))
-        {
-            layout.Tiles.Add(new()
-            {
-                Id = placed.TypeId,
-                TypeId = placed.TypeId,
-                Order = order++,
-                Row = placed.Row,
-                Column = placed.Column,
-                ColumnSpan = placed.ColumnSpan,
-                RowSpan = placed.RowSpan,
-                IsVisible = true,
-                IsCollapsed = _collapsed.Contains(placed.TypeId),
-                MaxHeight = placed.MaxHeight,
-                MaxWidth = placed.MaxWidth,
-            });
-        }
-
-        DashboardLayoutReconciler.AppendPreserved(layout, _preserved);
-
-        return layout;
+        return _draft.Layout;
     }
 
-    public void PlaceOrMove(string typeId, int row, int column)
+    public bool Resize(IReadOnlyList<int> path, IReadOnlyList<double> weights)
     {
-        if (!_catalog.ContainsKey(typeId) || row < 0 || row >= RowCount || column < 0 || column >= ColumnCount)
+        if (!_draft.Resize(path, weights))
+        {
+            return false;
+        }
+
+        Committed();
+
+        return true;
+    }
+
+    public void Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
+    {
+        Report(side == PaneSide.None
+            ? _draft.Swap(sourcePath, targetPath)
+            : _draft.Move(sourcePath, targetPath, side));
+    }
+
+    public void Add(string typeId, IReadOnlyList<int> targetPath, PaneSide side)
+    {
+        if (!_catalog.ContainsKey(typeId))
         {
             return;
         }
 
-        if (!_placed.TryGetValue(typeId, out var placed))
-        {
-            placed = new() { TypeId = typeId };
-            _placed[typeId] = placed;
-        }
-
-        placed.Row = row;
-        placed.Column = column;
-        DashboardLayoutCalculator.ClampPlacement(placed, ColumnCount, RowCount);
-
-        Resolve();
-        RaiseLayoutChanged();
-        RaiseEdited();
+        Report(_draft.AddAt(typeId, targetPath, side == PaneSide.None ? PaneSide.Right : side));
     }
 
-    public void RemoveTile(string typeId)
+    public PaneLayout? PreviewMove(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        if (!_placed.Remove(typeId))
-        {
-            return;
-        }
+        var root = side == PaneSide.None
+            ? _draft.Preview(pane => DashboardPaneEditor.TrySwap(pane, sourcePath, targetPath, out var result) ? result : null)
+            : _draft.Preview(pane => DashboardPaneEditor.TryMove(pane, sourcePath, targetPath, side, out var result) ? result : null);
 
-        Resolve();
-        RaiseLayoutChanged();
-        RaiseEdited();
+        return root is null ? null : DashboardPaneBuilder.BuildTree(root, _placements);
     }
 
-    public void SetColumnSpan(string typeId, int span)
+    public PaneLayout? PreviewAdd(string typeId, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        if (!_placed.TryGetValue(typeId, out var placed))
+        if (!_previewTiles.ContainsKey(typeId))
         {
-            return;
+            return null;
         }
 
-        placed.ColumnSpan = span;
-        Resolve();
-        RaiseLayoutChanged();
-        RaiseEdited();
+        var root = _draft.Preview(pane =>
+            DashboardPaneEditor.TrySplit(pane, targetPath, side == PaneSide.None ? PaneSide.Right : side, typeId, out var result)
+                ? result
+                : null);
+
+        if (root is null)
+        {
+            return null;
+        }
+
+        var placements = new Dictionary<string, DashboardTilePlacement>(_placements, StringComparer.Ordinal);
+
+        if (!placements.ContainsKey(typeId))
+        {
+            placements[typeId] = new(_previewTiles[typeId], 0, 0, 1, 1, null, null, null, null, false);
+        }
+
+        return DashboardPaneBuilder.BuildTree(root, placements);
     }
 
-    public void SetRowSpan(string typeId, int span)
+    public DashboardTileViewModel? PreviewTile(string typeId)
     {
-        if (!_placed.TryGetValue(typeId, out var placed))
-        {
-            return;
-        }
+        return _previewTiles.GetValueOrDefault(typeId);
+    }
 
-        placed.RowSpan = span;
-        Resolve();
-        RaiseLayoutChanged();
-        RaiseEdited();
+    public void Remove(IReadOnlyList<int> path)
+    {
+        switch (_draft.RemoveAt(path))
+        {
+            case DashboardRemoveStatus.Removed:
+                Committed();
+                return;
+
+            case DashboardRemoveStatus.LastTile:
+                Notice = "Нельзя убрать последнюю плитку. На панели должна остаться хотя бы одна.";
+                return;
+
+            default:
+                Notice = "Эту плитку сейчас убрать нельзя.";
+                return;
+        }
     }
 
     public void SetMaxWidth(string typeId, int? value)
     {
-        if (!_placed.TryGetValue(typeId, out var placed))
+        if (Record(typeId) is not { } record)
         {
             return;
         }
 
-        placed.MaxWidth = value;
-        RaiseEdited();
+        record.MaxWidth = value;
+        Committed();
     }
 
     public void SetMaxHeight(string typeId, int? value)
     {
-        if (!_placed.TryGetValue(typeId, out var placed))
+        if (Record(typeId) is not { } record)
         {
             return;
         }
 
-        placed.MaxHeight = value;
-        RaiseEdited();
+        record.MaxHeight = value;
+        Committed();
+    }
+
+    [RelayCommand]
+    private void Undo()
+    {
+        if (_draft.Undo())
+        {
+            Committed();
+
+            return;
+        }
+
+        Notice = "Отменять нечего: это первое состояние панели с начала правки.";
     }
 
     [RelayCommand]
     private void ResetLayout()
     {
-        LoadFrom(DashboardLayoutDefaults.Create());
-        RaiseEdited();
+        _draft.ResetToDefaults();
+        Notice = string.Empty;
+        Committed();
     }
 
-    [RelayCommand]
-    private void ClearGrid()
+    private static Size RestoreWindowSize(ISettingsStore? settings, DashboardLayoutStore? layoutStore)
     {
-        _placed.Clear();
-        Resolve();
-        RaiseLayoutChanged();
-        RaiseEdited();
-    }
-
-    partial void OnColumnCountChanged(int value)
-    {
-        OnGridSizeChanged();
-    }
-
-    partial void OnRowCountChanged(int value)
-    {
-        OnGridSizeChanged();
-    }
-
-    private void OnGridSizeChanged()
-    {
-        if (_suppress)
+        if (settings is not null)
         {
-            return;
-        }
+            var width = settings.GetDouble(SettingsKeys.WindowWidth);
+            var height = settings.GetDouble(SettingsKeys.WindowHeight);
 
-        Resolve();
-        RaiseLayoutChanged();
-        RaiseEdited();
-    }
-
-    private void LoadFrom(DashboardLayoutSettings layout)
-    {
-        _root = layout.Root;
-        _suppress = true;
-
-        try
-        {
-            ColumnCount = Math.Clamp(layout.ColumnCount, MinColumnCount, MaxColumnCount);
-            RowCount = Math.Clamp(layout.RowCount, MinRowCount, MaxRowCount);
-
-            _placed.Clear();
-            _collapsed.Clear();
-
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-
-            foreach (var tile in layout.Tiles.Where(tile => tile.IsVisible))
+            if (width > 0 && height > 0)
             {
-                if (!_catalog.ContainsKey(tile.TypeId) || !seen.Add(tile.TypeId))
-                {
-                    continue;
-                }
-
-                var placed = new PlacedTile
-                {
-                    TypeId = tile.TypeId,
-                    Row = tile.Row,
-                    Column = tile.Column,
-                    ColumnSpan = tile.ColumnSpan,
-                    RowSpan = tile.RowSpan,
-                    MaxHeight = tile.MaxHeight,
-                    MaxWidth = tile.MaxWidth,
-                };
-
-                DashboardLayoutCalculator.ClampPlacement(placed, ColumnCount, RowCount);
-                _placed[tile.TypeId] = placed;
-
-                if (tile.IsCollapsed)
-                {
-                    _collapsed.Add(tile.TypeId);
-                }
+                return new(width, height);
             }
         }
-        finally
+
+        if (layoutStore?.LoadMainWindow() is { Width: > 0, Height: > 0 } saved)
         {
-            _suppress = false;
+            var bounds = WinFormsPlacementImport.ToDeviceIndependent(saved, WinFormsPlacementImport.GetSystemScale());
+
+            return new(bounds.Width, bounds.Height);
         }
 
-        Resolve();
-        RaiseLayoutChanged();
+        return DashboardPreviewReference.DefaultWindow;
     }
 
-    private void Resolve()
+    partial void OnReferenceChanged(DashboardPreviewReference value)
     {
-        var (_, unplaceable) = DashboardLayoutCalculator.ResolveLayout(_placed.Values, RowCount, ColumnCount);
+        Refresh();
+        OnPropertyChanged(nameof(ReferenceCaption));
+    }
 
-        foreach (var lost in unplaceable)
+    private bool IsPlaced(string typeId)
+    {
+        return Record(typeId) is { IsVisible: true };
+    }
+
+    private void Report(DashboardEditStatus status)
+    {
+        switch (status)
         {
-            _placed.Remove(lost.TypeId);
-            RetainAsHidden(lost);
+            case DashboardEditStatus.Applied:
+                Notice = string.Empty;
+                Committed();
+                return;
+
+            case DashboardEditStatus.GridFull:
+                Notice = "На панели больше нет места для ещё одного разреза. Перенесите плитку в другое место или уберите одну из соседних.";
+                return;
+
+            case DashboardEditStatus.Unavailable:
+                Notice = NoRootNotice;
+                return;
+
+            default:
+                Notice = "Плитку не получилось перенести на это место.";
+                return;
         }
-
-        Notice = DashboardLayoutReconciler.DescribeHiddenTiles(
-            unplaceable.Select(lost => Meta(lost.TypeId)?.Title ?? lost.TypeId).ToList());
-
-        OnPropertyChanged(nameof(AvailablePalette));
-        OnPropertyChanged(nameof(PlacedTiles));
     }
 
-    private void RetainAsHidden(PlacedTile lost)
+    private void Committed()
     {
-        _preserved.RemoveAll(tile => string.Equals(tile.TypeId, lost.TypeId, StringComparison.Ordinal));
-        _preserved.Add(DashboardLayoutReconciler.CreateHiddenTile(lost, _collapsed.Contains(lost.TypeId)));
-    }
-
-    private void RaiseLayoutChanged()
-    {
-        LayoutChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void RaiseEdited()
-    {
+        Refresh();
         Edited?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void Refresh()
+    {
+        var model = DashboardPaneBuilder.Build(_draft.Layout, _previewTiles, showCollapsed: true);
+
+        foreach (var placement in model.Placements)
+        {
+            placement.Tile.IsCollapsed = placement.IsCollapsed;
+            placement.Tile.IsCollapsedToStrip = false;
+        }
+
+        _placements = model.ByTypeId;
+        Pane = model.Pane;
+        Bands = model.Bands;
+        ContentArea = Reference.ContentArea(_navCollapsed);
+        Stacked = DashboardPaneSurface.ShouldStack(ContentArea.Width, Pane);
+
+        DashboardPaneBuilder.ApplyCollapsedStrips(Pane, false, Stacked);
+
+        if (Pane is null)
+        {
+            Notice = NoRootNotice;
+        }
+
+        OnPropertyChanged(nameof(Pane));
+        OnPropertyChanged(nameof(Bands));
+        OnPropertyChanged(nameof(Stacked));
+        OnPropertyChanged(nameof(ContentArea));
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanEditTree));
+        OnPropertyChanged(nameof(AvailablePalette));
+
+        LayoutChanged?.Invoke(this, EventArgs.Empty);
     }
 }
 

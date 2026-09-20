@@ -1,6 +1,6 @@
 ﻿namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class HelpCommand(Func<IReadOnlyCollection<IChatCommand>> getAllCommands) : IChatCommand
+public sealed class HelpCommand(Func<IReadOnlyCollection<IChatCommand>> getAvailableCommands) : IChatCommand
 {
     public string Canonical => "помощь";
     public IReadOnlyCollection<string> Aliases => ["help", "h"];
@@ -13,7 +13,7 @@ public sealed class HelpCommand(Func<IReadOnlyCollection<IChatCommand>> getAllCo
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var allCommands = getAllCommands();
+        var allCommands = getAvailableCommands();
 
         if (context.Arguments.Count > 0)
         {

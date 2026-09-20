@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -16,11 +17,17 @@ public sealed class TwitchChatHandler :
     IEventSubscriber,
     IDisposable
 {
+    private const string BotFallbackDisplayName = "Бот";
+    private const string LocalMessageIdPrefix = "local-";
+
     private readonly SettingsManager _settingsManager;
     private readonly ObsChatStore _obsChatStore;
+    private readonly CommandSettingsStore _commandSettingsStore;
+    private readonly AccountsStore _accountsStore;
     private readonly AudienceTracker _audienceTracker;
     private readonly ChatDecorationsProvider _chatDecorations;
     private readonly ChatCommandProcessor _commandProcessor;
+    private readonly CommandResponseTracker _commandResponseTracker;
     private readonly TwitchChatMessenger _messenger;
     private readonly IEventBus _eventBus;
     private readonly ILogger<TwitchChatHandler> _logger;
@@ -29,18 +36,24 @@ public sealed class TwitchChatHandler :
     public TwitchChatHandler(
         SettingsManager settingsManager,
         ObsChatStore obsChatStore,
+        CommandSettingsStore commandSettingsStore,
+        AccountsStore accountsStore,
         AudienceTracker audienceTracker,
         ChatDecorationsProvider chatDecorationsProvider,
         ChatCommandProcessor commandProcessor,
+        CommandResponseTracker commandResponseTracker,
         TwitchChatMessenger messenger,
         IEventBus eventBus,
         ILogger<TwitchChatHandler> logger)
     {
         _settingsManager = settingsManager;
         _obsChatStore = obsChatStore;
+        _commandSettingsStore = commandSettingsStore;
+        _accountsStore = accountsStore;
         _audienceTracker = audienceTracker;
         _chatDecorations = chatDecorationsProvider;
         _commandProcessor = commandProcessor;
+        _commandResponseTracker = commandResponseTracker;
         _messenger = messenger;
         _eventBus = eventBus;
         _logger = logger;
@@ -58,6 +71,7 @@ public sealed class TwitchChatHandler :
     {
         Channel = null;
         _audienceTracker.ClearAll();
+        _commandResponseTracker.Clear();
     }
 
     public void Dispose()
@@ -108,6 +122,8 @@ public sealed class TwitchChatHandler :
             BadgeUrls = _chatDecorations.ExtractBadgeUrls(chatMessage.Badges, _obsChatStore.Load().BadgeSizePixels),
         };
 
+        var commandResponse = chatMessage.IsBot ? _commandResponseTracker.TryConsume(chatMessage.Id) : null;
+
         _ = _eventBus.PublishAsync(new ChatMessageReceived(chatMessage.Channel,
             chatMessage.Id,
             chatMessage.UserId,
@@ -117,7 +133,8 @@ public sealed class TwitchChatHandler :
             status,
             isFirstSeen,
             historyEntry,
-            chatMessage.IsBot), cancellationToken);
+            chatMessage.IsBot,
+            commandResponse), cancellationToken);
 
         if (chatMessage.IsBot)
         {
@@ -158,19 +175,84 @@ public sealed class TwitchChatHandler :
 
         if (response != null)
         {
-            switch (response.Delivery)
-            {
-                case DeliveryType.Reply:
-                    _messenger.Reply(response.ReplyToMessageId ?? context.MessageId, response.Text);
-                    break;
-
-                default:
-                    _messenger.Send(response.Text);
-                    break;
-            }
+            await DeliverCommandResponseAsync(response,
+                commandResult.Canonical ?? string.Empty,
+                chatMessage,
+                context,
+                cancellationToken);
         }
 
         _logger.LogDebug("[Бот] сообщение от {DisplayName} обработано ({Length} симв.)", chatMessage.DisplayName, chatMessage.Message.Length);
+    }
+
+    private async Task DeliverCommandResponseAsync(
+        OutgoingMessage response,
+        string canonical,
+        ChatMessage source,
+        CommandContext context,
+        CancellationToken cancellationToken)
+    {
+        var target = _commandSettingsStore.Load().ResolveResponseTarget(canonical);
+
+        if (target == CommandResponseTarget.None)
+        {
+            _logger.LogDebug("Ответ команды {Canonical} не доставлен: цель ответа – молча", canonical);
+            return;
+        }
+
+        var mark = new CommandResponseMark(canonical, target);
+
+        if (target.HasFlag(CommandResponseTarget.Chat))
+        {
+            switch (response.Delivery)
+            {
+                case DeliveryType.Reply:
+                    _messenger.Reply(response.ReplyToMessageId ?? context.MessageId, response.Text, mark);
+                    break;
+
+                default:
+                    _messenger.Send(response.Text, mark);
+                    break;
+            }
+
+            return;
+        }
+
+        await PublishOverlayOnlyResponseAsync(response, source, mark, cancellationToken);
+    }
+
+    private Task PublishOverlayOnlyResponseAsync(
+        OutgoingMessage response,
+        ChatMessage source,
+        CommandResponseMark mark,
+        CancellationToken cancellationToken)
+    {
+        var botAccount = _accountsStore.LoadBot();
+        var displayName = string.IsNullOrWhiteSpace(botAccount.Login) ? BotFallbackDisplayName : botAccount.Login;
+        var messageId = $"{LocalMessageIdPrefix}{Guid.NewGuid():N}";
+
+        var historyEntry = new ChatMessageData
+        {
+            MessageId = messageId,
+            Timestamp = DateTime.UtcNow,
+            UserId = botAccount.UserId,
+            DisplayName = displayName,
+            Message = response.Text,
+            MessageType = ChatMessageType.BotResponse,
+            Status = UserStatus.None,
+        };
+
+        return _eventBus.PublishAsync(new ChatMessageReceived(source.Channel,
+            messageId,
+            botAccount.UserId,
+            displayName,
+            displayName,
+            response.Text,
+            UserStatus.None,
+            false,
+            historyEntry,
+            true,
+            mark), cancellationToken);
     }
 
     private static UserStatus GetUserStatusFlags(ChatMessage chatMessage)

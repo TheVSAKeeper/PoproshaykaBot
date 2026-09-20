@@ -30,6 +30,26 @@ public class RelativeTimeTests
         Assert.That(RelativeTime.Describe(value, Now), Is.EqualTo("2 дн. назад"));
     }
 
+    [TestCase(0, "только что")]
+    [TestCase(1, "1 мин. назад")]
+    [TestCase(59, "59 мин. назад")]
+    [TestCase(60, "1 ч. назад")]
+    [TestCase(23 * 60, "23 ч. назад")]
+    [TestCase(25 * 60, "вчера")]
+    [TestCase(3 * 24 * 60, "3 дн. назад")]
+    public void Names_the_moment_down_to_minutes(int minutesAgo, string expected)
+    {
+        var value = Now.AddMinutes(-minutesAgo);
+
+        Assert.That(RelativeTime.DescribeMoment(value, Now), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Reads_a_moment_from_the_future_as_just_now()
+    {
+        Assert.That(RelativeTime.DescribeMoment(Now.AddMinutes(5), Now), Is.EqualTo("только что"));
+    }
+
     [Test]
     public void Formats_a_date_by_the_russian_pattern()
     {

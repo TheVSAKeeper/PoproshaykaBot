@@ -27,6 +27,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly IUiDispatcher _uiDispatcher;
     private readonly NavigationItem _statisticsSection;
     private readonly NavigationItem _streamHistorySection;
+    private readonly NavigationItem _commandsSection;
     private readonly UserStatisticsPageViewModel _statisticsPage;
     private readonly StreamHistoryPageViewModel _streamHistoryPage;
     private readonly NavigationItem _overviewSection;
@@ -44,6 +45,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         SettingsPageViewModel settingsPage,
         UserStatisticsPageViewModel statisticsPage,
         StreamHistoryPageViewModel streamHistoryPage,
+        CommandsPageViewModel commandsPage,
         LogsViewModel logsPage,
         ThemeViewModel theme,
         ShellPreferences preferences,
@@ -84,6 +86,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _statisticsPage = statisticsPage;
         _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, key: SectionKeys.Users) { StartsGroup = true };
         _streamHistorySection = new("История стримов", PackIconLucideKind.History, streamHistoryPage, key: SectionKeys.Streams);
+        _commandsSection = new("Команды", PackIconLucideKind.Terminal, commandsPage, activate: commandsPage.OnEnter, key: SectionKeys.Commands);
 
         _streamHistoryPage = streamHistoryPage;
         _streamHistoryPage.UserRequested += OnUserRequested;
@@ -93,6 +96,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Sections.Add(_overviewSection);
         Sections.Add(_statisticsSection);
         Sections.Add(_streamHistorySection);
+        Sections.Add(_commandsSection);
         Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage, key: SectionKeys.Logs) { StartsGroup = true });
 
         IsNavCollapsed = _preferences.NavCollapsed;

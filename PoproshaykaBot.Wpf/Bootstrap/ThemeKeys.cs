@@ -4,6 +4,7 @@ public static class ThemeKeys
 {
     public const string AccentPrimary = "Accent.Primary";
     public const string AccentSoft = "Accent.Soft";
+    public const string BgBase = "Bg.Base";
     public const string BgSurface = "Bg.Surface";
     public const string BorderSubtle = "Border.Subtle";
     public const string FgMuted = "Fg.Muted";

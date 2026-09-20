@@ -6,6 +6,7 @@ namespace PoproshaykaBot.Core.Statistics;
 public sealed class StatisticsAutoSaver(
     IUserStatisticsRepository userRepository,
     IBotStatisticsRepository botRepository,
+    CommandUsageRepository commandUsageRepository,
     UserStatisticsLoader userLoader,
     StatisticsFileStore fileStore,
     ILogger<StatisticsAutoSaver> logger)
@@ -21,6 +22,7 @@ public sealed class StatisticsAutoSaver(
     private Task? _autoSaveTask;
     private bool _disposed;
     private bool _botLoaded;
+    private StatisticsLoadState _commandUsageState = StatisticsLoadState.NotRead;
     private bool _statisticsRewrittenExternally;
     private bool _statisticsRewriteReported;
 
@@ -81,7 +83,7 @@ public sealed class StatisticsAutoSaver(
         _periodicTimer = null;
         _autoSaveTask = null;
 
-        if (!_botLoaded && !userLoader.IsLoaded)
+        if (!_botLoaded && !userLoader.IsLoaded && _commandUsageState != StatisticsLoadState.Loaded)
         {
             logger.LogDebug("Остановка автосохранения без финального сохранения: загрузка статистики не выполнялась");
             return;
@@ -204,6 +206,7 @@ public sealed class StatisticsAutoSaver(
         try
         {
             await userLoader.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+            await LoadCommandUsageAsync(cancellationToken).ConfigureAwait(false);
 
             if (_statisticsRewrittenExternally)
             {
@@ -246,6 +249,31 @@ public sealed class StatisticsAutoSaver(
         }
     }
 
+    private async Task LoadCommandUsageAsync(CancellationToken cancellationToken)
+    {
+        if (_commandUsageState != StatisticsLoadState.NotRead)
+        {
+            return;
+        }
+
+        var result = await fileStore.LoadCommandUsageAsync(cancellationToken).ConfigureAwait(false);
+
+        if (result.Failed)
+        {
+            _commandUsageState = StatisticsLoadState.Abandoned;
+
+            logger.LogError(
+                "Файл статистики команд не прочитан. Счётчики команд этого сеанса сохраняться не будут, чтобы не затереть файл; рядом с ним оставлена копия с суффиксом invalid");
+
+            return;
+        }
+
+        commandUsageRepository.Replace(result.Value ?? new CommandUsageData());
+        _commandUsageState = StatisticsLoadState.Loaded;
+
+        logger.LogInformation("Статистика команд загружена");
+    }
+
     private async Task RunAutoSaveLoopAsync(CancellationToken ct)
     {
         logger.LogDebug("Цикл автосохранения запущен");
@@ -276,13 +304,17 @@ public sealed class StatisticsAutoSaver(
             var saveUsers = (force || userRepository.HasChanges) && userLoader.IsLoaded;
             var saveBot = (force || botRepository.HasChanges) && _botLoaded;
 
-            if (!saveUsers && !saveBot)
+            var saveCommands = (force || commandUsageRepository.HasChanges)
+                               && _commandUsageState == StatisticsLoadState.Loaded;
+
+            if (!saveUsers && !saveBot && !saveCommands)
             {
                 return;
             }
 
             List<UserStatistics>? userSnapshot = null;
             BotStatistics? botSnapshot = null;
+            CommandUsageData? commandUsageSnapshot = null;
 
             if (saveUsers)
             {
@@ -294,30 +326,49 @@ public sealed class StatisticsAutoSaver(
                 botSnapshot = botRepository.CreateSnapshotAndMarkSaved();
             }
 
-            if (userSnapshot != null)
+            if (saveCommands)
             {
-                try
-                {
-                    await fileStore.SaveUsersAsync(userSnapshot, cancellationToken).ConfigureAwait(false);
-                }
-                catch
-                {
-                    userRepository.MarkChanged();
-                    throw;
-                }
+                commandUsageSnapshot = commandUsageRepository.CreateSnapshotAndMarkSaved();
             }
 
-            if (botSnapshot != null)
+            try
             {
-                try
+                if (userSnapshot != null)
+                {
+                    await fileStore.SaveUsersAsync(userSnapshot, cancellationToken).ConfigureAwait(false);
+                    userSnapshot = null;
+                }
+
+                if (botSnapshot != null)
                 {
                     await fileStore.SaveBotAsync(botSnapshot, cancellationToken).ConfigureAwait(false);
+                    botSnapshot = null;
                 }
-                catch
+
+                if (commandUsageSnapshot != null)
+                {
+                    await fileStore.SaveCommandUsageAsync(commandUsageSnapshot, cancellationToken).ConfigureAwait(false);
+                    commandUsageSnapshot = null;
+                }
+            }
+            catch
+            {
+                if (userSnapshot != null)
+                {
+                    userRepository.MarkChanged();
+                }
+
+                if (botSnapshot != null)
                 {
                     botRepository.MarkChanged();
-                    throw;
                 }
+
+                if (commandUsageSnapshot != null)
+                {
+                    commandUsageRepository.MarkChanged();
+                }
+
+                throw;
             }
 
             logger.LogDebug("Сохранение статистики успешно завершено");

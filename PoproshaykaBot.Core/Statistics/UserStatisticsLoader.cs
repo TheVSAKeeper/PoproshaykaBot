@@ -10,14 +10,14 @@ public sealed class UserStatisticsLoader(
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    private volatile UserStatisticsLoadState _state = UserStatisticsLoadState.NotRead;
+    private volatile StatisticsLoadState _state = StatisticsLoadState.NotRead;
     private bool _disposed;
 
-    public bool IsLoaded => _state == UserStatisticsLoadState.Loaded;
+    public bool IsLoaded => _state == StatisticsLoadState.Loaded;
 
     public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
-        if (_state != UserStatisticsLoadState.NotRead)
+        if (_state != StatisticsLoadState.NotRead)
         {
             return;
         }
@@ -26,7 +26,7 @@ public sealed class UserStatisticsLoader(
 
         try
         {
-            if (_state != UserStatisticsLoadState.NotRead)
+            if (_state != StatisticsLoadState.NotRead)
             {
                 return;
             }
@@ -35,7 +35,7 @@ public sealed class UserStatisticsLoader(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            _state = UserStatisticsLoadState.Abandoned;
+            _state = StatisticsLoadState.Abandoned;
 
             logger.LogError(exception, "Сбой при загрузке статистики пользователей");
             throw new InvalidOperationException($"Ошибка загрузки статистики пользователей: {exception.Message}", exception);
@@ -52,11 +52,11 @@ public sealed class UserStatisticsLoader(
 
         try
         {
-            var wasLoaded = _state == UserStatisticsLoadState.Loaded;
+            var wasLoaded = _state == StatisticsLoadState.Loaded;
 
             if (wasLoaded)
             {
-                _state = UserStatisticsLoadState.Abandoned;
+                _state = StatisticsLoadState.Abandoned;
 
                 logger.LogInformation(
                     "Статистика пользователей больше не считается прочитанной: её файл меняют мимо приложения, накопленное в этом сеансе сохраняться не будет, а перечитывания до перезапуска не будет");
@@ -81,7 +81,7 @@ public sealed class UserStatisticsLoader(
 
         try
         {
-            _state = UserStatisticsLoadState.Loaded;
+            _state = StatisticsLoadState.Loaded;
 
             logger.LogInformation("Статистика пользователей снова считается прочитанной: её файл никто не менял");
         }
@@ -108,7 +108,7 @@ public sealed class UserStatisticsLoader(
 
         if (result.Failed)
         {
-            _state = UserStatisticsLoadState.Abandoned;
+            _state = StatisticsLoadState.Abandoned;
 
             logger.LogError(
                 "Файл статистики пользователей не прочитан. Накопленное в этом сеансе сохраняться не будет, чтобы не затереть файл, и перечитывать его до перезапуска приложение не станет; рядом с файлом оставлена копия с суффиксом invalid");
@@ -118,7 +118,7 @@ public sealed class UserStatisticsLoader(
 
         var users = result.Value ?? [];
         repository.ReplaceAll(users);
-        _state = UserStatisticsLoadState.Loaded;
+        _state = StatisticsLoadState.Loaded;
 
         logger.LogInformation("Статистика пользователей загружена. Загружено пользователей: {UserCount}", users.Count);
     }

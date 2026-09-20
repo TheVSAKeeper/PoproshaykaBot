@@ -78,7 +78,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
 
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await loader.EnsureLoadedAsync();
         users.TrackMessage("u1", "Alice");
@@ -106,7 +106,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(botPath, BotContent);
 
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await loader.EnsureLoadedAsync();
         users.IncrementBonusPoints("u1", 10);
@@ -135,7 +135,7 @@ public sealed class StatisticsLoadOwnershipTests
             string.Equals(brokenFileName, BotFileName, StringComparison.Ordinal) ? BrokenContent : BotContent);
 
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -166,7 +166,7 @@ public sealed class StatisticsLoadOwnershipTests
     public async Task Отсутствующий_файл_статистики_это_законная_пустота()
     {
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -203,7 +203,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(botPath, BotContent);
 
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
         await saver.StopAsync(new Progress<string>(), CancellationToken.None);
@@ -243,7 +243,7 @@ public sealed class StatisticsLoadOwnershipTests
             importsStatistics ? ImportedUsersContent : "1,25");
 
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -292,7 +292,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_source, UsersFileName), ImportedUsersContent);
 
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         var entered = new ManualResetEventSlim(false);
         var release = new ManualResetEventSlim(false);
@@ -357,7 +357,7 @@ public sealed class StatisticsLoadOwnershipTests
 
         var (users, bot, fileStore, loader) = CreateGraph();
         var logger = new RecordingLogger<StatisticsAutoSaver>();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, logger);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, logger);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -406,7 +406,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_source, UsersFileName), ImportedUsersContent);
 
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         try
         {
@@ -444,7 +444,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_source, UsersFileName), ImportedUsersContent);
 
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await loader.EnsureLoadedAsync();
 
@@ -497,7 +497,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_directory, BotFileName), BotContent);
 
         var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
         await saver.StopAsync(new Progress<string>(), CancellationToken.None);
