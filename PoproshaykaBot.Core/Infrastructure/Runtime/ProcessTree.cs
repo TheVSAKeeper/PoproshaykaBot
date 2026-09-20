@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Diagnostics;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -6,20 +7,21 @@ namespace PoproshaykaBot.Core.Infrastructure.Runtime;
 
 internal static class ProcessTree
 {
+    private const string UnknownProcessName = "неизвестный процесс";
+
     public static long SelfMemoryBytes()
     {
         using var process = Process.GetCurrentProcess();
         return process.PrivateMemorySize64;
     }
 
-    public static long ChildMemoryBytes(ILogger logger, out int count)
+    public static IReadOnlyList<ChildProcessUsage> ChildProcesses(ILogger logger)
     {
-        count = 0;
         var parentByPid = SnapshotParentMap();
 
         if (parentByPid.Count == 0)
         {
-            return 0;
+            return [];
         }
 
         var childrenByParent = new Dictionary<int, List<int>>();
@@ -34,7 +36,7 @@ internal static class ProcessTree
             siblings.Add(pid);
         }
 
-        long totalBytes = 0;
+        var byName = new Dictionary<string, (int Count, long Bytes)>(StringComparer.OrdinalIgnoreCase);
         var pending = new Queue<int>();
         var visited = new HashSet<int> { Environment.ProcessId };
         pending.Enqueue(Environment.ProcessId);
@@ -58,8 +60,9 @@ internal static class ProcessTree
                 try
                 {
                     using var child = Process.GetProcessById(childPid);
-                    totalBytes += child.PrivateMemorySize64;
-                    count++;
+                    var name = string.IsNullOrWhiteSpace(child.ProcessName) ? UnknownProcessName : child.ProcessName;
+                    var previous = byName.GetValueOrDefault(name);
+                    byName[name] = (previous.Count + 1, previous.Bytes + child.PrivateMemorySize64);
                 }
                 catch (Exception exception)
                 {
@@ -68,7 +71,10 @@ internal static class ProcessTree
             }
         }
 
-        return totalBytes;
+        return byName
+            .Select(pair => new ChildProcessUsage(pair.Key, pair.Value.Count, pair.Value.Bytes))
+            .OrderByDescending(usage => usage.Bytes)
+            .ToArray();
     }
 
     private static Dictionary<int, int> SnapshotParentMap()

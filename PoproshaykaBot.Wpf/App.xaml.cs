@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Di;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -207,7 +208,9 @@ public partial class App : Application
                 var settingsManager = _services.GetRequiredService<SettingsManager>();
                 _appLifetimeStarted = StartHttpServerIfNeeded(settingsManager, _appLifetime);
                 _streamMonitoringStarted = StartStreamMonitoring(_streamMonitoringHost);
-                _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)), Log.CloseAndFlush);
+                _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)),
+                    Log.CloseAndFlush,
+                    _services.GetRequiredService<MemoryUsageSink>());
             }
 
             if (_galleryArguments is not null)
@@ -354,7 +357,8 @@ public partial class App : Application
             .AddPolls()
             .AddHttpServer()
             .AddObsIntegration()
-            .AddSelfUpdate();
+            .AddSelfUpdate()
+            .AddDiagnostics();
 
         services.AddSingleton<BotConnectionManager>();
         services.AddSingleton<IBotConnectionController>(provider => provider.GetRequiredService<BotConnectionManager>());

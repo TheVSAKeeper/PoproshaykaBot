@@ -22,6 +22,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHttpClient();
 
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<EventBusMetrics>();
         services.AddSingleton<InMemoryEventBus>();
         services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
         services.AddSingleton<UiEventDispatcher>();

@@ -21,6 +21,7 @@ public sealed class ChatSender(
 {
     private const int MaxMessageLength = 500;
     private const int MaxSendAttempts = 5;
+    private const int QueueCapacity = 1000;
     private const double RateLimitMaxDelaySeconds = 30.0;
     private static readonly TimeSpan SendInterval = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan MaxDrainTimeout = TimeSpan.FromSeconds(120);
@@ -31,6 +32,10 @@ public sealed class ChatSender(
     private Task? _backgroundTask;
     private CancellationTokenSource? _cts;
 
+    private long _sentCount;
+    private long _failedCount;
+    private long _lastSentAtUtcTicks;
+
     private enum SendOutcome
     {
         Done = 0,
@@ -40,6 +45,23 @@ public sealed class ChatSender(
     public string Name => "Отправитель сообщений чата (Helix)";
 
     public int StartOrder => 50;
+
+    public int QueueLength => _channel.Reader.CanCount ? _channel.Reader.Count : 0;
+
+    public int QueueMaxLength => QueueCapacity;
+
+    public long SentCount => Interlocked.Read(ref _sentCount);
+
+    public long FailedCount => Interlocked.Read(ref _failedCount);
+
+    public DateTimeOffset? LastSentAt
+    {
+        get
+        {
+            var ticks = Interlocked.Read(ref _lastSentAtUtcTicks);
+            return ticks == 0 ? null : new DateTimeOffset(ticks, TimeSpan.Zero);
+        }
+    }
 
     public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
@@ -141,6 +163,8 @@ public sealed class ChatSender(
                 continue;
             }
 
+            Interlocked.Increment(ref _failedCount);
+
             if (channel.Reader.Completion.IsCompleted)
             {
                 logger.LogWarning("ChatSender: канал закрыт, сообщение отброшено (длина сообщения {Length} символов)", chunk.Length);
@@ -154,7 +178,7 @@ public sealed class ChatSender(
 
     private static Channel<ChatSendItem> CreateChannel()
     {
-        return Channel.CreateBounded<ChatSendItem>(new BoundedChannelOptions(1000)
+        return Channel.CreateBounded<ChatSendItem>(new BoundedChannelOptions(QueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
@@ -269,6 +293,7 @@ public sealed class ChatSender(
 
             if (string.IsNullOrEmpty(broadcasterId))
             {
+                Interlocked.Increment(ref _failedCount);
                 logger.LogWarning("ChatSender: broadcaster id не получен, сообщение пропущено");
                 return SendOutcome.Done;
             }
@@ -277,11 +302,15 @@ public sealed class ChatSender(
 
             if (string.IsNullOrEmpty(senderId))
             {
+                Interlocked.Increment(ref _failedCount);
                 logger.LogWarning("ChatSender: sender id не получен, сообщение пропущено");
                 return SendOutcome.Done;
             }
 
             var messageId = await helix.SendChatMessageAsync(broadcasterId, senderId, item.Message, item.ReplyParentMessageId, ct);
+
+            Interlocked.Increment(ref _sentCount);
+            Interlocked.Exchange(ref _lastSentAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
 
             if (item.CommandResponse is { } commandResponse && !string.IsNullOrEmpty(messageId))
             {
@@ -306,6 +335,7 @@ public sealed class ChatSender(
         }
         catch (HelixMessageDroppedException ex)
         {
+            Interlocked.Increment(ref _failedCount);
             logger.LogWarning(ex, "Сообщение отклонено Twitch: {Code} {Reason}", ex.ReasonCode, ex.ReasonMessage);
             return SendOutcome.Done;
         }
@@ -315,6 +345,7 @@ public sealed class ChatSender(
         }
         catch (HelixRequestException ex)
         {
+            Interlocked.Increment(ref _failedCount);
             logger.LogError(ex, "ChatSender: ошибка Helix {Status} при отправке сообщения", (int)ex.StatusCode);
             return SendOutcome.Done;
         }
@@ -324,6 +355,7 @@ public sealed class ChatSender(
         }
         catch (Exception ex)
         {
+            Interlocked.Increment(ref _failedCount);
             logger.LogError(ex, "ChatSender: неожиданная ошибка при отправке сообщения");
             return SendOutcome.Done;
         }
@@ -333,6 +365,7 @@ public sealed class ChatSender(
     {
         if (attempt >= MaxSendAttempts)
         {
+            Interlocked.Increment(ref _failedCount);
             logger.LogError("ChatSender: rate limit 429, исчерпаны все {MaxAttempts} попыток – сообщение отброшено", MaxSendAttempts);
             return false;
         }

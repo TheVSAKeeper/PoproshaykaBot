@@ -44,9 +44,28 @@ public sealed class ObsIntegrationService(
 
     private bool _summaryFailureLogged;
 
-    public ObsConnectionSnapshot CurrentStatus { get; private set; } = ObsConnectionSnapshot.Disconnected();
+    private ObsConnectionSnapshot _currentStatus = ObsConnectionSnapshot.Disconnected();
+
+    private bool _statusObserved;
+
+    public ObsConnectionSnapshot CurrentStatus
+    {
+        get => _currentStatus;
+
+        private set
+        {
+            _currentStatus = value;
+            _statusObserved = true;
+        }
+    }
 
     public bool IsConnected => client.IsConnected;
+
+    public bool IsStatusObserved => _statusObserved;
+
+    // TODO: время последнего события OBS (смена сцены, старт записи) – отдельным полем по IObsWebSocketClient.EventReceived,
+    // когда карточке диагностики станет мало времени ответа на запрос
+    public DateTimeOffset? LastExchangeAt => client.LastExchangeAt;
 
     public async Task<ObsConnectionSnapshot> ConnectAsync(ObsIntegrationSettings settings, CancellationToken cancellationToken)
     {

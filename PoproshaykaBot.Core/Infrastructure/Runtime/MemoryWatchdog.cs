@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Diagnostics;
 using System.Diagnostics;
 
 namespace PoproshaykaBot.Core.Infrastructure.Runtime;
@@ -19,25 +20,46 @@ public sealed class MemoryWatchdog : IDisposable
 
     private readonly Action _flushLogs;
 
+    private readonly MemoryUsageSink? _usageSink;
+
     private readonly Timer _timer;
 
     private int _busy;
 
     private int _checkCount;
 
-    public MemoryWatchdog(ILogger logger, Action flushLogs)
+    public MemoryWatchdog(ILogger logger, Action flushLogs, MemoryUsageSink? usageSink = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(flushLogs);
 
         _logger = logger;
         _flushLogs = flushLogs;
+        _usageSink = usageSink;
         _timer = new(_ => Check(), null, CheckInterval, CheckInterval);
     }
 
     public void Dispose()
     {
         _timer.Dispose();
+    }
+
+    internal static MemoryUsage Measure(ILogger logger)
+    {
+        var children = ProcessTree.ChildProcesses(logger);
+        long childBytes = 0;
+
+        foreach (var child in children)
+        {
+            childBytes += child.Bytes;
+        }
+
+        return new(DateTimeOffset.UtcNow,
+            ProcessTree.SelfMemoryBytes(),
+            childBytes,
+            children,
+            SelfThresholdMb * BytesPerMb,
+            TotalThresholdMb * BytesPerMb);
     }
 
     private void Check()
@@ -49,9 +71,13 @@ public sealed class MemoryWatchdog : IDisposable
 
         try
         {
-            var selfBytes = ProcessTree.SelfMemoryBytes();
-            var childBytes = ProcessTree.ChildMemoryBytes(_logger, out var childCount);
-            var totalBytes = selfBytes + childBytes;
+            var usage = Measure(_logger);
+            _usageSink?.Publish(usage);
+
+            var selfBytes = usage.SelfBytes;
+            var childBytes = usage.ChildBytes;
+            var childCount = usage.ChildCount;
+            var totalBytes = usage.TotalBytes;
 
             if (++_checkCount % LogEveryNthCheck == 1)
             {
