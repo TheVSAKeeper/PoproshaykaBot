@@ -410,7 +410,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
         var layout = DashboardLayout.BuildLayout();
 
-        _dashboardRevision = _dashboardLayoutCoordinator.Commit(layout, _dashboardRevision).Snapshot.Revision;
+        _dashboardRevision = _dashboardLayoutCoordinator
+            .Commit(layout, _dashboardRevision, DashboardLayout.TreeEdited)
+            .Snapshot.Revision;
         _dashboardEdited = false;
     }
 

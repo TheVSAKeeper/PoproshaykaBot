@@ -1,7 +1,11 @@
-﻿using PoproshaykaBot.Core.Dashboard;
+﻿using KeepShell.Bootstrap;
+using MahApps.Metro.IconPacks;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
+using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
+using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -12,15 +16,30 @@ namespace PoproshaykaBot.Wpf.Views.Settings;
 public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLayoutSectionViewModel>
 {
     private const string DragFormat = "DashboardTileTypeId";
-    private const double TileCellMinWidth = 56;
+    private const double MaxPreviewHeight = 420;
+    private const double MiniatureFontSize = 11;
+    private const double MiniatureIconSize = 14;
+    private const double MiniaturePadding = 8;
+    private const double MiniatureLineHeight = 6;
+    private const double DropFillOpacity = 0.35;
+
+    private readonly Dictionary<FrameworkElement, int[]> _panePaths = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<DashboardTileViewModel, FrameworkElement> _tileHosts = [];
+    private readonly Dictionary<string, int[]> _tilePaths = new(StringComparer.Ordinal);
 
     private DashboardLayoutSectionViewModel? _viewModel;
+    private Border? _dropHint;
+    private Border? _dropFill;
+    private double _scale = 1;
+    private double _builtWidth;
 
     public DashboardLayoutSectionView()
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
         Unloaded += OnUnloaded;
+        PreviewArea.SizeChanged += OnPreviewAreaSizeChanged;
+        PreviewArea.LayoutUpdated += OnPreviewAreaLayoutUpdated;
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -37,7 +56,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             _viewModel.LayoutChanged += OnLayoutChanged;
         }
 
-        RebuildEditor();
+        RebuildPreview();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -50,7 +69,58 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 
     private void OnLayoutChanged(object? sender, EventArgs e)
     {
-        RebuildEditor();
+        RebuildPreview();
+    }
+
+    private void OnPreviewAreaSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        RebuildPreview();
+    }
+
+    private void OnPreviewAreaLayoutUpdated(object? sender, EventArgs e)
+    {
+        if (Math.Abs(PreviewArea.ActualWidth - _builtWidth) > 0.5)
+        {
+            RebuildPreview();
+
+            return;
+        }
+
+        if (_viewModel is null || PreviewBox.Child is not FrameworkElement { ActualWidth: > 0 } canvas)
+        {
+            return;
+        }
+
+        var actual = PreviewBox.ActualWidth / canvas.ActualWidth;
+        var drifted = Math.Abs(actual - _scale) > 0.05;
+
+        _scale = actual;
+        _viewModel.Scale = actual;
+
+        if (drifted)
+        {
+            RebuildMiniatures();
+        }
+    }
+
+    private void RebuildMiniatures()
+    {
+        var area = _viewModel!.ContentArea;
+
+        HideDropHint();
+        _panePaths.Clear();
+        _tilePaths.Clear();
+        _tileHosts.Clear();
+
+        var canvas = new Grid
+        {
+            Width = area.Width,
+            Height = area.Height,
+        };
+
+        canvas.Children.Add(WrapOverflow(BuildContent(_viewModel), area));
+
+        PreviewBox.Child = canvas;
     }
 
     private void OnPaletteMouseDown(object sender, MouseButtonEventArgs e)
@@ -61,7 +131,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         }
     }
 
-    private void OnTileMouseDown(object sender, MouseButtonEventArgs e)
+    private void OnMiniatureMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is Border { Tag: string typeId } border)
         {
@@ -69,202 +139,433 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         }
     }
 
-    private void OnCellDragOver(object sender, DragEventArgs e)
+    private void OnPreviewDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DragFormat) ? DragDropEffects.Move : DragDropEffects.None;
+        if (_viewModel is null || e.Data.GetData(DragFormat) is not string typeId)
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+
+            return;
+        }
+
+        e.Effects = DragDropEffects.Move;
         e.Handled = true;
+
+        ShowDropHint(typeId, e.GetPosition(PreviewArea));
     }
 
-    private void OnCellDrop(object sender, DragEventArgs e)
+    private void OnPreviewDragLeave(object sender, DragEventArgs e)
     {
-        if (_viewModel is null || !e.Data.GetDataPresent(DragFormat) || e.Data.GetData(DragFormat) is not string typeId)
+        HideDropHint();
+    }
+
+    private void OnPreviewDrop(object sender, DragEventArgs e)
+    {
+        HideDropHint();
+
+        if (_viewModel is null || e.Data.GetData(DragFormat) is not string typeId)
         {
             return;
         }
 
-        if (sender is not FrameworkElement element)
+        var position = e.GetPosition(PreviewArea);
+
+        if (TargetAt(position) is not { } target)
         {
             return;
         }
 
-        switch (element.Tag)
+        var side = DashboardPaneSurface.Side(position, target.Bounds);
+
+        if (_tilePaths.TryGetValue(typeId, out var sourcePath))
         {
-            case CellPosition cell:
-                _viewModel.PlaceOrMove(typeId, cell.Row, cell.Column);
-                break;
-
-            case string targetTypeId when _viewModel.Placed(targetTypeId) is { } target:
-                if (!string.Equals(targetTypeId, typeId, StringComparison.Ordinal))
-                {
-                    _viewModel.PlaceOrMove(typeId, target.Row, target.Column);
-                }
-
-                break;
+            if (!sourcePath.AsSpan().SequenceEqual(target.Path))
+            {
+                _viewModel.Move(sourcePath, target.Path, side);
+            }
+        }
+        else
+        {
+            _viewModel.Add(typeId, target.Path, side);
         }
 
         e.Handled = true;
     }
 
-    private void RebuildEditor()
+    private DropTarget? TargetAt(Point position)
     {
-        EditorGrid.Children.Clear();
-        EditorGrid.ColumnDefinitions.Clear();
-        EditorGrid.RowDefinitions.Clear();
+        var paths = new List<int[]>();
+        var bounds = new List<Rect>();
+
+        foreach (var (element, path) in _panePaths)
+        {
+            if (!element.IsVisible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
+            {
+                continue;
+            }
+
+            paths.Add(path);
+            bounds.Add(DashboardPaneSurface.Bounds(element, PreviewArea));
+        }
+
+        var nearest = DashboardPaneSurface.NearestPane(bounds, position, DashboardPaneSurface.DropReach);
+
+        return nearest < 0 ? null : new(paths[nearest], bounds[nearest]);
+    }
+
+    private void ShowDropHint(string typeId, Point position)
+    {
+        if (_viewModel is null || TargetAt(position) is not { } target)
+        {
+            HideDropHint();
+
+            return;
+        }
+
+        var side = DashboardPaneSurface.Side(position, target.Bounds);
+        var placed = _tilePaths.TryGetValue(typeId, out var sourcePath);
+
+        if (placed && sourcePath!.AsSpan().SequenceEqual(target.Path))
+        {
+            HideDropHint();
+
+            return;
+        }
+
+        var pane = placed
+            ? _viewModel.PreviewMove(sourcePath!, target.Path, side)
+            : _viewModel.PreviewAdd(typeId, target.Path, side);
+
+        if (pane is null
+            || _viewModel.PreviewTile(typeId) is not { } tile
+            || DashboardPaneSurface.LeafOf(pane, tile) is not { } leaf
+            || DashboardPaneSurface.MeasurePane(pane, leaf, _viewModel.ContentArea, TileContentSize) is not { } rect)
+        {
+            HideDropHint();
+
+            return;
+        }
+
+        var origin = PreviewBox.TransformToAncestor(PreviewArea).Transform(default);
+
+        if (_dropHint is null)
+        {
+            _dropFill = new()
+            {
+                Opacity = DropFillOpacity,
+            };
+
+            _dropFill.SetResourceReference(Border.BackgroundProperty, ThemeKeys.AccentSoft);
+            _dropFill.SetResourceReference(Border.CornerRadiusProperty, ThemeKeys.RadiusM);
+
+            _dropHint = new()
+            {
+                BorderThickness = new(2),
+                IsHitTestVisible = false,
+                Child = _dropFill,
+            };
+
+            _dropHint.SetResourceReference(Border.BorderBrushProperty, ThemeKeys.AccentPrimary);
+            _dropHint.SetResourceReference(Border.CornerRadiusProperty, ThemeKeys.RadiusM);
+        }
+
+        if (!PreviewOverlay.Children.Contains(_dropHint))
+        {
+            PreviewOverlay.Children.Add(_dropHint);
+        }
+
+        _dropFill!.Visibility = side == PaneSide.None ? Visibility.Collapsed : Visibility.Visible;
+
+        _dropHint.Width = rect.Width * _scale;
+        _dropHint.Height = rect.Height * _scale;
+
+        Canvas.SetLeft(_dropHint, origin.X + (rect.X * _scale));
+        Canvas.SetTop(_dropHint, origin.Y + (rect.Y * _scale));
+    }
+
+    private void HideDropHint()
+    {
+        PreviewOverlay.Children.Clear();
+    }
+
+    private Size TileContentSize(DashboardTileViewModel tile)
+    {
+        return _tileHosts.TryGetValue(tile, out var host) ? host.DesiredSize : default;
+    }
+
+    private void RebuildPreview()
+    {
+        HideDropHint();
+
+        PreviewBox.Child = null;
+        _panePaths.Clear();
+        _tilePaths.Clear();
+        _tileHosts.Clear();
 
         if (_viewModel is null)
         {
             return;
         }
 
-        var columnCount = _viewModel.ColumnCount;
-        var rowCount = _viewModel.RowCount;
+        var area = _viewModel.ContentArea;
 
-        for (var column = 0; column < columnCount; column++)
+        if (area.Width <= 0 || area.Height <= 0 || PreviewArea.ActualWidth <= 0)
         {
-            EditorGrid.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) });
+            return;
         }
 
-        for (var row = 0; row < rowCount; row++)
-        {
-            EditorGrid.RowDefinitions.Add(new() { Height = new(1, GridUnitType.Star) });
-        }
+        var ceiling = PreviewArea.ActualHeight > 0 ? Math.Min(PreviewArea.ActualHeight, MaxPreviewHeight) : MaxPreviewHeight;
 
-        var occupied = new bool[rowCount, columnCount];
+        _builtWidth = PreviewArea.ActualWidth;
+        _scale = Math.Min(_builtWidth / area.Width, ceiling / area.Height);
+        _viewModel.Scale = _scale;
 
-        foreach (var placed in _viewModel.PlacedTiles)
+        RebuildMiniatures();
+    }
+
+    private FrameworkElement WrapOverflow(FrameworkElement content, Size area)
+    {
+        var required = _viewModel is { Stacked: false, Pane: { } pane } ? DashboardPaneSurface.RequiredHeight(pane) : 0;
+        var overflows = required > area.Height;
+        var grid = new Grid { Height = overflows ? required : double.NaN };
+
+        grid.Children.Add(content);
+
+        return new ScrollViewer
         {
-            for (var r = placed.Row; r < placed.Row + placed.RowSpan && r < rowCount; r++)
+            Content = grid,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = _viewModel?.Stacked == true || overflows
+                ? ScrollBarVisibility.Auto
+                : ScrollBarVisibility.Disabled,
+        };
+    }
+
+    private FrameworkElement BuildContent(DashboardLayoutSectionViewModel viewModel)
+    {
+        var surface = Surface(viewModel);
+
+        if (viewModel.Pane is { } pane)
+        {
+            if (!viewModel.Stacked)
             {
-                for (var c = placed.Column; c < placed.Column + placed.ColumnSpan && c < columnCount; c++)
-                {
-                    occupied[r, c] = true;
-                }
+                return surface.BuildRoot(pane);
             }
 
-            EditorGrid.Children.Add(CreateTilePanel(placed));
+            var stack = new Grid();
+
+            surface.Stack(stack, pane);
+
+            return stack;
         }
 
-        for (var row = 0; row < rowCount; row++)
-        {
-            for (var column = 0; column < columnCount; column++)
+        var bands = new Grid();
+
+        DashboardPaneSurface.ApplyTracks(
+            bands.ColumnDefinitions,
+            viewModel.Bands.Count,
+            static () => new ColumnDefinition(),
+            (definition, index) =>
             {
-                if (!occupied[row, column])
-                {
-                    EditorGrid.Children.Add(CreatePlaceholder(row, column));
-                }
-            }
+                var track = viewModel.Bands[index].Width;
+
+                definition.Width = track.Length;
+                definition.MaxWidth = track.Max;
+                definition.MinWidth = track.Length.IsStar ? DashboardPaneSurface.ScaledStarBandMinWidth : 0;
+            });
+
+        for (var index = 0; index < viewModel.Bands.Count; index++)
+        {
+            var content = surface.BuildBandContent(viewModel.Bands[index]);
+
+            Grid.SetColumn(content, index);
+            bands.Children.Add(content);
+        }
+
+        return bands;
+    }
+
+    private DashboardPaneSurface Surface(DashboardLayoutSectionViewModel viewModel)
+    {
+        return new()
+        {
+            Tile = CreateMiniature,
+            Hole = CreateHole,
+            Registered = Register,
+            Splitters = (grid, split, alongColumns) => DashboardPaneSurface.AddSplitters(
+                grid,
+                split,
+                alongColumns,
+                completed: (_, canceled) => CommitShares(grid, split.Path, alongColumns, canceled)),
+            Stacked = viewModel.Stacked,
+        };
+    }
+
+    private void Register(PaneLayout pane, FrameworkElement element)
+    {
+        _panePaths[element] = pane.Path;
+
+        if (pane is TilePaneLayout leaf)
+        {
+            _tilePaths[leaf.Tile.TypeId] = leaf.Path;
+            _tileHosts[leaf.Tile] = element;
         }
     }
 
-    private Border CreateTilePanel(PlacedTile placed)
+    private void CommitShares(Grid grid, int[] path, bool alongColumns, bool canceled)
     {
-        var meta = _viewModel!.Meta(placed.TypeId);
-
-        var title = meta?.Title ?? placed.TypeId;
-
-        var text = new TextBlock
+        if (canceled || _viewModel?.Resize(path, DashboardPaneSurface.Shares(grid, alongColumns)) != true)
         {
-            Text = title,
-            ToolTip = title,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.NoWrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            Margin = new(4),
-        };
-
-        text.SetResourceReference(TextBlock.ForegroundProperty, ThemeKeys.FgPrimary);
-
-        var border = new Border
-        {
-            BorderThickness = new(1),
-            CornerRadius = new(4),
-            Margin = new(2),
-            MinWidth = TileCellMinWidth,
-            Cursor = Cursors.SizeAll,
-            AllowDrop = true,
-            Tag = placed.TypeId,
-            Child = text,
-            ContextMenu = BuildContextMenu(placed),
-        };
-
-        border.SetResourceReference(Border.BackgroundProperty, ThemeKeys.AccentSoft);
-        border.SetResourceReference(Border.BorderBrushProperty, ThemeKeys.AccentPrimary);
-
-        border.PreviewMouseLeftButtonDown += OnTileMouseDown;
-        border.DragOver += OnCellDragOver;
-        border.Drop += OnCellDrop;
-
-        Grid.SetRow(border, placed.Row);
-        Grid.SetColumn(border, placed.Column);
-        Grid.SetRowSpan(border, placed.RowSpan);
-        Grid.SetColumnSpan(border, placed.ColumnSpan);
-
-        return border;
+            RebuildPreview();
+        }
     }
 
-    private Border CreatePlaceholder(int row, int column)
+    private FrameworkElement CreateHole()
     {
+        var inverse = 1 / _scale;
+
         var border = new Border
         {
-            BorderThickness = new(1),
-            CornerRadius = new(4),
-            Margin = new(2),
-            MinWidth = TileCellMinWidth,
-            AllowDrop = true,
+            BorderThickness = new(inverse),
+            CornerRadius = new(4 * inverse),
+            Margin = new(2 * inverse),
             Background = Brushes.Transparent,
-            Tag = new CellPosition(row, column),
         };
 
         border.SetResourceReference(Border.BorderBrushProperty, ThemeKeys.BorderSubtle);
 
-        border.DragOver += OnCellDragOver;
-        border.Drop += OnCellDrop;
+        return border;
+    }
 
-        Grid.SetRow(border, row);
-        Grid.SetColumn(border, column);
+    private FrameworkElement CreateMiniature(DashboardTileViewModel tile)
+    {
+        var inverse = 1 / _scale;
+
+        var icon = new PackIconLucide
+        {
+            Kind = tile.Icon,
+            Width = MiniatureIconSize * inverse,
+            Height = MiniatureIconSize * inverse,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        icon.SetResourceReference(ForegroundProperty, ThemeKeys.FgMuted);
+
+        var header = new StackPanel { Orientation = Orientation.Horizontal };
+
+        header.Children.Add(icon);
+
+        if (!tile.IsCollapsedToStrip)
+        {
+            var title = new TextBlock
+            {
+                Text = tile.Title,
+                ToolTip = tile.Title,
+                FontSize = MiniatureFontSize * inverse,
+                FontWeight = FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextWrapping = TextWrapping.NoWrap,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new(6 * inverse, 0, 0, 0),
+            };
+
+            title.SetResourceReference(ForegroundProperty, ThemeKeys.FgPrimary);
+            header.Children.Add(title);
+        }
+
+        var content = new Grid();
+
+        content.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new() { Height = new(1, GridUnitType.Star) });
+        content.Children.Add(header);
+
+        if (!tile.IsCollapsed)
+        {
+            var body = new StackPanel { Margin = new(0, MiniaturePadding * inverse, 0, 0) };
+
+            body.Children.Add(SchematicLine(inverse, 0.75));
+            body.Children.Add(SchematicLine(inverse, 0.45));
+
+            Grid.SetRow(body, 1);
+            content.Children.Add(body);
+        }
+
+        var border = new Border
+        {
+            BorderThickness = new(inverse),
+            CornerRadius = new(4 * inverse),
+            Margin = new(2 * inverse),
+            Padding = new(MiniaturePadding * inverse),
+            Cursor = Cursors.SizeAll,
+            Tag = tile.TypeId,
+            Child = content,
+            ContextMenu = BuildContextMenu(tile),
+        };
+
+        border.SetResourceReference(Border.BackgroundProperty, ThemeKeys.BgSurface);
+        border.SetResourceReference(Border.BorderBrushProperty, ThemeKeys.BorderSubtle);
+
+        border.PreviewMouseLeftButtonDown += OnMiniatureMouseDown;
 
         return border;
     }
 
-    private ContextMenu BuildContextMenu(PlacedTile placed)
+    private static Grid SchematicLine(double inverse, double share)
+    {
+        var line = new Grid { Margin = new(0, 0, 0, 4 * inverse) };
+
+        line.ColumnDefinitions.Add(new() { Width = new(share, GridUnitType.Star) });
+        line.ColumnDefinitions.Add(new() { Width = new(1 - share, GridUnitType.Star) });
+
+        var bar = new Border
+        {
+            Height = MiniatureLineHeight * inverse,
+            CornerRadius = new(MiniatureLineHeight * inverse / 2),
+        };
+
+        bar.SetResourceReference(Border.BackgroundProperty, ThemeKeys.BgBase);
+
+        line.Children.Add(bar);
+
+        return line;
+    }
+
+    private ContextMenu BuildContextMenu(DashboardTileViewModel tile)
     {
         var menu = new ContextMenu();
+        var record = _viewModel?.Record(tile.TypeId);
+        var meta = _viewModel?.Meta(tile.TypeId);
 
-        var maxColumnSpan = Math.Max(1, _viewModel!.ColumnCount - placed.Column);
-        var maxRowSpan = Math.Max(1, _viewModel.RowCount - placed.Row);
+        menu.Items.Add(BuildMaxSizeMenu(
+            "Макс. ширина",
+            _viewModel?.MaxWidthPresets ?? [],
+            record?.MaxWidth,
+            meta?.DefaultMaxWidth,
+            value => _viewModel?.SetMaxWidth(tile.TypeId, value)));
 
-        menu.Items.Add(BuildSpanMenu("Ширина", placed.ColumnSpan, maxColumnSpan, span => _viewModel.SetColumnSpan(placed.TypeId, span)));
-        menu.Items.Add(BuildSpanMenu("Высота", placed.RowSpan, maxRowSpan, span => _viewModel.SetRowSpan(placed.TypeId, span)));
+        menu.Items.Add(BuildMaxSizeMenu(
+            "Макс. высота",
+            _viewModel?.MaxHeightPresets ?? [],
+            record?.MaxHeight,
+            meta?.DefaultMaxHeight,
+            value => _viewModel?.SetMaxHeight(tile.TypeId, value)));
+
         menu.Items.Add(new Separator());
 
-        var meta = _viewModel.Meta(placed.TypeId);
+        var removeItem = new MenuItem { Header = "Убрать плитку" };
 
-        menu.Items.Add(BuildMaxSizeMenu("Макс. ширина", _viewModel.MaxWidthPresets, placed.MaxWidth, meta?.DefaultMaxWidth, value => _viewModel.SetMaxWidth(placed.TypeId, value)));
-        menu.Items.Add(BuildMaxSizeMenu("Макс. высота", _viewModel.MaxHeightPresets, placed.MaxHeight, meta?.DefaultMaxHeight, value => _viewModel.SetMaxHeight(placed.TypeId, value)));
-        menu.Items.Add(new Separator());
+        removeItem.Click += (_, _) =>
+        {
+            if (_tilePaths.TryGetValue(tile.TypeId, out var path))
+            {
+                _viewModel?.Remove(path);
+            }
+        };
 
-        var removeItem = new MenuItem { Header = "Удалить плитку" };
-        removeItem.Click += (_, _) => _viewModel.RemoveTile(placed.TypeId);
         menu.Items.Add(removeItem);
 
         return menu;
-    }
-
-    private static MenuItem BuildSpanMenu(string label, int currentSpan, int maxSpan, Action<int> setSpan)
-    {
-        var root = new MenuItem { Header = $"{label}: {currentSpan}" };
-
-        for (var i = 1; i <= maxSpan; i++)
-        {
-            var span = i;
-            var item = new MenuItem { Header = span.ToString(), IsCheckable = true, IsChecked = span == currentSpan };
-            item.Click += (_, _) => setSpan(span);
-            root.Items.Add(item);
-        }
-
-        return root;
     }
 
     private static MenuItem BuildMaxSizeMenu(string label, IReadOnlyList<int> presets, int? overrideValue, int? typeDefault, Action<int?> setValue)
@@ -321,5 +622,5 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         return root;
     }
 
-    private sealed record CellPosition(int Row, int Column);
+    private sealed record DropTarget(int[] Path, Rect Bounds);
 }

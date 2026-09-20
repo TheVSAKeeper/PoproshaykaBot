@@ -15,7 +15,7 @@
                    Style="{StaticResource TextBlock.Subtle}"
                    TextWrapping="Wrap"
                    Margin="0,0,0,16"
-                   Text="Перетащите плитки из палитры в сетку. Правый клик по плитке – ширина, высота и максимальные размеры. Результат виден на вкладке «Обзор»." />
+                   Text="Превью показывает панель «Обзор» в масштабе окна. Перетащите плитку из палитры на нужное место, тяните разделители, чтобы поменять пропорции. Правый клик по плитке – максимальные размеры и удаление." />
 
         <TextBlock DockPanel.Dock="Top"
                    Text="{Binding Notice}"
@@ -31,51 +31,30 @@
             <StackPanel Orientation="Horizontal"
                         VerticalAlignment="Center"
                         Margin="0,0,24,8">
-                <TextBlock Text="Колонки"
+                <TextBlock Text="Эталон"
                            VerticalAlignment="Center"
                            Margin="0,0,8,0" />
-                <Slider Width="150"
-                        Minimum="{Binding MinColumnCount}"
-                        Maximum="{Binding MaxColumnCount}"
-                        Value="{Binding ColumnCount, Mode=TwoWay}"
-                        TickFrequency="1"
-                        IsSnapToTickEnabled="True"
-                        VerticalAlignment="Center" />
-                <TextBlock Text="{Binding ColumnCount}"
+                <ComboBox MinWidth="170"
+                          VerticalAlignment="Center"
+                          ItemsSource="{Binding References}"
+                          SelectedItem="{Binding Reference, Mode=TwoWay}"
+                          DisplayMemberPath="Label" />
+                <TextBlock Text="{Binding ReferenceCaption}"
+                           Style="{StaticResource TextBlock.Subtle}"
                            VerticalAlignment="Center"
-                           MinWidth="16"
-                           Margin="8,0,0,0" />
-            </StackPanel>
-
-            <StackPanel Orientation="Horizontal"
-                        VerticalAlignment="Center"
-                        Margin="0,0,24,8">
-                <TextBlock Text="Строки"
-                           VerticalAlignment="Center"
-                           Margin="0,0,8,0" />
-                <Slider Width="150"
-                        Minimum="{Binding MinRowCount}"
-                        Maximum="{Binding MaxRowCount}"
-                        Value="{Binding RowCount, Mode=TwoWay}"
-                        TickFrequency="1"
-                        IsSnapToTickEnabled="True"
-                        VerticalAlignment="Center" />
-                <TextBlock Text="{Binding RowCount}"
-                           VerticalAlignment="Center"
-                           MinWidth="16"
-                           Margin="8,0,0,0" />
+                           Margin="12,0,0,0" />
             </StackPanel>
 
             <StackPanel Orientation="Horizontal"
                         VerticalAlignment="Center"
                         Margin="0,0,0,8">
+                <Button Content="Отменить"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding UndoCommand}"
+                        Margin="0,0,8,0" />
                 <Button Content="Сбросить"
                         Style="{StaticResource Button.Secondary}"
-                        Command="{Binding ResetLayoutCommand}"
-                        Margin="0,0,8,0" />
-                <Button Content="Очистить"
-                        Style="{StaticResource Button.Secondary}"
-                        Command="{Binding ClearGridCommand}" />
+                        Command="{Binding ResetLayoutCommand}" />
             </StackPanel>
         </WrapPanel>
 
@@ -97,7 +76,8 @@
                                Text="Палитра"
                                Style="{StaticResource TextBlock.Subtle}"
                                Margin="0,0,0,8" />
-                    <ItemsControl ItemsSource="{Binding AvailablePalette}">
+                    <ItemsControl ItemsSource="{Binding AvailablePalette}"
+                                  IsEnabled="{Binding CanEditTree}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Button Content="{Binding Title}"
@@ -119,8 +99,23 @@
                     BorderBrush="{DynamicResource Border.Subtle}"
                     BorderThickness="1"
                     CornerRadius="6"
-                    Padding="4">
-                <Grid x:Name="EditorGrid" />
+                    Background="{DynamicResource Bg.Base}"
+                    Padding="4"
+                    AllowDrop="True"
+                    DragOver="OnPreviewDragOver"
+                    DragLeave="OnPreviewDragLeave"
+                    Drop="OnPreviewDrop">
+                <Grid x:Name="PreviewArea"
+                      ClipToBounds="True">
+                    <Viewbox x:Name="PreviewBox"
+                             Stretch="Uniform"
+                             StretchDirection="Both"
+                             MaxHeight="420"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Top" />
+                    <Canvas x:Name="PreviewOverlay"
+                            IsHitTestVisible="False" />
+                </Grid>
             </Border>
         </Grid>
     </DockPanel>

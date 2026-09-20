@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Dashboard;
-using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.Bootstrap;
 
@@ -10,16 +9,13 @@ public sealed class DashboardEditSession : IDisposable
 {
     public static readonly TimeSpan WriteDelay = TimeSpan.FromMilliseconds(500);
 
-    private const int UndoDepth = 20;
-
     private readonly DashboardLayoutCoordinator _coordinator;
     private readonly ILogger? _logger;
     private readonly SynchronizationContext? _context;
-    private readonly List<DashboardLayoutSettings> _undo = [];
+    private readonly DashboardLayoutDraft _draft;
     private readonly ITimer _timer;
     private readonly object _gate = new();
 
-    private DashboardLayoutSettings _draft;
     private int _baseRevision;
     private bool _dirty;
     private bool _writing;
@@ -36,7 +32,7 @@ public sealed class DashboardEditSession : IDisposable
 
         var snapshot = coordinator.Read();
 
-        _draft = Clone(snapshot.Layout) ?? DashboardLayoutDefaults.Create();
+        _draft = new(snapshot.Layout);
         _baseRevision = snapshot.Revision;
 
         _timer = time.CreateTimer(_ => Flush(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
@@ -46,7 +42,7 @@ public sealed class DashboardEditSession : IDisposable
 
     public event EventHandler? Changed;
 
-    public DashboardLayoutSettings Draft => _draft;
+    public DashboardLayoutSettings Draft => _draft.Layout;
 
     public bool CanUndo
     {
@@ -54,88 +50,92 @@ public sealed class DashboardEditSession : IDisposable
         {
             lock (_gate)
             {
-                return _undo.Count > 0;
+                return _draft.CanUndo;
             }
         }
     }
 
     public bool Resize(IReadOnlyList<int> path, IReadOnlyList<double> weights)
     {
-        return Apply(root => DashboardPaneEditor.TryResize(root, path, weights, out var result) ? result : null);
+        return Edit(draft => draft.Resize(path, weights)
+            ? DashboardEditStatus.Applied
+            : DashboardEditStatus.Rejected) == DashboardEditStatus.Applied;
     }
 
     public DashboardEditStatus Swap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
     {
-        return ApplyWithStatus(root => DashboardPaneEditor.TrySwap(root, firstPath, secondPath, out var result) ? result : null);
+        return Edit(draft => draft.Swap(firstPath, secondPath));
     }
 
     public DashboardEditStatus Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        return ApplyWithStatus(root => DashboardPaneEditor.TryMove(root, sourcePath, targetPath, side, out var result) ? result : null);
+        return Edit(draft => draft.Move(sourcePath, targetPath, side));
     }
 
     public DashboardPane? PreviewSwap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
     {
-        return Preview(root => DashboardPaneEditor.TrySwap(root, firstPath, secondPath, out var result) ? result : null);
+        lock (_gate)
+        {
+            return _disposed
+                ? null
+                : _draft.Preview(root => DashboardPaneEditor.TrySwap(root, firstPath, secondPath, out var result) ? result : null);
+        }
     }
 
     public DashboardPane? PreviewMove(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        return Preview(root => DashboardPaneEditor.TryMove(root, sourcePath, targetPath, side, out var result) ? result : null);
+        lock (_gate)
+        {
+            return _disposed
+                ? null
+                : _draft.Preview(root => DashboardPaneEditor.TryMove(root, sourcePath, targetPath, side, out var result) ? result : null);
+        }
     }
 
     public DashboardEditStatus Add(string typeId, string targetTypeId, PaneSide side)
     {
-        return ApplyWithStatus(root =>
-        {
-            if (!DashboardPaneEditor.TryFindPath(root, targetTypeId, out var targetPath))
-            {
-                return null;
-            }
-
-            DashboardLayoutReconciler.AppendMissingTypes(_draft, [typeId]);
-
-            return DashboardPaneEditor.TrySplit(root, targetPath, side, typeId, out var result) ? result : null;
-        });
+        return Edit(draft => draft.Add(typeId, targetTypeId, side));
     }
 
     public DashboardRemoveStatus Remove(string typeId)
     {
         var status = DashboardRemoveStatus.Rejected;
+        var changed = false;
 
-        var applied = Apply(root =>
+        lock (_gate)
         {
-            if (!DashboardPaneEditor.TryFindPath(root, typeId, out var path))
+            if (_disposed)
             {
-                return null;
+                return DashboardRemoveStatus.Rejected;
             }
 
-            var removal = DashboardPaneEditor.Remove(root, path);
+            var version = _draft.Version;
 
-            status = removal.Status;
+            status = _draft.Remove(typeId);
+            changed = _draft.Version != version;
 
-            return removal.Root;
-        });
-
-        if (applied)
-        {
-            return DashboardRemoveStatus.Removed;
+            if (changed)
+            {
+                Arm();
+            }
         }
 
-        return status == DashboardRemoveStatus.LastTile ? DashboardRemoveStatus.LastTile : DashboardRemoveStatus.Rejected;
+        if (changed)
+        {
+            Raise();
+        }
+
+        return status;
     }
 
     public bool Undo()
     {
         lock (_gate)
         {
-            if (_disposed || _undo.Count == 0)
+            if (_disposed || !_draft.Undo())
             {
                 return false;
             }
-
-            _draft = _undo[^1];
-            _undo.RemoveAt(_undo.Count - 1);
 
             Arm();
         }
@@ -154,11 +154,7 @@ public sealed class DashboardEditSession : IDisposable
                 return;
             }
 
-            Remember(Clone(_draft)!);
-
-            _draft = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutDefaults.Create(), _draft);
-
-            DashboardLayoutReconciler.SyncRoot(_draft);
+            _draft.ResetToDefaults();
             Arm();
         }
 
@@ -180,15 +176,15 @@ public sealed class DashboardEditSession : IDisposable
 
             try
             {
-                var result = _coordinator.Commit(_draft, _baseRevision, keepDraftRoot: true);
+                var result = _coordinator.Commit(_draft.Layout, _baseRevision, keepDraftRoot: true);
 
                 _dirty = false;
                 _baseRevision = result.Snapshot.Revision;
                 merged = result.Merged;
 
-                if (merged && Clone(result.Snapshot.Layout) is { } layout)
+                if (merged && DashboardLayoutDraft.Clone(result.Snapshot.Layout) is { } layout)
                 {
-                    _draft = layout;
+                    _draft.Replace(layout);
                 }
             }
             catch (Exception exception)
@@ -231,92 +227,35 @@ public sealed class DashboardEditSession : IDisposable
         _timer.Dispose();
     }
 
-    private static DashboardLayoutSettings? Clone(DashboardLayoutSettings? layout)
+    private DashboardEditStatus Edit(Func<DashboardLayoutDraft, DashboardEditStatus> change)
     {
-        return layout is null ? null : JsonStoreClone.DeepClone(layout);
-    }
+        DashboardEditStatus status;
+        bool changed;
 
-    private static bool Fits(DashboardPane root)
-    {
-        return DashboardLayoutTree.TryMeasure(root) is { } size
-            && size.Columns <= DashboardLayoutDefaults.MaxColumnCount
-            && size.Rows <= DashboardLayoutDefaults.MaxRowCount;
-    }
-
-    private bool Apply(Func<DashboardPane, DashboardPane?> change)
-    {
-        return ApplyWithStatus(change) == DashboardEditStatus.Applied;
-    }
-
-    private DashboardPane? Preview(Func<DashboardPane, DashboardPane?> change)
-    {
         lock (_gate)
         {
-            if (_disposed || _draft.Root is not { } root)
-            {
-                return null;
-            }
-
-            return change(root) is { } updated && Fits(updated) ? updated : null;
-        }
-    }
-
-    private DashboardEditStatus ApplyWithStatus(Func<DashboardPane, DashboardPane?> change)
-    {
-        lock (_gate)
-        {
-            if (_disposed || _draft.Root is not { } root)
+            if (_disposed)
             {
                 return DashboardEditStatus.Unavailable;
             }
 
-            var previous = Clone(_draft)!;
+            var version = _draft.Version;
 
-            if (change(root) is not { } updated)
+            status = change(_draft);
+            changed = _draft.Version != version;
+
+            if (changed)
             {
-                _draft = previous;
-
-                return DashboardEditStatus.Rejected;
+                Arm();
             }
-
-            if (ReferenceEquals(updated, root))
-            {
-                return DashboardEditStatus.Applied;
-            }
-
-            if (!Fits(updated))
-            {
-                _draft = previous;
-
-                return DashboardEditStatus.GridFull;
-            }
-
-            _draft.Root = updated;
-
-            if (!DashboardLayoutReconciler.SyncTiles(_draft))
-            {
-                _draft = previous;
-
-                return DashboardEditStatus.Rejected;
-            }
-
-            Remember(previous);
-            Arm();
         }
 
-        Raise();
-
-        return DashboardEditStatus.Applied;
-    }
-
-    private void Remember(DashboardLayoutSettings previous)
-    {
-        _undo.Add(previous);
-
-        if (_undo.Count > UndoDepth)
+        if (changed)
         {
-            _undo.RemoveAt(0);
+            Raise();
         }
+
+        return status;
     }
 
     private void Arm()
@@ -341,15 +280,15 @@ public sealed class DashboardEditSession : IDisposable
     {
         lock (_gate)
         {
-            if (_writing || _disposed || e.Snapshot.Revision == _baseRevision || Clone(e.Snapshot.Layout) is not { } layout)
+            if (_writing || _disposed || e.Snapshot.Revision == _baseRevision
+                || DashboardLayoutDraft.Clone(e.Snapshot.Layout) is not { } layout)
             {
                 return;
             }
 
-            _draft = layout;
+            _draft.Replace(layout);
             _baseRevision = e.Snapshot.Revision;
             _dirty = false;
-            _undo.Clear();
             _timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         }
 

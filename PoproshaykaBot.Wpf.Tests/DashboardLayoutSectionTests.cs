@@ -1,4 +1,7 @@
-﻿using PoproshaykaBot.Core.Settings.Ui;
+﻿using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Settings.Ui;
+using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
+using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 
@@ -7,197 +10,347 @@ namespace PoproshaykaBot.Wpf.Tests;
 [TestFixture]
 public class DashboardLayoutSectionTests
 {
-    private sealed class FakeTile(string typeId) : DashboardTileViewModel(typeId, typeId);
-
     private static DashboardLayoutSectionViewModel CreateSection()
     {
-        return new([new FakeTile("stream-info"), new FakeTile("broadcast-status")]);
+        return new([new FakeTile("stream-info"), new FakeTile("broadcast-status"), new FakeTile("twitch-chat", fills: true)]);
     }
 
-    private static DashboardLayoutSettings SingleCellLayout()
+    private static DashboardLayoutSettings TwoColumnLayout()
     {
-        return new()
+        var layout = new DashboardLayoutSettings
         {
-            ColumnCount = 1,
+            ColumnCount = 2,
             RowCount = 1,
-            Tiles =
-            [
-                new() { Id = "stream-info", TypeId = "stream-info", Row = 0, Column = 0, ColumnSpan = 1, RowSpan = 1, IsVisible = true },
-                new() { Id = "broadcast-status", TypeId = "broadcast-status", Row = 0, Column = 1, ColumnSpan = 1, RowSpan = 1, IsVisible = true },
-            ],
+            Root = new SplitPane(SplitOrientation.Columns, [
+                new(new TilePane("stream-info"), 0.6),
+                new(new TilePane("twitch-chat"), 0.4),
+            ]),
         };
+
+        AddTile(layout, "stream-info", 0, 0);
+        AddTile(layout, "twitch-chat", 0, 1);
+
+        return layout;
     }
 
-    [Test]
-    public void Keeps_tiles_unknown_to_this_host()
+    private static void AddTile(
+        DashboardLayoutSettings layout,
+        string typeId,
+        int row,
+        int column,
+        bool visible = true,
+        int rowSpan = 1,
+        int columnSpan = 1)
     {
-        var section = CreateSection();
-
-        section.LoadSettings(new()
+        layout.Tiles.Add(new()
         {
-            ColumnCount = 4,
-            RowCount = 3,
-            Tiles =
-            [
-                new() { Id = "stream-info", TypeId = "stream-info", Row = 0, Column = 0, ColumnSpan = 1, RowSpan = 1, IsVisible = true },
-                new() { Id = "logs", TypeId = "logs", Row = 1, Column = 2, ColumnSpan = 2, RowSpan = 1, IsVisible = true },
-            ],
-        });
-
-        var layout = section.BuildLayout();
-        var logs = layout.Tiles.SingleOrDefault(tile => tile.TypeId == "logs");
-
-        Assert.That(logs, Is.Not.Null);
-        Assert.Multiple(() =>
-        {
-            Assert.That(logs!.Row, Is.EqualTo(1));
-            Assert.That(logs.Column, Is.EqualTo(2));
-            Assert.That(logs.ColumnSpan, Is.EqualTo(2));
-        });
-    }
-
-    [Test]
-    public void Keeps_hidden_tiles()
-    {
-        var section = CreateSection();
-
-        section.LoadSettings(new()
-        {
-            Tiles =
-            [
-                new() { Id = "stream-info", TypeId = "stream-info", IsVisible = true },
-                new() { Id = "broadcast-status", TypeId = "broadcast-status", IsVisible = false },
-            ],
-        });
-
-        var layout = section.BuildLayout();
-
-        Assert.That(layout.Tiles.Count(tile => tile.TypeId == "broadcast-status"), Is.EqualTo(1));
-    }
-
-    [Test]
-    public void Tile_that_no_longer_fits_the_grid_is_kept_hidden()
-    {
-        var section = CreateSection();
-
-        section.LoadSettings(SingleCellLayout());
-
-        var layout = section.BuildLayout();
-        var lost = layout.Tiles.Where(tile => tile.TypeId == "broadcast-status").ToList();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(lost, Has.Count.EqualTo(1), "Не поместившаяся плитка должна остаться в файле ровно один раз.");
-            Assert.That(lost[0].IsVisible, Is.False, "Не поместившуюся плитку выключают, а не стирают из файла.");
-            Assert.That(layout.Tiles.Count(tile => tile.IsVisible), Is.EqualTo(1));
-            Assert.That(section.Notice, Does.Contain("broadcast-status"), "Пользователю нужно сказать, какую плитку выключили.");
-            Assert.That(section.AvailablePalette.Select(meta => meta.TypeId), Does.Contain("broadcast-status"));
+            Id = typeId,
+            TypeId = typeId,
+            Order = layout.Tiles.Count,
+            Row = row,
+            Column = column,
+            ColumnSpan = columnSpan,
+            RowSpan = rowSpan,
+            IsVisible = visible,
         });
     }
 
-    [Test]
-    public void Tile_hidden_by_a_shrunk_grid_survives_a_round_trip()
+    private static DashboardLayoutSectionViewModel CreatePinwheelSection()
     {
-        var section = CreateSection();
+        var section = new DashboardLayoutSectionViewModel([
+            new FakeTile("stream-info"),
+            new FakeTile("broadcast-status"),
+            new FakeTile("twitch-chat", fills: true),
+            new FakeTile("obs-info"),
+            new FakeTile("broadcast-profiles"),
+        ]);
 
-        section.LoadSettings(SingleCellLayout());
-        section.LoadSettings(section.BuildLayout());
+        var layout = new DashboardLayoutSettings { ColumnCount = 3, RowCount = 3 };
 
-        var reloaded = section.BuildLayout().Tiles.Where(tile => tile.TypeId == "broadcast-status").ToList();
+        AddTile(layout, "stream-info", 0, 0, columnSpan: 2);
+        AddTile(layout, "broadcast-status", 0, 2, rowSpan: 2);
+        AddTile(layout, "twitch-chat", 1, 0, rowSpan: 2);
+        AddTile(layout, "obs-info", 2, 1, columnSpan: 2);
+        AddTile(layout, "broadcast-profiles", 1, 1);
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(reloaded, Has.Count.EqualTo(1));
-            Assert.That(reloaded[0].IsVisible, Is.False);
-            Assert.That(section.Notice, Is.Empty, "Повторная загрузка ничего не выключает, значит и предупреждать не о чем.");
-        });
+        section.LoadSettings(layout);
+
+        return section;
     }
 
-    [Test]
-    public void Placing_a_hidden_tile_does_not_duplicate_it()
+    private static int[] PathOf(DashboardLayoutSectionViewModel section, string typeId)
     {
-        var section = CreateSection();
+        var leaf = Leaf(section.Pane, typeId);
 
-        section.LoadSettings(new()
+        Assert.That(leaf, Is.Not.Null, $"Плитка {typeId} обязана быть в дереве превью.");
+
+        return leaf!.Path;
+    }
+
+    private static PaneLayout? Leaf(PaneLayout? pane, string typeId)
+    {
+        switch (pane)
         {
-            Tiles =
-            [
-                new() { Id = "broadcast-status", TypeId = "broadcast-status", IsVisible = false },
-            ],
-        });
+            case TilePaneLayout leaf:
+                return string.Equals(leaf.Tile.TypeId, typeId, StringComparison.Ordinal) ? leaf : null;
 
-        section.PlaceOrMove("broadcast-status", 0, 0);
+            case SplitPaneLayout split:
+                foreach (var child in split.Children)
+                {
+                    if (Leaf(child.Pane, typeId) is { } found)
+                    {
+                        return found;
+                    }
+                }
 
-        var layout = section.BuildLayout();
-        var tiles = layout.Tiles.Where(tile => tile.TypeId == "broadcast-status").ToList();
+                return null;
 
-        Assert.That(tiles, Has.Count.EqualTo(1));
-        Assert.That(tiles[0].IsVisible, Is.True);
+            default:
+                return null;
+        }
     }
 
     [Test]
     public void Carries_the_split_tree_from_the_file()
     {
         var section = CreateSection();
-        var root = new TilePane("stream-info");
 
-        section.LoadSettings(new()
+        section.LoadSettings(TwoColumnLayout());
+
+        var root = section.BuildLayout().Root as SplitPane;
+
+        Assert.Multiple(() =>
         {
-            ColumnCount = 1,
-            RowCount = 1,
-            Root = root,
-            Tiles =
-            [
-                new() { Id = "stream-info", TypeId = "stream-info", Row = 0, Column = 0, ColumnSpan = 1, RowSpan = 1, IsVisible = true },
-            ],
+            Assert.That(root, Is.Not.Null, "Без переноса дерева первое сохранение из настроек стёрло бы пропорции, заданные на дашборде.");
+            Assert.That(root!.Children[0].Weight, Is.EqualTo(0.6).Within(0.001));
+            Assert.That(section.Pane, Is.TypeOf<SplitPaneLayout>(), "Превью рисует то же дерево, что и дашборд.");
         });
-
-        Assert.That(section.BuildLayout().Root, Is.SameAs(root),
-            "Без переноса дерева первое сохранение из настроек стёрло бы пропорции, заданные на дашборде.");
     }
 
     [Test]
-    public void Resetting_the_layout_drops_the_split_tree()
+    public void Saving_after_an_edit_keeps_the_tree_the_hole_and_the_records_of_other_hosts()
     {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 2,
+            Root = new SplitPane(SplitOrientation.Columns, [
+                new(new SplitPane(SplitOrientation.Rows, [
+                    new(new TilePane("stream-info"), 0.5),
+                    new(new TilePane(DashboardLayoutTree.EmptySlotTypeId), 0.5),
+                ]), 0.6),
+                new(new SplitPane(SplitOrientation.Rows, [
+                    new(new TilePane("twitch-chat"), 0.5),
+                    new(new TilePane("logs"), 0.5),
+                ]), 0.4),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0);
+        AddTile(layout, "twitch-chat", 0, 1);
+        AddTile(layout, "logs", 1, 1);
+        AddTile(layout, "broadcast-status", 1, 0, visible: false);
+
+        var store = new FakeLayoutStore(layout);
+        var coordinator = new DashboardLayoutCoordinator(store);
         var section = CreateSection();
 
-        section.LoadSettings(new()
+        section.LoadSettings(coordinator.Read().Layout);
+        section.Resize(PathOf(section, "stream-info")[..^1], [0.3, 0.7]);
+
+        coordinator.Commit(section.BuildLayout(), coordinator.Read().Revision, keepDraftRoot: true);
+
+        var saved = store.Saved;
+
+        Assert.That(saved, Is.Not.Null);
+
+        var savedRoot = saved!.Root as SplitPane;
+        var column = savedRoot?.Children[0].Pane as SplitPane;
+
+        Assert.Multiple(() =>
         {
-            ColumnCount = 1,
-            RowCount = 1,
-            Root = new TilePane("stream-info"),
-            Tiles =
-            [
-                new() { Id = "stream-info", TypeId = "stream-info", Row = 0, Column = 0, ColumnSpan = 1, RowSpan = 1, IsVisible = true },
-            ],
+            Assert.That(savedRoot, Is.Not.Null, "Сохранение из настроек обязано унести дерево на диск, иначе пропорции теряются.");
+            Assert.That(column?.Children[1].Pane, Is.TypeOf<TilePane>(), "Дыра остаётся листом дерева.");
+            Assert.That((column?.Children[1].Pane as TilePane)?.TypeId, Is.EqualTo(DashboardLayoutTree.EmptySlotTypeId));
+            Assert.That(column?.Children[0].Weight, Is.EqualTo(0.3).Within(0.001), "Сдвинутая доля обязана дойти до файла.");
+            Assert.That(savedRoot?.Children[0].Weight, Is.EqualTo(0.6).Within(0.001), "Чужие доли правка одного узла не трогает.");
+            Assert.That(saved.Tiles.Count(tile => tile.TypeId == "logs"), Is.EqualTo(1), "Запись чужого хоста из файла не исчезает.");
+            Assert.That(saved.Tiles.Count(tile => tile.TypeId == "broadcast-status"), Is.EqualTo(1), "Скрытая запись остаётся в файле.");
+            Assert.That(saved.Tiles.Count(tile => tile.TypeId == DashboardLayoutTree.EmptySlotTypeId), Is.Zero,
+                "Зарезервированный тип дыры в Tiles попадать не должен.");
         });
-
-        section.ResetLayoutCommand.Execute(null);
-
-        Assert.That(section.BuildLayout().Root, Is.Null, "Сброс раскладки возвращает и геометрию к дефолтной.");
     }
 
     [Test]
-    public void The_same_type_twice_in_the_file_is_written_back_once()
+    public void A_removed_tile_returns_to_the_palette_and_stays_in_the_file()
     {
         var section = CreateSection();
 
-        section.LoadSettings(new()
-        {
-            Tiles =
-            [
-                new() { Id = "logs", TypeId = "logs", Row = 1, Column = 2, ColumnSpan = 1, RowSpan = 1, IsVisible = true },
-                new() { Id = "logs", TypeId = "logs", Row = 2, Column = 0, ColumnSpan = 1, RowSpan = 1, IsVisible = false },
-            ],
-        });
+        section.LoadSettings(TwoColumnLayout());
+        section.Remove(PathOf(section, "stream-info"));
 
         var layout = section.BuildLayout();
 
         Assert.Multiple(() =>
         {
-            Assert.That(layout.Tiles.Count(tile => string.Equals(tile.TypeId, "logs", StringComparison.Ordinal)), Is.EqualTo(1),
-                "Задвоенная запись из файла не должна размножаться при каждом сохранении.");
-            Assert.That(layout.Tiles.Select(tile => tile.Order), Is.Unique);
+            Assert.That(section.AvailablePalette.Select(meta => meta.TypeId), Does.Contain("stream-info"));
+            Assert.That(layout.Tiles.Count(tile => tile.TypeId == "stream-info"), Is.EqualTo(1));
+            Assert.That(layout.Tiles.Single(tile => tile.TypeId == "stream-info").IsVisible, Is.False,
+                "Убранная плитка выключается, а не стирается из файла.");
         });
+    }
+
+    [Test]
+    public void The_last_tile_cannot_be_removed()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.Remove(PathOf(section, "stream-info"));
+        section.Remove(PathOf(section, "twitch-chat"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(section.Notice, Does.Contain("последнюю плитку"));
+            Assert.That(Leaf(section.Pane, "twitch-chat"), Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public void A_tile_from_the_palette_splits_the_target_pane()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.Add("broadcast-status", PathOf(section, "twitch-chat"), PaneSide.Bottom);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Leaf(section.Pane, "broadcast-status"), Is.Not.Null, "Брошенная плитка обязана появиться в дереве превью.");
+            Assert.That(section.AvailablePalette.Select(meta => meta.TypeId), Does.Not.Contain("broadcast-status"));
+            Assert.That(section.BuildLayout().Tiles.Single(tile => tile.TypeId == "broadcast-status").IsVisible, Is.True);
+        });
+    }
+
+    [Test]
+    public void Undo_returns_the_previous_tree()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.Add("broadcast-status", PathOf(section, "twitch-chat"), PaneSide.Bottom);
+        section.UndoCommand.Execute(null);
+
+        Assert.That(Leaf(section.Pane, "broadcast-status"), Is.Null, "Отмена обязана вернуть дерево к состоянию до броска.");
+    }
+
+    [Test]
+    public void The_reference_decides_whether_the_preview_stacks()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 3,
+            RowCount = 1,
+            Root = new SplitPane(SplitOrientation.Columns, [
+                new(new TilePane("stream-info"), 0.34),
+                new(new TilePane("broadcast-status"), 0.33),
+                new(new TilePane("twitch-chat"), 0.33),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0);
+        AddTile(layout, "broadcast-status", 0, 1);
+        AddTile(layout, "twitch-chat", 0, 2);
+
+        var section = new DashboardLayoutSectionViewModel([
+            new FakeTile("stream-info", fills: true),
+            new FakeTile("broadcast-status", fills: true),
+            new FakeTile("twitch-chat", fills: true),
+        ]);
+
+        section.LoadSettings(layout);
+
+        section.Reference = DashboardPreviewReference.Window1920;
+        var wide = section.Stacked;
+
+        section.Reference = DashboardPreviewReference.Window1024;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(wide, Is.False, "На эталоне 1920 три колонки помещаются, стопки быть не должно.");
+            Assert.That(section.Stacked, Is.True,
+                "На эталоне 1024 сумма минимумов трёх колонок не влезает – дашборд там уходит в стопку, и превью обязано показать то же.");
+            Assert.That(section.ContentArea.Width, Is.EqualTo(1024 - DashboardPreviewReference.NavWidthExpanded).Within(0.001));
+        });
+    }
+
+    [Test]
+    public void The_caption_names_the_reference_and_the_scale()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.Reference = DashboardPreviewReference.Window1920;
+        section.Scale = 0.38;
+
+        Assert.That(section.ReferenceCaption, Does.Contain("1920").And.Contains("38"));
+    }
+
+    [Test]
+    public void A_layout_no_seam_cuts_says_so_before_the_first_attempt()
+    {
+        var section = CreatePinwheelSection();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(section.Pane, Is.Null, "Вертушку не режет ни один сквозной шов – дерева у неё нет.");
+            Assert.That(section.Bands, Is.Not.Empty, "Без дерева превью рисуется полосами.");
+            Assert.That(section.CanEditTree, Is.False, "Палитра обязана быть погашена: бросок в такую раскладку невыразим.");
+            Assert.That(section.Notice, Is.Not.Empty,
+                "Пользователю говорят, почему правка недоступна, сразу, а не молчат до первой неудачной попытки.");
+        });
+    }
+
+    [Test]
+    public void Changing_only_a_max_size_lets_a_newer_tree_from_disk_win()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.SetMaxWidth("stream-info", 420);
+
+        var persisted = TwoColumnLayout();
+
+        persisted.Root = new SplitPane(SplitOrientation.Columns, [
+            new(new TilePane("stream-info"), 0.25),
+            new(new TilePane("twitch-chat"), 0.75),
+        ]);
+
+        var layout = section.BuildLayout();
+
+        Assert.That(section.TreeEdited, Is.False, "Максимальная ширина плитки дерева не трогает.");
+
+        DashboardLayoutReconciler.MergeConcurrentEdits(layout, persisted, section.TreeEdited);
+
+        Assert.That(((SplitPane)layout.Root!).Children[0].Weight, Is.EqualTo(0.25).Within(0.001),
+            "Пропорции, записанные с дашборда, пока раздел был открыт, обязаны пережить сохранение настроек.");
+    }
+
+    [Test]
+    public void An_edit_of_the_tree_wins_over_the_proportions_on_disk()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+
+        Assert.That(section.Resize([], [0.3, 0.7]), Is.True, "Сдвиг разделителя корня обязан пройти.");
+        Assert.That(section.TreeEdited, Is.True, "Сдвиг разделителя – правка дерева.");
+
+        var layout = section.BuildLayout();
+
+        DashboardLayoutReconciler.MergeConcurrentEdits(layout, TwoColumnLayout(), section.TreeEdited);
+
+        Assert.That(((SplitPane)layout.Root!).Children[0].Weight, Is.EqualTo(0.3).Within(0.001),
+            "Своя правка пропорций в превью не должна теряться при сохранении настроек.");
     }
 }
