@@ -13,13 +13,14 @@ namespace PoproshaykaBot.Core.Infrastructure.Runtime;
 
 public static class StartupReport
 {
-    public static void LogEnvironment(ILogger logger, IReadOnlyList<string> arguments)
+    public static void LogEnvironment(ILogger logger, IReadOnlyList<string> arguments, string? build = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(arguments);
 
-        logger.LogInformation("Запуск версии {Version}: ОС {OperatingSystem}, среда {Framework}, процесс {ProcessId}, аргументы {Arguments}",
+        logger.LogInformation("Запуск версии {Version}{Build}: ОС {OperatingSystem}, среда {Framework}, процесс {ProcessId}, аргументы {Arguments}",
             ResolveVersion(),
+            string.IsNullOrWhiteSpace(build) ? string.Empty : $" ({build.Trim()})",
             RuntimeInformation.OSDescription,
             RuntimeInformation.FrameworkDescription,
             Environment.ProcessId,

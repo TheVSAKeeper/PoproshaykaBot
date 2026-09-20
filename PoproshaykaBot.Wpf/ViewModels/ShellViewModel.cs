@@ -124,6 +124,10 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public DashboardViewModel Overview { get; }
 
+    public string BuildLabel => AppBuildBadge.Current.Value;
+
+    public string BuildTooltip => AppBuildBadge.Current.Tooltip;
+
     public bool IsOverviewSelected => ReferenceEquals(Selected, _overviewSection);
 
     public override IPageHeader? EffectivePageHeader => _preferences.ShowPageHeader ? CurrentPageHeader : null;
