@@ -48,6 +48,15 @@ public sealed class StatisticsLoadOwnershipTests
 
     private const string BotContent = """{"totalMessages":7,"startTime":"2024-01-01T00:00:00Z"}""";
 
+    private const string BotCountersContent = """
+                                              {
+                                                "totalMessagesProcessed": 7,
+                                                "botStartTime": "2024-01-01T00:00:00Z",
+                                                "lastUpdated": "2024-01-01T00:00:00Z",
+                                                "totalUptime": "00:00:00"
+                                              }
+                                              """;
+
     private const string BrokenContent = "{ это не json";
 
     private string _directory = string.Empty;
@@ -338,6 +347,76 @@ public sealed class StatisticsLoadOwnershipTests
                     "Дождавшееся подключение читает уже перенесённый файл, и флаг у него законный");
                 Assert.That(users.GetById("u1")!.MessageCount, Is.EqualTo(500ul),
                     "Подключение обязано прочитать то, что записала внешняя запись, а не доимпортный файл");
+            }
+        }
+        finally
+        {
+            release.Set();
+
+            await Task.WhenAny(write, Task.Delay(WaitTimeout));
+            await saver.DisposeAsync();
+
+            entered.Dispose();
+            release.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task Остановка_во_время_холостого_переноса_ждёт_его_конца_и_сохраняет_накопленное()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
+        await File.WriteAllTextAsync(Path.Combine(_directory, BotFileName), BotCountersContent);
+        await File.WriteAllTextAsync(Path.Combine(_directory, CommandUsageFileName), BrokenContent);
+        await File.WriteAllTextAsync(Path.Combine(_source, "chat-zoom.txt"), "1,25");
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        Assert.That(loader.IsLoaded, Is.True,
+            "Повреждённый файл команд оставляет третий флаг опущенным, и решение об остановке держат только две погашаемые половины");
+
+        users.TrackMessage("u1", "Alice");
+        bot.IncrementMessagesProcessed();
+
+        var entered = new ManualResetEventSlim(false);
+        var release = new ManualResetEventSlim(false);
+
+        var write = Task.Run(() => saver.RunExternalWriteAsync(
+            () =>
+            {
+                entered.Set();
+                release.Wait(WaitTimeout);
+
+                return LegacyDataImporter.Import(_source, _directory, true, null);
+            },
+            static imported => imported.ExternalWrite));
+
+        try
+        {
+            Assert.That(entered.Wait(WaitTimeout), Is.True, "Внешняя запись обязана дойти до своей работы");
+
+            var stop = saver.StopAsync(new Progress<string>(), CancellationToken.None);
+            var waited = await Task.WhenAny(stop, Task.Delay(TimeSpan.FromMilliseconds(300)));
+
+            Assert.That(waited, Is.Not.SameAs(stop),
+                "Решение о финальном сохранении читает те же флаги, что гасит внешняя запись, поэтому оно обязано ждать её замка, а не опережать его");
+
+            release.Set();
+
+            await write;
+            await stop;
+
+            var savedUsers = await fileStore.LoadUsersAsync();
+            var savedBot = await fileStore.LoadBotAsync();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(savedUsers.Value!.Single().MessageCount, Is.EqualTo(101ul),
+                    "Остановка, попавшая в окно холостого переноса, обязана увидеть возвращённые флаги, а не уйти по ветке «загрузка не выполнялась»");
+                Assert.That(savedBot.Value!.TotalMessagesProcessed, Is.EqualTo(8ul),
+                    "Счётчики бота с последнего тика автосохранения теряются на ближайшем Replace, если их не дописать при остановке");
             }
         }
         finally

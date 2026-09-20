@@ -111,20 +111,14 @@ public sealed class StatisticsAutoSaver(
         _autoSaveTask = null;
         Interlocked.Exchange(ref _nextRunAtUtcTicks, 0);
 
-        if (!_botLoaded && !userLoader.IsLoaded && _commandUsageState != StatisticsLoadState.Loaded)
-        {
-            await FlushHistoryAsync(cancellationToken).ConfigureAwait(false);
-
-            logger.LogDebug("Остановка автосохранения без финального сохранения: загрузка статистики не выполнялась");
-            return;
-        }
-
         try
         {
-            await SaveNowAsync(cancellationToken).ConfigureAwait(false);
-            logger.LogInformation("Автосохранение статистики корректно остановлено");
+            if (await StopUnderSaveLockAsync(cancellationToken).ConfigureAwait(false))
+            {
+                logger.LogInformation("Автосохранение статистики корректно остановлено");
+            }
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             logger.LogError(exception, "Ошибка при финальном сохранении статистики");
             throw new InvalidOperationException($"Ошибка остановки автосохранения статистики: {exception.Message}", exception);
@@ -347,18 +341,26 @@ public sealed class StatisticsAutoSaver(
         }
     }
 
-    private async Task FlushHistoryAsync(CancellationToken cancellationToken)
+    private async Task<bool> StopUnderSaveLockAsync(CancellationToken cancellationToken)
     {
-        if (historyStore == null)
-        {
-            return;
-        }
-
         await _saveSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            historyStore.TryFlush();
+            if (!_botLoaded && !userLoader.IsLoaded && _commandUsageState != StatisticsLoadState.Loaded)
+            {
+                historyStore?.TryFlush();
+
+                logger.LogDebug("Остановка автосохранения без финального сохранения: загрузка статистики не выполнялась");
+
+                return false;
+            }
+
+            logger.LogDebug("Финальное сохранение статистики при остановке");
+
+            await SaveUnderSaveLockAsync(true, cancellationToken).ConfigureAwait(false);
+
+            return true;
         }
         finally
         {
@@ -370,6 +372,18 @@ public sealed class StatisticsAutoSaver(
     {
         await _saveSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
+        try
+        {
+            await SaveUnderSaveLockAsync(force, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _saveSemaphore.Release();
+        }
+    }
+
+    private async Task SaveUnderSaveLockAsync(bool force, CancellationToken cancellationToken)
+    {
         try
         {
             historyStore?.TryFlush();
@@ -453,10 +467,6 @@ public sealed class StatisticsAutoSaver(
             RecordRun(exception.Message);
             logger.LogError(exception, "Сбой при попытке сохранения статистики");
             throw new InvalidOperationException($"Ошибка сохранения статистики: {exception.Message}", exception);
-        }
-        finally
-        {
-            _saveSemaphore.Release();
         }
     }
 
