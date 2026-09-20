@@ -47,6 +47,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         StreamHistoryPageViewModel streamHistoryPage,
         CommandsPageViewModel commandsPage,
         LogsViewModel logsPage,
+        DiagnosticsViewModel diagnosticsPage,
         ThemeViewModel theme,
         ShellPreferences preferences,
         BotConnectionManager connectionManager,
@@ -101,6 +102,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Sections.Add(_streamHistorySection);
         Sections.Add(_commandsSection);
         Sections.Add(new("Логи", PackIconLucideKind.ScrollText, logsPage, key: SectionKeys.Logs) { StartsGroup = true });
+        Sections.Add(new("Диагностика", PackIconLucideKind.Gauge, diagnosticsPage, key: SectionKeys.Diagnostics));
 
         IsNavCollapsed = _preferences.NavCollapsed;
 

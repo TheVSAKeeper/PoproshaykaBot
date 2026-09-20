@@ -89,6 +89,28 @@ public sealed class ChatIngestionServiceTests
     }
 
     [Test]
+    public async Task Новая_сессия_гасит_признак_подключения_к_чату_до_попыток_подписки()
+    {
+        _eventSubClient.SessionId.Returns("session-1");
+
+        await _service.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(_service.IsJoined, Is.True);
+
+        _broadcasterIdProvider.GetAsync(Arg.Any<CancellationToken>()).Returns(string.Empty);
+
+        _eventSubClient.OnSessionWelcome += Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(
+            new EventSubSessionWelcomeArgs("session-2", null),
+            CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_service.IsJoined, Is.False);
+            Assert.That(_service.JoinedAt, Is.Null);
+        });
+    }
+
+    [Test]
     public async Task StartAsync_WhenNoActiveSession_DoesNotCallHelixUntilWelcome()
     {
         _eventSubClient.SessionId.Returns((string?)null);

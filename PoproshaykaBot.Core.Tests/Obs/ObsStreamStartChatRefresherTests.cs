@@ -168,6 +168,8 @@ public sealed class ObsStreamStartChatRefresherTests
 
         public bool IsConnected { get; private set; }
 
+        public DateTimeOffset? LastExchangeAt { get; private set; }
+
         public IReadOnlyList<string> PressButtonRequests
         {
             get
@@ -230,6 +232,7 @@ public sealed class ObsStreamStartChatRefresherTests
 
             if (_responses.TryGetValue(requestType, out var queue) && queue.Count > 0)
             {
+                LastExchangeAt = DateTimeOffset.UtcNow;
                 return Task.FromResult(queue.Dequeue());
             }
 

@@ -23,10 +23,18 @@ public sealed class ChatIngestionService(
     : IHostedComponent
 {
     private bool _subscribed;
+    private long _joinedAtUtcTicks;
+    private long _lastMessageAtUtcTicks;
 
     public string Name => "Чтение сообщений чата (EventSub)";
 
     public int StartOrder => 250;
+
+    public bool IsJoined => Interlocked.Read(ref _joinedAtUtcTicks) != 0;
+
+    public DateTimeOffset? JoinedAt => ToTimestamp(Interlocked.Read(ref _joinedAtUtcTicks));
+
+    public DateTimeOffset? LastMessageAt => ToTimestamp(Interlocked.Read(ref _lastMessageAtUtcTicks));
 
     public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
@@ -59,14 +67,22 @@ public sealed class ChatIngestionService(
         eventSubClient.OnSessionWelcome -= HandleSessionWelcomeAsync;
         eventSubClient.OnNotification -= HandleNotificationAsync;
         _subscribed = false;
+        Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
 
         logger.LogInformation("ChatIngestionService: отписка от EventSub");
         return Task.CompletedTask;
     }
 
+    private static DateTimeOffset? ToTimestamp(long utcTicks)
+    {
+        return utcTicks == 0 ? null : new DateTimeOffset(utcTicks, TimeSpan.Zero);
+    }
+
     private async Task HandleSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken ct)
     {
         logger.LogInformation("ChatIngestionService: EventSub сессия открыта ({SessionId}), регистрируем channel.chat.message", args.SessionId);
+
+        Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
 
         try
         {
@@ -108,6 +124,8 @@ public sealed class ChatIngestionService(
                         args.SessionId,
                         ct);
 
+                    Interlocked.Exchange(ref _joinedAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+
                     logger.LogInformation("ChatIngestionService: подписка channel.chat.message создана (broadcaster={BroadcasterId}, bot={BotId}, попытка {Attempt})",
                         broadcasterId, botId, attempt + 1);
 
@@ -115,6 +133,8 @@ public sealed class ChatIngestionService(
                 }
                 catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
                 {
+                    Interlocked.Exchange(ref _joinedAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+
                     logger.LogInformation(ex, "ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии – переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
                         broadcasterId, botId);
 
@@ -141,6 +161,8 @@ public sealed class ChatIngestionService(
         {
             return;
         }
+
+        Interlocked.Exchange(ref _lastMessageAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
 
         try
         {

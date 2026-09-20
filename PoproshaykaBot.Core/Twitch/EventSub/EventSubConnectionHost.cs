@@ -32,6 +32,8 @@ public sealed class EventSubConnectionHost :
     private CancellationTokenSource? _reconnectCts;
     private bool _stopRequested;
     private bool _disposed;
+    private StreamMonitoringStatus? _status;
+    private long _lastMessageAtUtcTicks;
 
     public EventSubConnectionHost(
         TwitchOAuthRole role,
@@ -47,9 +49,36 @@ public sealed class EventSubConnectionHost :
         _logger = logger;
 
         _eventSubClient.OnSessionWelcome += OnSessionWelcomeAsync;
+        _eventSubClient.OnNotification += OnNotificationAsync;
         _eventSubClient.OnDisconnected += OnDisconnectedAsync;
         _authSubscription = _eventBus.Subscribe(this);
     }
+
+    public TwitchOAuthRole Role => _role;
+
+    public StreamMonitoringStatus? CurrentStatus
+    {
+        get
+        {
+            lock (_lockObj)
+            {
+                return _status;
+            }
+        }
+    }
+
+    public DateTimeOffset? LastMessageAt
+    {
+        get
+        {
+            var ticks = Interlocked.Read(ref _lastMessageAtUtcTicks);
+            return ticks == 0 ? null : new DateTimeOffset(ticks, TimeSpan.Zero);
+        }
+    }
+
+    public int ReconnectAttempt => _reconnectionPolicy.CurrentAttempt;
+
+    public int ReconnectLimit => _reconnectionPolicy.MaxAttempts;
 
     public string Name => _role == TwitchOAuthRole.Bot
         ? "EventSub WebSocket (бот)"
@@ -144,6 +173,7 @@ public sealed class EventSubConnectionHost :
 
         _authSubscription.Dispose();
         _eventSubClient.OnSessionWelcome -= OnSessionWelcomeAsync;
+        _eventSubClient.OnNotification -= OnNotificationAsync;
         _eventSubClient.OnDisconnected -= OnDisconnectedAsync;
 
         CancellationTokenSource? runCts;
@@ -162,8 +192,15 @@ public sealed class EventSubConnectionHost :
         }
     }
 
+    private Task OnNotificationAsync(EventSubNotificationArgs args, CancellationToken cancellationToken)
+    {
+        Interlocked.Exchange(ref _lastMessageAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+        return Task.CompletedTask;
+    }
+
     private Task OnSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
+        Interlocked.Exchange(ref _lastMessageAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
         _reconnectionPolicy.Reset();
         _logger.LogInformation("EventSub session welcome ({Role}, SessionId: {SessionId}) – статус мониторинга: Connected", _role, args.SessionId);
         return PublishStatusAsync(StreamMonitoringStatus.Connected);
@@ -303,6 +340,11 @@ public sealed class EventSubConnectionHost :
 
     private Task PublishStatusAsync(StreamMonitoringStatus status, string? detail = null)
     {
+        lock (_lockObj)
+        {
+            _status = status;
+        }
+
         _logger.LogDebug("Публикация StreamMonitoringStatusChanged: {Role} {Status} ({Detail})", _role, status, detail ?? "–");
         return _eventBus.PublishAsync(new StreamMonitoringStatusChanged(_role, status, detail));
     }

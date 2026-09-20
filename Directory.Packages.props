@@ -6,10 +6,10 @@
   <ItemGroup>
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.3.2" />
     <PackageVersion Include="Cyotek.Windows.Forms.ColorPicker" Version="1.7.2" />
-    <PackageVersion Include="KeepShell" Version="0.1.201" />
-    <PackageVersion Include="KeepShell.Automation" Version="0.1.201" />
-    <PackageVersion Include="KeepShell.Mcp" Version="0.1.201" />
-    <PackageVersion Include="KeepShell.Testing" Version="0.1.201" />
+    <PackageVersion Include="KeepShell" Version="0.1.205" />
+    <PackageVersion Include="KeepShell.Automation" Version="0.1.205" />
+    <PackageVersion Include="KeepShell.Mcp" Version="0.1.205" />
+    <PackageVersion Include="KeepShell.Testing" Version="0.1.205" />
     <PackageVersion Include="MahApps.Metro.IconPacks.Lucide" Version="6.2.1" />
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.3650.58" />
     <PackageVersion Include="Serilog" Version="4.3.1" />

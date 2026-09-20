@@ -25,10 +25,34 @@ public sealed class StatisticsAutoSaver(
     private StatisticsLoadState _commandUsageState = StatisticsLoadState.NotRead;
     private bool _statisticsRewrittenExternally;
     private bool _statisticsRewriteReported;
+    private long _lastRunAtUtcTicks;
+    private long _nextRunAtUtcTicks;
+    private string? _lastError;
+
+    internal StatisticsAutoSaver(
+        IUserStatisticsRepository userRepository,
+        IBotStatisticsRepository botRepository,
+        CommandUsageRepository commandUsageRepository,
+        UserStatisticsLoader userLoader,
+        StatisticsFileStore fileStore,
+        ILogger<StatisticsAutoSaver> logger,
+        TimeSpan autoSaveInterval)
+        : this(userRepository, botRepository, commandUsageRepository, userLoader, fileStore, logger)
+    {
+        _autoSaveInterval = autoSaveInterval;
+    }
 
     public string Name => "Инициализация статистики...";
 
     public int StartOrder => 100;
+
+    public TimeSpan Interval => _autoSaveInterval;
+
+    public DateTimeOffset? LastRunAt => ToTimestamp(Interlocked.Read(ref _lastRunAtUtcTicks));
+
+    public DateTimeOffset? NextRunAt => ToTimestamp(Interlocked.Read(ref _nextRunAtUtcTicks));
+
+    public string? LastError => Volatile.Read(ref _lastError);
 
     public async Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
@@ -47,6 +71,7 @@ public sealed class StatisticsAutoSaver(
 
             _cts = new();
             _periodicTimer = new(_autoSaveInterval);
+            Interlocked.Exchange(ref _nextRunAtUtcTicks, (DateTimeOffset.UtcNow + _autoSaveInterval).UtcTicks);
             _autoSaveTask = RunAutoSaveLoopAsync(_cts.Token);
 
             logger.LogInformation("Автосохранение статистики запущено (интервал: {Interval})", _autoSaveInterval);
@@ -82,6 +107,7 @@ public sealed class StatisticsAutoSaver(
         _periodicTimer?.Dispose();
         _periodicTimer = null;
         _autoSaveTask = null;
+        Interlocked.Exchange(ref _nextRunAtUtcTicks, 0);
 
         if (!_botLoaded && !userLoader.IsLoaded && _commandUsageState != StatisticsLoadState.Loaded)
         {
@@ -282,7 +308,16 @@ public sealed class StatisticsAutoSaver(
         {
             while (await _periodicTimer!.WaitForNextTickAsync(ct).ConfigureAwait(false))
             {
-                await SaveAsync(false, ct).ConfigureAwait(false);
+                try
+                {
+                    await SaveAsync(false, ct).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    logger.LogError(exception, "Сбой тика автосохранения статистики, цикл продолжает работу");
+                }
+
+                Interlocked.Exchange(ref _nextRunAtUtcTicks, (DateTimeOffset.UtcNow + _autoSaveInterval).UtcTicks);
             }
         }
         catch (OperationCanceledException ex)
@@ -291,7 +326,12 @@ public sealed class StatisticsAutoSaver(
         }
         catch (Exception exception)
         {
+            Volatile.Write(ref _lastError, exception.Message);
             logger.LogError(exception, "Непредвиденная ошибка в фоновом цикле автосохранения статистики");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _nextRunAtUtcTicks, 0);
         }
     }
 
@@ -309,6 +349,7 @@ public sealed class StatisticsAutoSaver(
 
             if (!saveUsers && !saveBot && !saveCommands)
             {
+                RecordRun(null);
                 return;
             }
 
@@ -371,10 +412,12 @@ public sealed class StatisticsAutoSaver(
                 throw;
             }
 
+            RecordRun(null);
             logger.LogDebug("Сохранение статистики успешно завершено");
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            RecordRun(exception.Message);
             logger.LogError(exception, "Сбой при попытке сохранения статистики");
             throw new InvalidOperationException($"Ошибка сохранения статистики: {exception.Message}", exception);
         }
@@ -382,5 +425,16 @@ public sealed class StatisticsAutoSaver(
         {
             _saveSemaphore.Release();
         }
+    }
+
+    private static DateTimeOffset? ToTimestamp(long utcTicks)
+    {
+        return utcTicks == 0 ? null : new DateTimeOffset(utcTicks, TimeSpan.Zero);
+    }
+
+    private void RecordRun(string? error)
+    {
+        Interlocked.Exchange(ref _lastRunAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+        Volatile.Write(ref _lastError, error);
     }
 }

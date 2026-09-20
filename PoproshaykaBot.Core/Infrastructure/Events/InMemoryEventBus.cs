@@ -1,32 +1,39 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace PoproshaykaBot.Core.Infrastructure.Events;
 
-public sealed class InMemoryEventBus(ILogger<InMemoryEventBus> logger) : IEventBus
+public sealed class InMemoryEventBus(ILogger<InMemoryEventBus> logger, EventBusMetrics? metrics = null) : IEventBus
 {
     private const string OutsidePublishScopeName = "вне публикации";
 
     private readonly Dictionary<Type, List<HandlerRegistration>> _handlers = new();
     private readonly object _syncLock = new();
     private readonly AsyncLocal<PublishScope?> _currentScope = new();
+    private readonly EventBusMetrics _metrics = metrics ?? new();
 
     public async Task PublishAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default)
         where TEvent : IEvent
     {
+        var eventTypeName = typeof(TEvent).Name;
+        var startedAt = Stopwatch.GetTimestamp();
         HandlerRegistration[] snapshot;
 
         lock (_syncLock)
         {
-            if (!_handlers.TryGetValue(typeof(TEvent), out var registrations) || registrations.Count == 0)
-            {
-                logger.LogTrace("Нет подписчиков для события {EventType}", typeof(TEvent).Name);
-                return;
-            }
-
-            snapshot = registrations.ToArray();
+            snapshot = _handlers.TryGetValue(typeof(TEvent), out var registrations)
+                ? registrations.ToArray()
+                : [];
         }
 
-        logger.LogDebug("Публикация события {EventType} для {HandlerCount} подписчиков", typeof(TEvent).Name, snapshot.Length);
+        if (snapshot.Length == 0)
+        {
+            logger.LogTrace("Нет подписчиков для события {EventType}", eventTypeName);
+            _metrics.RecordPublish(eventTypeName, Stopwatch.GetElapsedTime(startedAt), DateTimeOffset.UtcNow);
+            return;
+        }
+
+        logger.LogDebug("Публикация события {EventType} для {HandlerCount} подписчиков", eventTypeName, snapshot.Length);
 
         var scope = new PublishScope();
         var previousScope = _currentScope.Value;
@@ -46,16 +53,19 @@ public sealed class InMemoryEventBus(ILogger<InMemoryEventBus> logger) : IEventB
                 }
                 catch (Exception ex)
                 {
+                    _metrics.RecordHandlerFailure(eventTypeName);
+
                     logger.LogError(ex,
                         "Обработчик события {EventType} завершился с ошибкой",
-                        typeof(TEvent).Name);
+                        eventTypeName);
                 }
             }
         }
         finally
         {
             _currentScope.Value = previousScope;
-            StartContinuations(scope, typeof(TEvent).Name);
+            _metrics.RecordPublish(eventTypeName, Stopwatch.GetElapsedTime(startedAt), DateTimeOffset.UtcNow);
+            StartContinuations(scope, eventTypeName);
         }
     }
 
@@ -161,12 +171,15 @@ public sealed class InMemoryEventBus(ILogger<InMemoryEventBus> logger) : IEventB
 
     private async Task RunContinuationAsync(Func<Task> continuation, string scopeName)
     {
+        _metrics.RecordContinuationStarted();
+
         try
         {
             await continuation().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
+            _metrics.RecordContinuationFailure();
             logger.LogError(ex, "Продолжение публикации ({Scope}) завершилось с ошибкой", scopeName);
         }
     }
