@@ -19,10 +19,13 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     private const string ResizeRefused = "Размер этой плитки сейчас не изменить.";
 
     private readonly Dictionary<DashboardTileViewModel, ContentControl> _hosts = [];
+    private readonly HashSet<DashboardTileViewModel> _placed = [];
     private readonly Dictionary<FrameworkElement, int[]> _panePaths = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<SplitPaneLayout, Grid> _splitGrids = new(ReferenceEqualityComparer.Instance);
 
     private DashboardViewModel? _viewModel;
+    private bool _subscribed;
+    private bool _rebuildPending;
     private DashboardTileViewModel? _dragTile;
     private Border? _dragShield;
     private Border? _dropHint;
@@ -38,27 +41,43 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
         SizeChanged += OnSizeChanged;
+        Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         PreviewKeyDown += OnPreviewKeyDown;
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (_viewModel is not null)
-        {
-            _viewModel.LayoutChanged -= OnLayoutChanged;
-            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        }
+        Detach();
 
         _viewModel = e.NewValue as DashboardViewModel;
 
-        if (_viewModel is not null)
+        Attach();
+        RebuildGrid();
+    }
+
+    private void Attach()
+    {
+        if (_subscribed || _viewModel is null)
         {
-            _viewModel.LayoutChanged += OnLayoutChanged;
-            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            return;
         }
 
-        RebuildGrid();
+        _viewModel.LayoutChanged += OnLayoutChanged;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _subscribed = true;
+    }
+
+    private void Detach()
+    {
+        if (!_subscribed || _viewModel is null)
+        {
+            return;
+        }
+
+        _viewModel.LayoutChanged -= OnLayoutChanged;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _subscribed = false;
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -84,6 +103,18 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     {
         _preview = null;
 
+        if (e.NewSize.Width <= 0 || e.NewSize.Height <= 0)
+        {
+            return;
+        }
+
+        if (_rebuildPending)
+        {
+            RebuildGrid(e.NewSize.Width, e.NewSize.Height);
+
+            return;
+        }
+
         if (e.WidthChanged && ComputeStacked(e.NewSize.Width) != _stacked)
         {
             RebuildGrid(e.NewSize.Width, e.NewSize.Height);
@@ -94,13 +125,14 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         ApplyVerticalOverflow(e.NewSize.Height);
     }
 
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        Attach();
+    }
+
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        if (_viewModel is not null)
-        {
-            _viewModel.LayoutChanged -= OnLayoutChanged;
-            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        }
+        Detach();
     }
 
     private void OnLayoutChanged(object? sender, EventArgs e)
@@ -142,12 +174,22 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private void RebuildGrid(double width, double height)
     {
+        if (width <= 0 || height <= 0)
+        {
+            _rebuildPending = true;
+
+            return;
+        }
+
+        _rebuildPending = false;
+
         DetachHosts();
         BandsGrid.Children.Clear();
         BandsGrid.ColumnDefinitions.Clear();
         BandsGrid.RowDefinitions.Clear();
         _panePaths.Clear();
         _splitGrids.Clear();
+        _placed.Clear();
         _preview = null;
 
         if (_viewModel is null)
@@ -163,6 +205,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         if (_viewModel.Pane is { } pane)
         {
             RebuildTree(pane);
+            DropUnplacedHosts();
             ApplyVerticalOverflow(height);
 
             return;
@@ -215,6 +258,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             BandsGrid.Children.Add(content);
         }
 
+        DropUnplacedHosts();
         ApplyVerticalOverflow(height);
     }
 
@@ -323,8 +367,18 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         }
     }
 
+    private void DropUnplacedHosts()
+    {
+        foreach (var tile in _hosts.Keys.Where(tile => !_placed.Contains(tile)).ToList())
+        {
+            _hosts.Remove(tile);
+        }
+    }
+
     private ContentControl GetOrCreateHost(DashboardTileViewModel tile)
     {
+        _placed.Add(tile);
+
         if (_hosts.TryGetValue(tile, out var existing))
         {
             return existing;

@@ -91,7 +91,10 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _streamHistoryPage = streamHistoryPage;
         _streamHistoryPage.UserRequested += OnUserRequested;
 
-        _overviewSection = new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter, key: SectionKeys.Overview);
+        _overviewSection = new("Обзор", PackIconLucideKind.LayoutDashboard, overview, activate: overview.OnEnter, key: SectionKeys.Overview)
+        {
+            KeepAlive = true,
+        };
 
         Sections.Add(_overviewSection);
         Sections.Add(_statisticsSection);
