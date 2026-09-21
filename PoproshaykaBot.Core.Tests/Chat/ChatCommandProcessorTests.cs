@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Tests.Polls;
@@ -67,6 +68,41 @@ public sealed class ChatCommandProcessorTests
             Assert.That(command.Calls, Is.Zero);
             Assert.That(sizeAfter, Is.EqualTo(sizeBefore), "Выключенная команда – не неизвестная, в файл она не пишется");
             Assert.That(_usage.GetSnapshot(), Is.Empty);
+        });
+    }
+
+    [TestCase("?", "?ранг", true)]
+    [TestCase("?", "!ранг", false)]
+    [TestCase("  ", "!ранг", true)]
+    public async Task Префикс_разбора_виден_снаружи_и_решает_судьбу_сообщения(string prefix, string message, bool handled)
+    {
+        var command = new FakeCommand("ранг");
+        var processor = new ChatCommandProcessor(
+            [command],
+            _settingsStore,
+            _usage,
+            NullLogger<ChatCommandProcessor>.Instance,
+            prefix);
+
+        var result = await processor.TryProcessAsync(message, CreateContext(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(processor.Prefix, Is.EqualTo(string.IsNullOrWhiteSpace(prefix) ? ChatCommandProcessor.DefaultPrefix : prefix));
+            Assert.That(message.StartsWith(processor.Prefix, StringComparison.Ordinal), Is.EqualTo(handled));
+            Assert.That(result.IsCommand, Is.EqualTo(handled));
+        });
+    }
+
+    [Test]
+    public void Ограничение_особым_списком_объявляет_команда_а_не_хост()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(((IChatCommand)new FakeCommand("ранг")).IsRestrictedToAllowedUsers, Is.False, "Обычная команда особым списком не ограничена");
+            Assert.That(
+                new TrumpCommand(new(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"))).IsRestrictedToAllowedUsers,
+                Is.True);
         });
     }
 
@@ -175,7 +211,7 @@ public sealed class ChatCommandProcessorTests
     public async Task Помощь_перечисляет_только_включённые_команды()
     {
         var processor = CreateProcessor(new FakeCommand("ранг"), new FakeCommand("донат"));
-        processor.Register(new HelpCommand(processor.GetEnabledCommands));
+        processor.Register(new HelpCommand(processor.GetEnabledCommands, processor.Prefix));
 
         _settingsStore.Mutate(settings => settings.Commands["донат"] = new()
         {
@@ -189,6 +225,35 @@ public sealed class ChatCommandProcessorTests
         {
             Assert.That(result.Response!.Text, Does.Contain("!ранг"));
             Assert.That(result.Response.Text, Does.Not.Contain("!донат"));
+        });
+    }
+
+    [TestCase("!", "!помощь ранг")]
+    [TestCase("!", "!помощь !ранг")]
+    [TestCase("?", "?помощь ранг")]
+    [TestCase("?", "?помощь ?ранг")]
+    public async Task Помощь_печатает_имена_префиксом_процессора(string prefix, string message)
+    {
+        var processor = new ChatCommandProcessor(
+            [new FakeCommand("ранг")],
+            _settingsStore,
+            _usage,
+            NullLogger<ChatCommandProcessor>.Instance,
+            prefix);
+
+        processor.Register(new HelpCommand(processor.GetEnabledCommands, processor.Prefix));
+
+        var list = await processor.TryProcessAsync($"{prefix}помощь", CreateContext(), CancellationToken.None);
+        var about = await processor.TryProcessAsync(message, CreateContext(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(list.Response!.Text, Does.Contain($"{prefix}ранг"));
+            Assert.That(about.Response!.Text, Does.Contain($"{prefix}ранг: тестовая команда"), "Аргумент разбирается с префиксом и без него");
+            Assert.That(
+                list.Response.Text.Contains("!ранг", StringComparison.Ordinal),
+                Is.EqualTo(prefix == ChatCommandProcessor.DefaultPrefix),
+                "При нестандартном префиксе решётки в выводе помощи не остаётся");
         });
     }
 

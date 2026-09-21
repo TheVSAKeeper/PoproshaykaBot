@@ -13,8 +13,6 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeader
 {
-    private const string Prefix = "!";
-
     private static readonly CommandContext ViewerProbe = new()
     {
         Username = "viewer",
@@ -75,7 +73,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
         foreach (var command in processor.GetAllCommands().OrderBy(command => command.Canonical, byName))
         {
-            var row = new CommandRowViewModel(command, Prefix, ProbeAccess(command));
+            var row = new CommandRowViewModel(command, processor.Prefix, ProbeAccess(command));
             row.EnabledChanged += OnRowEnabledChanged;
             row.TargetChanged += OnRowTargetChanged;
             _allRows.Add(row);
@@ -189,12 +187,16 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private static CommandAccess ProbeAccess(IChatCommand command)
     {
-        if (command.CanExecute(ViewerProbe))
+        if (command.IsRestrictedToAllowedUsers)
         {
-            return CommandAccess.Everyone;
+            return CommandAccess.AllowedUsers;
         }
 
-        return command.CanExecute(BroadcasterProbe) ? CommandAccess.Moderators : CommandAccess.None;
+        return command.CanExecute(ViewerProbe)
+            ? CommandAccess.Everyone
+            : command.CanExecute(BroadcasterProbe)
+                ? CommandAccess.Moderators
+                : CommandAccess.None;
     }
 
     private static CommandOverride GetOrAddOverride(CommandSettings settings, string canonical)

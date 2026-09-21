@@ -43,7 +43,7 @@ public static class ChatServiceCollectionExtensions
             var usageRepository = sp.GetRequiredService<CommandUsageRepository>();
             var logger = sp.GetRequiredService<ILogger<ChatCommandProcessor>>();
             var processor = new ChatCommandProcessor(commands, commandSettingsStore, usageRepository, logger);
-            processor.Register(new HelpCommand(processor.GetEnabledCommands));
+            processor.Register(new HelpCommand(processor.GetEnabledCommands, processor.Prefix));
             return processor;
         });
 

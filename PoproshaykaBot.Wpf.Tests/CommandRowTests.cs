@@ -27,6 +27,40 @@ public class CommandRowTests
         }
     }
 
+    private sealed class RestrictedCommand(string canonical = "x2illson", bool canExecute = true) : IChatCommand
+    {
+        public string Canonical => canonical;
+
+        public IReadOnlyCollection<string> Aliases => [];
+
+        public string Description => "курс монеты для своих";
+
+        public bool IsRestrictedToAllowedUsers => true;
+
+        public bool CanExecute(CommandContext context) => canExecute;
+
+        public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<OutgoingMessage?>(null);
+        }
+    }
+
+    private sealed class ModeratorsCommand : IChatCommand
+    {
+        public string Canonical => "игра";
+
+        public IReadOnlyCollection<string> Aliases => [];
+
+        public string Description => "сменить категорию";
+
+        public bool CanExecute(CommandContext context) => context.IsModerator || context.IsBroadcaster;
+
+        public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<OutgoingMessage?>(null);
+        }
+    }
+
     private static CommandRowViewModel Row()
     {
         return new(new FakeCommand(), "!", CommandAccess.Everyone);
@@ -159,6 +193,54 @@ public class CommandRowTests
             Assert.That(row.LastUsedByText, Is.EqualTo("qp_illson"));
             Assert.That(row.LastUsedSummary, Does.Contain("qp_illson"));
         });
+    }
+
+    [Test]
+    public void Права_различают_особый_список_и_берут_префикс_у_процессора()
+    {
+        var settingsPath = Path.Combine(Path.GetTempPath(), $"poproshayka-commands-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            var usage = new CommandUsageRepository(TimeProvider.System);
+            var settingsStore = new CommandSettingsStore(null, settingsPath);
+
+            var processor = new ChatCommandProcessor(
+                [new FakeCommand(), new RestrictedCommand(), new RestrictedCommand("тайное", false), new ModeratorsCommand()],
+                settingsStore,
+                usage,
+                NullLogger<ChatCommandProcessor>.Instance,
+                "?");
+
+            var page = new CommandsPageViewModel(
+                processor,
+                settingsStore,
+                usage,
+                NullLogger<CommandsPageViewModel>.Instance);
+
+            var everyone = page.Rows.Single(row => row.Canonical == "помощь");
+            var restricted = page.Rows.Single(row => row.Canonical == "x2illson");
+            var restrictedClosed = page.Rows.Single(row => row.Canonical == "тайное");
+            var moderators = page.Rows.Single(row => row.Canonical == "игра");
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(restricted.Access, Is.EqualTo(CommandAccess.AllowedUsers));
+                Assert.That(restricted.AccessText, Is.EqualTo("Особый список"));
+                Assert.That(
+                    restrictedClosed.Access,
+                    Is.EqualTo(CommandAccess.AllowedUsers),
+                    "Ни один проб не представляет пользователя из особого списка");
+                Assert.That(everyone.Access, Is.EqualTo(CommandAccess.Everyone));
+                Assert.That(moderators.Access, Is.EqualTo(CommandAccess.Moderators));
+                Assert.That(everyone.Invocation, Is.EqualTo("?помощь"), "Префикс страницы приходит из Core");
+                Assert.That(everyone.Aliases, Is.EqualTo(new[] { "?help", "?h" }));
+            });
+        }
+        finally
+        {
+            File.Delete(settingsPath);
+        }
     }
 
     [Test]
