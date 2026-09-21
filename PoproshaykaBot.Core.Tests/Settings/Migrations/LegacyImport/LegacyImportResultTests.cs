@@ -82,6 +82,24 @@ public class LegacyImportResultTests
             "ui-preferences.toml не JsonStore: владельца с гейтом у него нет, и обещать замороженную запись было бы неправдой");
     }
 
+    [Test]
+    public void Переписанным_считается_и_скопированное_и_то_что_переписала_миграция_раскладки()
+    {
+        var result = new LegacyImportResult
+        {
+            SourcePath = @"C:\old",
+            TargetPath = @"C:\new",
+            CopiedFiles = ["settings/settings.json", "settings/accounts.json"],
+            SkippedFiles = [],
+            Failures = [],
+            RequiresReauthorization = false,
+            MigratedSettingsFiles = ["ACCOUNTS.JSON", "polls.json"],
+        };
+
+        Assert.That(result.RewrittenSettingsFiles, Is.EquivalentTo(new[] { "settings.json", "accounts.json", "polls.json" }),
+            "Гейт ключуется именем файла, поэтому принесённое копированием и переписанное миграцией раскладки сходятся в один список без повторов");
+    }
+
     private static LegacyImportResult Build(string[] copied)
     {
         return new()

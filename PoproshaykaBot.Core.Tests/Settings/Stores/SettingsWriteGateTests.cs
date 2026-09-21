@@ -272,6 +272,88 @@ public sealed class SettingsWriteGateTests
             "Запись стора успела целиком до копирования, а копирование заместило её результат");
     }
 
+    [Test]
+    public async Task Разбор_принесённого_монолита_отнимает_право_записи_у_файлов_которые_он_породил()
+    {
+        var (source, target) = CreateMonolithSource();
+        var pollsPath = Path.Combine(target, "settings", "polls.json");
+        var gate = new SettingsWriteGate();
+        var polls = new PollsStore(null, pollsPath, gate);
+
+        await gate.RunExternalWriteAsync(
+            () => Task.FromResult(LegacyDataImporter.Import(source, target, false, null)),
+            static imported => imported.RewrittenSettingsFiles);
+
+        polls.Save(new());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllText(pollsPath), Does.Contain("777"),
+                "polls.json никто не копировал – его вынул из принесённого монолита разбор настроек, "
+                + "и стор с доимпортным состоянием в памяти переписывать его не вправе");
+
+            Assert.That(gate.IsRevoked(pollsPath), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task Возвращённый_в_прежний_вид_файл_права_записи_не_отнимает()
+    {
+        var (source, target) = CreateMonolithSource();
+        var pollsPath = Path.Combine(target, "settings", "polls.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(pollsPath)!);
+        File.WriteAllText(pollsPath, """{"historyMaxItems":11}""");
+
+        var gate = new SettingsWriteGate();
+        var polls = new PollsStore(null, pollsPath, gate);
+
+        await gate.RunExternalWriteAsync(
+            () => Task.FromResult(LegacyDataImporter.Import(source, target, false, null)),
+            static imported => imported.RewrittenSettingsFiles);
+
+        polls.Save(new() { HistoryMaxItems = 22 });
+
+        Assert.That(File.ReadAllText(pollsPath), Does.Contain("22"),
+            "С выключенной перезаписью разбор откатили к доимпортному снимку: на диске лежит то же, что у стора в памяти, "
+            + "и запрещать ему сохраняться до перезапуска не за что");
+    }
+
+    [Test]
+    public async Task Переезд_плоской_раскладки_на_месте_отнимает_право_записи_у_перенесённого_файла()
+    {
+        var target = Path.Combine(_directory.FullName, "рабочая");
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(target, "accounts.json"),
+            """{"botAccount":{"login":"thebot","accessToken":"принесённый-токен"}}""");
+
+        var accountsPath = Path.Combine(target, "settings", "accounts.json");
+        var gate = new SettingsWriteGate();
+        var accounts = new AccountsStore(null, accountsPath, gate);
+
+        await gate.RunExternalWriteAsync(
+            () => Task.FromResult(LegacyDataImporter.Import(target, target, false, null)),
+            static imported => imported.RewrittenSettingsFiles);
+
+        accounts.SaveAll(new(), new());
+
+        Assert.That(File.ReadAllText(accountsPath), Does.Contain("принесённый-токен"),
+            "Перенос на месте ничего не копирует, но миграция раскладки положила этот файл в settings/ мимо стора: "
+            + "стор его не читал и до перезапуска переписывать не вправе");
+    }
+
+    private (string Source, string Target) CreateMonolithSource()
+    {
+        var source = Path.Combine(_directory.FullName, "источник");
+        var target = Path.Combine(_directory.FullName, "рабочая");
+        Directory.CreateDirectory(Path.Combine(source, "settings"));
+        Directory.CreateDirectory(target);
+
+        File.WriteAllText(Path.Combine(source, "settings", "settings.json"),
+            """{"twitch":{"channel":"bobito217","polls":{"historyMaxItems":777}}}""");
+
+        return (source, target);
+    }
+
     private static TestCaseData Owner(string fileName, Func<string, SettingsWriteGate, Action> createWriter)
     {
         return new TestCaseData(fileName, createWriter).SetArgDisplayNames(fileName, "владелец");

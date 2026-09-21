@@ -38,14 +38,14 @@ public static class LegacyDataImporter
         {
             logger?.LogError(exception, "Импорт данных: путь {Path} не удалось разобрать", sourcePath);
             failures.Add(new(string.Empty, $"Не удалось разобрать путь: {sourcePath}"));
-            return Build(sourcePath, targetBaseDirectory, copied, skipped, failures, false, false, []);
+            return Build(sourcePath, targetBaseDirectory, copied, skipped, failures, false, false, [], []);
         }
 
         if (!Directory.Exists(fullSource))
         {
             logger?.LogWarning("Импорт данных: папка-источник {Source} недоступна – переносить нечего", fullSource);
             failures.Add(new(string.Empty, $"Папка-источник недоступна: {fullSource}"));
-            return Build(fullSource, fullTarget, copied, skipped, failures, false, false, []);
+            return Build(fullSource, fullTarget, copied, skipped, failures, false, false, [], []);
         }
 
         var settingsDirectory = Path.Combine(fullTarget, LegacyDataCatalog.SettingsFolderName);
@@ -67,11 +67,11 @@ public static class LegacyDataImporter
             CopyAll(fullSource, fullTarget, overwrite, copied, skipped, failures, logger);
         }
 
-        LegacySettingsLayoutMigrator.Run(fullTarget, settingsDirectory, logger);
+        var migratedSettingsFiles = new List<string>(LegacySettingsLayoutMigrator.Run(fullTarget, settingsDirectory, logger));
 
         if (copied.Contains(MonolithRelativePath, StringComparer.OrdinalIgnoreCase))
         {
-            RestoreFilesTouchedBySplit(snapshot, fullTarget, skipped, failures, logger);
+            RestoreFilesTouchedBySplit(snapshot, fullTarget, migratedSettingsFiles, skipped, failures, logger);
         }
 
         var leftovers = CollectUnmigratedLegacyFiles(fullTarget, logger);
@@ -91,7 +91,7 @@ public static class LegacyDataImporter
             logger?.LogWarning("Импорт данных: сохранённые токены доступа не перенесены – потребуется повторная авторизация в Twitch");
         }
 
-        return Build(fullSource, fullTarget, copied, skipped, failures, requiresReauthorization, inPlace, leftovers);
+        return Build(fullSource, fullTarget, copied, skipped, failures, requiresReauthorization, inPlace, leftovers, migratedSettingsFiles);
     }
 
     internal static void CopyAll(
@@ -210,6 +210,7 @@ public static class LegacyDataImporter
     private static void RestoreFilesTouchedBySplit(
         Dictionary<string, byte[]> snapshot,
         string target,
+        List<string> migratedSettingsFiles,
         List<LegacyImportSkip> skipped,
         List<LegacyImportFailure> failures,
         ILogger? logger)
@@ -217,19 +218,22 @@ public static class LegacyDataImporter
         foreach (var (path, original) in snapshot)
         {
             var relativePath = Path.GetRelativePath(target, path);
+            var fileName = Path.GetFileName(path);
 
             try
             {
-                if (File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(original))
+                var untouched = File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(original);
+
+                if (!untouched)
                 {
-                    continue;
+                    AtomicFile.Save(path, original, logger);
+                    skipped.Add(new(relativePath, LegacyImportSkipReason.TargetExists));
+
+                    logger?.LogWarning("Импорт данных: {File} возвращён в прежний вид – разбор перенесённого settings.json попытался его заменить, а перезапись выключена",
+                        relativePath);
                 }
 
-                AtomicFile.Save(path, original, logger);
-                skipped.Add(new(relativePath, LegacyImportSkipReason.TargetExists));
-
-                logger?.LogWarning("Импорт данных: {File} возвращён в прежний вид – разбор перенесённого settings.json попытался его заменить, а перезапись выключена",
-                    relativePath);
+                migratedSettingsFiles.RemoveAll(name => string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase));
             }
             catch (Exception exception)
             {
@@ -275,7 +279,8 @@ public static class LegacyDataImporter
         List<LegacyImportFailure> failures,
         bool requiresReauthorization,
         bool inPlace,
-        IReadOnlyList<string> unmigratedLegacyFiles)
+        IReadOnlyList<string> unmigratedLegacyFiles,
+        IReadOnlyList<string> migratedSettingsFiles)
     {
         return new()
         {
@@ -287,6 +292,7 @@ public static class LegacyDataImporter
             RequiresReauthorization = requiresReauthorization,
             IsInPlaceMigration = inPlace,
             UnmigratedLegacyFiles = unmigratedLegacyFiles,
+            MigratedSettingsFiles = migratedSettingsFiles,
         };
     }
 }

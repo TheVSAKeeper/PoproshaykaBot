@@ -20,28 +20,32 @@ public static class LegacySettingsLayoutMigrator
         "dashboard-layout.json",
     ];
 
-    public static void Run(string baseDirectory, string settingsDirectory, ILogger? logger = null)
+    public static IReadOnlyList<string> Run(string baseDirectory, string settingsDirectory, ILogger? logger = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(baseDirectory);
         ArgumentException.ThrowIfNullOrEmpty(settingsDirectory);
 
         if (PathComparison.AreEqual(baseDirectory, settingsDirectory))
         {
-            return;
+            return [];
         }
 
         if (!Directory.Exists(baseDirectory))
         {
-            return;
+            return [];
         }
 
         Directory.CreateDirectory(settingsDirectory);
-        RelocateFlatLayout(baseDirectory, settingsDirectory, logger);
-        SplitMonolithicSettings(settingsDirectory, logger);
+        var relocated = RelocateFlatLayout(baseDirectory, settingsDirectory, logger);
+        var split = SplitMonolithicSettings(settingsDirectory, logger);
+
+        return [.. relocated.Union(split, StringComparer.OrdinalIgnoreCase)];
     }
 
-    private static void RelocateFlatLayout(string baseDirectory, string settingsDirectory, ILogger? logger)
+    private static List<string> RelocateFlatLayout(string baseDirectory, string settingsDirectory, ILogger? logger)
     {
+        var relocated = new List<string>();
+
         foreach (var fileName in KnownSettingsFiles)
         {
             var legacy = Path.Combine(baseDirectory, fileName);
@@ -66,6 +70,7 @@ public static class LegacySettingsLayoutMigrator
                 AtomicFile.Save(target, temporaryPath => File.Copy(legacy, temporaryPath, true), logger);
                 var backupPath = BuildLegacyBackupPath(legacy);
                 File.Move(legacy, backupPath);
+                relocated.Add(fileName);
                 logger?.LogInformation("Legacy-файл перенесён: {Legacy} → {Target}; оригинал сохранён как {Backup}",
                     legacy,
                     target,
@@ -76,6 +81,8 @@ public static class LegacySettingsLayoutMigrator
                 logger?.LogError(exception, "Не удалось перенести {Legacy} в {Target}", legacy, target);
             }
         }
+
+        return relocated;
     }
 
     private static string BuildLegacyBackupPath(string legacyPath)
@@ -87,14 +94,16 @@ public static class LegacySettingsLayoutMigrator
         return Path.Combine(directory, $"{name}.legacy-{timestamp}{extension}");
     }
 
-    private static void SplitMonolithicSettings(string settingsDirectory, ILogger? logger)
+    private static IReadOnlyList<string> SplitMonolithicSettings(string settingsDirectory, ILogger? logger)
     {
         var settingsFile = Path.Combine(settingsDirectory, "settings.json");
 
         if (!File.Exists(settingsFile))
         {
-            return;
+            return [];
         }
+
+        var migration = SettingsMigrationResult.Unchanged;
 
         try
         {
@@ -102,14 +111,14 @@ public static class LegacySettingsLayoutMigrator
 
             if (JsonNode.Parse(json) is not JsonObject root)
             {
-                return;
+                return [];
             }
 
-            var changed = SettingsMigrator.TryMigrate(root, logger, settingsDirectory);
+            migration = SettingsMigrator.Migrate(root, logger, settingsDirectory);
 
-            if (!changed)
+            if (!migration.Changed)
             {
-                return;
+                return migration.SplitFiles;
             }
 
             JsonStoreBackup.CreateBackup(settingsFile, "pre-migration", logger, AccountsTokenRedactor.Redact);
@@ -121,5 +130,7 @@ public static class LegacySettingsLayoutMigrator
         {
             logger?.LogError(exception, "Ошибка миграции монолитного settings.json в {Directory}", settingsDirectory);
         }
+
+        return migration.SplitFiles;
     }
 }

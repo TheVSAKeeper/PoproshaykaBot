@@ -135,7 +135,7 @@ public class SettingsManager
 
         var baseDirectory = Path.GetDirectoryName(_settingsFilePath)!;
 
-        if (SettingsMigrator.TryMigrate(root, _logger, baseDirectory))
+        if (SettingsMigrator.Migrate(root, _logger, baseDirectory).Changed)
         {
             JsonStoreBackup.CreateBackup(_settingsFilePath, "pre-migration", _logger);
             var migratedJson = root.ToJsonString(JsonStoreOptions.Default);

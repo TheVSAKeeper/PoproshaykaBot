@@ -129,7 +129,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         var result = _settingsWriteGate is null
             ? await WithStatisticsScope().ConfigureAwait(true)
             : await _settingsWriteGate
-                .RunExternalWriteAsync(WithStatisticsScope, static imported => imported.CopiedSettingsFiles)
+                .RunExternalWriteAsync(WithStatisticsScope, static imported => imported.RewrittenSettingsFiles)
                 .ConfigureAwait(true);
 
         Result = result;

@@ -47,7 +47,7 @@ public sealed class LegacySettingsEndToEndMigrationTests
     {
         var root = LoadFixtureRoot();
 
-        SettingsMigrator.TryMigrate(root);
+        SettingsMigrator.Migrate(root);
 
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         var settings = root.Deserialize<AppSettings>(options);
@@ -93,14 +93,14 @@ public sealed class LegacySettingsEndToEndMigrationTests
 
             var root = JsonNode.Parse(File.ReadAllText(tempSettings, Encoding.UTF8))!.AsObject();
 
-            var firstChanged = SettingsMigrator.TryMigrate(root, NullLogger.Instance);
+            var firstChanged = SettingsMigrator.Migrate(root, NullLogger.Instance).Changed;
             Assert.That(firstChanged, Is.True, "Legacy-fixture должен мигрироваться при первом запуске");
 
             AtomicFile.Save(tempSettings, root.ToJsonString(options), NullLogger.Instance);
 
             var diskJson = File.ReadAllText(tempSettings, Encoding.UTF8);
             var rootRoundTrip = JsonNode.Parse(diskJson)!.AsObject();
-            var secondChanged = SettingsMigrator.TryMigrate(rootRoundTrip, NullLogger.Instance);
+            var secondChanged = SettingsMigrator.Migrate(rootRoundTrip, NullLogger.Instance).Changed;
             var settings = JsonSerializer.Deserialize<AppSettings>(diskJson, options);
 
             using (Assert.EnterMultipleScope())
@@ -157,8 +157,11 @@ public sealed class LegacySettingsEndToEndMigrationTests
 
             var root = JsonNode.Parse(File.ReadAllText(tempSettings, Encoding.UTF8))!.AsObject();
 
-            SettingsMigrator.TryMigrate(root, NullLogger.Instance, tempDir);
+            var migration = SettingsMigrator.Migrate(root, NullLogger.Instance, tempDir);
             AtomicFile.Save(tempSettings, root.ToJsonString(options), NullLogger.Instance);
+
+            Assert.That(migration.SplitFiles, Does.Contain("accounts.json"),
+                "Разбор монолита обязан доложить о каждом файле, который он записал мимо стора – по этому списку у сторов снимается право записи");
 
             var accountsStore = new AccountsStore(filePath: Path.Combine(tempDir, "accounts.json"));
             var bot = accountsStore.LoadBot();

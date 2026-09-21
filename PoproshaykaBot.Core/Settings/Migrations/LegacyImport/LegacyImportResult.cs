@@ -20,6 +20,8 @@ public sealed class LegacyImportResult
 
     public IReadOnlyList<string> UnmigratedLegacyFiles { get; init; } = [];
 
+    public IReadOnlyList<string> MigratedSettingsFiles { get; init; } = [];
+
     public bool CopiedStatistics => Copied(LegacyDataCatalog.UserStatisticsFileName)
         || Copied(LegacyDataCatalog.BotStatisticsFileName);
 
@@ -31,6 +33,9 @@ public sealed class LegacyImportResult
         [.. LegacyDataCatalog.StoreOwnedSettingsFiles.Where(CopiedSettingsFile)];
 
     public bool CopiedSettings => CopiedSettingsFiles.Count > 0;
+
+    public IReadOnlyList<string> RewrittenSettingsFiles =>
+        [.. CopiedSettingsFiles.Union(MigratedSettingsFiles, StringComparer.OrdinalIgnoreCase)];
 
     public StatisticsExternalWrite ExternalWrite => new(CopiedStatistics, CopiedStreamHistory, CopiedPollHistory);
 
