@@ -63,7 +63,7 @@ public static class LegacySettingsLayoutMigrator
 
             try
             {
-                File.Copy(legacy, target);
+                AtomicFile.Save(target, temporaryPath => File.Copy(legacy, temporaryPath, true), logger);
                 var backupPath = BuildLegacyBackupPath(legacy);
                 File.Move(legacy, backupPath);
                 logger?.LogInformation("Legacy-файл перенесён: {Legacy} → {Target}; оригинал сохранён как {Backup}",
