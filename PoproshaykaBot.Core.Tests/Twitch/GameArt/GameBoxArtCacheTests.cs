@@ -174,6 +174,42 @@ public sealed class GameBoxArtCacheTests
     }
 
     [Test]
+    public async Task Отказ_CDN_на_одной_игре_не_лишает_обложки_соседнюю()
+    {
+        Knows("Minecraft", "Dota 2");
+
+        var image = ImageHandler().Responder!;
+        var attempt = 0;
+
+        _cdn.Responder = request => attempt++ == 0
+            ? throw new HttpRequestException("сеть недоступна")
+            : image(request);
+
+        var paths = await Create().GetPathsAsync(["Minecraft", "Dota 2"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(paths.ContainsKey("Minecraft"), Is.False, "обложка упавшей игры в результат не попадает");
+            Assert.That(paths["Dota 2"], Does.EndWith(".jpg"));
+        }
+    }
+
+    [Test]
+    public async Task Три_отказа_CDN_подряд_обрывают_проход()
+    {
+        Knows("Игра 1", "Игра 2", "Игра 3", "Игра 4");
+        _cdn.Responder = _ => throw new HttpRequestException("сеть недоступна");
+
+        var paths = await Create().GetPathsAsync(["Игра 1", "Игра 2", "Игра 3", "Игра 4"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(paths, Is.Empty);
+            Assert.That(_cdn.Requests, Has.Count.EqualTo(3), "четвёртая игра батча в CDN уже не идёт");
+        }
+    }
+
+    [Test]
     public async Task Ответ_не_картинкой_на_диск_не_попадает()
     {
         Knows("Minecraft");
@@ -336,6 +372,236 @@ public sealed class GameBoxArtCacheTests
         }
     }
 
+    [Test]
+    public async Task Обложка_к_которой_давно_не_обращались_убирается_по_возрасту()
+    {
+        Knows("Minecraft", "Dota 2");
+        var lifetime = TimeSpan.FromDays(90);
+
+        var downloaded = await Create(imageLifetime: lifetime).GetPathsAsync(["Minecraft", "Dota 2"]);
+
+        _time.UtcNow += TimeSpan.FromDays(30);
+        Create(imageLifetime: lifetime).GetCachedPaths(["Minecraft"]);
+
+        _time.UtcNow += TimeSpan.FromDays(70);
+        var survivors = Create(imageLifetime: lifetime).GetCachedPaths(["Minecraft", "Dota 2"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(survivors.Keys, Is.EqualTo(new[] { "Minecraft" }));
+            Assert.That(File.Exists(downloaded["Minecraft"]), Is.True,
+                "время последнего обращения переживает перезапуск");
+            Assert.That(File.Exists(downloaded["Dota 2"]), Is.False);
+        }
+    }
+
+    [Test]
+    public async Task Потолок_размера_убирает_самые_давние_обложки()
+    {
+        Knows("Игра 1", "Игра 2", "Игра 3");
+        var cache = Create(maxTotalBytes: Jpeg.Length * 2);
+
+        var first = await cache.GetPathsAsync(["Игра 1"]);
+        _time.UtcNow += TimeSpan.FromHours(2);
+        var second = await cache.GetPathsAsync(["Игра 2"]);
+        _time.UtcNow += TimeSpan.FromHours(2);
+        var third = await cache.GetPathsAsync(["Игра 3"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.Exists(first["Игра 1"]), Is.False, "самая давняя обложка уходит первой");
+            Assert.That(File.Exists(second["Игра 2"]), Is.True);
+            Assert.That(File.Exists(third["Игра 3"]), Is.True);
+            Assert.That(Directory.EnumerateFiles(_directory, "*" + GameBoxArtCache.ImageExtension).Count(),
+                Is.EqualTo(2));
+        }
+    }
+
+    [Test]
+    public async Task Убранная_очисткой_обложка_скачивается_заново()
+    {
+        Knows("Minecraft");
+        var lifetime = TimeSpan.FromDays(90);
+        var first = await Create(imageLifetime: lifetime).GetPathsAsync(["Minecraft"]);
+
+        _time.UtcNow += TimeSpan.FromDays(100);
+        var restarted = Create(imageLifetime: lifetime);
+        var afterSweep = restarted.GetCachedPaths(["Minecraft"]);
+        var again = await restarted.GetPathsAsync(["Minecraft"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(afterSweep, Is.Empty, "убранная обложка отдаётся как отсутствие, а не путём в никуда");
+            Assert.That(again["Minecraft"], Is.EqualTo(first["Minecraft"]));
+            Assert.That(File.Exists(again["Minecraft"]), Is.True);
+            Assert.That(_cdn.Requests, Has.Count.EqualTo(2));
+        }
+    }
+
+    [Test]
+    public void Чужие_файлы_в_каталоге_кеша_очистка_не_трогает()
+    {
+        var note = Path.Combine(_directory, "readme.txt");
+        var alien = Path.Combine(_directory, "cover.jpg");
+        var longAgo = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.WriteAllText(note, "чужое");
+        File.WriteAllBytes(alien, Jpeg);
+        File.SetLastWriteTimeUtc(note, longAgo);
+        File.SetLastWriteTimeUtc(alien, longAgo);
+
+        Create(maxTotalBytes: 1).GetStatus();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.Exists(note), Is.True);
+            Assert.That(File.Exists(alien), Is.True, "кеш убирает только файлы, которые сам создал");
+        }
+    }
+
+    [Test]
+    public async Task Отказ_Twitch_запоминается_на_выдержку_и_промахом_не_считается()
+    {
+        _helix
+            .GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Throws(new TwitchAuthorizationMissingException("нет токена"));
+
+        var cache = Create(failureBackoff: TimeSpan.FromMinutes(5));
+
+        await cache.GetPathsAsync(["Minecraft"]);
+        await cache.GetPathsAsync(["Minecraft"]);
+
+        _time.UtcNow += TimeSpan.FromMinutes(4);
+        await cache.GetPathsAsync(["Minecraft"]);
+        var duringBackoff = cache.GetStatus().MissCount;
+
+        _time.UtcNow += TimeSpan.FromMinutes(1);
+        await cache.GetPathsAsync(["Minecraft"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(duringBackoff, Is.Zero, "отказ Twitch промахом не записывается");
+
+            await _helix.Received(2).GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Test]
+    public async Task Отказ_сети_не_мешает_отдавать_обложки_из_кеша()
+    {
+        Knows("Minecraft");
+        var cache = Create();
+        var downloaded = await cache.GetPathsAsync(["Minecraft"]);
+
+        _helix
+            .GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Throws(new HttpRequestException("сеть недоступна"));
+
+        var offline = await cache.GetPathsAsync(["Minecraft", "Dota 2"]);
+        var repeated = await cache.GetPathsAsync(["Minecraft", "Dota 2"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(offline["Minecraft"], Is.EqualTo(downloaded["Minecraft"]));
+            Assert.That(repeated.Keys, Is.EqualTo(new[] { "Minecraft" }));
+
+            await _helix.Received(2).GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Test]
+    public async Task Путь_вычеркнутый_уборкой_в_том_же_проходе_наружу_не_отдаётся()
+    {
+        Knows("Minecraft");
+        var cache = Create(maxTotalBytes: 1);
+
+        var paths = await cache.GetPathsAsync(["Minecraft"]);
+        var cached = cache.GetCachedPaths(["Minecraft"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(paths, Is.Empty, "уборка снесла только что скачанный файл, пути к нему в выдаче быть не должно");
+            Assert.That(cached, Is.Empty);
+            Assert.That(Directory.EnumerateFiles(_directory, "*" + GameBoxArtCache.ImageExtension), Is.Empty);
+        }
+    }
+
+    [TestCase(true, 1, TestName = "Отказ_Helix_взводит_выдержку_и_следующий_запрос_в_Helix_не_идёт")]
+    [TestCase(false, 2, TestName = "Отказ_CDN_выдержку_не_взводит_и_следующему_запросу_в_Helix_не_мешает")]
+    public async Task Выдержку_взводит_только_отказ_Helix(bool helixFails, int expectedHelixCalls)
+    {
+        Knows("Minecraft", "Dota 2");
+
+        if (helixFails)
+        {
+            _helix
+                .GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+                .Throws(new HttpRequestException("сеть недоступна"));
+        }
+        else
+        {
+            _cdn.Responder = _ => throw new HttpRequestException("сеть недоступна");
+        }
+
+        var cache = Create(failureBackoff: TimeSpan.FromMinutes(5));
+
+        var first = await cache.GetPathsAsync(["Minecraft"]);
+        var second = await cache.GetPathsAsync(["Dota 2"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first, Is.Empty);
+            Assert.That(second, Is.Empty);
+
+            await _helix.Received(expectedHelixCalls)
+                .GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Test]
+    public async Task Отказ_записи_на_диск_выдержку_не_взводит_и_называется_в_журнале_собой()
+    {
+        Knows("Minecraft", "Dota 2");
+        var cache = Create(failureBackoff: TimeSpan.FromMinutes(5));
+
+        var first = await cache.GetPathsAsync(["Minecraft"]);
+        cache.Invalidate("Minecraft");
+        Directory.CreateDirectory(first["Minecraft"]);
+
+        var blocked = await cache.GetPathsAsync(["Minecraft"]);
+        var next = await cache.GetPathsAsync(["Dota 2"]);
+        var warnings = _logger.Entries.Where(entry => entry.Level == LogLevel.Warning).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(blocked, Is.Empty, "не записанная на диск обложка путём наружу не уходит");
+            Assert.That(next, Is.Not.Empty, "отказ диска не мешает следующей игре");
+            Assert.That(warnings.Any(entry => entry.Message.Contains("не сохранена", StringComparison.Ordinal)),
+                Is.True, "отказ записи называется в журнале записью");
+            Assert.That(warnings.Any(entry => entry.Message.Contains("Обложки игр не загружаются", StringComparison.Ordinal)),
+                Is.False, "отказ диска сетевым отказом не объявляется");
+
+            await _helix.Received(3).GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Test]
+    public async Task Игра_которой_нет_на_Twitch_живёт_правилом_промаха_а_не_выдержкой()
+    {
+        var cache = Create(failureBackoff: TimeSpan.FromMinutes(5));
+
+        await cache.GetPathsAsync(["Выдуманная игра"]);
+
+        _time.UtcNow += TimeSpan.FromMinutes(10);
+        await cache.GetPathsAsync(["Выдуманная игра"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cache.GetStatus().MissCount, Is.EqualTo(1));
+
+            await _helix.Received(1).GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>());
+        }
+    }
+
     private static StubHttpMessageHandler ImageHandler()
     {
         return new()
@@ -350,7 +616,7 @@ public sealed class GameBoxArtCacheTests
         };
     }
 
-    private void Knows(string game)
+    private void Knows(params string[] games)
     {
         _helix
             .GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
@@ -359,13 +625,19 @@ public sealed class GameBoxArtCacheTests
                 var names = call.Arg<IEnumerable<string>>().ToArray();
 
                 return Task.FromResult<IReadOnlyList<GameInfo>>(
-                    names.Contains(game, StringComparer.OrdinalIgnoreCase)
-                        ? [new("509658", game, BoxArtTemplate, null)]
-                        : []);
+                    games
+                        .Where(game => names.Contains(game, StringComparer.OrdinalIgnoreCase))
+                        .Select(game => new GameInfo("509658", game, BoxArtTemplate, null))
+                        .ToArray());
             });
     }
 
-    private GameBoxArtCache Create(bool cacheOnly = false, int maxImageBytes = 2 * 1024 * 1024)
+    private GameBoxArtCache Create(
+        bool cacheOnly = false,
+        int maxImageBytes = 2 * 1024 * 1024,
+        TimeSpan? imageLifetime = null,
+        long? maxTotalBytes = null,
+        TimeSpan? failureBackoff = null)
     {
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient(TwitchEndpoints.BoxArtClient).Returns(_ => new HttpClient(_cdn, disposeHandler: false));
@@ -375,6 +647,9 @@ public sealed class GameBoxArtCacheTests
             Directory = _directory,
             CacheOnly = cacheOnly,
             MaxImageBytes = maxImageBytes,
+            ImageLifetime = imageLifetime ?? GameBoxArtCacheOptions.DefaultImageLifetime,
+            MaxTotalBytes = maxTotalBytes ?? GameBoxArtCacheOptions.DefaultMaxTotalBytes,
+            FailureBackoff = failureBackoff ?? GameBoxArtCacheOptions.DefaultFailureBackoff,
         };
 
         return new(_helix, factory, _time, options, _logger);
