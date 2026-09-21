@@ -17,7 +17,7 @@ public sealed class ObsStreamStartChatRefresherTests
         _store = new(_eventBus, null, _tempFile);
 
         _client = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         _settingsManager.Current.Returns(new AppSettings
         {
             Twitch =

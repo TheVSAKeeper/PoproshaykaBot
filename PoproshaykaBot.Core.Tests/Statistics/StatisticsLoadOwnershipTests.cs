@@ -1059,7 +1059,7 @@ public sealed class StatisticsLoadOwnershipTests
 
     private PollHistoryStore CreatePollHistoryStore(string? filePath = null)
     {
-        var pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null);
+        var pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null, null);
         pollsStore.Load().Returns(new PollsSettings());
 
         return new(pollsStore,

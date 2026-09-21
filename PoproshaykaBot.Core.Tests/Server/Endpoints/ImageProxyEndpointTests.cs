@@ -215,7 +215,7 @@ public sealed class ImageProxyEndpointTests
 
     private static SettingsManager BuildSettingsManager()
     {
-        var manager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
+        var manager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         manager.Current.Returns(new AppSettings());
         return manager;
     }

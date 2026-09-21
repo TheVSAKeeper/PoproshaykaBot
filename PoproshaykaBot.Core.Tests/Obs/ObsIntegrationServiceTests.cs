@@ -19,7 +19,7 @@ public sealed class ObsIntegrationServiceTests
             },
         };
 
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         _settingsManager.Current.Returns(_settings);
         _client = new();
         _service = new(_client, _settingsManager, NullLogger<ObsIntegrationService>.Instance);

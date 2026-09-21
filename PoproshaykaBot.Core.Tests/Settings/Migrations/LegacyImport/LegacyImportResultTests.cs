@@ -55,6 +55,33 @@ public class LegacyImportResultTests
         }
     }
 
+    [TestCase(new[] { "settings/settings.json" }, new[] { "settings.json" })]
+    [TestCase(new[] { "settings\\accounts.json", "users_statistics.json" }, new[] { "accounts.json" })]
+    [TestCase(new[] { "settings/polls.json", "settings/update.json" }, new[] { "polls.json", "update.json" })]
+    [TestCase(new[] { "settings/SETTINGS.JSON" }, new[] { "settings.json" })]
+    [TestCase(new[] { "stream_sessions.json" }, new string[0])]
+    [TestCase(new string[0], new string[0])]
+    public void Перенос_считается_тронувшим_настройки_по_именам_файлов_из_каталога(string[] copied, string[] expected)
+    {
+        var result = Build(copied);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.CopiedSettingsFiles, Is.EquivalentTo(expected),
+                "Имя файла берётся из каталога переноса, а путь в CopiedFiles лежит вместе с папкой settings – сверять их целиком нельзя");
+
+            Assert.That(result.CopiedSettings, Is.EqualTo(expected.Length > 0),
+                "По этому признаку строка итога переноса решает, называть ли настройки среди того, что до перезапуска не сохраняется");
+        }
+    }
+
+    [Test]
+    public void Настройки_вида_из_переноса_права_записи_ни_у_кого_не_отнимают()
+    {
+        Assert.That(Build(["settings/ui-preferences.toml"]).CopiedSettings, Is.False,
+            "ui-preferences.toml не JsonStore: владельца с гейтом у него нет, и обещать замороженную запись было бы неправдой");
+    }
+
     private static LegacyImportResult Build(string[] copied)
     {
         return new()

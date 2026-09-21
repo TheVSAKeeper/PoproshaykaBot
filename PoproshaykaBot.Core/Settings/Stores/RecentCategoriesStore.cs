@@ -10,9 +10,9 @@ public sealed class RecentCategoriesStore
 
     private readonly JsonStore<RecentCategoriesFileDto> _store;
 
-    public RecentCategoriesStore(ILogger<RecentCategoriesStore>? logger = null, string? filePath = null)
+    public RecentCategoriesStore(ILogger<RecentCategoriesStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
     {
-        _store = new(filePath ?? AppPaths.SettingsFile("recent-categories.json"), logger);
+        _store = new(filePath ?? AppPaths.SettingsFile("recent-categories.json"), logger, gate: gate);
     }
 
     public IReadOnlyList<GameCategoryCacheEntry> Load()

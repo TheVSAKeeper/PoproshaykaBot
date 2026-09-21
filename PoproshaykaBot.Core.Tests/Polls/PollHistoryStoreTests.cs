@@ -16,7 +16,7 @@ public class PollHistoryStoreTests
     public void SetUp()
     {
         _polls = new();
-        _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null);
+        _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null, null);
         _pollsStore.Load().Returns(_polls);
         _helix = Substitute.For<ITwitchHelixClient>();
         _broadcasterIdProvider = Substitute.For<IBroadcasterIdProvider>();

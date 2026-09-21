@@ -20,7 +20,7 @@ public sealed class TwitchOAuthServiceTests
         _settings = new();
         _settings.Twitch.ClientId = "test-client-id";
         _settings.Twitch.ClientSecret = "test-client-secret";
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         _settingsManager.Current.Returns(_settings);
         _accountsStore = new(filePath: Path.Combine(_tempDir, "accounts.json"));
 

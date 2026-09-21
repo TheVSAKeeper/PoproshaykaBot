@@ -27,10 +27,20 @@ public sealed class LegacyImportResult
 
     public bool CopiedPollHistory => Copied(LegacyDataCatalog.PollsHistoryFileName);
 
+    public IReadOnlyList<string> CopiedSettingsFiles =>
+        [.. LegacyDataCatalog.StoreOwnedSettingsFiles.Where(CopiedSettingsFile)];
+
+    public bool CopiedSettings => CopiedSettingsFiles.Count > 0;
+
     public StatisticsExternalWrite ExternalWrite => new(CopiedStatistics, CopiedStreamHistory, CopiedPollHistory);
 
     private bool Copied(string fileName)
     {
         return CopiedFiles.Any(file => string.Equals(file, fileName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool CopiedSettingsFile(string fileName)
+    {
+        return CopiedFiles.Any(file => string.Equals(Path.GetFileName(file), fileName, StringComparison.OrdinalIgnoreCase));
     }
 }

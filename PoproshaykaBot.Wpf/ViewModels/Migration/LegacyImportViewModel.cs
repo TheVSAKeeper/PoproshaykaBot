@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -15,6 +16,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private readonly ILogger _logger;
     private readonly bool _isSettingsEntry;
     private readonly StatisticsAutoSaver? _statisticsAutoSaver;
+    private readonly SettingsWriteGate? _settingsWriteGate;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
@@ -51,12 +53,14 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         bool isSettingsEntry,
         IFilePicker filePicker,
         ILogger logger,
-        StatisticsAutoSaver? statisticsAutoSaver = null)
+        StatisticsAutoSaver? statisticsAutoSaver = null,
+        SettingsWriteGate? settingsWriteGate = null)
     {
         _filePicker = filePicker;
         _logger = logger;
         _isSettingsEntry = isSettingsEntry;
         _statisticsAutoSaver = statisticsAutoSaver;
+        _settingsWriteGate = settingsWriteGate;
         CanOverwriteExisting = hasOwnData;
         CanDismiss = !isSettingsEntry;
 
@@ -110,12 +114,22 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         // TODO: перенос идёт на UI-потоке – окно не отвечает, пока копируются файлы, и прогресса не видно;
         // уводить в фоновую задачу с индикатором, когда появится источник, у которого статистика зрителей
         // и история стримов копируются достаточно долго, чтобы застывшее окно бросалось в глаза
-        var result = _statisticsAutoSaver is null
-            ? LegacyDataImporter.Import(path, overwrite, _logger)
-            : await _statisticsAutoSaver
-                .RunExternalWriteAsync(
-                    () => LegacyDataImporter.Import(path, overwrite, _logger),
-                    static imported => imported.ExternalWrite)
+        LegacyImportResult Import()
+        {
+            return LegacyDataImporter.Import(path, overwrite, _logger);
+        }
+
+        Task<LegacyImportResult> WithStatisticsScope()
+        {
+            return _statisticsAutoSaver is null
+                ? Task.FromResult(Import())
+                : _statisticsAutoSaver.RunExternalWriteAsync(Import, static imported => imported.ExternalWrite);
+        }
+
+        var result = _settingsWriteGate is null
+            ? await WithStatisticsScope().ConfigureAwait(true)
+            : await _settingsWriteGate
+                .RunExternalWriteAsync(WithStatisticsScope, static imported => imported.CopiedSettingsFiles)
                 .ConfigureAwait(true);
 
         Result = result;

@@ -18,7 +18,7 @@ public sealed class SseChatBridgeHandlerTests
     [SetUp]
     public void SetUp()
     {
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         settingsManager.Current.Returns(new AppSettings());
 
         _root = Path.Combine(Path.GetTempPath(), "poproshayka-sse-bridge-" + Guid.NewGuid().ToString("N"));

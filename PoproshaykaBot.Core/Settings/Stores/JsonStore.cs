@@ -14,6 +14,7 @@ internal sealed class JsonStore<T>
     private readonly Func<string, string>? _backupRedactor;
     private readonly Func<string, T?>? _parser;
     private readonly Func<T, string>? _describe;
+    private readonly SettingsWriteGate? _gate;
     private readonly object _syncLock = new();
 
     private T _state;
@@ -23,7 +24,8 @@ internal sealed class JsonStore<T>
         ILogger? logger = null,
         Func<string, string>? backupRedactor = null,
         Func<string, T?>? parser = null,
-        Func<T, string>? describe = null)
+        Func<T, string>? describe = null,
+        SettingsWriteGate? gate = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(filePath);
 
@@ -32,6 +34,7 @@ internal sealed class JsonStore<T>
         _backupRedactor = backupRedactor;
         _parser = parser;
         _describe = describe;
+        _gate = gate;
         _state = ReadFile();
     }
 
@@ -45,17 +48,18 @@ internal sealed class JsonStore<T>
         }
     }
 
-    public void Save(T value)
+    public bool Save(T value)
     {
         ArgumentNullException.ThrowIfNull(value);
 
         Exception? failure;
+        bool written;
         var snapshot = JsonStoreClone.DeepClone(value);
 
         lock (_syncLock)
         {
             var json = JsonSerializer.Serialize(snapshot, JsonStoreOptions.Default);
-            failure = TryWrite(json);
+            written = TryWrite(json, out failure);
 
             if (failure == null)
             {
@@ -68,10 +72,18 @@ internal sealed class JsonStore<T>
             ReportFailure(failure);
         }
 
+        if (!written)
+        {
+            LogBlocked();
+            return false;
+        }
+
         LogSaved(LogLevel.Information, "замена", snapshot);
+
+        return true;
     }
 
-    public void Mutate(Action<T> mutator)
+    public bool Mutate(Action<T> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
@@ -80,29 +92,34 @@ internal sealed class JsonStore<T>
                 mutator(state);
                 return true;
             },
-            _ => true);
+            _ => true,
+            out var written);
+
+        return written;
     }
 
     public TResult Mutate<TResult>(Func<T, TResult> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
-        return MutateCore(mutator, _ => true);
+        return MutateCore(mutator, _ => true, out _);
     }
 
     public bool MutateIf(Func<T, bool> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
-        return MutateCore(mutator, applied => applied);
+        return MutateCore(mutator, applied => applied, out _);
     }
 
-    private TResult MutateCore<TResult>(Func<T, TResult> mutator, Func<TResult, bool> shouldWrite)
+    private TResult MutateCore<TResult>(Func<T, TResult> mutator, Func<TResult, bool> shouldWrite, out bool written)
     {
         TResult result;
         Exception? failure = null;
-        var written = false;
+        var blocked = false;
         T draft;
+
+        written = false;
 
         lock (_syncLock)
         {
@@ -112,12 +129,12 @@ internal sealed class JsonStore<T>
             if (shouldWrite(result))
             {
                 var json = JsonSerializer.Serialize(draft, JsonStoreOptions.Default);
-                failure = TryWrite(json);
+                written = TryWrite(json, out failure);
+                blocked = !written && failure == null;
 
                 if (failure == null)
                 {
                     _state = draft;
-                    written = true;
                 }
             }
         }
@@ -125,6 +142,12 @@ internal sealed class JsonStore<T>
         if (failure != null)
         {
             ReportFailure(failure);
+        }
+
+        if (blocked)
+        {
+            LogBlocked();
+            return result;
         }
 
         if (written)
@@ -165,21 +188,48 @@ internal sealed class JsonStore<T>
         logger.Log(level, "Сохранён {Store} ({Operation}): {Description}", typeof(T).Name, operation, description);
     }
 
-    private Exception? TryWrite(string json)
+    private bool TryWrite(string json, out Exception? failure)
     {
-        try
-        {
-            AtomicFile.Save(_filePath, json, _logger);
-            return null;
-        }
-        catch (Exception exception)
-        {
-            _logger?.LogError(exception,
-                "Ошибка записи {FilePath}, в памяти осталась последняя записанная на диск версия",
-                _filePath);
+        Exception? captured = null;
 
-            return exception;
+        void Write()
+        {
+            try
+            {
+                AtomicFile.Save(_filePath, json, _logger);
+            }
+            catch (Exception exception)
+            {
+                _logger?.LogError(exception,
+                    "Ошибка записи {FilePath}, в памяти осталась последняя записанная на диск версия",
+                    _filePath);
+
+                captured = exception;
+            }
         }
+
+        bool allowed;
+
+        if (_gate == null)
+        {
+            Write();
+            allowed = true;
+        }
+        else
+        {
+            allowed = _gate.TryWrite(_filePath, Write);
+        }
+
+        failure = captured;
+
+        return allowed;
+    }
+
+    private void LogBlocked()
+    {
+        _logger?.LogWarning(
+            "Файл {FilePath} не переписан: право записи снято внешней записью в него. Изменения приняты в памяти и действуют до перезапуска приложения",
+            _filePath);
     }
 
     [DoesNotReturn]

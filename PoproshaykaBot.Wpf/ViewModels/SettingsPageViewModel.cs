@@ -43,6 +43,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     private const string ObsSectionKey = "obs";
 
+    private const string NotWrittenNotice = "Настройки применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните настройки ещё раз.";
+
     private static readonly string[] DraftlessSectionKeys = ["appearance", "misc", "mcp"];
 
     private readonly SettingsManager _settingsManager;
@@ -51,6 +53,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly ObsIntegrationStore _obsIntegrationStore;
     private readonly UpdateStore _updateStore;
     private readonly DebugChannelStore _debugChannelStore;
+    private readonly SettingsWriteGate _settingsWriteGate;
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly DashboardLayoutCoordinator _dashboardLayoutCoordinator;
     private readonly IEventBus _eventBus;
@@ -104,6 +107,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         ObsIntegrationStore obsIntegrationStore,
         UpdateStore updateStore,
         DebugChannelStore debugChannelStore,
+        SettingsWriteGate settingsWriteGate,
         ITargetChannelProvider targetChannelProvider,
         DashboardLayoutCoordinator dashboardLayoutCoordinator,
         IEventBus eventBus,
@@ -136,6 +140,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _obsIntegrationStore = obsIntegrationStore;
         _updateStore = updateStore;
         _debugChannelStore = debugChannelStore;
+        _settingsWriteGate = settingsWriteGate;
         _targetChannelProvider = targetChannelProvider;
         _dashboardLayoutCoordinator = dashboardLayoutCoordinator;
         _eventBus = eventBus;
@@ -432,9 +437,13 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                 return;
             }
 
-            var info = portChanged
-                ? $"Настройки сохранены. HTTP сервер перезапущен на порту {newPort}."
+            var saved = _settingsWriteGate.HasRevoked
+                ? NotWrittenNotice
                 : "Настройки успешно сохранены.";
+
+            var info = portChanged
+                ? $"{saved} HTTP сервер перезапущен на порту {newPort}."
+                : saved;
 
             _dialogService.Info("Настройки", info);
         }

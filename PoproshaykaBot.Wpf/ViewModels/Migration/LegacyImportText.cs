@@ -118,6 +118,13 @@ public static class LegacyImportText
         const string Restart = "Перенесённые данные вступят в силу после перезапуска приложения.";
 
         var frozen = new List<string>();
+        var pluralName = false;
+
+        if (result.CopiedSettings)
+        {
+            frozen.Add("настройки");
+            pluralName = true;
+        }
 
         if (result.CopiedStatistics)
         {
@@ -143,7 +150,7 @@ public static class LegacyImportText
             ? frozen[0]
             : $"{string.Join(", ", frozen.Take(frozen.Count - 1))} и {frozen[^1]}";
 
-        var verb = frozen.Count == 1 ? "не сохраняется" : "не сохраняются";
+        var verb = frozen.Count == 1 && !pluralName ? "не сохраняется" : "не сохраняются";
 
         return $"{Restart} До перезапуска {names} {verb} – чтобы не затереть перенесённое.";
     }

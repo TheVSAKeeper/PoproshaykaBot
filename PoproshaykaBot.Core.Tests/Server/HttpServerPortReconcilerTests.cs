@@ -70,7 +70,7 @@ public class HttpServerPortReconcilerTests
         settings.Twitch.RedirectUri = redirectUri;
         settings.Twitch.HttpServerPort = httpServerPort;
 
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         settingsManager.Current.Returns(settings);
 
         settingsManager
