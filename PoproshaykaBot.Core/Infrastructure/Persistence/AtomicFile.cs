@@ -30,15 +30,7 @@ public static class AtomicFile
             Directory.CreateDirectory(directory);
         }
 
-        try
-        {
-            WriteAtomic(targetPath, writeTemporary, logger);
-        }
-        catch
-        {
-            TryRestoreFromBackup(targetPath, logger);
-            throw;
-        }
+        WriteAtomic(targetPath, writeTemporary, logger);
     }
 
     private static void WriteAtomic(string targetPath, Action<string> writeTemporary, ILogger? logger)
@@ -53,12 +45,25 @@ public static class AtomicFile
             File.Copy(targetPath, backupPath, true);
 
             var oldPath = targetPath + ".old";
-            File.Replace(tempPath, targetPath, oldPath);
+            ReplaceTarget(tempPath, targetPath, oldPath, logger);
             TryDelete(oldPath, logger);
         }
         else
         {
             File.Move(tempPath, targetPath);
+        }
+    }
+
+    private static void ReplaceTarget(string tempPath, string targetPath, string oldPath, ILogger? logger)
+    {
+        try
+        {
+            File.Replace(tempPath, targetPath, oldPath);
+        }
+        catch
+        {
+            TryRestoreFromBackup(targetPath, logger);
+            throw;
         }
     }
 

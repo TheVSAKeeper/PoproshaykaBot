@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Persistence;
+using PoproshaykaBot.Core.Tests.Server;
 
 namespace PoproshaykaBot.Core.Tests.Infrastructure.Persistence;
 
@@ -16,10 +17,17 @@ public sealed class AtomicFileTests
     [TearDown]
     public void TearDown()
     {
-        if (Directory.Exists(_workDir))
+        if (!Directory.Exists(_workDir))
         {
-            Directory.Delete(_workDir, true);
+            return;
         }
+
+        foreach (var path in Directory.EnumerateFiles(_workDir, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+        }
+
+        Directory.Delete(_workDir, true);
     }
 
     private string _workDir = null!;
@@ -85,15 +93,79 @@ public sealed class AtomicFileTests
 
         Directory.CreateDirectory(_targetPath + ".old");
 
+        var logger = new RecordingLogger<AtomicFileTests>();
+
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(() => AtomicFile.Save(_targetPath, "v3"), Throws.InstanceOf<IOException>());
+            Assert.That(() => AtomicFile.Save(_targetPath, "v3", logger), Throws.InstanceOf<IOException>());
 
             Assert.That(File.ReadAllText(_targetPath), Is.EqualTo("v2"),
                 "Сорвавшаяся запись обязана вернуть файл из .bak: читателю достаётся последняя хорошая версия, а не обрывок.");
 
             Assert.That(File.ReadAllText(_targetPath + ".bak"), Is.EqualTo("v2"));
+
+            Assert.That(logger.Entries.Any(entry => entry.Message.Contains("восстановлено из бэкапа")), Is.True,
+                "Подмена – единственная фаза, где целевой файл уже мог измениться, и откат из .bak обязан остаться именно здесь.");
         }
+    }
+
+    [TestCaseSource(nameof(PreSwapFailures))]
+    public void Бросок_до_подмены_не_кладёт_резервную_копию_поверх_целевого_файла(Action<string> arrangeFailure)
+    {
+        AtomicFile.Save(_targetPath, "v1");
+        AtomicFile.Save(_targetPath, "v2");
+
+        arrangeFailure(_targetPath);
+
+        var logger = new RecordingLogger<AtomicFileTests>();
+
+        Assert.Catch(() => AtomicFile.Save(_targetPath, "v3", logger),
+            "Сорвавшаяся запись обязана дойти до вызывающего, а не быть проглоченной откатом.");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllText(_targetPath), Is.EqualTo("v2"),
+                "До File.Replace целевой файл не тронут, и откат из .bak откатил бы данные на поколение назад.");
+
+            Assert.That(File.ReadAllText(_targetPath + ".bak"), Is.EqualTo("v1"),
+                ".bak прошлой удачной записи остаётся как был – он старше целевого файла.");
+
+            Assert.That(logger.Entries, Is.Empty,
+                "Восстанавливать нечего, поэтому о восстановлении не сообщается и оно не пробуется.");
+        }
+    }
+
+    [Test]
+    public void Бросок_без_целевого_файла_не_создаёт_его_из_чужого_бэкапа()
+    {
+        var backupPath = _targetPath + ".bak";
+        File.WriteAllText(backupPath, "чужое");
+        Directory.CreateDirectory(_targetPath);
+
+        var logger = new RecordingLogger<AtomicFileTests>();
+
+        Assert.Catch(() => AtomicFile.Save(_targetPath, "v1", logger),
+            "Сорвавшийся File.Move обязан дойти до вызывающего.");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.Exists(_targetPath), Is.False,
+                "Целевого файла не было – восстанавливать нечего по определению.");
+
+            Assert.That(File.ReadAllText(backupPath), Is.EqualTo("чужое"));
+
+            Assert.That(logger.Entries, Is.Empty,
+                "Попытка отката в этой ветке значит, что .bak чужой жизни файла лёг бы на его место.");
+        }
+    }
+
+    private static IEnumerable<TestCaseData> PreSwapFailures()
+    {
+        yield return new TestCaseData((Action<string>)(target => Directory.CreateDirectory(target + ".tmp")))
+            .SetName("Бросок_на_записи_временного_файла");
+
+        yield return new TestCaseData((Action<string>)(target => File.SetAttributes(target + ".bak", FileAttributes.ReadOnly)))
+            .SetName("Бросок_на_копировании_резервной_копии");
     }
 
     [Test]
