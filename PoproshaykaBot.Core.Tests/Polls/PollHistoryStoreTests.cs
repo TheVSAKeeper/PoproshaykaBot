@@ -1,8 +1,11 @@
-﻿using PoproshaykaBot.Core.Polls;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Tests.Debugging;
+using PoproshaykaBot.Core.Tests.Server;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.Polls;
 
@@ -18,20 +21,21 @@ public class PollHistoryStoreTests
         _helix = Substitute.For<ITwitchHelixClient>();
         _broadcasterIdProvider = Substitute.For<IBroadcasterIdProvider>();
         _broadcasterIdProvider.GetAsync(Arg.Any<CancellationToken>()).Returns("1");
-        _tempFile = Path.Combine(Path.GetTempPath(), $"poll-history-{Guid.NewGuid():N}.json");
+        _directory = Path.Combine(Path.GetTempPath(), $"poll-history-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_directory);
+        _tempFile = Path.Combine(_directory, "polls-history.json");
         _store = new(_pollsStore, _helix, _broadcasterIdProvider, new FakeTargetChannelProvider(), NullLogger<PollHistoryStore>.Instance, _tempFile);
     }
 
     [TearDown]
     public void TearDown()
     {
-        foreach (var suffix in new[] { string.Empty, ".bak", ".old", ".tmp" })
+        try
         {
-            var path = _tempFile + suffix;
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
+            Directory.Delete(_directory, true);
+        }
+        catch (IOException)
+        {
         }
     }
 
@@ -40,6 +44,7 @@ public class PollHistoryStoreTests
     private ITwitchHelixClient _helix = null!;
     private IBroadcasterIdProvider _broadcasterIdProvider = null!;
     private PollHistoryStore _store = null!;
+    private string _directory = null!;
     private string _tempFile = null!;
 
     private static PollHistoryEntry Entry(string id)
@@ -204,5 +209,147 @@ public class PollHistoryStoreTests
             Assert.That(added, Is.EqualTo(0));
             Assert.That(_store.GetAll(), Has.Count.EqualTo(1));
         }
+    }
+
+    [TestCase("{ это не json", TestName = "Сорвавшееся чтение истории голосований не даёт права писать (мусор вместо json)")]
+    [TestCase("null", TestName = "Сорвавшееся чтение истории голосований не даёт права писать (файл разобран в пустое значение)")]
+    [TestCase("", TestName = "Сорвавшееся чтение истории голосований не даёт права писать (файл нулевой длины)")]
+    [TestCase("   \r\n", TestName = "Сорвавшееся чтение истории голосований не даёт права писать (файл из одних пробелов)")]
+    public void Сорвавшееся_чтение_не_даёт_права_переписывать_файл(string content)
+    {
+        File.WriteAllText(_tempFile, content);
+
+        var logger = new RecordingLogger<PollHistoryStore>();
+        var store = Create(logger);
+
+        var added = store.TryAdd(Entry("p1"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.IsLoaded, Is.False,
+                "Существующий файл, не разобравшийся в историю, – признак оборвавшейся записи, и класть память поверх него нельзя; законная пустота только у отсутствующего файла");
+            Assert.That(File.ReadAllText(_tempFile), Is.EqualTo(content),
+                "Повреждённый файл остаётся как был – в нём могут быть данные, которые ещё вытащат руками");
+            Assert.That(InvalidCopies(), Is.Not.Empty, "Рядом с непрочитанным файлом ложится копия с суффиксом invalid");
+            Assert.That(added, Is.True);
+            Assert.That(store.GetAll().Select(entry => entry.PollId), Is.EquivalentTo(["p1"]),
+                "Снятое право – про файл, а не про память: запись копится и не теряется молча");
+            Assert.That(logger.Entries.Any(entry => entry.Level == LogLevel.Error), Is.True,
+                "Пользователь узнаёт о случившемся из журнала");
+        }
+    }
+
+    [Test]
+    public void Отсутствующий_файл_это_законная_пустота()
+    {
+        var store = Create();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.GetAll(), Is.Empty);
+            Assert.That(store.IsLoaded, Is.True, "Свежий профиль без файла – не отказ чтения, писать в него можно");
+        }
+
+        store.TryAdd(Entry("p1"));
+
+        Assert.That(File.Exists(_tempFile), Is.True);
+    }
+
+    [Test]
+    public void Снятое_право_копит_записи_в_памяти_и_возврат_сбрасывает_их_на_диск()
+    {
+        _store.TryAdd(Entry("p0"));
+        var onDisk = File.ReadAllText(_tempFile);
+
+        var wasLoaded = _store.Invalidate();
+        var added = _store.TryAdd(Entry("p1"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(wasLoaded, Is.True);
+            Assert.That(added, Is.True);
+            Assert.That(_store.IsLoaded, Is.False);
+            Assert.That(_store.TryFlush(), Is.False, "Без права записи повтор не пытается писать вовсе");
+            Assert.That(File.ReadAllText(_tempFile), Is.EqualTo(onDisk),
+                "Принесённую переносом историю нельзя переписывать памятью стора");
+        }
+
+        _store.Restore(wasLoaded);
+
+        Assert.That(PollIdsOnDisk(), Is.EquivalentTo(["p0", "p1"]),
+            "Возврат права сбрасывает накопленное на диск одной записью");
+    }
+
+    [Test]
+    public void Гашение_до_первого_чтения_читает_файл_и_оставляет_память_доимпортной()
+    {
+        File.WriteAllText(_tempFile, HistoryJson("p0"));
+
+        var store = Create();
+        var wasLoaded = store.Invalidate();
+
+        File.WriteAllText(_tempFile, HistoryJson("принесённый"));
+        store.TryAdd(Entry("p1"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(wasLoaded, Is.True,
+                "Чтение ленивое, поэтому гашение само доводит его до конца – иначе стор прочитал бы уже принесённый файл");
+            Assert.That(store.GetAll().Select(entry => entry.PollId), Is.EquivalentTo(["p0", "p1"]));
+            Assert.That(PollIdsOnDisk(), Is.EquivalentTo(["принесённый"]),
+                "Принесённое вступает в силу после перезапуска, а до него файл не трогают");
+        }
+    }
+
+    [Test]
+    public void Сорвавшаяся_запись_дотаскивается_ближайшим_повтором()
+    {
+        var store = Create();
+        var obstacle = _tempFile + ".tmp";
+        Directory.CreateDirectory(obstacle);
+
+        store.TryAdd(Entry("p1"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.Exists(_tempFile), Is.False, "Запись сорвалась, файла нет");
+            Assert.That(store.TryFlush(), Is.False, "Пока препятствие на месте, повтор честно отвечает отказом");
+        }
+
+        Directory.Delete(obstacle);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.TryFlush(), Is.True);
+            Assert.That(PollIdsOnDisk(), Is.EquivalentTo(["p1"]),
+                "Несохранённое дотаскивается повтором, а не теряется до перезапуска");
+        }
+    }
+
+    private static string HistoryJson(string pollId)
+    {
+        return $$"""{"version":1,"entries":[{"pollId":"{{pollId}}","title":"T","finalStatus":1}]}""";
+    }
+
+    private PollHistoryStore Create(ILogger<PollHistoryStore>? logger = null)
+    {
+        return new(_pollsStore,
+            _helix,
+            _broadcasterIdProvider,
+            new FakeTargetChannelProvider(),
+            logger ?? NullLogger<PollHistoryStore>.Instance,
+            _tempFile);
+    }
+
+    private string[] InvalidCopies()
+    {
+        return Directory.GetFiles(_directory, "polls-history.invalid-*.json");
+    }
+
+    private string[] PollIdsOnDisk()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(_tempFile));
+
+        return [.. document.RootElement.GetProperty("entries").EnumerateArray().Select(entry => entry.GetProperty("pollId").GetString()!)];
     }
 }

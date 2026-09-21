@@ -25,7 +25,9 @@ public sealed class LegacyImportResult
 
     public bool CopiedStreamHistory => Copied(LegacyDataCatalog.StreamSessionsFileName);
 
-    public StatisticsExternalWrite ExternalWrite => new(CopiedStatistics, CopiedStreamHistory);
+    public bool CopiedPollHistory => Copied(LegacyDataCatalog.PollsHistoryFileName);
+
+    public StatisticsExternalWrite ExternalWrite => new(CopiedStatistics, CopiedStreamHistory, CopiedPollHistory);
 
     private bool Copied(string fileName)
     {

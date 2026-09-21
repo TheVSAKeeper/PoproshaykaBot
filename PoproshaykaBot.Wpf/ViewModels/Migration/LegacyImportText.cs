@@ -117,15 +117,35 @@ public static class LegacyImportText
 
         const string Restart = "Перенесённые данные вступят в силу после перезапуска приложения.";
 
-        var frozen = (result.CopiedStatistics, result.CopiedStreamHistory) switch
-        {
-            (true, true) => "статистика и история стримов не сохраняются",
-            (true, false) => "статистика не сохраняется",
-            (false, true) => "история стримов не сохраняется",
-            _ => null,
-        };
+        var frozen = new List<string>();
 
-        return frozen is null ? Restart : $"{Restart} До перезапуска {frozen} – чтобы не затереть перенесённое.";
+        if (result.CopiedStatistics)
+        {
+            frozen.Add("статистика");
+        }
+
+        if (result.CopiedStreamHistory)
+        {
+            frozen.Add("история стримов");
+        }
+
+        if (result.CopiedPollHistory)
+        {
+            frozen.Add("история голосований");
+        }
+
+        if (frozen.Count == 0)
+        {
+            return Restart;
+        }
+
+        var names = frozen.Count == 1
+            ? frozen[0]
+            : $"{string.Join(", ", frozen.Take(frozen.Count - 1))} и {frozen[^1]}";
+
+        var verb = frozen.Count == 1 ? "не сохраняется" : "не сохраняются";
+
+        return $"{Restart} До перезапуска {names} {verb} – чтобы не затереть перенесённое.";
     }
 
     public static IReadOnlyList<string> BuildCounts(LegacyImportResult result)

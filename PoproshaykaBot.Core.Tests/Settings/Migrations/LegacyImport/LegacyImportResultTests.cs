@@ -32,8 +32,26 @@ public class LegacyImportResultTests
         {
             Assert.That(result.CopiedStreamHistory, Is.EqualTo(expected),
                 "По этому признаку гашение решает, возвращать ли стору истории право писать, поэтому имя файла берётся из каталога переноса");
-            Assert.That(result.ExternalWrite, Is.EqualTo(new StatisticsExternalWrite(result.CopiedStatistics, expected)),
-                "Область внешней записи получает обе половины одним значением – собирать их на стороне хоста нечем");
+            Assert.That(result.ExternalWrite, Is.EqualTo(new StatisticsExternalWrite(result.CopiedStatistics, expected, result.CopiedPollHistory)),
+                "Область внешней записи получает все половины одним значением – собирать их на стороне хоста нечем");
+        }
+    }
+
+    [TestCase(new[] { "polls-history.json" }, true)]
+    [TestCase(new[] { "POLLS-HISTORY.JSON" }, true)]
+    [TestCase(new[] { "settings/settings.json", "polls-history.json" }, true)]
+    [TestCase(new[] { "settings/polls.json" }, false)]
+    [TestCase(new[] { "stream_sessions.json" }, false)]
+    [TestCase(new string[0], false)]
+    public void Перенос_считается_тронувшим_историю_голосований_по_её_файлу(string[] copied, bool expected)
+    {
+        var result = Build(copied);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.CopiedPollHistory, Is.EqualTo(expected),
+                "Профили голосований (settings/polls.json) и их история – разные файлы, право записи отнимает только вторая");
+            Assert.That(result.ExternalWrite.PollHistory, Is.EqualTo(expected));
         }
     }
 

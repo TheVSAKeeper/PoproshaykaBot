@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Polls;
 
 namespace PoproshaykaBot.Core.Statistics;
 
@@ -10,7 +11,8 @@ public sealed class StatisticsAutoSaver(
     UserStatisticsLoader userLoader,
     StatisticsFileStore fileStore,
     ILogger<StatisticsAutoSaver> logger,
-    StreamSessionHistoryStore? historyStore = null)
+    StreamSessionHistoryStore? historyStore = null,
+    PollHistoryStore? pollHistoryStore = null)
     : IHostedComponent, IAsyncDisposable
 {
     private static readonly TimeSpan DefaultAutoSaveInterval = TimeSpan.FromMinutes(1);
@@ -38,8 +40,9 @@ public sealed class StatisticsAutoSaver(
         StatisticsFileStore fileStore,
         ILogger<StatisticsAutoSaver> logger,
         TimeSpan autoSaveInterval,
-        StreamSessionHistoryStore? historyStore = null)
-        : this(userRepository, botRepository, commandUsageRepository, userLoader, fileStore, logger, historyStore)
+        StreamSessionHistoryStore? historyStore = null,
+        PollHistoryStore? pollHistoryStore = null)
+        : this(userRepository, botRepository, commandUsageRepository, userLoader, fileStore, logger, historyStore, pollHistoryStore)
     {
         _autoSaveInterval = autoSaveInterval;
     }
@@ -152,7 +155,8 @@ public sealed class StatisticsAutoSaver(
                 var restore = new StatisticsInvalidation(
                     invalidation.Users && !rewrite.Statistics,
                     invalidation.Bot && !rewrite.Statistics,
-                    invalidation.StreamHistory && !rewrite.StreamHistory);
+                    invalidation.StreamHistory && !rewrite.StreamHistory,
+                    invalidation.PollHistory && !rewrite.PollHistory);
 
                 await RestoreUnderSaveLockAsync(restore).ConfigureAwait(false);
 
@@ -164,7 +168,7 @@ public sealed class StatisticsAutoSaver(
 
                 logger.LogWarning(
                     exception,
-                    "Внешняя запись в файлы статистики оборвалась. Статистика и история стримов этого сеанса до перезапуска сохраняться не будут: файлы могли остаться переписанными наполовину, и класть поверх них прочитанное до записи нельзя");
+                    "Внешняя запись в файлы статистики оборвалась. Статистика, история стримов и история голосований этого сеанса до перезапуска сохраняться не будут: файлы могли остаться переписанными наполовину, и класть поверх них прочитанное до записи нельзя");
 
                 throw;
             }
@@ -211,8 +215,9 @@ public sealed class StatisticsAutoSaver(
         }
 
         var history = historyStore?.Invalidate() ?? false;
+        var pollHistory = pollHistoryStore?.Invalidate() ?? false;
 
-        return new(users, bot, history);
+        return new(users, bot, history, pollHistory);
     }
 
     private async Task RestoreUnderSaveLockAsync(StatisticsInvalidation invalidation)
@@ -227,6 +232,7 @@ public sealed class StatisticsAutoSaver(
         }
 
         historyStore?.Restore(invalidation.StreamHistory);
+        pollHistoryStore?.Restore(invalidation.PollHistory);
     }
 
     private async Task LoadAsync(CancellationToken cancellationToken)
@@ -350,6 +356,7 @@ public sealed class StatisticsAutoSaver(
             if (!_botLoaded && !userLoader.IsLoaded && _commandUsageState != StatisticsLoadState.Loaded)
             {
                 historyStore?.TryFlush();
+                pollHistoryStore?.TryFlush();
 
                 logger.LogDebug("Остановка автосохранения без финального сохранения: загрузка статистики не выполнялась");
 
@@ -387,6 +394,7 @@ public sealed class StatisticsAutoSaver(
         try
         {
             historyStore?.TryFlush();
+            pollHistoryStore?.TryFlush();
 
             var saveUsers = (force || userRepository.HasChanges) && userLoader.IsLoaded;
             var saveBot = (force || botRepository.HasChanges) && _botLoaded;

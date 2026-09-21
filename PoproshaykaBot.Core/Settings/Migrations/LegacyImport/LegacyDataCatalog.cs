@@ -8,13 +8,14 @@ internal static class LegacyDataCatalog
     public const string UserStatisticsFileName = "users_statistics.json";
     public const string BotStatisticsFileName = "bot_statistics.json";
     public const string StreamSessionsFileName = "stream_sessions.json";
+    public const string PollsHistoryFileName = "polls-history.json";
 
     public static readonly string[] RootFiles =
     [
         UserStatisticsFileName,
         BotStatisticsFileName,
         StreamSessionsFileName,
-        "polls-history.json",
+        PollsHistoryFileName,
         "unknown_commands.txt",
         "chat-blockers.txt",
         "chat-zoom.txt",

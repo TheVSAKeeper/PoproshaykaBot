@@ -1,9 +1,13 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Tests.Server;
+using PoproshaykaBot.Core.Twitch;
+using PoproshaykaBot.Core.Twitch.Helix;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.Statistics;
@@ -17,6 +21,7 @@ public sealed class StatisticsLoadOwnershipTests
     private const string BotFileName = "bot_statistics.json";
     private const string HistoryFileName = "stream_sessions.json";
     private const string CommandUsageFileName = "command-usage.json";
+    private const string PollHistoryFileName = "polls-history.json";
 
     private const string UsersContent = """
                                         [
@@ -915,17 +920,108 @@ public sealed class StatisticsLoadOwnershipTests
         services.AddSingleton(TimeProvider.System);
         services.AddStatistics();
         services.AddSingleton(new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath));
+        services.AddSingleton(CreatePollHistoryStore());
 
         await using var provider = services.BuildServiceProvider();
 
         var history = provider.GetRequiredService<StreamSessionHistoryStore>();
+        var pollHistory = provider.GetRequiredService<PollHistoryStore>();
+
+        Assert.That(pollHistory.GetAll(), Is.Empty);
+
+        Assert.That(pollHistory.IsLoaded, Is.True,
+            "Чтение у истории голосований ленивое, поэтому право писать сперва надо получить – иначе проверка ниже пройдёт сама собой");
 
         await provider.GetRequiredService<StatisticsAutoSaver>().RunExternalWriteAsync(
             () => 0,
-            static _ => new StatisticsExternalWrite(false, true));
+            static _ => new StatisticsExternalWrite(false, true, true));
 
-        Assert.That(history.IsLoaded, Is.False,
-            "Необязательный параметр конструктора превращает гашение в тихую пустышку, и увидеть это можно только на настоящей композиции");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(history.IsLoaded, Is.False,
+                "Необязательный параметр конструктора превращает гашение в тихую пустышку, и увидеть это можно только на настоящей композиции");
+            Assert.That(pollHistory.IsLoaded, Is.False,
+                "У истории голосований тот же необязательный параметр и та же цена подмены его на null");
+        }
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task Перенос_гасит_право_записи_истории_голосований_ровно_когда_принёс_её_файл(bool importsPollHistory)
+    {
+        var pollHistoryPath = Path.Combine(_directory, PollHistoryFileName);
+
+        await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
+        await File.WriteAllTextAsync(pollHistoryPath, PollHistoryJson("свой-опрос"));
+
+        await File.WriteAllTextAsync(
+            Path.Combine(_source, importsPollHistory ? PollHistoryFileName : UsersFileName),
+            importsPollHistory ? PollHistoryJson("принесённый-опрос") : ImportedUsersContent);
+
+        var (users, bot, fileStore, loader) = CreateGraph();
+        var pollHistory = CreatePollHistoryStore(pollHistoryPath);
+
+        var saver = new StatisticsAutoSaver(
+            users,
+            bot,
+            new(TimeProvider.System),
+            loader,
+            fileStore,
+            NullLogger<StatisticsAutoSaver>.Instance,
+            null,
+            pollHistory);
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        try
+        {
+            var imported = await saver.RunExternalWriteAsync(
+                () =>
+                {
+                    Assert.That(pollHistory.IsLoaded, Is.False,
+                        "Гашение идёт до копирования – иначе конец опроса успевает лечь поверх принесённого");
+
+                    return LegacyDataImporter.Import(_source, _directory, true, null);
+                },
+                static result => result.ExternalWrite);
+
+            Assert.That(imported.CopiedPollHistory, Is.EqualTo(importsPollHistory),
+                "Перенос обязан либо принести файл истории голосований, либо не трогать его вовсе");
+
+            Assert.That(pollHistory.IsLoaded, Is.EqualTo(!importsPollHistory),
+                "Холостой для истории голосований прогон возвращает право записи, принесённая история оставляет его снятым");
+
+            var added = pollHistory.TryAdd(new() { PollId = "конец-опроса", Title = "Опрос" });
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(added, Is.True,
+                    "Снятое право – это про файл, а не про память: запись принимается и без права, а на диск не идёт");
+                Assert.That(pollHistory.GetAll().Select(entry => entry.PollId), Does.Contain("конец-опроса"),
+                    "Запись нельзя выбрасывать из-за снятого права – иначе она теряется безвозвратно");
+                Assert.That(PollIdsOnDisk(pollHistoryPath),
+                    Is.EqualTo(importsPollHistory ? new[] { "принесённый-опрос" } : new[] { "свой-опрос", "конец-опроса" }),
+                    "Принесённую историю голосований нельзя переписывать доимпортной памятью стора, а холостой прогон нельзя наказывать потерей записи");
+                Assert.That(loader.IsLoaded, Is.EqualTo(importsPollHistory),
+                    "Половины живут своей судьбой: перенос одной истории голосований прав статистики не отнимает");
+            }
+        }
+        finally
+        {
+            await saver.DisposeAsync();
+        }
+    }
+
+    private static string PollHistoryJson(string pollId)
+    {
+        return $$"""{"version":1,"entries":[{"pollId":"{{pollId}}","title":"Опрос","finalStatus":1}]}""";
+    }
+
+    private static string[] PollIdsOnDisk(string path)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+
+        return [.. document.RootElement.GetProperty("entries").EnumerateArray().Select(entry => entry.GetProperty("pollId").GetString()!)];
     }
 
     private static string[] ChannelsOnDisk(string path)
@@ -959,6 +1055,19 @@ public sealed class StatisticsLoadOwnershipTests
         var pattern = Path.GetFileNameWithoutExtension(fileName) + ".invalid-*" + Path.GetExtension(fileName);
 
         return Directory.GetFiles(_directory, pattern);
+    }
+
+    private PollHistoryStore CreatePollHistoryStore(string? filePath = null)
+    {
+        var pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null);
+        pollsStore.Load().Returns(new PollsSettings());
+
+        return new(pollsStore,
+            Substitute.For<ITwitchHelixClient>(),
+            Substitute.For<IBroadcasterIdProvider>(),
+            new FakeTargetChannelProvider(),
+            NullLogger<PollHistoryStore>.Instance,
+            filePath ?? Path.Combine(_directory, PollHistoryFileName));
     }
 
     private (UserStatisticsRepository Users, BotStatisticsRepository Bot, StatisticsFileStore FileStore, UserStatisticsLoader Loader) CreateGraph()
