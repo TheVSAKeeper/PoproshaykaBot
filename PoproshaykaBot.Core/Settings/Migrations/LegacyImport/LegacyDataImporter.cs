@@ -8,7 +8,6 @@ namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 public static class LegacyDataImporter
 {
     private const string BackupSuffix = "pre-import";
-    private const string TemporarySuffix = ".import-tmp";
 
     private static readonly string MonolithRelativePath =
         Path.Combine(LegacyDataCatalog.SettingsFolderName, LegacyDataCatalog.SettingsFileName);
@@ -226,7 +225,7 @@ public static class LegacyDataImporter
                     continue;
                 }
 
-                RestoreAtomic(path, original, logger);
+                AtomicFile.Save(path, original, logger);
                 skipped.Add(new(relativePath, LegacyImportSkipReason.TargetExists));
 
                 logger?.LogWarning("Импорт данных: {File} возвращён в прежний вид – разбор перенесённого settings.json попытался его заменить, а перезапись выключена",
@@ -257,55 +256,7 @@ public static class LegacyDataImporter
 
     private static void CopyAtomic(string source, string target, ILogger? logger)
     {
-        Commit(target, temporaryPath => File.Copy(source, temporaryPath, true), logger);
-    }
-
-    private static void RestoreAtomic(string target, byte[] content, ILogger? logger)
-    {
-        Commit(target, temporaryPath => File.WriteAllBytes(temporaryPath, content), logger);
-    }
-
-    private static void Commit(string target, Action<string> writeTemporary, ILogger? logger)
-    {
-        var directory = Path.GetDirectoryName(target);
-
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        var temporaryPath = target + TemporarySuffix;
-
-        try
-        {
-            writeTemporary(temporaryPath);
-
-            if (File.Exists(target))
-            {
-                File.Replace(temporaryPath, target, null);
-            }
-            else
-            {
-                File.Move(temporaryPath, target);
-            }
-        }
-        catch
-        {
-            TryDelete(temporaryPath, logger);
-            throw;
-        }
-    }
-
-    private static void TryDelete(string path, ILogger? logger)
-    {
-        try
-        {
-            File.Delete(path);
-        }
-        catch (Exception exception)
-        {
-            logger?.LogWarning(exception, "Импорт данных: не удалось удалить временный файл {Path}", path);
-        }
+        AtomicFile.Save(target, temporaryPath => File.Copy(source, temporaryPath, true), logger);
     }
 
     private static Func<string, string>? ResolveRedactor(string fileName)

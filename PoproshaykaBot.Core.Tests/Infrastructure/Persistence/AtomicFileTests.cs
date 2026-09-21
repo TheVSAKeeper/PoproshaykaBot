@@ -197,6 +197,8 @@ public sealed class AtomicFileTests
         Assert.Throws<ArgumentNullException>(() => AtomicFile.Save(null!, "content"));
         Assert.Throws<ArgumentNullException>(() => AtomicFile.Save(_targetPath, (string)null!));
         Assert.Throws<ArgumentNullException>(() => AtomicFile.Save(_targetPath, (byte[])null!));
+        Assert.Throws<ArgumentNullException>(() => AtomicFile.Save(_targetPath, (Action<string>)null!));
+        Assert.Throws<ArgumentException>(() => AtomicFile.Save("", _ => { }));
     }
 
     [Test]

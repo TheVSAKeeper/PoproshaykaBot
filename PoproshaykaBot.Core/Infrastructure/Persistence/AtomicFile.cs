@@ -21,8 +21,11 @@ public static class AtomicFile
         Save(targetPath, tempPath => File.WriteAllBytes(tempPath, content), logger);
     }
 
-    private static void Save(string targetPath, Action<string> writeTemporary, ILogger? logger)
+    public static void Save(string targetPath, Action<string> writeTemporary, ILogger? logger = null)
     {
+        ArgumentException.ThrowIfNullOrEmpty(targetPath);
+        ArgumentNullException.ThrowIfNull(writeTemporary);
+
         var directory = Path.GetDirectoryName(targetPath);
 
         if (!string.IsNullOrEmpty(directory))
