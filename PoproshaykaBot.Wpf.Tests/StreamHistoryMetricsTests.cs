@@ -104,12 +104,7 @@ public class StreamHistoryMetricsTests
     [Test]
     public void Список_карточек_на_минимальном_окне_не_вырождается_в_одну_карточку()
     {
-        var content = WindowMinHeight - TitleBarHeight - StatusBarHeight;
-        var shared = content - PageHeaderHeight - SplitterHeight;
-        var share = StreamHistoryPageView.DetailCardsRowShare
-                    / (StreamHistoryPageView.ListRowShare + StreamHistoryPageView.DetailCardsRowShare);
-        var detail = Math.Max(shared * share, StreamHistoryPageView.DetailCardsRowMinHeight);
-        var list = shared - detail - StreamHistoryPageView.TrendStripHeight;
+        var list = CardListBudget(StreamHistoryPageView.TrendStripHeight);
         var cards = list / StreamHistoryPageView.CardHeight;
 
         Assert.Multiple(() =>
@@ -121,6 +116,32 @@ public class StreamHistoryMetricsTests
             Assert.That(cards, Is.GreaterThanOrEqualTo(2.5),
                 $"при окне {WindowMinHeight} DIP списку карточек остаётся {list:F1} DIP, то есть {cards:F1} карточки по {StreamHistoryPageView.CardHeight} – вид карточками вырождается в одну строку с обрезком");
         });
+    }
+
+    [Test]
+    public void Компактная_карточка_укладывается_трижды_в_список_минимального_окна()
+    {
+        var list = CardListBudget(StreamHistoryPageView.TrendStripCompactHeight);
+        var cards = list / StreamHistoryPageView.CardCompactHeight;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(StreamHistoryPageView.CardCompactHeight, Is.LessThan(StreamHistoryPageView.CardHeight),
+                "компактная карточка тем и компактна, что ниже обычной");
+            Assert.That(cards, Is.GreaterThanOrEqualTo(3),
+                $"при окне {WindowMinHeight} DIP списку остаётся {list:F1} DIP, то есть {cards:F1} карточки по {StreamHistoryPageView.CardCompactHeight} – приёмочных трёх целых не видно");
+        });
+    }
+
+    private static double CardListBudget(double trendStripHeight)
+    {
+        var content = WindowMinHeight - TitleBarHeight - StatusBarHeight;
+        var shared = content - PageHeaderHeight - SplitterHeight;
+        var share = StreamHistoryPageView.DetailCardsRowShare
+                    / (StreamHistoryPageView.ListRowShare + StreamHistoryPageView.DetailCardsRowShare);
+        var detail = Math.Max(shared * share, StreamHistoryPageView.DetailCardsRowMinHeight);
+
+        return shared - detail - trendStripHeight;
     }
 
     private static Grid Themed()
