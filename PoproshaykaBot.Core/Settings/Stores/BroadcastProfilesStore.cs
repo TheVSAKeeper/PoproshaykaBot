@@ -8,10 +8,10 @@ public class BroadcastProfilesStore
 {
     private readonly JsonStore<BroadcastProfilesSettings> _store;
 
-    public BroadcastProfilesStore(ILogger<BroadcastProfilesStore>? logger = null, string? filePath = null)
+    public BroadcastProfilesStore(ILogger<BroadcastProfilesStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
     {
         var path = filePath ?? AppPaths.SettingsFile("broadcast-profiles.json");
-        _store = new(path, logger, describe: SettingsDescriber.Describe);
+        _store = new(path, logger, describe: SettingsDescriber.Describe, gate: gate);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {

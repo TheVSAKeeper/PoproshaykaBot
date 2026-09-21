@@ -60,7 +60,7 @@ public sealed class LegacyDataImporterTests
             Assert.That(File.Exists(Path.Combine(_target, "settings.json")), Is.False,
                 "Файл настроек обязан попасть сразу в settings/, а не остаться в корне рабочей папки");
 
-            Assert.That(Directory.GetFiles(_target, "*.import-tmp", SearchOption.AllDirectories), Is.Empty);
+            Assert.That(Directory.GetFiles(_target, "*.tmp", SearchOption.AllDirectories), Is.Empty);
         }
     }
 
@@ -113,6 +113,32 @@ public sealed class LegacyDataImporterTests
     }
 
     [Test]
+    public void Сорвавшаяся_подмена_оставляет_целевой_файл_с_прежним_содержимым()
+    {
+        LegacyDataFixture.FillSource(_source, true);
+        LegacyDataFixture.Write(_target, Path.Combine("settings", "obs-chat.json"), """{"fontSize":99}""");
+        Directory.CreateDirectory(TargetSettings("obs-chat.json") + ".old");
+
+        var result = LegacyDataImporter.Import(_source, _target, true, null);
+        var relativePath = Path.Combine("settings", "obs-chat.json");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllText(TargetSettings("obs-chat.json")), Is.EqualTo("""{"fontSize":99}"""),
+                "Сорвавшаяся подмена обязана вернуть файл из .bak – иначе перенос уносит данные пользователя, хотя копия лежит рядом.");
+
+            Assert.That(result.CopiedFiles, Does.Not.Contain(relativePath),
+                "Файл, который не удалось подменить, перенесённым не считается.");
+
+            Assert.That(result.Failures.Select(failure => failure.RelativeTargetPath), Does.Contain(relativePath),
+                "Об отказе подмены пользователю сообщают, а не глотают его молча.");
+
+            Assert.That(File.ReadAllText(TargetSettings("obs-chat.json") + ".bak"), Is.EqualTo("""{"fontSize":99}"""),
+                "Рядом с целевым файлом остаётся копия прежнего содержимого – та самая, из которой шёл откат.");
+        }
+    }
+
+    [Test]
     public void Import_Overwrite_RedactsTokensInAccountsBackup()
     {
         LegacyDataFixture.FillSource(_source, true);
@@ -151,7 +177,7 @@ public sealed class LegacyDataImporterTests
             Assert.That(File.Exists(Path.Combine(_target, "accounts.json")), Is.False);
             Assert.That(Directory.GetFiles(_target, "accounts.legacy-*.json"), Has.Length.EqualTo(1));
             Assert.That(File.ReadAllText(Path.Combine(_target, "users_statistics.json")), Is.EqualTo(LegacyDataFixture.UserStatistics));
-            Assert.That(Directory.GetFiles(_target, "*.import-tmp", SearchOption.AllDirectories), Is.Empty);
+            Assert.That(Directory.GetFiles(_target, "*.tmp", SearchOption.AllDirectories), Is.Empty);
             Assert.That(result.UnmigratedLegacyFiles, Is.Empty);
         }
     }
@@ -177,6 +203,69 @@ public sealed class LegacyDataImporterTests
         }
     }
 
+    [Test]
+    public void Import_MonolithSplit_ReportsGeneratedFilesAsRewritten()
+    {
+        const string Monolith = """
+                                {
+                                  "twitch": {
+                                    "channel": "bobito217",
+                                    "botAccount": { "login": "thebot" },
+                                    "broadcastProfiles": { "profiles": [] },
+                                    "polls": { "historyMaxItems": 777 },
+                                    "obsChat": { "fontSize": 24 },
+                                    "infrastructure": { "recentCategories": ["Just Chatting"] }
+                                  },
+                                  "ui": { "dashboard": { "columnCount": 2 } }
+                                }
+                                """;
+
+        LegacyDataFixture.Write(_source, Path.Combine("settings", "settings.json"), Monolith);
+
+        var result = LegacyDataImporter.Import(_source, _target, false, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.CopiedFiles, Is.EquivalentTo(new[] { Path.Combine("settings", "settings.json") }),
+                "Разбор порождает файлы из секций монолита, а не копирует их – в списке скопированного их нет и быть не может");
+
+            Assert.That(result.RewrittenSettingsFiles, Is.EquivalentTo(new[]
+            {
+                "settings.json",
+                "accounts.json",
+                "broadcast-profiles.json",
+                "polls.json",
+                "recent-categories.json",
+                "obs-chat.json",
+                "dashboard-layout.json",
+            }), "Этот список гейт получает как перечень переписанного мимо сторов: файл, выпавший из него, "
+                + "первое же сохранение его владельца затрёт доимпортным состоянием из памяти");
+
+            Assert.That(result.Failures, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void Import_InPlace_ReportsRelocatedFilesAsRewritten()
+    {
+        LegacyDataFixture.Write(_target, "accounts.json", LegacyDataFixture.Accounts);
+
+        var result = LegacyDataImporter.Import(_target, _target, false, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.IsInPlaceMigration, Is.True);
+            Assert.That(result.CopiedFiles, Is.Empty,
+                "Перенос на месте не копирует ничего – файл только переезжает из корня в settings/");
+
+            Assert.That(File.ReadAllText(TargetSettings("accounts.json")), Is.EqualTo(LegacyDataFixture.Accounts));
+
+            Assert.That(result.RewrittenSettingsFiles, Is.EquivalentTo(new[] { "accounts.json" }),
+                "До переезда settings/accounts.json не существовало, поэтому живой стор держит дефолты и первым же сохранением "
+                + "положит их поверх перенесённого – право записи у него надо снять");
+        }
+    }
+
     [TestCase(false, TestName = "Import_MonolithSplit_KeepsExistingStore_WhenOverwriteIsOff")]
     [TestCase(true, TestName = "Import_MonolithSplit_ReplacesExistingStore_WhenOverwriteIsOn")]
     public void Import_MonolithSplit_RespectsOverwriteFlag(bool overwrite)
@@ -198,6 +287,10 @@ public sealed class LegacyDataImporterTests
             Assert.That(result.SkippedFiles.Any(skip => skip.RelativeTargetPath == relativeAccounts), Is.EqualTo(!overwrite));
             Assert.That(result.CopiedFiles, Does.Contain(Path.Combine("settings", "settings.json")));
             Assert.That(result.Failures, Is.Empty);
+
+            Assert.That(result.RewrittenSettingsFiles.Contains("accounts.json", StringComparer.OrdinalIgnoreCase), Is.EqualTo(overwrite),
+                "Возвращённый в прежний вид файл совпадает с тем, что стор держит в памяти: отнимать у него запись не за что, "
+                + "а переписанный разбором обязан остаться в списке");
         }
     }
 

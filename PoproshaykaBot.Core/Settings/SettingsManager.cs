@@ -18,16 +18,11 @@ public class SettingsManager
 
     private AppSettings? _currentSettings;
 
-    public SettingsManager(ILogger<SettingsManager> logger)
-        : this(logger, null)
-    {
-    }
-
-    public SettingsManager(ILogger<SettingsManager> logger, string? settingsFilePath)
+    public SettingsManager(ILogger<SettingsManager> logger, string? settingsFilePath = null, SettingsWriteGate? gate = null)
     {
         _logger = logger;
         _settingsFilePath = settingsFilePath ?? AppPaths.SettingsFile("settings.json");
-        _store = new(_settingsFilePath, logger, parser: ParseFile, describe: SettingsDescriber.Describe);
+        _store = new(_settingsFilePath, logger, parser: ParseFile, describe: SettingsDescriber.Describe, gate: gate);
     }
 
     public virtual AppSettings Current
@@ -51,9 +46,9 @@ public class SettingsManager
         {
             try
             {
-                _store.Save(settings);
+                var written = _store.Save(settings);
                 _currentSettings = _store.Load();
-                _logger.LogInformation("User-настройки приложения сохранены");
+                LogApplied(written);
             }
             catch (Exception exception)
             {
@@ -71,9 +66,9 @@ public class SettingsManager
         {
             try
             {
-                _store.Mutate(mutator);
+                var written = _store.Mutate(mutator);
                 _currentSettings = _store.Load();
-                _logger.LogInformation("User-настройки приложения сохранены");
+                LogApplied(written);
             }
             catch (Exception exception)
             {
@@ -92,6 +87,18 @@ public class SettingsManager
             mutator(_currentSettings ??= _store.Load());
             _logger.LogDebug("Настройки изменены только в памяти, файл {SettingsFilePath} не тронут", _settingsFilePath);
         }
+    }
+
+    private void LogApplied(bool written)
+    {
+        if (written)
+        {
+            _logger.LogInformation("User-настройки приложения сохранены");
+            return;
+        }
+
+        _logger.LogInformation("User-настройки приложения приняты в памяти и действуют до перезапуска: файл {SettingsFilePath} переписан снаружи, и класть поверх него прочитанное раньше нельзя",
+            _settingsFilePath);
     }
 
     private void SanitizeRanks(AppSettings settings)
@@ -128,7 +135,7 @@ public class SettingsManager
 
         var baseDirectory = Path.GetDirectoryName(_settingsFilePath)!;
 
-        if (SettingsMigrator.TryMigrate(root, _logger, baseDirectory))
+        if (SettingsMigrator.Migrate(root, _logger, baseDirectory).Changed)
         {
             JsonStoreBackup.CreateBackup(_settingsFilePath, "pre-migration", _logger);
             var migratedJson = root.ToJsonString(JsonStoreOptions.Default);

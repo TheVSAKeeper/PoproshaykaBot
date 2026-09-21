@@ -17,7 +17,7 @@ public sealed class SseServiceTests
     public void SetUp()
     {
         _settings = new();
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
 
         _settingsManager.Current.Returns(_settings);
         _logger = new();

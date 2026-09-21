@@ -115,9 +115,44 @@ public static class LegacyImportText
             return null;
         }
 
-        return result.CopiedStatistics
-            ? "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска статистика не сохраняется – чтобы не затереть перенесённое."
-            : "Перенесённые данные вступят в силу после перезапуска приложения.";
+        const string Restart = "Перенесённые данные вступят в силу после перезапуска приложения.";
+
+        var frozen = new List<string>();
+        var pluralName = false;
+
+        if (result.CopiedSettings)
+        {
+            frozen.Add("настройки");
+            pluralName = true;
+        }
+
+        if (result.CopiedStatistics)
+        {
+            frozen.Add("статистика");
+        }
+
+        if (result.CopiedStreamHistory)
+        {
+            frozen.Add("история стримов");
+        }
+
+        if (result.CopiedPollHistory)
+        {
+            frozen.Add("история голосований");
+        }
+
+        if (frozen.Count == 0)
+        {
+            return Restart;
+        }
+
+        var names = frozen.Count == 1
+            ? frozen[0]
+            : $"{string.Join(", ", frozen.Take(frozen.Count - 1))} и {frozen[^1]}";
+
+        var verb = frozen.Count == 1 && !pluralName ? "не сохраняется" : "не сохраняются";
+
+        return $"{Restart} До перезапуска {names} {verb} – чтобы не затереть перенесённое.";
     }
 
     public static IReadOnlyList<string> BuildCounts(LegacyImportResult result)

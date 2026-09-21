@@ -11,11 +11,11 @@ public sealed class AccountsStore
     private readonly string _filePath;
     private readonly JsonStore<AccountsFileDto> _store;
 
-    public AccountsStore(ILogger<AccountsStore>? logger = null, string? filePath = null)
+    public AccountsStore(ILogger<AccountsStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
     {
         _logger = logger;
         _filePath = filePath ?? AppPaths.SettingsFile("accounts.json");
-        _store = new(_filePath, logger, AccountsTokenRedactor.Redact, describe: DescribeAccounts);
+        _store = new(_filePath, logger, AccountsTokenRedactor.Redact, describe: DescribeAccounts, gate: gate);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {
@@ -47,11 +47,11 @@ public sealed class AccountsStore
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
-        _store.Mutate(state => mutator(TakeAccount(state, role)));
+        var written = _store.Mutate(state => mutator(TakeAccount(state, role)));
 
-        _logger?.LogDebug("AccountsStore: применена мутация для роли {Role}, состояние сохранено в {FilePath}",
+        _logger?.LogDebug("AccountsStore: применена мутация для роли {Role}, {Outcome}",
             role,
-            _filePath);
+            written ? $"состояние сохранено в {_filePath}" : "состояние принято только в памяти до перезапуска");
     }
 
     public bool TryClearAccessToken(TwitchOAuthRole role, string expectedToken)
@@ -89,13 +89,19 @@ public sealed class AccountsStore
         ArgumentNullException.ThrowIfNull(bot);
         ArgumentNullException.ThrowIfNull(broadcaster);
 
-        _store.Save(new()
+        var written = _store.Save(new()
         {
             BotAccount = bot,
             BroadcasterAccount = broadcaster,
         });
 
-        _logger?.LogInformation("AccountsStore: оба аккаунта заменены целиком и сохранены в {FilePath}", _filePath);
+        if (written)
+        {
+            _logger?.LogInformation("AccountsStore: оба аккаунта заменены целиком и сохранены в {FilePath}", _filePath);
+            return;
+        }
+
+        _logger?.LogInformation("AccountsStore: оба аккаунта заменены в памяти до перезапуска, файл {FilePath} переписан снаружи", _filePath);
     }
 
     private static string DescribeAccounts(AccountsFileDto state)

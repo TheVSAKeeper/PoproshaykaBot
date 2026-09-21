@@ -115,6 +115,42 @@ public sealed class LegacySettingsLayoutMigratorTests
     }
 
     [Test]
+    public void Run_ОборванноеКопирование_НеОставляетОбрезанныйФайлИНеТеряетОригинал()
+    {
+        const string Original = "{\"original\":true}";
+        var legacy = Path.Combine(_baseDirectory, "accounts.json");
+        var target = Path.Combine(_settingsDirectory, "accounts.json");
+        File.WriteAllText(legacy, Original);
+        Directory.CreateDirectory(_settingsDirectory);
+        Directory.CreateDirectory(target + ".tmp");
+
+        LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.Exists(target), Is.False,
+                "Оборванное копирование не должно оставлять в settings/ обрезанный файл");
+
+            Assert.That(File.Exists(legacy), Is.True, "Целый оригинал остаётся под прежним именем");
+            Assert.That(File.ReadAllText(legacy), Is.EqualTo(Original));
+
+            Assert.That(Directory.GetFiles(_baseDirectory, "accounts.legacy-*.json"), Is.Empty,
+                "Без удавшейся подмены оригинал не переименовывается");
+        }
+
+        Directory.Delete(target + ".tmp", true);
+
+        LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllText(target), Is.EqualTo(Original), "Следующий запуск переносит целый оригинал");
+            Assert.That(File.Exists(legacy), Is.False);
+            Assert.That(Directory.GetFiles(_baseDirectory, "accounts.legacy-*.json"), Has.Length.EqualTo(1));
+        }
+    }
+
+    [Test]
     public void Run_SplitsMonolithicSettingsIntoSeparateFiles()
     {
         const string Monolithic = """

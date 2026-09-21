@@ -7,13 +7,16 @@ internal static class LegacyDataCatalog
     public const string AccountsFileName = "accounts.json";
     public const string UserStatisticsFileName = "users_statistics.json";
     public const string BotStatisticsFileName = "bot_statistics.json";
+    public const string StreamSessionsFileName = "stream_sessions.json";
+    public const string PollsHistoryFileName = "polls-history.json";
+    public const string UiPreferencesFileName = "ui-preferences.toml";
 
     public static readonly string[] RootFiles =
     [
         UserStatisticsFileName,
         BotStatisticsFileName,
-        "stream_sessions.json",
-        "polls-history.json",
+        StreamSessionsFileName,
+        PollsHistoryFileName,
         "unknown_commands.txt",
         "chat-blockers.txt",
         "chat-zoom.txt",
@@ -30,7 +33,12 @@ internal static class LegacyDataCatalog
         "polls.json",
         "recent-categories.json",
         "update.json",
-        "ui-preferences.toml",
+        UiPreferencesFileName,
+    ];
+
+    public static readonly string[] StoreOwnedSettingsFiles =
+    [
+        .. SettingsFiles.Where(name => !string.Equals(name, UiPreferencesFileName, StringComparison.OrdinalIgnoreCase)),
     ];
 
     public static List<LegacyDataFile> Enumerate(string sourceDirectory)

@@ -10,12 +10,12 @@ public class DashboardLayoutStore
     private readonly ILogger<DashboardLayoutStore>? _logger;
     private readonly JsonStore<DashboardLayoutFileDto> _store;
 
-    public DashboardLayoutStore(ILogger<DashboardLayoutStore>? logger = null, string? filePath = null)
+    public DashboardLayoutStore(ILogger<DashboardLayoutStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
     {
         var path = filePath ?? AppPaths.SettingsFile("dashboard-layout.json");
 
         _logger = logger;
-        _store = new(path, logger);
+        _store = new(path, logger, gate: gate);
 
         _logger?.LogDebug("DashboardLayoutStore инициализирован из {FilePath}", path);
     }

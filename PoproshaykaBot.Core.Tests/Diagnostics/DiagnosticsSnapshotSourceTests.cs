@@ -33,7 +33,7 @@ public sealed class DiagnosticsSnapshotSourceTests
         _memoryUsageSink = new();
 
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, _metrics);
-        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         settingsManager.Current.Returns(new AppSettings());
 
         var eventSubClient = Substitute.For<ITwitchEventSubClient>();

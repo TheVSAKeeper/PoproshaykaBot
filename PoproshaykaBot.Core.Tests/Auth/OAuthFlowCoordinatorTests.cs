@@ -17,7 +17,7 @@ public sealed class OAuthFlowCoordinatorTests
         var settings = new AppSettings();
         settings.Twitch.RedirectUri = "http://localhost:3000/callback";
 
-        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance);
+        _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         _settingsManager.Current.Returns(settings);
 
         _accountsStore = new(filePath: Path.Combine(_tempDir, "accounts.json"));

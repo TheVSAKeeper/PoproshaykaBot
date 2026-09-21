@@ -143,7 +143,7 @@ public sealed class StreamSessionHistoryStoreTests
     }
 
     [Test]
-    public void FailedRead_BlocksEveryWritePath()
+    public void FailedRead_KeepsEveryWritePathOutOfTheFile()
     {
         const string Broken = "{ this is not valid json";
         File.WriteAllText(_tempFile, Broken);
@@ -155,9 +155,11 @@ public sealed class StreamSessionHistoryStoreTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(store.IsLoaded, Is.False);
-            Assert.That(hidden, Is.False);
-            Assert.That(store.Load().Sessions, Is.Empty);
-            Assert.That(File.ReadAllText(_tempFile), Is.EqualTo(Broken));
+            Assert.That(hidden, Is.False, "Скрывать нечего: сессии с таким идентификатором в памяти нет");
+            Assert.That(store.Load().Sessions, Has.Count.EqualTo(1),
+                "Снятое право – это про файл: сессия остаётся в памяти, а выбросить её значило бы потерять её безвозвратно");
+            Assert.That(File.ReadAllText(_tempFile), Is.EqualTo(Broken),
+                "Повреждённый файл не переписывается ни одним путём записи");
         }
     }
 

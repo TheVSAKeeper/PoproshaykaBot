@@ -70,14 +70,14 @@ public sealed class UserStatisticsLoader(
         }
     }
 
-    public async Task RestoreAsync(bool wasLoaded, CancellationToken cancellationToken = default)
+    public async Task RestoreAsync(bool wasLoaded)
     {
         if (!wasLoaded)
         {
             return;
         }
 
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
 
         try
         {
