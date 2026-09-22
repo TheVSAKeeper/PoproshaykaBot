@@ -555,6 +555,13 @@
             <Setter Property="ContextMenu"
                     Value="{StaticResource SessionRowMenu}" />
             <Style.Triggers>
+                <DataTrigger Binding="{Binding DataContext.IsCompactLayout, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                             Value="True">
+                    <Setter Property="MinHeight"
+                            Value="{x:Static views:StreamHistoryPageView.CardCompactHeight}" />
+                    <Setter Property="Padding"
+                            Value="12,6" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsHidden}"
                              Value="True">
                     <Setter Property="Opacity"
@@ -627,7 +634,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <ContentPresenter Grid.Row="0"
+                <ContentPresenter x:Name="CardCover"
+                                  Grid.Row="0"
                                   Grid.Column="0"
                                   Content="{Binding BoxArt}"
                                   ContentTemplate="{StaticResource BoxArtCover}" />
@@ -705,7 +713,8 @@
                     </Border>
                 </StackPanel>
 
-                <ItemsControl Grid.Row="1"
+                <ItemsControl x:Name="CardStripes"
+                              Grid.Row="1"
                               Grid.Column="0"
                               Grid.ColumnSpan="3"
                               Height="6"
@@ -731,6 +740,17 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding DataContext.IsCompactLayout, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                             Value="True">
+                    <Setter TargetName="CardCover"
+                            Property="ContentTemplate"
+                            Value="{StaticResource BoxArtThumb}" />
+                    <Setter TargetName="CardStripes"
+                            Property="Visibility"
+                            Value="Collapsed" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <Style x:Key="RecordCard"

@@ -8,9 +8,10 @@ namespace PoproshaykaBot.Core.Chat;
 
 public sealed class ChatCommandProcessor
 {
+    public const string DefaultPrefix = "!";
+
     private readonly string _unknownCommandsFilePath;
     private readonly Dictionary<string, IChatCommand> _tokenToCommand;
-    private readonly string _prefix;
     private readonly CommandSettingsStore _commandSettingsStore;
     private readonly CommandUsageRepository _usageRepository;
     private readonly ILogger<ChatCommandProcessor> _logger;
@@ -20,7 +21,7 @@ public sealed class ChatCommandProcessor
         CommandSettingsStore commandSettingsStore,
         CommandUsageRepository usageRepository,
         ILogger<ChatCommandProcessor> logger,
-        string prefix = "!")
+        string prefix = DefaultPrefix)
     {
         _commandSettingsStore = commandSettingsStore;
         _usageRepository = usageRepository;
@@ -29,7 +30,7 @@ public sealed class ChatCommandProcessor
         Directory.CreateDirectory(AppPaths.BaseDirectory);
         _unknownCommandsFilePath = AppPaths.Combine("unknown_commands.txt");
 
-        _prefix = string.IsNullOrWhiteSpace(prefix) ? "!" : prefix;
+        Prefix = string.IsNullOrWhiteSpace(prefix) ? DefaultPrefix : prefix;
         _tokenToCommand = new(StringComparer.OrdinalIgnoreCase);
 
         foreach (var command in commands)
@@ -37,6 +38,8 @@ public sealed class ChatCommandProcessor
             Register(command);
         }
     }
+
+    public string Prefix { get; }
 
     public void Register(IChatCommand command)
     {
@@ -75,12 +78,12 @@ public sealed class ChatCommandProcessor
 
         var trimmed = messageText.Trim();
 
-        if (!trimmed.StartsWith(_prefix, StringComparison.Ordinal))
+        if (!trimmed.StartsWith(Prefix, StringComparison.Ordinal))
         {
             return ChatCommandResult.NotHandled;
         }
 
-        var afterPrefix = trimmed[_prefix.Length..].Trim();
+        var afterPrefix = trimmed[Prefix.Length..].Trim();
 
         if (string.IsNullOrEmpty(afterPrefix))
         {

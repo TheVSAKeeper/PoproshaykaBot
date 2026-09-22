@@ -90,6 +90,7 @@ public sealed partial class CommandRowViewModel : ObservableObject
     {
         CommandAccess.Everyone => "Все",
         CommandAccess.Moderators => "Модераторы",
+        CommandAccess.AllowedUsers => "Особый список",
         _ => "Никто",
     };
 
@@ -97,6 +98,7 @@ public sealed partial class CommandRowViewModel : ObservableObject
     {
         CommandAccess.Everyone => "Команду может вызвать любой зритель",
         CommandAccess.Moderators => "Команда отвечает только стримеру и модераторам канала",
+        CommandAccess.AllowedUsers => "Команда отвечает по существу только тем, кто указан в особом списке настроек – остальным приходит отказ",
         _ => "Команда не отвечает ни зрителю, ни стримеру",
     };
 

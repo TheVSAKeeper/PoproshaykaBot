@@ -32,99 +32,111 @@
             BorderBrush="{DynamicResource Border.Subtle}"
             BorderThickness="0,1,0,0"
             Padding="14,5">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <DockPanel LastChildFill="True">
+            <StackPanel DockPanel.Dock="Right"
+                        Orientation="Horizontal"
+                        Margin="16,0,0,0"
+                        DataContext="{Binding DebugBanner}"
+                        AutomationProperties.Name="Отладочный канал"
+                        ToolTip="{Binding Text}"
+                        Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="TextElement.Foreground"
+                                Value="{DynamicResource State.InfoText}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSendingAllowed}"
+                                         Value="True">
+                                <Setter Property="TextElement.Foreground"
+                                        Value="{DynamicResource State.WarningText}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
 
-            <StackPanel Grid.Column="0"
-                        Orientation="Horizontal">
-                <Ellipse Width="8"
+                <Border Width="1"
+                        Margin="0,1,16,1"
+                        Background="{DynamicResource Border.Subtle}" />
+
+                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Bug}"
+                                          Width="13"
+                                          Height="13"
+                                          VerticalAlignment="Center" />
+                <TextBlock Text="{Binding ShortText}"
+                           Margin="6,0,0,0"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap" />
+            </StackPanel>
+
+            <DockPanel DockPanel.Dock="Right"
+                       LastChildFill="True"
+                       ClipToBounds="True"
+                       DataContext="{Binding StreamMonitoring}"
+                       Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
+                <Border DockPanel.Dock="Left"
+                        Width="1"
+                        Margin="14,1,0,1"
+                        Background="{DynamicResource Border.Subtle}" />
+
+                <ContentPresenter DockPanel.Dock="Right"
+                                  Content="{Binding Broadcaster}"
+                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
+                <ContentPresenter DockPanel.Dock="Right"
+                                  Content="{Binding Bot}"
+                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
+
+                <TextBlock Text="Мониторинг стрима"
+                           Margin="14,0,0,0"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="Мониторинг стрима"
+                           Foreground="{DynamicResource Fg.Secondary}"
+                           Opacity="0.7" />
+            </DockPanel>
+
+            <DockPanel DockPanel.Dock="Right"
+                       LastChildFill="True"
+                       ClipToBounds="True">
+                <Ellipse DockPanel.Dock="Left"
+                         Width="8"
                          Height="8"
                          VerticalAlignment="Center"
                          keepshell:SeverityBrushBehavior.Fill="{Binding StatusSeverity}" />
                 <TextBlock Text="{Binding StatusText}"
-                           Margin="8,0,8,0"
+                           Margin="8,0,0,0"
                            VerticalAlignment="Center"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding StatusText}"
                            Foreground="{DynamicResource Fg.Secondary}" />
+            </DockPanel>
 
-                <TextBlock Text="Тяните разделители и плитки; Ctrl+Z – отмена, Escape – выход"
-                           Margin="8,0,0,0"
-                           VerticalAlignment="Center"
-                           TextWrapping="NoWrap"
-                           TextTrimming="CharacterEllipsis"
-                           Foreground="{DynamicResource Fg.Muted}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility"
-                                    Value="Collapsed" />
-                            <Style.Triggers>
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding IsOverviewSelected}"
-                                                   Value="True" />
-                                        <Condition Binding="{Binding Overview.IsEditing}"
-                                                   Value="True" />
-                                    </MultiDataTrigger.Conditions>
-                                    <Setter Property="Visibility"
-                                            Value="Visible" />
-                                </MultiDataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </StackPanel>
-
-            <StackPanel Grid.Column="1"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Right">
-                <StackPanel Orientation="Horizontal"
-                            DataContext="{Binding StreamMonitoring}"
-                            Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock Text="Мониторинг стрима"
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource Fg.Secondary}"
-                               Opacity="0.7" />
-                    <ContentPresenter Content="{Binding Bot}"
-                                      ContentTemplate="{StaticResource MonitoringIndicator}" />
-                    <ContentPresenter Content="{Binding Broadcaster}"
-                                      ContentTemplate="{StaticResource MonitoringIndicator}" />
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal"
-                            Margin="16,0,0,0"
-                            DataContext="{Binding DebugBanner}"
-                            AutomationProperties.Name="Отладочный канал"
-                            ToolTip="{Binding Text}"
-                            Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                            <Setter Property="TextElement.Foreground"
-                                    Value="{DynamicResource State.InfoText}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsSendingAllowed}"
-                                             Value="True">
-                                    <Setter Property="TextElement.Foreground"
-                                            Value="{DynamicResource State.WarningText}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </StackPanel.Style>
-
-                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Bug}"
-                                              Width="13"
-                                              Height="13"
-                                              VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding ShortText}"
-                               Margin="6,0,0,0"
-                               VerticalAlignment="Center"
-                               TextWrapping="NoWrap" />
-                </StackPanel>
-            </StackPanel>
-        </Grid>
+            <TextBlock Text="Тяните разделители и плитки; Ctrl+Z – отмена, Escape – выход"
+                       Margin="0,0,8,0"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource Fg.Muted}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility"
+                                Value="Collapsed" />
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsOverviewSelected}"
+                                               Value="True" />
+                                    <Condition Binding="{Binding Overview.IsEditing}"
+                                               Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility"
+                                        Value="Visible" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </DockPanel>
     </Border>
 </UserControl>

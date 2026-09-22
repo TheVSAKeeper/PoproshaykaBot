@@ -77,36 +77,46 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0"
-                        Orientation="Horizontal"
-                        Margin="14,0">
-                <Image Width="18"
-                       Height="18"
-                       VerticalAlignment="Center"
-                       RenderOptions.BitmapScalingMode="HighQuality">
-                    <Image.Source>
-                        <BitmapImage UriSource="pack://application:,,,/Assets/icon.ico"
-                                     DecodePixelWidth="48" />
-                    </Image.Source>
-                </Image>
-                <TextBlock Text="PoproshaykaBot"
-                           Margin="10,0,0,0"
+            <Grid Grid.Column="0"
+                  Margin="14,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal">
+                    <Image Width="18"
+                           Height="18"
                            VerticalAlignment="Center"
-                           FontWeight="SemiBold" />
-            </StackPanel>
+                           RenderOptions.BitmapScalingMode="HighQuality">
+                        <Image.Source>
+                            <BitmapImage UriSource="pack://application:,,,/Assets/icon.ico"
+                                         DecodePixelWidth="48" />
+                        </Image.Source>
+                    </Image>
+                    <TextBlock Text="PoproshaykaBot"
+                               Margin="10,0,0,0"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="1"
+                           Text="{Binding BuildLabel}"
+                           Style="{StaticResource TextBlock.Subtle}"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           Margin="10,1,10,0"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding BuildTooltip}"
+                           AutomationProperties.Name="Версия сборки"
+                           shell:WindowChrome.IsHitTestVisibleInChrome="True" />
+            </Grid>
 
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True">
-
-                <TextBlock Text="{Binding BuildLabel}"
-                           Style="{StaticResource TextBlock.Subtle}"
-                           VerticalAlignment="Center"
-                           Margin="0,0,12,0"
-                           MaxWidth="220"
-                           TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding BuildTooltip}"
-                           AutomationProperties.Name="Версия сборки" />
 
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center">

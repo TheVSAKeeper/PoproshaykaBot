@@ -21,8 +21,11 @@ public class StreamHistoryTrendGeometryTests
 {
     private static readonly DateTimeOffset Start = new(new DateTime(2026, 9, 1, 18, 0, 0, DateTimeKind.Local));
     private static readonly Size Area = new(1024, 640);
+    private static readonly Size Wide = new(1360, 800);
 
     private const double CardBorder = 1;
+    private const double CompactCoverHeight = 32;
+    private const double WideCoverHeight = 72;
 
     private static readonly string[] Dictionaries =
     [
@@ -92,6 +95,55 @@ public class StreamHistoryTrendGeometryTests
             Assert.That(withoutStrip, Is.LessThanOrEqualTo(CardBorder),
                 "Ни столбиков, ни подписей, ни черты, ни полей обёртки – таблица начинается у рамки карточки");
         }
+    }
+
+    [Test]
+    public void Компактная_карточка_идёт_малым_слотом_без_полосы_долей()
+    {
+        var page = CreatePage();
+        page.IsCardsView = true;
+
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        Arrange(view);
+
+        var compact = Card(view);
+
+        Arrange(view, Wide);
+
+        var wide = Card(view);
+
+        Arrange(view);
+
+        var again = Card(view);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.IsCompactLayout, Is.True, "На 1024 DIP страница идёт стопкой – без этого мерить нечего");
+            Assert.That(compact.Height, Is.LessThanOrEqualTo(StreamHistoryPageView.CardCompactHeight),
+                $"Компактная карточка выросла до {compact.Height:F1} DIP при потолке {StreamHistoryPageView.CardCompactHeight}");
+            Assert.That(compact.CoverHeight, Is.EqualTo(CompactCoverHeight), "В компактной карточке обложка идёт малым слотом");
+            Assert.That(compact.Stripes, Is.EqualTo(Visibility.Collapsed), "Полоса долей категорий набирает высоту, которой в 72 DIP нет");
+            Assert.That(wide.Height, Is.GreaterThanOrEqualTo(StreamHistoryPageView.CardHeight), "Широкая раскладка оставляет карточку прежней");
+            Assert.That(wide.CoverHeight, Is.EqualTo(WideCoverHeight));
+            Assert.That(wide.Stripes, Is.EqualTo(Visibility.Visible));
+            Assert.That(again.Height, Is.EqualTo(compact.Height), "Возврат в узкую раскладку возвращает компактную карточку – признак не залипает");
+            Assert.That(again.Stripes, Is.EqualTo(Visibility.Collapsed));
+        }
+    }
+
+    private static (double Height, double CoverHeight, Visibility Stripes) Card(StreamHistoryPageView view)
+    {
+        var list = (ListBox)view.FindName("SessionCards")!;
+        var container = (ListBoxItem)list.ItemContainerGenerator.ContainerFromIndex(0)!;
+        var presenter = FindChild<ContentPresenter>(container)!;
+        var template = container.ContentTemplate;
+
+        var cover = (ContentPresenter)template.FindName("CardCover", presenter)!;
+        var stripes = (UIElement)template.FindName("CardStripes", presenter)!;
+        var slot = FindChild<Border>(cover)!;
+
+        return (container.ActualHeight, slot.Height, stripes.Visibility);
     }
 
     [Test]
@@ -209,8 +261,13 @@ public class StreamHistoryTrendGeometryTests
 
     private static void Arrange(FrameworkElement view)
     {
-        view.Measure(Area);
-        view.Arrange(new(Area));
+        Arrange(view, Area);
+    }
+
+    private static void Arrange(FrameworkElement view, Size area)
+    {
+        view.Measure(area);
+        view.Arrange(new(area));
         view.UpdateLayout();
     }
 

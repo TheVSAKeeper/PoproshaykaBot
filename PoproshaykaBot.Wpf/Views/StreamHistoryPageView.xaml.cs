@@ -22,6 +22,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double TrendStripHeight = 40;
     public const double TrendStripCompactHeight = 36;
     public const double CardHeight = 96;
+    public const double CardCompactHeight = 72;
     public const double DetailRowMinHeight = 200;
     public const double DetailCardsRowMinHeight = 150;
     public const double ListRowShare = 3;
