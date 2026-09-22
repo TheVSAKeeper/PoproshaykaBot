@@ -40,16 +40,17 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private bool _isFilterActive;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PointsSortArrow))]
-    [NotifyPropertyChangedFor(nameof(MessagesSortArrow))]
-    [NotifyPropertyChangedFor(nameof(NameSortArrow))]
+    [NotifyPropertyChangedFor(nameof(PointsSortIndicator))]
+    [NotifyPropertyChangedFor(nameof(MessagesSortIndicator))]
+    [NotifyPropertyChangedFor(nameof(NameSortIndicator))]
+    [NotifyPropertyChangedFor(nameof(RankSortIndicator))]
     private UserStatisticsSortKey _sortKey = UserStatisticsSortKey.Points;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SortDirectionArrow))]
-    [NotifyPropertyChangedFor(nameof(PointsSortArrow))]
-    [NotifyPropertyChangedFor(nameof(MessagesSortArrow))]
-    [NotifyPropertyChangedFor(nameof(NameSortArrow))]
+    [NotifyPropertyChangedFor(nameof(PointsSortIndicator))]
+    [NotifyPropertyChangedFor(nameof(MessagesSortIndicator))]
+    [NotifyPropertyChangedFor(nameof(NameSortIndicator))]
+    [NotifyPropertyChangedFor(nameof(RankSortIndicator))]
     private bool _sortDescending = true;
 
     [ObservableProperty]
@@ -71,10 +72,10 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private string _totalPoints = "0";
 
     [ObservableProperty]
-    private string _totalBonus = "+0";
+    private string _totalBonus = "0";
 
     [ObservableProperty]
-    private string _totalPenalty = "−0";
+    private string _totalPenalty = "0";
 
     public UserStatisticsPageViewModel(
         IUserStatisticsRepository userStatistics,
@@ -120,13 +121,13 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public IRelayCommand? EmptyActionCommand => IsFilterActive ? ClearFilterCommand : null;
 
-    public string SortDirectionArrow => SortDescending ? "↓" : "↑";
+    public UserStatisticsSortIndicator PointsSortIndicator => IndicatorFor(UserStatisticsSortKey.Points);
 
-    public string PointsSortArrow => ArrowFor(UserStatisticsSortKey.Points);
+    public UserStatisticsSortIndicator MessagesSortIndicator => IndicatorFor(UserStatisticsSortKey.Messages);
 
-    public string MessagesSortArrow => ArrowFor(UserStatisticsSortKey.Messages);
+    public UserStatisticsSortIndicator NameSortIndicator => IndicatorFor(UserStatisticsSortKey.Name);
 
-    public string NameSortArrow => ArrowFor(UserStatisticsSortKey.Name);
+    public UserStatisticsSortIndicator RankSortIndicator => IndicatorFor(UserStatisticsSortKey.Rank);
 
     public string VisibleCountText => IsFilterActive
         ? UserStatisticsRanking.DescribeVisibleCount(_rows.Count, _allRows.Count)
@@ -228,9 +229,14 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         OnPropertyChanged(nameof(SelectedPlaceText));
     }
 
-    private string ArrowFor(UserStatisticsSortKey key)
+    private UserStatisticsSortIndicator IndicatorFor(UserStatisticsSortKey key)
     {
-        return SortKey == key ? SortDirectionArrow : string.Empty;
+        if (SortKey != key)
+        {
+            return UserStatisticsSortIndicator.None;
+        }
+
+        return SortDescending ? UserStatisticsSortIndicator.Descending : UserStatisticsSortIndicator.Ascending;
     }
 
     [RelayCommand]
@@ -393,11 +399,13 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         long totalPenalty = 0;
 
         var pointTerm = _userRankService.PointTerm;
+        var ranks = _settingsManager.Current.Ranks.Ranks;
 
         foreach (var user in all)
         {
-            var rank = _userRankService.GetRankDisplay(user.Points);
-            _allRows.Add(new UserStatisticsRowViewModel(user, rank, pointTerm));
+            var rank = _userRankService.GetRank(user.Points);
+            var standing = UserRankStanding.Create(user.Points, _userRankService.GetRankDisplay(user.Points), rank, ranks);
+            _allRows.Add(new UserStatisticsRowViewModel(user, standing, pointTerm));
 
             totalMessages += (long)user.MessageCount;
             totalPoints += user.Points;
@@ -408,8 +416,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         TotalUsers = all.Count.ToString("N0", UiCulture.Russian);
         TotalMessages = totalMessages.ToString("N0", UiCulture.Russian);
         TotalPoints = totalPoints.ToString("N0", UiCulture.Russian);
-        TotalBonus = string.Create(UiCulture.Russian, $"+{totalBonus:N0}");
-        TotalPenalty = string.Create(UiCulture.Russian, $"−{totalPenalty:N0}");
+        TotalBonus = totalBonus > 0 ? string.Create(UiCulture.Russian, $"+{totalBonus:N0}") : "0";
+        TotalPenalty = totalPenalty > 0 ? string.Create(UiCulture.Russian, $"−{totalPenalty:N0}") : "0";
 
         RebuildView();
     }

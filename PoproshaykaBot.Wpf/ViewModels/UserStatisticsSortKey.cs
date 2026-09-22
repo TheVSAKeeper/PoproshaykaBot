@@ -6,4 +6,5 @@ public enum UserStatisticsSortKey
     Points = 1,
     Messages = 2,
     Name = 3,
+    Rank = 4,
 }

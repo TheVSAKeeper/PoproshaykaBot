@@ -9,6 +9,13 @@ public class UserStatisticsRankingTests
 {
     private static readonly PointTerm Term = new();
 
+    private static readonly List<UserRank> Ranks =
+    [
+        new("♟", "ПЕШКА", 0),
+        new("♞", "КОНЬ", 300),
+        new("♜", "ЛАДЬЯ", 1000),
+    ];
+
     private static UserStatisticsRowViewModel Row(string name, ulong messages, ulong bonus = 0, ulong penalty = 0)
     {
         var source = new UserStatistics
@@ -20,7 +27,14 @@ public class UserStatisticsRankingTests
             PenaltyPoints = penalty,
         };
 
-        return new(source, "♟ ПЕШКА", Term);
+        var current = Ranks
+            .Where(rank => source.Points >= (long)rank.MinMessages)
+            .OrderByDescending(rank => rank.MinMessages)
+            .FirstOrDefault() ?? Ranks[0];
+
+        var standing = UserRankStanding.Create(source.Points, $"{current.Emoji} {current.DisplayName}", current, Ranks);
+
+        return new(source, standing, Term);
     }
 
     private static List<UserStatisticsRowViewModel> Sample()
@@ -39,6 +53,8 @@ public class UserStatisticsRankingTests
     [TestCase(UserStatisticsSortKey.Messages, false, "zed,borland,Anna")]
     [TestCase(UserStatisticsSortKey.Name, false, "Anna,borland,zed")]
     [TestCase(UserStatisticsSortKey.Name, true, "zed,borland,Anna")]
+    [TestCase(UserStatisticsSortKey.Rank, true, "Anna,borland,zed")]
+    [TestCase(UserStatisticsSortKey.Rank, false, "zed,borland,Anna")]
     public void Orders_rows_by_key_and_direction(UserStatisticsSortKey sortKey, bool descending, string expected)
     {
         var ordered = UserStatisticsRanking.Arrange(Sample(), sortKey, descending);
@@ -88,6 +104,90 @@ public class UserStatisticsRankingTests
         var ordered = UserStatisticsRanking.Arrange([Row("empty", 0)], UserStatisticsSortKey.Points, true);
 
         Assert.That(ordered[0].Share, Is.EqualTo(UserStatisticsRanking.MinimumShare));
+    }
+
+    [Test]
+    public void Breaks_equal_ranks_by_points_and_then_by_name()
+    {
+        var rows = new List<UserStatisticsRowViewModel>
+        {
+            Row("bob", 10),
+            Row("alice", 250),
+            Row("carol", 250),
+        };
+
+        var ordered = UserStatisticsRanking.Arrange(rows, UserStatisticsSortKey.Rank, true);
+
+        Assert.That(ordered.Select(row => row.Name), Is.EqualTo(new[] { "alice", "carol", "bob" }));
+    }
+
+    [Test]
+    public void Measures_the_way_to_the_next_rank()
+    {
+        var row = Row("climber", 400);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.RankDisplay, Is.EqualTo("♞ КОНЬ"));
+            Assert.That(row.HasNextRank, Is.True);
+            Assert.That(row.NextRankText, Is.EqualTo("До ранга ♜ ЛАДЬЯ"));
+            Assert.That(row.Standing.PointsToNext, Is.EqualTo(600));
+            Assert.That(row.Standing.Progress, Is.EqualTo(100d / 700).Within(0.0001));
+        });
+    }
+
+    [Test]
+    public void Says_the_top_rank_has_nowhere_left_to_grow()
+    {
+        var row = Row("king", 4000);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.HasNextRank, Is.False);
+            Assert.That(row.HasRankPath, Is.True);
+            Assert.That(row.NextRankText, Is.EqualTo("Максимальный ранг"));
+            Assert.That(row.PointsToNextText, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void Hides_the_way_when_the_only_rank_is_the_one_already_shown()
+    {
+        List<UserRank> ranks = [new("♟", "ПЕШКА", 500)];
+
+        var source = new UserStatistics
+        {
+            UserId = "newbie-id",
+            Name = "newbie",
+            MessageCount = 10,
+        };
+
+        var current = ranks[0];
+        var standing = UserRankStanding.Create(source.Points, $"{current.Emoji} {current.DisplayName}", current, ranks);
+        var row = new UserStatisticsRowViewModel(source, standing, Term);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.RankDisplay, Is.EqualTo("♟ ПЕШКА"));
+            Assert.That(row.HasNextRank, Is.False);
+            Assert.That(standing.IsTopRank, Is.False);
+            Assert.That(row.HasRankPath, Is.False);
+            Assert.That(row.NextRankText, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void Shows_a_plain_zero_instead_of_a_signed_one()
+    {
+        var row = Row("quiet", 10);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.BonusDisplay, Is.EqualTo("0"));
+            Assert.That(row.PenaltyDisplay, Is.EqualTo("0"));
+            Assert.That(row.HasBonus, Is.False);
+            Assert.That(row.HasPenalty, Is.False);
+        });
     }
 
     [TestCase(1, 421, "1-е место из 421")]
