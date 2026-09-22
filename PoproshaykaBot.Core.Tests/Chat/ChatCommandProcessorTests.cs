@@ -257,7 +257,96 @@ public sealed class ChatCommandProcessorTests
         });
     }
 
-    private static CommandContext CreateContext()
+    [Test]
+    public async Task Настройка_прав_отнимает_команду_у_зрителя_и_снятие_возвращает_её()
+    {
+        var command = new FakeCommand("ранг");
+        var processor = CreateProcessor(command);
+
+        _settingsStore.Mutate(settings => settings.Commands["ранг"] = new()
+        {
+            Access = CommandAccessLevel.Moderators,
+        });
+
+        var refused = await processor.TryProcessAsync("!ранг", CreateContext(), CancellationToken.None);
+        var allowedToModerator = await processor.TryProcessAsync("!ранг", CreateContext(isModerator: true), CancellationToken.None);
+
+        _settingsStore.Mutate(settings => settings.Commands["ранг"].Access = null);
+
+        var returned = await processor.TryProcessAsync("!ранг", CreateContext(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(refused.IsCommand, Is.False, "Отказ по правам выглядит так же, как отказ CanExecute");
+            Assert.That(allowedToModerator.IsCommand, Is.True);
+            Assert.That(returned.IsCommand, Is.True, "Снятое право возвращается без перезапуска");
+            Assert.That(command.Calls, Is.EqualTo(2));
+            Assert.That(_usage.GetSnapshot().Single().TotalCount, Is.EqualTo(2), "Отказ по правам вызовом не считается");
+        });
+    }
+
+    [TestCase(null)]
+    [TestCase(CommandAccessLevel.Everyone)]
+    [TestCase(CommandAccessLevel.Moderators)]
+    [TestCase(CommandAccessLevel.Broadcaster)]
+    [TestCase((CommandAccessLevel)(-3))]
+    [TestCase((CommandAccessLevel)99)]
+    public async Task Зрителю_и_модератору_нельзя_выдать_команду_стримера_никакой_настройкой(CommandAccessLevel? access)
+    {
+        var command = new FakeCommand("название")
+        {
+            BroadcasterOnly = true,
+        };
+
+        var processor = CreateProcessor(command);
+
+        _settingsStore.Mutate(settings => settings.Commands["название"] = new()
+        {
+            Access = access,
+        });
+
+        var viewer = await processor.TryProcessAsync("!название", CreateContext(), CancellationToken.None);
+        var moderator = await processor.TryProcessAsync("!название", CreateContext(isModerator: true), CancellationToken.None);
+        var broadcaster = await processor.TryProcessAsync("!название", CreateContext(isBroadcaster: true), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewer.IsCommand, Is.False, "Настройка прав сужает доступ, а не расширяет его");
+            Assert.That(moderator.IsCommand, Is.False);
+            Assert.That(broadcaster.IsCommand, Is.True,
+                "Строже стримера настройка стать не может, поэтому владелец канала команду сохраняет");
+
+            Assert.That(command.Calls, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task Настройка_сужает_доступ_поверх_ограничения_в_коде()
+    {
+        var command = new FakeCommand("игра")
+        {
+            ModeratorsOnly = true,
+        };
+
+        var processor = CreateProcessor(command);
+
+        _settingsStore.Mutate(settings => settings.Commands["игра"] = new()
+        {
+            Access = CommandAccessLevel.Broadcaster,
+        });
+
+        var moderator = await processor.TryProcessAsync("!игра", CreateContext(isModerator: true), CancellationToken.None);
+        var broadcaster = await processor.TryProcessAsync("!игра", CreateContext(isBroadcaster: true), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(moderator.IsCommand, Is.False, "Настройка вправе поднять планку выше кодовой");
+            Assert.That(broadcaster.IsCommand, Is.True);
+            Assert.That(command.Calls, Is.EqualTo(1));
+        });
+    }
+
+    private static CommandContext CreateContext(bool isBroadcaster = false, bool isModerator = false)
     {
         return new()
         {
@@ -266,6 +355,8 @@ public sealed class ChatCommandProcessorTests
             UserId = "u1",
             Username = "alice",
             DisplayName = "Алиса",
+            IsBroadcaster = isBroadcaster,
+            IsModerator = isModerator,
         };
     }
 
@@ -284,13 +375,22 @@ public sealed class ChatCommandProcessorTests
 
         public bool Throws { get; init; }
 
+        public bool BroadcasterOnly { get; init; }
+
+        public bool ModeratorsOnly { get; init; }
+
         public OutgoingMessage? Response { get; init; } = OutgoingMessage.Normal("ответ");
 
         public int Calls { get; private set; }
 
         public bool CanExecute(CommandContext context)
         {
-            return true;
+            if (BroadcasterOnly)
+            {
+                return context.IsBroadcaster;
+            }
+
+            return !ModeratorsOnly || context.IsBroadcaster || context.IsModerator;
         }
 
         public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)

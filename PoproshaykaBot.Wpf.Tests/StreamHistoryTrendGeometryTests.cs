@@ -3,12 +3,15 @@ using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.Views;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -22,7 +25,16 @@ public class StreamHistoryTrendGeometryTests
     private static readonly DateTimeOffset Start = new(new DateTime(2026, 9, 1, 18, 0, 0, DateTimeKind.Local));
     private static readonly Size Area = new(1024, 640);
     private static readonly Size Wide = new(1360, 800);
+    private static readonly Size NarrowSideBySide = new(StreamHistoryPageView.SideBySideWidth, 800);
 
+    private const int HiddenMenuItemIndex = 1;
+    private const int TrendBarCount = 40;
+    private const int FourDigitPeak = 2543;
+    private const int FiveDigitPeak = 12345;
+    private const int EdgePeak = 12317;
+    private const int LongTrend = 80;
+    private const double Tolerance = 0.5;
+    private const int LongHistory = 200;
     private const double CardBorder = 1;
     private const double CompactCoverHeight = 32;
     private const double WideCoverHeight = 72;
@@ -147,6 +159,165 @@ public class StreamHistoryTrendGeometryTests
     }
 
     [Test]
+    public void Подпись_крайнего_столбика_не_выходит_за_карточку_таблицы()
+    {
+        var page = CreatePage(sessions: LongTrend, peak: FiveDigitPeak, firstPeak: EdgePeak, trendLength: LongTrend);
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        Arrange(view, NarrowSideBySide);
+
+        var card = (FrameworkElement)view.FindName("TableCard")!;
+
+        page.TrySelectAt(0);
+        Pump(view);
+
+        var right = LabelBounds(card, TrendLabel(view, LongTrend - 1));
+
+        page.TrySelectAt(LongTrend - 1);
+        Pump(view);
+
+        var left = LabelBounds(card, TrendLabel(view, 0));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(right.Right, Is.LessThanOrEqualTo(card.ActualWidth + Tolerance),
+                $"Подпись «{right.Text}» крайнего правого столбика вышла за правую границу карточки на {right.Right - card.ActualWidth:F1} DIP");
+            Assert.That(left.Left, Is.GreaterThanOrEqualTo(-Tolerance),
+                $"Подпись «{left.Text}» крайнего левого столбика вышла за левую границу карточки на {-left.Left:F1} DIP");
+            Assert.That(right.Clipped, Is.False, "Подпись правого края обрезана – запас в поле не сработал");
+            Assert.That(left.Clipped, Is.False, "Подпись левого края обрезана – запас в поле не сработал");
+        }
+    }
+
+    private static (double Left, double Right, bool Clipped, string Text) LabelBounds(FrameworkElement card, TextBlock label)
+    {
+        var left = label.TransformToAncestor(card).Transform(default).X;
+
+        return (left, left + label.ActualWidth, LayoutInformation.GetLayoutClip(label) is not null, label.Text);
+    }
+
+    private static TextBlock TrendLabel(StreamHistoryPageView view, int index)
+    {
+        var strip = (ItemsControl)view.FindName("TrendStrip")!;
+        var presenter = (ContentPresenter)strip.ItemContainerGenerator.ContainerFromIndex(index)!;
+        var button = FindChild<Button>(presenter)!;
+
+        return (TextBlock)button.Template.FindName("Value", button)!;
+    }
+
+    [Test]
+    public void Подпись_четырёхзначного_пика_не_режется_шириной_столбика()
+    {
+        var page = CreatePage(sessions: TrendBarCount, peak: FourDigitPeak);
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        Arrange(view, Wide);
+
+        var label = PeakLabel(view);
+        var text = label.Text;
+        var visibility = label.Visibility;
+        var clip = LayoutInformation.GetLayoutClip(label);
+
+        Arrange(view);
+
+        var compact = PeakLabel(view).Visibility;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(visibility, Is.EqualTo(Visibility.Visible), "Подпись пика видна в широкой раскладке");
+            Assert.That(text, Is.EqualTo(StreamHistoryPageViewModel.FormatNumber(FourDigitPeak)));
+            Assert.That(clip, Is.Null,
+                $"Подпись «{text}» обрезана шириной своего столбика – запас в {StreamHistoryPageView.TrendValueMargin.Left:F0} DIP не сработал");
+            Assert.That(compact, Is.EqualTo(Visibility.Collapsed), "В компактной раскладке подпись по-прежнему скрыта");
+        }
+    }
+
+    [Test]
+    public void Выделение_доводится_пикселями_и_не_двигает_уже_видимую_строку()
+    {
+        var page = CreatePage(sessions: LongHistory);
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        Arrange(view, Wide);
+
+        var list = (ListBox)view.FindName("SessionsList")!;
+        var viewer = FindChild<ScrollViewer>(list)!;
+        var panel = FindChild<VirtualizingStackPanel>(list);
+
+        var cut = LastPartiallyVisible(list, viewer);
+        var overflow = Bounds(list, viewer, cut).Bottom - viewer.ViewportHeight;
+
+        page.TrySelectAt(cut);
+        Pump(view);
+
+        var revealed = Bounds(list, viewer, cut);
+        var settled = viewer.VerticalOffset;
+
+        page.TrySelectAt(cut - 1);
+        Pump(view);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(VirtualizingPanel.GetScrollUnit(list), Is.EqualTo(ScrollUnit.Pixel),
+                "Список прокручивается пикселями, а не целыми строками");
+            Assert.That(panel, Is.Not.Null, "Виртуализация списка сохранена – панель осталась VirtualizingStackPanel");
+            Assert.That(panel!.Children, Has.Count.LessThan(LongHistory / 4),
+                "Пиксельная прокрутка не должна материализовать всю историю");
+            Assert.That(overflow, Is.GreaterThan(0.5), "Тест мерит строку, которая не влезла в окно целиком");
+            Assert.That(revealed.Bottom, Is.EqualTo(viewer.ViewportHeight).Within(1),
+                "Строка доведена ровно на недостающие пиксели, а не на целую строку");
+            Assert.That(viewer.VerticalOffset, Is.EqualTo(settled).Within(0.5),
+                "Выбор строки, видимой целиком, список не двигает");
+        }
+    }
+
+    private static TextBlock PeakLabel(StreamHistoryPageView view)
+    {
+        var strip = (ItemsControl)view.FindName("TrendStrip")!;
+        var bar = strip.Items.Cast<StreamTrendBarViewModel>().Single(item => item.IsPeak);
+        var presenter = (ContentPresenter)strip.ItemContainerGenerator.ContainerFromItem(bar)!;
+        var button = FindChild<Button>(presenter)!;
+
+        return (TextBlock)button.Template.FindName("Value", button)!;
+    }
+
+    private static (double Top, double Bottom) Bounds(ItemsControl list, ScrollViewer viewer, int index)
+    {
+        var container = (FrameworkElement)list.ItemContainerGenerator.ContainerFromIndex(index)!;
+        var top = container.TransformToAncestor(viewer).Transform(default).Y;
+
+        return (top, top + container.ActualHeight);
+    }
+
+    private static int LastPartiallyVisible(ItemsControl list, ScrollViewer viewer)
+    {
+        for (var index = 0; index < list.Items.Count; index++)
+        {
+            if (list.ItemContainerGenerator.ContainerFromIndex(index) is null)
+            {
+                break;
+            }
+
+            var bounds = Bounds(list, viewer, index);
+
+            if (bounds.Top < viewer.ViewportHeight && bounds.Bottom > viewer.ViewportHeight + 0.5)
+            {
+                return index;
+            }
+        }
+
+        throw new InvalidOperationException("В списке нет строки, обрезанной нижним краем окна");
+    }
+
+    private static void Pump(FrameworkElement view)
+    {
+        view.Dispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
+        view.UpdateLayout();
+        view.Dispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
+        view.UpdateLayout();
+    }
+
+    [Test]
     public void Меню_фильтра_висит_на_строке_сегмента_и_достижимо_с_клавиатуры()
     {
         var page = CreatePage();
@@ -157,18 +328,17 @@ public class StreamHistoryTrendGeometryTests
         page.TrySelectAt(0);
         Arrange(view);
 
-        var grid = (DataGrid)view.FindName("SegmentsGrid")!;
-        var row = (DataGridRow)grid.ItemContainerGenerator.ContainerFromIndex(0)!;
-        var cell = FindChild<DataGridCell>(row)!;
+        var list = (ListBox)view.FindName("SegmentCards")!;
+        var card = (ListBoxItem)list.ItemContainerGenerator.ContainerFromIndex(0)!;
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(page.Segments[0].CanFilter, Is.True);
-            Assert.That(ContextMenuService.GetContextMenu(row), Is.Not.Null);
-            Assert.That(cell.Focusable, Is.True, "Фокус клавиатуры стоит на ячейке – строка у DataGrid не фокусируема");
-            Assert.That(OwnerOfMenu(cell), Is.SameAs(row),
-                "Клавиша контекстного меню поднимает ContextMenuOpening от ячейки вверх и находит меню строки");
-            Assert.That(row.Cursor, Is.Null, "Строка больше не притворяется кнопкой");
+            Assert.That(ContextMenuService.GetContextMenu(card), Is.Not.Null);
+            Assert.That(card.Focusable, Is.True, "Фокус клавиатуры стоит на самой карточке – с неё и поднимается ContextMenuOpening");
+            Assert.That(OwnerOfMenu(card), Is.SameAs(card));
+            Assert.That(card.Cursor, Is.EqualTo(Cursors.Hand),
+                "Карточка выбирается кликом, и курсор у неё тот же, что у строк списков каркаса");
         }
     }
 
@@ -183,15 +353,15 @@ public class StreamHistoryTrendGeometryTests
         page.TrySelectAt(0);
         Arrange(view);
 
-        var sessions = (DataGrid)view.FindName("SessionsGrid")!;
-        var segments = (DataGrid)view.FindName("SegmentsGrid")!;
+        var sessions = (ListBox)view.FindName("SessionsList")!;
+        var segments = (ListBox)view.FindName("SegmentCards")!;
 
-        var firstRow = (DataGridRow)sessions.ItemContainerGenerator.ContainerFromIndex(0)!;
-        var secondRow = (DataGridRow)sessions.ItemContainerGenerator.ContainerFromIndex(1)!;
-        var segmentRow = (DataGridRow)segments.ItemContainerGenerator.ContainerFromIndex(0)!;
+        var firstRow = (ListBoxItem)sessions.ItemContainerGenerator.ContainerFromIndex(0)!;
+        var secondRow = (ListBoxItem)sessions.ItemContainerGenerator.ContainerFromIndex(1)!;
+        var segmentRow = (ListBoxItem)segments.ItemContainerGenerator.ContainerFromIndex(0)!;
 
-        var first = MenuItemState(firstRow);
-        var second = MenuItemState(secondRow);
+        var first = MenuItemState(firstRow, HiddenMenuItemIndex);
+        var second = MenuItemState(secondRow, HiddenMenuItemIndex);
         var segment = MenuItemState(segmentRow);
 
         using (Assert.EnterMultipleScope())
@@ -204,7 +374,7 @@ public class StreamHistoryTrendGeometryTests
         }
     }
 
-    private static (object? DataContext, object? Header) MenuItemState(FrameworkElement owner)
+    private static (object? DataContext, object? Header) MenuItemState(FrameworkElement owner, int index = 0)
     {
         var menu = ContextMenuService.GetContextMenu(owner)
             ?? throw new InvalidOperationException("У строки нет контекстного меню");
@@ -214,7 +384,7 @@ public class StreamHistoryTrendGeometryTests
 
         try
         {
-            var item = (MenuItem)menu.Items[0];
+            var item = (MenuItem)menu.Items[index];
             item.Dispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
 
             return (item.DataContext, item.Header);
@@ -274,32 +444,37 @@ public class StreamHistoryTrendGeometryTests
     private static double TableTop(StreamHistoryPageView view)
     {
         var card = (FrameworkElement)view.FindName("TableCard")!;
-        var grid = (FrameworkElement)view.FindName("SessionsGrid")!;
+        var table = (FrameworkElement)view.FindName("SessionsTable")!;
 
-        return grid.TransformToAncestor(card).Transform(default).Y;
+        return table.TransformToAncestor(card).Transform(default).Y;
     }
 
-    private StreamHistoryPageViewModel CreatePage()
+    private StreamHistoryPageViewModel CreatePage(int sessions = 4, int peak = 0, int firstPeak = 0, int trendLength = StreamHistoryPageViewModel.DefaultTrendLength)
     {
         var store = new StreamSessionHistoryStore(filePath: Path.Combine(_directory, "sessions.json"));
 
-        for (var index = 0; index < 4; index++)
+        for (var index = 0; index < sessions; index++)
         {
-            store.Append(Session(index));
+            var value = index == sessions - 1 ? peak : index == 0 ? firstPeak : 0;
+
+            store.Append(Session(index, value));
         }
 
         var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         var boxArt = new GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<GameBoxArtProvider>.Instance);
+        ISettingsStore settings = new MemorySettings();
+
+        settings.SetInt(SettingsKeys.StreamTrendLength, trendLength);
 
         return new(
             store,
             users,
-            new MemorySettings(),
+            settings,
             boxArt,
             new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
     }
 
-    private static StreamSessionRecord Session(int index)
+    private static StreamSessionRecord Session(int index, int peak = 0)
     {
         var started = Start.AddDays(index);
 
@@ -312,7 +487,7 @@ public class StreamHistoryTrendGeometryTests
             Game = index % 2 == 0 ? "Just Chatting" : "Minecraft",
             MessageCount = 100 + index,
             ChatterCount = 1,
-            PeakViewers = 10 + index,
+            PeakViewers = peak > 0 ? peak : 10 + index,
             AverageViewers = 5,
         };
     }

@@ -1,21 +1,30 @@
-﻿using PoproshaykaBot.Wpf.ViewModels;
+﻿using KeepShell.Services.Platform;
+using PoproshaykaBot.Wpf.ViewModels;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views;
 
 public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPageViewModel>
 {
+    public static readonly DependencyProperty SegmentColumnsProperty = DependencyProperty.Register(
+        nameof(SegmentColumns),
+        typeof(int),
+        typeof(StreamHistoryPageView),
+        new PropertyMetadata(1));
+
+    public const double SegmentCardMinWidth = 272;
+    public const double SegmentsPaneMinWidth = 220;
+    public const int SegmentCardMaxColumns = 3;
     public const double SideBySideWidth = 1240;
     public const double StackedWidth = 1200;
     public const double DetailMinWidth = 360;
-    public const double TableMinWidth = 720;
+    public const double TableMinWidth = 792;
     public const double DetailSplitWidth = 740;
     public const double DetailStackWidth = 700;
     public const double ChattersMinWidth = 240;
@@ -29,10 +38,21 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double DetailRowShare = 2;
     public const double DetailCardsRowShare = 1;
 
+    // TODO: подпись пика выходит за свой столбик на 24 DIP в каждую сторону, у крайних столбиков – на 48
+    // внутрь полосы; потолок держит пятизначное значение при 80 столбиках и масштабе шрифта 1.6,
+    // шестизначный пик или больший масштаб снова обрежут её, и тогда подписи нужен свой слой поверх
+    // полосы вместо запаса в поле
+    public static readonly Thickness TrendValueMargin = new(-24, 0, -24, 2);
+    public static readonly Thickness TrendValueFirstMargin = new(0, 0, -48, 2);
+    public static readonly Thickness TrendValueLastMargin = new(-48, 0, 0, 2);
+
+    private readonly IClipboardService _clipboard = new ClipboardService();
+
     private bool _sideBySide;
     private bool _layoutApplied;
     private bool _detailStacked;
     private bool _detailApplied;
+    private double _segmentCardsWidth;
 
     public StreamHistoryPageView()
     {
@@ -43,6 +63,12 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         DetailSplit.SizeChanged += OnDetailSplitSizeChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    public int SegmentColumns
+    {
+        get => (int)GetValue(SegmentColumnsProperty);
+        set => SetValue(SegmentColumnsProperty, value);
     }
 
     private static void Place(UIElement element, int row, int column, int rowSpan = 1, int columnSpan = 1)
@@ -80,6 +106,25 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         _detailApplied = false;
         UpdateLayoutMode();
         UpdateDetailMode();
+        ApplySegmentColumns();
+    }
+
+    private void OnSegmentCardsSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        _segmentCardsWidth = e.NewSize.Width;
+        ApplySegmentColumns();
+    }
+
+    private void ApplySegmentColumns()
+    {
+        if (_segmentCardsWidth <= 0)
+        {
+            return;
+        }
+
+        var fits = (int)(_segmentCardsWidth / (SegmentCardMinWidth * FontScaleManager.Current));
+
+        SegmentColumns = Math.Clamp(fits, 1, SegmentCardMaxColumns);
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -115,12 +160,6 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         _detailStacked = stacked;
         _detailApplied = true;
 
-        var numbers = stacked ? Visibility.Collapsed : Visibility.Visible;
-
-        SegmentMessagesColumn.Visibility = numbers;
-        SegmentPeakColumn.Visibility = numbers;
-        SegmentAverageColumn.Visibility = numbers;
-
         DetailSplit.ColumnDefinitions.Clear();
         DetailSplit.RowDefinitions.Clear();
 
@@ -138,7 +177,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         }
         else
         {
-            DetailSplit.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star), MinWidth = 220 * scale });
+            DetailSplit.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star), MinWidth = SegmentsPaneMinWidth * scale });
             DetailSplit.ColumnDefinitions.Add(new() { Width = new(12, GridUnitType.Pixel) });
             DetailSplit.ColumnDefinitions.Add(new()
             {
@@ -316,59 +355,13 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
                 if (viewModel.IsCardsView)
                 {
                     SessionCards.ScrollIntoView(row);
-                    RevealFully(SessionCards, row);
                 }
                 else
                 {
-                    SessionsGrid.ScrollIntoView(row);
-                    RevealFully(SessionsGrid, row);
+                    SessionsList.ScrollIntoView(row);
                 }
             },
             DispatcherPriority.Background);
-    }
-
-    private static void RevealFully(ItemsControl list, object item)
-    {
-        if (list.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement container)
-        {
-            return;
-        }
-
-        if (FindScrollViewer(list) is not { } viewer)
-        {
-            return;
-        }
-
-        var top = container.TransformToAncestor(viewer).Transform(default(Point)).Y;
-        var bottom = top + container.ActualHeight;
-        if (bottom > viewer.ViewportHeight + 0.5)
-        {
-            var down = viewer.CanContentScroll ? 1 : bottom - viewer.ViewportHeight;
-            viewer.ScrollToVerticalOffset(viewer.VerticalOffset + down);
-        }
-        else if (top < -0.5)
-        {
-            var up = viewer.CanContentScroll ? 1 : -top;
-            viewer.ScrollToVerticalOffset(Math.Max(0, viewer.VerticalOffset - up));
-        }
-    }
-
-    private static ScrollViewer? FindScrollViewer(DependencyObject root)
-    {
-        if (root is ScrollViewer found)
-        {
-            return found;
-        }
-
-        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
-        {
-            if (FindScrollViewer(VisualTreeHelper.GetChild(root, index)) is { } viewer)
-            {
-                return viewer;
-            }
-        }
-
-        return null;
     }
 
     private void OnTrendMenuClick(object sender, RoutedEventArgs e)
@@ -414,6 +407,47 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         }
 
         viewModel.SetSessionHiddenCommand.Execute(row);
+    }
+
+    private void OnCopySessionCanExecute(object sender, CanExecuteRoutedEventArgs e)
+    {
+        e.CanExecute = ResolveSessionRow(e.Parameter) is not null;
+        e.Handled = true;
+    }
+
+    private void OnCopySessionExecuted(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (ResolveSessionRow(e.Parameter) is not { } row)
+        {
+            return;
+        }
+
+        _clipboard.TrySetText(BuildRowClipboardText(row));
+        e.Handled = true;
+    }
+
+    private StreamSessionRowViewModel? ResolveSessionRow(object? parameter)
+    {
+        if (parameter is StreamSessionRowViewModel parameterRow)
+        {
+            return parameterRow;
+        }
+
+        return (DataContext as StreamHistoryPageViewModel)?.SelectedRow;
+    }
+
+    private static string BuildRowClipboardText(StreamSessionRowViewModel row)
+    {
+        return string.Join(
+            '\t',
+            row.StartedAtFormatted,
+            row.DurationFormatted,
+            row.TitleFormatted,
+            row.GameCellText,
+            row.MessageCountFormatted,
+            row.ChatterCountFormatted,
+            row.PeakViewersFormatted,
+            row.AverageViewersFormatted);
     }
 
     private void OnCategoryRowActivated(object sender, MouseButtonEventArgs e)

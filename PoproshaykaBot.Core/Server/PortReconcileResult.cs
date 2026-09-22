@@ -9,4 +9,5 @@ public enum PortReconcileSeverity
     None = 0,
     Information = 1,
     Error = 2,
+    Warning = 3,
 }

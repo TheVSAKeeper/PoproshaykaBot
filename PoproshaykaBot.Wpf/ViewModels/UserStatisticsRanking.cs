@@ -59,6 +59,7 @@ public static class UserStatisticsRanking
         {
             UserStatisticsSortKey.Messages => left.MessageCount.CompareTo(right.MessageCount),
             UserStatisticsSortKey.Name => string.Compare(left.Name, right.Name, StringComparison.CurrentCultureIgnoreCase),
+            UserStatisticsSortKey.Rank => CompareRank(left, right),
             _ => left.Points.CompareTo(right.Points),
         };
 
@@ -68,5 +69,12 @@ public static class UserStatisticsRanking
         }
 
         return string.Compare(left.Name, right.Name, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private static int CompareRank(UserStatisticsRowViewModel left, UserStatisticsRowViewModel right)
+    {
+        var byRank = left.RankOrder.CompareTo(right.RankOrder);
+
+        return byRank != 0 ? byRank : left.Points.CompareTo(right.Points);
     }
 }

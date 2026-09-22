@@ -10,6 +10,8 @@ public abstract partial class DiagnosticsCardViewModel : ObservableObject, IDiag
 {
     private readonly DiagnosticsSnapshotPublisher _publisher;
 
+    private DiagnosticsSnapshot? _snapshot;
+
     [ObservableProperty]
     private DiagnosticsCardState _state = DiagnosticsCardState.Unknown;
 
@@ -43,7 +45,22 @@ public abstract partial class DiagnosticsCardViewModel : ObservableObject, IDiag
 
     protected abstract DiagnosticsCardContent Build(DiagnosticsSnapshot snapshot);
 
+    protected void Rebuild()
+    {
+        if (_snapshot is { } snapshot)
+        {
+            Apply(snapshot);
+        }
+    }
+
     private void OnSnapshot(DiagnosticsSnapshot snapshot)
+    {
+        _snapshot = snapshot;
+
+        Apply(snapshot);
+    }
+
+    private void Apply(DiagnosticsSnapshot snapshot)
     {
         var content = Build(snapshot);
 

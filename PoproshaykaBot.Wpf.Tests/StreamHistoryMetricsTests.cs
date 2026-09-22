@@ -9,15 +9,19 @@ namespace PoproshaykaBot.Wpf.Tests;
 [TestFixture]
 public class StreamHistoryMetricsTests
 {
-    private const double GameColumnMinWidth = 90;
-    private const double SegmentGameColumnMinWidth = 110;
-    private const double SegmentTitleColumnMinWidth = 80;
+    private const double GameColumnMinWidth = 72;
+    private const double TitleColumnMinWidth = 72;
+    private const double SmallFontScale = 0.8;
     private const double SegmentCaptionWidth = 56;
     private const double SegmentPadding = 12;
     private const double SplitterWidth = 12;
     private const double TableShare = 3d / 5;
-    private const double NumericHeaderChrome = 8 + 10 + 14;
-    private const double CellMargin = 10;
+    private const double SortHeaderChrome = 2 + 8 + 6 + 8 + 8;
+    private const double TableEdges = 12 + 12 + 17;
+    private const double CellMargin = 10 + 10;
+    private const double SegmentCardChrome = 16 + 2 + 3 + 8 + 24 + 8 + 8;
+    private const double SegmentCardGameMinWidth = 50;
+    private const double SegmentCardDurationGap = 8;
     private const double WindowMinHeight = 640;
     private const double TitleBarHeight = 37;
     private const double StatusBarHeight = 30;
@@ -41,48 +45,52 @@ public class StreamHistoryMetricsTests
     {
         var root = Themed();
 
-        var required = Column(root, "Начало", "06.09.2026 08:34", mono: true)
-                       + Column(root, "Эфир", "2 ч 54 мин")
-                       + 90
-                       + GameColumnMinWidth
-                       + Column(root, "Сообщ.", "175")
-                       + Column(root, "Чаттеры", "9")
-                       + Column(root, "Пик", "13")
-                       + Column(root, "Средн.", "12");
+        var required = Required(root, 1);
+        var small = Required(root, SmallFontScale);
 
         var available = (StreamHistoryPageView.SideBySideWidth - SplitterWidth) * TableShare;
 
         Assert.Multiple(() =>
         {
             Assert.That(available, Is.GreaterThanOrEqualTo(required),
-                $"На пороге {StreamHistoryPageView.SideBySideWidth} DIP таблица получает {available:F1} DIP, а её колонкам на минимуме нужно {required:F1} – рядом с карточкой она уйдёт в горизонтальную прокрутку");
+                $"На пороге {StreamHistoryPageView.SideBySideWidth} DIP таблица получает {available:F1} DIP, а её колонкам на минимуме нужно {required:F1} – рядом с карточкой у последней колонки отрежет заголовок");
             Assert.That(StreamHistoryPageView.TableMinWidth, Is.GreaterThanOrEqualTo(required),
-                $"Пол колонки таблицы ({StreamHistoryPageView.TableMinWidth} DIP) ниже нужных ей {required:F1} – разделителем её можно будет загнать в горизонтальную прокрутку");
+                $"Пол колонки таблицы ({StreamHistoryPageView.TableMinWidth} DIP) ниже нужных ей {required:F1} – разделителем её можно будет сузить так, что последняя колонка обрежется");
+            Assert.That(StreamHistoryPageView.TableMinWidth * SmallFontScale, Is.GreaterThanOrEqualTo(small),
+                $"Пол колонки едет с масштабом шрифта целиком, а поля кнопок шапки, стрелка, полы колонок и полоса прокрутки – нет: при {SmallFontScale} таблице остаётся {StreamHistoryPageView.TableMinWidth * SmallFontScale:F1} DIP при нужных {small:F1}");
         });
     }
 
     [Test]
     [Apartment(ApartmentState.STA)]
-    public void Карточка_стрима_разъезжается_только_когда_обе_панели_влезают()
+    public void Карточка_сегмента_влезает_в_самую_узкую_панель()
     {
         var root = Themed();
 
-        var full = SegmentGameColumnMinWidth
-                   + SegmentTitleColumnMinWidth
-                   + Column(root, "Эфир", "1 ч 25 мин")
-                   + Column(root, "Сообщ.", "175")
-                   + Column(root, "Пик", "13")
-                   + Column(root, "Средн.", "12");
+        var caption = (double)root.FindResource("Font.Size.Caption");
+        var strong = (double)root.FindResource("Font.Size.S");
+        var mono = (FontFamily)root.FindResource("Font.Mono");
 
-        var compact = SegmentGameColumnMinWidth + SegmentTitleColumnMinWidth + Column(root, "Эфир", "1 ч 25 мин");
+        var head = SegmentCardChrome
+                   + SegmentCardGameMinWidth
+                   + SegmentCardDurationGap
+                   + MeasureText(root, "1 ч 25 мин", strong, mono);
+
+        var metrics = SegmentCardChrome
+                      + MeasureText(root, "1 234 сообщ.", caption, null)
+                      + MeasureText(root, "пик 175", caption, null)
+                      + MeasureText(root, "средн. 132", caption, null)
+                      + (12 * 2);
 
         Assert.Multiple(() =>
         {
-            Assert.That(StreamHistoryPageView.DetailSplitWidth,
-                Is.GreaterThanOrEqualTo(full + SplitterWidth + StreamHistoryPageView.ChattersMinWidth),
-                $"Порог {StreamHistoryPageView.DetailSplitWidth} DIP ниже нужных {full + SplitterWidth + StreamHistoryPageView.ChattersMinWidth:F1} – таблица сегментов уйдёт в горизонтальную прокрутку рядом с чаттерами");
-            Assert.That(StreamHistoryPageView.DetailMinWidth, Is.GreaterThanOrEqualTo(compact),
-                $"В стопке карточки таблице сегментов остаётся её пол {StreamHistoryPageView.DetailMinWidth} DIP, а трём оставшимся колонкам нужно {compact:F1}");
+            Assert.That(StreamHistoryPageView.SegmentsPaneMinWidth, Is.GreaterThanOrEqualTo(head),
+                $"Пол панели сегментов {StreamHistoryPageView.SegmentsPaneMinWidth} DIP ниже нужных карточке {head:F1} – название игры схлопнется в многоточие рядом с эфиром");
+            Assert.That(StreamHistoryPageView.SegmentCardMinWidth, Is.GreaterThanOrEqualTo(metrics),
+                $"Порог второй колонки {StreamHistoryPageView.SegmentCardMinWidth} DIP ниже строки показателей {metrics:F1} – в двух колонках она переносится на вторую строку");
+            Assert.That(StreamHistoryPageView.DetailSplitWidth - SplitterWidth - StreamHistoryPageView.ChattersMinWidth,
+                Is.GreaterThanOrEqualTo(StreamHistoryPageView.SegmentsPaneMinWidth),
+                "На пороге разъезда панели сегментов остаётся меньше её собственного пола – сетка пересилит минимум сразу после переключения");
         });
     }
 
@@ -163,14 +171,28 @@ public class StreamHistoryMetricsTests
         return root;
     }
 
-    private static double Column(Grid root, string header, string cell, bool mono = false)
+    private static double Required(Grid root, double fontScale)
     {
-        var size = (double)root.FindResource("Font.Size.Body");
+        return TableEdges
+               + TitleColumnMinWidth
+               + GameColumnMinWidth
+               + Column(root, "Начало", "06.09.2026 08:34", fontScale, mono: true)
+               + Column(root, "Эфир", "2 ч 54 мин", fontScale)
+               + Column(root, "Сообщ.", "175", fontScale)
+               + Column(root, "Чаттеры", "9", fontScale)
+               + Column(root, "Пик", "13", fontScale)
+               + Column(root, "Средн.", "12", fontScale);
+    }
+
+    private static double Column(Grid root, string header, string cell, double fontScale, bool mono = false)
+    {
+        var headerSize = (double)root.FindResource("Font.Size.Caption") * fontScale;
+        var cellSize = (double)root.FindResource("Font.Size.Body") * fontScale;
         var family = mono ? (FontFamily)root.FindResource("Font.Mono") : null;
 
         return Math.Max(
-            MeasureText(root, header, size, null) + NumericHeaderChrome,
-            MeasureText(root, cell, size, family) + CellMargin);
+            MeasureText(root, header, headerSize, null) + SortHeaderChrome,
+            MeasureText(root, cell, cellSize, family) + CellMargin);
     }
 
     private static double MeasureText(Grid root, string text, double fontSize, FontFamily? family)

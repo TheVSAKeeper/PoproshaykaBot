@@ -24,7 +24,7 @@ public sealed class SseChatBridgeHandler :
     public Task HandleAsync(ChatMessageReceived @event, CancellationToken cancellationToken)
     {
         if (@event.CommandResponse is { } commandResponse
-            && !commandResponse.Target.HasFlag(CommandResponseTarget.Overlay))
+            && !commandResponse.Target.GoesToOverlay())
         {
             return Task.CompletedTask;
         }

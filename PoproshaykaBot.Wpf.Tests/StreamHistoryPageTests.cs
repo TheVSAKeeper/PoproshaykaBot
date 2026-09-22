@@ -6,17 +6,52 @@ using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
+using PoproshaykaBot.Wpf.Views;
 using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.Tests;
 
 [TestFixture]
+[Apartment(ApartmentState.STA)]
+[NonParallelizable]
 public class StreamHistoryPageTests
 {
     private static readonly DateTimeOffset Start = new(new DateTime(2026, 9, 1, 18, 0, 0, DateTimeKind.Local));
 
+    private static readonly string[] Dictionaries =
+    [
+        "pack://application:,,,/KeepShell;component/Resources/Themes/Light.xaml",
+        "pack://application:,,,/KeepShell;component/Resources/Themes/Tokens.xaml",
+        "pack://application:,,,/KeepShell;component/Resources/Converters.xaml",
+        "pack://application:,,,/KeepShell;component/Resources/Styles/Controls.xaml",
+        "pack://application:,,,/PoproshaykaBot.Wpf;component/Infrastructure/Converters/AppConverters.xaml",
+        "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/TableStyles.xaml",
+        "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/RatingStyles.xaml",
+    ];
+
     private string _directory = null!;
     private StreamSessionHistoryStore _store = null!;
+
+    [OneTimeSetUp]
+    public void EnsureApplication()
+    {
+        PackScheme.Ensure();
+
+        if (Application.Current is not null)
+        {
+            return;
+        }
+
+        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+
+        foreach (var source in Dictionaries)
+        {
+            application.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new(source) });
+        }
+    }
 
     [SetUp]
     public void SetUp()
@@ -340,12 +375,12 @@ public class StreamHistoryPageTests
         {
             Assert.That(restarted.IsCardsView, Is.True);
             Assert.That(restarted.IsTableView, Is.False);
-            Assert.That(restarted.Cards, Has.Count.EqualTo(2));
+            Assert.That(restarted.SortedSessions, Has.Count.EqualTo(2));
         }
     }
 
     [Test]
-    public void Сортировка_карточек_не_трогает_таблицу_и_тренд()
+    public void Сортировка_не_трогает_порядок_тренда()
     {
         ISettingsStore settings = new MemorySettings();
         var page = Create(settings, Session(0, "Just Chatting", messages: 900), Session(1, "Minecraft", messages: 10));
@@ -354,9 +389,9 @@ public class StreamHistoryPageTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(page.Cards.Select(card => card.MessageCount), Is.EqualTo(new long[] { 900, 10 }));
+            Assert.That(page.SortedSessions.Select(row => row.MessageCount), Is.EqualTo(new long[] { 900, 10 }));
             Assert.That(page.Sessions.Select(row => row.MessageCount), Is.EqualTo(new long[] { 10, 900 }),
-                "Таблица и тренд остаются в порядке по дате – сортировка принадлежит только карточкам");
+                "Тренд строится по этому списку и остаётся в порядке по дате – сортировка живёт только в списке стримов");
             Assert.That(page.Trend.Select(bar => bar.Row.MessageCount), Is.EqualTo(new long[] { 900, 10 }));
             Assert.That(page.SortCaption, Is.EqualTo("Сортировка: Сообщения, по убыванию"));
         }
@@ -365,13 +400,78 @@ public class StreamHistoryPageTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(page.Cards.Select(card => card.MessageCount), Is.EqualTo(new long[] { 10, 900 }));
+            Assert.That(page.SortedSessions.Select(row => row.MessageCount), Is.EqualTo(new long[] { 10, 900 }));
             Assert.That(page.SortCaption, Is.EqualTo("Сортировка: Сообщения, по возрастанию"));
         }
 
         var restarted = Create(settings, Session(0, "Just Chatting", messages: 900), Session(1, "Minecraft", messages: 10));
 
-        Assert.That(restarted.Cards.Select(card => card.MessageCount), Is.EqualTo(new long[] { 10, 900 }));
+        Assert.That(restarted.SortedSessions.Select(row => row.MessageCount), Is.EqualTo(new long[] { 10, 900 }));
+    }
+
+    [Test]
+    public void Заголовок_колонки_переворачивает_направление_и_показывает_стрелку()
+    {
+        ISettingsStore settings = new MemorySettings();
+        var page = Create(settings, Session(0, "Just Chatting", messages: 900), Session(1, "Minecraft", messages: 10));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.StartedAtSortIndicator, Is.EqualTo(TableSortIndicator.Descending),
+                "стартовое направление – по началу убыванием");
+            Assert.That(page.MessagesSortIndicator, Is.EqualTo(TableSortIndicator.None));
+        }
+
+        page.SortByColumnCommand.Execute(StreamSortKey.Messages);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.SortedSessions.Select(row => row.MessageCount), Is.EqualTo(new long[] { 900, 10 }));
+            Assert.That(page.MessagesSortIndicator, Is.EqualTo(TableSortIndicator.Descending));
+            Assert.That(page.StartedAtSortIndicator, Is.EqualTo(TableSortIndicator.None));
+        }
+
+        page.SortByColumnCommand.Execute(StreamSortKey.Messages);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.SortedSessions.Select(row => row.MessageCount), Is.EqualTo(new long[] { 10, 900 }));
+            Assert.That(page.MessagesSortIndicator, Is.EqualTo(TableSortIndicator.Ascending));
+            Assert.That(page.SortOptions[Array.IndexOf(StreamHistoryPageViewModel.SortKeys, StreamSortKey.Messages)].IsChecked, Is.True,
+                "меню сортировки карточек и шапка таблицы делят одно состояние");
+            Assert.That(page.SortDirectionOptions[1].IsChecked, Is.True);
+        }
+
+        page.SortByColumnCommand.Execute(StreamSortKey.Title);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.TitleSortIndicator, Is.EqualTo(TableSortIndicator.Ascending),
+                "текстовая колонка открывается по возрастанию, числовая – по убыванию");
+            Assert.That(page.SortedSessions.Select(row => row.TitleFormatted), Is.Ordered);
+        }
+
+        var restarted = Create(settings, Session(0, "Just Chatting", messages: 900), Session(1, "Minecraft", messages: 10));
+
+        Assert.That(restarted.TitleSortIndicator, Is.EqualTo(TableSortIndicator.Ascending));
+    }
+
+    [Test]
+    public void Инспектор_показывает_отклонения_только_там_где_их_нет_в_списке()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting", messages: 900), Session(1, "Minecraft", messages: 10));
+
+        page.TrySelectAt(0);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.ShowDetailDeltas, Is.True, "В таблице отклонений не видно – инспектор их и показывает");
+            Assert.That(page.DetailMessagesDelta, Is.Not.Empty);
+        }
+
+        page.IsCardsView = true;
+
+        Assert.That(page.ShowDetailDeltas, Is.False, "Карточка стрима несёт те же отклонения – в инспекторе они были бы дублем");
     }
 
     [Test]
@@ -388,7 +488,7 @@ public class StreamHistoryPageTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(page.SelectedRow, Is.SameAs(selected));
-            Assert.That(page.Cards, Does.Contain(selected));
+            Assert.That(page.SortedSessions, Does.Contain(selected));
         }
     }
 
@@ -397,7 +497,7 @@ public class StreamHistoryPageTests
     {
         var page = Create(new MemorySettings(), Session(0, "Just Chatting", messages: 100), Session(1, "Minecraft", messages: 900));
 
-        var quiet = page.Cards.Single(card => card.MessageCount == 100);
+        var quiet = page.SortedSessions.Single(card => card.MessageCount == 100);
 
         using (Assert.EnterMultipleScope())
         {
@@ -547,6 +647,55 @@ public class StreamHistoryPageTests
             Assert.That(page.HasSessions, Is.True, "Страница остаётся такой же, какой была до правки");
             Assert.That(page.EmptyHeading, Is.EqualTo("Стримов пока нет"));
         }
+    }
+
+    [Test]
+    [TestCase("SessionsList")]
+    [TestCase("SessionCards")]
+    public void Копирование_строки_кладёт_колонки_в_буфер_через_табуляцию(string listName)
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting"));
+        var list = (ListBox)CreateView(page).FindName(listName)!;
+
+        Clipboard.SetText("прежнее содержимое буфера");
+
+        var idle = ApplicationCommands.Copy.CanExecute(null, list);
+
+        page.TrySelectAt(0);
+
+        var ready = ApplicationCommands.Copy.CanExecute(null, list);
+
+        ApplicationCommands.Copy.Execute(null, list);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(idle, Is.False, "Без выбранной строки копировать нечего – пункт меню и Ctrl+C неактивны");
+            Assert.That(ready, Is.True);
+            Assert.That(Clipboard.GetText(),
+                Is.EqualTo("01.09.2026 18:00\t3 ч 0 мин\tэфир\tJust Chatting\t100\t1\t10\t5"),
+                "Порядок колонок таблицы и разделитель-табуляция – так отдавал строку DataGrid до переезда на список");
+        }
+    }
+
+    [Test]
+    public void Копирование_берёт_строку_под_курсором_а_не_выбранную()
+    {
+        var page = Create(new MemorySettings(), Session(0, "Just Chatting"), Session(1, "Minecraft"));
+        var list = (ListBox)CreateView(page).FindName("SessionsList")!;
+
+        page.TrySelectAt(0);
+
+        var other = page.Sessions.Single(row => row.GameCellText == "Minecraft");
+
+        ApplicationCommands.Copy.Execute(other, list);
+
+        Assert.That(Clipboard.GetText(), Does.Contain("Minecraft"),
+            "Правый клик по строке её не выбирает, поэтому меню передаёт свою строку параметром");
+    }
+
+    private static StreamHistoryPageView CreateView(StreamHistoryPageViewModel page)
+    {
+        return new() { DataContext = page };
     }
 
     private static StreamSessionRecord Session(

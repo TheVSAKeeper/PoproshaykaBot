@@ -89,9 +89,11 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
 
         try
         {
-            _settingsManager.SaveSettings(new AppSettings());
+            var written = _settingsManager.SaveSettings(new AppSettings());
 
-            _dialogService.Info("Сброс настроек", "Настройки успешно сброшены к значениям по умолчанию.\n\nПерезапустите приложение для применения изменений.");
+            _dialogService.Info("Сброс настроек", written
+                ? "Настройки сброшены к значениям по умолчанию.\n\nПерезапустите приложение для применения изменений."
+                : "Настройки сброшены только в этом сеансе. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и повторите сброс.");
         }
         catch (Exception ex)
         {

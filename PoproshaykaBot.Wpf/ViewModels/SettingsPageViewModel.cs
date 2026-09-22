@@ -21,7 +21,7 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
-public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeader, IDisposable
+public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeader, IUnsavedChangesPage, IDisposable
 {
     private static readonly HashSet<string> NonDirtyProperties = new(StringComparer.Ordinal)
     {
@@ -247,6 +247,22 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public bool HasDraft => HasChanges
         || Sections.Selected is not { } selected
         || !DraftlessSectionKeys.Contains(selected.Key, StringComparer.Ordinal);
+
+    public bool HasUnsavedChanges => HasChanges;
+
+    public string UnsavedChangesSubject => "На странице настроек есть несохранённые изменения.";
+
+    public async Task<bool> TrySaveUnsavedChangesAsync()
+    {
+        await SaveCommand.ExecuteAsync(null);
+
+        return !HasChanges;
+    }
+
+    public void DiscardUnsavedChanges()
+    {
+        RevertCommand.Execute(null);
+    }
 
     public void OnEnter()
     {

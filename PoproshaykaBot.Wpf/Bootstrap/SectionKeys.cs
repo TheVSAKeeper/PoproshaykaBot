@@ -13,19 +13,24 @@ public static class SectionKeys
     public const string SelectedSuffix = ":selected";
     public const string CardsSuffix = ":cards";
     public const string HiddenSuffix = ":hidden";
+    public const string ParamsSuffix = ":params";
 
     public const string UsersSelected = Users + SelectedSuffix;
     public const string StreamsSelected = Streams + SelectedSuffix;
     public const string StreamsCards = Streams + CardsSuffix;
     public const string StreamsHidden = Streams + HiddenSuffix;
+    public const string CommandsSelected = Commands + SelectedSuffix;
+    public const string CommandsParams = Commands + ParamsSuffix;
 
     public static IReadOnlyList<string> All { get; } = [Overview, Users, Streams, Commands, Logs, Diagnostics, Settings];
 
-    public static IReadOnlyList<string> Selected { get; } = [UsersSelected, StreamsSelected];
+    public static IReadOnlyList<string> Selected { get; } = [UsersSelected, StreamsSelected, CommandsSelected];
 
     public static IReadOnlyList<string> Cards { get; } = [StreamsCards];
 
     public static IReadOnlyList<string> Hidden { get; } = [StreamsHidden];
+
+    public static IReadOnlyList<string> Params { get; } = [CommandsParams];
 
     public static IReadOnlyDictionary<string, string> LegacyTitles { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -58,6 +63,13 @@ public static class SectionKeys
         return Hidden.Contains(key, StringComparer.OrdinalIgnoreCase);
     }
 
+    public static bool IsParamsCase(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        return Params.Contains(key, StringComparer.OrdinalIgnoreCase);
+    }
+
     public static string PageOf(string key)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -70,6 +82,11 @@ public static class SectionKeys
         if (IsCardsCase(key))
         {
             return key[..^CardsSuffix.Length];
+        }
+
+        if (IsParamsCase(key))
+        {
+            return key[..^ParamsSuffix.Length];
         }
 
         return IsHiddenCase(key) ? key[..^HiddenSuffix.Length] : key;

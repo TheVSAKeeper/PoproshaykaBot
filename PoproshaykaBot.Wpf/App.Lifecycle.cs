@@ -152,6 +152,7 @@ public partial class App
         return severity switch
         {
             PortReconcileSeverity.Information => MessageBoxImage.Information,
+            PortReconcileSeverity.Warning => MessageBoxImage.Warning,
             PortReconcileSeverity.Error => MessageBoxImage.Error,
             _ => MessageBoxImage.None,
         };

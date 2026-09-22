@@ -230,6 +230,28 @@ public sealed class TwitchChatHandlerCommandResponseTests
     }
 
     [Test]
+    public async Task Цель_только_вызвавшему_шлёт_реплай_даже_команде_отвечающей_обычным_сообщением()
+    {
+        SetTarget(CommandSettings.CallerOnly);
+
+        await _sender.StartAsync(new Progress<string>(), CancellationToken.None);
+        await _handler.HandleAsync(CreateRaw("!ранг"), CancellationToken.None);
+
+        await SendSentinelAsync();
+
+        await _helix.Received()
+            .SendChatMessageAsync("1", "2", FakeCommand.ResponseText, "incoming-1", Arg.Any<CancellationToken>());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(SentTexts(), Is.EqualTo(new[] { FakeCommand.ResponseText, SentinelText }),
+                "Отдельной строкой ответ не дублируется");
+
+            Assert.That(_collector.Events.Count(x => x.IsBot), Is.Zero, "Ответ в чат виден только эхом EventSub");
+        });
+    }
+
+    [Test]
     public async Task Эхо_позже_срока_приходит_без_пометки()
     {
         SetTarget(CommandResponseTarget.Chat);

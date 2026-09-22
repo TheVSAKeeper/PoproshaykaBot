@@ -15,15 +15,17 @@ public sealed class CommandResponseTargetOption
 
     public static CommandResponseTargetOption Chat { get; } = new(CommandResponseTarget.Chat, "Только в чат", "Ответ уходит в чат Twitch, в оверлее его нет");
 
+    public static CommandResponseTargetOption Caller { get; } = new(CommandSettings.CallerOnly, "Только вызвавшему", "Ответ уходит в чат Twitch ответом на сообщение вызвавшего, отдельной строкой не идёт");
+
     public static CommandResponseTargetOption Overlay { get; } = new(CommandResponseTarget.Overlay, "Только в оверлей", "Ответ виден в оверлее и в чате приложения, в чат Twitch не уходит");
 
-    public static CommandResponseTargetOption Both { get; } = new(CommandSettings.KnownTargets, "В чат и оверлей", "Ответ уходит и в чат Twitch, и в оверлей");
+    public static CommandResponseTargetOption Both { get; } = new(CommandSettings.ChatAndOverlay, "В чат и оверлей", "Ответ уходит и в чат Twitch, и в оверлей");
 
     public static CommandResponseTargetOption Silent { get; } = new(CommandResponseTarget.None, "Молча", "Команда выполняется, но ответа не показывает нигде");
 
-    public static IReadOnlyList<CommandResponseTargetOption> ForCommand { get; } = [Inherit, Chat, Overlay, Both, Silent];
+    public static IReadOnlyList<CommandResponseTargetOption> ForCommand { get; } = [Inherit, Chat, Caller, Overlay, Both, Silent];
 
-    public static IReadOnlyList<CommandResponseTargetOption> ForDefault { get; } = [Chat, Overlay, Both, Silent];
+    public static IReadOnlyList<CommandResponseTargetOption> ForDefault { get; } = [Chat, Caller, Overlay, Both, Silent];
 
     public CommandResponseTarget? Target { get; }
 
@@ -53,11 +55,18 @@ public sealed class CommandResponseTargetOption
 
     private static CommandResponseTargetOption Resolve(CommandResponseTarget target)
     {
-        return (target & CommandSettings.KnownTargets) switch
+        var known = target & CommandSettings.KnownTargets;
+
+        if (known.RepliesToCaller())
+        {
+            return Caller;
+        }
+
+        return known switch
         {
             CommandResponseTarget.Chat => Chat,
             CommandResponseTarget.Overlay => Overlay,
-            CommandSettings.KnownTargets => Both,
+            CommandSettings.ChatAndOverlay => Both,
             _ => Silent,
         };
     }

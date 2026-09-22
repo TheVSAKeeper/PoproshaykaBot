@@ -42,6 +42,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1104, Level = LogLevel.Warning, Message = "Запуск подключения отклонён: уже выполняется")]
     public static partial void BotConnectionStartRejected(this ILogger logger, Exception? exception);
 
+    [LoggerMessage(EventId = 1133, Level = LogLevel.Warning, Message = "Настройки мастера приняты только в памяти: файл settings.json переписан снаружи, шаг подключения остановлен")]
+    public static partial void BotConnectionSettingsNotWritten(this ILogger logger);
+
     [LoggerMessage(EventId = 1105, Level = LogLevel.Error, Message = "Не удалось сохранить настройки в onboarding-мастере")]
     public static partial void OnboardingSettingsSaveFailed(this ILogger logger, Exception? exception);
 
@@ -218,4 +221,16 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1603, Level = LogLevel.Error, Message = "Не удалось сохранить настройки команд, правка отменена")]
     public static partial void CommandSettingsSaveFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1604, Level = LogLevel.Information, Message = "Права на команду {Command} на странице «Команды»: {Access}")]
+    public static partial void CommandAccessChanged(this ILogger logger, string command, string access);
+
+    [LoggerMessage(EventId = 1605, Level = LogLevel.Information, Message = "Параметры команды {Command} сохранены со страницы «Команды»")]
+    public static partial void CommandParametersSaved(this ILogger logger, string command);
+
+    [LoggerMessage(EventId = 1606, Level = LogLevel.Error, Message = "Не удалось сохранить параметры команды {Command}")]
+    public static partial void CommandParametersSaveFailed(this ILogger logger, Exception? exception, string command);
+
+    [LoggerMessage(EventId = 1607, Level = LogLevel.Warning, Message = "Параметры команды {Command} приняты в памяти: файл настроек не переписан")]
+    public static partial void CommandParametersNotWritten(this ILogger logger, string command);
 }

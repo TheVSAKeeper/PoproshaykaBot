@@ -31,8 +31,9 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly UserStatisticsPageViewModel _statisticsPage;
     private readonly StreamHistoryPageViewModel _streamHistoryPage;
     private readonly NavigationItem _overviewSection;
+    private readonly IUnsavedChangesPrompt _unsavedChangesPrompt;
     private NavigationItem? _current;
-    private bool _returningToSettings;
+    private bool _returningToPage;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConnectButtonText))]
@@ -60,9 +61,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         StreamMonitoringViewModel streamMonitoring,
         ChatHistoryManager chatHistory,
         ISettingsStore uiSettings,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        IUnsavedChangesPrompt unsavedChangesPrompt)
         : base(modal)
     {
+        _unsavedChangesPrompt = unsavedChangesPrompt;
         _connectionManager = connectionManager;
         _logger = logger;
         _preferences = preferences;
@@ -82,7 +85,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _uiSettings = uiSettings;
         _uiDispatcher = uiDispatcher;
         _uiSettings.WriteFailed += OnUiSettingsWriteFailed;
-        _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: ActivateSettings, key: SectionKeys.Settings);
+        _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: GuardReturn(settingsPage.OnEnter), key: SectionKeys.Settings);
 
         _statisticsPage = statisticsPage;
         _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, key: SectionKeys.Users) { StartsGroup = true };
@@ -92,7 +95,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             streamHistoryPage,
             activate: streamHistoryPage.OnEnter,
             key: SectionKeys.Streams);
-        _commandsSection = new("Команды", PackIconLucideKind.Terminal, commandsPage, activate: commandsPage.OnEnter, key: SectionKeys.Commands);
+        _commandsSection = new("Команды", PackIconLucideKind.Terminal, commandsPage, activate: GuardReturn(commandsPage.OnEnter), key: SectionKeys.Commands);
 
         _streamHistoryPage = streamHistoryPage;
         _streamHistoryPage.UserRequested += OnUserRequested;
@@ -151,7 +154,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public override async Task<bool> RequestCloseAsync()
     {
-        if (!await ConfirmDirtySettingsOnCloseAsync())
+        if (!await ConfirmDirtyPagesOnCloseAsync())
         {
             UpdateBanner.ResetInstallState();
             return false;
@@ -253,7 +256,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     protected override void OnSelectionChanged(NavigationItem? value)
     {
-        if (!_returningToSettings && LeavingDirtySettings(value) && !TryLeaveSettings(value))
+        if (!_returningToPage && !ReferenceEquals(value, _current) && !TryLeaveDirtyPage(value))
         {
             return;
         }
@@ -271,106 +274,112 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         }
     }
 
-    private void ActivateSettings()
+    private Action GuardReturn(Action activate)
     {
-        if (_returningToSettings)
+        return () =>
         {
-            return;
+            if (_returningToPage)
+            {
+                return;
+            }
+
+            activate();
+        };
+    }
+
+    private static IUnsavedChangesPage? DirtyPageOf(NavigationItem? section)
+    {
+        return section?.Content is IUnsavedChangesPage { HasUnsavedChanges: true } page ? page : null;
+    }
+
+    private IEnumerable<NavigationItem> GatedSections()
+    {
+        yield return _settingsSection;
+
+        foreach (var section in Sections)
+        {
+            yield return section;
+        }
+    }
+
+    private async Task<bool> ConfirmDirtyPagesOnCloseAsync()
+    {
+        foreach (var section in GatedSections())
+        {
+            if (DirtyPageOf(section) is not { } page)
+            {
+                continue;
+            }
+
+            switch (_unsavedChangesPrompt.Ask(page.UnsavedChangesSubject, "закрытием"))
+            {
+                case UnsavedChangesDecision.Save:
+                    await page.TrySaveUnsavedChangesAsync();
+
+                    if (page.HasUnsavedChanges)
+                    {
+                        ReturnToPage(section);
+                        return false;
+                    }
+
+                    break;
+
+                case UnsavedChangesDecision.Discard:
+                    page.DiscardUnsavedChanges();
+                    break;
+
+                default:
+                    ReturnToPage(section);
+                    return false;
+            }
         }
 
-        _settingsPage.OnEnter();
+        return true;
     }
 
-    private bool LeavingDirtySettings(NavigationItem? value)
+    private bool TryLeaveDirtyPage(NavigationItem? target)
     {
-        return ReferenceEquals(_current, _settingsSection)
-            && !ReferenceEquals(value, _settingsSection)
-            && _settingsPage.HasChanges;
-    }
-
-    private static MessageBoxResult AskAboutDirtySettings(string action)
-    {
-        if (App.IsHeadless)
-        {
-            return MessageBoxResult.No;
-        }
-
-        return StyledMessageBox.Show(
-            $"На странице настроек есть несохранённые изменения. Сохранить их перед {action}?",
-            "Несохранённые настройки",
-            MessageBoxButton.YesNoCancel,
-            MessageBoxImage.Warning,
-            MessageBoxResult.Yes);
-    }
-
-    private async Task<bool> ConfirmDirtySettingsOnCloseAsync()
-    {
-        if (!_settingsPage.HasChanges)
+        if (_current is not { } section || DirtyPageOf(section) is not { } page)
         {
             return true;
         }
 
-        switch (AskAboutDirtySettings("закрытием"))
+        switch (_unsavedChangesPrompt.Ask(page.UnsavedChangesSubject, "переходом"))
         {
-            case MessageBoxResult.Yes:
-                await _settingsPage.SaveCommand.ExecuteAsync(null);
-
-                if (!_settingsPage.HasChanges)
-                {
-                    return true;
-                }
-
-                ReturnToSettings();
+            case UnsavedChangesDecision.Save:
+                ReturnToPage(section);
+                _ = SaveThenNavigateAsync(page, target);
                 return false;
 
-            case MessageBoxResult.No:
-                _settingsPage.RevertCommand.Execute(null);
+            case UnsavedChangesDecision.Discard:
+                page.DiscardUnsavedChanges();
                 return true;
 
             default:
-                ReturnToSettings();
+                ReturnToPage(section);
                 return false;
         }
     }
 
-    private bool TryLeaveSettings(NavigationItem? target)
+    private void ReturnToPage(NavigationItem section)
     {
-        switch (AskAboutDirtySettings("переходом"))
-        {
-            case MessageBoxResult.Yes:
-                ReturnToSettings();
-                _ = SaveThenNavigateAsync(target);
-                return false;
-
-            case MessageBoxResult.No:
-                _settingsPage.RevertCommand.Execute(null);
-                return true;
-
-            default:
-                ReturnToSettings();
-                return false;
-        }
-    }
-
-    private void ReturnToSettings()
-    {
-        _returningToSettings = true;
+        _returningToPage = true;
 
         try
         {
-            Selected = _settingsSection;
+            Selected = section;
         }
         finally
         {
-            _returningToSettings = false;
+            _returningToPage = false;
         }
     }
 
-    private async Task SaveThenNavigateAsync(NavigationItem? target)
+    private async Task SaveThenNavigateAsync(IUnsavedChangesPage page, NavigationItem? target)
     {
-        await _settingsPage.SaveCommand.ExecuteAsync(null);
+        await page.TrySaveUnsavedChangesAsync();
 
-        if (_settingsPage.HasChanges || target is null)
+        if (page.HasUnsavedChanges || target is null)
         {
             return;
         }
