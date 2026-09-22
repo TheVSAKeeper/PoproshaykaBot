@@ -1701,6 +1701,15 @@
                                    Foreground="{DynamicResource Fg.Secondary}"
                                    TextWrapping="NoWrap"
                                    HorizontalAlignment="Right" />
+
+                        <TextBlock Text="{Binding DetailTrackingText}"
+                                   FontSize="{DynamicResource Font.Size.Caption}"
+                                   Foreground="{DynamicResource Fg.Secondary}"
+                                   TextWrapping="NoWrap"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,2,0,0"
+                                   ToolTip="Столько времени эфира бот был подключён к чату. Сообщения, написанные без него, в статистику стрима не попали."
+                                   Visibility="{Binding DetailTrackingText, Converter={StaticResource NullToVisibility}}" />
                     </StackPanel>
                 </Grid>
 

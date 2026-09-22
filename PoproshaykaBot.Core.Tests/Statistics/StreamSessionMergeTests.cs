@@ -282,4 +282,53 @@ public sealed class StreamSessionMergeTests
             Assert.That(result.Sessions, Is.EqualTo(new[] { first, second }).AsCollection);
         }
     }
+
+    [Test]
+    public void Склейка_сливает_интервалы_учёта_и_не_даёт_учёту_превысить_эфир()
+    {
+        var first = Record(Start, TimeSpan.FromMinutes(40));
+        first.TrackedIntervals = [Interval(Start, TimeSpan.FromMinutes(40))];
+
+        var second = Record(Start.AddMinutes(30), TimeSpan.FromMinutes(50));
+        second.TrackedIntervals =
+        [
+            Interval(Start.AddMinutes(30), TimeSpan.FromMinutes(20)),
+            Interval(Start.AddMinutes(60), TimeSpan.FromMinutes(40)),
+        ];
+
+        var merged = StreamSessionMerge.Merge([first, second]).Sessions.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(merged.Duration, Is.EqualTo(TimeSpan.FromMinutes(80)));
+
+            Assert.That(merged.TrackedIntervals!.Select(interval => (interval.StartedAt, interval.EndedAt)),
+                Is.EqualTo(new[]
+                {
+                    (Start, Start.AddMinutes(50)),
+                    (Start.AddMinutes(60), Start.AddMinutes(80)),
+                }));
+
+            Assert.That(merged.TrackedDuration, Is.EqualTo(TimeSpan.FromMinutes(70)));
+            Assert.That(merged.TrackedDuration, Is.LessThanOrEqualTo(merged.Duration));
+        }
+    }
+
+    [Test]
+    public void Склейка_с_записью_без_учёта_оставляет_учёт_неизвестным()
+    {
+        var first = Record(Start, TimeSpan.FromMinutes(40));
+
+        var second = Record(Start.AddMinutes(30), TimeSpan.FromMinutes(50));
+        second.TrackedIntervals = [Interval(Start.AddMinutes(30), TimeSpan.FromMinutes(50))];
+
+        var merged = StreamSessionMerge.Merge([first, second]).Sessions.Single();
+
+        Assert.That(merged.TrackedIntervals, Is.Null);
+    }
+
+    private static StreamSessionInterval Interval(DateTimeOffset startedAt, TimeSpan duration)
+    {
+        return new() { StartedAt = startedAt, EndedAt = startedAt + duration };
+    }
 }

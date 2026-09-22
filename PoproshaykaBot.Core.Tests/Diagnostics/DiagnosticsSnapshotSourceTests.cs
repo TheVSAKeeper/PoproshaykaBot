@@ -60,6 +60,7 @@ public sealed class DiagnosticsSnapshotSourceTests
             botUserIdProvider,
             settingsManager,
             bus,
+            TimeProvider.System,
             NullLogger<ChatIngestionService>.Instance);
 
         var obs = new ObsIntegrationService(Substitute.For<IObsWebSocketClient>(),

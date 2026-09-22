@@ -122,6 +122,9 @@ public static class StreamSessionMerge
             AverageViewers = WeightedAverageViewers(group),
             Chatters = chatters,
             Segments = MergeSegments(group),
+            TrackedIntervals = group.All(record => record.TrackedIntervals != null)
+                ? StreamSessionInterval.Normalize(group.SelectMany(record => record.TrackedIntervals!), primary.StartedAt, endedAt)
+                : null,
         };
     }
 

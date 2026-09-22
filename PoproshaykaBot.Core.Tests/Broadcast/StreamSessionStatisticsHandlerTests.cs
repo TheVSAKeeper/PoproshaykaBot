@@ -802,4 +802,119 @@ public sealed class StreamSessionStatisticsHandlerTests
             Assert.That(_captured[0].StartedAt, Is.EqualTo(StreamStart.AddSeconds(20)));
         }
     }
+
+    [Test]
+    public async Task Учёт_обрезан_по_границам_эфира_и_разорван_переподключением()
+    {
+        await _handler.HandleAsync(new ChatIngestionStarted(StreamStart.AddMinutes(-30)), CancellationToken.None);
+        await _handler.HandleAsync(Online(), CancellationToken.None);
+
+        await _handler.HandleAsync(new ChatIngestionStopped(StreamStart.AddMinutes(20)), CancellationToken.None);
+        await _handler.HandleAsync(new ChatIngestionStarted(StreamStart.AddMinutes(25)), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddMinutes(79);
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+        await _handler.HandleAsync(new ChatIngestionStopped(StreamStart.AddMinutes(90)), CancellationToken.None);
+
+        var record = _captured.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record.TrackedIntervals!.Select(interval => (interval.StartedAt, interval.EndedAt)),
+                Is.EqualTo(new[]
+                {
+                    (StreamStart, StreamStart.AddMinutes(20)),
+                    (StreamStart.AddMinutes(25), StreamStart.AddMinutes(79)),
+                }));
+
+            Assert.That(record.TrackedDuration, Is.EqualTo(TimeSpan.FromMinutes(74)));
+        }
+    }
+
+    [Test]
+    public async Task Бот_не_подключался_за_эфир_и_это_записано_пустым_учётом_а_не_неизвестностью()
+    {
+        await _handler.HandleAsync(Online(), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddHours(1);
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_captured.Single().TrackedIntervals, Is.Empty);
+            Assert.That(_captured.Single().TrackedDuration, Is.EqualTo(TimeSpan.Zero));
+        }
+    }
+
+    [Test]
+    public async Task Возобновление_после_перезапуска_закрывает_учёт_прошлого_процесса_последним_чекпойнтом()
+    {
+        _store.Save(new()
+        {
+            Channel = Channel,
+            StartedAt = StreamStart,
+            UpdatedAt = StreamStart.AddMinutes(40),
+            Segments = [new() { StartedAt = StreamStart, Title = "Заголовок", Game = "Игра" }],
+            TrackedIntervals = [new() { StartedAt = StreamStart.AddMinutes(1) }],
+        });
+
+        await _handler.HandleAsync(new ChatIngestionStarted(StreamStart.AddMinutes(50)), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddMinutes(50);
+        await _handler.HandleAsync(OnlineCatchUp(), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddMinutes(60);
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+
+        Assert.That(_captured.Single().TrackedIntervals!.Select(interval => (interval.StartedAt, interval.EndedAt)),
+            Is.EqualTo(new[]
+            {
+                (StreamStart.AddMinutes(1), StreamStart.AddMinutes(40)),
+                (StreamStart.AddMinutes(50), StreamStart.AddMinutes(60)),
+            }));
+    }
+
+    [Test]
+    public async Task Черновик_прежней_сборки_даёт_запись_без_учёта_а_не_нулевой_учёт()
+    {
+        SeedDraft(StreamStart, StreamStart.AddMinutes(30), 5);
+
+        await _handler.HandleAsync(new ChatIngestionStarted(StreamStart.AddMinutes(31)), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddMinutes(31);
+        await _handler.HandleAsync(OnlineCatchUp(), CancellationToken.None);
+
+        _timeProvider.UtcNow = StreamStart.AddMinutes(60);
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_captured.Single().TrackedIntervals, Is.Null);
+            Assert.That(_captured.Single().TrackedDuration, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task Брошенный_черновик_закрывает_открытый_учёт_временем_последнего_чекпойнта()
+    {
+        _store.Save(new()
+        {
+            Channel = Channel,
+            StartedAt = StreamStart,
+            UpdatedAt = StreamStart.AddMinutes(30),
+            Segments = [new() { StartedAt = StreamStart, Title = "Заголовок", Game = "Игра" }],
+            TrackedIntervals = [new() { StartedAt = StreamStart.AddMinutes(5) }],
+        });
+
+        _timeProvider.UtcNow = StreamStart.AddHours(2);
+        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+
+        var record = _captured.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record.Duration, Is.EqualTo(TimeSpan.FromHours(2)));
+            Assert.That(record.TrackedDuration, Is.EqualTo(TimeSpan.FromMinutes(25)));
+        }
+    }
 }

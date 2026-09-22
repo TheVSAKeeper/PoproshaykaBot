@@ -18,6 +18,8 @@ public sealed class StreamSessionStatisticsHandler :
     IEventHandler<StreamMetadataResolved>,
     IEventHandler<ChatMessageReceived>,
     IEventHandler<ChannelUpdated>,
+    IEventHandler<ChatIngestionStarted>,
+    IEventHandler<ChatIngestionStopped>,
     IEventSubscriber,
     IAsyncDisposable
 {
@@ -39,10 +41,15 @@ public sealed class StreamSessionStatisticsHandler :
     private readonly IDisposable _metadataResolvedSubscription;
     private readonly IDisposable _chatSubscription;
     private readonly IDisposable _channelUpdatedSubscription;
+    private readonly IDisposable _ingestionStartedSubscription;
+    private readonly IDisposable _ingestionStoppedSubscription;
 
     private readonly object _stateLock = new();
     private readonly Dictionary<string, ChatterTally> _chatters = new(StringComparer.Ordinal);
     private readonly List<SegmentTally> _segments = [];
+    private readonly List<ActiveStreamSessionInterval> _tracked = [];
+    private bool _trackedKnown;
+    private DateTimeOffset? _ingestionSince;
     private string? _channel;
     private string? _streamId;
     private DateTimeOffset? _sessionStartedAt;
@@ -75,6 +82,8 @@ public sealed class StreamSessionStatisticsHandler :
         _metadataResolvedSubscription = eventBus.Subscribe<StreamMetadataResolved>(this);
         _chatSubscription = eventBus.Subscribe<ChatMessageReceived>(this);
         _channelUpdatedSubscription = eventBus.Subscribe<ChannelUpdated>(this);
+        _ingestionStartedSubscription = eventBus.Subscribe<ChatIngestionStarted>(this);
+        _ingestionStoppedSubscription = eventBus.Subscribe<ChatIngestionStopped>(this);
     }
 
     public async Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
@@ -115,12 +124,15 @@ public sealed class StreamSessionStatisticsHandler :
             _channel = channel;
             _chatters.Clear();
             _segments.Clear();
+            _tracked.Clear();
+            _trackedKnown = !resume || existingDraft!.TrackedIntervals != null;
 
             if (resume)
             {
                 _sessionStartedAt = existingDraft!.StartedAt;
                 _streamId = streamId ?? existingDraft.StreamId;
                 _segments.AddRange(RestoreSegments(existingDraft));
+                _tracked.AddRange(RestoreTracked(existingDraft, existingDraft.UpdatedAt));
 
                 foreach (var chatter in existingDraft.Chatters)
                 {
@@ -153,6 +165,11 @@ public sealed class StreamSessionStatisticsHandler :
                     ViewerSamplesSum = initialViewers,
                     ViewerSamplesCount = initialViewers > 0 ? 1 : 0,
                 });
+            }
+
+            if (_ingestionSince is { } ingestionSince)
+            {
+                OpenTracked(ingestionSince);
             }
         }
 
@@ -224,6 +241,57 @@ public sealed class StreamSessionStatisticsHandler :
 
             ApplyMetadata(@event.Title, @event.GameName);
         }
+
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(ChatIngestionStarted @event, CancellationToken cancellationToken)
+    {
+        lock (_stateLock)
+        {
+            if (_ingestionSince != null)
+            {
+                return Task.CompletedTask;
+            }
+
+            _ingestionSince = @event.At;
+
+            if (_sessionStartedAt == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            OpenTracked(@event.At);
+        }
+
+        Checkpoint();
+
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(ChatIngestionStopped @event, CancellationToken cancellationToken)
+    {
+        lock (_stateLock)
+        {
+            if (_ingestionSince is not { } since || @event.At < since)
+            {
+                return Task.CompletedTask;
+            }
+
+            _ingestionSince = null;
+
+            if (_sessionStartedAt == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            foreach (var interval in _tracked)
+            {
+                interval.EndedAt ??= @event.At;
+            }
+        }
+
+        Checkpoint();
 
         return Task.CompletedTask;
     }
@@ -350,6 +418,8 @@ public sealed class StreamSessionStatisticsHandler :
         _metadataResolvedSubscription.Dispose();
         _chatSubscription.Dispose();
         _channelUpdatedSubscription.Dispose();
+        _ingestionStartedSubscription.Dispose();
+        _ingestionStoppedSubscription.Dispose();
 
         try
         {
@@ -442,13 +512,47 @@ public sealed class StreamSessionStatisticsHandler :
         ];
     }
 
+    private static List<ActiveStreamSessionInterval> RestoreTracked(ActiveStreamSession draft, DateTimeOffset closeOpenAt)
+    {
+        if (draft.TrackedIntervals == null)
+        {
+            return [];
+        }
+
+        return draft.TrackedIntervals
+            .OfType<ActiveStreamSessionInterval>()
+            .Select(interval => new ActiveStreamSessionInterval
+            {
+                StartedAt = interval.StartedAt,
+                EndedAt = interval.EndedAt ?? (closeOpenAt > interval.StartedAt ? closeOpenAt : interval.StartedAt),
+            })
+            .ToList();
+    }
+
+    private static List<StreamSessionInterval>? ToIntervals(bool known, IEnumerable<ActiveStreamSessionInterval> tracked, DateTimeOffset closeOpenAt)
+    {
+        if (!known)
+        {
+            return null;
+        }
+
+        return tracked
+            .Select(interval => new StreamSessionInterval
+            {
+                StartedAt = interval.StartedAt,
+                EndedAt = interval.EndedAt ?? closeOpenAt,
+            })
+            .ToList();
+    }
+
     private static StreamSessionRecord BuildRecord(
         string channel,
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
         int chatterCount,
         List<StreamSessionChatter> chatters,
-        IReadOnlyList<SegmentTally> segments)
+        IReadOnlyList<SegmentTally> segments,
+        List<StreamSessionInterval>? tracked)
     {
         var normalizedEnd = endedAt < startedAt ? startedAt : endedAt;
 
@@ -499,6 +603,7 @@ public sealed class StreamSessionStatisticsHandler :
             AverageViewers = AverageViewers(viewerSamplesSum, viewerSamplesCount),
             Chatters = chatters,
             Segments = resultSegments,
+            TrackedIntervals = tracked == null ? null : StreamSessionInterval.Normalize(tracked, startedAt, normalizedEnd),
         };
     }
 
@@ -515,7 +620,20 @@ public sealed class StreamSessionStatisticsHandler :
             MessageCount = chatter.MessageCount,
         }));
 
-        return BuildRecord(draft.Channel, draft.StartedAt, endedAt, draft.Chatters.Count, chatters, segments);
+        var lastSeenAlive = draft.UpdatedAt < endedAt ? draft.UpdatedAt : endedAt;
+        var tracked = ToIntervals(draft.TrackedIntervals != null, RestoreTracked(draft, lastSeenAlive), lastSeenAlive);
+
+        return BuildRecord(draft.Channel, draft.StartedAt, endedAt, draft.Chatters.Count, chatters, segments, tracked);
+    }
+
+    private void OpenTracked(DateTimeOffset at)
+    {
+        if (_tracked.Count > 0 && _tracked[^1].EndedAt == null)
+        {
+            return;
+        }
+
+        _tracked.Add(new() { StartedAt = at });
     }
 
     private void ApplyMetadata(string? title, string? game)
@@ -690,13 +808,15 @@ public sealed class StreamSessionStatisticsHandler :
                 MessageCount = pair.Value.MessageCount,
             }));
 
-            var record = BuildRecord(channel, _sessionStartedAt.Value, endedAt, _chatters.Count, chatters, _segments);
+            var tracked = ToIntervals(_trackedKnown, _tracked, endedAt);
+            var record = BuildRecord(channel, _sessionStartedAt.Value, endedAt, _chatters.Count, chatters, _segments, tracked);
 
             _channel = null;
             _streamId = null;
             _sessionStartedAt = null;
             _chatters.Clear();
             _segments.Clear();
+            _tracked.Clear();
 
             return record;
         }
@@ -748,6 +868,14 @@ public sealed class StreamSessionStatisticsHandler :
                     })
                     .ToList(),
                 Segments = segments,
+                TrackedIntervals = _trackedKnown
+                    ? _tracked.Select(interval => new ActiveStreamSessionInterval
+                        {
+                            StartedAt = interval.StartedAt,
+                            EndedAt = interval.EndedAt,
+                        })
+                        .ToList()
+                    : null,
             };
         }
     }

@@ -25,4 +25,6 @@ public sealed class ActiveStreamSession
     public List<ActiveStreamSessionChatter> Chatters { get; set; } = [];
 
     public List<ActiveStreamSessionSegment> Segments { get; set; } = [];
+
+    public List<ActiveStreamSessionInterval>? TrackedIntervals { get; set; }
 }

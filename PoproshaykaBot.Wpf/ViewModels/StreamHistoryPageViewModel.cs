@@ -117,6 +117,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private string _detailPeriodText = Placeholder;
 
     [ObservableProperty]
+    private string _detailTrackingText = string.Empty;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowDetailDeltas))]
     private string _detailMessagesDelta = string.Empty;
 
@@ -490,6 +493,33 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         return rounded >= 0
             ? (string.Create(UiCulture.Russian, $"+{rounded:N0} % к обычному"), TrendTone.Up)
             : (string.Create(UiCulture.Russian, $"−{-rounded:N0} % к обычному"), TrendTone.Down);
+    }
+
+    public static string DescribeTracking(StreamSessionRecord session)
+    {
+        if (session.TrackedDuration is not { } tracked)
+        {
+            return string.Empty;
+        }
+
+        var duration = session.Duration;
+
+        if (tracked <= TimeSpan.Zero)
+        {
+            return "Учёт не вёлся: бот не был подключён к чату";
+        }
+
+        if (tracked >= duration)
+        {
+            return "Учёт вёлся весь эфир";
+        }
+
+        var trackedText = FormatDuration(tracked);
+        var durationText = FormatDuration(duration);
+
+        return trackedText == durationText
+            ? "Учёт вёлся почти весь эфир"
+            : string.Create(UiCulture.Russian, $"Учёт вёлся {trackedText} из {durationText}");
     }
 
     public static string DescribeComposition(StreamSessionRecord session)
@@ -1083,6 +1113,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             DetailBoxArt = GameBoxArtViewModel.None;
             DetailComposition = string.Empty;
             DetailPeriodText = Placeholder;
+            DetailTrackingText = string.Empty;
             DetailMessagesDelta = string.Empty;
             DetailChattersDelta = string.Empty;
             DetailPeakViewersDelta = string.Empty;
@@ -1100,6 +1131,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         DetailBoxArt = row.BoxArt;
         DetailComposition = DescribeComposition(row.Source);
         DetailPeriodText = FormatPeriod(row.StartedAt, row.Source.EndedAt);
+        DetailTrackingText = DescribeTracking(row.Source);
 
         (DetailMessagesDelta, DetailMessagesDeltaTone) = DescribeDelta(row.MessageCount, _averageMessages, _visibleSessions.Count);
         (DetailChattersDelta, DetailChattersDeltaTone) = DescribeDelta(row.ChatterCount, _averageChatters, _visibleSessions.Count);

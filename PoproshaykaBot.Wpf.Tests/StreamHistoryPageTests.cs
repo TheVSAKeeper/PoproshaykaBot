@@ -126,6 +126,50 @@ public class StreamHistoryPageTests
         Assert.That(page.HasGameFilter, Is.False);
     }
 
+    [Test]
+    public void Строка_учёта_есть_только_у_записи_с_интервалами()
+    {
+        var legacy = Session(0, "Just Chatting");
+        var tracked = Session(1, "Minecraft");
+        tracked.TrackedIntervals = [new() { StartedAt = tracked.StartedAt.AddMinutes(5), EndedAt = tracked.EndedAt }];
+
+        var page = Create(new MemorySettings(), legacy, tracked);
+        var texts = new Dictionary<string, string>();
+
+        for (var index = 0; index < 2; index++)
+        {
+            page.TrySelectAt(index);
+            texts[page.SelectedRow!.Source.Game!] = page.DetailTrackingText;
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(texts["Just Chatting"], Is.Empty);
+            Assert.That(texts["Minecraft"], Is.EqualTo("Учёт вёлся 2 ч 55 мин из 3 ч 0 мин"));
+        }
+    }
+
+    [TestCase(-1, "")]
+    [TestCase(0, "Учёт не вёлся: бот не был подключён к чату")]
+    [TestCase(181, "Учёт вёлся весь эфир")]
+    [TestCase(179.5, "Учёт вёлся 2 ч 59 мин из 3 ч 0 мин")]
+    [TestCase(180.2, "Учёт вёлся почти весь эфир")]
+    [TestCase(74, "Учёт вёлся 1 ч 14 мин из 3 ч 0 мин")]
+    public void Строка_учёта_называет_долю_эфира_без_лжи_про_неизвестное(double trackedMinutes, string expected)
+    {
+        var session = Session(0, "Just Chatting");
+        session.EndedAt += TimeSpan.FromSeconds(30);
+
+        if (trackedMinutes >= 0)
+        {
+            session.TrackedIntervals = trackedMinutes > 0
+                ? [new() { StartedAt = session.StartedAt, EndedAt = session.StartedAt.AddMinutes(trackedMinutes) }]
+                : [];
+        }
+
+        Assert.That(StreamHistoryPageViewModel.DescribeTracking(session), Is.EqualTo(expected));
+    }
+
     [TestCase(20, 20)]
     [TestCase(40, 30)]
     public void Глубина_ограничивает_число_столбиков(int length, int expected)
