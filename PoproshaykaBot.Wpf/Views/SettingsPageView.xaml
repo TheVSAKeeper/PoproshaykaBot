@@ -190,51 +190,51 @@
                                                 Visibility="{Binding Sections[misc].IsSelected, Converter={StaticResource BoolToVisibility}}">
                             <ContentControl Content="{Binding Misc}" />
                         </HeaderedContentControl>
+
+                        <StackPanel Visibility="{Binding Sections[obs].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding Sections[obs].Title}"
+                                       Style="{StaticResource Setting.SectionTitle}" />
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Подключение к OBS"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="obs/connection">
+                                <StackPanel>
+                                    <TextBlock Text="Адрес и пароль WebSocket, через который приложение управляет OBS."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding ObsIntegration}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Оформление чат-оверлея"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="obs/overlay">
+                                <StackPanel>
+                                    <TextBlock Text="Как чат выглядит в браузерном источнике на трансляции."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding ObsChat}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="HTTP сервер оверлея"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="obs/server">
+                                <StackPanel>
+                                    <TextBlock Text="Порт и адреса страниц, которые открывает браузерный источник."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding HttpServer}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
+
+                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                Header="{Binding Sections[dashboard].Title}"
+                                                Visibility="{Binding Sections[dashboard].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <ContentControl Content="{Binding DashboardLayout}" />
+                        </HeaderedContentControl>
                     </Grid>
-
-                    <StackPanel Visibility="{Binding Sections[obs].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock Text="{Binding Sections[obs].Title}"
-                                   Style="{StaticResource Setting.SectionTitle}" />
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="Подключение к OBS"
-                                                Margin="{StaticResource Setting.BlockGap}"
-                                                settings:SettingsBlock.Key="obs/connection">
-                            <StackPanel>
-                                <TextBlock Text="Адрес и пароль WebSocket, через который приложение управляет OBS."
-                                           Style="{StaticResource Setting.BlockHint}" />
-                                <ContentControl Content="{Binding ObsIntegration}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="Оформление чат-оверлея"
-                                                Margin="{StaticResource Setting.BlockGap}"
-                                                settings:SettingsBlock.Key="obs/overlay">
-                            <StackPanel>
-                                <TextBlock Text="Как чат выглядит в браузерном источнике на трансляции."
-                                           Style="{StaticResource Setting.BlockHint}" />
-                                <ContentControl Content="{Binding ObsChat}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="HTTP сервер оверлея"
-                                                Margin="{StaticResource Setting.BlockGap}"
-                                                settings:SettingsBlock.Key="obs/server">
-                            <StackPanel>
-                                <TextBlock Text="Порт и адреса страниц, которые открывает браузерный источник."
-                                           Style="{StaticResource Setting.BlockHint}" />
-                                <ContentControl Content="{Binding HttpServer}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-                    </StackPanel>
-
-                    <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                            Header="{Binding Sections[dashboard].Title}"
-                                            Visibility="{Binding Sections[dashboard].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                        <ContentControl Content="{Binding DashboardLayout}" />
-                    </HeaderedContentControl>
                 </Grid>
             </ScrollViewer>
         </Grid>

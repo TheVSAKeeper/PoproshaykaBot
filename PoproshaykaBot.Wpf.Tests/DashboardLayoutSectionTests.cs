@@ -33,6 +33,18 @@ public class DashboardLayoutSectionTests
         return layout;
     }
 
+    private static DashboardLayoutSettings LooseSlotLayout()
+    {
+        var layout = TwoColumnLayout();
+
+        layout.Root = new SplitPane(SplitOrientation.Columns, [
+            new(new TilePane("stream-info"), 0.6),
+            new(new TilePane("twitch-chat"), null),
+        ]);
+
+        return layout;
+    }
+
     private static void AddTile(
         DashboardLayoutSettings layout,
         string typeId,
@@ -309,6 +321,264 @@ public class DashboardLayoutSectionTests
             Assert.That(section.Notice, Is.Not.Empty,
                 "Пользователю говорят, почему правка недоступна, сразу, а не молчат до первой неудачной попытки.");
         });
+    }
+
+    [Test]
+    public void One_more_column_opens_an_empty_cell_and_keeps_the_proportions_inside_the_columns()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnRowsLayout());
+        section.ColumnCount = 3;
+
+        var root = section.BuildLayout().Root as SplitPane;
+        var column = root?.Children.Select(child => child.Pane).OfType<SplitPane>().FirstOrDefault();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(section.ColumnCount, Is.EqualTo(3));
+            Assert.That(Holes(section.Pane), Is.Not.Zero, "Новая колонка обязана быть видна пустой ячейкой, иначе положить в неё плитку некуда.");
+            Assert.That(column?.Children[0].Weight, Is.EqualTo(0.7).Within(0.01),
+                "Пропорции строк внутри уцелевшей колонки менять число колонок не должно.");
+            Assert.That(section.Notice, Is.Empty, "Ничего не потерялось – тревожить пользователя нечем.");
+        });
+    }
+
+    [Test]
+    public void One_more_column_keeps_the_proportions_of_the_columns_that_survived()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.ColumnCount = 3;
+
+        var root = section.BuildLayout().Root as SplitPane;
+
+        Assert.That(root?.Children, Has.Count.EqualTo(3), "Прибавленная колонка обязана стать третьим ребёнком корня.");
+        Assert.That(root!.Children[0].Weight / root.Children[1].Weight, Is.EqualTo(1.5).Within(0.05),
+            "Разное число детей не повод сбросить доли колонок, которые остались на месте.");
+    }
+
+    [Test]
+    public void A_slot_without_a_weight_does_not_cost_the_node_its_proportions()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(LooseSlotLayout());
+        section.ColumnCount = 3;
+
+        var root = section.BuildLayout().Root as SplitPane;
+
+        Assert.That(root?.Children[0].Weight, Is.EqualTo(0.6).Within(0.05),
+            "Сосед по содержимому весa не несёт, и это не повод потерять долю взвешенной колонки.");
+    }
+
+    [Test]
+    public void Undo_clears_the_notice_about_a_switched_off_tile()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.ColumnCount = 1;
+
+        Assert.That(section.Notice, Is.Not.Empty, "Проверка холостая: о выключенной плитке не сказали.");
+
+        section.UndoCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(section.BuildLayout().Tiles.All(static tile => tile.IsVisible), Is.True, "Отмена вернула плитку на панель.");
+            Assert.That(section.Notice, Is.Empty, "Лента продолжает утверждать, что плитка выключена, хотя она вернулась.");
+        });
+    }
+
+    [Test]
+    public void A_tile_that_stops_fitting_the_grid_is_switched_off_and_named()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.ColumnCount = 1;
+
+        var layout = section.BuildLayout();
+        var hidden = layout.Tiles.Where(tile => !tile.IsVisible).Select(tile => tile.TypeId).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hidden, Has.Count.EqualTo(1), "Одной из двух плиток в одной колонке одной строки места нет.");
+            Assert.That(layout.Tiles, Has.Count.EqualTo(2), "Не поместившаяся плитка остаётся в файле, а не стирается из него.");
+            Assert.That(section.Notice, Does.Contain(hidden[0]), "Пользователю говорят, какая плитка выключена.");
+            Assert.That(section.AvailablePalette.Select(meta => meta.TypeId), Does.Contain(hidden[0]),
+                "Выключенная плитка возвращается в палитру, иначе вернуть её нечем.");
+        });
+    }
+
+    [Test]
+    public void A_tile_from_the_palette_lands_in_the_cell_the_new_column_opened()
+    {
+        var section = new DashboardLayoutSectionViewModel([
+            new FakeTile("stream-info"),
+            new FakeTile("broadcast-status"),
+            new FakeTile("twitch-chat", fills: true),
+            new FakeTile("obs-info"),
+        ]);
+
+        section.LoadSettings(TwoColumnRowsLayout());
+        section.ColumnCount = 3;
+
+        var hole = HolePath(section.Pane);
+
+        Assert.That(hole, Is.Not.Null, "Пустая ячейка обязана быть адресуемой – иначе бросок в неё невыразим.");
+
+        section.Add("obs-info", hole!, PaneSide.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Leaf(section.Pane, "obs-info"), Is.Not.Null, "Плитка обязана встать в открывшуюся ячейку.");
+            Assert.That(section.AvailablePalette.Select(meta => meta.TypeId), Does.Not.Contain("obs-info"));
+        });
+    }
+
+    [Test]
+    public void A_column_with_nowhere_to_grow_is_named_instead_of_appearing_as_a_sliver()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.Reference = DashboardPreviewReference.Window1024;
+        section.ColumnCount = 3;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(section.Stacked, Is.False, "Проверяется именно узкий, а не стопочный случай.");
+            Assert.That(section.Notice, Does.Contain("ширины"),
+                "Пустая ячейка шириной в пару пикселей выглядит как «ничего не произошло» – это надо сказать словами.");
+        });
+    }
+
+    [Test]
+    public void A_stacked_preview_says_that_the_new_cell_is_not_shown_there()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 3,
+            RowCount = 1,
+            Root = new SplitPane(SplitOrientation.Columns, [
+                new(new TilePane("stream-info"), 0.34),
+                new(new TilePane("broadcast-status"), 0.33),
+                new(new TilePane("twitch-chat"), 0.33),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0);
+        AddTile(layout, "broadcast-status", 0, 1);
+        AddTile(layout, "twitch-chat", 0, 2);
+
+        var section = new DashboardLayoutSectionViewModel([
+            new FakeTile("stream-info", fills: true),
+            new FakeTile("broadcast-status", fills: true),
+            new FakeTile("twitch-chat", fills: true),
+        ]);
+
+        section.LoadSettings(layout);
+        section.Reference = DashboardPreviewReference.Window1024;
+        section.ColumnCount = 4;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(section.Stacked, Is.True, "Три растягивающиеся колонки на эталоне 1024 не влезают полами – превью уходит в стопку.");
+            Assert.That(section.Notice, Does.Contain("стопкой"),
+                "В стопке пустых ячеек не видно – иначе ползунок выглядит сломанным.");
+        });
+    }
+
+    [Test]
+    public void Undo_returns_the_grid_size_together_with_the_tree()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.RowCount = 3;
+        section.UndoCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(section.RowCount, Is.EqualTo(1), "Отмена обязана вернуть и число строк – правка сетки такая же правка, как разрез.");
+            Assert.That(section.BuildLayout().RowCount, Is.EqualTo(1));
+            Assert.That(Holes(section.Pane), Is.Zero, "Вместе с сеткой уходят и открытые ею пустые ячейки.");
+        });
+    }
+
+    [Test]
+    public void The_grid_size_survives_a_concurrent_write_of_the_dashboard()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.RowCount = 2;
+
+        var layout = section.BuildLayout();
+
+        Assert.That(section.TreeEdited, Is.True, "Смена сетки – правка дерева: иначе дерево с диска перебьёт её при сохранении.");
+
+        DashboardLayoutReconciler.MergeConcurrentEdits(layout, TwoColumnLayout(), section.TreeEdited);
+
+        Assert.That(layout.RowCount, Is.EqualTo(2), "Число строк принадлежит черновику настроек, а не файлу.");
+    }
+
+    private static DashboardLayoutSettings TwoColumnRowsLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 2,
+            RowCount = 2,
+            Root = new SplitPane(SplitOrientation.Columns, [
+                new(new SplitPane(SplitOrientation.Rows, [
+                    new(new TilePane("stream-info"), 0.7),
+                    new(new TilePane("broadcast-status"), 0.3),
+                ]), 0.6),
+                new(new TilePane("twitch-chat"), 0.4),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0);
+        AddTile(layout, "broadcast-status", 1, 0);
+        AddTile(layout, "twitch-chat", 0, 1, rowSpan: 2);
+
+        return layout;
+    }
+
+    private static int[]? HolePath(PaneLayout? pane)
+    {
+        switch (pane)
+        {
+            case EmptyPaneLayout hole:
+                return hole.Path;
+
+            case SplitPaneLayout split:
+                foreach (var child in split.Children)
+                {
+                    if (HolePath(child.Pane) is { } found)
+                    {
+                        return found;
+                    }
+                }
+
+                return null;
+
+            default:
+                return null;
+        }
+    }
+
+    private static int Holes(PaneLayout? pane)
+    {
+        return pane switch
+        {
+            EmptyPaneLayout => 1,
+            SplitPaneLayout split => split.Children.Sum(child => Holes(child.Pane)),
+            _ => 0,
+        };
     }
 
     [Test]

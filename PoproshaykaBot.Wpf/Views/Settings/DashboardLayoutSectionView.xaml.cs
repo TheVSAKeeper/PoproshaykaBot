@@ -6,17 +6,20 @@ using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
+using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views.Settings;
 
 public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLayoutSectionViewModel>
 {
     private const string DragFormat = "DashboardTileTypeId";
-    private const double MaxPreviewHeight = 420;
+    private const double MaxPreviewHeight = 560;
     private const double MiniatureFontSize = 11;
     private const double MiniatureIconSize = 14;
     private const double MiniaturePadding = 8;
@@ -32,11 +35,14 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     private Border? _dropFill;
     private double _scale = 1;
     private double _builtWidth;
+    private Size _canvas;
 
     public DashboardLayoutSectionView()
     {
         InitializeComponent();
+        PreviewBox.MaxHeight = MaxPreviewHeight;
         DataContextChanged += OnDataContextChanged;
+        Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         PreviewArea.SizeChanged += OnPreviewAreaSizeChanged;
         PreviewArea.LayoutUpdated += OnPreviewAreaLayoutUpdated;
@@ -44,27 +50,64 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (_viewModel is not null)
-        {
-            _viewModel.LayoutChanged -= OnLayoutChanged;
-        }
+        Unsubscribe();
 
         _viewModel = e.NewValue as DashboardLayoutSectionViewModel;
 
-        if (_viewModel is not null)
+        Subscribe();
+        RebuildPreview();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        Subscribe();
+    }
+
+    private void Subscribe()
+    {
+        if (_viewModel is null)
         {
-            _viewModel.LayoutChanged += OnLayoutChanged;
+            return;
         }
 
-        RebuildPreview();
+        Unsubscribe();
+
+        _viewModel.LayoutChanged += OnLayoutChanged;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        if (_viewModel is not null)
+        Unsubscribe();
+    }
+
+    private void Unsubscribe()
+    {
+        if (_viewModel is null)
         {
-            _viewModel.LayoutChanged -= OnLayoutChanged;
+            return;
         }
+
+        _viewModel.LayoutChanged -= OnLayoutChanged;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!string.Equals(e.PropertyName, nameof(DashboardLayoutSectionViewModel.Notice), StringComparison.Ordinal)
+            || string.IsNullOrEmpty(_viewModel?.Notice))
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(AnnounceNotice));
+    }
+
+    private void AnnounceNotice()
+    {
+        var peer = UIElementAutomationPeer.FromElement(NoticeText) ?? UIElementAutomationPeer.CreatePeerForElement(NoticeText);
+
+        peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
     private void OnLayoutChanged(object? sender, EventArgs e)
@@ -105,20 +148,20 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 
     private void RebuildMiniatures()
     {
-        var area = _viewModel!.ContentArea;
-
         HideDropHint();
         _panePaths.Clear();
         _tilePaths.Clear();
         _tileHosts.Clear();
 
+        _canvas = CanvasSize(_viewModel!.ContentArea);
+
         var canvas = new Grid
         {
-            Width = area.Width,
-            Height = area.Height,
+            Width = _canvas.Width,
+            Height = _canvas.Height,
         };
 
-        canvas.Children.Add(WrapOverflow(BuildContent(_viewModel), area));
+        canvas.Children.Add(BuildContent(_viewModel));
 
         PreviewBox.Child = canvas;
     }
@@ -240,7 +283,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         if (pane is null
             || _viewModel.PreviewTile(typeId) is not { } tile
             || DashboardPaneSurface.LeafOf(pane, tile) is not { } leaf
-            || DashboardPaneSurface.MeasurePane(pane, leaf, _viewModel.ContentArea, TileContentSize) is not { } rect)
+            || DashboardPaneSurface.MeasurePane(pane, leaf, _canvas, TileContentSize) is not { } rect)
         {
             HideDropHint();
 
@@ -316,30 +359,37 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         }
 
         var ceiling = PreviewArea.ActualHeight > 0 ? Math.Min(PreviewArea.ActualHeight, MaxPreviewHeight) : MaxPreviewHeight;
+        var canvas = CanvasSize(area);
 
         _builtWidth = PreviewArea.ActualWidth;
-        _scale = Math.Min(_builtWidth / area.Width, ceiling / area.Height);
+        _scale = Math.Min(_builtWidth / canvas.Width, ceiling / canvas.Height);
         _viewModel.Scale = _scale;
 
         RebuildMiniatures();
     }
 
-    private FrameworkElement WrapOverflow(FrameworkElement content, Size area)
+    private Size CanvasSize(Size area)
     {
-        var required = _viewModel is { Stacked: false, Pane: { } pane } ? DashboardPaneSurface.RequiredHeight(pane) : 0;
-        var overflows = required > area.Height;
-        var grid = new Grid { Height = overflows ? required : double.NaN };
+        return new(area.Width, Math.Max(area.Height, RequiredHeight()));
+    }
 
-        grid.Children.Add(content);
-
-        return new ScrollViewer
+    private double RequiredHeight()
+    {
+        if (_viewModel is not { Pane: { } pane })
         {
-            Content = grid,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = _viewModel?.Stacked == true || overflows
-                ? ScrollBarVisibility.Auto
-                : ScrollBarVisibility.Disabled,
-        };
+            return _viewModel?.Bands.Select(band => band.MinHeight).DefaultIfEmpty(0).Max() ?? 0;
+        }
+
+        if (!_viewModel.Stacked)
+        {
+            return DashboardPaneSurface.RequiredHeight(pane);
+        }
+
+        var leaves = new List<TilePaneLayout>();
+
+        DashboardPaneSurface.CollectLeaves(pane, leaves);
+
+        return leaves.Sum(leaf => DashboardPaneSurface.StackedRow(leaf).Min);
     }
 
     private FrameworkElement BuildContent(DashboardLayoutSectionViewModel viewModel)

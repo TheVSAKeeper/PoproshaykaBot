@@ -23,12 +23,19 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
     private DashboardLayoutDraft _draft = new(DashboardLayoutDefaults.Create());
     private IReadOnlyDictionary<string, DashboardTilePlacement> _placements = new Dictionary<string, DashboardTilePlacement>(StringComparer.Ordinal);
     private double _scale = 1;
+    private bool _gridFromDraft;
 
     [ObservableProperty]
     private string _notice = string.Empty;
 
     [ObservableProperty]
     private DashboardPreviewReference _reference;
+
+    [ObservableProperty]
+    private int _columnCount = DashboardLayoutDefaults.DefaultColumnCount;
+
+    [ObservableProperty]
+    private int _rowCount = DashboardLayoutDefaults.DefaultRowCount;
 
     public DashboardLayoutSectionViewModel(
         IEnumerable<DashboardTileViewModel> tiles,
@@ -97,6 +104,14 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
     }
 
     public string ReferenceCaption => Reference.Describe(Scale);
+
+    public int MinColumnCount => DashboardLayoutDefaults.MinColumnCount;
+
+    public int MaxColumnCount => DashboardLayoutDefaults.MaxColumnCount;
+
+    public int MinRowCount => DashboardLayoutDefaults.MinRowCount;
+
+    public int MaxRowCount => DashboardLayoutDefaults.MaxRowCount;
 
     public IReadOnlyList<int> MaxWidthPresets { get; } = [200, 300, 400, 500, 600, 800];
 
@@ -244,6 +259,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
     {
         if (_draft.Undo())
         {
+            Notice = string.Empty;
             Committed();
 
             return;
@@ -289,6 +305,86 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         OnPropertyChanged(nameof(ReferenceCaption));
     }
 
+    partial void OnColumnCountChanged(int value)
+    {
+        ApplyGridSize();
+    }
+
+    partial void OnRowCountChanged(int value)
+    {
+        ApplyGridSize();
+    }
+
+    private void ApplyGridSize()
+    {
+        if (_gridFromDraft)
+        {
+            return;
+        }
+
+        var version = _draft.Version;
+        var columns = _draft.Layout.ColumnCount;
+        var rows = _draft.Layout.RowCount;
+        var hidden = _draft.SetGridSize(ColumnCount, RowCount);
+
+        if (_draft.Version == version)
+        {
+            return;
+        }
+
+        Committed();
+
+        if (hidden.Count > 0)
+        {
+            Notice = DashboardLayoutReconciler.DescribeHiddenTiles(hidden.Select(Title).ToList());
+
+            return;
+        }
+
+        if (Crowded(_draft.Layout.ColumnCount > columns, _draft.Layout.RowCount > rows) is { Length: > 0 } crowded)
+        {
+            Notice = crowded;
+        }
+        else if (Pane is not null)
+        {
+            Notice = string.Empty;
+        }
+    }
+
+    private string Crowded(bool widened, bool heightened)
+    {
+        if (Pane is not { } pane)
+        {
+            return string.Empty;
+        }
+
+        if (Stacked)
+        {
+            return widened || heightened
+                ? "На этом эталоне панель показана стопкой, и новая пустая ячейка в ней не видна. Возьмите эталон шире, чтобы её увидеть."
+                : string.Empty;
+        }
+
+        if (widened
+            && ContentArea.Width - pane.MinWidth(DashboardPaneSurface.ScaledStarBandMinWidth) < DashboardPaneSurface.ScaledStarBandMinWidth)
+        {
+            return "Новой колонке при этом эталоне почти не остаётся ширины: плитки уже на минимуме. Возьмите эталон шире или уберите плитку.";
+        }
+
+        if (heightened
+            && ContentArea.Height - pane.MinHeight(DashboardPaneSurface.ScaledStarBandMinHeight) < DashboardPaneSurface.ScaledStarBandMinHeight)
+        {
+            return "Новой строке при этом эталоне почти не остаётся высоты: плитки уже на минимуме. Возьмите эталон выше или уберите плитку.";
+        }
+
+        return string.Empty;
+    }
+
+    private string Title(string typeId)
+    {
+        return _catalog.GetValueOrDefault(typeId)?.Title ?? typeId;
+    }
+
     private bool IsPlaced(string typeId)
     {
         return Record(typeId) is { IsVisible: true };
@@ -325,6 +421,13 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
     private void Refresh()
     {
+        _gridFromDraft = true;
+
+        ColumnCount = _draft.Layout.ColumnCount;
+        RowCount = _draft.Layout.RowCount;
+
+        _gridFromDraft = false;
+
         var model = DashboardPaneBuilder.Build(_draft.Layout, _previewTiles, showCollapsed: true);
 
         foreach (var placement in model.Placements)
