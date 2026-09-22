@@ -9,6 +9,7 @@ using PoproshaykaBot.Wpf.Views;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -23,6 +24,7 @@ public class StreamHistoryTrendGeometryTests
     private static readonly Size Area = new(1024, 640);
     private static readonly Size Wide = new(1360, 800);
 
+    private const int HiddenMenuItemIndex = 1;
     private const double CardBorder = 1;
     private const double CompactCoverHeight = 32;
     private const double WideCoverHeight = 72;
@@ -157,18 +159,17 @@ public class StreamHistoryTrendGeometryTests
         page.TrySelectAt(0);
         Arrange(view);
 
-        var grid = (DataGrid)view.FindName("SegmentsGrid")!;
-        var row = (DataGridRow)grid.ItemContainerGenerator.ContainerFromIndex(0)!;
-        var cell = FindChild<DataGridCell>(row)!;
+        var list = (ListBox)view.FindName("SegmentCards")!;
+        var card = (ListBoxItem)list.ItemContainerGenerator.ContainerFromIndex(0)!;
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(page.Segments[0].CanFilter, Is.True);
-            Assert.That(ContextMenuService.GetContextMenu(row), Is.Not.Null);
-            Assert.That(cell.Focusable, Is.True, "Фокус клавиатуры стоит на ячейке – строка у DataGrid не фокусируема");
-            Assert.That(OwnerOfMenu(cell), Is.SameAs(row),
-                "Клавиша контекстного меню поднимает ContextMenuOpening от ячейки вверх и находит меню строки");
-            Assert.That(row.Cursor, Is.Null, "Строка больше не притворяется кнопкой");
+            Assert.That(ContextMenuService.GetContextMenu(card), Is.Not.Null);
+            Assert.That(card.Focusable, Is.True, "Фокус клавиатуры стоит на самой карточке – с неё и поднимается ContextMenuOpening");
+            Assert.That(OwnerOfMenu(card), Is.SameAs(card));
+            Assert.That(card.Cursor, Is.EqualTo(Cursors.Hand),
+                "Карточка выбирается кликом, и курсор у неё тот же, что у строк списков каркаса");
         }
     }
 
@@ -183,15 +184,15 @@ public class StreamHistoryTrendGeometryTests
         page.TrySelectAt(0);
         Arrange(view);
 
-        var sessions = (DataGrid)view.FindName("SessionsGrid")!;
-        var segments = (DataGrid)view.FindName("SegmentsGrid")!;
+        var sessions = (ListBox)view.FindName("SessionsList")!;
+        var segments = (ListBox)view.FindName("SegmentCards")!;
 
-        var firstRow = (DataGridRow)sessions.ItemContainerGenerator.ContainerFromIndex(0)!;
-        var secondRow = (DataGridRow)sessions.ItemContainerGenerator.ContainerFromIndex(1)!;
-        var segmentRow = (DataGridRow)segments.ItemContainerGenerator.ContainerFromIndex(0)!;
+        var firstRow = (ListBoxItem)sessions.ItemContainerGenerator.ContainerFromIndex(0)!;
+        var secondRow = (ListBoxItem)sessions.ItemContainerGenerator.ContainerFromIndex(1)!;
+        var segmentRow = (ListBoxItem)segments.ItemContainerGenerator.ContainerFromIndex(0)!;
 
-        var first = MenuItemState(firstRow);
-        var second = MenuItemState(secondRow);
+        var first = MenuItemState(firstRow, HiddenMenuItemIndex);
+        var second = MenuItemState(secondRow, HiddenMenuItemIndex);
         var segment = MenuItemState(segmentRow);
 
         using (Assert.EnterMultipleScope())
@@ -204,7 +205,7 @@ public class StreamHistoryTrendGeometryTests
         }
     }
 
-    private static (object? DataContext, object? Header) MenuItemState(FrameworkElement owner)
+    private static (object? DataContext, object? Header) MenuItemState(FrameworkElement owner, int index = 0)
     {
         var menu = ContextMenuService.GetContextMenu(owner)
             ?? throw new InvalidOperationException("У строки нет контекстного меню");
@@ -214,7 +215,7 @@ public class StreamHistoryTrendGeometryTests
 
         try
         {
-            var item = (MenuItem)menu.Items[0];
+            var item = (MenuItem)menu.Items[index];
             item.Dispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
 
             return (item.DataContext, item.Header);
@@ -274,9 +275,9 @@ public class StreamHistoryTrendGeometryTests
     private static double TableTop(StreamHistoryPageView view)
     {
         var card = (FrameworkElement)view.FindName("TableCard")!;
-        var grid = (FrameworkElement)view.FindName("SessionsGrid")!;
+        var table = (FrameworkElement)view.FindName("SessionsTable")!;
 
-        return grid.TransformToAncestor(card).Transform(default).Y;
+        return table.TransformToAncestor(card).Transform(default).Y;
     }
 
     private StreamHistoryPageViewModel CreatePage()

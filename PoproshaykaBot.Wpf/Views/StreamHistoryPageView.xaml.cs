@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Wpf.ViewModels;
+﻿using KeepShell.Services.Platform;
+using PoproshaykaBot.Wpf.ViewModels;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Automation.Peers;
@@ -12,10 +13,19 @@ namespace PoproshaykaBot.Wpf.Views;
 
 public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPageViewModel>
 {
+    public static readonly DependencyProperty SegmentColumnsProperty = DependencyProperty.Register(
+        nameof(SegmentColumns),
+        typeof(int),
+        typeof(StreamHistoryPageView),
+        new PropertyMetadata(1));
+
+    public const double SegmentCardMinWidth = 272;
+    public const double SegmentsPaneMinWidth = 220;
+    public const int SegmentCardMaxColumns = 3;
     public const double SideBySideWidth = 1240;
     public const double StackedWidth = 1200;
     public const double DetailMinWidth = 360;
-    public const double TableMinWidth = 720;
+    public const double TableMinWidth = 792;
     public const double DetailSplitWidth = 740;
     public const double DetailStackWidth = 700;
     public const double ChattersMinWidth = 240;
@@ -29,10 +39,13 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double DetailRowShare = 2;
     public const double DetailCardsRowShare = 1;
 
+    private readonly IClipboardService _clipboard = new ClipboardService();
+
     private bool _sideBySide;
     private bool _layoutApplied;
     private bool _detailStacked;
     private bool _detailApplied;
+    private double _segmentCardsWidth;
 
     public StreamHistoryPageView()
     {
@@ -43,6 +56,12 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         DetailSplit.SizeChanged += OnDetailSplitSizeChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    public int SegmentColumns
+    {
+        get => (int)GetValue(SegmentColumnsProperty);
+        set => SetValue(SegmentColumnsProperty, value);
     }
 
     private static void Place(UIElement element, int row, int column, int rowSpan = 1, int columnSpan = 1)
@@ -80,6 +99,25 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         _detailApplied = false;
         UpdateLayoutMode();
         UpdateDetailMode();
+        ApplySegmentColumns();
+    }
+
+    private void OnSegmentCardsSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        _segmentCardsWidth = e.NewSize.Width;
+        ApplySegmentColumns();
+    }
+
+    private void ApplySegmentColumns()
+    {
+        if (_segmentCardsWidth <= 0)
+        {
+            return;
+        }
+
+        var fits = (int)(_segmentCardsWidth / (SegmentCardMinWidth * FontScaleManager.Current));
+
+        SegmentColumns = Math.Clamp(fits, 1, SegmentCardMaxColumns);
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -115,12 +153,6 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         _detailStacked = stacked;
         _detailApplied = true;
 
-        var numbers = stacked ? Visibility.Collapsed : Visibility.Visible;
-
-        SegmentMessagesColumn.Visibility = numbers;
-        SegmentPeakColumn.Visibility = numbers;
-        SegmentAverageColumn.Visibility = numbers;
-
         DetailSplit.ColumnDefinitions.Clear();
         DetailSplit.RowDefinitions.Clear();
 
@@ -138,7 +170,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         }
         else
         {
-            DetailSplit.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star), MinWidth = 220 * scale });
+            DetailSplit.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star), MinWidth = SegmentsPaneMinWidth * scale });
             DetailSplit.ColumnDefinitions.Add(new() { Width = new(12, GridUnitType.Pixel) });
             DetailSplit.ColumnDefinitions.Add(new()
             {
@@ -320,8 +352,8 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
                 }
                 else
                 {
-                    SessionsGrid.ScrollIntoView(row);
-                    RevealFully(SessionsGrid, row);
+                    SessionsList.ScrollIntoView(row);
+                    RevealFully(SessionsList, row);
                 }
             },
             DispatcherPriority.Background);
@@ -414,6 +446,47 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         }
 
         viewModel.SetSessionHiddenCommand.Execute(row);
+    }
+
+    private void OnCopySessionCanExecute(object sender, CanExecuteRoutedEventArgs e)
+    {
+        e.CanExecute = ResolveSessionRow(e.Parameter) is not null;
+        e.Handled = true;
+    }
+
+    private void OnCopySessionExecuted(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (ResolveSessionRow(e.Parameter) is not { } row)
+        {
+            return;
+        }
+
+        _clipboard.TrySetText(BuildRowClipboardText(row));
+        e.Handled = true;
+    }
+
+    private StreamSessionRowViewModel? ResolveSessionRow(object? parameter)
+    {
+        if (parameter is StreamSessionRowViewModel parameterRow)
+        {
+            return parameterRow;
+        }
+
+        return (DataContext as StreamHistoryPageViewModel)?.SelectedRow;
+    }
+
+    private static string BuildRowClipboardText(StreamSessionRowViewModel row)
+    {
+        return string.Join(
+            '\t',
+            row.StartedAtFormatted,
+            row.DurationFormatted,
+            row.TitleFormatted,
+            row.GameCellText,
+            row.MessageCountFormatted,
+            row.ChatterCountFormatted,
+            row.PeakViewersFormatted,
+            row.AverageViewersFormatted);
     }
 
     private void OnCategoryRowActivated(object sender, MouseButtonEventArgs e)

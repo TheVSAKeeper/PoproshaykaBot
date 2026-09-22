@@ -260,7 +260,7 @@
                                    HorizontalAlignment="Center" />
 
                         <Button Grid.Column="1"
-                                Style="{StaticResource RatingSortButton}"
+                                Style="{StaticResource TableSortButton}"
                                 HorizontalAlignment="Left"
                                 Margin="2,0,0,0"
                                 Command="{Binding SortByCommand}"
@@ -268,13 +268,13 @@
                                 AutomationProperties.Name="Сортировать по нику">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Участник" />
-                                <Path Style="{StaticResource RatingSortArrow}"
+                                <Path Style="{StaticResource TableSortArrow}"
                                       Tag="{Binding NameSortIndicator}" />
                             </StackPanel>
                         </Button>
 
                         <Button Grid.Column="2"
-                                Style="{StaticResource RatingSortButton}"
+                                Style="{StaticResource TableSortButton}"
                                 HorizontalAlignment="Left"
                                 Margin="2,0,0,0"
                                 Command="{Binding SortByCommand}"
@@ -282,13 +282,13 @@
                                 AutomationProperties.Name="Сортировать по рангу">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Ранг" />
-                                <Path Style="{StaticResource RatingSortArrow}"
+                                <Path Style="{StaticResource TableSortArrow}"
                                       Tag="{Binding RankSortIndicator}" />
                             </StackPanel>
                         </Button>
 
                         <Button Grid.Column="3"
-                                Style="{StaticResource RatingSortButton}"
+                                Style="{StaticResource TableSortButton}"
                                 HorizontalAlignment="Right"
                                 Margin="2,0,0,0"
                                 Command="{Binding SortByCommand}"
@@ -296,13 +296,13 @@
                                 AutomationProperties.Name="Сортировать по баллам">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Баллы" />
-                                <Path Style="{StaticResource RatingSortArrow}"
+                                <Path Style="{StaticResource TableSortArrow}"
                                       Tag="{Binding PointsSortIndicator}" />
                             </StackPanel>
                         </Button>
 
                         <Button Grid.Column="4"
-                                Style="{StaticResource RatingSortButton}"
+                                Style="{StaticResource TableSortButton}"
                                 HorizontalAlignment="Right"
                                 Margin="2,0,0,0"
                                 Command="{Binding SortByCommand}"
@@ -310,7 +310,7 @@
                                 AutomationProperties.Name="Сортировать по сообщениям">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Сообщения" />
-                                <Path Style="{StaticResource RatingSortArrow}"
+                                <Path Style="{StaticResource TableSortArrow}"
                                       Tag="{Binding MessagesSortIndicator}" />
                             </StackPanel>
                         </Button>

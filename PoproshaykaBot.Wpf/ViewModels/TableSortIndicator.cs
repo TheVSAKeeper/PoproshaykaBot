@@ -1,6 +1,6 @@
 ﻿namespace PoproshaykaBot.Wpf.ViewModels;
 
-public enum UserStatisticsSortIndicator
+public enum TableSortIndicator
 {
     None = 0,
     Ascending = 1,

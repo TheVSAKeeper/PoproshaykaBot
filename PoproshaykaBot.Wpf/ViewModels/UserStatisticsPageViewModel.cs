@@ -121,13 +121,13 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public IRelayCommand? EmptyActionCommand => IsFilterActive ? ClearFilterCommand : null;
 
-    public UserStatisticsSortIndicator PointsSortIndicator => IndicatorFor(UserStatisticsSortKey.Points);
+    public TableSortIndicator PointsSortIndicator => IndicatorFor(UserStatisticsSortKey.Points);
 
-    public UserStatisticsSortIndicator MessagesSortIndicator => IndicatorFor(UserStatisticsSortKey.Messages);
+    public TableSortIndicator MessagesSortIndicator => IndicatorFor(UserStatisticsSortKey.Messages);
 
-    public UserStatisticsSortIndicator NameSortIndicator => IndicatorFor(UserStatisticsSortKey.Name);
+    public TableSortIndicator NameSortIndicator => IndicatorFor(UserStatisticsSortKey.Name);
 
-    public UserStatisticsSortIndicator RankSortIndicator => IndicatorFor(UserStatisticsSortKey.Rank);
+    public TableSortIndicator RankSortIndicator => IndicatorFor(UserStatisticsSortKey.Rank);
 
     public string VisibleCountText => IsFilterActive
         ? UserStatisticsRanking.DescribeVisibleCount(_rows.Count, _allRows.Count)
@@ -229,14 +229,14 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         OnPropertyChanged(nameof(SelectedPlaceText));
     }
 
-    private UserStatisticsSortIndicator IndicatorFor(UserStatisticsSortKey key)
+    private TableSortIndicator IndicatorFor(UserStatisticsSortKey key)
     {
         if (SortKey != key)
         {
-            return UserStatisticsSortIndicator.None;
+            return TableSortIndicator.None;
         }
 
-        return SortDescending ? UserStatisticsSortIndicator.Descending : UserStatisticsSortIndicator.Ascending;
+        return SortDescending ? TableSortIndicator.Descending : TableSortIndicator.Ascending;
     }
 
     [RelayCommand]
