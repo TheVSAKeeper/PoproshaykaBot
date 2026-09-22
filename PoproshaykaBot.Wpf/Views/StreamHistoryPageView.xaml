@@ -159,7 +159,7 @@
                                        Foreground="{DynamicResource Fg.Secondary}"
                                        TextWrapping="NoWrap"
                                        HorizontalAlignment="Center"
-                                       Margin="0,0,0,2"
+                                       Margin="{x:Static views:StreamHistoryPageView.TrendValueMargin}"
                                        Visibility="Hidden" />
 
                             <Border Grid.Row="1"
@@ -189,6 +189,24 @@
                                 <Setter TargetName="Value"
                                         Property="Foreground"
                                         Value="{DynamicResource Accent.Text}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsFirst}"
+                                         Value="True">
+                                <Setter TargetName="Value"
+                                        Property="HorizontalAlignment"
+                                        Value="Left" />
+                                <Setter TargetName="Value"
+                                        Property="Margin"
+                                        Value="{x:Static views:StreamHistoryPageView.TrendValueFirstMargin}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsLast}"
+                                         Value="True">
+                                <Setter TargetName="Value"
+                                        Property="HorizontalAlignment"
+                                        Value="Right" />
+                                <Setter TargetName="Value"
+                                        Property="Margin"
+                                        Value="{x:Static views:StreamHistoryPageView.TrendValueLastMargin}" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding DataContext.IsCompactLayout, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                          Value="True">
@@ -839,58 +857,48 @@
                             Grid.Column="2"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <Border Style="{StaticResource StatCell.Lead}"
-                            MinWidth="72">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource StatValue.Small}"
-                                       Text="{Binding MessageCountFormatted}" />
-                            <TextBlock Style="{StaticResource StatLabel}"
-                                       Text="сообщений" />
-                            <TextBlock Style="{StaticResource DeltaText}"
-                                       Tag="{Binding MessagesDeltaTone}"
-                                       Text="{Binding MessagesDelta}" />
-                        </StackPanel>
-                    </Border>
+                    <StackPanel MinWidth="72"
+                                Margin="0,0,20,0">
+                        <TextBlock Style="{StaticResource StatValue.Small}"
+                                   Text="{Binding MessageCountFormatted}" />
+                        <TextBlock Style="{StaticResource StatLabel}"
+                                   Text="сообщений" />
+                        <TextBlock Style="{StaticResource DeltaText}"
+                                   Tag="{Binding MessagesDeltaTone}"
+                                   Text="{Binding MessagesDelta}" />
+                    </StackPanel>
 
-                    <Border Style="{StaticResource StatCell}"
-                            MinWidth="72">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource StatValue.Small}"
-                                       Text="{Binding ChatterCountFormatted}" />
-                            <TextBlock Style="{StaticResource StatLabel}"
-                                       Text="чаттеров" />
-                            <TextBlock Style="{StaticResource DeltaText}"
-                                       Tag="{Binding ChattersDeltaTone}"
-                                       Text="{Binding ChattersDelta}" />
-                        </StackPanel>
-                    </Border>
+                    <StackPanel MinWidth="72"
+                                Margin="0,0,20,0">
+                        <TextBlock Style="{StaticResource StatValue.Small}"
+                                   Text="{Binding ChatterCountFormatted}" />
+                        <TextBlock Style="{StaticResource StatLabel}"
+                                   Text="чаттеров" />
+                        <TextBlock Style="{StaticResource DeltaText}"
+                                   Tag="{Binding ChattersDeltaTone}"
+                                   Text="{Binding ChattersDelta}" />
+                    </StackPanel>
 
-                    <Border Style="{StaticResource StatCell}"
-                            MinWidth="72">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource StatValue.Small}"
-                                       Text="{Binding PeakViewersFormatted}" />
-                            <TextBlock Style="{StaticResource StatLabel}"
-                                       Text="пик зрителей" />
-                            <TextBlock Style="{StaticResource DeltaText}"
-                                       Tag="{Binding PeakViewersDeltaTone}"
-                                       Text="{Binding PeakViewersDelta}" />
-                        </StackPanel>
-                    </Border>
+                    <StackPanel MinWidth="72"
+                                Margin="0,0,20,0">
+                        <TextBlock Style="{StaticResource StatValue.Small}"
+                                   Text="{Binding PeakViewersFormatted}" />
+                        <TextBlock Style="{StaticResource StatLabel}"
+                                   Text="пик зрителей" />
+                        <TextBlock Style="{StaticResource DeltaText}"
+                                   Tag="{Binding PeakViewersDeltaTone}"
+                                   Text="{Binding PeakViewersDelta}" />
+                    </StackPanel>
 
-                    <Border Style="{StaticResource StatCell}"
-                            MinWidth="72"
-                            Margin="0">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource StatValue.Small}"
-                                       Text="{Binding AverageViewersFormatted}" />
-                            <TextBlock Style="{StaticResource StatLabel}"
-                                       Text="средние зрители" />
-                            <TextBlock Style="{StaticResource DeltaText}"
-                                       Tag="{Binding AverageViewersDeltaTone}"
-                                       Text="{Binding AverageViewersDelta}" />
-                        </StackPanel>
-                    </Border>
+                    <StackPanel MinWidth="72">
+                        <TextBlock Style="{StaticResource StatValue.Small}"
+                                   Text="{Binding AverageViewersFormatted}" />
+                        <TextBlock Style="{StaticResource StatLabel}"
+                                   Text="средние зрители" />
+                        <TextBlock Style="{StaticResource DeltaText}"
+                                   Tag="{Binding AverageViewersDeltaTone}"
+                                   Text="{Binding AverageViewersDelta}" />
+                    </StackPanel>
                 </StackPanel>
 
                 <ItemsControl x:Name="CardStripes"
@@ -977,8 +985,26 @@
                     Grid.Row="0">
 
         <DockPanel x:Name="SummaryBar"
-                   LastChildFill="False"
+                   LastChildFill="True"
                    Margin="0,0,0,8">
+            <Button DockPanel.Dock="Left"
+                    Style="{StaticResource Button.Ghost}"
+                    Command="{Binding ToggleSummaryCommand}"
+                    VerticalAlignment="Center"
+                    Padding="8,4"
+                    AutomationProperties.Name="{Binding SummaryToggleCaption}"
+                    ToolTip="{Binding SummaryToggleCaption}"
+                    Visibility="{Binding HasSummaryStrip, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <iconPacks:PackIconLucide Style="{StaticResource SummaryChevron}" />
+
+                    <TextBlock Text="Сводка"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               Margin="8,0,0,0"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+
             <StackPanel DockPanel.Dock="Right"
                         Orientation="Horizontal"
                         VerticalAlignment="Center"
@@ -1126,6 +1152,55 @@
                 </StackPanel>
             </Border>
 
+            <Grid x:Name="SummaryHeader"
+                  Margin="12,0,8,0"
+                  VerticalAlignment="Center"
+                  Visibility="{Binding HasSessions, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="{Binding SummaryLine}"
+                           FontSize="{DynamicResource Font.Size.S}"
+                           Foreground="{DynamicResource Fg.Secondary}"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           AutomationProperties.Name="{Binding SummaryLine}"
+                           Visibility="{Binding IsCompactLayout, Converter={StaticResource BoolToVisibility}}" />
+
+                <WrapPanel x:Name="SummaryStats"
+                           Orientation="Horizontal"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           Margin="0,0,-8,-8"
+                           Visibility="{Binding HasWideSummary, Converter={StaticResource BoolToVisibility}}">
+                    <Border Style="{StaticResource StatCell}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource StatValue}"
+                                       Text="{Binding TotalSessionsText}" />
+                            <TextBlock Style="{StaticResource StatLabel}"
+                                       Text="{Binding TotalSessionsLabel}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource StatCell}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource StatValue}"
+                                       Text="{Binding TotalAirTimeText}" />
+                            <TextBlock Style="{StaticResource StatLabel}"
+                                       Text="в эфире" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource StatCell}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource StatValue}"
+                                       Text="{Binding LastStreamText}" />
+                            <TextBlock Style="{StaticResource StatLabel}"
+                                       Text="последний стрим" />
+                        </StackPanel>
+                    </Border>
+                </WrapPanel>
+            </Grid>
+
         </DockPanel>
 
         <Border x:Name="NoticeStrip"
@@ -1145,91 +1220,8 @@
                 Style="{StaticResource Card}"
                 Padding="0"
                 Margin="0,0,0,8"
-                Visibility="{Binding HasSessions, Converter={StaticResource BoolToVisibility}}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <Grid x:Name="SummaryHeader"
-                      Grid.Row="0"
-                      Margin="6,6,12,6">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <Button Grid.Column="0"
-                            Style="{StaticResource Button.Ghost}"
-                            Command="{Binding ToggleSummaryCommand}"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Center"
-                            Padding="8,4"
-                            AutomationProperties.Name="{Binding SummaryToggleCaption}"
-                            ToolTip="{Binding SummaryToggleCaption}"
-                            Visibility="{Binding HasSummaryStrip, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel Orientation="Horizontal">
-                            <iconPacks:PackIconLucide Style="{StaticResource SummaryChevron}" />
-
-                            <TextBlock Text="Сводка"
-                                       FontSize="{DynamicResource Font.Size.S}"
-                                       Margin="8,0,0,0"
-                                       VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding SummaryLine}"
-                               FontSize="{DynamicResource Font.Size.S}"
-                               Foreground="{DynamicResource Fg.Secondary}"
-                               HorizontalAlignment="Right"
-                               VerticalAlignment="Center"
-                               Margin="12,0,0,0"
-                               TextWrapping="NoWrap"
-                               TextTrimming="CharacterEllipsis"
-                               AutomationProperties.Name="{Binding SummaryLine}"
-                               Visibility="{Binding IsCompactLayout, Converter={StaticResource BoolToVisibility}}" />
-
-                    <WrapPanel Grid.Column="1"
-                               x:Name="SummaryStats"
-                               Orientation="Horizontal"
-                               HorizontalAlignment="Right"
-                               VerticalAlignment="Center"
-                               Margin="12,0,-16,0"
-                               Visibility="{Binding HasWideSummary, Converter={StaticResource BoolToVisibility}}">
-                        <Border Style="{StaticResource StatCell.Lead}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource StatValue}"
-                                           Text="{Binding TotalSessionsText}" />
-                                <TextBlock Style="{StaticResource StatLabel}"
-                                           Text="{Binding TotalSessionsLabel}" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource StatCell}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource StatValue}"
-                                           Text="{Binding TotalAirTimeText}" />
-                                <TextBlock Style="{StaticResource StatLabel}"
-                                           Text="в эфире" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource StatCell}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource StatValue}"
-                                           Text="{Binding LastStreamText}" />
-                                <TextBlock Style="{StaticResource StatLabel}"
-                                           Text="последний стрим" />
-                            </StackPanel>
-                        </Border>
-                    </WrapPanel>
-                </Grid>
-
-                <Grid Grid.Row="1"
-                      Margin="12,2,12,10"
-                      Visibility="{Binding IsSummaryOpen, Converter={StaticResource BoolToVisibility}}">
+                Visibility="{Binding IsSummaryOpen, Converter={StaticResource BoolToVisibility}}">
+                <Grid Margin="12,10,12,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition>
                             <ColumnDefinition.Style>
@@ -1331,7 +1323,6 @@
                         </ItemsControl>
                     </Grid>
                 </Grid>
-            </Grid>
         </Border>
 
         </StackPanel>
@@ -1431,6 +1422,7 @@
                          ItemTemplate="{StaticResource SessionCardTemplate}"
                          VirtualizingStackPanel.IsVirtualizing="True"
                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.ScrollUnit="Pixel"
                          ScrollViewer.CanContentScroll="True"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -1609,6 +1601,7 @@
                              Padding="0"
                              VirtualizingStackPanel.IsVirtualizing="True"
                              VirtualizingStackPanel.VirtualizationMode="Recycling"
+                             VirtualizingPanel.ScrollUnit="Pixel"
                              ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Visible">
@@ -1897,6 +1890,7 @@
                                          Padding="0"
                                          VirtualizingStackPanel.IsVirtualizing="True"
                                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                                         VirtualizingPanel.ScrollUnit="Pixel"
                                          ScrollViewer.CanContentScroll="True"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                          ScrollViewer.VerticalScrollBarVisibility="Auto" />

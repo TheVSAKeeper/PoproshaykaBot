@@ -231,20 +231,15 @@
         <Setter Property="BorderBrush"
                 Value="{DynamicResource Border.Subtle}" />
         <Setter Property="BorderThickness"
-                Value="1,0,0,0" />
+                Value="1" />
+        <Setter Property="CornerRadius"
+                Value="{DynamicResource Radius.S}" />
         <Setter Property="Padding"
-                Value="16,0,0,0" />
+                Value="10,6" />
         <Setter Property="Margin"
-                Value="0,0,16,0" />
-    </Style>
-
-    <Style x:Key="StatCell.Lead"
-           TargetType="Border"
-           BasedOn="{StaticResource StatCell}">
-        <Setter Property="BorderThickness"
-                Value="0" />
-        <Setter Property="Padding"
-                Value="0" />
+                Value="0,0,8,8" />
+        <Setter Property="MinWidth"
+                Value="120" />
     </Style>
 
 </ResourceDictionary>

@@ -185,8 +185,9 @@
 
                     <StackPanel Grid.Row="0"
                                 Margin="16,16,16,12">
-                        <WrapPanel Orientation="Horizontal">
-                            <Border Style="{StaticResource StatCell.Lead}">
+                        <WrapPanel Orientation="Horizontal"
+                                   Margin="0,0,-8,-8">
+                            <Border Style="{StaticResource StatCell}">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource StatValue}"
                                                Text="{Binding TotalUsers}" />
@@ -330,6 +331,7 @@
                              Padding="0"
                              VirtualizingStackPanel.IsVirtualizing="True"
                              VirtualizingStackPanel.VirtualizationMode="Recycling"
+                             VirtualizingPanel.ScrollUnit="Pixel"
                              ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Visible" />

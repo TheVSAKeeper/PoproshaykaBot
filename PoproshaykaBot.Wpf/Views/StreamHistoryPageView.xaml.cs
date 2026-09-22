@@ -6,7 +6,6 @@ using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views;
@@ -38,6 +37,14 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double ListRowShare = 3;
     public const double DetailRowShare = 2;
     public const double DetailCardsRowShare = 1;
+
+    // TODO: подпись пика выходит за свой столбик на 24 DIP в каждую сторону, у крайних столбиков – на 48
+    // внутрь полосы; потолок держит пятизначное значение при 80 столбиках и масштабе шрифта 1.6,
+    // шестизначный пик или больший масштаб снова обрежут её, и тогда подписи нужен свой слой поверх
+    // полосы вместо запаса в поле
+    public static readonly Thickness TrendValueMargin = new(-24, 0, -24, 2);
+    public static readonly Thickness TrendValueFirstMargin = new(0, 0, -48, 2);
+    public static readonly Thickness TrendValueLastMargin = new(-48, 0, 0, 2);
 
     private readonly IClipboardService _clipboard = new ClipboardService();
 
@@ -348,59 +355,13 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
                 if (viewModel.IsCardsView)
                 {
                     SessionCards.ScrollIntoView(row);
-                    RevealFully(SessionCards, row);
                 }
                 else
                 {
                     SessionsList.ScrollIntoView(row);
-                    RevealFully(SessionsList, row);
                 }
             },
             DispatcherPriority.Background);
-    }
-
-    private static void RevealFully(ItemsControl list, object item)
-    {
-        if (list.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement container)
-        {
-            return;
-        }
-
-        if (FindScrollViewer(list) is not { } viewer)
-        {
-            return;
-        }
-
-        var top = container.TransformToAncestor(viewer).Transform(default(Point)).Y;
-        var bottom = top + container.ActualHeight;
-        if (bottom > viewer.ViewportHeight + 0.5)
-        {
-            var down = viewer.CanContentScroll ? 1 : bottom - viewer.ViewportHeight;
-            viewer.ScrollToVerticalOffset(viewer.VerticalOffset + down);
-        }
-        else if (top < -0.5)
-        {
-            var up = viewer.CanContentScroll ? 1 : -top;
-            viewer.ScrollToVerticalOffset(Math.Max(0, viewer.VerticalOffset - up));
-        }
-    }
-
-    private static ScrollViewer? FindScrollViewer(DependencyObject root)
-    {
-        if (root is ScrollViewer found)
-        {
-            return found;
-        }
-
-        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
-        {
-            if (FindScrollViewer(VisualTreeHelper.GetChild(root, index)) is { } viewer)
-            {
-                return viewer;
-            }
-        }
-
-        return null;
     }
 
     private void OnTrendMenuClick(object sender, RoutedEventArgs e)

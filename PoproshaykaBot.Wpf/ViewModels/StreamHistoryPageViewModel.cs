@@ -1171,9 +1171,13 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         var recent = _visibleSessions.Take(_trendLength).Reverse().ToList();
         var leader = recent.Count > 0 ? recent.Max(row => MetricValue(row, _trendMetric)) : 0;
 
-        foreach (var row in recent)
+        for (var index = 0; index < recent.Count; index++)
         {
-            Trend.Add(new(row, leader, _trendMetric));
+            Trend.Add(new(recent[index], leader, _trendMetric)
+            {
+                IsFirst = index == 0,
+                IsLast = index == recent.Count - 1,
+            });
         }
 
         foreach (var bar in Trend)
@@ -1373,6 +1377,8 @@ public sealed partial class StreamTrendBarViewModel : ObservableObject
     }
 
     public StreamSessionRowViewModel Row { get; }
+    public bool IsFirst { get; init; }
+    public bool IsLast { get; init; }
     public long Value { get; }
     public double Share { get; }
     public GridLength FillTrack { get; }
