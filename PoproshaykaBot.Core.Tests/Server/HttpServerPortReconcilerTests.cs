@@ -44,6 +44,24 @@ public class HttpServerPortReconcilerTests
         settingsManager.Received(1).Mutate(Arg.Any<Action<AppSettings>>());
     }
 
+    [Test]
+    public void Закрытый_гейт_записи_не_выдаётся_за_сохранённый_порт()
+    {
+        var settingsManager = CreateSettingsManager("http://localhost:3000", 8080, written: false);
+
+        var result = HttpServerPortReconciler.Reconcile(settingsManager, NullLogger.Instance);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsResolved, Is.True, "Сервер поднимается на новом порту и в этом запуске работает");
+            Assert.That(settingsManager.Current.Twitch.HttpServerPort, Is.EqualTo(3000));
+            Assert.That(result.Notice, Is.Not.Null);
+            Assert.That(result.Notice!.Severity, Is.EqualTo(PortReconcileSeverity.Warning),
+                "Незаписанный файл – это не рядовое уведомление");
+            Assert.That(result.Notice.Message, Does.Contain("не записан").And.Contain("Перезапустите"));
+        });
+    }
+
     [TestCase("")]
     [TestCase("   ")]
     [TestCase("not a uri")]
@@ -64,7 +82,7 @@ public class HttpServerPortReconcilerTests
         settingsManager.DidNotReceive().Mutate(Arg.Any<Action<AppSettings>>());
     }
 
-    private static SettingsManager CreateSettingsManager(string redirectUri, int httpServerPort)
+    private static SettingsManager CreateSettingsManager(string redirectUri, int httpServerPort, bool written = true)
     {
         var settings = new AppSettings();
         settings.Twitch.RedirectUri = redirectUri;
@@ -74,8 +92,12 @@ public class HttpServerPortReconcilerTests
         settingsManager.Current.Returns(settings);
 
         settingsManager
-            .When(manager => manager.Mutate(Arg.Any<Action<AppSettings>>()))
-            .Do(call => call.Arg<Action<AppSettings>>()(settings));
+            .Mutate(Arg.Any<Action<AppSettings>>())
+            .Returns(call =>
+            {
+                call.Arg<Action<AppSettings>>()(settings);
+                return written;
+            });
 
         return settingsManager;
     }

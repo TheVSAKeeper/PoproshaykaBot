@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -15,7 +15,9 @@ namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
 public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModelBase, IDisposable
 {
-    private readonly BotConnectionManager _botConnectionManager;
+    private const string SettingsNotWrittenDetails = "Настройки применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
+
+    private readonly IBotConnectionController _botConnectionManager;
     private readonly IEventBus _eventBus;
     private readonly SettingsManager _settingsManager;
     private readonly AccountsStore _accountsStore;
@@ -40,7 +42,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
     private bool _showRetry;
 
     public BotConnectionPageViewModel(
-        BotConnectionManager botConnectionManager,
+        IBotConnectionController botConnectionManager,
         IEventBus eventBus,
         SettingsManager settingsManager,
         AccountsStore accountsStore,
@@ -67,7 +69,15 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
         try
         {
-            _settingsManager.SaveSettings(context.Settings);
+            if (!_settingsManager.SaveSettings(context.Settings))
+            {
+                _logger.BotConnectionSettingsNotWritten();
+                ApplyPhase(BotLifecyclePhase.Failed, SettingsNotWrittenDetails);
+                StatusText = "Настройки не записаны в файл";
+                ShowRetry = false;
+                return;
+            }
+
             _accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
         }
         catch (Exception exception)

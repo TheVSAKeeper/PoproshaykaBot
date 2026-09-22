@@ -36,7 +36,7 @@ public class SettingsManager
         }
     }
 
-    public virtual void SaveSettings(AppSettings settings)
+    public virtual bool SaveSettings(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -49,6 +49,8 @@ public class SettingsManager
                 var written = _store.Save(settings);
                 _currentSettings = _store.Load();
                 LogApplied(written);
+
+                return written;
             }
             catch (Exception exception)
             {
@@ -58,7 +60,7 @@ public class SettingsManager
         }
     }
 
-    public virtual void Mutate(Action<AppSettings> mutator)
+    public virtual bool Mutate(Action<AppSettings> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
@@ -69,6 +71,8 @@ public class SettingsManager
                 var written = _store.Mutate(mutator);
                 _currentSettings = _store.Load();
                 LogApplied(written);
+
+                return written;
             }
             catch (Exception exception)
             {

@@ -360,6 +360,31 @@ public sealed class SettingsWriteGateTests
     }
 
     [Test]
+    public async Task Менеджер_настроек_докладывает_дошла_ли_правка_до_файла()
+    {
+        var path = Path.Combine(_directory.FullName, "settings.json");
+        var gate = new SettingsWriteGate();
+        var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, path, gate);
+
+        var writtenBeforeImport = manager.Mutate(settings => settings.Twitch.HttpServerPort = 3000);
+
+        await gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { "settings.json" });
+
+        var writtenAfterImport = manager.Mutate(settings => settings.Twitch.HttpServerPort = 4000);
+        var savedAfterImport = manager.SaveSettings(manager.Current);
+        var onDisk = new SettingsManager(NullLogger<SettingsManager>.Instance, path);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(writtenBeforeImport, Is.True);
+            Assert.That(writtenAfterImport, Is.False, "Снятое право – не успех, и вызывающий обязан это узнать");
+            Assert.That(savedAfterImport, Is.False);
+            Assert.That(manager.Current.Twitch.HttpServerPort, Is.EqualTo(4000), "В памяти правка действует до перезапуска");
+            Assert.That(onDisk.Current.Twitch.HttpServerPort, Is.EqualTo(3000), "В файле осталась последняя удавшаяся запись");
+        });
+    }
+
+    [Test]
     public async Task Признак_снятого_права_поднят_ровно_когда_перенос_что_то_принёс()
     {
         var pollsPath = Path.Combine(_directory.FullName, "polls.json");

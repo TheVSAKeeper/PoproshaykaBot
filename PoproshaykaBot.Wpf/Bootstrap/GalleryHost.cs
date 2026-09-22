@@ -11,6 +11,9 @@ public sealed class GalleryHost : IGalleryHost
 {
     public const string ArgumentName = "--gallery";
 
+    private const string PreviewCommandWithParameters = "донат";
+    private const string PreviewCommandWithoutParameters = "помощь";
+
     private readonly IServiceProvider _services;
     private readonly ShellViewModel _shell;
     private readonly Window _window;
@@ -101,7 +104,7 @@ public sealed class GalleryHost : IGalleryHost
             return await CaptureDialogAsync(dialog, context).ConfigureAwait(true);
         }
 
-        if (SectionKeys.IsSelectedCase(item.Name))
+        if (SectionKeys.IsSelectedCase(item.Name) || SectionKeys.IsParamsCase(item.Name))
         {
             return await CaptureSelectedAsync(item.Name, context).ConfigureAwait(true);
         }
@@ -162,6 +165,7 @@ public sealed class GalleryHost : IGalleryHost
             .Concat(SectionKeys.Selected)
             .Concat(SectionKeys.Cards)
             .Concat(SectionKeys.Hidden)
+            .Concat(SectionKeys.Params)
             .FirstOrDefault(known => string.Equals(known, requested, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -288,6 +292,19 @@ public sealed class GalleryHost : IGalleryHost
             WarnWhenNothingSelected(name, streams.TrySelectAt(DetailedSessionIndex(streams.Sessions)));
 
             return () => streams.SelectedRow = null;
+        }
+
+        if (string.Equals(name, SectionKeys.CommandsSelected, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, SectionKeys.CommandsParams, StringComparison.OrdinalIgnoreCase))
+        {
+            var commands = _services.GetRequiredService<CommandsPageViewModel>();
+            var canonical = string.Equals(name, SectionKeys.CommandsParams, StringComparison.OrdinalIgnoreCase)
+                ? PreviewCommandWithParameters
+                : PreviewCommandWithoutParameters;
+
+            WarnWhenNothingSelected(name, commands.TrySelect(canonical));
+
+            return () => commands.SelectedRow = null;
         }
 
         throw new InvalidOperationException($"Кейс «{name}» не умеет выбирать строку.");

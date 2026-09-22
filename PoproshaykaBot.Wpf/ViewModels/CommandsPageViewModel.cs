@@ -3,20 +3,31 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
-public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeader
+public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeader, IUnsavedChangesPage
 {
+    private const string NotWrittenNotice = "Параметры применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните параметры ещё раз.";
+
     private static readonly CommandContext ViewerProbe = new()
     {
         Username = "viewer",
         DisplayName = "viewer",
+    };
+
+    private static readonly CommandContext ModeratorProbe = new()
+    {
+        Username = "moderator",
+        DisplayName = "moderator",
+        IsModerator = true,
     };
 
     private static readonly CommandContext BroadcasterProbe = new()
@@ -24,16 +35,21 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         Username = "broadcaster",
         DisplayName = "broadcaster",
         IsBroadcaster = true,
-        IsModerator = true,
     };
 
     private readonly CommandSettingsStore _settingsStore;
+    private readonly SettingsManager _settingsManager;
     private readonly CommandUsageRepository _usageRepository;
+    private readonly IUnsavedChangesPrompt _unsavedChangesPrompt;
     private readonly ILogger<CommandsPageViewModel> _logger;
     private readonly List<CommandRowViewModel> _allRows = [];
     private readonly ObservableCollection<CommandRowViewModel> _rows = [];
+    private readonly Dictionary<string, IChatCommand> _commands = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _applying;
+    private bool _restoringRow;
+    private bool _rebuildingView;
+    private CommandRowViewModel? _parametersRow;
 
     [ObservableProperty]
     private CommandRowViewModel? _selectedRow;
@@ -57,26 +73,43 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     [ObservableProperty]
     private string? _notice;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasParameters))]
+    private CommandParametersViewModel? _parameters;
+
+    [ObservableProperty]
+    private string? _parametersNotice;
+
+    [ObservableProperty]
+    private CommandNoticeTone _parametersNoticeTone = CommandNoticeTone.Info;
+
     public CommandsPageViewModel(
         ChatCommandProcessor processor,
         CommandSettingsStore settingsStore,
+        SettingsManager settingsManager,
         CommandUsageRepository usageRepository,
+        IUnsavedChangesPrompt unsavedChangesPrompt,
         ILogger<CommandsPageViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(processor);
 
         _settingsStore = settingsStore;
+        _settingsManager = settingsManager;
         _usageRepository = usageRepository;
+        _unsavedChangesPrompt = unsavedChangesPrompt;
         _logger = logger;
 
         var byName = StringComparer.Create(UiCulture.Russian, ignoreCase: true);
 
         foreach (var command in processor.GetAllCommands().OrderBy(command => command.Canonical, byName))
         {
-            var row = new CommandRowViewModel(command, processor.Prefix, ProbeAccess(command));
+            var row = new CommandRowViewModel(command, processor.Prefix, ProbeCodeLevel(command));
             row.EnabledChanged += OnRowEnabledChanged;
             row.TargetChanged += OnRowTargetChanged;
+            row.AccessChanged += OnRowAccessChanged;
+
             _allRows.Add(row);
+            _commands[command.Canonical] = command;
         }
 
         Reload();
@@ -84,7 +117,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     public string PageTitle => "Команды";
 
-    public string? PageDescription => "Включение, цель ответа и статистика вызовов";
+    public string? PageDescription => "Права, цель ответа, параметры и статистика вызовов";
 
     public ObservableCollection<CommandRowViewModel> Rows => _rows;
 
@@ -92,9 +125,13 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     public IReadOnlyList<CommandResponseTargetOption> DefaultTargetOptions => CommandResponseTargetOption.ForDefault;
 
+    public IReadOnlyList<CommandAccessOption> AccessOptions => CommandAccessOption.All;
+
     public bool HasCommands => _rows.Count > 0;
 
     public bool HasSelectedRow => SelectedRow is not null;
+
+    public bool HasParameters => Parameters is not null;
 
     public string EmptyHeading => IsFilterActive ? "Ничего не найдено" : "Команд нет";
 
@@ -110,9 +147,31 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         ? string.Empty
         : "Счётчики вызовов читаются при подключении бота – до него они пустые";
 
+    public bool HasUnsavedChanges => Parameters is { IsDirty: true };
+
+    public string UnsavedChangesSubject => _parametersRow is { } row
+        ? $"Параметры команды {row.Invocation} изменены, но не сохранены."
+        : "Параметры команды изменены, но не сохранены.";
+
     public void OnEnter()
     {
+        if (HasUnsavedChanges)
+        {
+            ReloadRows();
+            return;
+        }
+
         Reload();
+    }
+
+    public Task<bool> TrySaveUnsavedChangesAsync()
+    {
+        return Task.FromResult(TrySaveParameters());
+    }
+
+    public void DiscardUnsavedChanges()
+    {
+        ReloadParameters();
     }
 
     public void RefreshUsage()
@@ -133,7 +192,64 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         UpdateSummaries();
     }
 
+    public bool TrySelect(string canonical)
+    {
+        var row = _rows.FirstOrDefault(item => string.Equals(item.Canonical, canonical, StringComparison.OrdinalIgnoreCase));
+
+        if (row is null)
+        {
+            return false;
+        }
+
+        SelectedRow = row;
+
+        return true;
+    }
+
+    private static CommandAccessLevel? ProbeCodeLevel(IChatCommand command)
+    {
+        if (command.CanExecute(ViewerProbe))
+        {
+            return CommandAccessLevel.Everyone;
+        }
+
+        if (command.CanExecute(ModeratorProbe))
+        {
+            return CommandAccessLevel.Moderators;
+        }
+
+        return command.CanExecute(BroadcasterProbe) ? CommandAccessLevel.Broadcaster : null;
+    }
+
+    private static CommandOverride GetOrAddOverride(CommandSettings settings, string canonical)
+    {
+        if (settings.Commands.TryGetValue(canonical, out var existing) && existing is not null)
+        {
+            return existing;
+        }
+
+        var created = new CommandOverride();
+        settings.Commands[canonical] = created;
+
+        return created;
+    }
+
+    private static void DropRedundantOverride(CommandSettings settings, string canonical)
+    {
+        if (settings.Commands.TryGetValue(canonical, out var existing)
+            && existing is { Enabled: true, ResponseTarget: null, Access: null })
+        {
+            settings.Commands.Remove(canonical);
+        }
+    }
+
     private void Reload()
+    {
+        ReloadRows();
+        ReloadParameters();
+    }
+
+    private void ReloadRows()
     {
         var settings = _settingsStore.Load();
 
@@ -165,7 +281,39 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     partial void OnSelectedRowChanged(CommandRowViewModel? value)
     {
+        if (_restoringRow || _rebuildingView)
+        {
+            return;
+        }
+
         OnPropertyChanged(nameof(HasSelectedRow));
+
+        if (!ConfirmParametersDraft("переключением на другую команду"))
+        {
+            RestoreParametersRow();
+            return;
+        }
+
+        ReloadParameters();
+    }
+
+    partial void OnParametersChanging(CommandParametersViewModel? value)
+    {
+        if (Parameters is not null)
+        {
+            Parameters.PropertyChanged -= OnParametersPropertyChanged;
+        }
+    }
+
+    partial void OnParametersChanged(CommandParametersViewModel? value)
+    {
+        if (value is not null)
+        {
+            value.PropertyChanged += OnParametersPropertyChanged;
+        }
+
+        OnPropertyChanged(nameof(HasUnsavedChanges));
+        SaveParametersCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnDefaultTargetOptionChanged(CommandResponseTargetOption value)
@@ -185,40 +333,63 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         RefreshEffectiveTargets();
     }
 
-    private static CommandAccess ProbeAccess(IChatCommand command)
+    private void OnParametersPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (command.IsRestrictedToAllowedUsers)
+        if (string.Equals(args.PropertyName, nameof(CommandParametersViewModel.IsDirty), StringComparison.Ordinal))
         {
-            return CommandAccess.AllowedUsers;
+            OnPropertyChanged(nameof(HasUnsavedChanges));
+            SaveParametersCommand.NotifyCanExecuteChanged();
         }
-
-        return command.CanExecute(ViewerProbe)
-            ? CommandAccess.Everyone
-            : command.CanExecute(BroadcasterProbe)
-                ? CommandAccess.Moderators
-                : CommandAccess.None;
     }
 
-    private static CommandOverride GetOrAddOverride(CommandSettings settings, string canonical)
+    private void ReloadParameters()
     {
-        if (settings.Commands.TryGetValue(canonical, out var existing) && existing is not null)
+        ParametersNotice = null;
+        ParametersNoticeTone = CommandNoticeTone.Info;
+        _parametersRow = SelectedRow;
+
+        if (SelectedRow is null || !_commands.TryGetValue(SelectedRow.Canonical, out var command))
         {
-            return existing;
+            Parameters = null;
+            return;
         }
 
-        var created = new CommandOverride();
-        settings.Commands[canonical] = created;
+        var parameters = CommandParametersViewModel.TryCreate(command);
 
-        return created;
+        parameters?.Load(_settingsManager.Current);
+
+        Parameters = parameters;
     }
 
-    private static void DropRedundantOverride(CommandSettings settings, string canonical)
+    private bool ConfirmParametersDraft(string action)
     {
-        if (settings.Commands.TryGetValue(canonical, out var existing)
-            && existing is { Enabled: true, ResponseTarget: null })
+        if (!HasUnsavedChanges)
         {
-            settings.Commands.Remove(canonical);
+            return true;
         }
+
+        return _unsavedChangesPrompt.Ask(UnsavedChangesSubject, action) switch
+        {
+            UnsavedChangesDecision.Save => TrySaveParameters(),
+            UnsavedChangesDecision.Discard => true,
+            _ => false,
+        };
+    }
+
+    private void RestoreParametersRow()
+    {
+        _restoringRow = true;
+
+        try
+        {
+            SelectedRow = _parametersRow;
+        }
+        finally
+        {
+            _restoringRow = false;
+        }
+
+        OnPropertyChanged(nameof(HasSelectedRow));
     }
 
     private void OnRowEnabledChanged(object? sender, EventArgs args)
@@ -267,6 +438,29 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         RefreshEffectiveTargets();
     }
 
+    private void OnRowAccessChanged(object? sender, EventArgs args)
+    {
+        if (sender is not CommandRowViewModel row)
+        {
+            return;
+        }
+
+        var access = row.AccessOption.Level;
+
+        if (!TryMutate(settings =>
+            {
+                GetOrAddOverride(settings, row.Canonical).Access = access;
+                DropRedundantOverride(settings, row.Canonical);
+            }))
+        {
+            return;
+        }
+
+        _logger.CommandAccessChanged(row.Invocation, row.AccessOption.Title);
+
+        UpdateSummaries();
+    }
+
     private bool TryMutate(Action<CommandSettings> mutator)
     {
         try
@@ -280,7 +474,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         {
             _logger.CommandSettingsSaveFailed(exception);
             Notice = "Настройки команд не сохранились – правка отменена. Подробности в журнале.";
-            Reload();
+            ReloadRows();
 
             return false;
         }
@@ -311,21 +505,37 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         var query = FilterText.Trim();
         var hasFilter = query.Length > 0;
 
-        _rows.Clear();
+        _rebuildingView = true;
 
-        foreach (var row in _allRows)
+        try
         {
-            if (hasFilter && !row.Matches(query))
+            _rows.Clear();
+
+            foreach (var row in _allRows)
             {
-                continue;
+                if (hasFilter && !row.Matches(query) && !IsEditedRow(row))
+                {
+                    continue;
+                }
+
+                row.RefreshLastUsedText();
+                _rows.Add(row);
             }
 
-            row.RefreshLastUsedText();
-            _rows.Add(row);
+            SelectedRow = _rows.FirstOrDefault(row => string.Equals(row.Canonical, selected, StringComparison.OrdinalIgnoreCase))
+                          ?? _rows.FirstOrDefault();
+        }
+        finally
+        {
+            _rebuildingView = false;
         }
 
-        SelectedRow = _rows.FirstOrDefault(row => string.Equals(row.Canonical, selected, StringComparison.OrdinalIgnoreCase))
-                      ?? _rows.FirstOrDefault();
+        OnPropertyChanged(nameof(HasSelectedRow));
+
+        if (!ReferenceEquals(SelectedRow, _parametersRow))
+        {
+            ReloadParameters();
+        }
 
         IsFilterActive = hasFilter;
 
@@ -334,6 +544,11 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         OnPropertyChanged(nameof(HasCommands));
         OnPropertyChanged(nameof(EmptyHeading));
         OnPropertyChanged(nameof(EmptyDescription));
+    }
+
+    private bool IsEditedRow(CommandRowViewModel row)
+    {
+        return HasUnsavedChanges && ReferenceEquals(row, _parametersRow);
     }
 
     private void UpdateSummaries()
@@ -346,6 +561,69 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         SummaryLine = $"Включено {enabled} из {_allRows.Count} · вызовов {total}, за текущий стрим {stream}{visible}";
     }
 
+    private bool CanSaveParameters()
+    {
+        return Parameters is { IsDirty: true };
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSaveParameters))]
+    private void SaveParameters()
+    {
+        TrySaveParameters();
+    }
+
+    private bool TrySaveParameters()
+    {
+        if (Parameters is not { } parameters || _parametersRow is not { } row)
+        {
+            return true;
+        }
+
+        if (!parameters.Validate())
+        {
+            ShowParametersNotice("Проверьте выделенные поля – параметры не сохранены.", CommandNoticeTone.Error);
+
+            return false;
+        }
+
+        bool written;
+
+        try
+        {
+            written = _settingsManager.Mutate(parameters.Apply);
+        }
+        catch (Exception exception)
+        {
+            _logger.CommandParametersSaveFailed(exception, row.Invocation);
+            ShowParametersNotice("Параметры не сохранились. Подробности в журнале.", CommandNoticeTone.Error);
+
+            return false;
+        }
+
+        parameters.Load(_settingsManager.Current);
+
+        if (written)
+        {
+            _logger.CommandParametersSaved(row.Invocation);
+            ShowParametersNotice("Параметры сохранены", CommandNoticeTone.Info);
+        }
+        else
+        {
+            _logger.CommandParametersNotWritten(row.Invocation);
+            ShowParametersNotice(NotWrittenNotice, CommandNoticeTone.Warning);
+        }
+
+        SaveParametersCommand.NotifyCanExecuteChanged();
+
+        return true;
+    }
+
+    private void ShowParametersNotice(string text, CommandNoticeTone tone)
+    {
+        ParametersNoticeTone = tone;
+        ParametersNotice = text;
+    }
+
     [RelayCommand]
     private void ClearFilter()
     {
@@ -355,6 +633,11 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     [RelayCommand]
     private void Refresh()
     {
+        if (!ConfirmParametersDraft("перечитыванием"))
+        {
+            return;
+        }
+
         Reload();
     }
 }

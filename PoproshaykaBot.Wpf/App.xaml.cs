@@ -433,6 +433,7 @@ public partial class App : Application
         services.AddSingleton<UpdateBannerViewModel>();
         services.AddSingleton<OnboardingBannerViewModel>();
         services.AddSingleton<DebugBannerViewModel>();
+        services.AddSingleton<IUnsavedChangesPrompt, UnsavedChangesPrompt>();
         services.AddSingleton<IOnboardingWizardLauncher, OnboardingWizardLauncher>();
         services.AddSingleton<IEmbeddedTwitchAuthDialog, EmbeddedTwitchAuthDialog>();
         services.AddSingleton<ILegacyImportDialog, LegacyImportDialog>();

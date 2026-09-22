@@ -4,9 +4,15 @@ namespace PoproshaykaBot.Core.Chat.Commands;
 
 public sealed class CommandSettings
 {
-    public const CommandResponseTarget KnownTargets = CommandResponseTarget.Chat | CommandResponseTarget.Overlay;
+    public const CommandResponseTarget ChatAndOverlay = CommandResponseTarget.Chat | CommandResponseTarget.Overlay;
 
-    public CommandResponseTarget DefaultResponseTarget { get; set; } = KnownTargets;
+    public const CommandResponseTarget CallerOnly = CommandResponseTarget.Chat | CommandResponseTarget.Caller;
+
+    public static CommandResponseTarget KnownTargets { get; } = Enum
+        .GetValues<CommandResponseTarget>()
+        .Aggregate(CommandResponseTarget.None, static (mask, value) => mask | value);
+
+    public CommandResponseTarget DefaultResponseTarget { get; set; } = ChatAndOverlay;
 
     [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
     public Dictionary<string, CommandOverride> Commands { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -24,6 +30,18 @@ public sealed class CommandSettings
         }
 
         return DefaultResponseTarget & KnownTargets;
+    }
+
+    public CommandAccessLevel? ReadAccess(string canonical)
+    {
+        return TryGetOverride(canonical, out var commandOverride) && commandOverride.Access is { } access
+            ? CommandAccessLevels.Clamp(access)
+            : null;
+    }
+
+    public CommandAccessLevel ResolveAccessLevel(string canonical)
+    {
+        return ReadAccess(canonical) ?? CommandAccessLevel.Everyone;
     }
 
     private bool TryGetOverride(string canonical, out CommandOverride commandOverride)

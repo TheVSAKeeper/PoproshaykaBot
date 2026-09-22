@@ -112,9 +112,10 @@ public static class SettingsDescriber
         var overrides = settings.Commands.Values.Where(x => x is not null).ToList();
         var disabled = overrides.Count(x => !x.Enabled);
         var retargeted = overrides.Count(x => x.ResponseTarget is not null);
+        var restricted = overrides.Count(x => x.Access is not null);
 
         return $"цель ответа по умолчанию {settings.DefaultResponseTarget}, переопределений {overrides.Count} "
-            + $"(выключено {disabled}, со своей целью {retargeted})";
+            + $"(выключено {disabled}, со своей целью {retargeted}, со своими правами {restricted})";
     }
 
     public static string Describe(PollsSettings settings)

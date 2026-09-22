@@ -22,6 +22,23 @@ public class GalleryPageCaseTests
     }
 
     [Test]
+    public void Кейсы_страницы_команд_разводят_инспектор_с_параметрами_и_без_них()
+    {
+        var requested = string.Join(',', SectionKeys.CommandsSelected, SectionKeys.CommandsParams, "users:params");
+        var arguments = GalleryHost.Parse(["--pages", requested], "gallery-out");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(arguments.Pages, Is.EqualTo(new[] { SectionKeys.CommandsSelected, SectionKeys.CommandsParams }));
+            Assert.That(arguments.Unknown, Is.EqualTo(new[] { "users:params" }),
+                "Суффикс :params есть только у страницы «Команды»");
+
+            Assert.That(SectionKeys.PageOf(SectionKeys.CommandsParams), Is.EqualTo(SectionKeys.Commands));
+            Assert.That(SectionKeys.PageOf(SectionKeys.CommandsSelected), Is.EqualTo(SectionKeys.Commands));
+        }
+    }
+
+    [Test]
     public void Кейс_карточек_распознаётся_только_у_истории_стримов()
     {
         var requested = string.Join(',', SectionKeys.StreamsCards, "users:cards");

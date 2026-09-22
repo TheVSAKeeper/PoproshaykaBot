@@ -367,9 +367,15 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
         try
         {
-            _settingsManager.Mutate(settings => settings.Ranks.PointTerm = dialog.BuildResult());
+            var written = _settingsManager.Mutate(settings => settings.Ranks.PointTerm = dialog.BuildResult());
             OnPropertyChanged(nameof(ActionButtonText));
             Reload();
+
+            if (!written)
+            {
+                _dialogService.Warning("Названия баллов",
+                    "Названия применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и задайте названия ещё раз.");
+            }
         }
         catch (Exception ex)
         {

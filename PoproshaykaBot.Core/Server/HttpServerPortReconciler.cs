@@ -31,13 +31,32 @@ public static class HttpServerPortReconciler
         }
 
         logger.LogInformation("Конфликт портов. Обновление порта с {OldPort} на {NewPort}", serverPort, redirectPort);
-        settingsManager.Mutate(current => current.Twitch.HttpServerPort = redirectPort);
+        var written = settingsManager.Mutate(current => current.Twitch.HttpServerPort = redirectPort);
+
+        var conflict = $"""
+                        Обнаружен конфликт портов:
+
+                        • RedirectUri использует порт: {redirectPort}
+                        • HTTP сервер был настроен на порт: {serverPort}
+                        """;
+
+        if (!written)
+        {
+            logger.LogWarning("Новый порт {NewPort} принят только в памяти: файл настроек переписан снаружи", redirectPort);
+
+            var pending = $"""
+                           {conflict}
+
+                           Порт HTTP сервера переключён на {redirectPort} и работает до перезапуска. В файл он не записан: туда только что перенесены данные предыдущей версии, поэтому после перезапуска конфликт вернётся.
+
+                           Перезапустите приложение и задайте порт HTTP сервера и RedirectUri вручную в настройках.
+                           """;
+
+            return new(true, new("Порт обновлен до перезапуска", pending, PortReconcileSeverity.Warning));
+        }
 
         var message = $"""
-                       Обнаружен конфликт портов:
-
-                       • RedirectUri использует порт: {redirectPort}
-                       • HTTP сервер был настроен на порт: {serverPort}
+                       {conflict}
 
                        Для корректной работы OAuth порт HTTP сервера был автоматически обновлен до {redirectPort}.
 

@@ -21,11 +21,20 @@ public sealed partial class CommandRowViewModel : ObservableObject
     private CommandResponseTargetOption _targetOption = CommandResponseTargetOption.Inherit;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Summary))]
+    [NotifyPropertyChangedFor(nameof(AccessText))]
+    [NotifyPropertyChangedFor(nameof(AccessHint))]
+    [NotifyPropertyChangedFor(nameof(EffectiveAccessLevel))]
+    [NotifyPropertyChangedFor(nameof(HasAccessConflict))]
+    [NotifyPropertyChangedFor(nameof(AccessConflictNote))]
+    private CommandAccessOption _accessOption = CommandAccessOption.Inherit;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EffectiveTargetText))]
     [NotifyPropertyChangedFor(nameof(TargetTooltip))]
     [NotifyPropertyChangedFor(nameof(TargetSummary))]
     [NotifyPropertyChangedFor(nameof(Summary))]
-    private CommandResponseTarget _effectiveTarget = CommandSettings.KnownTargets;
+    private CommandResponseTarget _effectiveTarget = CommandSettings.ChatAndOverlay;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TotalCountText))]
@@ -48,13 +57,14 @@ public sealed partial class CommandRowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(LastUsedSummary))]
     private string _lastUsedBy = string.Empty;
 
-    public CommandRowViewModel(IChatCommand command, string prefix, CommandAccess access)
+    public CommandRowViewModel(IChatCommand command, string prefix, CommandAccessLevel? codeLevel)
     {
         ArgumentNullException.ThrowIfNull(command);
 
         Canonical = command.Canonical;
         Description = command.Description;
-        Access = access;
+        CodeLevel = codeLevel;
+        IsRestrictedToAllowedUsers = command.IsRestrictedToAllowedUsers;
 
         Invocation = prefix + command.Canonical;
 
@@ -72,6 +82,8 @@ public sealed partial class CommandRowViewModel : ObservableObject
 
     public event EventHandler? TargetChanged;
 
+    public event EventHandler? AccessChanged;
+
     public string Canonical { get; }
 
     public string Invocation { get; }
@@ -84,23 +96,66 @@ public sealed partial class CommandRowViewModel : ObservableObject
 
     public string Description { get; }
 
-    public CommandAccess Access { get; }
+    public CommandAccessLevel? CodeLevel { get; }
 
-    public string AccessText => Access switch
-    {
-        CommandAccess.Everyone => "Все",
-        CommandAccess.Moderators => "Модераторы",
-        CommandAccess.AllowedUsers => "Особый список",
-        _ => "Никто",
-    };
+    public bool IsRestrictedToAllowedUsers { get; }
 
-    public string AccessHint => Access switch
+    public bool IsClosedByCode => CodeLevel is null;
+
+    public string CodeAccessText => CommandAccessOption.DescribeSource(CodeLevel);
+
+    public CommandAccessLevel EffectiveAccessLevel => CodeLevel is { } code
+        ? CommandAccessLevels.Stricter(code, AccessOption.Level ?? CommandAccessLevel.Everyone)
+        : CommandAccessLevel.Broadcaster;
+
+    public bool HasAccessConflict => CodeLevel is { } code
+        && AccessOption.Level is { } chosen
+        && chosen < code;
+
+    public string? AccessConflictNote => HasAccessConflict
+        ? $"Ограничение в коде команды сильнее выбранного: {CodeAccessText.ToLower(UiCulture.Russian)}. Настройка вправе только сузить доступ."
+        : null;
+
+    public string AccessText
     {
-        CommandAccess.Everyone => "Команду может вызвать любой зритель",
-        CommandAccess.Moderators => "Команда отвечает только стримеру и модераторам канала",
-        CommandAccess.AllowedUsers => "Команда отвечает по существу только тем, кто указан в особом списке настроек – остальным приходит отказ",
-        _ => "Команда не отвечает ни зрителю, ни стримеру",
-    };
+        get
+        {
+            if (IsClosedByCode)
+            {
+                return "Никто";
+            }
+
+            var level = CommandAccessOption.Describe(EffectiveAccessLevel);
+
+            if (!IsRestrictedToAllowedUsers)
+            {
+                return level;
+            }
+
+            return EffectiveAccessLevel == CommandAccessLevel.Everyone
+                ? "Особый список"
+                : $"{level} · особый список";
+        }
+    }
+
+    public string AccessHint
+    {
+        get
+        {
+            var basic = IsClosedByCode
+                ? "Команда не отвечает ни зрителю, ни стримеру"
+                : EffectiveAccessLevel switch
+                {
+                    CommandAccessLevel.Broadcaster => "Команду вызывает только владелец канала",
+                    CommandAccessLevel.Moderators => "Команда отвечает только стримеру и модераторам канала",
+                    _ => "Команду может вызвать любой зритель",
+                };
+
+            return IsRestrictedToAllowedUsers
+                ? basic + "; по существу она отвечает только тем, кто указан в особом списке – остальным приходит отказ"
+                : basic;
+        }
+    }
 
     public bool IsTargetInherited => TargetOption.Target is null;
 
@@ -140,13 +195,16 @@ public sealed partial class CommandRowViewModel : ObservableObject
         {
             var state = IsEnabled ? "включена" : "выключена";
 
-            return $"{Invocation}, {state}, ответ {EffectiveTargetText.ToLower(UiCulture.Russian)}, вызовов {TotalCountText}";
+            return $"{Invocation}, {state}, права {AccessText.ToLower(UiCulture.Russian)}, "
+                + $"ответ {EffectiveTargetText.ToLower(UiCulture.Russian)}, вызовов {TotalCountText}";
         }
     }
 
     public string EnabledAutomationName => $"Включить команду {Invocation}";
 
     public string TargetAutomationName => $"Цель ответа команды {Invocation}";
+
+    public string AccessAutomationName => $"Права на команду {Invocation}";
 
     public void ApplySettings(CommandSettings settings)
     {
@@ -158,6 +216,7 @@ public sealed partial class CommandRowViewModel : ObservableObject
         {
             IsEnabled = settings.IsEnabled(Canonical);
             TargetOption = CommandResponseTargetOption.ForCommandTarget(ReadOverride(settings));
+            AccessOption = CommandAccessOption.For(settings.ReadAccess(Canonical));
             EffectiveTarget = settings.ResolveResponseTarget(Canonical);
         }
         finally
@@ -208,6 +267,16 @@ public sealed partial class CommandRowViewModel : ObservableObject
         }
 
         TargetChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    partial void OnAccessOptionChanged(CommandAccessOption value)
+    {
+        if (_applying)
+        {
+            return;
+        }
+
+        AccessChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private CommandResponseTarget? ReadOverride(CommandSettings settings)

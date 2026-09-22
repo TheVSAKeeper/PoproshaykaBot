@@ -202,17 +202,21 @@ public sealed class TwitchChatHandler :
 
         var mark = new CommandResponseMark(canonical, target);
 
-        if (target.HasFlag(CommandResponseTarget.Chat))
+        if (target.GoesToChat())
         {
-            switch (response.Delivery)
-            {
-                case DeliveryType.Reply:
-                    _messenger.Reply(response.ReplyToMessageId ?? context.MessageId, response.Text, mark);
-                    break;
+            var replyToMessageId = target.RepliesToCaller()
+                ? context.MessageId
+                : response.Delivery == DeliveryType.Reply
+                    ? response.ReplyToMessageId ?? context.MessageId
+                    : null;
 
-                default:
-                    _messenger.Send(response.Text, mark);
-                    break;
+            if (string.IsNullOrEmpty(replyToMessageId))
+            {
+                _messenger.Send(response.Text, mark);
+            }
+            else
+            {
+                _messenger.Reply(replyToMessageId, response.Text, mark);
             }
 
             return;

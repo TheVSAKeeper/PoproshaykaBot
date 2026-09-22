@@ -100,7 +100,9 @@ public sealed class ChatCommandProcessor
             return ChatCommandResult.NotHandled;
         }
 
-        if (!_commandSettingsStore.Load().IsEnabled(command.Canonical))
+        var settings = _commandSettingsStore.Load();
+
+        if (!settings.IsEnabled(command.Canonical))
         {
             _logger.LogDebug("Команда {Canonical} выключена в настройках, сообщение от {Username} пропущено",
                 command.Canonical,
@@ -124,6 +126,18 @@ public sealed class ChatCommandProcessor
             IsBroadcaster = context.IsBroadcaster,
             IsModerator = context.IsModerator,
         };
+
+        var requiredLevel = settings.ResolveAccessLevel(command.Canonical);
+
+        if (!requiredLevel.Allows(enrichedContext))
+        {
+            _logger.LogDebug("Команда {Canonical} отклонена для {Username}: настройка прав требует {Level}",
+                command.Canonical,
+                enrichedContext.Username,
+                requiredLevel);
+
+            return ChatCommandResult.NotHandled;
+        }
 
         if (!command.CanExecute(enrichedContext))
         {
