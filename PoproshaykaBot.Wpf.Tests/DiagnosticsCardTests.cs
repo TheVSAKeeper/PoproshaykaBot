@@ -157,6 +157,103 @@ public class DiagnosticsCardTests
         }
     }
 
+    [Test]
+    public void Показатели_типа_события_идут_колонками_под_общей_шапкой()
+    {
+        var card = Activate(publisher => new EventBusDiagnosticsCardViewModel(publisher), Bus(6));
+        var header = card.Rows.Single(static row => row.IsHeader);
+        var first = card.Rows.First(static row => row.HasColumns && !row.IsHeader);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.Columns, Has.Count.EqualTo(3), "Подписи колонок даются один раз на карточку");
+            Assert.That(first.Columns, Has.Count.EqualTo(header.Columns.Count), "Числа обязаны встать под подписями");
+            Assert.That(first.Value, Is.Empty, "Склейка чисел в одно значение – это то, от чего уходили");
+            Assert.That(first.Hint, Does.Contain("сбоев обработчиков"), "Диктор читает подсказку: без неё числа остаются без подписей");
+        }
+    }
+
+    [Test]
+    public void Карточка_шины_показывает_первые_типы_и_разворачивается_кнопкой()
+    {
+        var card = Activate(publisher => new EventBusDiagnosticsCardViewModel(publisher), Bus(9));
+        var collapsed = card.Rows.Count(static row => row.HasColumns && !row.IsHeader);
+
+        Assert.That(card.Command, Is.Not.Null, "Типов больше, чем влезает – кнопка развёртки обязана быть");
+        Assert.That(card.CommandCaption, Does.Contain("9"), "Подпись кнопки называет, сколько типов всего");
+
+        card.Command!.Execute(null);
+
+        var expanded = card.Rows.Count(static row => row.HasColumns && !row.IsHeader);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(collapsed, Is.EqualTo(4), "Свёрнутая карточка не должна тянуть вверх весь ряд");
+            Assert.That(expanded, Is.EqualTo(9), "Развёрнутая карточка обязана показать остальные типы");
+            Assert.That(card.CommandCaption, Is.EqualTo("Показать меньше"));
+        }
+    }
+
+    [Test]
+    public void Подпись_кнопки_не_выдаёт_потолок_строк_за_число_типов()
+    {
+        var card = Activate(publisher => new EventBusDiagnosticsCardViewModel(publisher), Bus(14));
+
+        Assert.That(card.CommandCaption, Is.EqualTo("Показать 10 самых частых из 14"),
+            "Развернуться можно только до потолка строк, и подпись обязана называть оба числа");
+
+        card.Command!.Execute(null);
+
+        Assert.That(card.Rows.Count(static row => row.HasColumns && !row.IsHeader), Is.EqualTo(10),
+            "Обещанное подписью число строк и есть то, что показывает разворот");
+    }
+
+    [Test]
+    public void Дочерние_процессы_идут_колонками_а_не_склейкой()
+    {
+        var snapshot = DiagnosticsSnapshots.Empty() with
+        {
+            Memory = DiagnosticsSnapshots.Memory(DiagnosticsSnapshots.Gigabyte / 4, DiagnosticsSnapshots.Gigabyte / 2),
+        };
+        var card = Activate(publisher => new MemoryDiagnosticsCardViewModel(publisher, Monitor()), snapshot);
+        var header = card.Rows.Single(static row => row.IsHeader);
+        var child = card.Rows.First(static row => row.HasColumns && !row.IsHeader);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.Columns, Has.Count.EqualTo(child.Columns.Count), "Числа обязаны встать под подписями");
+            Assert.That(child.Value, Is.Empty, "Склейка памяти и числа процессов через точку – это то, от чего уходили");
+            Assert.That(child.Fill, Is.Not.Null, "Доля общего порога у строки процесса остаётся шкалой");
+            Assert.That(child.Hint, Does.Contain("процесс"), "Диктор читает подсказку: без неё числа остаются без подписей");
+        }
+    }
+
+    [Test]
+    public void Шина_без_единого_типа_обходится_без_шапки_и_кнопки()
+    {
+        var card = Activate(publisher => new EventBusDiagnosticsCardViewModel(publisher), Bus(0));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(card.Rows.Any(static row => row.IsHeader), Is.False, "Шапка колонок без единой строки чисел – пустая секция с заголовком");
+            Assert.That(card.Command, Is.Null, "Разворачивать нечего – кнопки быть не должно");
+        }
+    }
+
+    private static DiagnosticsSnapshot Bus(int types)
+    {
+        var byType = Enumerable.Range(0, types)
+            .Select(index => new EventTypeStatistics($"EventType{index}",
+                100 - index,
+                0,
+                TimeSpan.FromMilliseconds(120 - index),
+                TimeSpan.FromMilliseconds(80),
+                DiagnosticsSnapshots.CapturedAt.AddMinutes(-index)))
+            .ToArray();
+
+        return DiagnosticsSnapshots.Empty() with { Bus = new(1200, 0, 8, 0, byType) };
+    }
+
     private static PerformanceMonitor Monitor()
     {
         return new(new(), new ManualUiDispatcher(), NullLogger<PerformanceMonitor>.Instance);

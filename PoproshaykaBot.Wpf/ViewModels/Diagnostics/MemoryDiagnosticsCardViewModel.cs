@@ -103,15 +103,21 @@ public sealed class MemoryDiagnosticsCardViewModel : DiagnosticsCardViewModel
 
         var ordered = memory.Children.OrderByDescending(child => child.Bytes).ToList();
 
+        rows.Add(new("Дочерние процессы", string.Empty)
+        {
+            Columns = ["память", "штук"],
+            IsHeader = true,
+            Hint = "Процессы одного имени сложены в одну строку: сколько они заняли и сколько их",
+        });
+
         foreach (var child in ordered.Take(ChildRows))
         {
             var share = DiagnosticsFormat.Share(child.Bytes, memory.TotalThresholdBytes);
 
-            rows.Add(new(DisplayName(child.Name), Usage(child.Bytes, child.Count))
+            rows.Add(new(DisplayName(child.Name), string.Empty)
             {
-                Hint = share is { } value
-                    ? $"{DiagnosticsFormat.Percent(value)} общего порога {DiagnosticsFormat.Size(memory.TotalThresholdBytes)}"
-                    : null,
+                Columns = Usage(child.Bytes, child.Count),
+                Hint = Explain(child.Bytes, child.Count, share, memory.TotalThresholdBytes),
                 Fill = share,
             });
         }
@@ -123,12 +129,28 @@ public sealed class MemoryDiagnosticsCardViewModel : DiagnosticsCardViewModel
             return;
         }
 
-        rows.Add(new("Прочие процессы", Usage(rest.Sum(child => child.Bytes), rest.Sum(child => child.Count))));
+        var restBytes = rest.Sum(child => child.Bytes);
+        var restCount = rest.Sum(child => child.Count);
+
+        rows.Add(new("Прочие процессы", string.Empty)
+        {
+            Columns = Usage(restBytes, restCount),
+            Hint = Explain(restBytes, restCount, null, memory.TotalThresholdBytes),
+        });
     }
 
-    private static string Usage(long bytes, int count)
+    private static IReadOnlyList<string> Usage(long bytes, int count)
     {
-        return $"{DiagnosticsFormat.Size(bytes)} · {DiagnosticsFormat.Count(count, "процесс", "процесса", "процессов")}";
+        return [DiagnosticsFormat.Size(bytes), DiagnosticsFormat.Number(count)];
+    }
+
+    private static string Explain(long bytes, int count, double? share, long limit)
+    {
+        var usage = $"{DiagnosticsFormat.Size(bytes)}, {DiagnosticsFormat.Count(count, "процесс", "процесса", "процессов")}";
+
+        return share is { } value
+            ? $"{usage}; {DiagnosticsFormat.Percent(value)} общего порога {DiagnosticsFormat.Size(limit)}"
+            : usage;
     }
 
     private static string DisplayName(string name)
