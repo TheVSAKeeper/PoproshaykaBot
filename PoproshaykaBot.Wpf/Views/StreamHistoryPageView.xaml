@@ -1423,13 +1423,19 @@
                             <UniformGrid Rows="1" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="AutomationProperties.Name"
+                                    Value="{Binding Label}" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Button Style="{StaticResource TrendBar}"
                                     Command="{Binding DataContext.SelectSessionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                     CommandParameter="{Binding Row}"
                                     ToolTip="{Binding Label}"
-                                    AutomationProperties.Name="{Binding Label}" />
+                                    AutomationProperties.Name="Выбрать стрим в таблице" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

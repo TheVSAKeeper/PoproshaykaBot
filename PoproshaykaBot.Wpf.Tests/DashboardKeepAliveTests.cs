@@ -28,19 +28,7 @@ public class DashboardKeepAliveTests
     [OneTimeSetUp]
     public void EnsureApplication()
     {
-        PackScheme.Ensure();
-
-        if (Application.Current is not null)
-        {
-            return;
-        }
-
-        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-
-        foreach (var source in Dictionaries)
-        {
-            application.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new(source) });
-        }
+        TestApplication.EnsureResources(Dictionaries);
     }
 
     [TestCase(880, true, TestName = "Нулевой размер не выводит дашборд из обычного режима")]
