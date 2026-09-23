@@ -26,6 +26,7 @@ public sealed class ChatIngestionService(
     private readonly object _joinLock = new();
     private bool _subscribed;
     private long _generation;
+    private string? _subscriptionId;
     private long _joinedAtUtcTicks;
     private long _lastMessageAtUtcTicks;
 
@@ -77,7 +78,12 @@ public sealed class ChatIngestionService(
 
         logger.LogInformation("ChatIngestionService: отписка от EventSub");
 
-        await MarkLeftAsync();
+        await MarkLeftAsync(out _, out var subscriptionId);
+
+        if (subscriptionId != null)
+        {
+            await DeleteSubscriptionAsync(subscriptionId, cancellationToken);
+        }
     }
 
     private static DateTimeOffset? ToTimestamp(long utcTicks)
@@ -89,7 +95,7 @@ public sealed class ChatIngestionService(
     {
         logger.LogInformation("ChatIngestionService: EventSub сессия открыта ({SessionId}), регистрируем channel.chat.message", args.SessionId);
 
-        await MarkLeftAsync(out var generation);
+        await MarkLeftAsync(out var generation, out _);
 
         try
         {
@@ -121,7 +127,7 @@ public sealed class ChatIngestionService(
 
                 try
                 {
-                    await helix.CreateEventSubSubscriptionAsync("channel.chat.message",
+                    var subscriptionId = await helix.CreateEventSubSubscriptionAsync("channel.chat.message",
                         "1",
                         new Dictionary<string, string>
                         {
@@ -131,7 +137,16 @@ public sealed class ChatIngestionService(
                         args.SessionId,
                         ct);
 
-                    await MarkJoinedAsync(generation);
+                    await MarkJoinedAsync(generation, subscriptionId, out var current);
+
+                    if (!current)
+                    {
+                        logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionId} создана, когда приём чата уже остановлен – удаляем",
+                            subscriptionId);
+
+                        await DeleteSubscriptionAsync(subscriptionId, ct);
+                        return;
+                    }
 
                     logger.LogInformation("ChatIngestionService: подписка channel.chat.message создана (broadcaster={BroadcasterId}, bot={BotId}, попытка {Attempt})",
                         broadcasterId, botId, attempt + 1);
@@ -140,9 +155,9 @@ public sealed class ChatIngestionService(
                 }
                 catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
                 {
-                    await MarkJoinedAsync(generation);
+                    await MarkJoinedAsync(generation, null, out _);
 
-                    logger.LogInformation(ex, "ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии – переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
+                    logger.LogInformation(ex, "ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии – переиспользуем; её id неизвестен, и при остановке она не удаляется (broadcaster={BroadcasterId}, bot={BotId})",
                         broadcasterId, botId);
 
                     return;
@@ -201,13 +216,37 @@ public sealed class ChatIngestionService(
         return MarkLeftAsync();
     }
 
-    private Task MarkJoinedAsync(long generation)
+    private async Task DeleteSubscriptionAsync(string subscriptionId, CancellationToken ct)
+    {
+        try
+        {
+            if (!await helix.DeleteEventSubSubscriptionAsync(subscriptionId, ct))
+            {
+                logger.LogDebug("ChatIngestionService: подписки channel.chat.message {SubscriptionId} в Twitch уже нет", subscriptionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "ChatIngestionService: не удалось удалить подписку channel.chat.message {SubscriptionId} – уведомления чата будут приходить, пока открыт сокет EventSub",
+                subscriptionId);
+        }
+    }
+
+    private Task MarkJoinedAsync(long generation, string? subscriptionId, out bool current)
     {
         var now = timeProvider.GetUtcNow();
 
         lock (_joinLock)
         {
-            if (generation != _generation || Interlocked.Exchange(ref _joinedAtUtcTicks, now.UtcTicks) != 0)
+            current = generation == _generation;
+            if (!current)
+            {
+                return Task.CompletedTask;
+            }
+
+            _subscriptionId = subscriptionId;
+
+            if (Interlocked.Exchange(ref _joinedAtUtcTicks, now.UtcTicks) != 0)
             {
                 return Task.CompletedTask;
             }
@@ -218,16 +257,18 @@ public sealed class ChatIngestionService(
 
     private Task MarkLeftAsync()
     {
-        return MarkLeftAsync(out _);
+        return MarkLeftAsync(out _, out _);
     }
 
-    private Task MarkLeftAsync(out long generation)
+    private Task MarkLeftAsync(out long generation, out string? subscriptionId)
     {
         long previous;
 
         lock (_joinLock)
         {
             generation = ++_generation;
+            subscriptionId = _subscriptionId;
+            _subscriptionId = null;
             previous = Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
         }
 

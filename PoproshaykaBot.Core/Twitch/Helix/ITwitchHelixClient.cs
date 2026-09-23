@@ -38,6 +38,8 @@ public interface ITwitchHelixClient
         string sessionId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> DeleteEventSubSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken = default);
+
     Task<HelixPollInfo> CreatePollAsync(CreatePollRequest request, CancellationToken cancellationToken = default);
 
     Task<HelixPollInfo> EndPollAsync(EndPollRequest request, CancellationToken cancellationToken = default);

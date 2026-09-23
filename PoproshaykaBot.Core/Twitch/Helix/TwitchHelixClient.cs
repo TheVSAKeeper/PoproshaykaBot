@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -219,6 +220,27 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
             subscription.Id, subscription.Type, subscription.Status);
 
         return subscription.Id;
+    }
+
+    public async Task<bool> DeleteEventSubSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionId);
+
+        using var client = httpClientFactory.CreateClient(HttpClientName);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Delete,
+            $"{TwitchEndpoints.HelixEventSubSubscriptions}?id={Uri.EscapeDataString(subscriptionId)}");
+
+        using var response = await client.SendAsync(httpRequest, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        await EnsureSuccessAsync(httpRequest, response, cancellationToken);
+
+        logger.LogInformation("Удалена EventSub подписка {Id}", subscriptionId);
+
+        return true;
     }
 
     public async Task<HelixPollInfo> CreatePollAsync(CreatePollRequest request, CancellationToken cancellationToken = default)

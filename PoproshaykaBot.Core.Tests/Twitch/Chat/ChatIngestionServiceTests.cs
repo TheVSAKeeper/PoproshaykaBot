@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using NSubstitute.ExceptionExtensions;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Tests.Polls;
@@ -6,6 +7,7 @@ using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Net;
 
 namespace PoproshaykaBot.Core.Tests.Twitch.Chat;
 
@@ -107,7 +109,94 @@ public sealed class ChatIngestionServiceTests
     }
 
     [Test]
-    public async Task Подписка_завершившаяся_после_остановки_не_открывает_приём()
+    public async Task Остановка_удаляет_подписку_последней_сессии_по_id_из_ответа_на_создание()
+    {
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns("sub-1", "sub-2");
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await _service.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnDisconnected += Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(
+            new EventSubDisconnectedArgs("обрыв"),
+            CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome += Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(
+            new EventSubSessionWelcomeArgs("session-2", null),
+            CancellationToken.None);
+
+        await _service.StopAsync(NullProgress, CancellationToken.None);
+        await _service.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-2", Arg.Any<CancellationToken>());
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-1", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Остановка_после_переиспользованной_подписки_ничего_не_удаляет()
+    {
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HelixRequestException(HttpMethod.Post,
+                "/helix/eventsub/subscriptions",
+                HttpStatusCode.Conflict,
+                "subscription already exists",
+                null));
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await _service.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(_service.IsJoined, Is.True);
+
+        await _service.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    private static IEnumerable<TestCaseData> DeleteFailures()
+    {
+        yield return new TestCaseData(new HelixRequestException(HttpMethod.Delete,
+            "/helix/eventsub/subscriptions",
+            HttpStatusCode.InternalServerError,
+            "oops",
+            "{\"access_token\":\"секрет\"}")).SetArgDisplayNames("HTTP 500");
+
+        yield return new TestCaseData(new HttpRequestException("сеть недоступна")).SetArgDisplayNames("сеть");
+        yield return new TestCaseData(new OperationCanceledException()).SetArgDisplayNames("таймаут остановки");
+    }
+
+    [TestCaseSource(nameof(DeleteFailures))]
+    public async Task Отказ_удаления_подписки_не_роняет_остановку(Exception failure)
+    {
+        var stops = 0;
+        _eventBus.Subscribe<ChatIngestionStopped>(_ => stops++);
+
+        _helix.DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(failure);
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await _service.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.DoesNotThrowAsync(() => _service.StopAsync(NullProgress, CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stops, Is.EqualTo(1));
+            Assert.That(_service.IsJoined, Is.False);
+        }
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-id", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Подписка_завершившаяся_после_остановки_не_открывает_приём_и_удаляется()
     {
         var starts = 0;
         _eventBus.Subscribe<ChatIngestionStarted>(_ => starts++);
@@ -125,7 +214,9 @@ public sealed class ChatIngestionServiceTests
 
         await _service.StopAsync(NullProgress, CancellationToken.None);
 
-        pending.SetResult("sub-id");
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        pending.SetResult("sub-late");
         await start;
 
         Assert.Multiple(() =>
@@ -133,6 +224,8 @@ public sealed class ChatIngestionServiceTests
             Assert.That(starts, Is.Zero);
             Assert.That(_service.IsJoined, Is.False);
         });
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-late", Arg.Any<CancellationToken>());
     }
 
     [Test]
