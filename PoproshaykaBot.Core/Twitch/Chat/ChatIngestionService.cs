@@ -19,10 +19,13 @@ public sealed class ChatIngestionService(
     IBotUserIdProvider botUserIdProvider,
     SettingsManager settingsManager,
     IEventBus eventBus,
+    TimeProvider timeProvider,
     ILogger<ChatIngestionService> logger)
     : IHostedComponent
 {
+    private readonly object _joinLock = new();
     private bool _subscribed;
+    private long _generation;
     private long _joinedAtUtcTicks;
     private long _lastMessageAtUtcTicks;
 
@@ -45,6 +48,8 @@ public sealed class ChatIngestionService(
 
         eventSubClient.OnSessionWelcome += HandleSessionWelcomeAsync;
         eventSubClient.OnNotification += HandleNotificationAsync;
+        eventSubClient.OnDisconnected += HandleDisconnectedAsync;
+        eventSubClient.OnRevocation += HandleRevocationAsync;
         _subscribed = true;
 
         logger.LogInformation("ChatIngestionService: подписка на EventSub установлена");
@@ -57,20 +62,22 @@ public sealed class ChatIngestionService(
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (!_subscribed)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         eventSubClient.OnSessionWelcome -= HandleSessionWelcomeAsync;
         eventSubClient.OnNotification -= HandleNotificationAsync;
+        eventSubClient.OnDisconnected -= HandleDisconnectedAsync;
+        eventSubClient.OnRevocation -= HandleRevocationAsync;
         _subscribed = false;
-        Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
 
         logger.LogInformation("ChatIngestionService: отписка от EventSub");
-        return Task.CompletedTask;
+
+        await MarkLeftAsync();
     }
 
     private static DateTimeOffset? ToTimestamp(long utcTicks)
@@ -82,7 +89,7 @@ public sealed class ChatIngestionService(
     {
         logger.LogInformation("ChatIngestionService: EventSub сессия открыта ({SessionId}), регистрируем channel.chat.message", args.SessionId);
 
-        Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
+        await MarkLeftAsync(out var generation);
 
         try
         {
@@ -124,7 +131,7 @@ public sealed class ChatIngestionService(
                         args.SessionId,
                         ct);
 
-                    Interlocked.Exchange(ref _joinedAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+                    await MarkJoinedAsync(generation);
 
                     logger.LogInformation("ChatIngestionService: подписка channel.chat.message создана (broadcaster={BroadcasterId}, bot={BotId}, попытка {Attempt})",
                         broadcasterId, botId, attempt + 1);
@@ -133,7 +140,7 @@ public sealed class ChatIngestionService(
                 }
                 catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
                 {
-                    Interlocked.Exchange(ref _joinedAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+                    await MarkJoinedAsync(generation);
 
                     logger.LogInformation(ex, "ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии – переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
                         broadcasterId, botId);
@@ -162,7 +169,7 @@ public sealed class ChatIngestionService(
             return;
         }
 
-        Interlocked.Exchange(ref _lastMessageAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+        Interlocked.Exchange(ref _lastMessageAtUtcTicks, timeProvider.GetUtcNow().UtcTicks);
 
         try
         {
@@ -175,5 +182,57 @@ public sealed class ChatIngestionService(
         {
             logger.LogError(ex, "ChatIngestionService: ошибка обработки channel.chat.message");
         }
+    }
+
+    private Task HandleDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken ct)
+    {
+        return MarkLeftAsync();
+    }
+
+    private Task HandleRevocationAsync(EventSubRevocationArgs args, CancellationToken ct)
+    {
+        if (!string.Equals(args.SubscriptionType, "channel.chat.message", StringComparison.Ordinal))
+        {
+            return Task.CompletedTask;
+        }
+
+        logger.LogWarning("ChatIngestionService: Twitch отозвал подписку channel.chat.message ({Status}) – сообщения чата больше не приходят", args.Status);
+
+        return MarkLeftAsync();
+    }
+
+    private Task MarkJoinedAsync(long generation)
+    {
+        var now = timeProvider.GetUtcNow();
+
+        lock (_joinLock)
+        {
+            if (generation != _generation || Interlocked.Exchange(ref _joinedAtUtcTicks, now.UtcTicks) != 0)
+            {
+                return Task.CompletedTask;
+            }
+        }
+
+        return eventBus.PublishAsync(new ChatIngestionStarted(now), CancellationToken.None);
+    }
+
+    private Task MarkLeftAsync()
+    {
+        return MarkLeftAsync(out _);
+    }
+
+    private Task MarkLeftAsync(out long generation)
+    {
+        long previous;
+
+        lock (_joinLock)
+        {
+            generation = ++_generation;
+            previous = Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
+        }
+
+        return previous != 0
+            ? eventBus.PublishAsync(new ChatIngestionStopped(timeProvider.GetUtcNow()), CancellationToken.None)
+            : Task.CompletedTask;
     }
 }

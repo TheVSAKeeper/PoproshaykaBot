@@ -15,14 +15,16 @@
                    Style="{StaticResource TextBlock.Subtle}"
                    TextWrapping="Wrap"
                    Margin="0,0,0,16"
-                   Text="Превью показывает панель «Обзор» в масштабе окна. Перетащите плитку из палитры на нужное место, тяните разделители, чтобы поменять пропорции. Правый клик по плитке – максимальные размеры и удаление." />
+                   Text="Превью показывает панель «Обзор» в масштабе окна. Колонки и строки задают саму сетку: новые ячейки остаются пустыми, а плитка, которой не хватило места, выключается и возвращается в палитру. Перетащите плитку из палитры на нужное место, тяните разделители, чтобы поменять пропорции. Правый клик по плитке – максимальные размеры и удаление." />
 
-        <TextBlock DockPanel.Dock="Top"
+        <TextBlock x:Name="NoticeText"
+                   DockPanel.Dock="Top"
                    Text="{Binding Notice}"
                    TextWrapping="Wrap"
                    FontSize="{DynamicResource Font.Size.S}"
                    keepshell:SeverityBrushBehavior.Foreground="Warning"
                    Visibility="{Binding Notice, Converter={StaticResource NullToVisibility}}"
+                   AutomationProperties.LiveSetting="Assertive"
                    Margin="0,0,0,16" />
 
         <WrapPanel DockPanel.Dock="Top"
@@ -43,6 +45,46 @@
                            Style="{StaticResource TextBlock.Subtle}"
                            VerticalAlignment="Center"
                            Margin="12,0,0,0" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,0,24,8">
+                <TextBlock Text="Колонки"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <Slider Width="120"
+                        Minimum="{Binding MinColumnCount, Mode=OneTime}"
+                        Maximum="{Binding MaxColumnCount, Mode=OneTime}"
+                        Value="{Binding ColumnCount, Mode=TwoWay}"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Число колонок сетки" />
+                <TextBlock Text="{Binding ColumnCount}"
+                           VerticalAlignment="Center"
+                           MinWidth="16"
+                           Margin="8,0,0,0" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,0,24,8">
+                <TextBlock Text="Строки"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <Slider Width="120"
+                        Minimum="{Binding MinRowCount, Mode=OneTime}"
+                        Maximum="{Binding MaxRowCount, Mode=OneTime}"
+                        Value="{Binding RowCount, Mode=TwoWay}"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Число строк сетки" />
+                <TextBlock Text="{Binding RowCount}"
+                           VerticalAlignment="Center"
+                           MinWidth="16"
+                           Margin="8,0,0,0" />
             </StackPanel>
 
             <StackPanel Orientation="Horizontal"
@@ -110,7 +152,6 @@
                     <Viewbox x:Name="PreviewBox"
                              Stretch="Uniform"
                              StretchDirection="Both"
-                             MaxHeight="420"
                              HorizontalAlignment="Center"
                              VerticalAlignment="Top" />
                     <Canvas x:Name="PreviewOverlay"

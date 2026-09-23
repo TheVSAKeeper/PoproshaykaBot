@@ -7,6 +7,8 @@ namespace PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 public sealed class DashboardLayoutDraft
 {
     private const int UndoDepth = 20;
+    private const int MaxDepth = 32;
+    private const double MinimumShare = 0.05;
 
     private readonly List<DashboardLayoutSettings> _undo = [];
 
@@ -59,6 +61,42 @@ public sealed class DashboardLayoutDraft
 
         DashboardLayoutReconciler.SyncRoot(_layout);
         Version++;
+    }
+
+    public IReadOnlyList<string> SetGridSize(int columnCount, int rowCount)
+    {
+        var columns = Math.Clamp(columnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
+        var rows = Math.Clamp(rowCount, DashboardLayoutDefaults.MinRowCount, DashboardLayoutDefaults.MaxRowCount);
+
+        if (columns == _layout.ColumnCount && rows == _layout.RowCount)
+        {
+            return [];
+        }
+
+        var previous = Clone(_layout)!;
+        var hidden = Reflow(columns, rows);
+
+        _layout.ColumnCount = columns;
+        _layout.RowCount = rows;
+        _layout.Root = null;
+
+        DashboardLayoutReconciler.SyncRoot(_layout);
+
+        if (_layout.Root is { } rebuilt && previous.Root is { } before)
+        {
+            _layout.Root = CarryWeights(rebuilt, before);
+
+            if (!DashboardLayoutReconciler.SyncTiles(_layout))
+            {
+                _layout.Root = rebuilt;
+                DashboardLayoutReconciler.SyncTiles(_layout);
+            }
+        }
+
+        Remember(previous);
+        Version++;
+
+        return hidden;
     }
 
     public bool Resize(IReadOnlyList<int> path, IReadOnlyList<double> weights)
@@ -156,11 +194,215 @@ public sealed class DashboardLayoutDraft
         return DashboardEditStatus.Applied;
     }
 
+    private static DashboardPane CarryWeights(DashboardPane rebuilt, DashboardPane previous)
+    {
+        var carried = rebuilt;
+
+        foreach (var (path, weights) in MatchingWeights(rebuilt, previous, []))
+        {
+            if (DashboardPaneEditor.TryResize(carried, path, weights, out var resized))
+            {
+                carried = resized;
+            }
+        }
+
+        return carried;
+    }
+
+    private static IEnumerable<(int[] Path, double[] Weights)> MatchingWeights(DashboardPane rebuilt, DashboardPane previous, int[] path)
+    {
+        if (path.Length > MaxDepth
+            || rebuilt is not SplitPane next
+            || previous is not SplitPane before
+            || next.Orientation != before.Orientation)
+        {
+            yield break;
+        }
+
+        if (WeightsFor(next, before) is { } weights)
+        {
+            yield return (path, weights);
+        }
+
+        foreach (var (nextIndex, beforeIndex) in Aligned(next, before))
+        {
+            var nested = MatchingWeights(
+                next.Children[nextIndex].Pane,
+                before.Children[beforeIndex].Pane,
+                [.. path, nextIndex]);
+
+            foreach (var match in nested)
+            {
+                yield return match;
+            }
+        }
+    }
+
+    private static IEnumerable<(int Next, int Before)> Aligned(SplitPane next, SplitPane before)
+    {
+        var taken = new bool[before.Children.Count];
+
+        for (var index = 0; index < next.Children.Count; index++)
+        {
+            var signature = Signature(next.Children[index].Pane);
+
+            if (signature.Count == 0)
+            {
+                continue;
+            }
+
+            for (var candidate = 0; candidate < before.Children.Count; candidate++)
+            {
+                if (taken[candidate] || !Signature(before.Children[candidate].Pane).SequenceEqual(signature, StringComparer.Ordinal))
+                {
+                    continue;
+                }
+
+                taken[candidate] = true;
+
+                yield return (index, candidate);
+
+                break;
+            }
+        }
+    }
+
+    private static double[]? WeightsFor(SplitPane next, SplitPane before)
+    {
+        if (next.Children.Count < 2)
+        {
+            return null;
+        }
+
+        var weights = new double[next.Children.Count];
+        var carried = 0;
+        var total = 0.0;
+
+        foreach (var (nextIndex, beforeIndex) in Aligned(next, before))
+        {
+            if (before.Children[beforeIndex].Weight is not { } weight || weight <= 0 || !double.IsFinite(weight))
+            {
+                continue;
+            }
+
+            weights[nextIndex] = weight;
+            total += weight;
+            carried++;
+        }
+
+        if (carried == 0 || !double.IsFinite(total) || total <= 0)
+        {
+            return null;
+        }
+
+        var rest = next.Children.Count - carried;
+
+        if (rest == 0)
+        {
+            return weights;
+        }
+
+        var share = Math.Max(1 - total, MinimumShare * rest) / rest;
+
+        for (var index = 0; index < weights.Length; index++)
+        {
+            if (weights[index] <= 0)
+            {
+                weights[index] = share;
+            }
+        }
+
+        return weights;
+    }
+
+    private static List<string> Signature(DashboardPane? pane)
+    {
+        var leaves = new List<string>();
+
+        Collect(pane, leaves, 0);
+
+        return leaves;
+    }
+
+    private static void Collect(DashboardPane? pane, List<string> leaves, int depth)
+    {
+        if (depth > MaxDepth)
+        {
+            return;
+        }
+
+        switch (pane)
+        {
+            case TilePane tile when !DashboardLayoutTree.IsEmptySlot(tile.TypeId):
+                leaves.Add(tile.TypeId);
+
+                return;
+
+            case SplitPane split:
+                foreach (var slot in split.Children)
+                {
+                    Collect(slot?.Pane, leaves, depth + 1);
+                }
+
+                return;
+        }
+    }
+
     private static bool Fits(DashboardPane root)
     {
         return DashboardLayoutTree.TryMeasure(root) is { } size
             && size.Columns <= DashboardLayoutDefaults.MaxColumnCount
             && size.Rows <= DashboardLayoutDefaults.MaxRowCount;
+    }
+
+    private List<string> Reflow(int columnCount, int rowCount)
+    {
+        var pairs = new List<(DashboardTileSettings Tile, PlacedTile Placed)>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var tile in _layout.Tiles)
+        {
+            if (!tile.IsVisible
+                || string.IsNullOrEmpty(tile.TypeId)
+                || DashboardLayoutTree.IsEmptySlot(tile.TypeId)
+                || !seen.Add(tile.TypeId))
+            {
+                continue;
+            }
+
+            pairs.Add((tile, new()
+            {
+                TypeId = tile.TypeId,
+                Row = tile.Row,
+                Column = tile.Column,
+                ColumnSpan = tile.ColumnSpan,
+                RowSpan = tile.RowSpan,
+                MaxWidth = tile.MaxWidth,
+                MaxHeight = tile.MaxHeight,
+            }));
+        }
+
+        var (_, unplaceable) = DashboardLayoutCalculator.ResolveLayout(pairs.Select(pair => pair.Placed), rowCount, columnCount);
+        var lost = unplaceable.ToHashSet();
+        var hidden = new List<string>();
+
+        foreach (var (tile, placed) in pairs)
+        {
+            if (lost.Contains(placed))
+            {
+                tile.IsVisible = false;
+                hidden.Add(tile.TypeId);
+
+                continue;
+            }
+
+            tile.Row = placed.Row;
+            tile.Column = placed.Column;
+            tile.RowSpan = placed.RowSpan;
+            tile.ColumnSpan = placed.ColumnSpan;
+        }
+
+        return hidden;
     }
 
     private DashboardPane? Split(DashboardPane root, IReadOnlyList<int> targetPath, PaneSide side, string typeId)

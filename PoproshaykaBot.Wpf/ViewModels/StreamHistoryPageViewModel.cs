@@ -117,6 +117,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private string _detailPeriodText = Placeholder;
 
     [ObservableProperty]
+    private string _detailTrackingText = string.Empty;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowDetailDeltas))]
     private string _detailMessagesDelta = string.Empty;
 
@@ -490,6 +493,33 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         return rounded >= 0
             ? (string.Create(UiCulture.Russian, $"+{rounded:N0} % к обычному"), TrendTone.Up)
             : (string.Create(UiCulture.Russian, $"−{-rounded:N0} % к обычному"), TrendTone.Down);
+    }
+
+    public static string DescribeTracking(StreamSessionRecord session)
+    {
+        if (session.TrackedDuration is not { } tracked)
+        {
+            return string.Empty;
+        }
+
+        var duration = session.Duration;
+
+        if (tracked <= TimeSpan.Zero)
+        {
+            return "Учёт не вёлся: бот не был подключён к чату";
+        }
+
+        if (tracked >= duration)
+        {
+            return "Учёт вёлся весь эфир";
+        }
+
+        var trackedText = FormatDuration(tracked);
+        var durationText = FormatDuration(duration);
+
+        return trackedText == durationText
+            ? "Учёт вёлся почти весь эфир"
+            : string.Create(UiCulture.Russian, $"Учёт вёлся {trackedText} из {durationText}");
     }
 
     public static string DescribeComposition(StreamSessionRecord session)
@@ -1083,6 +1113,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             DetailBoxArt = GameBoxArtViewModel.None;
             DetailComposition = string.Empty;
             DetailPeriodText = Placeholder;
+            DetailTrackingText = string.Empty;
             DetailMessagesDelta = string.Empty;
             DetailChattersDelta = string.Empty;
             DetailPeakViewersDelta = string.Empty;
@@ -1100,6 +1131,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         DetailBoxArt = row.BoxArt;
         DetailComposition = DescribeComposition(row.Source);
         DetailPeriodText = FormatPeriod(row.StartedAt, row.Source.EndedAt);
+        DetailTrackingText = DescribeTracking(row.Source);
 
         (DetailMessagesDelta, DetailMessagesDeltaTone) = DescribeDelta(row.MessageCount, _averageMessages, _visibleSessions.Count);
         (DetailChattersDelta, DetailChattersDeltaTone) = DescribeDelta(row.ChatterCount, _averageChatters, _visibleSessions.Count);
@@ -1170,10 +1202,11 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         var recent = _visibleSessions.Take(_trendLength).Reverse().ToList();
         var leader = recent.Count > 0 ? recent.Max(row => MetricValue(row, _trendMetric)) : 0;
+        var scale = StreamTrendBarViewModel.ScaleOf(recent.Select(row => MetricValue(row, _trendMetric)));
 
         for (var index = 0; index < recent.Count; index++)
         {
-            Trend.Add(new(recent[index], leader, _trendMetric)
+            Trend.Add(new(recent[index], scale, _trendMetric)
             {
                 IsFirst = index == 0,
                 IsLast = index == recent.Count - 1,
@@ -1355,25 +1388,28 @@ public sealed partial class StreamTrendBarViewModel : ObservableObject
 {
     public const double MinimumShare = 0.06;
 
+    private const int ScalePercentile = 90;
+
     [ObservableProperty]
     private bool _isSelected;
 
     [ObservableProperty]
     private bool _isPeak;
 
-    public StreamTrendBarViewModel(StreamSessionRowViewModel row, long leaderValue, StreamTrendMetric metric)
+    public StreamTrendBarViewModel(StreamSessionRowViewModel row, long scale, StreamTrendMetric metric)
     {
         Row = row;
         Value = StreamHistoryPageViewModel.MetricValue(row, metric);
-        Share = leaderValue > 0
-            ? Math.Clamp((double)Value / leaderValue, MinimumShare, 1)
+        Share = scale > 0
+            ? Math.Clamp((double)Value / scale, MinimumShare, 1)
             : MinimumShare;
+        IsClipped = scale > 0 && Value > scale;
         FillTrack = new(Share, GridUnitType.Star);
         RestTrack = new(1 - Share, GridUnitType.Star);
         ValueText = StreamHistoryPageViewModel.FormatNumber(Value);
         Label = string.Create(
             UiCulture.Russian,
-            $"{RelativeTime.FormatDate(row.StartedAt)}, {StreamHistoryPageViewModel.MetricLabel(metric)} {ValueText}");
+            $"{RelativeTime.FormatDate(row.StartedAt)}, {StreamHistoryPageViewModel.MetricLabel(metric)} {ValueText}{(IsClipped ? ", выше шкалы полосы" : string.Empty)}");
     }
 
     public StreamSessionRowViewModel Row { get; }
@@ -1381,10 +1417,24 @@ public sealed partial class StreamTrendBarViewModel : ObservableObject
     public bool IsLast { get; init; }
     public long Value { get; }
     public double Share { get; }
+    public bool IsClipped { get; }
     public GridLength FillTrack { get; }
     public GridLength RestTrack { get; }
     public string ValueText { get; }
     public string Label { get; }
+
+    public static long ScaleOf(IEnumerable<long> values)
+    {
+        var positive = values.Where(value => value > 0).Order().ToList();
+
+        if (positive.Count == 0)
+        {
+            return 0;
+        }
+
+        var rank = (positive.Count * ScalePercentile + 99) / 100;
+        return positive[rank - 1];
+    }
 }
 
 public sealed partial class StreamSessionSegmentRowViewModel : ObservableObject

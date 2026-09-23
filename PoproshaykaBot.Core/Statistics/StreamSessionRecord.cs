@@ -19,8 +19,17 @@ public sealed class StreamSessionRecord
 
     public List<StreamSessionSegment> Segments { get; set; } = [];
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<StreamSessionInterval>? TrackedIntervals { get; set; }
+
     [JsonIgnore]
     public TimeSpan Duration => EndedAt > StartedAt ? EndedAt - StartedAt : TimeSpan.Zero;
+
+    [JsonIgnore]
+    public TimeSpan? TrackedDuration => TrackedIntervals == null
+        ? null
+        : StreamSessionInterval.Normalize(TrackedIntervals, StartedAt, EndedAt)
+            .Aggregate(TimeSpan.Zero, (sum, interval) => sum + interval.Duration);
 
     public void EnsureSegments()
     {

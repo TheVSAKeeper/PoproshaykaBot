@@ -54,7 +54,7 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
     public OAuthAccountViewModel Broadcaster { get; }
 
     public string ChannelHintText => string.IsNullOrWhiteSpace(Channel)
-        ? "Канал не задан – заполните его на вкладке «Основные», иначе авторизация стримера не пройдёт."
+        ? "Канал не задан – заполните его в разделе «Основные», блок «Канал и аккаунт», иначе авторизация стримера не пройдёт."
         : $"Канал: {Channel}";
 
     public StatusSeverity ChannelHintSeverity => string.IsNullOrWhiteSpace(Channel)

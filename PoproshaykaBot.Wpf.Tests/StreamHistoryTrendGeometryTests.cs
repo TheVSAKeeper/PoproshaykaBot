@@ -144,6 +144,155 @@ public class StreamHistoryTrendGeometryTests
         }
     }
 
+    [TestCase(1.0, 1680)]
+    [TestCase(1.6, 2200)]
+    public void Без_выбора_заглушка_стоит_на_полу_а_таблица_забирает_остаток(double scale, double width)
+    {
+        var area = new Size(width, 900);
+
+        try
+        {
+            FontScaleManager.Apply(scale);
+
+            var page = CreatePage();
+            var view = new StreamHistoryPageView { DataContext = page };
+
+            Arrange(view, area);
+
+            var empty = PageColumns(view);
+
+            page.TrySelectAt(0);
+            Arrange(view, area);
+
+            var selected = PageColumns(view);
+
+            page.TrySelectAt(1);
+            Arrange(view, area);
+
+            var other = PageColumns(view);
+
+            page.SelectedRow = null;
+            Arrange(view, area);
+
+            var cleared = PageColumns(view);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(empty.Detail, Is.EqualTo(StreamHistoryPageView.DetailMinWidth * scale).Within(Tolerance),
+                    "Заглушка «Выберите стрим» стоит на своём полу, остальное отдано таблице");
+                Assert.That(selected.Table / selected.Detail,
+                    Is.EqualTo(StreamHistoryPageView.TableColumnShare / StreamHistoryPageView.DetailColumnShare).Within(0.01),
+                    "С выбором карточка стрима получает прежние 3 к 2");
+                Assert.That(other, Is.EqualTo(selected), "Выбор другой строки при уже выбранной раскладку не двигает");
+                Assert.That(cleared, Is.EqualTo(empty), "Снятый выбор возвращает заглушку на пол");
+            }
+        }
+        finally
+        {
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+        }
+    }
+
+    [Test]
+    public void Стопка_не_меняет_раскладку_от_выбора()
+    {
+        var page = CreatePage();
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        Arrange(view);
+
+        var empty = PageRows(view);
+
+        page.TrySelectAt(0);
+        Arrange(view);
+
+        var selected = PageRows(view);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(((Grid)view.FindName("PageGrid")!).ColumnDefinitions, Is.Empty);
+            Assert.That(selected, Is.EqualTo(empty).AsCollection);
+        }
+    }
+
+    [TestCase(1.0)]
+    [TestCase(1.6)]
+    public void Пол_карточки_рекорда_и_колонки_рекордов_едет_с_масштабом_шрифта(double scale)
+    {
+        try
+        {
+            FontScaleManager.Apply(scale);
+
+            var page = CreatePage();
+            var view = new StreamHistoryPageView { DataContext = page };
+
+            Arrange(view, new(2200, 900));
+
+            var style = (Style)view.FindResource("RecordCard");
+            var cards = Descendants<Button>(view).Where(button => ReferenceEquals(button.Style, style)).ToList();
+            var records = cards.Count > 0 ? ColumnOf(cards[0]) : null;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cards, Is.Not.Empty, "На четырёх сессиях сводка показывает рекорды");
+                Assert.That(cards.Select(card => card.MinWidth),
+                    Is.All.EqualTo(StreamHistoryPageView.RecordCardMinWidth * scale).Within(Tolerance));
+                Assert.That(records?.MinWidth, Is.EqualTo(StreamHistoryPageView.RecordsPaneMinWidth * scale).Within(Tolerance));
+            }
+        }
+        finally
+        {
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+        }
+    }
+
+    private static ColumnDefinition? ColumnOf(DependencyObject element)
+    {
+        for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (VisualTreeHelper.GetParent(current) is Grid { ColumnDefinitions.Count: > 1 } grid
+                && grid.ColumnDefinitions.Any(column => column.Style is not null))
+            {
+                return grid.ColumnDefinitions[Grid.GetColumn((UIElement)current)];
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<T> Descendants<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var nested in Descendants<T>(child))
+            {
+                yield return nested;
+            }
+        }
+    }
+
+    private static (double Table, double Detail) PageColumns(StreamHistoryPageView view)
+    {
+        var columns = ((Grid)view.FindName("PageGrid")!).ColumnDefinitions;
+
+        Assert.That(columns, Has.Count.EqualTo(3), "Раскладка рядом");
+
+        return (Math.Round(columns[0].ActualWidth, 2), Math.Round(columns[2].ActualWidth, 2));
+    }
+
+    private static double[] PageRows(StreamHistoryPageView view)
+    {
+        return ((Grid)view.FindName("PageGrid")!).RowDefinitions.Select(row => Math.Round(row.ActualHeight, 2)).ToArray();
+    }
+
     private static (double Height, double CoverHeight, Visibility Stripes) Card(StreamHistoryPageView view)
     {
         var list = (ListBox)view.FindName("SessionCards")!;

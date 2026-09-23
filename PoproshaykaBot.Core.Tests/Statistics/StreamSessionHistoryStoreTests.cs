@@ -257,6 +257,92 @@ public sealed class StreamSessionHistoryStoreTests
     }
 
     [Test]
+    public void Запись_прежней_сборки_читается_без_учёта_и_переписывается_без_нового_поля()
+    {
+        var legacy = Record("legacy", 50);
+        File.WriteAllText(_tempFile, JsonSerializer.Serialize(new StreamSessionHistory { Sessions = [legacy] }, JsonStoreOptions.Default));
+
+        var store = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, _tempFile);
+        var fresh = Record("fresh", 10);
+        fresh.StartedAt = legacy.StartedAt.AddDays(1);
+        fresh.EndedAt = fresh.StartedAt.AddHours(1);
+        store.Append(fresh);
+
+        using var file = JsonDocument.Parse(File.ReadAllText(_tempFile));
+        var rewrittenLegacy = file.RootElement.GetProperty("sessions")[0];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.Load().Sessions[0].TrackedIntervals, Is.Null);
+            Assert.That(store.Load().Sessions[0].TrackedDuration, Is.Null);
+            Assert.That(rewrittenLegacy.TryGetProperty("trackedIntervals", out _), Is.False);
+        }
+    }
+
+    [Test]
+    public void Новый_файл_с_учётом_читается_прежней_сборкой_и_переживает_перечитывание()
+    {
+        var record = Record("chan", 10);
+        record.TrackedIntervals = [new() { StartedAt = record.StartedAt.AddMinutes(5), EndedAt = record.EndedAt }];
+        _store.Append(record);
+
+        var previousBuild = JsonSerializer.Deserialize<PreviousBuildHistory>(File.ReadAllText(_tempFile), JsonStoreOptions.Default);
+        var reloaded = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, _tempFile).Load().Sessions.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(previousBuild!.Sessions.Single().MessageCount, Is.EqualTo(10));
+            Assert.That(previousBuild.Sessions.Single().Chatters, Has.Count.EqualTo(2));
+            Assert.That(reloaded.TrackedIntervals, Has.Count.EqualTo(1));
+            Assert.That(reloaded.TrackedDuration, Is.EqualTo(record.Duration - TimeSpan.FromMinutes(5)));
+        }
+    }
+
+    [Test]
+    public void Испорченный_учёт_в_файле_не_превышает_эфир()
+    {
+        File.WriteAllText(_tempFile,
+            """
+            {
+              "sessions": [
+                {
+                  "channel": "bobito217",
+                  "startedAt": "2026-08-17T06:00:00+00:00",
+                  "endedAt": "2026-08-17T07:00:00+00:00",
+                  "trackedIntervals": [
+                    { "startedAt": "2026-08-17T05:00:00+00:00", "endedAt": "2026-08-17T06:30:00+00:00" },
+                    { "startedAt": "2026-08-17T06:20:00+00:00", "endedAt": "2026-08-17T09:00:00+00:00" },
+                    { "startedAt": "2026-08-17T06:50:00+00:00", "endedAt": "2026-08-17T06:10:00+00:00" },
+                    null
+                  ]
+                }
+              ]
+            }
+            """);
+
+        var session = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, _tempFile).Load().Sessions.Single();
+
+        Assert.That(session.TrackedDuration, Is.EqualTo(TimeSpan.FromHours(1)));
+    }
+
+    private sealed class PreviousBuildHistory
+    {
+        public List<PreviousBuildRecord> Sessions { get; set; } = [];
+    }
+
+    private sealed class PreviousBuildRecord
+    {
+        public Guid Id { get; set; }
+        public string Channel { get; set; } = string.Empty;
+        public DateTimeOffset StartedAt { get; set; }
+        public DateTimeOffset EndedAt { get; set; }
+        public long MessageCount { get; set; }
+        public bool IsHidden { get; set; }
+        public List<StreamSessionChatter> Chatters { get; set; } = [];
+        public List<StreamSessionSegment> Segments { get; set; } = [];
+    }
+
+    [Test]
     public void TrySetHidden_SurvivesReload()
     {
         var record = Record("chan", 10);

@@ -18,6 +18,18 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         typeof(StreamHistoryPageView),
         new PropertyMetadata(1));
 
+    public static readonly DependencyProperty ScaledRecordCardMinWidthProperty = DependencyProperty.Register(
+        nameof(ScaledRecordCardMinWidth),
+        typeof(double),
+        typeof(StreamHistoryPageView),
+        new PropertyMetadata(RecordCardMinWidth));
+
+    public static readonly DependencyProperty ScaledRecordsPaneMinWidthProperty = DependencyProperty.Register(
+        nameof(ScaledRecordsPaneMinWidth),
+        typeof(double),
+        typeof(StreamHistoryPageView),
+        new PropertyMetadata(RecordsPaneMinWidth));
+
     public const double SegmentCardMinWidth = 272;
     public const double SegmentsPaneMinWidth = 220;
     public const int SegmentCardMaxColumns = 3;
@@ -28,6 +40,8 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double DetailSplitWidth = 740;
     public const double DetailStackWidth = 700;
     public const double ChattersMinWidth = 240;
+    public const double RecordCardMinWidth = 164;
+    public const double RecordsPaneMinWidth = 2 * (RecordCardMinWidth + 8);
     public const double TrendStripHeight = 40;
     public const double TrendStripCompactHeight = 36;
     public const double CardHeight = 96;
@@ -37,6 +51,8 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double ListRowShare = 3;
     public const double DetailRowShare = 2;
     public const double DetailCardsRowShare = 1;
+    public const double TableColumnShare = 3;
+    public const double DetailColumnShare = 2;
 
     // TODO: подпись пика выходит за свой столбик на 24 DIP в каждую сторону, у крайних столбиков – на 48
     // внутрь полосы; потолок держит пятизначное значение при 80 столбиках и масштабе шрифта 1.6,
@@ -52,11 +68,13 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     private bool _layoutApplied;
     private bool _detailStacked;
     private bool _detailApplied;
+    private bool _detailNarrowed;
     private double _segmentCardsWidth;
 
     public StreamHistoryPageView()
     {
         InitializeComponent();
+        ApplyScaledFloors();
 
         DataContextChanged += OnDataContextChanged;
         SizeChanged += OnSizeChanged;
@@ -71,6 +89,18 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         set => SetValue(SegmentColumnsProperty, value);
     }
 
+    public double ScaledRecordCardMinWidth
+    {
+        get => (double)GetValue(ScaledRecordCardMinWidthProperty);
+        set => SetValue(ScaledRecordCardMinWidthProperty, value);
+    }
+
+    public double ScaledRecordsPaneMinWidth
+    {
+        get => (double)GetValue(ScaledRecordsPaneMinWidthProperty);
+        set => SetValue(ScaledRecordsPaneMinWidthProperty, value);
+    }
+
     private static void Place(UIElement element, int row, int column, int rowSpan = 1, int columnSpan = 1)
     {
         Grid.SetRow(element, row);
@@ -83,6 +113,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     {
         FontScaleManager.Changed -= OnFontScaleChanged;
         FontScaleManager.Changed += OnFontScaleChanged;
+        ApplyScaledFloors();
         _layoutApplied = false;
         UpdateLayoutMode();
 
@@ -102,11 +133,20 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
 
     private void OnFontScaleChanged(object? sender, double scale)
     {
+        ApplyScaledFloors();
         _layoutApplied = false;
         _detailApplied = false;
         UpdateLayoutMode();
         UpdateDetailMode();
         ApplySegmentColumns();
+    }
+
+    private void ApplyScaledFloors()
+    {
+        var scale = FontScaleManager.Current;
+
+        ScaledRecordCardMinWidth = RecordCardMinWidth * scale;
+        ScaledRecordsPaneMinWidth = RecordsPaneMinWidth * scale;
     }
 
     private void OnSegmentCardsSizeChanged(object sender, SizeChangedEventArgs e)
@@ -276,9 +316,11 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
         PageGrid.RowDefinitions.Add(new() { Height = new(1, GridUnitType.Star) });
 
-        PageGrid.ColumnDefinitions.Add(new() { Width = new(3, GridUnitType.Star), MinWidth = TableMinWidth * scale });
+        PageGrid.ColumnDefinitions.Add(new() { MinWidth = TableMinWidth * scale });
         PageGrid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        PageGrid.ColumnDefinitions.Add(new() { Width = new(2, GridUnitType.Star), MinWidth = DetailMinWidth * scale });
+        PageGrid.ColumnDefinitions.Add(new() { MinWidth = DetailMinWidth * scale });
+
+        ApplyDetailColumn(IsDetailNarrowed(), scale);
 
         Place(HeaderStack, 0, 0, columnSpan: 3);
         Place(TableCard, 1, 0);
@@ -290,6 +332,33 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         LayoutSplitter.ResizeDirection = GridResizeDirection.Columns;
         LayoutSplitter.ClearValue(HeightProperty);
         LayoutSplitter.ClearValue(WidthProperty);
+    }
+
+    private bool IsDetailNarrowed()
+    {
+        return DataContext is StreamHistoryPageViewModel { HasSelection: false };
+    }
+
+    private void UpdateDetailColumn()
+    {
+        var narrowed = IsDetailNarrowed();
+
+        if (!_layoutApplied || !_sideBySide || narrowed == _detailNarrowed)
+        {
+            return;
+        }
+
+        ApplyDetailColumn(narrowed, FontScaleManager.Current);
+    }
+
+    private void ApplyDetailColumn(bool narrowed, double scale)
+    {
+        _detailNarrowed = narrowed;
+
+        PageGrid.ColumnDefinitions[0].Width = new(TableColumnShare, GridUnitType.Star);
+        PageGrid.ColumnDefinitions[2].Width = narrowed
+            ? new(DetailMinWidth * scale)
+            : new(DetailColumnShare, GridUnitType.Star);
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -319,6 +388,11 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         {
             _layoutApplied = false;
             UpdateLayoutMode();
+        }
+
+        if (e.PropertyName is nameof(StreamHistoryPageViewModel.HasSelection))
+        {
+            UpdateDetailColumn();
         }
 
         if (e.PropertyName is nameof(StreamHistoryPageViewModel.SelectedRow)
