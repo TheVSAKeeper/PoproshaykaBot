@@ -84,7 +84,7 @@ public sealed class CommandParametersViewModel : ObservableObject
     private static CommandParameterViewModel DonateMessage()
     {
         return new("Текст ответа",
-            "Тот же текст, что и в разделе настроек «Сообщения»",
+            "Тот же текст, что и в настройках: «Основные» – «Шаблоны сообщений»",
             CommandParameterKind.Multiline,
             settings => settings.Twitch.Messages.DonateCommandMessage,
             (settings, text) => settings.Twitch.Messages.DonateCommandMessage =

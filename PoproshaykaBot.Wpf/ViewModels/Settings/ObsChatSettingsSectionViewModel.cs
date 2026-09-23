@@ -376,7 +376,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
         if (port <= 0)
         {
-            _dialogService.Warning("Демо анимаций", "Не удалось определить порт HTTP-сервера. Проверьте настройки на вкладке «HTTP сервер».");
+            _dialogService.Warning("Демо анимаций", "Не удалось определить порт HTTP-сервера. Проверьте настройки в разделе «HTTP сервер оверлея».");
             return;
         }
 

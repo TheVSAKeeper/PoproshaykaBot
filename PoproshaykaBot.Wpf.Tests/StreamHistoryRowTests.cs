@@ -58,6 +58,39 @@ public class StreamHistoryRowTests
         });
     }
 
+    private static IEnumerable<TestCaseData> TrendScaleCases()
+    {
+        yield return new TestCaseData(Array.Empty<long>(), 0L).SetName("Пустая полоса без шкалы");
+        yield return new TestCaseData(new long[] { 0, 0, 0 }, 0L).SetName("Одни нули без шкалы");
+        yield return new TestCaseData(new long[] { 0, 5, 9, 2543 }, 2543L).SetName("Три ненулевых меряются максимумом");
+        yield return new TestCaseData(Enumerable.Repeat(7L, 40).ToArray(), 7L).SetName("Равные пики дают шкалу по себе");
+        yield return new TestCaseData(Enumerable.Range(1, 10).Select(value => (long)value).ToArray(), 9L).SetName("Девяностый перцентиль по ближайшему рангу");
+        yield return new TestCaseData(Enumerable.Range(0, 39).Select(index => 3L + index % 15).Append(2543).ToArray(), 16L)
+            .SetName("Выброс не задаёт шкалу");
+    }
+
+    [TestCaseSource(nameof(TrendScaleCases))]
+    public void Trend_scale_ignores_an_outlier(long[] values, long expectedScale)
+    {
+        Assert.That(StreamTrendBarViewModel.ScaleOf(values), Is.EqualTo(expectedScale));
+    }
+
+    [TestCase(2543, 16, 1d, true)]
+    [TestCase(16, 16, 1d, false)]
+    [TestCase(8, 16, 0.5, false)]
+    public void A_bar_above_the_scale_is_clipped_and_marked(int peakViewers, long scale, double expectedShare, bool expectedClipped)
+    {
+        var bar = new StreamTrendBarViewModel(Row(peakViewers), scale, StreamTrendMetric.PeakViewers);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(bar.Share, Is.EqualTo(expectedShare).Within(1e-9));
+            Assert.That(bar.IsClipped, Is.EqualTo(expectedClipped));
+            Assert.That(bar.Value, Is.EqualTo(peakViewers));
+            Assert.That(bar.Label.Contains("выше шкалы", StringComparison.Ordinal), Is.EqualTo(expectedClipped));
+        });
+    }
+
     [TestCase(1, 54, 54, 1d, true)]
     [TestCase(3, 27, 54, 0.5, true)]
     [TestCase(4, 0, 54, UserStatisticsRanking.MinimumShare, false)]

@@ -28,6 +28,8 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double DetailSplitWidth = 740;
     public const double DetailStackWidth = 700;
     public const double ChattersMinWidth = 240;
+    public const double RecordCardMinWidth = 164;
+    public const double RecordsPaneMinWidth = 2 * (RecordCardMinWidth + 8);
     public const double TrendStripHeight = 40;
     public const double TrendStripCompactHeight = 36;
     public const double CardHeight = 96;

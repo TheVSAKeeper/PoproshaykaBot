@@ -173,8 +173,22 @@
                                     BorderBrush="Transparent"
                                     BorderThickness="0"
                                     CornerRadius="2,2,0,0" />
+
+                            <Border x:Name="Break"
+                                    Grid.Row="2"
+                                    Height="2"
+                                    Margin="0,4,0,0"
+                                    VerticalAlignment="Top"
+                                    Background="{DynamicResource Bg.Surface}"
+                                    Visibility="Collapsed" />
                         </Grid>
                         <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsClipped}"
+                                         Value="True">
+                                <Setter TargetName="Break"
+                                        Property="Visibility"
+                                        Value="Visible" />
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding IsPeak}"
                                          Value="True">
                                 <Setter TargetName="Value"
@@ -944,8 +958,8 @@
         <Style x:Key="RecordCard"
                TargetType="Button"
                BasedOn="{StaticResource Button.Ghost}">
-            <Setter Property="Width"
-                    Value="164" />
+            <Setter Property="MinWidth"
+                    Value="{x:Static views:StreamHistoryPageView.RecordCardMinWidth}" />
             <Setter Property="Margin"
                     Value="0,0,8,8" />
             <Setter Property="Padding"
@@ -960,6 +974,43 @@
                     Value="{Binding Summary}" />
             <Setter Property="AutomationProperties.Name"
                     Value="{Binding Summary}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource Radius.M}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="Bd"
+                                        Property="Background"
+                                        Value="{DynamicResource Bg.SurfaceAlt}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed"
+                                     Value="True">
+                                <Setter TargetName="Bd"
+                                        Property="Background"
+                                        Value="{DynamicResource Bg.SurfaceMute}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter Property="Opacity"
+                                        Value="0.5" />
+                                <Setter Property="Cursor"
+                                        Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding CanSelect}"
                              Value="False">
@@ -1227,7 +1278,7 @@
                             <ColumnDefinition.Style>
                                 <Style TargetType="ColumnDefinition">
                                     <Setter Property="Width"
-                                            Value="*" />
+                                            Value="3*" />
                                     <Setter Property="MinWidth"
                                             Value="220" />
                                     <Style.Triggers>
@@ -1242,7 +1293,25 @@
                                 </Style>
                             </ColumnDefinition.Style>
                         </ColumnDefinition>
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition>
+                            <ColumnDefinition.Style>
+                                <Style TargetType="ColumnDefinition">
+                                    <Setter Property="Width"
+                                            Value="2*" />
+                                    <Setter Property="MinWidth"
+                                            Value="{x:Static views:StreamHistoryPageView.RecordsPaneMinWidth}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasRecords}"
+                                                     Value="False">
+                                            <Setter Property="Width"
+                                                    Value="Auto" />
+                                            <Setter Property="MinWidth"
+                                                    Value="0" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ColumnDefinition.Style>
+                        </ColumnDefinition>
                     </Grid.ColumnDefinitions>
 
                     <Grid Grid.Column="0"
