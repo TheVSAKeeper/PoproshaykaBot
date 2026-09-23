@@ -959,7 +959,7 @@
                TargetType="Button"
                BasedOn="{StaticResource Button.Ghost}">
             <Setter Property="MinWidth"
-                    Value="{x:Static views:StreamHistoryPageView.RecordCardMinWidth}" />
+                    Value="{Binding ScaledRecordCardMinWidth, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}" />
             <Setter Property="Margin"
                     Value="0,0,8,8" />
             <Setter Property="Padding"
@@ -1299,7 +1299,7 @@
                                     <Setter Property="Width"
                                             Value="2*" />
                                     <Setter Property="MinWidth"
-                                            Value="{x:Static views:StreamHistoryPageView.RecordsPaneMinWidth}" />
+                                            Value="{Binding ScaledRecordsPaneMinWidth, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding HasRecords}"
                                                      Value="False">
