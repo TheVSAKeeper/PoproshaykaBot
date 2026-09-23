@@ -65,6 +65,31 @@ public abstract partial class DiagnosticsCardViewModel : ObservableObject, IDiag
         var content = Build(snapshot);
 
         State = content.State;
-        Rows = content.Rows;
+
+        if (!SameRows(Rows, content.Rows))
+        {
+            Rows = content.Rows;
+        }
+    }
+
+    private static bool SameRows(IReadOnlyList<DiagnosticsCardRow> current, IReadOnlyList<DiagnosticsCardRow> next)
+    {
+        if (current.Count != next.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < current.Count; index++)
+        {
+            var left = current[index];
+            var right = next[index];
+
+            if (left != right with { Columns = left.Columns } || !left.Columns.SequenceEqual(right.Columns))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
