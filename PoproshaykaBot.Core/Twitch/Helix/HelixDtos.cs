@@ -180,6 +180,24 @@ internal sealed record HelixEventSubSubscriptionDto(
     [property: JsonPropertyName("created_at")]
     DateTime CreatedAt);
 
+internal sealed record HelixEventSubSubscriptionListItemDto(
+    [property: JsonPropertyName("id")]
+    string Id,
+    [property: JsonPropertyName("status")]
+    string Status,
+    [property: JsonPropertyName("type")]
+    string Type,
+    [property: JsonPropertyName("condition")]
+    IReadOnlyDictionary<string, string>? Condition,
+    [property: JsonPropertyName("transport")]
+    HelixEventSubTransportDto? Transport);
+
+internal sealed record HelixEventSubTransportDto(
+    [property: JsonPropertyName("method")]
+    string? Method,
+    [property: JsonPropertyName("session_id")]
+    string? SessionId);
+
 internal sealed record HelixGlobalBadgesResponse(
     [property: JsonPropertyName("data")]
     IReadOnlyList<HelixGlobalBadgeDto>? Data);
@@ -279,6 +297,13 @@ public sealed record GameInfo(
     string Name,
     string? BoxArtUrl,
     string? IgdbId);
+
+public sealed record EventSubSubscriptionInfo(
+    string Id,
+    string Type,
+    string Status,
+    string? SessionId,
+    IReadOnlyDictionary<string, string> Condition);
 
 public sealed record PatchChannelRequest
 {

@@ -15,11 +15,6 @@ public sealed record UserRankStanding(string Display, ulong Order, string? NextD
             return new(display, current.MinMessages, null, 0, 1, true);
         }
 
-        if (next == current)
-        {
-            return new(display, current.MinMessages, null, 0, 0, false);
-        }
-
         var floor = Math.Min((long)current.MinMessages, points);
         var ceiling = (long)next.MinMessages;
         var span = ceiling - floor;

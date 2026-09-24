@@ -137,7 +137,119 @@ public sealed class ChatIngestionServiceTests
     }
 
     [Test]
-    public async Task Остановка_после_переиспользованной_подписки_ничего_не_удаляет()
+    public async Task Остановка_удаляет_переиспользованную_по_409_подписку_найденную_по_сессии_и_условию()
+    {
+        SetUpConflict();
+
+        _helix.GetEventSubSubscriptionsAsync("channel.chat.message", Arg.Any<CancellationToken>())
+            .Returns(new List<EventSubSubscriptionInfo>
+            {
+                ChatSubscription("sub-old-session", "session-0", BroadcasterId, BotId),
+                ChatSubscription("sub-other-channel", "session-1", "99999", BotId),
+                ChatSubscription("sub-other-bot", "session-1", BroadcasterId, "11111"),
+                ChatSubscription("sub-reused", "session-1", BroadcasterId, BotId),
+            });
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await _service.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(_service.IsJoined, Is.True);
+
+        await _service.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-reused", Arg.Any<CancellationToken>());
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    private static IEnumerable<TestCaseData> LookupFailures()
+    {
+        yield return new TestCaseData(new HelixRequestException(HttpMethod.Get,
+            "/helix/eventsub/subscriptions",
+            HttpStatusCode.InternalServerError,
+            "oops",
+            null)).SetArgDisplayNames("HTTP 500");
+
+        yield return new TestCaseData(new HttpRequestException("сеть недоступна")).SetArgDisplayNames("сеть");
+        yield return new TestCaseData((Exception?)null).SetArgDisplayNames("подписки нет в списке");
+    }
+
+    [TestCaseSource(nameof(LookupFailures))]
+    public async Task Несостоявшийся_поиск_переиспользованной_подписки_не_ломает_подключение(Exception? failure)
+    {
+        var starts = 0;
+        _eventBus.Subscribe<ChatIngestionStarted>(_ => starts++);
+
+        SetUpConflict();
+
+        if (failure is null)
+        {
+            _helix.GetEventSubSubscriptionsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(new List<EventSubSubscriptionInfo> { ChatSubscription("sub-foreign", "session-0", BroadcasterId, BotId) });
+        }
+        else
+        {
+            _helix.GetEventSubSubscriptionsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .ThrowsAsync(failure);
+        }
+
+        _eventSubClient.SessionId.Returns("session-1");
+
+        Assert.DoesNotThrowAsync(() => _service.StartAsync(NullProgress, CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_service.IsJoined, Is.True);
+            Assert.That(starts, Is.EqualTo(1));
+        }
+
+        await _service.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Переиспользованная_подписка_найденная_после_остановки_удаляется_и_приём_не_открывает()
+    {
+        var starts = 0;
+        _eventBus.Subscribe<ChatIngestionStarted>(_ => starts++);
+
+        SetUpConflict();
+
+        var pending = new TaskCompletionSource<IReadOnlyList<EventSubSubscriptionInfo>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _helix.GetEventSubSubscriptionsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(pending.Task);
+
+        _eventSubClient.SessionId.Returns("session-1");
+        var start = _service.StartAsync(NullProgress, CancellationToken.None);
+
+        await _service.StopAsync(NullProgress, CancellationToken.None);
+
+        pending.SetResult([ChatSubscription("sub-late", "session-1", BroadcasterId, BotId)]);
+        await start;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(starts, Is.Zero);
+            Assert.That(_service.IsJoined, Is.False);
+        });
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-late", Arg.Any<CancellationToken>());
+    }
+
+    private static EventSubSubscriptionInfo ChatSubscription(string id, string sessionId, string broadcasterId, string botId)
+    {
+        return new(id,
+            "channel.chat.message",
+            "enabled",
+            sessionId,
+            new Dictionary<string, string>
+            {
+                ["broadcaster_user_id"] = broadcasterId,
+                ["user_id"] = botId,
+            });
+    }
+
+    private void SetUpConflict()
     {
         _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -149,15 +261,6 @@ public sealed class ChatIngestionServiceTests
                 HttpStatusCode.Conflict,
                 "subscription already exists",
                 null));
-
-        _eventSubClient.SessionId.Returns("session-1");
-        await _service.StartAsync(NullProgress, CancellationToken.None);
-
-        Assert.That(_service.IsJoined, Is.True);
-
-        await _service.StopAsync(NullProgress, CancellationToken.None);
-
-        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     private static IEnumerable<TestCaseData> DeleteFailures()

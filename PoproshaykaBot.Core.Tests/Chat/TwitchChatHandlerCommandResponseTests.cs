@@ -17,6 +17,7 @@ namespace PoproshaykaBot.Core.Tests.Chat;
 public sealed class TwitchChatHandlerCommandResponseTests
 {
     private const string SentinelText = "маячок";
+    private const string WelcomeText = "добро пожаловать";
     private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(5);
 
     [SetUp]
@@ -67,11 +68,11 @@ public sealed class TwitchChatHandlerCommandResponseTests
         _messenger = new(_sender);
         _commandSettingsStore = new(null, Path.Combine(_root, "commands.json"));
 
-        var settings = new AppSettings();
-        settings.Twitch.Messages.WelcomeEnabled = false;
+        _settings = new();
+        _settings.Twitch.Messages.WelcomeEnabled = false;
 
         var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
-        settingsManager.Current.Returns(settings);
+        settingsManager.Current.Returns(_settings);
 
         var obsChatStore = new ObsChatStore(_bus,
             NullLogger<ObsChatStore>.Instance,
@@ -113,6 +114,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
     }
 
     private string _root = null!;
+    private AppSettings _settings = null!;
     private List<string> _sentTexts = null!;
     private ITwitchHelixClient _helix = null!;
     private TestTimeProvider _time = null!;
@@ -269,6 +271,78 @@ public sealed class TwitchChatHandlerCommandResponseTests
         Assert.That(_collector.Events.Single(x => x.IsBot).CommandResponse, Is.Null);
     }
 
+    [TestCase(CommandResponseTarget.Overlay, new[] { FakeCommand.ResponseText })]
+    [TestCase(CommandResponseTarget.None, new string[0])]
+    public async Task Приветствие_новичка_уходит_в_чат_когда_ответ_команды_идёт_мимо_чата(CommandResponseTarget target, string[] expectedPublished)
+    {
+        EnableWelcome();
+        SetTarget(target);
+
+        await _sender.StartAsync(new Progress<string>(), CancellationToken.None);
+        await _handler.HandleAsync(CreateRaw("!ранг"), CancellationToken.None);
+
+        await SendSentinelAsync();
+
+        await _helix.Received()
+            .SendChatMessageAsync("1", "2", WelcomeText, "incoming-1", Arg.Any<CancellationToken>());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(SentTexts(), Is.EqualTo(new[] { WelcomeText, SentinelText }),
+                "В чат уходит одно приветствие, ответ команды – только по своей цели");
+
+            Assert.That(_collector.Events.Where(x => x.IsBot).Select(x => x.Text), Is.EqualTo(expectedPublished),
+                "Приветствие не сливается с ответом, который в чат не идёт");
+        });
+    }
+
+    [TestCase(CommandResponseTarget.Chat, false, null)]
+    [TestCase(CommandResponseTarget.Chat, true, "incoming-1")]
+    [TestCase(CommandSettings.CallerOnly, false, "incoming-1")]
+    [TestCase(CommandResponseTarget.Chat | CommandResponseTarget.Overlay, false, null)]
+    public async Task Приветствие_новичка_сливается_с_ответом_который_идёт_в_чат(CommandResponseTarget target, bool repliesToSender, string? replyTo)
+    {
+        EnableWelcome();
+        SetTarget(target);
+        _command.RepliesToSender = repliesToSender;
+
+        await _sender.StartAsync(new Progress<string>(), CancellationToken.None);
+        await _handler.HandleAsync(CreateRaw("!ранг"), CancellationToken.None);
+
+        await SendSentinelAsync();
+
+        var merged = $"{WelcomeText} {FakeCommand.ResponseText}";
+
+        await _helix.Received()
+            .SendChatMessageAsync("1", "2", merged, replyTo, Arg.Any<CancellationToken>());
+
+        Assert.That(SentTexts(), Is.EqualTo(new[] { merged, SentinelText }));
+    }
+
+    [Test]
+    public async Task Приветствие_новичка_уходит_в_чат_когда_команда_ничего_не_ответила()
+    {
+        EnableWelcome();
+        SetTarget(CommandResponseTarget.Chat);
+        _command.ReturnsNothing = true;
+
+        await _sender.StartAsync(new Progress<string>(), CancellationToken.None);
+        await _handler.HandleAsync(CreateRaw("!ранг"), CancellationToken.None);
+
+        await SendSentinelAsync();
+
+        await _helix.Received()
+            .SendChatMessageAsync("1", "2", WelcomeText, "incoming-1", Arg.Any<CancellationToken>());
+
+        Assert.That(SentTexts(), Is.EqualTo(new[] { WelcomeText, SentinelText }));
+    }
+
+    private void EnableWelcome()
+    {
+        _settings.Twitch.Messages.WelcomeEnabled = true;
+        _settings.Twitch.Messages.Welcome = WelcomeText;
+    }
+
     private static RawChatMessageReceived CreateRaw(string text)
     {
         return new(new("test-channel",
@@ -356,8 +430,15 @@ public sealed class TwitchChatHandlerCommandResponseTests
 
         public bool RepliesToSender { get; set; }
 
+        public bool ReturnsNothing { get; set; }
+
         public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
         {
+            if (ReturnsNothing)
+            {
+                return Task.FromResult<OutgoingMessage?>(null);
+            }
+
             return Task.FromResult<OutgoingMessage?>(RepliesToSender
                 ? OutgoingMessage.Reply(ResponseText, context.MessageId)
                 : OutgoingMessage.Normal(ResponseText));

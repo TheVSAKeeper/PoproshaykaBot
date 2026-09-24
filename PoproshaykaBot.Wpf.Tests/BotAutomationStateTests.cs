@@ -135,6 +135,42 @@ public sealed class BotAutomationStateTests
         });
     }
 
+    [TestCase(BotLifecyclePhase.Connected, 1, BotLifecyclePhase.Disconnected, TestName = "DisconnectAsync_ConnectFinishedBeforeCancel_StopsBot")]
+    [TestCase(BotLifecyclePhase.Cancelled, 0, BotLifecyclePhase.Cancelled, TestName = "DisconnectAsync_ConnectCancelled_DoesNotStop")]
+    [TestCase(BotLifecyclePhase.Failed, 0, BotLifecyclePhase.Failed, TestName = "DisconnectAsync_ConnectFailed_DoesNotStop")]
+    public async Task DisconnectAsync_WhileConnecting_RereadsPhaseAfterWait(BotLifecyclePhase phaseAfterWait, int expectedStops, BotLifecyclePhase expectedPhase)
+    {
+        var connection = new FakeBotConnectionController
+        {
+            CurrentPhase = BotLifecyclePhase.Connecting,
+            IsBusy = true,
+            PhaseAfterWait = phaseAfterWait,
+        };
+
+        var automation = CreateAutomation(connection: connection);
+
+        var phase = await automation.DisconnectAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(connection.CancelRequested, Is.True);
+            Assert.That(connection.StopCalls, Is.EqualTo(expectedStops));
+            Assert.That(phase, Is.EqualTo(expectedPhase));
+        });
+    }
+
+    [TestCase(BotLifecyclePhase.Idle)]
+    [TestCase(BotLifecyclePhase.Disconnected)]
+    [TestCase(BotLifecyclePhase.Disconnecting)]
+    public void DisconnectAsync_NothingToDisconnect_Throws(BotLifecyclePhase current)
+    {
+        var connection = new FakeBotConnectionController { CurrentPhase = current };
+        var automation = CreateAutomation(connection: connection);
+
+        Assert.ThrowsAsync<InvalidOperationException>(() => automation.DisconnectAsync());
+        Assert.That(connection.StopCalls, Is.Zero);
+    }
+
     private static BotAutomation CreateAutomation(
         FakeBotConnectionController? connection = null,
         TargetChannelState? target = null,
@@ -157,7 +193,13 @@ public sealed class BotAutomationStateTests
     {
         public bool IsBusy { get; init; }
 
-        public BotLifecyclePhase CurrentPhase { get; init; } = BotLifecyclePhase.Idle;
+        public BotLifecyclePhase CurrentPhase { get; set; } = BotLifecyclePhase.Idle;
+
+        public BotLifecyclePhase? PhaseAfterWait { get; init; }
+
+        public bool CancelRequested { get; private set; }
+
+        public int StopCalls { get; private set; }
 
         public void StartConnection()
         {
@@ -165,11 +207,25 @@ public sealed class BotAutomationStateTests
 
         public void CancelConnection()
         {
+            CancelRequested = true;
         }
 
-        public Task WaitForConnectionAsync() => Task.CompletedTask;
+        public Task WaitForConnectionAsync()
+        {
+            if (PhaseAfterWait is { } phase)
+            {
+                CurrentPhase = phase;
+            }
 
-        public Task StopAsync(BotStopMode mode) => Task.CompletedTask;
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(BotStopMode mode)
+        {
+            StopCalls++;
+            CurrentPhase = BotLifecyclePhase.Disconnected;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeTargetChannelProvider(TargetChannelState current) : ITargetChannelProvider

@@ -155,6 +155,11 @@ public sealed class TwitchChatHandler :
 
         var commandResult = await _commandProcessor.TryProcessAsync(chatMessage.Message, context, cancellationToken);
         var response = commandResult.Response;
+        var canonical = commandResult.Canonical ?? string.Empty;
+
+        var target = response != null
+            ? _commandSettingsStore.Load().ResolveResponseTarget(canonical)
+            : CommandResponseTarget.None;
 
         if (settings.Messages.WelcomeEnabled && isFirstSeen)
         {
@@ -162,11 +167,11 @@ public sealed class TwitchChatHandler :
 
             if (!string.IsNullOrWhiteSpace(welcomeMessage))
             {
-                if (commandResult.IsCommand && response != null)
+                if (response != null && target.GoesToChat())
                 {
                     response = response with { Text = $"{welcomeMessage} {response.Text}" };
                 }
-                else if (!commandResult.IsCommand)
+                else
                 {
                     _messenger.Reply(chatMessage.Id, welcomeMessage);
                 }
@@ -176,7 +181,8 @@ public sealed class TwitchChatHandler :
         if (response != null)
         {
             await DeliverCommandResponseAsync(response,
-                commandResult.Canonical ?? string.Empty,
+                canonical,
+                target,
                 chatMessage,
                 context,
                 cancellationToken);
@@ -188,12 +194,11 @@ public sealed class TwitchChatHandler :
     private async Task DeliverCommandResponseAsync(
         OutgoingMessage response,
         string canonical,
+        CommandResponseTarget target,
         ChatMessage source,
         CommandContext context,
         CancellationToken cancellationToken)
     {
-        var target = _commandSettingsStore.Load().ResolveResponseTarget(canonical);
-
         if (target == CommandResponseTarget.None)
         {
             _logger.LogDebug("Ответ команды {Canonical} не доставлен: цель ответа – молча", canonical);

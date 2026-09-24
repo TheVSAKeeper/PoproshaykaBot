@@ -23,6 +23,8 @@ public sealed class ChatIngestionService(
     ILogger<ChatIngestionService> logger)
     : IHostedComponent
 {
+    private const string ChatMessageSubscriptionType = "channel.chat.message";
+
     private readonly object _joinLock = new();
     private bool _subscribed;
     private long _generation;
@@ -155,10 +157,33 @@ public sealed class ChatIngestionService(
                 }
                 catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
                 {
-                    await MarkJoinedAsync(generation, null, out _);
+                    var existingId = await FindExistingSubscriptionAsync(args.SessionId, broadcasterId, botId, ct);
 
-                    logger.LogInformation(ex, "ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии – переиспользуем; её id неизвестен, и при остановке она не удаляется (broadcaster={BroadcasterId}, bot={BotId})",
-                        broadcasterId, botId);
+                    await MarkJoinedAsync(generation, existingId, out var current);
+
+                    if (!current)
+                    {
+                        if (existingId != null)
+                        {
+                            logger.LogInformation("ChatIngestionService: существующая подписка channel.chat.message {SubscriptionId} найдена, когда приём чата уже остановлен – удаляем",
+                                existingId);
+
+                            await DeleteSubscriptionAsync(existingId, ct);
+                        }
+
+                        return;
+                    }
+
+                    if (existingId != null)
+                    {
+                        logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionId} уже существует для текущей EventSub-сессии – переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
+                            existingId, broadcasterId, botId);
+                    }
+                    else
+                    {
+                        logger.LogWarning("ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии, но её id не найден – переиспользуем, при остановке она не удаляется (broadcaster={BroadcasterId}, bot={BotId})",
+                            broadcasterId, botId);
+                    }
 
                     return;
                 }
@@ -214,6 +239,44 @@ public sealed class ChatIngestionService(
         logger.LogWarning("ChatIngestionService: Twitch отозвал подписку channel.chat.message ({Status}) – сообщения чата больше не приходят", args.Status);
 
         return MarkLeftAsync();
+    }
+
+    private async Task<string?> FindExistingSubscriptionAsync(string sessionId, string broadcasterId, string botId, CancellationToken ct)
+    {
+        try
+        {
+            var subscriptions = await helix.GetEventSubSubscriptionsAsync(ChatMessageSubscriptionType, ct);
+
+            var matches = subscriptions
+                .Where(x => string.Equals(x.Type, ChatMessageSubscriptionType, StringComparison.Ordinal)
+                            && string.Equals(x.SessionId, sessionId, StringComparison.Ordinal)
+                            && HasCondition(x, "broadcaster_user_id", broadcasterId)
+                            && HasCondition(x, "user_id", botId))
+                .ToList();
+
+            if (matches.Count > 1)
+            {
+                logger.LogWarning("ChatIngestionService: для EventSub-сессии {SessionId} найдено {Count} подписок channel.chat.message – при остановке удаляется только {SubscriptionId}",
+                    sessionId, matches.Count, matches[0].Id);
+            }
+
+            return matches.FirstOrDefault()?.Id;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "ChatIngestionService: не удалось найти существующую подписку channel.chat.message для EventSub-сессии {SessionId}", sessionId);
+            return null;
+        }
+
+        static bool HasCondition(EventSubSubscriptionInfo subscription, string key, string value)
+        {
+            return subscription.Condition.TryGetValue(key, out var actual)
+                   && string.Equals(actual, value, StringComparison.Ordinal);
+        }
     }
 
     private async Task DeleteSubscriptionAsync(string subscriptionId, CancellationToken ct)
