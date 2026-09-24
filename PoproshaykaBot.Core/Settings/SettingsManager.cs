@@ -141,9 +141,9 @@ public class SettingsManager
 
         if (SettingsMigrator.Migrate(root, _logger, baseDirectory).Changed)
         {
-            JsonStoreBackup.CreateBackup(_settingsFilePath, "pre-migration", _logger);
+            JsonStoreBackup.CreateBackup(_settingsFilePath, "pre-migration", _logger, AccountsTokenRedactor.Redact);
             var migratedJson = root.ToJsonString(JsonStoreOptions.Default);
-            AtomicFile.Save(_settingsFilePath, migratedJson, _logger);
+            AtomicFile.Save(_settingsFilePath, migratedJson, _logger, keepBackup: false);
             _logger.LogInformation("Настройки мигрированы в актуальный формат и сохранены");
         }
 

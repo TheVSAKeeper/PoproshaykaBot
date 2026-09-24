@@ -168,6 +168,51 @@ public sealed class AtomicFileTests
             .SetName("Бросок_на_копировании_резервной_копии");
     }
 
+    [TestCase(true, TestName = "Запись_без_откатной_копии_убирает_её_после_удавшейся_подмены")]
+    [TestCase(false, TestName = "Запись_без_откатной_копии_убирает_bak_прежней_жизни_файла")]
+    public void Запись_без_откатной_копии_не_оставляет_bak(bool targetExists)
+    {
+        if (targetExists)
+        {
+            AtomicFile.Save(_targetPath, "v1");
+            AtomicFile.Save(_targetPath, "v2");
+        }
+        else
+        {
+            File.WriteAllText(_targetPath + ".bak", "чужое");
+        }
+
+        AtomicFile.Save(_targetPath, "v3", keepBackup: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllText(_targetPath), Is.EqualTo("v3"));
+
+            Assert.That(File.Exists(_targetPath + ".bak"), Is.False,
+                "У файла с секретами копия прежнего содержимого нужна только на время подмены.");
+
+            Assert.That(File.Exists(_targetPath + ".old"), Is.False);
+        }
+    }
+
+    [Test]
+    public void Сорвавшаяся_подмена_без_откатной_копии_всё_равно_откатывается_из_неё()
+    {
+        AtomicFile.Save(_targetPath, "v1");
+        Directory.CreateDirectory(_targetPath + ".old");
+
+        Assert.That(() => AtomicFile.Save(_targetPath, "v2", keepBackup: false), Throws.InstanceOf<IOException>());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllText(_targetPath), Is.EqualTo("v1"),
+                "Копия убирается только после удачи – откат на сорвавшемся File.Replace тот же, что у остальных файлов.");
+
+            Assert.That(File.ReadAllText(_targetPath + ".bak"), Is.EqualTo("v1"),
+                "На сорвавшейся подмене копия остаётся: если откат сам не удался, она единственная целая версия.");
+        }
+    }
+
     [Test]
     public void Save_DoesNotLeaveTempFile()
     {

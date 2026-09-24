@@ -83,6 +83,12 @@ internal static class LegacyDataCatalog
         return File.Exists(flat) ? flat : null;
     }
 
+    public static bool CarriesTokens(string fileName)
+    {
+        return string.Equals(fileName, AccountsFileName, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(fileName, SettingsFileName, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static bool HasFlatSettingsFiles(string sourceDirectory)
     {
         return SettingsFiles.Any(name => File.Exists(Path.Combine(sourceDirectory, name)));

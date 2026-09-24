@@ -196,7 +196,7 @@ internal sealed class JsonStore<T>
         {
             try
             {
-                AtomicFile.Save(_filePath, json, _logger);
+                AtomicFile.Save(_filePath, json, _logger, keepBackup: _backupRedactor == null);
             }
             catch (Exception exception)
             {

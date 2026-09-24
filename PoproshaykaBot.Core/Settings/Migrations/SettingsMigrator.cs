@@ -160,7 +160,7 @@ public static class SettingsMigrator
                     targetFileName);
             }
 
-            AtomicFile.Save(target, content, logger);
+            AtomicFile.Save(target, content, logger, keepBackup: backupRedactor == null);
             splitFiles.Add(targetFileName);
             logger?.LogInformation("Миграция настроек: данные из settings.json вынесены в {TargetFileName}",
                 targetFileName);

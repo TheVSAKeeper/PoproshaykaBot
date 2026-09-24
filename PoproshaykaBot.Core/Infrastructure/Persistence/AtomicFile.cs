@@ -5,23 +5,23 @@ namespace PoproshaykaBot.Core.Infrastructure.Persistence;
 
 public static class AtomicFile
 {
-    public static void Save(string targetPath, string content, ILogger? logger = null)
+    public static void Save(string targetPath, string content, ILogger? logger = null, bool keepBackup = true)
     {
         ArgumentException.ThrowIfNullOrEmpty(targetPath);
         ArgumentNullException.ThrowIfNull(content);
 
-        Save(targetPath, tempPath => File.WriteAllText(tempPath, content, Encoding.UTF8), logger);
+        Save(targetPath, tempPath => File.WriteAllText(tempPath, content, Encoding.UTF8), logger, keepBackup);
     }
 
-    public static void Save(string targetPath, byte[] content, ILogger? logger = null)
+    public static void Save(string targetPath, byte[] content, ILogger? logger = null, bool keepBackup = true)
     {
         ArgumentException.ThrowIfNullOrEmpty(targetPath);
         ArgumentNullException.ThrowIfNull(content);
 
-        Save(targetPath, tempPath => File.WriteAllBytes(tempPath, content), logger);
+        Save(targetPath, tempPath => File.WriteAllBytes(tempPath, content), logger, keepBackup);
     }
 
-    public static void Save(string targetPath, Action<string> writeTemporary, ILogger? logger = null)
+    public static void Save(string targetPath, Action<string> writeTemporary, ILogger? logger = null, bool keepBackup = true)
     {
         ArgumentException.ThrowIfNullOrEmpty(targetPath);
         ArgumentNullException.ThrowIfNull(writeTemporary);
@@ -33,18 +33,18 @@ public static class AtomicFile
             Directory.CreateDirectory(directory);
         }
 
-        WriteAtomic(targetPath, writeTemporary, logger);
+        WriteAtomic(targetPath, writeTemporary, logger, keepBackup);
     }
 
-    private static void WriteAtomic(string targetPath, Action<string> writeTemporary, ILogger? logger)
+    private static void WriteAtomic(string targetPath, Action<string> writeTemporary, ILogger? logger, bool keepBackup)
     {
         var tempPath = targetPath + ".tmp";
+        var backupPath = targetPath + ".bak";
 
         writeTemporary(tempPath);
 
         if (File.Exists(targetPath))
         {
-            var backupPath = targetPath + ".bak";
             File.Copy(targetPath, backupPath, true);
 
             var oldPath = targetPath + ".old";
@@ -54,6 +54,11 @@ public static class AtomicFile
         else
         {
             File.Move(tempPath, targetPath);
+        }
+
+        if (!keepBackup)
+        {
+            TryDelete(backupPath, logger);
         }
     }
 

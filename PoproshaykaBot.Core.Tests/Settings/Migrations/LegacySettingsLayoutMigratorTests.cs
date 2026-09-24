@@ -301,6 +301,101 @@ public sealed class LegacySettingsLayoutMigratorTests
     }
 
     [Test]
+    public void Разбор_монолита_не_оставляет_в_настройках_сырых_токенов_вне_accounts()
+    {
+        Directory.CreateDirectory(_settingsDirectory);
+        File.WriteAllText(Path.Combine(_settingsDirectory, "accounts.json"), """{"botAccount":{"accessToken":"stale-secret-access"}}""");
+        File.WriteAllText(Path.Combine(_baseDirectory, "settings.json"), MonolithicWithTokens);
+
+        LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);
+
+        var leaks = Directory.GetFiles(_settingsDirectory)
+            .Where(path => !string.Equals(Path.GetFileName(path), "accounts.json", StringComparison.OrdinalIgnoreCase))
+            .Where(path => File.ReadAllText(path) is var text
+                           && (text.Contains("bot-secret-access") || text.Contains("stale-secret-access")))
+            .Select(Path.GetFileName);
+
+        Assert.That(leaks, Is.Empty,
+            "Именованные копии до разбора редактируются – откатные копии settings.json и accounts.json не должны проносить токены мимо них.");
+    }
+
+    [TestCase("", TestName = "Пустой_target_восстанавливается_из_целого_оригинала")]
+    [TestCase("{\"fontSize\":2", TestName = "Обрезанный_target_восстанавливается_из_целого_оригинала")]
+    public void Повреждённый_target_восстанавливается_из_целого_оригинала(string damaged)
+    {
+        const string Original = "{\"fontSize\":24}";
+        var legacy = Path.Combine(_baseDirectory, "obs-chat.json");
+        var target = Path.Combine(_settingsDirectory, "obs-chat.json");
+        Directory.CreateDirectory(_settingsDirectory);
+        File.WriteAllText(legacy, Original);
+        File.WriteAllText(target, damaged);
+
+        var rewritten = LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);
+
+        var invalid = Directory.GetFiles(_settingsDirectory, "obs-chat.invalid-*.json");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllText(target), Is.EqualTo(Original),
+                "Target от старого сбоя переноса нечитаем, а целый оригинал лежит в корне – стор иначе встанет на умолчания.");
+
+            Assert.That(invalid, Has.Length.EqualTo(1), "Повреждённый файл остаётся рядом с суффиксом, как у стора.");
+            Assert.That(invalid.Length == 1 ? File.ReadAllText(invalid[0]) : null, Is.EqualTo(damaged));
+
+            Assert.That(File.Exists(legacy), Is.False);
+            Assert.That(Directory.GetFiles(_baseDirectory, "obs-chat.legacy-*.json"), Has.Length.EqualTo(1));
+
+            Assert.That(rewritten, Does.Contain("obs-chat.json"),
+                "Лечение – такая же запись мимо стора, как переезд: гейт обязан о ней узнать.");
+        }
+    }
+
+    [Test]
+    public void Повреждённый_accounts_лечится_без_сырых_токенов_рядом()
+    {
+        var target = Path.Combine(_settingsDirectory, "accounts.json");
+        Directory.CreateDirectory(_settingsDirectory);
+        File.WriteAllText(Path.Combine(_baseDirectory, "accounts.json"), """{"botAccount":{"login":"thebot","accessToken":"whole-secret"}}""");
+        File.WriteAllText(target, """{"botAccount":{"login":"thebot","accessToken":"half-sec""");
+
+        LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);
+
+        var leaks = Directory.GetFiles(_settingsDirectory)
+            .Where(path => path != target && File.ReadAllText(path) is var text
+                           && (text.Contains("half-sec") || text.Contains("whole-secret")))
+            .Select(Path.GetFileName);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllText(target), Does.Contain("whole-secret"));
+            Assert.That(Directory.GetFiles(_settingsDirectory, "accounts.invalid-*.json"), Has.Length.EqualTo(1));
+            Assert.That(leaks, Is.Empty, "Копия повреждённого файла аккаунтов редактируется, а откатная не переживает подмену.");
+        }
+    }
+
+    [Test]
+    public void Повреждённый_оригинал_не_лечит_повреждённый_target()
+    {
+        const string DamagedLegacy = "{\"fontSize\":2";
+        const string DamagedTarget = "{\"fontSize\":9";
+        var legacy = Path.Combine(_baseDirectory, "obs-chat.json");
+        var target = Path.Combine(_settingsDirectory, "obs-chat.json");
+        Directory.CreateDirectory(_settingsDirectory);
+        File.WriteAllText(legacy, DamagedLegacy);
+        File.WriteAllText(target, DamagedTarget);
+
+        var rewritten = LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.ReadAllText(target), Is.EqualTo(DamagedTarget), "Лечить нечем – оба файла остаются как были.");
+            Assert.That(File.ReadAllText(legacy), Is.EqualTo(DamagedLegacy));
+            Assert.That(Directory.GetFiles(_settingsDirectory, "obs-chat.invalid-*.json"), Is.Empty);
+            Assert.That(rewritten, Does.Not.Contain("obs-chat.json"));
+        }
+    }
+
+    [Test]
     public void Run_NoLegacyFiles_DoesNothing()
     {
         LegacySettingsLayoutMigrator.Run(_baseDirectory, _settingsDirectory);

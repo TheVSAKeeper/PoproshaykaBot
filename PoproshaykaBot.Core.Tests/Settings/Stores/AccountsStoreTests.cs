@@ -228,6 +228,26 @@ public sealed class AccountsStoreTests
         }
     }
 
+    [Test]
+    public void Запись_аккаунтов_не_оставляет_рядом_откатную_копию_с_прежними_токенами()
+    {
+        var store = Store();
+        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "old-secret-access");
+        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "new-secret-access");
+
+        var leaks = _directory.GetFiles()
+            .Where(file => file.FullName != _filePath && File.ReadAllText(file.FullName).Contains("secret-access"))
+            .Select(file => file.Name);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(leaks, Is.Empty,
+                "Откатная копия нужна только на время подмены; пережив её, она держит токены открытым текстом – а после переноса данных и весь сеанс.");
+
+            Assert.That(Store().LoadBot().AccessToken, Is.EqualTo("new-secret-access"));
+        }
+    }
+
     private static string RedactedOriginal()
     {
         var expected = JsonNode.Parse(ParseableButInvalid)!;
