@@ -151,7 +151,7 @@ public class UserStatisticsRankingTests
     }
 
     [Test]
-    public void Hides_the_way_when_the_only_rank_is_the_one_already_shown()
+    public void Shows_the_lowest_unreached_rank_as_the_way_not_as_the_chip()
     {
         List<UserRank> ranks = [new("♟", "ПЕШКА", 500)];
 
@@ -162,17 +162,19 @@ public class UserStatisticsRankingTests
             MessageCount = 10,
         };
 
-        var current = ranks[0];
+        var current = UserRank.Unranked;
         var standing = UserRankStanding.Create(source.Points, $"{current.Emoji} {current.DisplayName}", current, ranks);
         var row = new UserStatisticsRowViewModel(source, standing, Term);
 
         Assert.Multiple(() =>
         {
-            Assert.That(row.RankDisplay, Is.EqualTo("♟ ПЕШКА"));
-            Assert.That(row.HasNextRank, Is.False);
-            Assert.That(standing.IsTopRank, Is.False);
-            Assert.That(row.HasRankPath, Is.False);
-            Assert.That(row.NextRankText, Is.Empty);
+            Assert.That(row.RankDisplay, Is.EqualTo("🌱 БЕЗ РАНГА"));
+            Assert.That(row.HasNextRank, Is.True);
+            Assert.That(row.HasRankPath, Is.True);
+            Assert.That(row.NextRankText, Is.EqualTo("До ранга ♟ ПЕШКА"));
+            Assert.That(standing.PointsToNext, Is.EqualTo(490));
+            Assert.That(standing.Progress, Is.EqualTo(10d / 500).Within(0.0001));
+            Assert.That(row.RankOrder, Is.Zero);
         });
     }
 

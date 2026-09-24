@@ -62,24 +62,9 @@ public sealed class DashboardEditSession : IDisposable
             : DashboardEditStatus.Rejected) == DashboardEditStatus.Applied;
     }
 
-    public DashboardEditStatus Swap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
-    {
-        return Edit(draft => draft.Swap(firstPath, secondPath));
-    }
-
     public DashboardEditStatus Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
         return Edit(draft => draft.Move(sourcePath, targetPath, side));
-    }
-
-    public DashboardPane? PreviewSwap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
-    {
-        lock (_gate)
-        {
-            return _disposed
-                ? null
-                : _draft.Preview(root => DashboardPaneEditor.TrySwap(root, firstPath, secondPath, out var result) ? result : null);
-        }
     }
 
     public DashboardPane? PreviewMove(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)

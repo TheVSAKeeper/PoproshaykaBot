@@ -60,6 +60,13 @@
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               VerticalAlignment="Center" />
 
+                            <Border x:Name="SelectionEdge"
+                                    Width="3"
+                                    HorizontalAlignment="Left"
+                                    Background="{DynamicResource Accent.Primary}"
+                                    IsHitTestVisible="False"
+                                    Visibility="Collapsed" />
+
                             <Border x:Name="Outline"
                                     BorderBrush="Transparent"
                                     BorderThickness="1"
@@ -78,6 +85,9 @@
                             <Setter TargetName="Bd"
                                     Property="Background"
                                     Value="{DynamicResource Bg.SurfaceMute}" />
+                            <Setter TargetName="SelectionEdge"
+                                    Property="Visibility"
+                                    Value="Visible" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin"
                                  Value="True">

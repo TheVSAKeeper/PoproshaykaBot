@@ -346,7 +346,9 @@ public partial class App : Application
 
     private static void ConfigureServices(IServiceCollection services, UiLogSink uiLogSink, ISettingsStore uiSettings)
     {
-        services.AddSingleton(uiSettings);
+        var uiSettingsGuard = new UiSettingsWriteGuard(uiSettings);
+        services.AddSingleton(uiSettingsGuard);
+        services.AddSingleton<ISettingsStore>(uiSettingsGuard);
 
         services
             .AddCoreInfrastructure(uiLogSink, disposeSerilog: false)

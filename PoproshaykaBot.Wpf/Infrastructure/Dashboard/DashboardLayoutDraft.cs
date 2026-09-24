@@ -105,11 +105,6 @@ public sealed class DashboardLayoutDraft
             == DashboardEditStatus.Applied;
     }
 
-    public DashboardEditStatus Swap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
-    {
-        return Apply(root => DashboardPaneEditor.TrySwap(root, firstPath, secondPath, out var result) ? result : null);
-    }
-
     public DashboardEditStatus Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
         return Apply(root => DashboardPaneEditor.TryMove(root, sourcePath, targetPath, side, out var result) ? result : null);
@@ -409,7 +404,19 @@ public sealed class DashboardLayoutDraft
     {
         DashboardLayoutReconciler.AppendMissingTypes(_layout, [typeId]);
 
-        return DashboardPaneEditor.TrySplit(root, targetPath, side, typeId, out var result) ? result : null;
+        return Place(root, targetPath, side, typeId);
+    }
+
+    public static DashboardPane? Place(DashboardPane root, IReadOnlyList<int> targetPath, PaneSide side, string typeId)
+    {
+        if (side == PaneSide.None && DashboardPaneEditor.TryFill(root, targetPath, typeId, out var filled))
+        {
+            return filled;
+        }
+
+        return DashboardPaneEditor.TrySplit(root, targetPath, side == PaneSide.None ? PaneSide.Right : side, typeId, out var result)
+            ? result
+            : null;
     }
 
     private DashboardRemoveStatus RemoveWhere(Func<DashboardPane, IReadOnlyList<int>?> locate)

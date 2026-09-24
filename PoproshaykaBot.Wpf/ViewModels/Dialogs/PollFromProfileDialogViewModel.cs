@@ -17,7 +17,12 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
     [NotifyPropertyChangedFor(nameof(PreviewText))]
     private PollProfile? _selectedProfile;
 
+    [ObservableProperty]
+    private string? _notice;
+
     public ObservableCollection<PollProfile> Profiles { get; } = [];
+
+    public bool ProfilesNotWritten => Notice is not null;
 
     public bool IsEmpty => Profiles.Count == 0;
 
@@ -75,6 +80,11 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
             return;
         }
 
+        if (editVm.ProfileNotWritten)
+        {
+            ReportWrite(false);
+        }
+
         if (editVm.ShouldStartPoll)
         {
             Result = editVm.Result;
@@ -94,6 +104,11 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
         if (!await _dialogService.ShowAsync(editVm))
         {
             return;
+        }
+
+        if (editVm.ProfileNotWritten)
+        {
+            ReportWrite(false);
         }
 
         if (editVm.ShouldStartPoll)
@@ -123,8 +138,14 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
             return;
         }
 
-        _manager.Remove(_selectedProfile.Id);
+        ReportWrite(_manager.Remove(_selectedProfile.Id));
         LoadProfiles(null);
+    }
+
+    private void ReportWrite(bool written)
+    {
+        Notice = written ? null : PollProfileEditDialogViewModel.NotWrittenNotice;
+        OnPropertyChanged(nameof(ProfilesNotWritten));
     }
 
     private bool HasSelection() => _selectedProfile != null;

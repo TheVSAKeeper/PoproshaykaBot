@@ -160,6 +160,31 @@ public sealed class LegacyDataImporterTests
     }
 
     [Test]
+    public void Перенос_поверх_аккаунтов_не_оставляет_рядом_откатную_копию_с_токенами()
+    {
+        LegacyDataFixture.FillSource(_source, true);
+        LegacyDataFixture.Write(_target, Path.Combine("settings", "accounts.json"), LegacyDataFixture.LocalAccounts);
+        LegacyDataFixture.Write(_target, Path.Combine("settings", "obs-chat.json"), """{"fontSize":99}""");
+
+        var result = LegacyDataImporter.Import(_source, _target, true, null);
+
+        var leaks = Directory.GetFiles(_target, "*", SearchOption.AllDirectories)
+            .Where(path => File.ReadAllText(path).Contains("local-access"))
+            .Select(path => Path.GetRelativePath(_target, path));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Failures, Is.Empty);
+
+            Assert.That(leaks, Is.Empty,
+                "Резервная копия прежних аккаунтов редактируется, и откатная не должна проносить их токены мимо неё: гейт снимает право записи, и переписать её нечем до перезапуска.");
+
+            Assert.That(File.Exists(TargetSettings("obs-chat.json") + ".bak"), Is.True,
+                "У файлов без секретов откатная копия живёт как прежде – общий алгоритм не меняется.");
+        }
+    }
+
+    [Test]
     public void Import_OntoCurrentBaseDirectory_MigratesInPlaceWithoutCopying()
     {
         LegacyDataFixture.FillSource(_target, false);

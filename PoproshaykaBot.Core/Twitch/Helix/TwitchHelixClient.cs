@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -8,6 +9,7 @@ namespace PoproshaykaBot.Core.Twitch.Helix;
 public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILogger<TwitchHelixClient> logger) : ITwitchHelixClient
 {
     public const int MaxGamesPerRequest = 100;
+    public const int MaxEventSubSubscriptionPages = 10;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -219,6 +221,66 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
             subscription.Id, subscription.Type, subscription.Status);
 
         return subscription.Id;
+    }
+
+    public async Task<bool> DeleteEventSubSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionId);
+
+        using var client = httpClientFactory.CreateClient(HttpClientName);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Delete,
+            $"{TwitchEndpoints.HelixEventSubSubscriptions}?id={Uri.EscapeDataString(subscriptionId)}");
+
+        using var response = await client.SendAsync(httpRequest, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        await EnsureSuccessAsync(httpRequest, response, cancellationToken);
+
+        logger.LogInformation("Удалена EventSub подписка {Id}", subscriptionId);
+
+        return true;
+    }
+
+    public async Task<IReadOnlyList<EventSubSubscriptionInfo>> GetEventSubSubscriptionsAsync(string type, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(type);
+
+        var result = new List<EventSubSubscriptionInfo>();
+        string? cursor = null;
+
+        // TODO: потолок в MaxEventSubSubscriptionPages страниц по 100 подписок одного типа; упрётся, когда у клиента станут жить сотни подписок типа – тогда фильтр по subscription_id или user_id
+        for (var page = 0; page < MaxEventSubSubscriptionPages; page++)
+        {
+            var uri = $"{TwitchEndpoints.HelixEventSubSubscriptions}?type={Uri.EscapeDataString(type)}";
+
+            if (cursor is not null)
+            {
+                uri += $"&after={Uri.EscapeDataString(cursor)}";
+            }
+
+            var envelope = await GetRawAsync<HelixEnvelope<HelixEventSubSubscriptionListItemDto>>(uri, cancellationToken);
+
+            foreach (var dto in envelope?.Data ?? [])
+            {
+                result.Add(new(dto.Id,
+                    dto.Type,
+                    dto.Status,
+                    dto.Transport?.SessionId,
+                    dto.Condition ?? new Dictionary<string, string>()));
+            }
+
+            cursor = envelope?.Pagination?.Cursor;
+
+            if (string.IsNullOrEmpty(cursor))
+            {
+                break;
+            }
+        }
+
+        return result;
     }
 
     public async Task<HelixPollInfo> CreatePollAsync(CreatePollRequest request, CancellationToken cancellationToken = default)

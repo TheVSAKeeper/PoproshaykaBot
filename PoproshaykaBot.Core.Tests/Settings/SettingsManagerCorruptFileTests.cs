@@ -61,7 +61,7 @@ public sealed class SettingsManagerCorruptFileTests
     }
 
     [Test]
-    public void Current_LegacySettingsWithTokens_WritesThePreMigrationBackupUnredacted()
+    public void Current_LegacySettingsWithTokens_LeavesNoTokensInBackups()
     {
         File.WriteAllText(_filePath, LegacyWithTokens);
 
@@ -73,8 +73,11 @@ public sealed class SettingsManagerCorruptFileTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(backups, Has.Length.EqualTo(1));
-            Assert.That(backup, Does.Contain("bot-secret-access"),
-                "Сплиттер, поднятый из SettingsManager, кладёт бэкап без редактора – в отличие от того же сплиттера из LegacySettingsLayoutMigrator.");
+            Assert.That(backup, Does.Not.Contain("bot-secret-access"),
+                "Бэкап монолита снимается через редактор токенов, как у того же сплиттера из LegacySettingsLayoutMigrator.");
+
+            Assert.That(File.Exists(_filePath + ".bak"), Is.False,
+                "Откатная копия монолита с токенами не переживает удавшуюся запись.");
 
             Assert.That(File.ReadAllText(_filePath), Does.Not.Contain("bot-secret-access"),
                 "Сам settings.json после разбора токенов не хранит – они уезжают в accounts.json.");

@@ -26,18 +26,13 @@ public class BroadcastProfilesStore
         return _store.Load();
     }
 
-    public virtual void Mutate(Action<BroadcastProfilesSettings> mutator)
-    {
-        _store.Mutate(mutator);
-    }
-
-    public virtual TResult Mutate<TResult>(Func<BroadcastProfilesSettings, TResult> mutator)
+    public virtual bool Mutate(Action<BroadcastProfilesSettings> mutator)
     {
         return _store.Mutate(mutator);
     }
 
-    public virtual void Save(BroadcastProfilesSettings value)
+    public virtual bool Save(BroadcastProfilesSettings value)
     {
-        _store.Save(value);
+        return _store.Save(value);
     }
 }

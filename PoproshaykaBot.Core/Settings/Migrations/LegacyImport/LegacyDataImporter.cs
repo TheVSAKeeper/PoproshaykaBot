@@ -148,7 +148,7 @@ public static class LegacyDataImporter
                     continue;
                 }
 
-                CopyAtomic(file.SourcePath, targetPath, logger);
+                CopyAtomic(file.SourcePath, targetPath, file.Name, logger);
                 copied.Add(file.RelativeTargetPath);
 
                 logger?.LogInformation("Импорт данных: {Source} перенесён в {Target}", file.SourcePath, targetPath);
@@ -226,7 +226,7 @@ public static class LegacyDataImporter
 
                 if (!untouched)
                 {
-                    AtomicFile.Save(path, original, logger);
+                    AtomicFile.Save(path, original, logger, keepBackup: !LegacyDataCatalog.CarriesTokens(fileName));
                     skipped.Add(new(relativePath, LegacyImportSkipReason.TargetExists));
 
                     logger?.LogWarning("Импорт данных: {File} возвращён в прежний вид – разбор перенесённого settings.json попытался его заменить, а перезапись выключена",
@@ -258,17 +258,17 @@ public static class LegacyDataImporter
         return leftovers;
     }
 
-    private static void CopyAtomic(string source, string target, ILogger? logger)
+    private static void CopyAtomic(string source, string target, string fileName, ILogger? logger)
     {
-        AtomicFile.Save(target, temporaryPath => File.Copy(source, temporaryPath, true), logger);
+        AtomicFile.Save(target,
+            temporaryPath => File.Copy(source, temporaryPath, true),
+            logger,
+            keepBackup: !LegacyDataCatalog.CarriesTokens(fileName));
     }
 
     private static Func<string, string>? ResolveRedactor(string fileName)
     {
-        var carriesTokens = string.Equals(fileName, LegacyDataCatalog.AccountsFileName, StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(fileName, LegacyDataCatalog.SettingsFileName, StringComparison.OrdinalIgnoreCase);
-
-        return carriesTokens ? AccountsTokenRedactor.Redact : null;
+        return LegacyDataCatalog.CarriesTokens(fileName) ? AccountsTokenRedactor.Redact : null;
     }
 
     private static LegacyImportResult Build(

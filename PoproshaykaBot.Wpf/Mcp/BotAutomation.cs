@@ -85,15 +85,22 @@ public sealed class BotAutomation(
             connectionManager.CancelConnection();
             await connectionManager.WaitForConnectionAsync();
 
-            return connectionManager.CurrentPhase;
-        }
+            phase = connectionManager.CurrentPhase;
 
-        if (phase != BotLifecyclePhase.Connected)
+            if (phase != BotLifecyclePhase.Connected)
+            {
+                return phase;
+            }
+        }
+        else if (phase == BotLifecyclePhase.Connected)
+        {
+            logger.McpBotDisconnectRequested();
+        }
+        else
         {
             throw new InvalidOperationException($"Бот в фазе {phase} – отключать нечего.");
         }
 
-        logger.McpBotDisconnectRequested();
         await connectionManager.StopAsync(BotStopMode.Graceful);
 
         return connectionManager.CurrentPhase;

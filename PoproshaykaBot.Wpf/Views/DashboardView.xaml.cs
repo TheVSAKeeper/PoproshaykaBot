@@ -457,11 +457,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
         var side = DashboardPaneSurface.Side(position, target.Bounds);
 
-        var moved = side == PaneSide.None
-            ? _viewModel.Swap(sourcePath, target.Path)
-            : _viewModel.Move(sourcePath, target.Path, side);
-
-        _viewModel.ReportMove(moved);
+        _viewModel.ReportMove(_viewModel.Move(sourcePath, target.Path, side));
     }
 
     private void ShowDropHint(Point position)

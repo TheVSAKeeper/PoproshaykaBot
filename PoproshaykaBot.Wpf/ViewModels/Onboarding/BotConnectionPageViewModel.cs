@@ -17,6 +17,8 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 {
     private const string SettingsNotWrittenDetails = "Настройки применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
 
+    private const string AccountsNotWrittenDetails = "Вход в Twitch применён и работает до перезапуска. В файл он не записан: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
+
     private readonly IBotConnectionController _botConnectionManager;
     private readonly IEventBus _eventBus;
     private readonly SettingsManager _settingsManager;
@@ -78,7 +80,14 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
                 return;
             }
 
-            _accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
+            if (!_accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount))
+            {
+                _logger.BotConnectionAccountsNotWritten();
+                ApplyPhase(BotLifecyclePhase.Failed, AccountsNotWrittenDetails);
+                StatusText = "Вход в Twitch не записан в файл";
+                ShowRetry = false;
+                return;
+            }
         }
         catch (Exception exception)
         {

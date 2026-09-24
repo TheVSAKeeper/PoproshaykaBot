@@ -413,8 +413,9 @@ public class DashboardLayoutSectionTests
         });
     }
 
-    [Test]
-    public void A_tile_from_the_palette_lands_in_the_cell_the_new_column_opened()
+    [TestCase(PaneSide.None, false)]
+    [TestCase(PaneSide.Bottom, true)]
+    public void A_tile_from_the_palette_lands_in_the_cell_the_new_column_opened(PaneSide side, bool holeRemains)
     {
         var section = new DashboardLayoutSectionViewModel([
             new FakeTile("stream-info"),
@@ -430,12 +431,47 @@ public class DashboardLayoutSectionTests
 
         Assert.That(hole, Is.Not.Null, "Пустая ячейка обязана быть адресуемой – иначе бросок в неё невыразим.");
 
-        section.Add("obs-info", hole!, PaneSide.None);
+        var predicted = section.PreviewAdd("obs-info", hole!, side);
+
+        section.Add("obs-info", hole!, side);
 
         Assert.Multiple(() =>
         {
             Assert.That(Leaf(section.Pane, "obs-info"), Is.Not.Null, "Плитка обязана встать в открывшуюся ячейку.");
             Assert.That(section.AvailablePalette.Select(meta => meta.TypeId), Does.Not.Contain("obs-info"));
+            Assert.That(HolePath(section.Pane) is not null, Is.EqualTo(holeRemains),
+                "Бросок в центр дыры занимает её целиком, бросок к краю по-прежнему её режет.");
+            Assert.That(HolePath(predicted) is not null, Is.EqualTo(holeRemains),
+                "Подсказка броска обязана обещать то же, что сделает сам бросок.");
+        });
+    }
+
+    [TestCase(PaneSide.None, false)]
+    [TestCase(PaneSide.Top, true)]
+    public void A_tile_moved_into_the_centre_of_a_hole_takes_it_whole(PaneSide side, bool holeRemains)
+    {
+        var section = new DashboardLayoutSectionViewModel([
+            new FakeTile("stream-info"),
+            new FakeTile("broadcast-status"),
+            new FakeTile("twitch-chat", fills: true),
+        ]);
+
+        section.LoadSettings(TwoColumnRowsLayout());
+        section.ColumnCount = 3;
+
+        var hole = HolePath(section.Pane);
+        var source = Leaf(section.Pane, "broadcast-status")?.Path;
+
+        Assert.That(hole, Is.Not.Null);
+        Assert.That(source, Is.Not.Null);
+
+        section.Move(source!, hole!, side);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Leaf(section.Pane, "broadcast-status"), Is.Not.Null);
+            Assert.That(HolePath(section.Pane) is not null, Is.EqualTo(holeRemains),
+                "Перенос в центр дыры не оставляет дыры ни на месте броска, ни на прежнем месте плитки.");
         });
     }
 

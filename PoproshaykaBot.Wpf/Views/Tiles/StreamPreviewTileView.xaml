@@ -11,7 +11,8 @@
              d:DesignHeight="214">
 
     <Grid>
-        <Image Source="{Binding Thumbnail}"
+        <Image x:Name="FrameImage"
+               Source="{Binding Thumbnail}"
                Stretch="Uniform"
                HorizontalAlignment="Center"
                VerticalAlignment="Center"

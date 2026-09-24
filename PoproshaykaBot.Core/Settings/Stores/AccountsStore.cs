@@ -84,7 +84,7 @@ public sealed class AccountsStore
         return cleared;
     }
 
-    public void SaveAll(TwitchAccountSettings bot, TwitchAccountSettings broadcaster)
+    public bool SaveAll(TwitchAccountSettings bot, TwitchAccountSettings broadcaster)
     {
         ArgumentNullException.ThrowIfNull(bot);
         ArgumentNullException.ThrowIfNull(broadcaster);
@@ -98,10 +98,11 @@ public sealed class AccountsStore
         if (written)
         {
             _logger?.LogInformation("AccountsStore: оба аккаунта заменены целиком и сохранены в {FilePath}", _filePath);
-            return;
+            return true;
         }
 
         _logger?.LogInformation("AccountsStore: оба аккаунта заменены в памяти до перезапуска, файл {FilePath} переписан снаружи", _filePath);
+        return false;
     }
 
     private static string DescribeAccounts(AccountsFileDto state)

@@ -45,6 +45,15 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1133, Level = LogLevel.Warning, Message = "Настройки мастера приняты только в памяти: файл settings.json переписан снаружи, шаг подключения остановлен")]
     public static partial void BotConnectionSettingsNotWritten(this ILogger logger);
 
+    [LoggerMessage(EventId = 1135, Level = LogLevel.Warning, Message = "Аккаунты мастера приняты только в памяти: файл accounts.json переписан снаружи, шаг подключения остановлен")]
+    public static partial void BotConnectionAccountsNotWritten(this ILogger logger);
+
+    [LoggerMessage(EventId = 1136, Level = LogLevel.Information, Message = "Аккаунты возвращены к состоянию до мастера в памяти, файл accounts.json не переписан: туда перенесены данные предыдущей версии")]
+    public static partial void OnboardingAccountsRolledBackInMemory(this ILogger logger);
+
+    [LoggerMessage(EventId = 1134, Level = LogLevel.Warning, Message = "Мастер завершён, но часть настроек принята только в памяти: settings.json записан – {SettingsWritten}, accounts.json записан – {AccountsWritten}")]
+    public static partial void OnboardingCompletionNotWritten(this ILogger logger, bool settingsWritten, bool accountsWritten);
+
     [LoggerMessage(EventId = 1105, Level = LogLevel.Error, Message = "Не удалось сохранить настройки в onboarding-мастере")]
     public static partial void OnboardingSettingsSaveFailed(this ILogger logger, Exception? exception);
 

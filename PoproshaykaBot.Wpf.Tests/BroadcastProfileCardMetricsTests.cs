@@ -31,19 +31,7 @@ public class BroadcastProfileCardMetricsTests
     [OneTimeSetUp]
     public void EnsureApplication()
     {
-        PackScheme.Ensure();
-
-        if (Application.Current is not null)
-        {
-            return;
-        }
-
-        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-
-        foreach (var source in Dictionaries)
-        {
-            application.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new(source) });
-        }
+        TestApplication.EnsureResources(Dictionaries);
     }
 
     [TestCase(2, BroadcastProfilesTileView.TwoColumnsWidth)]

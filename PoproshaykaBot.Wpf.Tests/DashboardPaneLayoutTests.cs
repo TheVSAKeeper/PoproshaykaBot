@@ -456,6 +456,16 @@ public class DashboardPaneLayoutTests
         return (SplitPaneLayout)top.Children[1].Pane;
     }
 
+    private static bool HasHole(PaneLayout? pane)
+    {
+        return pane switch
+        {
+            EmptyPaneLayout => true,
+            SplitPaneLayout split => split.Children.Any(child => HasHole(child.Pane)),
+            _ => false,
+        };
+    }
+
     [TestCase(573, ExpectedResult = true)]
     [TestCase(733, ExpectedResult = false)]
     public bool Column_of_the_default_layout_outgrows_the_viewport_and_asks_for_scrolling(double viewport)
@@ -973,11 +983,7 @@ public class DashboardPaneLayoutTests
 
         var predicted = Measure(preview!, dragged);
 
-        var status = side == PaneSide.None
-            ? dashboard.Swap(source, target)
-            : dashboard.Move(source, target, side);
-
-        Assert.That(status, Is.EqualTo(DashboardEditStatus.Applied));
+        Assert.That(dashboard.Move(source, target, side), Is.EqualTo(DashboardEditStatus.Applied));
 
         AssertSameRect(predicted, Measure(dashboard.Pane!, dragged));
     }
@@ -1004,11 +1010,10 @@ public class DashboardPaneLayoutTests
 
         var predicted = Measure(preview!, dragged);
 
-        var status = side == PaneSide.None
-            ? dashboard.Swap(source, hole)
-            : dashboard.Move(source, hole, side);
+        Assert.That(dashboard.Move(source, hole, side), Is.EqualTo(DashboardEditStatus.Applied));
 
-        Assert.That(status, Is.EqualTo(DashboardEditStatus.Applied));
+        Assert.That(HasHole(dashboard.Pane), Is.EqualTo(side != PaneSide.None),
+            "Бросок в центр дыры занимает её целиком, а бросок к краю по-прежнему её режет.");
 
         AssertSameRect(predicted, Measure(dashboard.Pane!, dragged));
     }

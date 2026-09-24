@@ -9,6 +9,7 @@ using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.Views;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -55,19 +56,7 @@ public class StreamHistoryTrendGeometryTests
     [OneTimeSetUp]
     public void EnsureApplication()
     {
-        PackScheme.Ensure();
-
-        if (Application.Current is not null)
-        {
-            return;
-        }
-
-        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-
-        foreach (var source in Dictionaries)
-        {
-            application.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new(source) });
-        }
+        TestApplication.EnsureResources(Dictionaries);
     }
 
     [SetUp]
@@ -378,6 +367,30 @@ public class StreamHistoryTrendGeometryTests
             Assert.That(clip, Is.Null,
                 $"Подпись «{text}» обрезана шириной своего столбика – запас в {StreamHistoryPageView.TrendValueMargin.Left:F0} DIP не сработал");
             Assert.That(compact, Is.EqualTo(Visibility.Collapsed), "В компактной раскладке подпись по-прежнему скрыта");
+        }
+    }
+
+    [Test]
+    public void Столбик_тренда_назван_для_диктора_датой_и_значением_а_кнопка_действием()
+    {
+        var page = CreatePage(sessions: TrendBarCount, peak: FourDigitPeak);
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        Arrange(view, Wide);
+
+        var strip = (ItemsControl)view.FindName("TrendStrip")!;
+        var bar = strip.Items.Cast<StreamTrendBarViewModel>().Single(item => item.IsPeak);
+        var index = strip.Items.IndexOf(bar);
+        var items = UIElementAutomationPeer.CreatePeerForElement(strip).GetChildren();
+        var presenter = (ContentPresenter)strip.ItemContainerGenerator.ContainerFromIndex(index)!;
+        var button = UIElementAutomationPeer.CreatePeerForElement(FindChild<Button>(presenter)!);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items, Has.Count.EqualTo(strip.Items.Count), "У каждого столбика свой элемент в дереве автоматизации");
+            Assert.That(items[index].GetName(), Is.EqualTo(bar.Label), "Контейнер столбика звучит датой и значением, а не именем типа");
+            Assert.That(button.GetName(), Is.Not.Empty.And.Not.EqualTo(bar.Label),
+                "Кнопка внутри называет действие и не повторяет имя контейнера");
         }
     }
 

@@ -243,7 +243,15 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     [RelayCommand]
     private async Task EditBlockersAsync()
     {
-        var dialog = new ChatBlockersDialogViewModel(_store.LoadBlockersText());
+        if (!_store.TryLoadBlockersText(out var selectors))
+        {
+            _dialogService.Error("Не удалось открыть правила",
+                "Файл с правилами скрытия сейчас не читается: его держит другая программа или к нему нет доступа. Сохранённые правила не тронуты – попробуйте открыть их ещё раз чуть позже. Подробности – в логах.");
+
+            return;
+        }
+
+        var dialog = new ChatBlockersDialogViewModel(selectors);
 
         if (!await _dialogService.ShowAsync(dialog))
         {

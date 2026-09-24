@@ -39,6 +39,9 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
     [ObservableProperty]
     private bool _hasStatusMessage;
 
+    [ObservableProperty]
+    private string? _unsavedNotice;
+
     public ObservableCollection<PollChoiceRowViewModel> Choices { get; } = [];
 
     public override PackIconLucideKind Icon => PackIconLucideKind.ChartColumn;
@@ -90,6 +93,11 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
             return;
         }
 
+        if (dialog.ProfileNotWritten)
+        {
+            UnsavedNotice = PollProfileEditDialogViewModel.NotWrittenNotice;
+        }
+
         if (dialog.ShouldStartPoll && dialog.Result is not null)
         {
             await StartPollAsync(dialog.Result);
@@ -100,8 +108,14 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
     private async Task CreateFromProfileAsync()
     {
         var dialog = new PollFromProfileDialogViewModel(_profiles, _dialogService);
+        var accepted = await _dialogService.ShowAsync(dialog);
 
-        if (!await _dialogService.ShowAsync(dialog) || dialog.Result is null)
+        if (dialog.ProfilesNotWritten)
+        {
+            UnsavedNotice = PollProfileEditDialogViewModel.NotWrittenNotice;
+        }
+
+        if (!accepted || dialog.Result is null)
         {
             return;
         }

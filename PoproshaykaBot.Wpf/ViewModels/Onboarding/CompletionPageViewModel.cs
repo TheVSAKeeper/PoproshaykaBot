@@ -123,10 +123,13 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         var newPort = context.Settings.Twitch.HttpServerPort;
         var portChanged = oldPort != newPort;
 
+        bool settingsWritten;
+        bool accountsWritten;
+
         try
         {
-            _settingsManager.SaveSettings(context.Settings);
-            _accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
+            settingsWritten = _settingsManager.SaveSettings(context.Settings);
+            accountsWritten = _accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
         }
         catch (Exception exception)
         {
@@ -138,9 +141,15 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
         await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
 
+        if (!settingsWritten || !accountsWritten)
+        {
+            _logger.OnboardingCompletionNotWritten(settingsWritten, accountsWritten);
+            _dialogService.Warning("Настройки не записаны", DescribeNotWritten(settingsWritten, accountsWritten));
+        }
+
         if (portChanged)
         {
-            await TryRestartHttpServerAsync(newPort);
+            await TryRestartHttpServerAsync(newPort, settingsWritten);
         }
 
         if (AutoConnect && _botConnectionManager.CurrentPhase != BotLifecyclePhase.Connected)
@@ -305,7 +314,19 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             $"Канал «{context.Settings.Twitch.Channel}» не найден на Twitch. Возможно, имя написано с ошибкой.\n\nВсё равно сохранить настройки?");
     }
 
-    private async Task TryRestartHttpServerAsync(int newPort)
+    private static string DescribeNotWritten(bool settingsWritten, bool accountsWritten)
+    {
+        var what = (settingsWritten, accountsWritten) switch
+        {
+            (false, false) => "Настройки и вход в Twitch применены и работают до перезапуска. В файл они не записаны",
+            (false, true) => "Настройки применены и работают до перезапуска. В файл они не записаны",
+            _ => "Вход в Twitch применён и работает до перезапуска. В файл он не записан",
+        };
+
+        return $"{what}: туда только что перенесены данные предыдущей версии. Перезапустите приложение и пройдите настройку ещё раз.";
+    }
+
+    private async Task TryRestartHttpServerAsync(int newPort, bool settingsWritten)
     {
         try
         {
@@ -321,7 +342,9 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             _logger.OnboardingHttpServerRestartFailed(exception, newPort);
             _dialogService.Warning(
                 "Внимание",
-                $"HTTP сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения.");
+                settingsWritten
+                    ? $"HTTP сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения."
+                    : $"HTTP сервер не удалось перезапустить на порту {newPort}.");
         }
     }
 

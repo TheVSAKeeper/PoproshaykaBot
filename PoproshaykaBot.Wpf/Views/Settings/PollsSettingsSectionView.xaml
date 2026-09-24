@@ -141,6 +141,13 @@
                       IsChecked="{Binding KillSwitchToday}" />
         </StackPanel>
 
+        <TextBlock Text="{Binding Notice}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8"
+                   Foreground="{DynamicResource State.WarningText}"
+                   AutomationProperties.LiveSetting="Polite"
+                   Visibility="{Binding Notice, Converter={StaticResource NullToVisibility}}" />
+
         <StackPanel Orientation="Horizontal"
                     HorizontalAlignment="Right">
             <Button Style="{StaticResource Button.Secondary}"

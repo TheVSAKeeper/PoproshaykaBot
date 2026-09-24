@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace PoproshaykaBot.Core.Settings.Migrations;
@@ -56,18 +58,29 @@ public static class LegacySettingsLayoutMigrator
                 continue;
             }
 
+            var carriesTokens = LegacyDataCatalog.CarriesTokens(fileName);
+
             if (File.Exists(target))
             {
-                logger?.LogWarning("Legacy-файл {Legacy} оставлен на месте: целевой {Target} уже существует",
-                    legacy,
-                    target);
+                if (!IsDamaged(target) || !IsIntact(legacy))
+                {
+                    logger?.LogWarning("Legacy-файл {Legacy} оставлен на месте: целевой {Target} уже существует",
+                        legacy,
+                        target);
 
-                continue;
+                    continue;
+                }
+
+                logger?.LogWarning("Целевой {Target} не читается как JSON-объект – он заменяется целым legacy-файлом {Legacy}",
+                    target,
+                    legacy);
+
+                JsonStoreBackup.CreateBackup(target, "invalid", logger, carriesTokens ? AccountsTokenRedactor.Redact : null);
             }
 
             try
             {
-                AtomicFile.Save(target, temporaryPath => File.Copy(legacy, temporaryPath, true), logger);
+                AtomicFile.Save(target, temporaryPath => File.Copy(legacy, temporaryPath, true), logger, keepBackup: !carriesTokens);
                 var backupPath = BuildLegacyBackupPath(legacy);
                 File.Move(legacy, backupPath);
                 relocated.Add(fileName);
@@ -83,6 +96,42 @@ public static class LegacySettingsLayoutMigrator
         }
 
         return relocated;
+    }
+
+    private static bool IsDamaged(string path)
+    {
+        return TryParseObject(path, out var isObject) && !isObject;
+    }
+
+    private static bool IsIntact(string path)
+    {
+        return TryParseObject(path, out var isObject) && isObject;
+    }
+
+    private static bool TryParseObject(string path, out bool isObject)
+    {
+        string json;
+
+        try
+        {
+            json = File.ReadAllText(path, Encoding.UTF8);
+        }
+        catch (Exception)
+        {
+            isObject = false;
+            return false;
+        }
+
+        try
+        {
+            isObject = JsonNode.Parse(json) is JsonObject;
+        }
+        catch (JsonException)
+        {
+            isObject = false;
+        }
+
+        return true;
     }
 
     private static string BuildLegacyBackupPath(string legacyPath)
@@ -122,7 +171,7 @@ public static class LegacySettingsLayoutMigrator
             }
 
             JsonStoreBackup.CreateBackup(settingsFile, "pre-migration", logger, AccountsTokenRedactor.Redact);
-            AtomicFile.Save(settingsFile, root.ToJsonString(JsonStoreOptions.Default), logger);
+            AtomicFile.Save(settingsFile, root.ToJsonString(JsonStoreOptions.Default), logger, keepBackup: false);
             logger?.LogInformation("Монолитный settings.json мигрирован и разбит на отдельные файлы (директория {Directory})",
                 settingsDirectory);
         }

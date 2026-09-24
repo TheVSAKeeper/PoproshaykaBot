@@ -34,6 +34,8 @@ public sealed class LegacyImportResult
 
     public bool CopiedSettings => CopiedSettingsFiles.Count > 0;
 
+    public bool CopiedUiPreferences => CopiedSettingsFile(LegacyDataCatalog.UiPreferencesFileName);
+
     public IReadOnlyList<string> RewrittenSettingsFiles =>
         [.. CopiedSettingsFiles.Union(MigratedSettingsFiles, StringComparer.OrdinalIgnoreCase)];
 

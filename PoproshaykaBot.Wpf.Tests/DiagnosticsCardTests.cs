@@ -240,6 +240,34 @@ public class DiagnosticsCardTests
         }
     }
 
+    [Test]
+    public void Опрос_без_перемен_не_пересоздаёт_строки_карточки()
+    {
+        var dispatcher = new ManualUiDispatcher();
+        var snapshot = Bus(6);
+        var publisher = new DiagnosticsSnapshotPublisher(dispatcher, () => snapshot, NullLogger<DiagnosticsSnapshotPublisher>.Instance);
+        var card = new EventBusDiagnosticsCardViewModel(publisher);
+        var notified = 0;
+
+        card.SetActive(true);
+        card.PropertyChanged += (_, e) => notified += e.PropertyName == nameof(card.Rows) ? 1 : 0;
+
+        snapshot = Bus(6);
+        dispatcher.Timers[0].Tick();
+
+        var unchanged = notified;
+
+        snapshot = Bus(6) with { Bus = snapshot.Bus! with { PublishedTotal = 1201 } };
+        dispatcher.Timers[0].Tick();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(unchanged, Is.Zero, "Новый список строк на каждом тике заставлял страницу заново строить строки всех карточек раз в секунду");
+            Assert.That(notified, Is.EqualTo(1), "Изменившееся число обязано дойти до страницы");
+            Assert.That(card.Rows[0].Value, Is.EqualTo(DiagnosticsFormat.Number(1201)));
+        }
+    }
+
     private static DiagnosticsSnapshot Bus(int types)
     {
         var byType = Enumerable.Range(0, types)

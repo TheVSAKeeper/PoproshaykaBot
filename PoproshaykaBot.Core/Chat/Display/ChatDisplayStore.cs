@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Chat.Display;
 
-public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger)
+public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger, string? directory = null)
 {
     public const double DefaultZoom = 0.75;
     public const double MinZoom = 0.25;
@@ -66,30 +66,40 @@ public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger)
         "[class*=\"community-highlight\"]",
     ];
 
-    private static readonly string ZoomFilePath = AppPaths.Combine("chat-zoom.txt");
+    private readonly string _zoomFilePath = Path.Combine(directory ?? AppPaths.BaseDirectory, "chat-zoom.txt");
 
-    private static readonly string BlockersFilePath = AppPaths.Combine("chat-blockers.txt");
+    private readonly string _blockersFilePath = Path.Combine(directory ?? AppPaths.BaseDirectory, "chat-blockers.txt");
+
+    private volatile bool _zoomReadFailed;
+    private volatile bool _blockersReadFailed;
 
     public double LoadZoom()
     {
+        string text;
+
         try
         {
-            if (!File.Exists(ZoomFilePath))
+            if (!File.Exists(_zoomFilePath))
             {
+                _zoomReadFailed = false;
                 return DefaultZoom;
             }
 
-            var text = File.ReadAllText(ZoomFilePath).Trim();
-
-            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var zoom)
-                && zoom >= MinZoom && zoom <= MaxZoom)
-            {
-                return zoom;
-            }
+            text = File.ReadAllText(_zoomFilePath).Trim();
         }
         catch (Exception exception)
         {
-            logger.LogWarning(exception, "Не удалось прочитать сохранённый масштаб чата");
+            _zoomReadFailed = true;
+            logger.LogWarning(exception, "Не удалось прочитать сохранённый масштаб чата – до удачного чтения он не перезаписывается");
+            return DefaultZoom;
+        }
+
+        _zoomReadFailed = false;
+
+        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var zoom)
+            && zoom >= MinZoom && zoom <= MaxZoom)
+        {
+            return zoom;
         }
 
         return DefaultZoom;
@@ -97,9 +107,20 @@ public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger)
 
     public void SaveZoom(double zoom)
     {
+        if (_zoomReadFailed)
+        {
+            if (zoom.Equals(DefaultZoom))
+            {
+                logger.LogDebug("Масштаб чата {Zoom} не сохранён: чтение {FilePath} сорвалось", zoom, _zoomFilePath);
+                return;
+            }
+
+            _zoomReadFailed = false;
+        }
+
         try
         {
-            AtomicFile.Save(ZoomFilePath, zoom.ToString("F3", CultureInfo.InvariantCulture), logger);
+            AtomicFile.Save(_zoomFilePath, zoom.ToString("F3", CultureInfo.InvariantCulture), logger);
         }
         catch (Exception exception)
         {
@@ -107,24 +128,32 @@ public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger)
         }
     }
 
+    public bool TryLoadBlockersText(out string text)
+    {
+        var read = TryReadBlockersText(out text);
+        _blockersReadFailed = !read;
+        return read;
+    }
+
     public string LoadBlockersText()
     {
-        try
-        {
-            return File.Exists(BlockersFilePath) ? File.ReadAllText(BlockersFilePath) : string.Empty;
-        }
-        catch (IOException exception)
-        {
-            logger.LogWarning(exception, "Не удалось прочитать список блокираторов баннеров чата");
-            return string.Empty;
-        }
+        TryLoadBlockersText(out var text);
+        return text;
     }
 
     public bool TrySaveBlockersText(string text)
     {
+        if (_blockersReadFailed)
+        {
+            logger.LogWarning("Список блокираторов баннеров чата не сохранён: чтение {FilePath} сорвалось, и запись стёрла бы непрочитанные правила",
+                _blockersFilePath);
+
+            return false;
+        }
+
         try
         {
-            AtomicFile.Save(BlockersFilePath, text, logger);
+            AtomicFile.Save(_blockersFilePath, text, logger);
             return true;
         }
         catch (Exception exception)
@@ -142,9 +171,26 @@ public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger)
 
     private IEnumerable<string> LoadUserSelectors()
     {
-        return LoadBlockersText()
+        TryReadBlockersText(out var text);
+
+        return text
             .Split('\n')
             .Select(line => line.Trim())
             .Where(line => line.Length > 0 && !line.StartsWith('#'));
+    }
+
+    private bool TryReadBlockersText(out string text)
+    {
+        try
+        {
+            text = File.Exists(_blockersFilePath) ? File.ReadAllText(_blockersFilePath) : string.Empty;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Не удалось прочитать список блокираторов баннеров чата");
+            text = string.Empty;
+            return false;
+        }
     }
 }

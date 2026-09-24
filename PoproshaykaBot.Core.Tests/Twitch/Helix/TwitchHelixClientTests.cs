@@ -332,6 +332,35 @@ public sealed class TwitchHelixClientTests
                 new Dictionary<string, string>(), "session-1"));
     }
 
+    [TestCase(HttpStatusCode.NoContent, true)]
+    [TestCase(HttpStatusCode.NotFound, false)]
+    public async Task DeleteEventSubSubscriptionAsync_SendsDeleteByIdAndTreatsMissingAsNotDeleted(HttpStatusCode status, bool expected)
+    {
+        var (client, handler) = Build(StubHttpMessageHandler.ReturnsStatus(status));
+
+        var deleted = await client.DeleteEventSubSubscriptionAsync("sub id/1");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.EqualTo(expected));
+            Assert.That(handler.Requests, Has.Count.EqualTo(1));
+            Assert.That(handler.Requests[0].Method, Is.EqualTo(HttpMethod.Delete));
+            Assert.That(handler.Requests[0].RequestUri!.AbsoluteUri,
+                Is.EqualTo(HelixBaseUrl + "helix/eventsub/subscriptions?id=sub%20id%2F1"));
+        }
+    }
+
+    [Test]
+    public void DeleteEventSubSubscriptionAsync_ServerError_ThrowsHelixRequestException()
+    {
+        var (client, _) = Build(StubHttpMessageHandler.ReturnsJson(HttpStatusCode.InternalServerError,
+            """{"error":"Internal Server Error","status":500,"message":"oops"}"""));
+
+        var ex = Assert.ThrowsAsync<HelixRequestException>(async () => await client.DeleteEventSubSubscriptionAsync("sub-1"));
+
+        Assert.That(ex!.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+    }
+
     [Test]
     public async Task CreatePollAsync_ZeroChannelPointsWhenVotingDisabled_EvenIfPerVoteSet()
     {

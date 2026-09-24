@@ -196,14 +196,30 @@
     </UserControl.Resources>
 
     <Grid>
-        <TextBlock Text="Профилей нет – добавьте кнопкой «+» в заголовке"
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="{Binding UnsavedNotice}"
+                   FontSize="{DynamicResource Font.Size.S}"
+                   Foreground="{DynamicResource State.WarningText}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8"
+                   AutomationProperties.LiveSetting="Polite"
+                   Visibility="{Binding UnsavedNotice, Converter={StaticResource NullToVisibility}}" />
+
+        <TextBlock Grid.Row="1"
+                   Text="Профилей нет – добавьте кнопкой «+» в заголовке"
                    Style="{StaticResource TextBlock.Subtle}"
                    FontSize="{DynamicResource Font.Size.S}"
                    TextWrapping="Wrap"
                    VerticalAlignment="Top"
                    Visibility="{Binding HasProfiles, Converter={StaticResource InverseBoolToVisibility}}" />
 
-        <Grid Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisibility}}">
+        <Grid Grid.Row="1"
+              Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisibility}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />

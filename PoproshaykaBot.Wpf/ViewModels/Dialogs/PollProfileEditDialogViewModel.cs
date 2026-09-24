@@ -6,6 +6,8 @@ namespace PoproshaykaBot.Wpf.ViewModels.Dialogs;
 
 public sealed partial class PollProfileEditDialogViewModel : ObservableObject, IDialogViewModel, IAcceptableDialog
 {
+    public const string NotWrittenNotice = "Профили голосований изменены до перезапуска. В файл изменения не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и повторите правку.";
+
     private readonly PollProfilesManager _manager;
     private readonly Guid _newProfileId = Guid.NewGuid();
     private Guid? _editTargetId;
@@ -49,6 +51,8 @@ public sealed partial class PollProfileEditDialogViewModel : ObservableObject, I
     public PollProfile? Result { get; private set; }
 
     public bool ShouldStartPoll { get; private set; }
+
+    public bool ProfileNotWritten { get; private set; }
 
     public event EventHandler<bool>? RequestClose;
 
@@ -102,7 +106,7 @@ public sealed partial class PollProfileEditDialogViewModel : ObservableObject, I
 
         try
         {
-            _manager.Upsert(profile);
+            ProfileNotWritten = !_manager.Upsert(profile);
         }
         catch (InvalidOperationException ex)
         {
@@ -151,7 +155,7 @@ public sealed partial class PollProfileEditDialogViewModel : ObservableObject, I
         {
             try
             {
-                _manager.Upsert(profile);
+                ProfileNotWritten = !_manager.Upsert(profile);
             }
             catch (InvalidOperationException ex)
             {
