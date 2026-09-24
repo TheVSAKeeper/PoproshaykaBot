@@ -369,8 +369,244 @@ public class DashboardLayoutSectionTests
 
         var root = section.BuildLayout().Root as SplitPane;
 
-        Assert.That(root?.Children[0].Weight, Is.EqualTo(0.6).Within(0.05),
-            "Сосед по содержимому весa не несёт, и это не повод потерять долю взвешенной колонки.");
+        Assert.Multiple(() =>
+        {
+            Assert.That(root?.Children[0].Weight, Is.EqualTo(0.6 * 2 / 3).Within(0.01),
+                "Сосед по содержимому веса не несёт, и это не повод потерять долю взвешенной колонки – она лишь уступает новой колонке её трек.");
+            Assert.That(root?.Children[1].Weight, Is.Null, "Слот «по содержимому» остаётся без доли и после прибавления колонки.");
+        });
+    }
+
+    [TestCase(3, 1, SplitOrientation.Columns, 1.0 / 3)]
+    [TestCase(2, 3, SplitOrientation.Rows, 2.0 / 3)]
+    public void A_new_track_gets_the_share_of_a_whole_track_and_moves_no_tile(int columns, int rows, SplitOrientation orientation, double holeShare)
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.ColumnCount = columns;
+        section.RowCount = rows;
+
+        var layout = section.BuildLayout();
+        var root = layout.Root as SplitPane;
+        var holes = root?.Children.Where(static child => DashboardLayoutTree.IsEmptySlot(child.Pane)).Sum(static child => child.Weight ?? 0);
+        var chat = layout.Tiles.Single(static tile => tile.TypeId == "twitch-chat");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root?.Orientation, Is.EqualTo(orientation));
+            Assert.That(holes, Is.EqualTo(holeShare).Within(0.001),
+                "Прибавленный трек получает долю целого трека сетки, а не остаток в 5 %, который выглядел как «ничего не произошло».");
+            Assert.That((chat.Column, chat.ColumnSpan, chat.Row, chat.RowSpan), Is.EqualTo((1, 1, 0, 1)),
+                "Плитка у края не растягивается в прибавленную ячейку – иначе ячейка «заполняется сама».");
+            Assert.That(layout.Tiles.Select(static tile => tile.TypeId), Does.Not.Contain(DashboardLayoutTree.EmptySlotTypeId));
+            Assert.That(Holes(section.Pane), Is.EqualTo(rows - 1 + columns - 2), "Каждый прибавленный трек – своя пустая ячейка в превью.");
+        });
+    }
+
+    [Test]
+    public void Removing_a_column_and_adding_it_back_keeps_the_order_and_the_relative_shares()
+    {
+        var section = new DashboardLayoutSectionViewModel([
+            new FakeTile("stream-info"),
+            new FakeTile("broadcast-status"),
+            new FakeTile("twitch-chat", fills: true),
+            new FakeTile("obs-info"),
+        ]);
+
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 3,
+            RowCount = 2,
+            Root = new SplitPane(SplitOrientation.Columns, [
+                new(new SplitPane(SplitOrientation.Rows, [
+                    new(new TilePane("stream-info"), 0.7),
+                    new(new TilePane("broadcast-status"), 0.3),
+                ]), 0.2),
+                new(new TilePane("twitch-chat"), 0.5),
+                new(new TilePane("obs-info"), 0.3),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0);
+        AddTile(layout, "broadcast-status", 1, 0);
+        AddTile(layout, "twitch-chat", 0, 1, rowSpan: 2);
+        AddTile(layout, "obs-info", 0, 2, rowSpan: 2);
+
+        section.LoadSettings(layout);
+        section.ColumnCount = 2;
+        section.ColumnCount = 3;
+
+        var root = (SplitPane)section.BuildLayout().Root!;
+        var column = root.Children[0].Pane as SplitPane;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(root.Children, Has.Count.EqualTo(3));
+            Assert.That(column?.Children.Select(static child => ((TilePane)child.Pane).TypeId), Is.EqualTo(new[] { "stream-info", "broadcast-status" }),
+                "Уцелевшие плитки стоят в прежнем порядке.");
+            Assert.That(root.Children[1].Pane, Is.EqualTo(new TilePane("twitch-chat")));
+            Assert.That(DashboardLayoutTree.IsEmptySlot(root.Children[2].Pane), Is.True,
+                "Выключенная плитка не возвращается сама: на месте колонки – пустая ячейка, плитка – в палитре.");
+            Assert.That(root.Children[0].Weight / root.Children[1].Weight, Is.EqualTo(0.2 / 0.5).Within(0.01),
+                "Относительные доли уцелевших колонок переживают убавление и прибавление.");
+            Assert.That(column!.Children[0].Weight, Is.EqualTo(0.7).Within(0.01), "Доли строк внутри уцелевшей колонки не трогаются.");
+            Assert.That(section.AvailablePalette.Select(static meta => meta.TypeId), Does.Contain("obs-info"));
+        });
+    }
+
+    [Test]
+    public void Removing_a_column_does_not_pour_its_tile_into_an_empty_cell()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 3,
+            RowCount = 1,
+            Root = new SplitPane(SplitOrientation.Columns, [
+                new(new TilePane("stream-info"), 0.4),
+                new(new TilePane(DashboardLayoutTree.EmptySlotTypeId), 0.3),
+                new(new TilePane("twitch-chat"), 0.3),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0);
+        AddTile(layout, "twitch-chat", 0, 2);
+
+        var section = CreateSection();
+
+        section.LoadSettings(layout);
+        section.ColumnCount = 2;
+
+        var chat = section.BuildLayout().Tiles.Single(static tile => tile.TypeId == "twitch-chat");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(chat.IsVisible, Is.False,
+                "Плитка из убранной колонки уходит в палитру, а не переезжает в чужую пустую ячейку.");
+            Assert.That(Holes(section.Pane), Is.EqualTo(1), "Пустая ячейка, которую сделал пользователь, остаётся пустой.");
+        });
+    }
+
+    [TestCase(SplitOrientation.Columns)]
+    [TestCase(SplitOrientation.Rows)]
+    public void Shrinking_away_the_only_visible_tile_moves_it_into_the_grid_that_is_left(SplitOrientation orientation)
+    {
+        var byColumns = orientation == SplitOrientation.Columns;
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = byColumns ? 2 : 1,
+            RowCount = byColumns ? 1 : 2,
+            Root = new SplitPane(orientation, [
+                new(new TilePane(DashboardLayoutTree.EmptySlotTypeId), 0.5),
+                new(new TilePane("twitch-chat"), 0.5),
+            ]),
+        };
+
+        AddTile(layout, "twitch-chat", byColumns ? 0 : 1, byColumns ? 1 : 0);
+
+        var section = CreateSection();
+
+        section.LoadSettings(layout);
+
+        if (byColumns)
+        {
+            section.ColumnCount = 1;
+        }
+        else
+        {
+            section.RowCount = 1;
+        }
+
+        var shrunk = section.BuildLayout();
+
+        if (byColumns)
+        {
+            section.ColumnCount = 2;
+        }
+        else
+        {
+            section.RowCount = 2;
+        }
+
+        var hole = HolePath(section.Pane);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shrunk.Tiles.Single(static tile => tile.TypeId == "twitch-chat").IsVisible, Is.True,
+                "Убавление сетки не оставляет панель без единой плитки: последняя переезжает в оставшуюся ячейку.");
+            Assert.That(shrunk.Root, Is.Not.Null, "У черновика после убавления есть дерево, иначе ни дыр, ни бросков.");
+            Assert.That(section.Notice, Is.Empty, "Ничего не выключено – тревожить пользователя нечем.");
+            Assert.That(hole, Is.Not.Null, "Прибавление после убавления открывает пустую ячейку.");
+        });
+
+        section.Add("stream-info", hole!, PaneSide.None);
+
+        Assert.That(Leaf(section.Pane, "stream-info"), Is.Not.Null, "Плитка из палитры ложится в открывшуюся ячейку без сброса раскладки.");
+    }
+
+    [Test]
+    public void One_slider_gesture_is_one_undo_step_and_passing_through_a_narrow_grid_loses_nothing()
+    {
+        var section = CreateSection();
+
+        section.LoadSettings(TwoColumnLayout());
+        section.BeginGridGesture();
+        section.ColumnCount = 3;
+        section.ColumnCount = 1;
+        section.ColumnCount = 4;
+        section.EndGridGesture();
+
+        var visible = section.BuildLayout().Tiles.Count(static tile => tile.IsVisible);
+
+        section.UndoCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(visible, Is.EqualTo(2),
+                "Промежуточная сетка в одну колонку внутри жеста не выключает плиток – каждый шаг считается от начала жеста.");
+            Assert.That(section.ColumnCount, Is.EqualTo(2), "Одна отмена возвращает сетку к началу жеста.");
+            Assert.That(section.CanUndo, Is.False, "Жест ползунка оставляет одну запись отмены, а не по записи на шаг.");
+        });
+    }
+
+    [Test]
+    public void An_empty_cell_survives_commit_and_reload_without_being_filled()
+    {
+        var store = new FakeLayoutStore(TwoColumnRowsLayout());
+        var coordinator = new DashboardLayoutCoordinator(store);
+        var section = CreateSection();
+
+        section.LoadSettings(coordinator.Read().Layout);
+        section.ColumnCount = 3;
+
+        coordinator.Commit(section.BuildLayout(), coordinator.Read().Revision, keepDraftRoot: section.TreeEdited);
+
+        var reread = new DashboardLayoutSectionViewModel([
+            new FakeTile("stream-info"),
+            new FakeTile("broadcast-status"),
+            new FakeTile("twitch-chat", fills: true),
+        ]);
+
+        reread.LoadSettings(coordinator.Read().Layout);
+
+        using var dashboard = new DashboardViewModel(
+            [new FakeTile("stream-info"), new FakeTile("broadcast-status"), new FakeTile("twitch-chat", fills: true)],
+            coordinator,
+            TimeProvider.System);
+
+        var saved = coordinator.Read().Layout;
+        var chat = saved.Tiles.Single(static tile => tile.TypeId == "twitch-chat");
+        var hole = ((SplitPane)saved.Root!).Children[^1];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(DashboardLayoutTree.IsEmptySlot(hole.Pane), Is.True, "Пустая ячейка доехала до файла.");
+            Assert.That(hole.Weight, Is.EqualTo(1.0 / 3).Within(0.001), "И с той долей, с которой её видели в превью.");
+            Assert.That((chat.Column, chat.ColumnSpan), Is.EqualTo((1, 1)), "Сосед не растянулся в пустую ячейку ни при сохранении, ни при чтении.");
+            Assert.That(saved.Tiles.Select(static tile => tile.TypeId), Does.Not.Contain(DashboardLayoutTree.EmptySlotTypeId));
+            Assert.That(Holes(reread.Pane), Is.EqualTo(1), "Раздел настроек после перечитывания видит ту же пустую ячейку.");
+            Assert.That(Holes(dashboard.Pane), Is.EqualTo(1), "«Обзор» после перечитывания видит ту же пустую ячейку.");
+        });
     }
 
     [Test]

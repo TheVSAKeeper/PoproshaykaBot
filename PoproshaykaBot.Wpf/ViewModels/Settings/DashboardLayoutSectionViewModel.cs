@@ -144,6 +144,16 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         return _draft.Layout;
     }
 
+    public void BeginGridGesture()
+    {
+        _draft.BeginGridGesture();
+    }
+
+    public void EndGridGesture()
+    {
+        _draft.EndGridGesture();
+    }
+
     public bool Resize(IReadOnlyList<int> path, IReadOnlyList<double> weights)
     {
         if (!_draft.Resize(path, weights))

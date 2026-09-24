@@ -13,6 +13,8 @@ public sealed class DashboardLayoutDraft
     private readonly List<DashboardLayoutSettings> _undo = [];
 
     private DashboardLayoutSettings _layout;
+    private DashboardLayoutSettings? _gestureBase;
+    private bool _gestureRemembered;
 
     public DashboardLayoutDraft(DashboardLayoutSettings? layout)
     {
@@ -34,6 +36,7 @@ public sealed class DashboardLayoutDraft
     {
         ArgumentNullException.ThrowIfNull(layout);
 
+        EndGridGesture();
         _layout = layout;
         _undo.Clear();
         Version++;
@@ -41,6 +44,8 @@ public sealed class DashboardLayoutDraft
 
     public bool Undo()
     {
+        EndGridGesture();
+
         if (_undo.Count == 0)
         {
             return false;
@@ -55,12 +60,25 @@ public sealed class DashboardLayoutDraft
 
     public void ResetToDefaults()
     {
+        EndGridGesture();
         Remember(Clone(_layout)!);
 
         _layout = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutDefaults.Create(), _layout);
 
         DashboardLayoutReconciler.SyncRoot(_layout);
         Version++;
+    }
+
+    public void BeginGridGesture()
+    {
+        _gestureBase = Clone(_layout);
+        _gestureRemembered = false;
+    }
+
+    public void EndGridGesture()
+    {
+        _gestureBase = null;
+        _gestureRemembered = false;
     }
 
     public IReadOnlyList<string> SetGridSize(int columnCount, int rowCount)
@@ -73,27 +91,22 @@ public sealed class DashboardLayoutDraft
             return [];
         }
 
-        var previous = Clone(_layout)!;
-        var hidden = Reflow(columns, rows);
+        var previous = _gestureBase is null ? Clone(_layout)! : null;
+        var next = Clone(_gestureBase ?? _layout)!;
+        var hidden = Regrid(next, columns, rows);
 
-        _layout.ColumnCount = columns;
-        _layout.RowCount = rows;
-        _layout.Root = null;
+        _layout = next;
 
-        DashboardLayoutReconciler.SyncRoot(_layout);
-
-        if (_layout.Root is { } rebuilt && previous.Root is { } before)
+        if (previous is not null)
         {
-            _layout.Root = CarryWeights(rebuilt, before);
-
-            if (!DashboardLayoutReconciler.SyncTiles(_layout))
-            {
-                _layout.Root = rebuilt;
-                DashboardLayoutReconciler.SyncTiles(_layout);
-            }
+            Remember(previous);
+        }
+        else if (!_gestureRemembered)
+        {
+            Remember(Clone(_gestureBase)!);
+            _gestureRemembered = true;
         }
 
-        Remember(previous);
         Version++;
 
         return hidden;
@@ -183,6 +196,7 @@ public sealed class DashboardLayoutDraft
             return DashboardEditStatus.Rejected;
         }
 
+        EndGridGesture();
         Remember(previous);
         Version++;
 
@@ -248,7 +262,7 @@ public sealed class DashboardLayoutDraft
 
             for (var candidate = 0; candidate < before.Children.Count; candidate++)
             {
-                if (taken[candidate] || !Signature(before.Children[candidate].Pane).SequenceEqual(signature, StringComparer.Ordinal))
+                if (taken[candidate] || !signature.All(Signature(before.Children[candidate].Pane).Contains))
                 {
                     continue;
                 }
@@ -270,44 +284,61 @@ public sealed class DashboardLayoutDraft
         }
 
         var weights = new double[next.Children.Count];
-        var carried = 0;
-        var total = 0.0;
+        var carried = new bool[next.Children.Count];
+        var carriedTotal = 0.0;
 
         foreach (var (nextIndex, beforeIndex) in Aligned(next, before))
         {
-            if (before.Children[beforeIndex].Weight is not { } weight || weight <= 0 || !double.IsFinite(weight))
+            if (!IsExplicit(before.Children[beforeIndex].Weight))
             {
                 continue;
             }
 
-            weights[nextIndex] = weight;
-            total += weight;
-            carried++;
+            weights[nextIndex] = before.Children[beforeIndex].Weight!.Value;
+            carried[nextIndex] = true;
+            carriedTotal += weights[nextIndex];
         }
 
-        if (carried == 0 || !double.IsFinite(total) || total <= 0)
+        if (carriedTotal <= 0 || !double.IsFinite(carriedTotal))
         {
             return null;
         }
 
-        var rest = next.Children.Count - carried;
-
-        if (rest == 0)
-        {
-            return weights;
-        }
-
-        var share = Math.Max(1 - total, MinimumShare * rest) / rest;
+        var gridShare = 1.0 / next.Children.Count;
+        var free = 0.0;
 
         for (var index = 0; index < weights.Length; index++)
         {
-            if (weights[index] <= 0)
+            if (carried[index])
             {
-                weights[index] = share;
+                continue;
+            }
+
+            weights[index] = IsExplicit(next.Children[index].Weight) ? next.Children[index].Weight!.Value : gridShare;
+            free += weights[index];
+        }
+
+        if (free >= 1 - MinimumShare)
+        {
+            return null;
+        }
+
+        var scale = (1 - free) / carriedTotal;
+
+        for (var index = 0; index < weights.Length; index++)
+        {
+            if (carried[index])
+            {
+                weights[index] *= scale;
             }
         }
 
         return weights;
+    }
+
+    private static bool IsExplicit(double? weight)
+    {
+        return weight is { } value && value > 0 && double.IsFinite(value);
     }
 
     private static List<string> Signature(DashboardPane? pane)
@@ -350,22 +381,155 @@ public sealed class DashboardLayoutDraft
             && size.Rows <= DashboardLayoutDefaults.MaxRowCount;
     }
 
-    private List<string> Reflow(int columnCount, int rowCount)
+    private static List<string> Regrid(DashboardLayoutSettings layout, int columns, int rows)
     {
-        var pairs = new List<(DashboardTileSettings Tile, PlacedTile Placed)>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var hidden = new List<string>();
 
-        foreach (var tile in _layout.Tiles)
+        if (columns < layout.ColumnCount || rows < layout.RowCount)
         {
-            if (!tile.IsVisible
-                || string.IsNullOrEmpty(tile.TypeId)
-                || DashboardLayoutTree.IsEmptySlot(tile.TypeId)
-                || !seen.Add(tile.TypeId))
+            hidden = Shrink(layout, Math.Min(columns, layout.ColumnCount), Math.Min(rows, layout.RowCount));
+        }
+
+        if (columns > layout.ColumnCount || rows > layout.RowCount)
+        {
+            Grow(layout, Math.Max(columns, layout.ColumnCount), Math.Max(rows, layout.RowCount));
+        }
+
+        return hidden;
+    }
+
+    private static List<string> Shrink(DashboardLayoutSettings layout, int columns, int rows)
+    {
+        var hidden = Crop(layout, columns, rows);
+
+        // TODO: убавление перестраивает дерево из Tiles – дыра уже половины трека и доли узла со сменившейся
+        //       ориентацией теряются; перевести на удаление листов из дерева, когда на это придёт жалоба или тест.
+        Rebuild(layout, columns, rows);
+
+        return hidden;
+    }
+
+    private static void Grow(DashboardLayoutSettings layout, int columns, int rows)
+    {
+        if (layout.Root is { } root && DashboardPaneEditor.IsWellFormed(root))
+        {
+            var (previousColumns, previousRows) = (layout.ColumnCount, layout.RowCount);
+            var grown = WithHoles(WithHoles(root, SplitOrientation.Columns, previousColumns, columns), SplitOrientation.Rows, previousRows, rows);
+
+            layout.Root = grown;
+            layout.ColumnCount = columns;
+            layout.RowCount = rows;
+
+            if (Fits(grown) && DashboardLayoutReconciler.SyncTiles(layout))
+            {
+                return;
+            }
+
+            layout.Root = root;
+            layout.ColumnCount = previousColumns;
+            layout.RowCount = previousRows;
+        }
+
+        Rebuild(layout, columns, rows);
+    }
+
+    private static void Rebuild(DashboardLayoutSettings layout, int columns, int rows)
+    {
+        var before = layout.Root;
+
+        layout.ColumnCount = columns;
+        layout.RowCount = rows;
+        layout.Root = null;
+
+        DashboardLayoutReconciler.SyncRoot(layout);
+
+        if (layout.Root is not { } rebuilt || before is null)
+        {
+            return;
+        }
+
+        layout.Root = CarryWeights(rebuilt, before);
+
+        if (!DashboardLayoutReconciler.SyncTiles(layout))
+        {
+            layout.Root = rebuilt;
+            DashboardLayoutReconciler.SyncTiles(layout);
+        }
+    }
+
+    private static DashboardPane WithHoles(DashboardPane root, SplitOrientation orientation, int count, int grown)
+    {
+        if (count <= 0 || grown <= count)
+        {
+            return root;
+        }
+
+        var keep = (double)count / grown;
+        var children = new List<PaneSlot>(grown - count + 1);
+
+        if (root is SplitPane split
+            && split.Orientation == orientation
+            && DashboardLayoutTree.ResolveWeights(split.Children) is { } resolved
+            && resolved.Sum() is var total
+            && total > 0
+            && double.IsFinite(total))
+        {
+            foreach (var slot in split.Children)
+            {
+                children.Add(new(slot.Pane, IsExplicit(slot.Weight) ? slot.Weight!.Value / total * keep : null));
+            }
+        }
+        else
+        {
+            children.Add(new(root, keep));
+        }
+
+        for (var index = count; index < grown; index++)
+        {
+            children.Add(new(new TilePane(DashboardLayoutTree.EmptySlotTypeId), 1.0 / grown));
+        }
+
+        return new SplitPane(orientation, children);
+    }
+
+    private static List<string> Crop(DashboardLayoutSettings layout, int columns, int rows)
+    {
+        var occupied = new bool[rows, columns];
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var hidden = new List<string>();
+
+        var shown = layout.Tiles
+            .Where(tile => tile.IsVisible && !string.IsNullOrEmpty(tile.TypeId) && !DashboardLayoutTree.IsEmptySlot(tile.TypeId))
+            .OrderBy(tile => tile.Row)
+            .ThenBy(tile => tile.Column)
+            .ToList();
+
+        foreach (var tile in shown)
+        {
+            if (!seen.Add(tile.TypeId))
             {
                 continue;
             }
 
-            pairs.Add((tile, new()
+            if (tile.Row >= rows || tile.Column >= columns || !TryOccupy(occupied, tile, columns, rows))
+            {
+                tile.IsVisible = false;
+                hidden.Add(tile.TypeId);
+            }
+        }
+
+        if (hidden.Count > 0 && hidden.Count == seen.Count)
+        {
+            Reflow(shown.Where(tile => !tile.IsVisible).DistinctBy(tile => tile.TypeId, StringComparer.Ordinal), columns, rows, hidden);
+        }
+
+        return hidden;
+    }
+
+    private static void Reflow(IEnumerable<DashboardTileSettings> tiles, int columns, int rows, List<string> hidden)
+    {
+        var pairs = tiles
+            .Select(tile => (Tile: tile, Placed: new PlacedTile
             {
                 TypeId = tile.TypeId,
                 Row = tile.Row,
@@ -374,30 +538,55 @@ public sealed class DashboardLayoutDraft
                 RowSpan = tile.RowSpan,
                 MaxWidth = tile.MaxWidth,
                 MaxHeight = tile.MaxHeight,
-            }));
-        }
+            }))
+            .ToList();
 
-        var (_, unplaceable) = DashboardLayoutCalculator.ResolveLayout(pairs.Select(pair => pair.Placed), rowCount, columnCount);
+        var (_, unplaceable) = DashboardLayoutCalculator.ResolveLayout(pairs.Select(pair => pair.Placed), rows, columns);
         var lost = unplaceable.ToHashSet();
-        var hidden = new List<string>();
 
-        foreach (var (tile, placed) in pairs)
+        foreach (var (tile, placed) in pairs.Where(pair => !lost.Contains(pair.Placed)))
         {
-            if (lost.Contains(placed))
-            {
-                tile.IsVisible = false;
-                hidden.Add(tile.TypeId);
-
-                continue;
-            }
-
             tile.Row = placed.Row;
             tile.Column = placed.Column;
             tile.RowSpan = placed.RowSpan;
             tile.ColumnSpan = placed.ColumnSpan;
+            tile.IsVisible = true;
+            hidden.Remove(tile.TypeId);
+        }
+    }
+
+    private static bool TryOccupy(bool[,] occupied, DashboardTileSettings tile, int columns, int rows)
+    {
+        var row = Math.Max(tile.Row, 0);
+        var column = Math.Max(tile.Column, 0);
+        var rowEnd = Math.Clamp(tile.Row + tile.RowSpan, row + 1, rows);
+        var columnEnd = Math.Clamp(tile.Column + tile.ColumnSpan, column + 1, columns);
+
+        for (var r = row; r < rowEnd; r++)
+        {
+            for (var c = column; c < columnEnd; c++)
+            {
+                if (occupied[r, c])
+                {
+                    return false;
+                }
+            }
         }
 
-        return hidden;
+        for (var r = row; r < rowEnd; r++)
+        {
+            for (var c = column; c < columnEnd; c++)
+            {
+                occupied[r, c] = true;
+            }
+        }
+
+        tile.Row = row;
+        tile.Column = column;
+        tile.RowSpan = rowEnd - row;
+        tile.ColumnSpan = columnEnd - column;
+
+        return true;
     }
 
     private DashboardPane? Split(DashboardPane root, IReadOnlyList<int> targetPath, PaneSide side, string typeId)

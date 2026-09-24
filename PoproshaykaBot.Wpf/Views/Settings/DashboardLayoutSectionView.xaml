@@ -15,7 +15,7 @@
                    Style="{StaticResource TextBlock.Subtle}"
                    TextWrapping="Wrap"
                    Margin="0,0,0,16"
-                   Text="Превью показывает панель «Обзор» в масштабе окна. Колонки и строки задают саму сетку: новые ячейки остаются пустыми, а плитка, которой не хватило места, выключается и возвращается в палитру. Перетащите плитку из палитры на нужное место, тяните разделители, чтобы поменять пропорции. Правый клик по плитке – максимальные размеры и удаление." />
+                   Text="Превью показывает панель «Обзор» в масштабе окна. Колонки и строки задают саму сетку: новая колонка встаёт справа, новая строка – снизу, обе пустые, пока в них не положат плитку; при убавлении плитка, оставшаяся за краем, выключается и возвращается в палитру. Перетащите плитку из палитры на нужное место, тяните разделители, чтобы поменять пропорции. Правый клик по плитке – максимальные размеры и удаление." />
 
         <TextBlock x:Name="NoticeText"
                    DockPanel.Dock="Top"
@@ -53,7 +53,8 @@
                 <TextBlock Text="Колонки"
                            VerticalAlignment="Center"
                            Margin="0,0,8,0" />
-                <Slider Width="120"
+                <Slider x:Name="ColumnSlider"
+                        Width="120"
                         Minimum="{Binding MinColumnCount, Mode=OneTime}"
                         Maximum="{Binding MaxColumnCount, Mode=OneTime}"
                         Value="{Binding ColumnCount, Mode=TwoWay}"
@@ -73,7 +74,8 @@
                 <TextBlock Text="Строки"
                            VerticalAlignment="Center"
                            Margin="0,0,8,0" />
-                <Slider Width="120"
+                <Slider x:Name="RowSlider"
+                        Width="120"
                         Minimum="{Binding MinRowCount, Mode=OneTime}"
                         Maximum="{Binding MaxRowCount, Mode=OneTime}"
                         Value="{Binding RowCount, Mode=TwoWay}"

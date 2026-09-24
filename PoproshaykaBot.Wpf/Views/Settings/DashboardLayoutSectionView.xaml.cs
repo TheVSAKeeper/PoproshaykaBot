@@ -8,10 +8,13 @@ using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views.Settings;
@@ -25,6 +28,9 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     private const double MiniaturePadding = 8;
     private const double MiniatureLineHeight = 6;
     private const double DropFillOpacity = 0.35;
+    private const string HoleCaption = "Пусто – перетащите сюда плитку";
+    private const string HoleStrokeKey = "Border.Default";
+    private const string HoleCaptionKey = "Fg.Secondary";
 
     private readonly Dictionary<FrameworkElement, int[]> _panePaths = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<DashboardTileViewModel, FrameworkElement> _tileHosts = [];
@@ -46,6 +52,22 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         Unloaded += OnUnloaded;
         PreviewArea.SizeChanged += OnPreviewAreaSizeChanged;
         PreviewArea.LayoutUpdated += OnPreviewAreaLayoutUpdated;
+
+        foreach (var slider in new[] { ColumnSlider, RowSlider })
+        {
+            slider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnGridSliderDragStarted), handledEventsToo: true);
+            slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnGridSliderDragCompleted), handledEventsToo: true);
+        }
+    }
+
+    private void OnGridSliderDragStarted(object sender, DragStartedEventArgs e)
+    {
+        _viewModel?.BeginGridGesture();
+    }
+
+    private void OnGridSliderDragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        _viewModel?.EndGridGesture();
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -474,17 +496,42 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     {
         var inverse = 1 / _scale;
 
-        var border = new Border
+        var outline = new Rectangle
         {
-            BorderThickness = new(inverse),
-            CornerRadius = new(4 * inverse),
-            Margin = new(2 * inverse),
-            Background = Brushes.Transparent,
+            StrokeThickness = 1.5 * inverse,
+            StrokeDashArray = new DoubleCollection { 4, 3 },
+            RadiusX = 4 * inverse,
+            RadiusY = 4 * inverse,
         };
 
-        border.SetResourceReference(Border.BorderBrushProperty, ThemeKeys.BorderSubtle);
+        outline.SetResourceReference(Shape.StrokeProperty, HoleStrokeKey);
 
-        return border;
+        var caption = new TextBlock
+        {
+            Text = HoleCaption,
+            FontSize = MiniatureFontSize * inverse,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new(MiniaturePadding * inverse),
+        };
+
+        caption.SetResourceReference(ForegroundProperty, HoleCaptionKey);
+
+        var hole = new Grid
+        {
+            Margin = new(2 * inverse),
+            Background = Brushes.Transparent,
+            ClipToBounds = true,
+        };
+
+        AutomationProperties.SetName(hole, HoleCaption);
+
+        hole.Children.Add(outline);
+        hole.Children.Add(caption);
+
+        return hole;
     }
 
     private FrameworkElement CreateMiniature(DashboardTileViewModel tile)
