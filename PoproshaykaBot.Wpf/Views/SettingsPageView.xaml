@@ -117,11 +117,43 @@
                             </HeaderedContentControl>
                         </StackPanel>
 
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[oauth].Title}"
-                                                Visibility="{Binding Sections[oauth].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <ContentControl Content="{Binding OAuth}" />
-                        </HeaderedContentControl>
+                        <StackPanel Visibility="{Binding Sections[oauth].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding Sections[oauth].Title}"
+                                       Style="{StaticResource Setting.SectionTitle}" />
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Приложение Twitch"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="oauth/app">
+                                <StackPanel>
+                                    <TextBlock Text="Ключи приложения из консоли разработчика Twitch – через них входят и бот, и стример."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding OAuth}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Аккаунт бота"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="oauth/bot">
+                                <StackPanel>
+                                    <TextBlock Text="Аккаунт, от имени которого бот пишет в чат и читает его."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding OAuth.Bot}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Аккаунт стримера"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="oauth/broadcaster">
+                                <StackPanel>
+                                    <TextBlock Text="Аккаунт канала: через него приложение меняет название и категорию стрима и запускает опросы."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding OAuth.Broadcaster}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
 
                         <StackPanel Visibility="{Binding Sections[stream].IsSelected, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="{Binding Sections[stream].Title}"

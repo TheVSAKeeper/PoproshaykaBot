@@ -179,7 +179,16 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                     new SettingsSubsection("limits", "Ограничения отправки"),
                     new SettingsSubsection("messages", "Шаблоны сообщений"),
                 ]),
-            new SettingsSection("oauth", "Авторизация", PackIconLucideKind.KeyRound, "oauth токен client id secret redirect uri scopes бот стример вещатель права доступа вход"),
+            new SettingsSection(
+                "oauth",
+                "Авторизация",
+                PackIconLucideKind.KeyRound,
+                "oauth токен client id secret redirect uri scopes бот стример вещатель права доступа вход приложение аккаунт",
+                [
+                    new SettingsSubsection("app", "Приложение Twitch"),
+                    new SettingsSubsection("bot", "Аккаунт бота"),
+                    new SettingsSubsection("broadcaster", "Аккаунт стримера"),
+                ]),
             new SettingsSection(
                 "obs",
                 "OBS",

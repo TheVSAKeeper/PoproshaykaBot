@@ -7,8 +7,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:ObsIntegrationSectionViewModel}"
-             d:DesignHeight="1000"
-             d:DesignWidth="680">
+             d:DesignHeight="800"
+             d:DesignWidth="720">
 
     <UserControl.Resources>
         <ResourceDictionary>
@@ -23,219 +23,232 @@
                           Content="{Binding Name}"
                           Padding="4,2" />
             </DataTemplate>
+
+            <Style x:Key="FieldLabel"
+                   TargetType="TextBlock">
+                <Setter Property="Foreground"
+                        Value="{DynamicResource Fg.Muted}" />
+                <Setter Property="FontSize"
+                        Value="{DynamicResource Font.Size.S}" />
+                <Setter Property="Margin"
+                        Value="0,0,0,4" />
+            </Style>
+
+            <Style x:Key="SourceHint"
+                   TargetType="TextBlock"
+                   BasedOn="{StaticResource FieldLabel}">
+                <Setter Property="TextWrapping"
+                        Value="Wrap" />
+                <Setter Property="Margin"
+                        Value="0,0,0,8" />
+            </Style>
+
+            <Style x:Key="SourceList"
+                   TargetType="Border">
+                <Setter Property="BorderBrush"
+                        Value="{DynamicResource Border.Default}" />
+                <Setter Property="BorderThickness"
+                        Value="1" />
+                <Setter Property="CornerRadius"
+                        Value="4" />
+                <Setter Property="MaxHeight"
+                        Value="180" />
+                <Setter Property="Margin"
+                        Value="0,0,0,8" />
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
     <StackPanel>
+        <TextBlock Text="{Binding StatusText}"
+                   keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
+                   FontSize="{DynamicResource Font.Size.S}"
+                   Margin="0,0,0,12" />
 
-        <StackPanel>
-            <TextBlock Text="{Binding StatusText}"
-                       keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       Margin="0,0,0,12" />
-
-            <TextBlock Text="Хост"
-                       Foreground="{DynamicResource Fg.Muted}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       Margin="0,0,0,4" />
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     AutomationProperties.Name="Хост OBS WebSocket"
-                     Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"
-                     keepshell:PlaceholderBehavior.Placeholder="127.0.0.1"
-                     Margin="0,0,0,12" />
-
-            <keepshell:NumericSettingField Label="Порт"
-                                           Value="{Binding Port, Mode=TwoWay}"
-                                           IncreaseCommand="{Binding IncreasePortCommand}"
-                                           DecreaseCommand="{Binding DecreasePortCommand}"
-                                           IncreaseAutomationName="Увеличить порт"
-                                           DecreaseAutomationName="Уменьшить порт"
-                                           Margin="0,0,0,12" />
-
-            <TextBlock Text="Пароль OBS WebSocket"
-                       Foreground="{DynamicResource Fg.Muted}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       Margin="0,0,0,4" />
-            <keepshell:RevealableTextBox Password="{Binding Password, Mode=TwoWay}"
-                                         Margin="0,0,0,16" />
-
-            <WrapPanel Orientation="Horizontal">
-                <Button Style="{StaticResource Button.Secondary}"
-                        Content="Проверить подключение"
-                        Command="{Binding TestConnectionCommand}"
-                        Margin="0,0,8,8" />
-                <Button Style="{StaticResource Button.Secondary}"
-                        Content="Переподключиться"
-                        Command="{Binding ReconnectCommand}"
-                        IsEnabled="{Binding Enabled}"
-                        Margin="0,0,8,8" />
-                <Button Style="{StaticResource Button.Secondary}"
-                        Content="Обновить списки"
-                        Command="{Binding LoadScenesCommand}"
-                        Margin="0,0,0,8" />
-            </WrapPanel>
-        </StackPanel>
-
-        <StackPanel>
-            <TextBlock Text="Автоматизация"
-                       Style="{StaticResource Setting.BlockTitle}" />
-
-            <CheckBox Style="{StaticResource CheckBox.Default}"
-                      IsChecked="{Binding Enabled, Mode=TwoWay}"
-                      Content="Включить OBS-интеграцию"
-                      Margin="0,0,0,8" />
-
-            <StackPanel IsEnabled="{Binding Enabled}"
-                        Margin="16,0,0,0">
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          IsChecked="{Binding AutoConnect, Mode=TwoWay}"
-                          Content="Подключаться автоматически"
-                          Margin="0,0,0,6" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          IsChecked="{Binding AutoProvisionBrowserSource, Mode=TwoWay}"
-                          Content="Создавать Browser Source автоматически"
-                          Margin="0,0,0,6" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          IsChecked="{Binding RefreshChatSourcesOnStreamStart, Mode=TwoWay}"
-                          Content="Обновлять чат-источники при начале стрима"
-                          Margin="0,0,0,6" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          IsChecked="{Binding ApplySceneOnProfile, Mode=TwoWay}"
-                          Content="Применять сцену при смене профиля"
-                          Margin="0,0,0,6" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          IsChecked="{Binding ApplyProfileOnScene, Mode=TwoWay}"
-                          Content="Применять профиль при смене сцены" />
+        <WrapPanel>
+            <StackPanel Style="{StaticResource Setting.PairCell}">
+                <TextBlock Text="Хост"
+                           Style="{StaticResource FieldLabel}" />
+                <TextBox Style="{StaticResource TextBox.Form}"
+                         AutomationProperties.Name="Хост OBS WebSocket"
+                         Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"
+                         keepshell:PlaceholderBehavior.Placeholder="127.0.0.1" />
             </StackPanel>
-        </StackPanel>
 
-        <StackPanel>
-            <TextBlock Text="Сцена"
-                       Style="{StaticResource Setting.BlockTitle}" />
+            <StackPanel Style="{StaticResource Setting.PairCell}">
+                <TextBlock Text="Пароль OBS WebSocket"
+                           Style="{StaticResource FieldLabel}" />
+                <keepshell:RevealableTextBox Password="{Binding Password, Mode=TwoWay}" />
+            </StackPanel>
+        </WrapPanel>
 
-            <TextBlock Text="Сцена OBS"
-                       Foreground="{DynamicResource Fg.Muted}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       Margin="0,0,0,4" />
-            <ComboBox Style="{StaticResource ComboBox.Form}"
-                      IsEditable="True"
-                      AutomationProperties.Name="Сцена OBS"
-                      ItemsSource="{Binding Scenes}"
-                      Text="{Binding SceneName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-        </StackPanel>
+        <keepshell:NumericSettingField Label="Порт"
+                                       Value="{Binding Port, Mode=TwoWay}"
+                                       IncreaseCommand="{Binding IncreasePortCommand}"
+                                       DecreaseCommand="{Binding DecreasePortCommand}"
+                                       IncreaseAutomationName="Увеличить порт"
+                                       DecreaseAutomationName="Уменьшить порт"
+                                       Margin="0,4,0,12" />
 
-        <StackPanel>
-            <TextBlock Text="Browser Source"
-                       Style="{StaticResource Setting.BlockTitle}" />
+        <WrapPanel Orientation="Horizontal">
+            <Button Style="{StaticResource Button.Secondary}"
+                    Content="Проверить подключение"
+                    Command="{Binding TestConnectionCommand}"
+                    Margin="0,0,8,8" />
+            <Button Style="{StaticResource Button.Secondary}"
+                    Content="Переподключиться"
+                    Command="{Binding ReconnectCommand}"
+                    IsEnabled="{Binding Enabled}"
+                    Margin="0,0,8,8" />
+            <Button Style="{StaticResource Button.Secondary}"
+                    Content="Обновить списки"
+                    Command="{Binding LoadScenesCommand}"
+                    Margin="0,0,0,8" />
+        </WrapPanel>
 
-            <TextBlock Text="Имя источника"
-                       Foreground="{DynamicResource Fg.Muted}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       Margin="0,0,0,4" />
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     AutomationProperties.Name="Имя источника браузера в OBS"
-                     Text="{Binding SourceName, UpdateSourceTrigger=PropertyChanged}"
-                     keepshell:PlaceholderBehavior.Placeholder="PoproshaykaBot Chat"
-                     Margin="0,0,0,12" />
+        <TextBlock Text="Автоматизация"
+                   Style="{StaticResource Setting.BlockTitle}" />
 
-            <keepshell:NumericSettingField Label="Ширина"
+        <CheckBox Style="{StaticResource CheckBox.Default}"
+                  IsChecked="{Binding Enabled, Mode=TwoWay}"
+                  Content="Включить OBS-интеграцию"
+                  Margin="0,0,0,8" />
+
+        <WrapPanel IsEnabled="{Binding Enabled}"
+                   Margin="16,0,0,0">
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      IsChecked="{Binding AutoConnect, Mode=TwoWay}"
+                      Content="Подключаться автоматически"
+                      Width="328"
+                      Margin="0,0,12,6" />
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      IsChecked="{Binding AutoProvisionBrowserSource, Mode=TwoWay}"
+                      Content="Создавать Browser Source автоматически"
+                      Width="328"
+                      Margin="0,0,12,6" />
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      IsChecked="{Binding RefreshChatSourcesOnStreamStart, Mode=TwoWay}"
+                      Content="Обновлять чат-источники при начале стрима"
+                      Width="328"
+                      Margin="0,0,12,6" />
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      IsChecked="{Binding ApplySceneOnProfile, Mode=TwoWay}"
+                      Content="Применять сцену при смене профиля"
+                      Width="328"
+                      Margin="0,0,12,6" />
+            <CheckBox Style="{StaticResource CheckBox.Default}"
+                      IsChecked="{Binding ApplyProfileOnScene, Mode=TwoWay}"
+                      Content="Применять профиль при смене сцены"
+                      Width="328"
+                      Margin="0,0,12,6" />
+        </WrapPanel>
+
+        <TextBlock Text="Сцена и Browser Source"
+                   Style="{StaticResource Setting.BlockTitle}" />
+
+        <WrapPanel>
+            <StackPanel Style="{StaticResource Setting.PairCell}">
+                <TextBlock Text="Сцена OBS"
+                           Style="{StaticResource FieldLabel}" />
+                <ComboBox Style="{StaticResource ComboBox.Form}"
+                          IsEditable="True"
+                          AutomationProperties.Name="Сцена OBS"
+                          ItemsSource="{Binding Scenes}"
+                          Text="{Binding SceneName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </StackPanel>
+
+            <StackPanel Style="{StaticResource Setting.PairCell}">
+                <TextBlock Text="Имя источника"
+                           Style="{StaticResource FieldLabel}" />
+                <TextBox Style="{StaticResource TextBox.Form}"
+                         AutomationProperties.Name="Имя источника браузера в OBS"
+                         Text="{Binding SourceName, UpdateSourceTrigger=PropertyChanged}"
+                         keepshell:PlaceholderBehavior.Placeholder="PoproshaykaBot Chat" />
+            </StackPanel>
+
+            <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
+                                           Label="Ширина"
                                            Value="{Binding Width, Mode=TwoWay}"
                                            IncreaseCommand="{Binding IncreaseWidthCommand}"
                                            DecreaseCommand="{Binding DecreaseWidthCommand}"
                                            IncreaseAutomationName="Увеличить ширину"
-                                           DecreaseAutomationName="Уменьшить ширину"
-                                           Margin="0,0,0,12" />
+                                           DecreaseAutomationName="Уменьшить ширину" />
 
-            <keepshell:NumericSettingField Label="Высота"
+            <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
+                                           Label="Высота"
                                            Value="{Binding Height, Mode=TwoWay}"
                                            IncreaseCommand="{Binding IncreaseHeightCommand}"
                                            DecreaseCommand="{Binding DecreaseHeightCommand}"
                                            IncreaseAutomationName="Увеличить высоту"
-                                           DecreaseAutomationName="Уменьшить высоту"
-                                           Margin="0,0,0,16" />
+                                           DecreaseAutomationName="Уменьшить высоту" />
+        </WrapPanel>
 
-            <WrapPanel Orientation="Horizontal">
-                <Button Style="{StaticResource Button.Primary}"
-                        Content="Создать Browser Source"
-                        Command="{Binding ProvisionCommand}"
-                        IsEnabled="{Binding Enabled}"
-                        Margin="0,0,8,0" />
-                <Button Style="{StaticResource Button.Secondary}"
-                        Content="Обновить чат сейчас"
-                        Command="{Binding RefreshChatNowCommand}"
-                        IsEnabled="{Binding Enabled}" />
-            </WrapPanel>
-        </StackPanel>
-
-        <StackPanel>
-            <TextBlock Text="Аудиоисточники дашборда"
-                       Style="{StaticResource Setting.BlockTitle}" />
-
-            <TextBlock Text="Выберите источники, уровни которых отображаются на дашборде. Обновите списки для загрузки из OBS."
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource Fg.Muted}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       Margin="0,0,0,10" />
-
-            <Border BorderBrush="{DynamicResource Border.Default}"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    MaxHeight="180"
-                    Margin="0,0,0,12">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding DashboardSources}"
-                                  ItemTemplate="{StaticResource SourceItemTemplate}"
-                                  Padding="8" />
-                </ScrollViewer>
-            </Border>
-
-            <keepshell:NumericSettingField Label="Задержка обновления, мс"
-                                           Value="{Binding DashboardVolumeMeterDelayMs, Mode=TwoWay}"
-                                           IncreaseCommand="{Binding IncreaseDelayCommand}"
-                                           DecreaseCommand="{Binding DecreaseDelayCommand}"
-                                           IncreaseAutomationName="Увеличить задержку"
-                                           DecreaseAutomationName="Уменьшить задержку" />
-        </StackPanel>
-
-        <StackPanel>
-            <TextBlock Text="Чат-источники для обновления"
-                       Style="{StaticResource Setting.BlockTitle}" />
-
-            <TextBlock Text="Выберите Browser Source, которые будут обновляться командой «Обновить чат сейчас» и при начале стрима."
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource Fg.Muted}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       Margin="0,0,0,10" />
-
-            <Border BorderBrush="{DynamicResource Border.Default}"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    MaxHeight="180">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding ChatRefreshSources}"
-                                  ItemTemplate="{StaticResource SourceItemTemplate}"
-                                  Padding="8" />
-                </ScrollViewer>
-            </Border>
-        </StackPanel>
-
-        <StackPanel>
+        <DockPanel Margin="0,4,0,12">
+            <Button DockPanel.Dock="Right"
+                    Style="{StaticResource Button.Secondary}"
+                    Content="Скопировать URL"
+                    Command="{Binding CopyOverlayUrlCommand}"
+                    Margin="12,0,0,0" />
             <TextBlock Text="Overlay URL"
-                       Style="{StaticResource Setting.BlockTitle}" />
-
+                       Foreground="{DynamicResource Fg.Muted}"
+                       FontSize="{DynamicResource Font.Size.S}"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,0" />
             <TextBlock Text="{Binding OverlayUrl}"
                        FontFamily="{DynamicResource Font.Mono}"
                        FontSize="{DynamicResource Font.Size.S}"
                        Foreground="{DynamicResource Fg.Primary}"
+                       VerticalAlignment="Center"
                        TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis"
-                       Margin="0,0,0,12" />
+                       TextTrimming="CharacterEllipsis" />
+        </DockPanel>
 
+        <WrapPanel Orientation="Horizontal">
+            <Button Style="{StaticResource Button.Primary}"
+                    Content="Создать Browser Source"
+                    Command="{Binding ProvisionCommand}"
+                    IsEnabled="{Binding Enabled}"
+                    Margin="0,0,8,0" />
             <Button Style="{StaticResource Button.Secondary}"
-                    Content="Скопировать URL"
-                    Command="{Binding CopyOverlayUrlCommand}"
-                    HorizontalAlignment="Left" />
-        </StackPanel>
+                    Content="Обновить чат сейчас"
+                    Command="{Binding RefreshChatNowCommand}"
+                    IsEnabled="{Binding Enabled}" />
+        </WrapPanel>
 
+        <WrapPanel>
+            <StackPanel Style="{StaticResource Setting.PairCell}">
+                <TextBlock Text="Аудиоисточники дашборда"
+                           Style="{StaticResource Setting.BlockTitle}" />
+                <TextBlock Text="Уровни каких источников видны на дашборде. Обновите списки, чтобы загрузить их из OBS."
+                           Style="{StaticResource SourceHint}" />
+                <Border Style="{StaticResource SourceList}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding DashboardSources}"
+                                      ItemTemplate="{StaticResource SourceItemTemplate}"
+                                      Padding="8" />
+                    </ScrollViewer>
+                </Border>
+                <keepshell:NumericSettingField Label="Задержка обновления, мс"
+                                               Value="{Binding DashboardVolumeMeterDelayMs, Mode=TwoWay}"
+                                               IncreaseCommand="{Binding IncreaseDelayCommand}"
+                                               DecreaseCommand="{Binding DecreaseDelayCommand}"
+                                               IncreaseAutomationName="Увеличить задержку"
+                                               DecreaseAutomationName="Уменьшить задержку" />
+            </StackPanel>
+
+            <StackPanel Style="{StaticResource Setting.PairCell}">
+                <TextBlock Text="Чат-источники для обновления"
+                           Style="{StaticResource Setting.BlockTitle}" />
+                <TextBlock Text="Какие Browser Source обновляет команда «Обновить чат сейчас» и начало стрима."
+                           Style="{StaticResource SourceHint}" />
+                <Border Style="{StaticResource SourceList}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding ChatRefreshSources}"
+                                      ItemTemplate="{StaticResource SourceItemTemplate}"
+                                      Padding="8" />
+                    </ScrollViewer>
+                </Border>
+            </StackPanel>
+        </WrapPanel>
     </StackPanel>
 </UserControl>
