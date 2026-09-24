@@ -61,6 +61,29 @@ public static class DashboardPaneEditor
         return true;
     }
 
+    public static bool TryFill(DashboardPane root, IReadOnlyList<int> targetPath, string typeId, out DashboardPane result)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(targetPath);
+
+        result = root;
+
+        if (string.IsNullOrEmpty(typeId)
+            || DashboardLayoutTree.IsEmptySlot(typeId)
+            || !TryCollectLeaves(root, out var leaves)
+            || Holds(leaves, typeId)
+            || Find(root, targetPath) is not TilePane { TypeId: var targetTypeId }
+            || !DashboardLayoutTree.IsEmptySlot(targetTypeId)
+            || Substitute(root, targetPath, new TilePane(typeId), 0) is not { } filled)
+        {
+            return false;
+        }
+
+        result = filled;
+
+        return true;
+    }
+
     public static bool TrySwap(DashboardPane root, IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath, out DashboardPane result)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -93,7 +116,7 @@ public static class DashboardPaneEditor
 
         result = root;
 
-        if (side == PaneSide.None || SamePath(sourcePath, targetPath) || !TryCollectLeaves(root, out var leaves))
+        if (SamePath(sourcePath, targetPath) || !TryCollectLeaves(root, out var leaves))
         {
             return false;
         }
@@ -106,6 +129,13 @@ public static class DashboardPaneEditor
             return false;
         }
 
+        var fills = side == PaneSide.None;
+
+        if (fills && !DashboardLayoutTree.IsEmptySlot(leaves[target].TypeId))
+        {
+            return TrySwap(root, sourcePath, targetPath, out result);
+        }
+
         if (RemoveAt(root, sourcePath) is not { } without
             || !TryCollectLeaves(without, out var remaining)
             || !Follows(leaves, remaining, source))
@@ -114,8 +144,13 @@ public static class DashboardPaneEditor
         }
 
         var shifted = target > source ? target - 1 : target;
+        DashboardPane moved;
 
-        if (!TrySplit(without, remaining[shifted].Path, side, leaves[source].TypeId, out var moved))
+        var placed = fills
+            ? TryFill(without, remaining[shifted].Path, leaves[source].TypeId, out moved)
+            : TrySplit(without, remaining[shifted].Path, side, leaves[source].TypeId, out moved);
+
+        if (!placed)
         {
             return false;
         }

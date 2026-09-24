@@ -158,9 +158,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
     public void Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        Report(side == PaneSide.None
-            ? _draft.Swap(sourcePath, targetPath)
-            : _draft.Move(sourcePath, targetPath, side));
+        Report(_draft.Move(sourcePath, targetPath, side));
     }
 
     public void Add(string typeId, IReadOnlyList<int> targetPath, PaneSide side)
@@ -170,14 +168,12 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
             return;
         }
 
-        Report(_draft.AddAt(typeId, targetPath, side == PaneSide.None ? PaneSide.Right : side));
+        Report(_draft.AddAt(typeId, targetPath, side));
     }
 
     public PaneLayout? PreviewMove(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        var root = side == PaneSide.None
-            ? _draft.Preview(pane => DashboardPaneEditor.TrySwap(pane, sourcePath, targetPath, out var result) ? result : null)
-            : _draft.Preview(pane => DashboardPaneEditor.TryMove(pane, sourcePath, targetPath, side, out var result) ? result : null);
+        var root = _draft.Preview(pane => DashboardPaneEditor.TryMove(pane, sourcePath, targetPath, side, out var result) ? result : null);
 
         return root is null ? null : DashboardPaneBuilder.BuildTree(root, _placements);
     }
@@ -189,10 +185,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
             return null;
         }
 
-        var root = _draft.Preview(pane =>
-            DashboardPaneEditor.TrySplit(pane, targetPath, side == PaneSide.None ? PaneSide.Right : side, typeId, out var result)
-                ? result
-                : null);
+        var root = _draft.Preview(pane => DashboardLayoutDraft.Place(pane, targetPath, side, typeId));
 
         if (root is null)
         {

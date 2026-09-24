@@ -212,26 +212,6 @@ public class DashboardEditSessionTests
     }
 
     [Test]
-    public void A_swap_with_a_hole_moves_the_tile_into_the_empty_cell()
-    {
-        var store = new FakeLayoutStore(ColumnWithAHole());
-
-        using var session = new DashboardEditSession(new(store), new ManualTimeProvider());
-
-        Assert.That(session.Swap([0], [1]), Is.EqualTo(DashboardEditStatus.Applied),
-            "Пустая ячейка адресуется путём, и обмен с ней – обычная правка дерева.");
-
-        session.Flush();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(store.Saved!.Tiles.Single().Row, Is.EqualTo(2), "Плитка переехала в нижнюю половину, где была дыра.");
-            Assert.That(store.Saved.Tiles.Select(tile => tile.TypeId), Has.No.Member(DashboardLayoutTree.EmptySlotTypeId),
-                "Дыра не заводит себе записи в Tiles даже после переезда.");
-        });
-    }
-
-    [Test]
     public void A_move_onto_a_hole_divides_it()
     {
         var store = new FakeLayoutStore(ColumnWithAHole());

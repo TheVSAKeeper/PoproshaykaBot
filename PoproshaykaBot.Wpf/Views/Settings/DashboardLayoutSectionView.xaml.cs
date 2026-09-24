@@ -363,7 +363,6 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 
         _builtWidth = PreviewArea.ActualWidth;
         _scale = Math.Min(_builtWidth / canvas.Width, ceiling / canvas.Height);
-        _viewModel.Scale = _scale;
 
         RebuildMiniatures();
     }

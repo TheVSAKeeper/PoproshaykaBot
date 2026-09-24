@@ -206,6 +206,84 @@ public sealed class DashboardPaneEditorTests
     }
 
     [Test]
+    public void Move_ATileIntoTheCentreOfAHole_TakesTheWholeHoleAndLeavesNoHoleBehind()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.25), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.25));
+
+        Assert.That(DashboardPaneEditor.TryMove(root, [1], [2], PaneSide.None, out var result), Is.True);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Leaves((SplitPane)result), Is.EqualTo(new[] { "stream-info", "polls-control" }),
+                "Бросок в центр дыры занимает её целиком: ни половины дыры, ни дыры на старом месте плитки.");
+
+            Assert.That(DashboardPaneEditor.IsWellFormed(result), Is.True);
+        }
+    }
+
+    [Test]
+    public void Move_TheLastTileIntoTheCentreOfItsOnlyNeighbourHole_LeavesTheTileAlone()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5));
+
+        Assert.That(DashboardPaneEditor.TryMove(root, [0], [1], PaneSide.None, out var result), Is.True);
+
+        Assert.That(result, Is.EqualTo(new TilePane("stream-info")),
+            "Удаление источника схлопывает узел в одну дыру, и её путь – корень.");
+    }
+
+    [Test]
+    public void Move_IntoTheCentreOfATile_SwapsTheTwo()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.25), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.25));
+
+        Assert.That(DashboardPaneEditor.TryMove(root, [0], [1], PaneSide.None, out var result), Is.True);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Leaves((SplitPane)result), Is.EqualTo(new[] { "polls-control", "stream-info", DashboardLayoutTree.EmptySlotTypeId }));
+            Assert.That(Weights((SplitPane)result), Is.EqualTo(new double?[] { 0.5, 0.25, 0.25 }));
+        }
+    }
+
+    [Test]
+    public void Fill_AHole_PutsTheTileInItsPlaceAndKeepsTheSlotWeight()
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.25), Leaf(DashboardLayoutTree.EmptySlotTypeId, null));
+
+        Assert.That(DashboardPaneEditor.TryFill(root, [2], "obs-info", out var result), Is.True);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Leaves((SplitPane)result), Is.EqualTo(new[] { "stream-info", "polls-control", "obs-info" }));
+            Assert.That(Weights((SplitPane)result), Is.EqualTo(new double?[] { 0.5, 0.25, null }),
+                "Плитка встаёт в слот дыры, а не делит его: доля слота, заданная или нет, остаётся прежней.");
+        }
+    }
+
+    [TestCaseSource(nameof(ImpossibleFills))]
+    public void Fill_ImpossibleRequest_LeavesTheTreeAlone(int[] target, string typeId)
+    {
+        var root = Columns(Leaf("stream-info", 0.5), Leaf("polls-control", 0.25), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.25));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DashboardPaneEditor.TryFill(root, target, typeId, out var result), Is.False);
+            Assert.That(result, Is.SameAs(root));
+        }
+    }
+
+    public static IEnumerable<TestCaseData> ImpossibleFills()
+    {
+        yield return new TestCaseData(new[] { 0 }, "obs-info").SetName("Fill_ATileInsteadOfAHole");
+        yield return new TestCaseData(new[] { 2 }, "stream-info").SetName("Fill_WithATileAlreadyOnThePanel");
+        yield return new TestCaseData(new[] { 2 }, DashboardLayoutTree.EmptySlotTypeId).SetName("Fill_WithTheReservedId");
+        yield return new TestCaseData(new[] { 2 }, "").SetName("Fill_WithoutAType");
+        yield return new TestCaseData(new[] { 9 }, "obs-info").SetName("Fill_PathOutsideTheNode");
+        yield return new TestCaseData(Array.Empty<int>(), "obs-info").SetName("Fill_TargetIsANodeInsteadOfALeaf");
+    }
+
+    [Test]
     public void Move_ThroughANodeThatCollapses_FollowsTheTargetToItsNewPath()
     {
         var root = Columns(Leaf("stream-info", 0.5), Rows(Leaf("polls-control", 0.5), Leaf(DashboardLayoutTree.EmptySlotTypeId, 0.5), 0.5));
@@ -244,8 +322,9 @@ public sealed class DashboardPaneEditorTests
         yield return new TestCaseData(new[] { 0 }, new[] { 0 }, PaneSide.Left).SetName("Move_OntoItself");
         yield return new TestCaseData(new[] { 0 }, new[] { 9 }, PaneSide.Left).SetName("Move_PathOutsideTheNode");
         yield return new TestCaseData(new[] { 0 }, Array.Empty<int>(), PaneSide.Left).SetName("Move_TargetIsANodeInsteadOfALeaf");
-        yield return new TestCaseData(new[] { 0 }, new[] { 1 }, PaneSide.None).SetName("Move_WithoutASide");
         yield return new TestCaseData(new[] { 2 }, new[] { 0 }, PaneSide.Left).SetName("Move_TheHoleItself");
+        yield return new TestCaseData(new[] { 2 }, new[] { 0 }, PaneSide.None).SetName("Move_TheHoleIntoTheCentreOfATile");
+        yield return new TestCaseData(new[] { 0 }, new[] { 0 }, PaneSide.None).SetName("Move_IntoItsOwnCentre");
     }
 
     [TestCaseSource(nameof(MovesOntoTheOwnSpot))]

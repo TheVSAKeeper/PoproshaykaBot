@@ -122,11 +122,6 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         return false;
     }
 
-    public DashboardEditStatus Swap(IReadOnlyList<int> firstPath, IReadOnlyList<int> secondPath)
-    {
-        return _session?.Swap(firstPath, secondPath) ?? DashboardEditStatus.Unavailable;
-    }
-
     public DashboardEditStatus Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
         return _session?.Move(sourcePath, targetPath, side) ?? DashboardEditStatus.Unavailable;
@@ -139,9 +134,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             return null;
         }
 
-        var root = side == PaneSide.None
-            ? session.PreviewSwap(sourcePath, targetPath)
-            : session.PreviewMove(sourcePath, targetPath, side);
+        var root = session.PreviewMove(sourcePath, targetPath, side);
 
         return root is null ? null : DashboardPaneBuilder.BuildTree(root, _placements);
     }

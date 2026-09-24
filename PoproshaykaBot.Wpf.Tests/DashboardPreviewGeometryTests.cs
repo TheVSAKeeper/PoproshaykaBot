@@ -90,6 +90,37 @@ public class DashboardPreviewGeometryTests
         });
     }
 
+    [TestCase(true, 900d, false)]
+    [TestCase(false, 900d, false)]
+    [TestCase(true, 900d, true)]
+    [TestCase(false, 900d, true)]
+    [TestCase(false, 520d, true)]
+    public void The_caption_names_the_drawn_scale_after_the_very_first_layout_pass(bool wide, double width, bool scrolls)
+    {
+        var section = new DashboardLayoutSectionViewModel(Tiles());
+
+        section.LoadSettings(WeightedLayout());
+        section.Reference = wide ? DashboardPreviewReference.Window1920 : DashboardPreviewReference.Window1024;
+
+        var view = new DashboardLayoutSectionView { DataContext = section };
+        FrameworkElement host = scrolls
+            ? new ScrollViewer { Width = width, Height = 700, Content = view }
+            : new Grid { Width = width, Height = 700, Children = { view } };
+
+        host.Measure(new(width, 700));
+        host.Arrange(new(0, 0, width, 700));
+        host.UpdateLayout();
+
+        var box = Descendants(view).OfType<Viewbox>().First();
+
+        Assert.That(box.Child, Is.InstanceOf<FrameworkElement>(), "Превью обязано быть построено первым же проходом.");
+
+        var drawn = box.ActualWidth / ((FrameworkElement)box.Child).Width;
+
+        Assert.That(section.Scale, Is.EqualTo(drawn).Within(0.01),
+            "Подпись называет масштаб, в котором превью нарисовано, уже на первом проходе – галерея снимает именно его.");
+    }
+
     private static FrameworkElement DescendantByName(DependencyObject root, string name)
     {
         var found = Descendants(root).OfType<FrameworkElement>().FirstOrDefault(element => element.Name == name);
