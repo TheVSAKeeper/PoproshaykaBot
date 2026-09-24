@@ -34,54 +34,78 @@ public sealed class GameBoxArtProvider(IGameBoxArtCache cache, ILogger<GameBoxAr
         return handle;
     }
 
-    public void ApplyCached(IReadOnlyCollection<string> games)
-    {
-        Apply(cache.GetCachedPaths(games));
-    }
-
     public async Task LoadAsync(IReadOnlyCollection<string> games, CancellationToken cancellationToken)
     {
-        IReadOnlyDictionary<string, string> paths;
+        var missing = Missing(games);
+
+        if (missing.Count == 0)
+        {
+            return;
+        }
 
         try
         {
-            paths = await cache.GetPathsAsync(games, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
+            var cached = await Task.Run(() => Decode(cache.GetCachedPaths(missing)), cancellationToken);
+            Apply(cached, cancellationToken);
+
+            missing = Missing(missing);
+
+            if (missing.Count == 0)
+            {
+                return;
+            }
+
+            var loaded = await Task.Run(
+                async () => Decode(await cache.GetPathsAsync(missing, cancellationToken).ConfigureAwait(false)),
+                cancellationToken);
+
+            Apply(loaded, cancellationToken);
         }
         catch (Exception exception)
         {
-            logger.BoxArtLoadFailed(exception);
-
-            return;
-        }
-
-        if (!cancellationToken.IsCancellationRequested)
-        {
-            Apply(paths);
+            if (exception is not OperationCanceledException)
+            {
+                logger.BoxArtLoadFailed(exception);
+            }
         }
     }
 
-    private void Apply(IReadOnlyDictionary<string, string> paths)
+    private List<string> Missing(IEnumerable<string> games)
     {
+        return games.Where(game => For(game) is { HasGame: true, HasImage: false }).ToList();
+    }
+
+    private List<(string Game, ImageSource Image)> Decode(IReadOnlyDictionary<string, string> paths)
+    {
+        var images = new List<(string, ImageSource)>(paths.Count);
+
         foreach (var (game, path) in paths)
         {
-            var handle = For(game);
-
-            if (handle.HasImage || !handle.HasGame)
-            {
-                continue;
-            }
-
             if (TryDecode(path) is { } image)
             {
-                handle.Image = image;
+                images.Add((game, image));
             }
             else
             {
                 cache.Invalidate(game);
+            }
+        }
+
+        return images;
+    }
+
+    private void Apply(List<(string Game, ImageSource Image)> images, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        foreach (var (game, image) in images)
+        {
+            if (For(game) is { HasGame: true, HasImage: false } handle)
+            {
+                handle.Image = image;
             }
         }
     }

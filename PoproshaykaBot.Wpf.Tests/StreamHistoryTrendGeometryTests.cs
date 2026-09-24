@@ -135,7 +135,7 @@ public class StreamHistoryTrendGeometryTests
 
     [TestCase(1.0, 1680)]
     [TestCase(1.6, 2200)]
-    public void Без_выбора_заглушка_стоит_на_полу_а_таблица_забирает_остаток(double scale, double width)
+    public void Инспектор_стоит_на_полу_с_выбором_и_без_а_таблица_забирает_остаток(double scale, double width)
     {
         var area = new Size(width, 900);
 
@@ -169,11 +169,9 @@ public class StreamHistoryTrendGeometryTests
             {
                 Assert.That(empty.Detail, Is.EqualTo(StreamHistoryPageView.DetailMinWidth * scale).Within(Tolerance),
                     "Заглушка «Выберите стрим» стоит на своём полу, остальное отдано таблице");
-                Assert.That(selected.Table / selected.Detail,
-                    Is.EqualTo(StreamHistoryPageView.TableColumnShare / StreamHistoryPageView.DetailColumnShare).Within(0.01),
-                    "С выбором карточка стрима получает прежние 3 к 2");
-                Assert.That(other, Is.EqualTo(selected), "Выбор другой строки при уже выбранной раскладку не двигает");
-                Assert.That(cleared, Is.EqualTo(empty), "Снятый выбор возвращает заглушку на пол");
+                Assert.That(selected, Is.EqualTo(empty), "Выбор стрима не расширяет инспектор и не сужает таблицу");
+                Assert.That(other, Is.EqualTo(selected), "Выбор другой строки раскладку не двигает");
+                Assert.That(cleared, Is.EqualTo(empty), "Снятый выбор раскладку не двигает");
             }
         }
         finally

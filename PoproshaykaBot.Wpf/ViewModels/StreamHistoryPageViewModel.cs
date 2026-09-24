@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.ViewModels;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Statistics;
 using PoproshaykaBot.Core.Statistics;
@@ -68,7 +69,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private readonly List<IDisposable> _subs = [];
     private readonly List<StreamSessionRowViewModel> _allSessions = [];
     private readonly List<StreamSessionRowViewModel> _visibleSessions = [];
-    private readonly ObservableCollection<StreamSessionRowViewModel> _sessions = [];
+    private readonly RangeObservableCollection<StreamSessionRowViewModel> _sessions = [];
     private readonly ObservableCollection<StreamSessionRowViewModel> _sortedSessions = [];
 
     private CancellationTokenSource? _boxArtCancellation;
@@ -244,13 +245,15 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public string PageTitle => "История стримов";
     public string? PageDescription => "Сессии стримов, их сегменты и чаттеры";
 
+    public Task BoxArtLoading { get; private set; } = Task.CompletedTask;
+
     public ObservableCollection<StreamSessionRowViewModel> Sessions => _sessions;
     public ObservableCollection<StreamSessionRowViewModel> SortedSessions => _sortedSessions;
-    public ObservableCollection<StreamTrendBarViewModel> Trend { get; } = [];
-    public ObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];
+    public RangeObservableCollection<StreamTrendBarViewModel> Trend { get; } = [];
+    public RangeObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];
     public ObservableCollection<StreamSessionChatterRowViewModel> Chatters { get; } = [];
-    public ObservableCollection<StreamCategoryRowViewModel> TopCategories { get; } = [];
-    public ObservableCollection<StreamRecordCardViewModel> Records { get; } = [];
+    public RangeObservableCollection<StreamCategoryRowViewModel> TopCategories { get; } = [];
+    public RangeObservableCollection<StreamRecordCardViewModel> Records { get; } = [];
     public ObservableCollection<StreamTrendOptionViewModel> MetricOptions { get; } = [];
     public ObservableCollection<StreamTrendOptionViewModel> LengthOptions { get; } = [];
     public ObservableCollection<StreamTrendOptionViewModel> SortOptions { get; } = [];
@@ -588,14 +591,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             return;
         }
 
-        Segments.Clear();
-        Chatters.Clear();
-
-        if (value?.Source is { } session)
-        {
-            FillSegments(session);
-            FillChatters(session);
-        }
+        Segments.ReplaceAll(value?.Source is { } segmentsOf ? BuildSegments(segmentsOf) : []);
+        Chatters.SyncTo(value?.Source is { } chattersOf ? BuildChatters(chattersOf) : []);
+        RefreshSegmentFilterState();
 
         foreach (var bar in Trend)
         {
@@ -882,8 +880,8 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private void RebuildView()
     {
         var selectedId = SelectedRow?.Source.Id;
+        var sessions = new List<StreamSessionRowViewModel>(_allSessions.Count);
 
-        _sessions.Clear();
         _visibleSessions.Clear();
 
         var hidden = _allSessions.Count(static row => row.IsHidden);
@@ -899,15 +897,17 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             {
                 if (ShowHidden)
                 {
-                    _sessions.Add(row);
+                    sessions.Add(row);
                 }
 
                 continue;
             }
 
             _visibleSessions.Add(row);
-            _sessions.Add(row);
+            sessions.Add(row);
         }
+
+        _sessions.ReplaceAll(sessions);
 
         HiddenCount = hidden;
 
@@ -943,12 +943,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         try
         {
-            _sortedSessions.Clear();
-
-            foreach (var row in SortRows(_sessions))
-            {
-                _sortedSessions.Add(row);
-            }
+            _sortedSessions.SyncTo(SortRows(_sessions).ToList());
         }
         finally
         {
@@ -1013,12 +1008,10 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             return;
         }
 
-        _boxArt.ApplyCached(games);
-
         var cancellation = new CancellationTokenSource();
         _boxArtCancellation = cancellation;
 
-        _ = _boxArt.LoadAsync(games, cancellation.Token);
+        BoxArtLoading = _boxArt.LoadAsync(games, cancellation.Token);
     }
 
     private void CancelBoxArt()
@@ -1056,9 +1049,10 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         return [.. games];
     }
 
-    private void FillSegments(StreamSessionRecord session)
+    private List<StreamSessionSegmentRowViewModel> BuildSegments(StreamSessionRecord session)
     {
         var longest = session.Segments.Aggregate(TimeSpan.Zero, (max, segment) => segment.Duration > max ? segment.Duration : max);
+        var segments = new List<StreamSessionSegmentRowViewModel>(session.Segments.Count);
         StreamSessionSegment? previous = null;
 
         foreach (var segment in session.Segments)
@@ -1069,11 +1063,11 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
                                 && segment.Game is { Length: > 0 }
                                 && string.Equals(previous.Game, segment.Game, StringComparison.OrdinalIgnoreCase);
 
-            Segments.Add(new(segment, share, continuesGame) { BoxArt = _boxArt.For(segment.Game) });
+            segments.Add(new(segment, share, continuesGame) { BoxArt = _boxArt.For(segment.Game) });
             previous = segment;
         }
 
-        RefreshSegmentFilterState();
+        return segments;
     }
 
     private void RefreshSegmentFilterState()
@@ -1086,7 +1080,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         }
     }
 
-    private void FillChatters(StreamSessionRecord session)
+    private List<StreamSessionChatterRowViewModel> BuildChatters(StreamSessionRecord session)
     {
         var ordered = session.Chatters
             .OrderByDescending(chatter => chatter.MessageCount)
@@ -1094,13 +1088,16 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             .ToList();
 
         var leader = ordered.Count > 0 ? ordered[0].MessageCount : 0;
+        var chatters = new List<StreamSessionChatterRowViewModel>(ordered.Count);
 
         for (var index = 0; index < ordered.Count; index++)
         {
             var known = ordered[index].UserId is { Length: > 0 } userId && _userStatistics.GetById(userId) is not null;
 
-            Chatters.Add(new(ordered[index], index + 1, leader, known));
+            chatters.Add(new(ordered[index], index + 1, leader, known));
         }
+
+        return chatters;
     }
 
     private void UpdateDetails(StreamSessionRowViewModel? row)
@@ -1172,22 +1169,15 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     {
         var summary = StreamHistorySummary.Build(_visibleSessions.Select(row => row.Source).ToList());
 
-        TopCategories.Clear();
-        Records.Clear();
-
         var leaderAirTime = summary.Categories.Count > 0 ? summary.Categories[0].AirTime : TimeSpan.Zero;
 
-        for (var index = 0; index < summary.Categories.Count; index++)
-        {
-            var stat = summary.Categories[index];
+        TopCategories.ReplaceAll(summary.Categories
+            .Select((stat, index) => new StreamCategoryRowViewModel(stat, index + 1, leaderAirTime) { BoxArt = _boxArt.For(stat.Game) })
+            .ToList());
 
-            TopCategories.Add(new(stat, index + 1, leaderAirTime) { BoxArt = _boxArt.For(stat.Game) });
-        }
-
-        foreach (var stat in summary.Records)
-        {
-            Records.Add(new(stat, _visibleSessions.FirstOrDefault(row => row.Source.Id == stat.Session.Id)));
-        }
+        Records.ReplaceAll(summary.Records
+            .Select(stat => new StreamRecordCardViewModel(stat, _visibleSessions.FirstOrDefault(row => row.Source.Id == stat.Session.Id)))
+            .ToList());
 
         OnPropertyChanged(nameof(HasTopCategories));
         OnPropertyChanged(nameof(HasRecords));
@@ -1198,26 +1188,25 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     private void BuildTrend()
     {
-        Trend.Clear();
-
         var recent = _visibleSessions.Take(_trendLength).Reverse().ToList();
         var leader = recent.Count > 0 ? recent.Max(row => MetricValue(row, _trendMetric)) : 0;
         var scale = StreamTrendBarViewModel.ScaleOf(recent.Select(row => MetricValue(row, _trendMetric)));
+        var bars = new List<StreamTrendBarViewModel>(recent.Count);
 
         for (var index = 0; index < recent.Count; index++)
         {
-            Trend.Add(new(recent[index], scale, _trendMetric)
+            var bar = new StreamTrendBarViewModel(recent[index], scale, _trendMetric)
             {
                 IsFirst = index == 0,
                 IsLast = index == recent.Count - 1,
-            });
-        }
+            };
 
-        foreach (var bar in Trend)
-        {
             bar.IsPeak = leader > 0 && bar.Value == leader;
             bar.IsSelected = SelectedRow is not null && ReferenceEquals(bar.Row, SelectedRow);
+            bars.Add(bar);
         }
+
+        Trend.ReplaceAll(bars);
 
         TrendFirstDate = recent.Count > 0 ? RelativeTime.FormatDate(recent[0].StartedAt) : string.Empty;
         TrendLastDate = recent.Count > 0 ? RelativeTime.FormatDate(recent[^1].StartedAt) : string.Empty;

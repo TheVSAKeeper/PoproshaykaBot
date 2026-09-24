@@ -2,6 +2,12 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels">
 
+    <Style TargetType="ListBox"
+           BasedOn="{StaticResource {x:Type ListBox}}">
+        <Setter Property="VirtualizingPanel.ScrollUnit"
+                Value="Pixel" />
+    </Style>
+
     <Style x:Key="MonoCell"
            TargetType="TextBlock">
         <Setter Property="FontFamily"

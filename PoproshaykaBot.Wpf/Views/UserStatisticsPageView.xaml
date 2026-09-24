@@ -44,6 +44,34 @@
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="SummaryBonusValue"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource StatValue}">
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Muted}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasTotalBonus}"
+                             Value="True">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.SuccessText}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SummaryPenaltyValue"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource StatValue}">
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Muted}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasTotalPenalty}"
+                             Value="True">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.ErrorText}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <DataTemplate x:Key="UserRatingRowTemplate">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -110,9 +138,10 @@
             </Grid.ColumnDefinitions>
 
             <Grid Grid.Column="0">
-                <TextBox Style="{StaticResource TextBox.IconField}"
+                <TextBox x:Name="SearchBox"
+                         Style="{StaticResource TextBox.IconField}"
                          Padding="10,0,32,0"
-                         Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=250}"
                          AutomationProperties.Name="Поиск участника по нику или идентификатору" />
 
                 <TextBlock Text="Найти по нику или ID"
@@ -122,7 +151,7 @@
                            TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource Fg.Muted}"
                            IsHitTestVisible="False"
-                           Visibility="{Binding FilterText, Converter={StaticResource NullToVisibility}, ConverterParameter=Inverse}" />
+                           Visibility="{Binding Text, ElementName=SearchBox, Converter={StaticResource NullToVisibility}, ConverterParameter=Inverse}" />
 
                 <Button HorizontalAlignment="Right"
                         VerticalAlignment="Center"
@@ -220,16 +249,19 @@
 
                             <Border Style="{StaticResource StatCell}">
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource StatValue}">
-                                        <Run Text="{Binding TotalBonus, Mode=OneWay}"
-                                             Foreground="{DynamicResource State.SuccessText}" />
-                                        <Run Text=" · "
-                                             Foreground="{DynamicResource Fg.Muted}" />
-                                        <Run Text="{Binding TotalPenalty, Mode=OneWay}"
-                                             Foreground="{DynamicResource State.ErrorText}" />
-                                    </TextBlock>
+                                    <TextBlock Style="{StaticResource SummaryBonusValue}"
+                                               Text="{Binding TotalBonus}" />
                                     <TextBlock Style="{StaticResource StatLabel}"
-                                               Text="бонус и штраф" />
+                                               Text="бонус" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource StatCell}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SummaryPenaltyValue}"
+                                               Text="{Binding TotalPenalty}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="штраф" />
                                 </StackPanel>
                             </Border>
                         </WrapPanel>
@@ -335,10 +367,6 @@
                              Background="Transparent"
                              BorderThickness="0"
                              Padding="0"
-                             VirtualizingStackPanel.IsVirtualizing="True"
-                             VirtualizingStackPanel.VirtualizationMode="Recycling"
-                             VirtualizingPanel.ScrollUnit="Pixel"
-                             ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Visible" />
                 </Grid>
@@ -427,18 +455,38 @@
                                                Text="штраф" />
                                 </StackPanel>
 
-                                <StackPanel Margin="0,0,12,0">
+                                <StackPanel Margin="0,0,12,10">
                                     <TextBlock Style="{StaticResource StatValue.Small}"
                                                Text="{Binding SelectedRow.DaysInChatDisplay}" />
                                     <TextBlock Style="{StaticResource StatLabel}"
                                                Text="в чате дней" />
                                 </StackPanel>
 
-                                <StackPanel>
+                                <StackPanel Margin="0,0,0,10">
                                     <TextBlock Style="{StaticResource StatValue.Small}"
                                                Text="{Binding SelectedRow.DailyRateDisplay}" />
                                     <TextBlock Style="{StaticResource StatLabel}"
                                                Text="сообщений в день" />
+                                </StackPanel>
+
+                                <StackPanel Margin="0,0,12,0"
+                                            Background="Transparent"
+                                            ToolTip="{Binding SelectedRow.FirstSeenMoment}">
+                                    <TextBlock Style="{StaticResource StatValue.Small}"
+                                               Text="{Binding SelectedRow.FirstSeenDisplay}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="в чате с" />
+                                </StackPanel>
+
+                                <StackPanel Background="Transparent"
+                                            ToolTip="{Binding SelectedRow.LastSeenMoment}">
+                                    <TextBlock Style="{StaticResource StatValue.Small}"
+                                               Text="{Binding SelectedRow.LastSeenDisplay}" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               Text="писал" />
+                                    <TextBlock Style="{StaticResource StatLabel}"
+                                               FontFamily="{DynamicResource Font.Mono}"
+                                               Text="{Binding SelectedRow.LastSeenMoment}" />
                                 </StackPanel>
                             </UniformGrid>
 
@@ -529,13 +577,6 @@
                                     </Grid>
                                 </Border>
                             </StackPanel>
-
-                            <TextBlock Text="{Binding SelectedRow.FirstSeenText}"
-                                       Style="{StaticResource TextBlock.Subtle}"
-                                       Margin="0,16,0,0" />
-                            <TextBlock Text="{Binding SelectedRow.LastSeenText}"
-                                       Style="{StaticResource TextBlock.Subtle}"
-                                       Margin="0,2,0,0" />
                         </StackPanel>
                     </ScrollViewer>
 

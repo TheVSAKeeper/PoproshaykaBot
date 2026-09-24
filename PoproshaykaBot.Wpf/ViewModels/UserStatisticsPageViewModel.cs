@@ -77,6 +77,12 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     [ObservableProperty]
     private string _totalPenalty = "0";
 
+    [ObservableProperty]
+    private bool _hasTotalBonus;
+
+    [ObservableProperty]
+    private bool _hasTotalPenalty;
+
     public UserStatisticsPageViewModel(
         IUserStatisticsRepository userStatistics,
         StatisticsAutoSaver statisticsAutoSaver,
@@ -210,12 +216,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             visible.Add(row);
         }
 
-        _rows.Clear();
-
-        foreach (var row in UserStatisticsRanking.Arrange(visible, SortKey, SortDescending))
-        {
-            _rows.Add(row);
-        }
+        _rows.SyncTo(UserStatisticsRanking.Arrange(visible, SortKey, SortDescending).ToList());
 
         SelectedRow = selectedId is not null
             ? _rows.FirstOrDefault(row => row.UserId == selectedId)
@@ -424,6 +425,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         TotalPoints = totalPoints.ToString("N0", UiCulture.Russian);
         TotalBonus = totalBonus > 0 ? string.Create(UiCulture.Russian, $"+{totalBonus:N0}") : "0";
         TotalPenalty = totalPenalty > 0 ? string.Create(UiCulture.Russian, $"−{totalPenalty:N0}") : "0";
+        HasTotalBonus = totalBonus > 0;
+        HasTotalPenalty = totalPenalty > 0;
 
         RebuildView();
     }
