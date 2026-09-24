@@ -263,10 +263,18 @@ public sealed partial class OnboardingWizardViewModel : ObservableObject
 
         try
         {
-            _accountsStore.SaveAll(_originalBotAccount, _originalBroadcasterAccount);
+            var written = _accountsStore.SaveAll(_originalBotAccount, _originalBroadcasterAccount);
             await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
             await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
-            _logger.OnboardingAccountsRolledBack();
+
+            if (written)
+            {
+                _logger.OnboardingAccountsRolledBack();
+            }
+            else
+            {
+                _logger.OnboardingAccountsRolledBackInMemory();
+            }
         }
         catch (Exception exception)
         {

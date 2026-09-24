@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -7,6 +7,8 @@ namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
 public sealed partial class PollsSettingsSectionViewModel : ObservableObject
 {
+    public const string NotWrittenNotice = "Настройки опросов применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните их ещё раз.";
+
     private readonly PollsStore _store;
     private readonly TimeProvider _timeProvider;
     private bool _isLoading;
@@ -14,6 +16,9 @@ public sealed partial class PollsSettingsSectionViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private bool _hasChanges;
+
+    [ObservableProperty]
+    private string? _notice;
 
     [ObservableProperty]
     private bool _startEnabled;
@@ -63,13 +68,21 @@ public sealed partial class PollsSettingsSectionViewModel : ObservableObject
 
     public string TabTitle => "Опросы";
 
-    [RelayCommand(CanExecute = nameof(HasChanges))]
-    private void Save()
+    public bool SaveChanges()
     {
         var draft = _store.Load();
         ApplyToDraft(draft);
-        _store.Save(draft);
+        var written = _store.Save(draft);
         HasChanges = false;
+        Notice = written ? null : NotWrittenNotice;
+
+        return written;
+    }
+
+    [RelayCommand(CanExecute = nameof(HasChanges))]
+    private void Save()
+    {
+        SaveChanges();
     }
 
     [RelayCommand]

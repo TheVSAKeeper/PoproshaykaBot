@@ -11,8 +11,6 @@ namespace PoproshaykaBot.Wpf;
 
 public partial class App
 {
-    private static readonly string _uiPreferencesRelativePath = Path.Combine("settings", "ui-preferences.toml");
-
     private static ISettingsStore OfferLegacyDataImport(ISettingsStore uiSettings, string uiSettingsPath)
     {
         if (uiSettings.GetBool(SettingsKeys.LegacyImportDismissed))
@@ -62,10 +60,7 @@ public partial class App
 
     private static ISettingsStore ReloadUiSettingsIfImported(ISettingsStore uiSettings, string uiSettingsPath, LegacyImportResult? result)
     {
-        var imported = result?.CopiedFiles.Any(file =>
-            string.Equals(file, _uiPreferencesRelativePath, StringComparison.OrdinalIgnoreCase)) == true;
-
-        if (!imported)
+        if (result?.CopiedUiPreferences != true)
         {
             return uiSettings;
         }

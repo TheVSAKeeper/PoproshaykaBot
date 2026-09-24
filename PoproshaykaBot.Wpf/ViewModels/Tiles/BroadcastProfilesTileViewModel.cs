@@ -23,6 +23,8 @@ namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewModel, IDisposable
 {
+    public const string NotWrittenNotice = "Профили изменены до перезапуска. В файл изменения не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и повторите правку.";
+
     private static readonly TimeSpan TitleMatchTimeout = TimeSpan.FromMilliseconds(100);
 
     private readonly BroadcastProfilesManager _manager;
@@ -50,6 +52,9 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     [ObservableProperty]
     private bool _isStatusError;
+
+    [ObservableProperty]
+    private string? _unsavedNotice;
 
     public bool HasProfiles => Items.Count > 0;
 
@@ -184,7 +189,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
         try
         {
-            _manager.Upsert(saved);
+            ReportWrite(_manager.Upsert(saved));
         }
         catch (InvalidOperationException ex)
         {
@@ -234,7 +239,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
             return;
         }
 
-        _manager.Remove(profile.Id);
+        ReportWrite(_manager.Remove(profile.Id));
     }
 
     private async Task<bool> EditInDialogAsync(BroadcastProfile profile)
@@ -256,12 +261,17 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     {
         try
         {
-            _manager.Upsert(profile);
+            ReportWrite(_manager.Upsert(profile));
         }
         catch (InvalidOperationException ex)
         {
             ShowStatus(ex.Message, true);
         }
+    }
+
+    private void ReportWrite(bool written)
+    {
+        UnsavedNotice = written ? null : NotWrittenNotice;
     }
 
     private async Task ApplyGuardedAsync(Func<Task> apply)
@@ -335,7 +345,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
         try
         {
-            _manager.Upsert(copy);
+            ReportWrite(_manager.Upsert(copy));
         }
         catch (InvalidOperationException ex)
         {

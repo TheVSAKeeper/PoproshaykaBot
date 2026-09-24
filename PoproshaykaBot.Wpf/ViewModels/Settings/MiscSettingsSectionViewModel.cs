@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
@@ -132,6 +133,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
 
         var imported = 0;
         var skipped = 0;
+        var written = true;
         var existingNames = new HashSet<string>(
             _broadcastProfiles.GetAll().Select(p => p.Name),
             StringComparer.OrdinalIgnoreCase);
@@ -161,7 +163,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
 
             try
             {
-                _broadcastProfiles.Upsert(profile);
+                written &= _broadcastProfiles.Upsert(profile);
                 existingNames.Add(name);
                 imported++;
             }
@@ -171,7 +173,15 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
             }
         }
 
-        _dialogService.Info("Импорт профилей", $"Импортировано: {imported}. Пропущено: {skipped}.");
+        var counts = $"Импортировано: {imported}. Пропущено: {skipped}.";
+
+        if (!written)
+        {
+            _dialogService.Warning("Импорт профилей", $"{counts} {BroadcastProfilesTileViewModel.NotWrittenNotice}");
+            return;
+        }
+
+        _dialogService.Info("Импорт профилей", counts);
     }
 
     private sealed record ExternalTwitchProfile(string? Name, string? Title, string? CategoryId);

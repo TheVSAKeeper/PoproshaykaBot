@@ -26,18 +26,13 @@ public class PollsStore
         return _store.Load();
     }
 
-    public virtual void Mutate(Action<PollsSettings> mutator)
-    {
-        _store.Mutate(mutator);
-    }
-
-    public virtual TResult Mutate<TResult>(Func<PollsSettings, TResult> mutator)
+    public virtual bool Mutate(Action<PollsSettings> mutator)
     {
         return _store.Mutate(mutator);
     }
 
-    public virtual void Save(PollsSettings value)
+    public virtual bool Save(PollsSettings value)
     {
-        _store.Save(value);
+        return _store.Save(value);
     }
 }

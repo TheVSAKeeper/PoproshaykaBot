@@ -13,6 +13,7 @@ public sealed class LegacyImportDialog(
     IFilePicker filePicker,
     StatisticsAutoSaver statisticsAutoSaver,
     SettingsWriteGate settingsWriteGate,
+    UiSettingsWriteGuard uiSettingsGuard,
     ILogger<LegacyImportDialog> logger) : ILegacyImportDialog
 {
     public LegacyImportResult? Show()
@@ -35,7 +36,8 @@ public sealed class LegacyImportDialog(
             filePicker,
             logger,
             statisticsAutoSaver,
-            settingsWriteGate);
+            settingsWriteGate,
+            uiSettingsGuard);
 
         var window = new LegacyImportWindow(viewModel)
         {

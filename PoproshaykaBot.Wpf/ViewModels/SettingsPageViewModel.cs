@@ -405,8 +405,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             ReconcileHttpServerPort();
             var newPort = _settings.Twitch.HttpServerPort;
 
-            _settingsManager.SaveSettings(_settings);
-            _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
+            var written = _settingsManager.SaveSettings(_settings);
+            written &= _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
             SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
             _updateStore.Save(_updateDraft);
@@ -415,7 +415,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
             if (Polls.HasChanges)
             {
-                Polls.SaveCommand.Execute(null);
+                written &= Polls.SaveChanges();
             }
 
             if (!string.Equals(prevBotToken, _botDraft.AccessToken, StringComparison.Ordinal))
@@ -453,7 +453,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                 return;
             }
 
-            var saved = _settingsWriteGate.HasRevoked
+            var saved = !written || _settingsWriteGate.HasRevoked
                 ? NotWrittenNotice
                 : "Настройки успешно сохранены.";
 

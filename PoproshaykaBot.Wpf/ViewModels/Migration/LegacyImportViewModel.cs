@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Wpf.Infrastructure;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -17,6 +18,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private readonly bool _isSettingsEntry;
     private readonly StatisticsAutoSaver? _statisticsAutoSaver;
     private readonly SettingsWriteGate? _settingsWriteGate;
+    private readonly UiSettingsWriteGuard? _uiSettingsGuard;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
@@ -54,13 +56,15 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         IFilePicker filePicker,
         ILogger logger,
         StatisticsAutoSaver? statisticsAutoSaver = null,
-        SettingsWriteGate? settingsWriteGate = null)
+        SettingsWriteGate? settingsWriteGate = null,
+        UiSettingsWriteGuard? uiSettingsGuard = null)
     {
         _filePicker = filePicker;
         _logger = logger;
         _isSettingsEntry = isSettingsEntry;
         _statisticsAutoSaver = statisticsAutoSaver;
         _settingsWriteGate = settingsWriteGate;
+        _uiSettingsGuard = uiSettingsGuard;
         CanOverwriteExisting = hasOwnData;
         CanDismiss = !isSettingsEntry;
 
@@ -126,11 +130,24 @@ public sealed partial class LegacyImportViewModel : ObservableObject
                 : _statisticsAutoSaver.RunExternalWriteAsync(Import, static imported => imported.ExternalWrite);
         }
 
-        var result = _settingsWriteGate is null
-            ? await WithStatisticsScope().ConfigureAwait(true)
-            : await _settingsWriteGate
-                .RunExternalWriteAsync(WithStatisticsScope, static imported => imported.RewrittenSettingsFiles)
-                .ConfigureAwait(true);
+        LegacyImportResult result;
+        var uiPreferencesKept = false;
+        _uiSettingsGuard?.Suspend();
+
+        try
+        {
+            result = _settingsWriteGate is null
+                ? await WithStatisticsScope().ConfigureAwait(true)
+                : await _settingsWriteGate
+                    .RunExternalWriteAsync(WithStatisticsScope, static imported => imported.RewrittenSettingsFiles)
+                    .ConfigureAwait(true);
+
+            uiPreferencesKept = !result.CopiedUiPreferences;
+        }
+        finally
+        {
+            _uiSettingsGuard?.Resume(rewritten: !uiPreferencesKept);
+        }
 
         Result = result;
         ResultHeadline = LegacyImportText.BuildHeadline(result);
