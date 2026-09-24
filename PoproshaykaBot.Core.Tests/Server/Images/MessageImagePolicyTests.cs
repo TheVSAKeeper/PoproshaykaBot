@@ -39,60 +39,60 @@ public sealed class MessageImagePolicyTests
     [TestCase(UserStatus.Vip, true)]
     [TestCase(UserStatus.Subscriber, false)]
     [TestCase(UserStatus.None, false)]
-    public void BuildImageUrls_DefaultRoles_AllowOnlyBroadcasterModeratorAndVip(UserStatus status, bool expected)
+    public void BuildImages_DefaultRoles_AllowOnlyBroadcasterModeratorAndVip(UserStatus status, bool expected)
     {
-        var urls = MessageImagePolicy.BuildImageUrls(Message(status), EnabledSettings());
+        var urls = MessageImagePolicy.BuildImages(Message(status), EnabledSettings());
 
         Assert.That(urls.Count > 0, Is.EqualTo(expected));
     }
 
     [Test]
-    public void BuildImageUrls_EveryoneRole_AllowsPlainViewer()
+    public void BuildImages_EveryoneRole_AllowsPlainViewer()
     {
         var settings = EnabledSettings();
         settings.MessageImageRoles = MessageImageSenderRoles.Everyone;
 
-        var urls = MessageImagePolicy.BuildImageUrls(Message(UserStatus.None), settings);
+        var urls = MessageImagePolicy.BuildImages(Message(UserStatus.None), settings);
 
         Assert.That(urls, Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void BuildImageUrls_Disabled_ReturnsNothing()
+    public void BuildImages_Disabled_ReturnsNothing()
     {
         var settings = EnabledSettings();
         settings.ShowMessageImages = false;
 
-        Assert.That(MessageImagePolicy.BuildImageUrls(Message(UserStatus.Moderator), settings), Is.Empty);
+        Assert.That(MessageImagePolicy.BuildImages(Message(UserStatus.Moderator), settings), Is.Empty);
     }
 
     [Test]
-    public void BuildImageUrls_DefaultSettings_ReturnNothing()
+    public void BuildImages_DefaultSettings_ReturnNothing()
     {
-        Assert.That(MessageImagePolicy.BuildImageUrls(Message(UserStatus.Broadcaster), new()), Is.Empty,
+        Assert.That(MessageImagePolicy.BuildImages(Message(UserStatus.Broadcaster), new()), Is.Empty,
             "По умолчанию функция выключена – обновление не должно включать её само.");
     }
 
     [Test]
-    public void BuildImageUrls_ReturnsLocalProxyUrlWithEncodedSource()
+    public void BuildImages_ReturnsLocalProxyUrlWithEncodedSource()
     {
-        var urls = MessageImagePolicy.BuildImageUrls(Message(UserStatus.Moderator), EnabledSettings());
+        var urls = MessageImagePolicy.BuildImages(Message(UserStatus.Moderator), EnabledSettings());
 
-        Assert.That(urls.Single(), Is.EqualTo("/api/image?u=https%3A%2F%2Fi.imgur.com%2Fabc.png"),
+        Assert.That(urls.Single().Url, Is.EqualTo("/api/image?u=https%3A%2F%2Fi.imgur.com%2Fabc.png"),
             "Браузер OBS обязан ходить только на свой прокси, внешний URL в DTO попадать не должен.");
     }
 
     [Test]
-    public void BuildImageUrls_KeepsAtMostOneImage()
+    public void BuildImages_KeepsAtMostOneImage()
     {
         var text = "https://i.imgur.com/one.png и https://i.imgur.com/two.png";
 
-        Assert.That(MessageImagePolicy.BuildImageUrls(Message(UserStatus.Moderator, text), EnabledSettings()), Has.Count.EqualTo(1));
+        Assert.That(MessageImagePolicy.BuildImages(Message(UserStatus.Moderator, text), EnabledSettings()), Has.Count.EqualTo(1));
     }
 
     [TestCase(ChatMessageType.BotResponse)]
     [TestCase(ChatMessageType.SystemNotification)]
-    public void BuildImageUrls_NonUserMessage_ReturnsNothing(ChatMessageType messageType)
+    public void BuildImages_NonUserMessage_ReturnsNothing(ChatMessageType messageType)
     {
         var settings = EnabledSettings();
         settings.MessageImageRoles = MessageImageSenderRoles.Everyone;
@@ -105,7 +105,7 @@ public sealed class MessageImagePolicyTests
             MessageType = messageType,
         };
 
-        Assert.That(MessageImagePolicy.BuildImageUrls(message, settings), Is.Empty);
+        Assert.That(MessageImagePolicy.BuildImages(message, settings), Is.Empty);
     }
 
     [Test]
@@ -116,9 +116,19 @@ public sealed class MessageImagePolicyTests
 
         using var document = JsonDocument.Parse(json);
         var images = document.RootElement.GetProperty("images");
+        var links = document.RootElement.GetProperty("imageLinks");
 
         Assert.That(images.GetArrayLength(), Is.EqualTo(1));
+        Assert.That(images[0].ValueKind, Is.EqualTo(JsonValueKind.String),
+            "Элемент images – строка: Browser Source, открытый со старым obs.js, иначе перестаёт вставлять картинки.");
         Assert.That(images[0].GetString(), Does.StartWith("/api/image?u="));
+        Assert.That(links.GetArrayLength(), Is.EqualTo(images.GetArrayLength()));
+
+        var start = links[0].GetProperty("startIndex").GetInt32();
+        var end = links[0].GetProperty("endIndex").GetInt32();
+
+        Assert.That(("смотри " + Link)[start..(end + 1)], Is.EqualTo(Link),
+            "obs.js прячет ссылку по этому отрезку, когда картинка загрузилась, – индексы обязаны указывать на текст ссылки.");
     }
 
     [Test]
@@ -130,5 +140,6 @@ public sealed class MessageImagePolicyTests
         using var document = JsonDocument.Parse(json);
 
         Assert.That(document.RootElement.GetProperty("images").GetArrayLength(), Is.Zero);
+        Assert.That(document.RootElement.GetProperty("imageLinks").GetArrayLength(), Is.Zero);
     }
 }

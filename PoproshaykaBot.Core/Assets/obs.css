@@ -492,6 +492,11 @@ body::-webkit-scrollbar {
     display: none;
 }
 
+.message.has-message-image:not(.no-message-images) .message-image-link,
+.message.has-message-image:not(.no-message-images) .message-text.message-text-link-only {
+    display: none;
+}
+
 .system-message {
     font-weight: 500;
     font-style: italic;
