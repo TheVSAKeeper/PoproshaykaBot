@@ -8,7 +8,6 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
-using System.Net;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Streaming;
@@ -31,6 +30,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private readonly StreamMetadataRetryLoop _metadataRetryLoop;
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
+    private readonly EventSubSubscriptionLedger _ledger;
 
     private IDisposable? _channelUpdatedSubscription;
     private CancellationTokenSource? _runCts;
@@ -58,6 +58,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _timeProvider = timeProvider;
         _logger = logger;
         _metadataRetryLoop = new(FetchMetadataAttemptAsync, IsCurrentlyOnline, logger);
+        _ledger = new(helix, logger);
     }
 
     public StreamStatus CurrentStatus => _state.CurrentStatus;
@@ -123,6 +124,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _runCts = null;
 
         _state.ResetToUnknown();
+
+        await _ledger.CloseAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("StreamStatusManager: подписки на EventSub сняты, состояние сброшено в Unknown");
     }
@@ -304,11 +307,15 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         _logger.LogWarning("EventSub revocation: id={Id}, type={Type}, status={Status}", args.SubscriptionId, args.SubscriptionType, args.Status);
 
-        if (string.IsNullOrEmpty(_eventSubClient.SessionId))
+        var sessionId = _eventSubClient.SessionId;
+
+        if (string.IsNullOrEmpty(sessionId))
         {
             _logger.LogDebug("Восстановление подписки {Type} пропущено: SessionId уже отсутствует", args.SubscriptionType);
             return;
         }
+
+        var generation = _ledger.Generation;
 
         try
         {
@@ -325,17 +332,25 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 { "broadcaster_user_id", broadcasterId },
             };
 
-            var newId = await _helix.CreateEventSubSubscriptionAsync(args.SubscriptionType,
+            var result = await EventSubSubscriptions.CreateAsync(_helix,
+                args.SubscriptionType,
                 "1",
                 condition,
-                _eventSubClient.SessionId,
+                sessionId,
+                _logger,
                 cancellationToken);
 
-            _logger.LogInformation("Подписка {Type} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, newId);
-        }
-        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-        {
-            _logger.LogInformation(ex, "Подписка {Type} уже существует для текущей EventSub-сессии – переиспользуем", args.SubscriptionType);
+            await _ledger.RecordAsync(generation, args.SubscriptionType, result, cancellationToken);
+
+            if (result.Outcome == EventSubSubscribeOutcome.Created)
+            {
+                _logger.LogInformation("Подписка {Type} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, result.SubscriptionIds[0]);
+            }
+            else if (result.Outcome == EventSubSubscribeOutcome.Reused)
+            {
+                _logger.LogInformation("Подписка {Type} {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем",
+                    args.SubscriptionType, result.SubscriptionIds);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -599,6 +614,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private async Task CreateEventSubSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
     {
+        var generation = _ledger.Generation;
         var broadcasterId = await _broadcasterIdProvider.GetAsync(cancellationToken);
 
         if (string.IsNullOrEmpty(broadcasterId))
@@ -619,23 +635,31 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         {
             try
             {
-                var subscriptionId = await _helix.CreateEventSubSubscriptionAsync(type,
+                var result = await EventSubSubscriptions.CreateAsync(_helix,
+                    type,
                     "1",
                     condition,
                     sessionId,
+                    _logger,
                     cancellationToken);
 
-                subscriptionsCreated++;
+                await _ledger.RecordAsync(generation, type, result, cancellationToken);
 
-                _logger.LogInformation("Подписка '{Type}' создана. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}",
-                    type, subscriptionId, sessionId);
-            }
-            catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-            {
-                subscriptionsCreated++;
+                if (result.IsSubscribed)
+                {
+                    subscriptionsCreated++;
+                }
 
-                _logger.LogInformation(ex, "Подписка '{Type}' уже существует для текущей EventSub-сессии – переиспользуем (SessionId: {SessionId})",
-                    type, sessionId);
+                if (result.Outcome == EventSubSubscribeOutcome.Created)
+                {
+                    _logger.LogInformation("Подписка '{Type}' создана. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}",
+                        type, result.SubscriptionIds[0], sessionId);
+                }
+                else if (result.Outcome == EventSubSubscribeOutcome.Reused)
+                {
+                    _logger.LogInformation("Подписка '{Type}' {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем (SessionId: {SessionId})",
+                        type, result.SubscriptionIds, sessionId);
+                }
             }
             catch (Exception ex)
             {

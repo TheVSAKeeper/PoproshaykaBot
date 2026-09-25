@@ -105,8 +105,9 @@ public sealed class ChannelUpdateSubscriberTests
         Assert.That(_subscriber.IsHealthy, Is.False);
     }
 
-    [Test]
-    public async Task HandleSessionWelcome_WhenSubscriptionConflict_StaysHealthy_AfterFix()
+    [TestCase("session-1", "enabled", true, TestName = "409 с подпиской своей сессии – переиспользуется и удаляется при остановке")]
+    [TestCase("session-other", "enabled", false, TestName = "409 с подпиской чужой активной сессии – нездоров и чужую не трогает")]
+    public async Task Ответ_409_решается_по_сессии_найденной_подписки(string sessionId, string status, bool reused)
     {
         _helix.CreateEventSubSubscriptionAsync("channel.update",
                 "2",
@@ -119,14 +120,51 @@ public sealed class ChannelUpdateSubscriberTests
                 "subscription already exists",
                 null));
 
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([
+                new EventSubSubscriptionInfo("sub-existing",
+                    "channel.update",
+                    status,
+                    sessionId,
+                    new Dictionary<string, string> { ["broadcaster_user_id"] = BroadcasterId }),
+            ]);
+
         await _subscriber.StartAsync(NullProgress, CancellationToken.None);
 
         _eventSubClient.OnSessionWelcome +=
             Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60),
                 CancellationToken.None);
 
-        Assert.That(_subscriber.IsHealthy, Is.True,
-            "409 при session_reconnect означает, что подписка уже создана от прежней сессии и перенесена Twitch'ом – IsHealthy должен остаться true");
+        Assert.That(_subscriber.IsHealthy, Is.EqualTo(reused));
+
+        await _subscriber.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(reused ? 1 : 0).DeleteEventSubSubscriptionAsync("sub-existing", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Остановка_удаляет_подписку_восстановленную_после_отзыва()
+    {
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns("sub-first", "sub-restored");
+
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60),
+                CancellationToken.None);
+
+        _eventSubClient.OnRevocation += Raise.Event<EventSubAsyncHandler<EventSubRevocationArgs>>(new EventSubRevocationArgs("sub-first", "channel.update", "user_removed"),
+            CancellationToken.None);
+
+        await _subscriber.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-restored", Arg.Any<CancellationToken>());
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-first", Arg.Any<CancellationToken>());
     }
 
     [Test]

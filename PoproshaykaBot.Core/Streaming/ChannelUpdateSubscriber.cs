@@ -6,7 +6,6 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
-using System.Net;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Streaming;
@@ -24,6 +23,7 @@ public sealed class ChannelUpdateSubscriber(
     private const string SubscriptionType = "channel.update";
     private const string SubscriptionVersion = "2";
 
+    private readonly EventSubSubscriptionLedger _ledger = new(helix, logger);
     private bool _subscribed;
 
     public bool IsHealthy { get; private set; } = true;
@@ -48,11 +48,11 @@ public sealed class ChannelUpdateSubscriber(
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (!_subscribed)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         eventSubClient.OnSessionWelcome -= HandleSessionWelcomeAsync;
@@ -60,11 +60,12 @@ public sealed class ChannelUpdateSubscriber(
         eventSubClient.OnRevocation -= HandleRevocationAsync;
         _subscribed = false;
 
-        return Task.CompletedTask;
+        await _ledger.CloseAsync(cancellationToken);
     }
 
     private async Task HandleSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
+        var generation = _ledger.Generation;
         var broadcasterId = await broadcasterIdProvider.GetAsync(cancellationToken);
 
         if (string.IsNullOrEmpty(broadcasterId))
@@ -76,22 +77,19 @@ public sealed class ChannelUpdateSubscriber(
 
         try
         {
-            await helix.CreateEventSubSubscriptionAsync(SubscriptionType,
-                SubscriptionVersion,
-                new Dictionary<string, string>
-                {
-                    ["broadcaster_user_id"] = broadcasterId,
-                },
-                args.SessionId,
-                cancellationToken);
+            var result = await SubscribeAsync(generation, broadcasterId, args.SessionId, cancellationToken);
 
-            IsHealthy = true;
-            logger.LogInformation("ChannelUpdateSubscriber: подписка на {Type} создана", SubscriptionType);
-        }
-        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-        {
-            IsHealthy = true;
-            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии – переиспользуем", SubscriptionType);
+            IsHealthy = result.IsSubscribed;
+
+            if (result.Outcome == EventSubSubscribeOutcome.Created)
+            {
+                logger.LogInformation("ChannelUpdateSubscriber: подписка на {Type} создана", SubscriptionType);
+            }
+            else if (result.Outcome == EventSubSubscribeOutcome.Reused)
+            {
+                logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем",
+                    SubscriptionType, result.SubscriptionIds);
+            }
         }
         catch (Exception ex)
         {
@@ -138,6 +136,8 @@ public sealed class ChannelUpdateSubscriber(
         logger.LogWarning("ChannelUpdateSubscriber: подписка {Type} отозвана ({Status})", args.SubscriptionType, args.Status);
         IsHealthy = false;
 
+        var generation = _ledger.Generation;
+
         var sessionId = eventSubClient.SessionId;
 
         if (string.IsNullOrEmpty(sessionId))
@@ -156,27 +156,41 @@ public sealed class ChannelUpdateSubscriber(
 
         try
         {
-            await helix.CreateEventSubSubscriptionAsync(SubscriptionType,
-                SubscriptionVersion,
-                new Dictionary<string, string>
-                {
-                    ["broadcaster_user_id"] = broadcasterId,
-                },
-                sessionId,
-                cancellationToken);
+            var result = await SubscribeAsync(generation, broadcasterId, sessionId, cancellationToken);
 
-            IsHealthy = true;
-            logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} восстановлена после revocation", SubscriptionType);
-        }
-        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-        {
-            IsHealthy = true;
-            logger.LogInformation(ex, "ChannelUpdateSubscriber: подписка {Type} уже существует для текущей EventSub-сессии – переиспользуем после revocation", SubscriptionType);
+            IsHealthy = result.IsSubscribed;
+
+            if (result.Outcome == EventSubSubscribeOutcome.Created)
+            {
+                logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} восстановлена после revocation", SubscriptionType);
+            }
+            else if (result.Outcome == EventSubSubscribeOutcome.Reused)
+            {
+                logger.LogInformation("ChannelUpdateSubscriber: подписка {Type} {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем после revocation",
+                    SubscriptionType, result.SubscriptionIds);
+            }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "ChannelUpdateSubscriber: не удалось восстановить подписку {Type} после revocation", SubscriptionType);
         }
+    }
+
+    private async Task<EventSubSubscribeResult> SubscribeAsync(long generation, string broadcasterId, string sessionId, CancellationToken cancellationToken)
+    {
+        var result = await EventSubSubscriptions.CreateAsync(helix,
+            SubscriptionType,
+            SubscriptionVersion,
+            new Dictionary<string, string>
+            {
+                ["broadcaster_user_id"] = broadcasterId,
+            },
+            sessionId,
+            logger,
+            cancellationToken);
+
+        await _ledger.RecordAsync(generation, SubscriptionType, result, cancellationToken);
+        return result;
     }
 
     private static IReadOnlyList<string> ParseStringArray(JsonElement parent, string propertyName)

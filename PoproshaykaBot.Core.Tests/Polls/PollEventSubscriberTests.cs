@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using NSubstitute.ExceptionExtensions;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Polling;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Polls;
@@ -84,6 +85,40 @@ public sealed class PollEventSubscriberTests
                     "existing-session",
                     Arg.Any<CancellationToken>());
         }
+    }
+
+    [Test]
+    public async Task Остановка_удаляет_созданные_и_переиспользованные_по_409_подписки()
+    {
+        _helix.CreateEventSubSubscriptionAsync("channel.poll.progress",
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HelixRequestException(HttpMethod.Post,
+                "helix/eventsub/subscriptions",
+                System.Net.HttpStatusCode.Conflict,
+                "subscription already exists",
+                null));
+
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([
+                new EventSubSubscriptionInfo("sub-progress",
+                    "channel.poll.progress",
+                    "enabled",
+                    "session-1",
+                    new Dictionary<string, string> { ["broadcaster_user_id"] = BroadcasterId }),
+            ]);
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(_subscriber.IsHealthy, Is.True);
+
+        await _subscriber.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-progress", Arg.Any<CancellationToken>());
+        await _helix.Received(3).DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Test]

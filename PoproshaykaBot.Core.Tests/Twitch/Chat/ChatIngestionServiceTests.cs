@@ -137,17 +137,18 @@ public sealed class ChatIngestionServiceTests
     }
 
     [Test]
-    public async Task Остановка_удаляет_переиспользованную_по_409_подписку_найденную_по_сессии_и_условию()
+    public async Task Остановка_удаляет_все_переиспользованные_по_409_подписки_текущей_сессии()
     {
         SetUpConflict();
 
-        _helix.GetEventSubSubscriptionsAsync("channel.chat.message", Arg.Any<CancellationToken>())
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
             .Returns(new List<EventSubSubscriptionInfo>
             {
                 ChatSubscription("sub-old-session", "session-0", BroadcasterId, BotId),
                 ChatSubscription("sub-other-channel", "session-1", "99999", BotId),
                 ChatSubscription("sub-other-bot", "session-1", BroadcasterId, "11111"),
                 ChatSubscription("sub-reused", "session-1", BroadcasterId, BotId),
+                ChatSubscription("sub-reused-twin", "session-1", BroadcasterId, BotId),
             });
 
         _eventSubClient.SessionId.Returns("session-1");
@@ -158,23 +159,29 @@ public sealed class ChatIngestionServiceTests
         await _service.StopAsync(NullProgress, CancellationToken.None);
 
         await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-reused", Arg.Any<CancellationToken>());
-        await _helix.Received(1).DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-reused-twin", Arg.Any<CancellationToken>());
+        await _helix.Received(2).DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    private static IEnumerable<TestCaseData> LookupFailures()
+    private static IEnumerable<TestCaseData> ConflictsWithoutOwnSubscription()
     {
         yield return new TestCaseData(new HelixRequestException(HttpMethod.Get,
             "/helix/eventsub/subscriptions",
             HttpStatusCode.InternalServerError,
             "oops",
-            null)).SetArgDisplayNames("HTTP 500");
+            null), null).SetArgDisplayNames("поиск: HTTP 500");
 
-        yield return new TestCaseData(new HttpRequestException("сеть недоступна")).SetArgDisplayNames("сеть");
-        yield return new TestCaseData((Exception?)null).SetArgDisplayNames("подписки нет в списке");
+        yield return new TestCaseData(new HttpRequestException("сеть недоступна"), null).SetArgDisplayNames("поиск: сеть");
+
+        yield return new TestCaseData(null, new List<EventSubSubscriptionInfo>())
+            .SetArgDisplayNames("подписки нет в списке");
+
+        yield return new TestCaseData(null, new List<EventSubSubscriptionInfo> { ChatSubscription("sub-foreign", "session-0", BroadcasterId, BotId) })
+            .SetArgDisplayNames("подписка на чужой активной сессии");
     }
 
-    [TestCaseSource(nameof(LookupFailures))]
-    public async Task Несостоявшийся_поиск_переиспользованной_подписки_не_ломает_подключение(Exception? failure)
+    [TestCaseSource(nameof(ConflictsWithoutOwnSubscription))]
+    public async Task Ответ_409_без_подписки_на_текущей_сессии_не_открывает_приём_и_ничего_не_удаляет(Exception? failure, List<EventSubSubscriptionInfo>? listed)
     {
         var starts = 0;
         _eventBus.Subscribe<ChatIngestionStarted>(_ => starts++);
@@ -183,12 +190,12 @@ public sealed class ChatIngestionServiceTests
 
         if (failure is null)
         {
-            _helix.GetEventSubSubscriptionsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-                .Returns(new List<EventSubSubscriptionInfo> { ChatSubscription("sub-foreign", "session-0", BroadcasterId, BotId) });
+            _helix.GetEventSubSubscriptionsByUserAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(listed!);
         }
         else
         {
-            _helix.GetEventSubSubscriptionsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            _helix.GetEventSubSubscriptionsByUserAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .ThrowsAsync(failure);
         }
 
@@ -198,13 +205,38 @@ public sealed class ChatIngestionServiceTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(_service.IsJoined, Is.True);
-            Assert.That(starts, Is.EqualTo(1));
+            Assert.That(_service.IsJoined, Is.False);
+            Assert.That(starts, Is.Zero);
         }
 
         await _service.StopAsync(NullProgress, CancellationToken.None);
 
         await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Подписка_отключённой_сессии_удаляется_и_приём_открывается_на_текущей()
+    {
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => throw ConflictException(), _ => "sub-new");
+
+        var stale = ChatSubscription("sub-stale", "session-0", BroadcasterId, BotId) with { Status = "websocket_disconnected" };
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns(new List<EventSubSubscriptionInfo> { stale });
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await _service.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(_service.IsJoined, Is.True);
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-stale", Arg.Any<CancellationToken>());
+
+        await _service.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-new", Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -216,7 +248,7 @@ public sealed class ChatIngestionServiceTests
         SetUpConflict();
 
         var pending = new TaskCompletionSource<IReadOnlyList<EventSubSubscriptionInfo>>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _helix.GetEventSubSubscriptionsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _helix.GetEventSubSubscriptionsByUserAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(pending.Task);
 
         _eventSubClient.SessionId.Returns("session-1");
@@ -256,11 +288,16 @@ public sealed class ChatIngestionServiceTests
                 Arg.Any<IReadOnlyDictionary<string, string>>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .ThrowsAsync(new HelixRequestException(HttpMethod.Post,
-                "/helix/eventsub/subscriptions",
-                HttpStatusCode.Conflict,
-                "subscription already exists",
-                null));
+            .ThrowsAsync(ConflictException());
+    }
+
+    private static HelixRequestException ConflictException()
+    {
+        return new(HttpMethod.Post,
+            "/helix/eventsub/subscriptions",
+            HttpStatusCode.Conflict,
+            "subscription already exists",
+            null);
     }
 
     private static IEnumerable<TestCaseData> DeleteFailures()

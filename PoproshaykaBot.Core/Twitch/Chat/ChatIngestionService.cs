@@ -6,7 +6,6 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
-using System.Net;
 
 namespace PoproshaykaBot.Core.Twitch.Chat;
 
@@ -28,7 +27,7 @@ public sealed class ChatIngestionService(
     private readonly object _joinLock = new();
     private bool _subscribed;
     private long _generation;
-    private string? _subscriptionId;
+    private IReadOnlyList<string> _subscriptionIds = [];
     private long _joinedAtUtcTicks;
     private long _lastMessageAtUtcTicks;
 
@@ -80,12 +79,9 @@ public sealed class ChatIngestionService(
 
         logger.LogInformation("ChatIngestionService: отписка от EventSub");
 
-        await MarkLeftAsync(out _, out var subscriptionId);
+        await MarkLeftAsync(out _, out var subscriptionIds);
 
-        if (subscriptionId != null)
-        {
-            await DeleteSubscriptionAsync(subscriptionId, cancellationToken);
-        }
+        await EventSubSubscriptions.DeleteAsync(helix, ChatMessageSubscriptionType, subscriptionIds, logger, cancellationToken);
     }
 
     private static DateTimeOffset? ToTimestamp(long utcTicks)
@@ -129,7 +125,8 @@ public sealed class ChatIngestionService(
 
                 try
                 {
-                    var subscriptionId = await helix.CreateEventSubSubscriptionAsync("channel.chat.message",
+                    var result = await EventSubSubscriptions.CreateAsync(helix,
+                        ChatMessageSubscriptionType,
                         "1",
                         new Dictionary<string, string>
                         {
@@ -137,52 +134,34 @@ public sealed class ChatIngestionService(
                             ["user_id"] = botId,
                         },
                         args.SessionId,
+                        logger,
                         ct);
 
-                    await MarkJoinedAsync(generation, subscriptionId, out var current);
-
-                    if (!current)
+                    if (!result.IsSubscribed)
                     {
-                        logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionId} создана, когда приём чата уже остановлен – удаляем",
-                            subscriptionId);
-
-                        await DeleteSubscriptionAsync(subscriptionId, ct);
                         return;
                     }
 
-                    logger.LogInformation("ChatIngestionService: подписка channel.chat.message создана (broadcaster={BroadcasterId}, bot={BotId}, попытка {Attempt})",
-                        broadcasterId, botId, attempt + 1);
-
-                    return;
-                }
-                catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-                {
-                    var existingId = await FindExistingSubscriptionAsync(args.SessionId, broadcasterId, botId, ct);
-
-                    await MarkJoinedAsync(generation, existingId, out var current);
+                    await MarkJoinedAsync(generation, result.SubscriptionIds, out var current);
 
                     if (!current)
                     {
-                        if (existingId != null)
-                        {
-                            logger.LogInformation("ChatIngestionService: существующая подписка channel.chat.message {SubscriptionId} найдена, когда приём чата уже остановлен – удаляем",
-                                existingId);
+                        logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionIds} получена, когда приём чата уже остановлен – удаляем",
+                            result.SubscriptionIds);
 
-                            await DeleteSubscriptionAsync(existingId, ct);
-                        }
-
+                        await EventSubSubscriptions.DeleteAsync(helix, ChatMessageSubscriptionType, result.SubscriptionIds, logger, ct);
                         return;
                     }
 
-                    if (existingId != null)
+                    if (result.Outcome == EventSubSubscribeOutcome.Reused)
                     {
-                        logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionId} уже существует для текущей EventSub-сессии – переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
-                            existingId, broadcasterId, botId);
+                        logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем (broadcaster={BroadcasterId}, bot={BotId})",
+                            result.SubscriptionIds, broadcasterId, botId);
                     }
                     else
                     {
-                        logger.LogWarning("ChatIngestionService: подписка channel.chat.message уже существует для текущей EventSub-сессии, но её id не найден – переиспользуем, при остановке она не удаляется (broadcaster={BroadcasterId}, bot={BotId})",
-                            broadcasterId, botId);
+                        logger.LogInformation("ChatIngestionService: подписка channel.chat.message создана (broadcaster={BroadcasterId}, bot={BotId}, попытка {Attempt})",
+                            broadcasterId, botId, attempt + 1);
                     }
 
                     return;
@@ -241,61 +220,7 @@ public sealed class ChatIngestionService(
         return MarkLeftAsync();
     }
 
-    private async Task<string?> FindExistingSubscriptionAsync(string sessionId, string broadcasterId, string botId, CancellationToken ct)
-    {
-        try
-        {
-            var subscriptions = await helix.GetEventSubSubscriptionsAsync(ChatMessageSubscriptionType, ct);
-
-            var matches = subscriptions
-                .Where(x => string.Equals(x.Type, ChatMessageSubscriptionType, StringComparison.Ordinal)
-                            && string.Equals(x.SessionId, sessionId, StringComparison.Ordinal)
-                            && HasCondition(x, "broadcaster_user_id", broadcasterId)
-                            && HasCondition(x, "user_id", botId))
-                .ToList();
-
-            if (matches.Count > 1)
-            {
-                logger.LogWarning("ChatIngestionService: для EventSub-сессии {SessionId} найдено {Count} подписок channel.chat.message – при остановке удаляется только {SubscriptionId}",
-                    sessionId, matches.Count, matches[0].Id);
-            }
-
-            return matches.FirstOrDefault()?.Id;
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "ChatIngestionService: не удалось найти существующую подписку channel.chat.message для EventSub-сессии {SessionId}", sessionId);
-            return null;
-        }
-
-        static bool HasCondition(EventSubSubscriptionInfo subscription, string key, string value)
-        {
-            return subscription.Condition.TryGetValue(key, out var actual)
-                   && string.Equals(actual, value, StringComparison.Ordinal);
-        }
-    }
-
-    private async Task DeleteSubscriptionAsync(string subscriptionId, CancellationToken ct)
-    {
-        try
-        {
-            if (!await helix.DeleteEventSubSubscriptionAsync(subscriptionId, ct))
-            {
-                logger.LogDebug("ChatIngestionService: подписки channel.chat.message {SubscriptionId} в Twitch уже нет", subscriptionId);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "ChatIngestionService: не удалось удалить подписку channel.chat.message {SubscriptionId} – уведомления чата будут приходить, пока открыт сокет EventSub",
-                subscriptionId);
-        }
-    }
-
-    private Task MarkJoinedAsync(long generation, string? subscriptionId, out bool current)
+    private Task MarkJoinedAsync(long generation, IReadOnlyList<string> subscriptionIds, out bool current)
     {
         var now = timeProvider.GetUtcNow();
 
@@ -307,7 +232,7 @@ public sealed class ChatIngestionService(
                 return Task.CompletedTask;
             }
 
-            _subscriptionId = subscriptionId;
+            _subscriptionIds = subscriptionIds;
 
             if (Interlocked.Exchange(ref _joinedAtUtcTicks, now.UtcTicks) != 0)
             {
@@ -323,15 +248,15 @@ public sealed class ChatIngestionService(
         return MarkLeftAsync(out _, out _);
     }
 
-    private Task MarkLeftAsync(out long generation, out string? subscriptionId)
+    private Task MarkLeftAsync(out long generation, out IReadOnlyList<string> subscriptionIds)
     {
         long previous;
 
         lock (_joinLock)
         {
             generation = ++_generation;
-            subscriptionId = _subscriptionId;
-            _subscriptionId = null;
+            subscriptionIds = _subscriptionIds;
+            _subscriptionIds = [];
             previous = Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
         }
 

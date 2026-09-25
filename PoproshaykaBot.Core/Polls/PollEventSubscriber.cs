@@ -6,7 +6,6 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
-using System.Net;
 
 namespace PoproshaykaBot.Core.Polls;
 
@@ -28,6 +27,7 @@ public sealed class PollEventSubscriber(
         "channel.poll.end",
     ];
 
+    private readonly EventSubSubscriptionLedger _ledger = new(helix, logger);
     private bool _subscribed;
 
     public bool IsHealthy { get; private set; } = true;
@@ -58,11 +58,11 @@ public sealed class PollEventSubscriber(
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (!_subscribed)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         eventSubClient.OnSessionWelcome -= HandleSessionWelcomeAsync;
@@ -70,11 +70,12 @@ public sealed class PollEventSubscriber(
         eventSubClient.OnRevocation -= HandleRevocationAsync;
         _subscribed = false;
 
-        return Task.CompletedTask;
+        await _ledger.CloseAsync(cancellationToken);
     }
 
     private async Task HandleSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken ct)
     {
+        var generation = _ledger.Generation;
         var availabilityResult = await availability.GetAsync(ct);
 
         if (!availabilityResult.IsAvailable)
@@ -99,20 +100,32 @@ public sealed class PollEventSubscriber(
         {
             try
             {
-                await helix.CreateEventSubSubscriptionAsync(type,
+                var result = await EventSubSubscriptions.CreateAsync(helix,
+                    type,
                     "1",
                     new Dictionary<string, string>
                     {
                         ["broadcaster_user_id"] = broadcasterId,
                     },
                     args.SessionId,
+                    logger,
                     ct);
 
-                logger.LogInformation("PollEventSubscriber: подписка на {Type} создана", type);
-            }
-            catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-            {
-                logger.LogInformation(ex, "PollEventSubscriber: подписка {Type} уже существует для текущей EventSub-сессии – переиспользуем", type);
+                await _ledger.RecordAsync(generation, type, result, ct);
+
+                if (result.Outcome == EventSubSubscribeOutcome.Created)
+                {
+                    logger.LogInformation("PollEventSubscriber: подписка на {Type} создана", type);
+                }
+                else if (result.Outcome == EventSubSubscribeOutcome.Reused)
+                {
+                    logger.LogInformation("PollEventSubscriber: подписка {Type} {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем",
+                        type, result.SubscriptionIds);
+                }
+                else
+                {
+                    IsHealthy = false;
+                }
             }
             catch (Exception ex)
             {
