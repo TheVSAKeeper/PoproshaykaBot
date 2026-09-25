@@ -25,6 +25,7 @@ public sealed class ChatIngestionService(
     private const string ChatMessageSubscriptionType = "channel.chat.message";
 
     private readonly object _joinLock = new();
+    private readonly EventSubSubscriptionRetry _retry = new(helix, eventSubClient, timeProvider, logger);
     private bool _subscribed;
     private long _generation;
     private IReadOnlyList<string> _subscriptionIds = [];
@@ -79,6 +80,7 @@ public sealed class ChatIngestionService(
 
         logger.LogInformation("ChatIngestionService: отписка от EventSub");
 
+        await _retry.CancelAndDrainAsync(cancellationToken);
         await MarkLeftAsync(out _, out var subscriptionIds);
 
         await EventSubSubscriptions.DeleteAsync(helix, ChatMessageSubscriptionType, subscriptionIds, logger, cancellationToken);
@@ -116,6 +118,12 @@ public sealed class ChatIngestionService(
             var delays = new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4) };
             Exception? lastError = null;
 
+            var condition = new Dictionary<string, string>
+            {
+                ["broadcaster_user_id"] = broadcasterId,
+                ["user_id"] = botId,
+            };
+
             for (var attempt = 0; attempt < delays.Length; attempt++)
             {
                 if (delays[attempt] > TimeSpan.Zero)
@@ -125,31 +133,15 @@ public sealed class ChatIngestionService(
 
                 try
                 {
-                    var result = await EventSubSubscriptions.CreateAsync(helix,
-                        ChatMessageSubscriptionType,
+                    var result = await _retry.CreateAsync(ChatMessageSubscriptionType,
                         "1",
-                        new Dictionary<string, string>
-                        {
-                            ["broadcaster_user_id"] = broadcasterId,
-                            ["user_id"] = botId,
-                        },
+                        condition,
                         args.SessionId,
-                        logger,
+                        retried => JoinAsync(generation, retried),
                         ct);
 
-                    if (!result.IsSubscribed)
+                    if (!result.IsSubscribed || !await JoinAsync(generation, result))
                     {
-                        return;
-                    }
-
-                    await MarkJoinedAsync(generation, result.SubscriptionIds, out var current);
-
-                    if (!current)
-                    {
-                        logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionIds} получена, когда приём чата уже остановлен – удаляем",
-                            result.SubscriptionIds);
-
-                        await EventSubSubscriptions.DeleteAsync(helix, ChatMessageSubscriptionType, result.SubscriptionIds, logger, ct);
                         return;
                     }
 
@@ -220,6 +212,22 @@ public sealed class ChatIngestionService(
         return MarkLeftAsync();
     }
 
+    private async Task<bool> JoinAsync(long generation, EventSubSubscribeResult result)
+    {
+        await MarkJoinedAsync(generation, result.SubscriptionIds, out var current);
+
+        if (current)
+        {
+            return true;
+        }
+
+        logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionIds} получена, когда приём чата уже остановлен – удаляем",
+            result.SubscriptionIds);
+
+        await EventSubSubscriptions.DeleteDetachedAsync(helix, ChatMessageSubscriptionType, result.SubscriptionIds, logger);
+        return false;
+    }
+
     private Task MarkJoinedAsync(long generation, IReadOnlyList<string> subscriptionIds, out bool current)
     {
         var now = timeProvider.GetUtcNow();
@@ -259,6 +267,8 @@ public sealed class ChatIngestionService(
             _subscriptionIds = [];
             previous = Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
         }
+
+        _retry.Cancel();
 
         return previous != 0
             ? eventBus.PublishAsync(new ChatIngestionStopped(timeProvider.GetUtcNow()), CancellationToken.None)

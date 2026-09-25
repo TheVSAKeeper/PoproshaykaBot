@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Tests.Polls;
+using PoproshaykaBot.Core.Tests.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.EventSub;
@@ -137,6 +138,52 @@ public sealed class ChatIngestionServiceTests
     }
 
     [Test]
+    public async Task Подписка_полученная_после_разрыва_удаляется_даже_при_отменённом_токене_обработчика()
+    {
+        var created = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(created.Task);
+
+        var deleted = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _helix.DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var token = call.Arg<CancellationToken>();
+
+                if (token.IsCancellationRequested)
+                {
+                    return Task.FromCanceled<bool>(token);
+                }
+
+                deleted.TrySetResult(call.Arg<string>());
+                return Task.FromResult(true);
+            });
+
+        _eventSubClient.SessionId.Returns((string?)null);
+        await _service.StartAsync(NullProgress, CancellationToken.None);
+
+        using var handler = new CancellationTokenSource();
+
+        _eventSubClient.OnSessionWelcome += Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(
+            new EventSubSessionWelcomeArgs("session-1", null),
+            handler.Token);
+
+        _eventSubClient.OnDisconnected += Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(
+            new EventSubDisconnectedArgs("обрыв"),
+            CancellationToken.None);
+
+        await handler.CancelAsync();
+        created.SetResult("sub-late");
+
+        Assert.That(await deleted.Task.WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo("sub-late"));
+        Assert.That(_service.IsJoined, Is.False);
+    }
+
+    [Test]
     public async Task Остановка_удаляет_все_переиспользованные_по_409_подписки_текущей_сессии()
     {
         SetUpConflict();
@@ -212,6 +259,70 @@ public sealed class ChatIngestionServiceTests
         await _service.StopAsync(NullProgress, CancellationToken.None);
 
         await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [TestCase(false, TestName = "Приём чата открывается повтором, как только подписка другой сессии освобождается")]
+    [TestCase(true, TestName = "Разрыв EventSub гасит повтор подписки чата")]
+    public async Task Повтор_после_подписки_на_другой_активной_сессии(bool disconnect)
+    {
+        var time = new ManualTimeProvider();
+        var service = new ChatIngestionService(_eventSubClient,
+            _helix,
+            _broadcasterIdProvider,
+            _botUserIdProvider,
+            _settingsManager,
+            _eventBus,
+            time,
+            NullLogger<ChatIngestionService>.Instance);
+
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<string>(ConflictException()), Task.FromResult("sub-retried"));
+
+        _helix.GetEventSubSubscriptionsByUserAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns([ChatSubscription("sub-foreign", "session-0", BroadcasterId, BotId)]);
+
+        _eventSubClient.SessionId.Returns("session-1");
+
+        await service.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(service.IsJoined, Is.False);
+
+        await time.WaitForPendingTimersAsync(1);
+
+        if (disconnect)
+        {
+            _eventSubClient.OnDisconnected += Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(new EventSubDisconnectedArgs("обрыв"),
+                CancellationToken.None);
+
+            await time.WaitForPendingTimersAsync(0);
+        }
+
+        time.Advance(EventSubSubscriptionRetry.FirstDelay);
+
+        if (disconnect)
+        {
+            Assert.That(service.IsJoined, Is.False);
+        }
+        else
+        {
+            Assert.That(() => service.IsJoined, Is.True.After(5000, 10));
+        }
+
+        await service.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(disconnect ? 1 : 2)
+            .CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+
+        await _helix.Received(disconnect ? 0 : 1).DeleteEventSubSubscriptionAsync("sub-retried", Arg.Any<CancellationToken>());
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-foreign", Arg.Any<CancellationToken>());
     }
 
     [Test]

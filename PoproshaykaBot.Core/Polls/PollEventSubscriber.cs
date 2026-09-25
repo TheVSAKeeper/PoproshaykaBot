@@ -17,6 +17,7 @@ public sealed class PollEventSubscriber(
     IBroadcasterIdProvider broadcasterIdProvider,
     PollsAvailabilityService availability,
     IEventBus eventBus,
+    TimeProvider timeProvider,
     ILogger<PollEventSubscriber> logger)
     : IStreamHostedComponent
 {
@@ -28,6 +29,7 @@ public sealed class PollEventSubscriber(
     ];
 
     private readonly EventSubSubscriptionLedger _ledger = new(helix, logger);
+    private readonly EventSubSubscriptionRetry _retry = new(helix, eventSubClient, timeProvider, logger);
     private bool _subscribed;
 
     public bool IsHealthy { get; private set; } = true;
@@ -46,6 +48,7 @@ public sealed class PollEventSubscriber(
         eventSubClient.OnSessionWelcome += HandleSessionWelcomeAsync;
         eventSubClient.OnNotification += HandleNotificationAsync;
         eventSubClient.OnRevocation += HandleRevocationAsync;
+        eventSubClient.OnDisconnected += HandleDisconnectedAsync;
         _subscribed = true;
 
         logger.LogInformation("PollEventSubscriber: хуки EventSub установлены");
@@ -68,14 +71,18 @@ public sealed class PollEventSubscriber(
         eventSubClient.OnSessionWelcome -= HandleSessionWelcomeAsync;
         eventSubClient.OnNotification -= HandleNotificationAsync;
         eventSubClient.OnRevocation -= HandleRevocationAsync;
+        eventSubClient.OnDisconnected -= HandleDisconnectedAsync;
         _subscribed = false;
 
+        await _retry.CancelAndDrainAsync(cancellationToken);
         await _ledger.CloseAsync(cancellationToken);
     }
 
     private async Task HandleSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken ct)
     {
-        var generation = _ledger.Generation;
+        _retry.Cancel();
+
+        var generation = await _ledger.BeginSessionAsync(ct);
         var availabilityResult = await availability.GetAsync(ct);
 
         if (!availabilityResult.IsAvailable)
@@ -94,24 +101,21 @@ public sealed class PollEventSubscriber(
             return;
         }
 
-        IsHealthy = true;
-
         foreach (var type in SubscriptionTypes)
         {
             try
             {
-                var result = await EventSubSubscriptions.CreateAsync(helix,
-                    type,
+                var result = await _retry.CreateAsync(type,
                     "1",
                     new Dictionary<string, string>
                     {
                         ["broadcaster_user_id"] = broadcasterId,
                     },
                     args.SessionId,
-                    logger,
+                    retried => RecordRetriedAsync(generation, type, retried),
                     ct);
 
-                await _ledger.RecordAsync(generation, type, result, ct);
+                await _ledger.RecordAsync(generation, type, result);
 
                 if (result.Outcome == EventSubSubscribeOutcome.Created)
                 {
@@ -122,19 +126,35 @@ public sealed class PollEventSubscriber(
                     logger.LogInformation("PollEventSubscriber: подписка {Type} {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем",
                         type, result.SubscriptionIds);
                 }
-                else
-                {
-                    IsHealthy = false;
-                }
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "PollEventSubscriber: ошибка подписки на {Type}", type);
-                IsHealthy = false;
             }
         }
 
+        RefreshHealth();
+
         await TryRecoverActivePollAsync(broadcasterId, ct);
+    }
+
+    private async Task RecordRetriedAsync(long generation, string type, EventSubSubscribeResult result)
+    {
+        if (await _ledger.RecordAsync(generation, type, result))
+        {
+            RefreshHealth();
+        }
+    }
+
+    private void RefreshHealth()
+    {
+        IsHealthy = SubscriptionTypes.All(_ledger.Holds);
+    }
+
+    private Task HandleDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken ct)
+    {
+        _retry.Cancel();
+        return Task.CompletedTask;
     }
 
     private async Task HandleNotificationAsync(EventSubNotificationArgs args, CancellationToken ct)
@@ -159,6 +179,7 @@ public sealed class PollEventSubscriber(
         if (args.SubscriptionType.StartsWith("channel.poll.", StringComparison.Ordinal))
         {
             logger.LogWarning("PollEventSubscriber: подписка {Type} отозвана ({Status})", args.SubscriptionType, args.Status);
+            _ledger.Forget(args.SubscriptionType, args.SubscriptionId);
             IsHealthy = false;
         }
 

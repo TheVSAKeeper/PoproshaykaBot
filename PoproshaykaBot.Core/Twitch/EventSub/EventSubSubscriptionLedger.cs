@@ -7,6 +7,7 @@ public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger
 {
     private readonly object _lock = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _idsByType = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _undeletedByType = new(StringComparer.Ordinal);
     private long _generation;
 
     public long Generation
@@ -20,12 +21,71 @@ public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger
         }
     }
 
-    public async Task RecordAsync(long generation, string type, EventSubSubscribeResult result, CancellationToken cancellationToken)
+    public bool Holds(string type)
     {
         lock (_lock)
         {
-            if (generation == _generation)
+            return _idsByType.ContainsKey(type);
+        }
+    }
+
+    public async Task<long> BeginSessionAsync(CancellationToken cancellationToken)
+    {
+        long generation;
+        KeyValuePair<string, IReadOnlyList<string>>[] previous;
+
+        lock (_lock)
+        {
+            generation = ++_generation;
+            previous = TakeAllForDeletion();
+        }
+
+        foreach (var (type, ids) in previous)
+        {
+            logger.LogDebug("Подписка EventSub {Type} {SubscriptionIds} прошлой сессии удаляется на новом session_welcome", type, ids);
+            KeepUndeleted(type, await EventSubSubscriptions.DeleteAsync(helix, type, ids, logger, cancellationToken));
+        }
+
+        return generation;
+    }
+
+    public void Forget(string type, string subscriptionId)
+    {
+        lock (_lock)
+        {
+            if (!_idsByType.TryGetValue(type, out var ids))
             {
+                return;
+            }
+
+            var remaining = ids.Where(x => !string.Equals(x, subscriptionId, StringComparison.Ordinal)).ToArray();
+
+            if (remaining.Length > 0)
+            {
+                _idsByType[type] = remaining;
+            }
+            else
+            {
+                _idsByType.Remove(type);
+            }
+        }
+    }
+
+    public async Task<bool> RecordAsync(long generation, string type, EventSubSubscribeResult result)
+    {
+        string[] displaced = [];
+        bool recorded;
+
+        lock (_lock)
+        {
+            recorded = generation == _generation;
+
+            if (recorded)
+            {
+                displaced = _idsByType.TryGetValue(type, out var previous)
+                    ? previous.Except(result.SubscriptionIds, StringComparer.Ordinal).ToArray()
+                    : [];
+
                 if (result.IsSubscribed)
                 {
                     _idsByType[type] = result.SubscriptionIds;
@@ -34,20 +94,30 @@ public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger
                 {
                     _idsByType.Remove(type);
                 }
-
-                return;
             }
+        }
+
+        if (recorded)
+        {
+            if (displaced.Length > 0)
+            {
+                logger.LogInformation("Подписка EventSub {Type} {SubscriptionIds} вытеснена новым ответом – удаляем", type, displaced);
+                KeepUndeleted(type, await EventSubSubscriptions.DeleteDetachedAsync(helix, type, displaced, logger));
+            }
+
+            return true;
         }
 
         if (!result.IsSubscribed)
         {
-            return;
+            return false;
         }
 
-        logger.LogInformation("Подписка EventSub {Type} {SubscriptionIds} получена, когда подписчик уже остановлен – удаляем",
+        logger.LogInformation("Подписка EventSub {Type} {SubscriptionIds} получена для прошлой сессии либо после остановки подписчика – удаляем",
             type, result.SubscriptionIds);
 
-        await EventSubSubscriptions.DeleteAsync(helix, type, result.SubscriptionIds, logger, cancellationToken);
+        KeepUndeleted(type, await EventSubSubscriptions.DeleteDetachedAsync(helix, type, result.SubscriptionIds, logger));
+        return false;
     }
 
     public async Task CloseAsync(CancellationToken cancellationToken)
@@ -57,13 +127,47 @@ public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger
         lock (_lock)
         {
             _generation++;
-            owned = _idsByType.ToArray();
-            _idsByType.Clear();
+            owned = TakeAllForDeletion();
         }
 
         foreach (var (type, ids) in owned)
         {
-            await EventSubSubscriptions.DeleteAsync(helix, type, ids, logger, cancellationToken);
+            KeepUndeleted(type, await EventSubSubscriptions.DeleteAsync(helix, type, ids, logger, cancellationToken));
+        }
+    }
+
+    private KeyValuePair<string, IReadOnlyList<string>>[] TakeAllForDeletion()
+    {
+        var all = new Dictionary<string, IReadOnlyList<string>>(_idsByType, StringComparer.Ordinal);
+
+        foreach (var (type, ids) in _undeletedByType)
+        {
+            all[type] = all.TryGetValue(type, out var owned)
+                ? owned.Union(ids, StringComparer.Ordinal).ToArray()
+                : ids.ToArray();
+        }
+
+        _idsByType.Clear();
+        _undeletedByType.Clear();
+        return all.ToArray();
+    }
+
+    private void KeepUndeleted(string type, IReadOnlyList<string> undeleted)
+    {
+        if (undeleted.Count == 0)
+        {
+            return;
+        }
+
+        lock (_lock)
+        {
+            if (!_undeletedByType.TryGetValue(type, out var ids))
+            {
+                ids = new(StringComparer.Ordinal);
+                _undeletedByType[type] = ids;
+            }
+
+            ids.UnionWith(undeleted);
         }
     }
 }

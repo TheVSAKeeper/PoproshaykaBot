@@ -31,6 +31,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly EventSubSubscriptionLedger _ledger;
+    private readonly EventSubSubscriptionRetry _retry;
 
     private IDisposable? _channelUpdatedSubscription;
     private CancellationTokenSource? _runCts;
@@ -59,6 +60,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _logger = logger;
         _metadataRetryLoop = new(FetchMetadataAttemptAsync, IsCurrentlyOnline, logger);
         _ledger = new(helix, logger);
+        _retry = new(helix, eventSubClient, timeProvider, logger);
     }
 
     public StreamStatus CurrentStatus => _state.CurrentStatus;
@@ -125,6 +127,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         _state.ResetToUnknown();
 
+        await _retry.CancelAndDrainAsync(cancellationToken).ConfigureAwait(false);
         await _ledger.CloseAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("StreamStatusManager: подписки на EventSub сняты, состояние сброшено в Unknown");
@@ -146,6 +149,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         {
             await _runCts.CancelAsync();
         }
+
+        _retry.Cancel();
 
         await _metadataRetryLoop.DisposeAsync().ConfigureAwait(false);
 
@@ -267,6 +272,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         _logger.LogInformation("EventSub WebSocket подключен. SessionId: {SessionId}", args.SessionId);
 
+        _retry.Cancel();
         _state.ForgetChannelUpdate();
 
         await CreateEventSubSubscriptionsAsync(args.SessionId, cancellationToken);
@@ -306,6 +312,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         }
 
         _logger.LogWarning("EventSub revocation: id={Id}, type={Type}, status={Status}", args.SubscriptionId, args.SubscriptionType, args.Status);
+        _ledger.Forget(args.SubscriptionType, args.SubscriptionId);
 
         var sessionId = _eventSubClient.SessionId;
 
@@ -332,15 +339,14 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 { "broadcaster_user_id", broadcasterId },
             };
 
-            var result = await EventSubSubscriptions.CreateAsync(_helix,
-                args.SubscriptionType,
+            var result = await _retry.CreateAsync(args.SubscriptionType,
                 "1",
                 condition,
                 sessionId,
-                _logger,
+                retried => _ledger.RecordAsync(generation, args.SubscriptionType, retried),
                 cancellationToken);
 
-            await _ledger.RecordAsync(generation, args.SubscriptionType, result, cancellationToken);
+            await _ledger.RecordAsync(generation, args.SubscriptionType, result);
 
             if (result.Outcome == EventSubSubscribeOutcome.Created)
             {
@@ -366,6 +372,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             _state.CurrentStatus,
             CurrentStream?.Id);
 
+        _retry.Cancel();
         _state.ResetToUnknown();
         return Task.CompletedTask;
     }
@@ -614,7 +621,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private async Task CreateEventSubSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
     {
-        var generation = _ledger.Generation;
+        var generation = await _ledger.BeginSessionAsync(cancellationToken);
         var broadcasterId = await _broadcasterIdProvider.GetAsync(cancellationToken);
 
         if (string.IsNullOrEmpty(broadcasterId))
@@ -635,15 +642,14 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         {
             try
             {
-                var result = await EventSubSubscriptions.CreateAsync(_helix,
-                    type,
+                var result = await _retry.CreateAsync(type,
                     "1",
                     condition,
                     sessionId,
-                    _logger,
+                    retried => _ledger.RecordAsync(generation, type, retried),
                     cancellationToken);
 
-                await _ledger.RecordAsync(generation, type, result, cancellationToken);
+                await _ledger.RecordAsync(generation, type, result);
 
                 if (result.IsSubscribed)
                 {

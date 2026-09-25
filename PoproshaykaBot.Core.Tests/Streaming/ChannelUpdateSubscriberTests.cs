@@ -1,6 +1,7 @@
 ﻿using NSubstitute.ExceptionExtensions;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Tests.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -30,7 +31,9 @@ public sealed class ChannelUpdateSubscriberTests
 
         _eventBus = new(NullLogger<InMemoryEventBus>.Instance);
 
-        _subscriber = new(_eventSubClient, _helix, _broadcasterIdProvider, _eventBus,
+        _time = new();
+
+        _subscriber = new(_eventSubClient, _helix, _broadcasterIdProvider, _eventBus, _time,
             NullLogger<ChannelUpdateSubscriber>.Instance);
     }
 
@@ -47,7 +50,135 @@ public sealed class ChannelUpdateSubscriberTests
     private ITwitchHelixClient _helix = null!;
     private IBroadcasterIdProvider _broadcasterIdProvider = null!;
     private InMemoryEventBus _eventBus = null!;
+    private ManualTimeProvider _time = null!;
     private ChannelUpdateSubscriber _subscriber = null!;
+
+    [Test]
+    public async Task Подписка_занятая_другой_сессией_берётся_повтором_и_удаляется_при_остановке()
+    {
+        _helix.CreateEventSubSubscriptionAsync("channel.update",
+                "2",
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                "session-1",
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<string>(new HelixRequestException(HttpMethod.Post,
+                    "helix/eventsub/subscriptions",
+                    HttpStatusCode.Conflict,
+                    "subscription already exists",
+                    null)),
+                Task.FromResult("sub-retried"));
+
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([
+                new EventSubSubscriptionInfo("sub-foreign",
+                    "channel.update",
+                    "enabled",
+                    "session-previous",
+                    new Dictionary<string, string> { ["broadcaster_user_id"] = BroadcasterId }),
+            ]);
+
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60),
+                CancellationToken.None);
+
+        Assert.That(_subscriber.IsHealthy, Is.False);
+
+        await _time.WaitForPendingTimersAsync(1);
+        _time.Advance(EventSubSubscriptionRetry.FirstDelay);
+
+        Assert.That(() => _subscriber.IsHealthy, Is.True.After(5000, 10));
+
+        await _subscriber.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-retried", Arg.Any<CancellationToken>());
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-foreign", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Разрыв_сокета_гасит_повтор_подписки()
+    {
+        SetUpCreate("session-1", Conflict(), Task.FromResult("sub-dead"));
+        SetUpForeignLookup();
+
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+        RaiseWelcome("session-1");
+        await _time.WaitForPendingTimersAsync(1);
+
+        _eventSubClient.OnDisconnected += Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(new EventSubDisconnectedArgs("обрыв"),
+            CancellationToken.None);
+
+        _time.Advance(EventSubSubscriptionRetry.MaxDelay);
+        await Task.Yield();
+
+        await _helix.Received(1)
+            .CreateEventSubSubscriptionAsync("channel.update", "2", Arg.Any<IReadOnlyDictionary<string, string>>(), "session-1", Arg.Any<CancellationToken>());
+
+        Assert.That(_time.PendingTimers, Is.Zero);
+    }
+
+    [Test]
+    public async Task Подписка_повтора_на_прошлой_сессии_удаляется_а_не_теряется_когда_новая_сессия_получает_409()
+    {
+        SetUpCreate("session-1", Conflict(), Task.FromResult("sub-dead"));
+        SetUpCreate("session-2", Conflict());
+        SetUpForeignLookup();
+
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+        RaiseWelcome("session-1");
+
+        await _time.WaitForPendingTimersAsync(1);
+        _time.Advance(EventSubSubscriptionRetry.FirstDelay);
+
+        Assert.That(() => _subscriber.IsHealthy, Is.True.After(5000, 10));
+
+        RaiseWelcome("session-2");
+        await _subscriber.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-dead", Arg.Any<CancellationToken>());
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-foreign", Arg.Any<CancellationToken>());
+    }
+
+    private void RaiseWelcome(string sessionId)
+    {
+        _eventSubClient.SessionId.Returns(sessionId);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs(sessionId, 60),
+                CancellationToken.None);
+    }
+
+    private void SetUpCreate(string sessionId, Task<string> first, params Task<string>[] rest)
+    {
+        _helix.CreateEventSubSubscriptionAsync("channel.update",
+                "2",
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                sessionId,
+                Arg.Any<CancellationToken>())
+            .Returns(first, rest);
+    }
+
+    private void SetUpForeignLookup()
+    {
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([
+                new EventSubSubscriptionInfo("sub-foreign",
+                    "channel.update",
+                    "enabled",
+                    "session-previous",
+                    new Dictionary<string, string> { ["broadcaster_user_id"] = BroadcasterId }),
+            ]);
+    }
+
+    private static Task<string> Conflict()
+    {
+        return Task.FromException<string>(new HelixRequestException(HttpMethod.Post,
+            "helix/eventsub/subscriptions",
+            HttpStatusCode.Conflict,
+            "subscription already exists",
+            null));
+    }
 
     [Test]
     public async Task HandleRevocation_OnChannelUpdate_RecreatesSubscription()

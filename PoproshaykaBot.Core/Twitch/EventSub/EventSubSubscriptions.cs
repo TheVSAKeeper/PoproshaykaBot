@@ -24,13 +24,28 @@ public static class EventSubSubscriptions
     private const string EnabledStatus = "enabled";
     private const string FilterConditionKey = "broadcaster_user_id";
 
-    public static async Task<EventSubSubscribeResult> CreateAsync(
+    internal static readonly TimeSpan DetachedDeleteTimeout = TimeSpan.FromSeconds(10);
+
+    public static Task<EventSubSubscribeResult> CreateAsync(
         ITwitchHelixClient helix,
         string type,
         string version,
         IReadOnlyDictionary<string, string> condition,
         string sessionId,
         ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        return CreateAsync(helix, type, version, condition, sessionId, logger, LogLevel.Warning, cancellationToken);
+    }
+
+    internal static async Task<EventSubSubscribeResult> CreateAsync(
+        ITwitchHelixClient helix,
+        string type,
+        string version,
+        IReadOnlyDictionary<string, string> condition,
+        string sessionId,
+        ILogger logger,
+        LogLevel transientLevel,
         CancellationToken cancellationToken)
     {
         for (var attempt = 0;; attempt++)
@@ -45,7 +60,7 @@ public static class EventSubSubscriptions
                 logger.LogDebug("Twitch ответил 409 на подписку EventSub {Type} для сессии {SessionId} – ищем существующую", type, sessionId);
             }
 
-            var matches = await FindMatchesAsync(helix, type, condition, sessionId, logger, cancellationToken);
+            var matches = await FindMatchesAsync(helix, type, condition, sessionId, logger, transientLevel, cancellationToken);
 
             if (matches is null)
             {
@@ -66,10 +81,10 @@ public static class EventSubSubscriptions
                 .Where(x => string.Equals(x.Status, EnabledStatus, StringComparison.Ordinal))
                 .ToArray();
 
-            // TODO: без повтора – подписчик ждёт следующего session_welcome; упрётся, когда Twitch после быстрого переподключения ещё держит нашу прошлую сессию enabled – тогда повтор с выдержкой
             if (active.Length > 0)
             {
-                logger.LogWarning("Подписка EventSub {Type} уже активна на другой сессии {OtherSessionId} (подписка {SubscriptionId}) – её держит другой запущенный экземпляр приложения, трогать её нельзя; на сессию {SessionId} уведомления этого типа не придут",
+                logger.Log(transientLevel,
+                    "Подписка EventSub {Type} уже активна на другой сессии {OtherSessionId} (подписка {SubscriptionId}) – её держит другой запущенный экземпляр приложения либо прошлая сессия, которую Twitch ещё не признал отключённой; трогать её нельзя, на сессию {SessionId} уведомления этого типа не придут, пока она не освободится",
                     type, active[0].SessionId, active[0].Id, sessionId);
 
                 var stale = matches
@@ -106,13 +121,15 @@ public static class EventSubSubscriptions
         }
     }
 
-    public static async Task DeleteAsync(
+    public static async Task<IReadOnlyList<string>> DeleteAsync(
         ITwitchHelixClient helix,
         string type,
         IReadOnlyList<string> subscriptionIds,
         ILogger logger,
         CancellationToken cancellationToken)
     {
+        List<string>? undeleted = null;
+
         for (var i = 0; i < subscriptionIds.Count; i++)
         {
             var subscriptionId = subscriptionIds[i];
@@ -129,14 +146,31 @@ public static class EventSubSubscriptions
                 logger.LogInformation("Удаление подписок EventSub {Type} прервано отменой, не удалено {Count} – уведомления будут приходить, пока открыт сокет EventSub",
                     type, subscriptionIds.Count - i);
 
-                return;
+                undeleted ??= [];
+                undeleted.AddRange(subscriptionIds.Skip(i));
+                return undeleted;
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Не удалось удалить подписку EventSub {Type} {SubscriptionId} – уведомления будут приходить, пока открыт сокет EventSub",
                     type, subscriptionId);
+
+                undeleted ??= [];
+                undeleted.Add(subscriptionId);
             }
         }
+
+        return undeleted ?? [];
+    }
+
+    internal static async Task<IReadOnlyList<string>> DeleteDetachedAsync(
+        ITwitchHelixClient helix,
+        string type,
+        IReadOnlyList<string> subscriptionIds,
+        ILogger logger)
+    {
+        using var timeout = new CancellationTokenSource(DetachedDeleteTimeout);
+        return await DeleteAsync(helix, type, subscriptionIds, logger, timeout.Token);
     }
 
     private static async Task<IReadOnlyList<EventSubSubscriptionInfo>?> FindMatchesAsync(
@@ -145,6 +179,7 @@ public static class EventSubSubscriptions
         IReadOnlyDictionary<string, string> condition,
         string sessionId,
         ILogger logger,
+        LogLevel failureLevel,
         CancellationToken cancellationToken)
     {
         if (!condition.TryGetValue(FilterConditionKey, out var userId) || string.IsNullOrEmpty(userId))
@@ -169,7 +204,7 @@ public static class EventSubSubscriptions
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Не удалось найти существующую подписку EventSub {Type} после 409 – на сессию {SessionId} уведомления этого типа не придут",
+            logger.Log(failureLevel, ex, "Не удалось найти существующую подписку EventSub {Type} после 409 – на сессию {SessionId} уведомления этого типа не придут",
                 type, sessionId);
 
             return null;

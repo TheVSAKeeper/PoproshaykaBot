@@ -17,6 +17,7 @@ public sealed class ChannelUpdateSubscriber(
     ITwitchHelixClient helix,
     IBroadcasterIdProvider broadcasterIdProvider,
     IEventBus eventBus,
+    TimeProvider timeProvider,
     ILogger<ChannelUpdateSubscriber> logger)
     : IStreamHostedComponent
 {
@@ -24,6 +25,7 @@ public sealed class ChannelUpdateSubscriber(
     private const string SubscriptionVersion = "2";
 
     private readonly EventSubSubscriptionLedger _ledger = new(helix, logger);
+    private readonly EventSubSubscriptionRetry _retry = new(helix, eventSubClient, timeProvider, logger);
     private bool _subscribed;
 
     public bool IsHealthy { get; private set; } = true;
@@ -42,6 +44,7 @@ public sealed class ChannelUpdateSubscriber(
         eventSubClient.OnSessionWelcome += HandleSessionWelcomeAsync;
         eventSubClient.OnNotification += HandleNotificationAsync;
         eventSubClient.OnRevocation += HandleRevocationAsync;
+        eventSubClient.OnDisconnected += HandleDisconnectedAsync;
         _subscribed = true;
 
         logger.LogInformation("ChannelUpdateSubscriber: хуки EventSub установлены");
@@ -58,14 +61,18 @@ public sealed class ChannelUpdateSubscriber(
         eventSubClient.OnSessionWelcome -= HandleSessionWelcomeAsync;
         eventSubClient.OnNotification -= HandleNotificationAsync;
         eventSubClient.OnRevocation -= HandleRevocationAsync;
+        eventSubClient.OnDisconnected -= HandleDisconnectedAsync;
         _subscribed = false;
 
+        await _retry.CancelAndDrainAsync(cancellationToken);
         await _ledger.CloseAsync(cancellationToken);
     }
 
     private async Task HandleSessionWelcomeAsync(EventSubSessionWelcomeArgs args, CancellationToken cancellationToken)
     {
-        var generation = _ledger.Generation;
+        _retry.Cancel();
+
+        var generation = await _ledger.BeginSessionAsync(cancellationToken);
         var broadcasterId = await broadcasterIdProvider.GetAsync(cancellationToken);
 
         if (string.IsNullOrEmpty(broadcasterId))
@@ -134,6 +141,7 @@ public sealed class ChannelUpdateSubscriber(
         }
 
         logger.LogWarning("ChannelUpdateSubscriber: подписка {Type} отозвана ({Status})", args.SubscriptionType, args.Status);
+        _ledger.Forget(SubscriptionType, args.SubscriptionId);
         IsHealthy = false;
 
         var generation = _ledger.Generation;
@@ -178,19 +186,32 @@ public sealed class ChannelUpdateSubscriber(
 
     private async Task<EventSubSubscribeResult> SubscribeAsync(long generation, string broadcasterId, string sessionId, CancellationToken cancellationToken)
     {
-        var result = await EventSubSubscriptions.CreateAsync(helix,
-            SubscriptionType,
+        var result = await _retry.CreateAsync(SubscriptionType,
             SubscriptionVersion,
             new Dictionary<string, string>
             {
                 ["broadcaster_user_id"] = broadcasterId,
             },
             sessionId,
-            logger,
+            retried => RecordRetriedAsync(generation, retried),
             cancellationToken);
 
-        await _ledger.RecordAsync(generation, SubscriptionType, result, cancellationToken);
+        await _ledger.RecordAsync(generation, SubscriptionType, result);
         return result;
+    }
+
+    private async Task RecordRetriedAsync(long generation, EventSubSubscribeResult result)
+    {
+        if (await _ledger.RecordAsync(generation, SubscriptionType, result))
+        {
+            IsHealthy = true;
+        }
+    }
+
+    private Task HandleDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken cancellationToken)
+    {
+        _retry.Cancel();
+        return Task.CompletedTask;
     }
 
     private static IReadOnlyList<string> ParseStringArray(JsonElement parent, string propertyName)

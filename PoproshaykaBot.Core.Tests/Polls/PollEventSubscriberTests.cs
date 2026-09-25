@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Tests.Debugging;
+using PoproshaykaBot.Core.Tests.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -50,6 +51,7 @@ public sealed class PollEventSubscriberTests
             _broadcasterIdProvider,
             _availability,
             _eventBus,
+            TimeProvider.System,
             NullLogger<PollEventSubscriber>.Instance);
     }
 
@@ -119,6 +121,163 @@ public sealed class PollEventSubscriberTests
 
         await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-progress", Arg.Any<CancellationToken>());
         await _helix.Received(3).DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Подписчик_здоров_только_когда_повтор_добрал_занятый_тип()
+    {
+        var time = new ManualTimeProvider();
+        var subscriber = new PollEventSubscriber(_eventSubClient,
+            _helix,
+            _broadcasterIdProvider,
+            _availability,
+            _eventBus,
+            time,
+            NullLogger<PollEventSubscriber>.Instance);
+
+        _helix.CreateEventSubSubscriptionAsync("channel.poll.progress",
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<string>(new HelixRequestException(HttpMethod.Post,
+                    "helix/eventsub/subscriptions",
+                    System.Net.HttpStatusCode.Conflict,
+                    "subscription already exists",
+                    null)),
+                Task.FromResult("sub-progress-retried"));
+
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([
+                new EventSubSubscriptionInfo("sub-progress-foreign",
+                    "channel.poll.progress",
+                    "enabled",
+                    "session-previous",
+                    new Dictionary<string, string> { ["broadcaster_user_id"] = BroadcasterId }),
+            ]);
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await subscriber.StartAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(subscriber.IsHealthy, Is.False);
+
+        await time.WaitForPendingTimersAsync(1);
+        time.Advance(EventSubSubscriptionRetry.FirstDelay);
+
+        Assert.That(() => subscriber.IsHealthy, Is.True.After(5000, 10));
+
+        await subscriber.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-progress-retried", Arg.Any<CancellationToken>());
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-progress-foreign", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Повтор_добравший_тип_раньше_конца_основного_цикла_не_оставляет_подписчика_нездоровым()
+    {
+        var time = new ManualTimeProvider();
+        var subscriber = new PollEventSubscriber(_eventSubClient,
+            _helix,
+            _broadcasterIdProvider,
+            _availability,
+            _eventBus,
+            time,
+            NullLogger<PollEventSubscriber>.Instance);
+
+        _helix.CreateEventSubSubscriptionAsync("channel.poll.begin",
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Conflict(), Task.FromResult("sub-begin-retried"));
+
+        var endCreated = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _helix.CreateEventSubSubscriptionAsync("channel.poll.end",
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(endCreated.Task);
+
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([ForeignPollSubscription("channel.poll.begin")]);
+
+        _eventSubClient.SessionId.Returns("session-1");
+        var start = subscriber.StartAsync(NullProgress, CancellationToken.None);
+
+        await time.WaitForPendingTimersAsync(1);
+        time.Advance(EventSubSubscriptionRetry.FirstDelay);
+
+        await _helix.Received(2)
+            .CreateEventSubSubscriptionAsync("channel.poll.begin", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), "session-1", Arg.Any<CancellationToken>());
+
+        await time.WaitForPendingTimersAsync(0);
+
+        endCreated.SetResult("sub-end");
+        await start.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.That(() => subscriber.IsHealthy, Is.True.After(5000, 10));
+
+        await subscriber.StopAsync(NullProgress, CancellationToken.None);
+    }
+
+    [Test]
+    public async Task Разрыв_сокета_гасит_повтор_занятого_типа()
+    {
+        var time = new ManualTimeProvider();
+        var subscriber = new PollEventSubscriber(_eventSubClient,
+            _helix,
+            _broadcasterIdProvider,
+            _availability,
+            _eventBus,
+            time,
+            NullLogger<PollEventSubscriber>.Instance);
+
+        _helix.CreateEventSubSubscriptionAsync("channel.poll.begin",
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Conflict(), Task.FromResult("sub-begin-dead"));
+
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([ForeignPollSubscription("channel.poll.begin")]);
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await subscriber.StartAsync(NullProgress, CancellationToken.None);
+        await time.WaitForPendingTimersAsync(1);
+
+        _eventSubClient.OnDisconnected += Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(new EventSubDisconnectedArgs("обрыв"),
+            CancellationToken.None);
+
+        time.Advance(EventSubSubscriptionRetry.MaxDelay);
+        await Task.Yield();
+
+        await _helix.Received(1)
+            .CreateEventSubSubscriptionAsync("channel.poll.begin", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        Assert.That(time.PendingTimers, Is.Zero);
+
+        await subscriber.StopAsync(NullProgress, CancellationToken.None);
+    }
+
+    private static EventSubSubscriptionInfo ForeignPollSubscription(string type)
+    {
+        return new(type + "-foreign",
+            type,
+            "enabled",
+            "session-previous",
+            new Dictionary<string, string> { ["broadcaster_user_id"] = BroadcasterId });
+    }
+
+    private static Task<string> Conflict()
+    {
+        return Task.FromException<string>(new HelixRequestException(HttpMethod.Post,
+            "helix/eventsub/subscriptions",
+            System.Net.HttpStatusCode.Conflict,
+            "subscription already exists",
+            null));
     }
 
     [Test]

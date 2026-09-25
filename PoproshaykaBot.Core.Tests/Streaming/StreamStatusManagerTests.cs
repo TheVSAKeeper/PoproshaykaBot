@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Tests.Polls;
 using PoproshaykaBot.Core.Tests.Server;
+using PoproshaykaBot.Core.Tests.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -521,6 +522,56 @@ public sealed class StreamStatusManagerTests
         await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-online", Arg.Any<CancellationToken>());
         await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-offline", Arg.Any<CancellationToken>());
         await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-foreign", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Разрыв_сокета_гасит_повтор_подписки()
+    {
+        var time = new ManualTimeProvider();
+        await using var manager = new StreamStatusManager(_eventSubClient,
+            _helix,
+            _broadcasterIdProvider,
+            _targetChannel,
+            _settingsManager,
+            _eventBus,
+            time,
+            NullLogger<StreamStatusManager>.Instance);
+
+        _helix.CreateEventSubSubscriptionAsync("stream.online",
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<string>(new HelixRequestException(HttpMethod.Post,
+                    "helix/eventsub/subscriptions",
+                    HttpStatusCode.Conflict,
+                    "subscription already exists",
+                    null)),
+                Task.FromResult("sub-dead"));
+
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([StreamSubscription("sub-foreign", "stream.online", "session-0")]);
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await time.WaitForPendingTimersAsync(1);
+
+        _eventSubClient.OnDisconnected +=
+            Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(new EventSubDisconnectedArgs("обрыв"), CancellationToken.None);
+
+        time.Advance(EventSubSubscriptionRetry.MaxDelay);
+        await Task.Yield();
+
+        await _helix.Received(1)
+            .CreateEventSubSubscriptionAsync("stream.online", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        Assert.That(time.PendingTimers, Is.Zero);
+
+        await manager.StopAsync(NullProgress, CancellationToken.None);
     }
 
     [Test]
