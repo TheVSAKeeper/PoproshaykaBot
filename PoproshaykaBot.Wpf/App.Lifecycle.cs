@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Bootstrap;
 using Serilog;
 using Serilog.Extensions.Logging;
+using System.Diagnostics;
 using System.Windows;
 
 namespace PoproshaykaBot.Wpf;
@@ -55,6 +56,64 @@ public partial class App
             HostLog.Error(exception, "Ошибка применения запланированного обновления");
             return false;
         }
+    }
+
+    internal static bool TryRequestRestart()
+    {
+        return Interlocked.CompareExchange(ref _restartRequested, 1, 0) == 0;
+    }
+
+    internal static void CancelRestart()
+    {
+        Interlocked.Exchange(ref _restartRequested, 0);
+    }
+
+    internal static bool TryRestartForced()
+    {
+        if (!LaunchReplacement())
+        {
+            return false;
+        }
+
+        HostLog.Information("Завершение работы приложения ({Reason}), код выхода {ExitCode}", AppExitReason.ForcedRestart, -1);
+        Log.CloseAndFlush();
+        Process.GetCurrentProcess().Kill();
+        return true;
+    }
+
+    private static bool LaunchReplacement()
+    {
+        var executablePath = Environment.ProcessPath;
+
+        if (string.IsNullOrEmpty(executablePath))
+        {
+            HostLog.Error("Перезапуск невозможен: путь к исполняемому файлу приложения неизвестен");
+            return false;
+        }
+
+        var arguments = AppRestart.BuildArguments(_startupArguments, Environment.ProcessId);
+
+        if (!AppRestart.TryLaunch(executablePath, arguments, false, out var failure))
+        {
+            HostLog.Error(failure, "Не удалось запустить новый экземпляр приложения для перезапуска");
+            return false;
+        }
+
+        HostLog.Information("Запущен новый экземпляр приложения, он дождётся завершения текущего");
+        return true;
+    }
+
+    private static void ReportRestartHandoff(int previousProcessId, bool exited)
+    {
+        if (exited)
+        {
+            HostLog.Information("Перезапуск: предыдущий экземпляр (PID {ProcessId}) завершился", previousProcessId);
+            return;
+        }
+
+        HostLog.Warning("Перезапуск: предыдущий экземпляр (PID {ProcessId}) не завершился за {Seconds} с, запуск идёт как обычно",
+            previousProcessId,
+            (int)AppRestart.HandoffTimeout.TotalSeconds);
     }
 
     private static void ReportEnvironment(IReadOnlyList<string> arguments)

@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Settings.Stores;
-using System.Diagnostics;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Update;
@@ -131,21 +131,9 @@ public static class UpdateApplier
 
     private static void Relaunch(string executablePath, ILogger logger)
     {
-        try
+        if (!AppRestart.TryLaunch(executablePath, [FinalizeArgument], true, out var failure))
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = executablePath,
-                UseShellExecute = true,
-                WorkingDirectory = Path.GetDirectoryName(executablePath) ?? string.Empty,
-            };
-
-            startInfo.ArgumentList.Add(FinalizeArgument);
-            using var process = Process.Start(startInfo);
-        }
-        catch (Exception exception)
-        {
-            logger.LogError(exception, "Не удалось перезапустить приложение после обновления");
+            logger.LogError(failure, "Не удалось перезапустить приложение после обновления");
         }
     }
 
