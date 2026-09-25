@@ -105,6 +105,10 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
     public string ReferenceCaption => Reference.Describe(Scale);
 
+    public string StackNote => Stacked
+        ? "При таком окне «Обзор» покажет плитки стопкой, одну под другой. Превью рисует саму раскладку, чтобы её можно было править."
+        : string.Empty;
+
     public int MinColumnCount => DashboardLayoutDefaults.MinColumnCount;
 
     public int MaxColumnCount => DashboardLayoutDefaults.MaxColumnCount;
@@ -361,13 +365,6 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
             return string.Empty;
         }
 
-        if (Stacked)
-        {
-            return widened || heightened
-                ? "На этом эталоне панель показана стопкой, и новая пустая ячейка в ней не видна. Возьмите эталон шире, чтобы её увидеть."
-                : string.Empty;
-        }
-
         if (widened
             && ContentArea.Width - pane.MinWidth(DashboardPaneSurface.ScaledStarBandMinWidth) < DashboardPaneSurface.ScaledStarBandMinWidth)
         {
@@ -455,6 +452,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         OnPropertyChanged(nameof(Pane));
         OnPropertyChanged(nameof(Bands));
         OnPropertyChanged(nameof(Stacked));
+        OnPropertyChanged(nameof(StackNote));
         OnPropertyChanged(nameof(ContentArea));
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanEditTree));

@@ -102,6 +102,13 @@
             </StackPanel>
         </WrapPanel>
 
+        <TextBlock DockPanel.Dock="Top"
+                   Text="{Binding StackNote}"
+                   Style="{StaticResource TextBlock.Subtle}"
+                   TextWrapping="Wrap"
+                   Visibility="{Binding StackNote, Converter={StaticResource NullToVisibility}}"
+                   Margin="0,-8,0,16" />
+
         <Grid MinHeight="380">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="190" />

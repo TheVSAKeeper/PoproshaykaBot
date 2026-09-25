@@ -758,9 +758,11 @@ public class DashboardLayoutSectionTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(section.Stacked, Is.True, "Три растягивающиеся колонки на эталоне 1024 не влезают полами – превью уходит в стопку.");
-            Assert.That(section.Notice, Does.Contain("стопкой"),
-                "В стопке пустых ячеек не видно – иначе ползунок выглядит сломанным.");
+            Assert.That(section.Stacked, Is.True, "Три растягивающиеся колонки на эталоне 1024 не влезают полами – «Обзор» уходит в стопку.");
+            Assert.That(section.Notice, Does.Contain("ширины"),
+                "Превью рисует дерево и в стопке «Обзора», поэтому новая колонка названа нулевой по ширине, а не спрятанной стопкой.");
+            Assert.That(section.StackNote, Does.Contain("стопкой"),
+                "О стопке «Обзора» говорит отдельная строка, раз превью её больше не рисует.");
         });
     }
 

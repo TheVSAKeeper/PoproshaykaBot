@@ -394,7 +394,11 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 
     private Size CanvasSize(Size area)
     {
-        return new(area.Width, Math.Max(area.Height, RequiredHeight()));
+        var width = _viewModel?.Pane is { } pane
+            ? Math.Max(area.Width, pane.MinWidth(DashboardPaneSurface.ScaledStarBandMinWidth))
+            : area.Width;
+
+        return new(width, Math.Max(area.Height, RequiredHeight()));
     }
 
     private double RequiredHeight()
@@ -404,34 +408,16 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             return _viewModel?.Bands.Select(band => band.MinHeight).DefaultIfEmpty(0).Max() ?? 0;
         }
 
-        if (!_viewModel.Stacked)
-        {
-            return DashboardPaneSurface.RequiredHeight(pane);
-        }
-
-        var leaves = new List<TilePaneLayout>();
-
-        DashboardPaneSurface.CollectLeaves(pane, leaves);
-
-        return leaves.Sum(leaf => DashboardPaneSurface.StackedRow(leaf).Min);
+        return DashboardPaneSurface.RequiredHeight(pane);
     }
 
     private FrameworkElement BuildContent(DashboardLayoutSectionViewModel viewModel)
     {
-        var surface = Surface(viewModel);
+        var surface = Surface();
 
         if (viewModel.Pane is { } pane)
         {
-            if (!viewModel.Stacked)
-            {
-                return surface.BuildRoot(pane);
-            }
-
-            var stack = new Grid();
-
-            surface.Stack(stack, pane);
-
-            return stack;
+            return surface.BuildRoot(pane);
         }
 
         var bands = new Grid();
@@ -460,7 +446,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         return bands;
     }
 
-    private DashboardPaneSurface Surface(DashboardLayoutSectionViewModel viewModel)
+    private DashboardPaneSurface Surface()
     {
         return new()
         {
@@ -472,7 +458,6 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
                 split,
                 alongColumns,
                 completed: (_, canceled) => CommitShares(grid, split.Path, alongColumns, canceled)),
-            Stacked = viewModel.Stacked,
         };
     }
 
