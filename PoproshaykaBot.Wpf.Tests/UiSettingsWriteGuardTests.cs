@@ -88,6 +88,37 @@ public class UiSettingsWriteGuardTests
             "Отложенная запись не должна дождаться копирования и лечь поверх принесённого");
     }
 
+    [TestCase(true, "dark")]
+    [TestCase(false, "light")]
+    public void Сорвавшаяся_досылка_не_ложится_поверх_принесённого_файла_и_не_теряется_без_него(bool rewritten, string expected)
+    {
+        var guard = new UiSettingsWriteGuard(new SettingsStore(_path));
+        guard.SetValue(ThemeKey, "system");
+        guard.Flush();
+        guard.SetValue(ThemeKey, "light");
+
+        using (new FileStream(_path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            guard.Suspend();
+        }
+
+        if (rewritten)
+        {
+            WriteImportedFile("dark");
+        }
+
+        guard.Resume(rewritten);
+        guard.Flush();
+        guard.Close();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(new SettingsStore(_path).GetStringValue(ThemeKey), Is.EqualTo(expected),
+                "Принесённый файл цел после закрытия, а без него правка доезжает до файла");
+            Assert.That(guard.GetStringValue(ThemeKey), Is.EqualTo("light"), "Правка действует в памяти");
+        });
+    }
+
     private void WriteImportedFile(string theme)
     {
         var imported = new SettingsStore(_path + ".import");
