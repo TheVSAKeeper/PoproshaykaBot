@@ -9,7 +9,8 @@ public sealed class TargetChannelProvider(
     SettingsManager settingsManager,
     DebugChannelStore debugChannelStore,
     DebugChannelOverride commandLine,
-    ILogger<TargetChannelProvider>? logger = null)
+    ILogger<TargetChannelProvider>? logger = null,
+    TimeProvider? timeProvider = null)
     : ITargetChannelProvider
 {
     private enum TargetChannelSource
@@ -53,6 +54,11 @@ public sealed class TargetChannelProvider(
         {
             _session = state;
         }
+
+        if (state.IsForeign)
+        {
+            RememberRecent(state.Login);
+        }
     }
 
     public void EndSession()
@@ -91,6 +97,18 @@ public sealed class TargetChannelProvider(
         }
 
         return (new(own, own, true, commandLine.AllowSending, isolated), stored.Channel ?? string.Empty, TargetChannelSource.OwnChannelAfterInvalidValue);
+    }
+
+    private void RememberRecent(string login)
+    {
+        try
+        {
+            debugChannelStore.RecordRecent(login, (timeProvider ?? TimeProvider.System).GetUtcNow());
+        }
+        catch (Exception exception)
+        {
+            logger?.LogWarning(exception, "Канал {Channel} не записан в недавние каналы отладки", login);
+        }
     }
 
     private static string DescribeSource(TargetChannelSource source)

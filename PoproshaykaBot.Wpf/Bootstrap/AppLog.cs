@@ -219,6 +219,18 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1208, Level = LogLevel.Warning, Message = "Перенос данных предыдущей версии недоступен в автоматическом режиме")]
     public static partial void LegacyImportSuppressedHeadless(this ILogger logger);
 
+    [LoggerMessage(EventId = 1209, Level = LogLevel.Information, Message = "Пользователь подставил недавний канал отладки {Channel}")]
+    public static partial void RecentDebugChannelChosen(this ILogger logger, string channel);
+
+    [LoggerMessage(EventId = 1210, Level = LogLevel.Information, Message = "Пользователь убрал канал {Channel} из недавних каналов отладки")]
+    public static partial void RecentDebugChannelRemoved(this ILogger logger, string channel);
+
+    [LoggerMessage(EventId = 1211, Level = LogLevel.Error, Message = "Не удалось убрать канал {Channel} из недавних каналов отладки")]
+    public static partial void RecentDebugChannelRemoveFailed(this ILogger logger, Exception? exception, string channel);
+
+    [LoggerMessage(EventId = 1212, Level = LogLevel.Warning, Message = "Проверка состояния недавних каналов отладки сорвалась")]
+    public static partial void RecentDebugChannelsStatusFailed(this ILogger logger, Exception? exception);
+
     [LoggerMessage(EventId = 1500, Level = LogLevel.Information, Message = "Обновление {Version} загружено, приложение перезапустится")]
     public static partial void UpdateDownloaded(this ILogger logger, string version);
 

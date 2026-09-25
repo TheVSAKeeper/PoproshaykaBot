@@ -7,4 +7,6 @@ public sealed class DebugChannelSettings
     public string Channel { get; set; } = string.Empty;
 
     public bool AllowSending { get; set; }
+
+    public List<RecentDebugChannel> RecentChannels { get; set; } = [];
 }

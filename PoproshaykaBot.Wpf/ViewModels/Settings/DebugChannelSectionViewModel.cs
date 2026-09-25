@@ -1,6 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Settings.Debugging;
+using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
@@ -23,12 +25,20 @@ public sealed partial class DebugChannelSectionViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HintSeverity))]
     private bool _allowSending;
 
-    public DebugChannelSectionViewModel(DebugChannelOverride commandLine)
+    public DebugChannelSectionViewModel(
+        DebugChannelOverride commandLine,
+        DebugChannelStore store,
+        ChannelLiveStatusReader reader,
+        TimeProvider timeProvider,
+        ILogger<DebugChannelSectionViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(commandLine);
 
         _commandLine = commandLine;
+        Recent = new(store, reader, timeProvider, logger, UseRecentChannel);
     }
+
+    public RecentDebugChannelsViewModel Recent { get; }
 
     public string HintText
     {
@@ -85,6 +95,7 @@ public sealed partial class DebugChannelSectionViewModel : ObservableObject
         IsEnabled = settings.IsEnabled;
         Channel = settings.Channel;
         AllowSending = settings.AllowSending;
+        Recent.Reload();
     }
 
     public void SaveSettings(DebugChannelSettings settings)
@@ -94,5 +105,11 @@ public sealed partial class DebugChannelSectionViewModel : ObservableObject
         settings.IsEnabled = IsEnabled;
         settings.Channel = ChannelLogin.TryNormalize(Channel, out var login) ? login : Channel.Trim();
         settings.AllowSending = AllowSending;
+    }
+
+    private void UseRecentChannel(string login)
+    {
+        Channel = login;
+        IsEnabled = true;
     }
 }
