@@ -214,10 +214,11 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             return;
         }
 
-        e.Effects = DragDropEffects.Move;
-        e.Handled = true;
+        e.Effects = ShowDropHint(typeId, e.GetPosition(PreviewArea))
+            ? e.AllowedEffects & (DragDropEffects.Copy | DragDropEffects.Move)
+            : DragDropEffects.None;
 
-        ShowDropHint(typeId, e.GetPosition(PreviewArea));
+        e.Handled = true;
     }
 
     private void OnPreviewDragLeave(object sender, DragEventArgs e)
@@ -279,13 +280,13 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         return nearest < 0 ? null : new(paths[nearest], bounds[nearest]);
     }
 
-    private void ShowDropHint(string typeId, Point position)
+    private bool ShowDropHint(string typeId, Point position)
     {
         if (_viewModel is null || TargetAt(position) is not { } target)
         {
             HideDropHint();
 
-            return;
+            return false;
         }
 
         var side = DashboardPaneSurface.Side(position, target.Bounds);
@@ -295,7 +296,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         {
             HideDropHint();
 
-            return;
+            return false;
         }
 
         var pane = placed
@@ -309,7 +310,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         {
             HideDropHint();
 
-            return;
+            return false;
         }
 
         var origin = PreviewBox.TransformToAncestor(PreviewArea).Transform(default);
@@ -347,6 +348,8 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 
         Canvas.SetLeft(_dropHint, origin.X + (rect.X * _scale));
         Canvas.SetTop(_dropHint, origin.Y + (rect.Y * _scale));
+
+        return true;
     }
 
     private void HideDropHint()
