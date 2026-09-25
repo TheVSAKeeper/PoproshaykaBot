@@ -198,6 +198,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -210,7 +211,26 @@
                    AutomationProperties.LiveSetting="Polite"
                    Visibility="{Binding UnsavedNotice, Converter={StaticResource NullToVisibility}}" />
 
-        <TextBlock Grid.Row="1"
+        <TextBlock x:Name="StatusLine"
+                   Grid.Row="1"
+                   Text="{Binding StatusMessage}"
+                   FontSize="{DynamicResource Font.Size.S}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8"
+                   Visibility="{Binding HasStatusMessage, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <TextBlock Grid.Row="2"
                    Text="Профилей нет – добавьте кнопкой «+» в заголовке"
                    Style="{StaticResource TextBlock.Subtle}"
                    FontSize="{DynamicResource Font.Size.S}"
@@ -218,65 +238,39 @@
                    VerticalAlignment="Top"
                    Visibility="{Binding HasProfiles, Converter={StaticResource InverseBoolToVisibility}}" />
 
-        <Grid Grid.Row="1"
-              Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisibility}}">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <TextBlock Grid.Row="0"
-                       Text="{Binding StatusMessage}"
-                       FontSize="{DynamicResource Font.Size.S}"
-                       TextWrapping="Wrap"
-                       Margin="0,0,0,8"
-                       Visibility="{Binding HasStatusMessage, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{DynamicResource Fg.Secondary}" />
+        <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Visibility="{Binding HasProfiles, Converter={StaticResource BoolToVisibility}}">
+            <ItemsControl ItemsSource="{Binding Items}"
+                          Margin="0,0,-8,0"
+                          VerticalAlignment="Top"
+                          ItemTemplate="{StaticResource ProfileCardTemplate}"
+                          SizeChanged="OnCardsSizeChanged">
+                <ItemsControl.Style>
+                    <Style TargetType="ItemsControl">
+                        <Setter Property="ItemsPanel">
+                            <Setter.Value>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="{Binding CardColumns, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                </ItemsPanelTemplate>
+                            </Setter.Value>
+                        </Setter>
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsStatusError}" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource State.ErrorText}" />
+                            <DataTrigger Binding="{Binding CardColumns, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                         Value="1">
+                                <Setter Property="ItemsPanel">
+                                    <Setter.Value>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel />
+                                        </ItemsPanelTemplate>
+                                    </Setter.Value>
+                                </Setter>
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
-                </TextBlock.Style>
-            </TextBlock>
-
-            <ScrollViewer Grid.Row="1"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl ItemsSource="{Binding Items}"
-                              Margin="0,0,-8,0"
-                              VerticalAlignment="Top"
-                              ItemTemplate="{StaticResource ProfileCardTemplate}"
-                              SizeChanged="OnCardsSizeChanged">
-                    <ItemsControl.Style>
-                        <Style TargetType="ItemsControl">
-                            <Setter Property="ItemsPanel">
-                                <Setter.Value>
-                                    <ItemsPanelTemplate>
-                                        <UniformGrid Columns="{Binding CardColumns, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                    </ItemsPanelTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding CardColumns, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                             Value="1">
-                                    <Setter Property="ItemsPanel">
-                                        <Setter.Value>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel />
-                                            </ItemsPanelTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ItemsControl.Style>
-                </ItemsControl>
-            </ScrollViewer>
-
-        </Grid>
+                </ItemsControl.Style>
+            </ItemsControl>
+        </ScrollViewer>
     </Grid>
 </UserControl>
