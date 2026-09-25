@@ -65,21 +65,21 @@ public static class DashboardPaneBuilder
     {
         ArgumentNullException.ThrowIfNull(root);
 
-        return BuildPane(root, placements, [], false, starred: true);
+        return BuildPane(root, placements, [], false, starred: true, strip: false);
     }
 
-    public static void ApplyCollapsedStrips(PaneLayout? pane, bool alongColumns, bool stacked)
+    public static void ApplyCollapsedStrips(PaneLayout? pane, bool stacked)
     {
         switch (pane)
         {
             case TilePaneLayout leaf:
-                leaf.Tile.IsCollapsedToStrip = alongColumns && !stacked && leaf.Tile.IsCollapsed;
+                leaf.Tile.IsCollapsedToStrip = leaf.Strip && !stacked;
                 return;
 
             case SplitPaneLayout split:
                 foreach (var child in split.Children)
                 {
-                    ApplyCollapsedStrips(child.Pane, split.Orientation == SplitOrientation.Columns, stacked);
+                    ApplyCollapsedStrips(child.Pane, stacked);
                 }
 
                 return;
@@ -144,15 +144,44 @@ public static class DashboardPaneBuilder
         IReadOnlyDictionary<string, DashboardTilePlacement> placements,
         int[] path,
         bool alongColumns,
-        bool starred)
+        bool starred,
+        bool strip)
     {
         return pane switch
         {
             TilePane tile when DashboardLayoutTree.IsEmptySlot(tile.TypeId) => BuildEmpty(path),
-            TilePane tile => placements.TryGetValue(tile.TypeId, out var placement) ? BuildLeaf(placement, path, alongColumns, starred) : null,
-            SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 0 } split => BuildSplit(split, placements, path),
+            TilePane tile => placements.TryGetValue(tile.TypeId, out var placement) ? BuildLeaf(placement, path, alongColumns, starred, strip) : null,
+            SplitPane { Orientation: SplitOrientation.Columns or SplitOrientation.Rows, Children.Count: > 0 } split => BuildSplit(split, placements, path, strip),
             _ => null,
         };
+    }
+
+    private static bool FoldsToStrip(DashboardPane pane, IReadOnlyDictionary<string, DashboardTilePlacement> placements)
+    {
+        var placed = TileLeaves(pane)
+            .Where(tile => DashboardLayoutTree.IsEmptySlot(tile.TypeId) || placements.ContainsKey(tile.TypeId))
+            .ToList();
+
+        return placed.Count > 0
+            && placed.All(tile => placements.TryGetValue(tile.TypeId, out var placement) && placement.IsCollapsed);
+    }
+
+    private static IEnumerable<TilePane> TileLeaves(DashboardPane pane)
+    {
+        switch (pane)
+        {
+            case TilePane tile:
+                yield return tile;
+                yield break;
+
+            case SplitPane split:
+                foreach (var leaf in split.Children.SelectMany(child => TileLeaves(child.Pane)))
+                {
+                    yield return leaf;
+                }
+
+                yield break;
+        }
     }
 
     private static PaneLayout BuildEmpty(int[] path)
@@ -162,26 +191,15 @@ public static class DashboardPaneBuilder
         return new EmptyPaneLayout(star, star, path);
     }
 
-    private static PaneLayout BuildLeaf(DashboardTilePlacement placement, int[] path, bool alongColumns, bool starred)
+    private static PaneLayout BuildLeaf(DashboardTilePlacement placement, int[] path, bool alongColumns, bool starred, bool strip)
     {
-        var contentWidth = placement.ScaledMaxWidth ?? double.PositiveInfinity;
-        var contentHeight = placement.ScaledMaxHeight ?? double.PositiveInfinity;
-
         if (placement.IsCollapsed)
         {
-            var strip = alongColumns
-                ? Math.Min(DashboardTileViewModel.ScaledCollapsedStripWidth, contentWidth)
-                : Math.Min(placement.Tile.ScaledMinWidth, contentWidth);
-
-            return new TilePaneLayout(
-                placement.Tile,
-                new(GridLength.Auto, contentWidth, strip),
-                new(GridLength.Auto, contentHeight, Math.Min(DashboardTileViewModel.ScaledCollapsedHeaderHeight, contentHeight)),
-                path,
-                false,
-                contentHeight);
+            return BuildCollapsed(placement, path, alongColumns, strip);
         }
 
+        var contentWidth = placement.ScaledMaxWidth ?? double.PositiveInfinity;
+        var contentHeight = placement.ScaledMaxHeight ?? double.PositiveInfinity;
         var star = new GridLength(1, GridUnitType.Star);
         var widthStar = Stretches(placement);
         var heightStar = Stretches(placement) || Grows(placement);
@@ -197,12 +215,43 @@ public static class DashboardPaneBuilder
             contentHeight);
     }
 
+    private static TilePaneLayout BuildCollapsed(DashboardTilePlacement placement, int[] path, bool alongColumns, bool strip)
+    {
+        var contentWidth = placement.ScaledMaxWidth ?? double.PositiveInfinity;
+        var contentHeight = placement.ScaledMaxHeight ?? double.PositiveInfinity;
+        var header = Math.Min(DashboardTileViewModel.ScaledCollapsedHeaderHeight, contentHeight);
+
+        if (strip)
+        {
+            var maxHeight = placement.ScaledAuthoredMaxHeight ?? double.PositiveInfinity;
+
+            return new TilePaneLayout(
+                placement.Tile,
+                new(GridLength.Auto, contentWidth, Math.Min(DashboardTileViewModel.ScaledCollapsedStripWidth, contentWidth)),
+                new(alongColumns ? GridLength.Auto : new(1, GridUnitType.Star), maxHeight, Math.Min(header, maxHeight)),
+                path,
+                true,
+                contentHeight,
+                Strip: true);
+        }
+
+        var maxWidth = placement.ScaledAuthoredMaxWidth ?? double.PositiveInfinity;
+
+        return new TilePaneLayout(
+            placement.Tile,
+            new(GridLength.Auto, maxWidth, Math.Min(placement.Tile.ScaledMinWidth, maxWidth)),
+            new(GridLength.Auto, contentHeight, header),
+            path,
+            true,
+            contentHeight);
+    }
+
     private static PaneLayout Fill(PaneLayout pane, IReadOnlyDictionary<string, DashboardTilePlacement> placements, bool alongColumns)
     {
         var star = new GridLength(1, GridUnitType.Star);
 
         var target = pane is TilePaneLayout leaf
-            ? BuildLeaf(placements[leaf.Tile.TypeId], leaf.Path, alongColumns, starred: true)
+            ? BuildLeaf(placements[leaf.Tile.TypeId], leaf.Path, alongColumns, starred: true, strip: false)
             : pane;
 
         return alongColumns
@@ -210,7 +259,7 @@ public static class DashboardPaneBuilder
             : target with { Height = target.Height with { Length = star } };
     }
 
-    private static PaneLayout? BuildSplit(SplitPane split, IReadOnlyDictionary<string, DashboardTilePlacement> placements, int[] path)
+    private static PaneLayout? BuildSplit(SplitPane split, IReadOnlyDictionary<string, DashboardTilePlacement> placements, int[] path, bool strip)
     {
         if (DashboardLayoutTree.ResolveWeights(split.Children) is not { } weights)
         {
@@ -218,17 +267,20 @@ public static class DashboardPaneBuilder
         }
 
         var children = new List<PaneLayoutSlot>(split.Children.Count);
+        var folded = new List<bool>(split.Children.Count);
         var alongColumns = split.Orientation == SplitOrientation.Columns;
 
         for (var index = 0; index < split.Children.Count; index++)
         {
             var slot = split.Children[index];
+            var folds = strip || (alongColumns && FoldsToStrip(slot.Pane, placements));
 
-            if (BuildPane(slot.Pane, placements, [.. path, index], alongColumns, Starred(slot, placements, alongColumns)) is { } child)
+            if (BuildPane(slot.Pane, placements, [.. path, index], alongColumns, Starred(slot, placements, alongColumns), folds) is { } child)
             {
-                var sizesToContent = SizesToContent(child, alongColumns);
+                var sizesToContent = folds || SizesToContent(child, alongColumns);
 
                 children.Add(new(child, weights[index], HasWeight(slot, placements) && !sizesToContent, sizesToContent));
+                folded.Add(folds);
             }
         }
 
@@ -249,8 +301,8 @@ public static class DashboardPaneBuilder
 
         var authored = children.Exists(child => child.HasWeight);
 
-        var width = MergeTracks(children, static pane => pane.Width, alongColumns, alongColumns && authored);
-        var height = MergeTracks(children, static pane => pane.Height, !alongColumns, !alongColumns && authored);
+        var width = MergeTracks(children, static pane => pane.Width, alongColumns, alongColumns && authored, alongColumns ? null : folded);
+        var height = MergeTracks(children, static pane => pane.Height, !alongColumns, !alongColumns && authored, alongColumns ? folded : null);
 
         return new SplitPaneLayout(split.Orientation, children, width, height, path, children.Count == split.Children.Count);
     }
@@ -301,7 +353,9 @@ public static class DashboardPaneBuilder
     {
         return pane switch
         {
-            TilePaneLayout leaf => leaf.Fills && placements.ContainsKey(leaf.Tile.TypeId),
+            TilePaneLayout leaf => leaf.Fills
+                && placements.TryGetValue(leaf.Tile.TypeId, out var placement)
+                && !placement.IsCollapsed,
             SplitPaneLayout split => Across(split, alongColumns)
                 && split.Children.Any(child => TakesRemainder(child.Pane, placements, alongColumns)),
             _ => false,
@@ -369,14 +423,20 @@ public static class DashboardPaneBuilder
             || !placement.IsCollapsed;
     }
 
-    private static TrackSize MergeTracks(IReadOnlyList<PaneLayoutSlot> children, Func<PaneLayout, TrackSize> axis, bool alongSplit, bool authored)
+    private static TrackSize MergeTracks(
+        IReadOnlyList<PaneLayoutSlot> children,
+        Func<PaneLayout, TrackSize> axis,
+        bool alongSplit,
+        bool authored,
+        IReadOnlyList<bool>? passive)
     {
         var tracks = children.Select(child => axis(child.Pane)).ToList();
         var ceiling = alongSplit ? tracks.Sum(track => track.Max) : tracks.Max(track => track.Max);
         var floor = alongSplit ? tracks.Sum(track => track.Min) : tracks.Max(track => track.Min);
+        var stretched = tracks.Where((_, index) => passive?[index] != true).Any(track => track.Length.IsStar);
 
         return new(
-            authored || tracks.Exists(track => track.Length.IsStar) ? new(1, GridUnitType.Star) : GridLength.Auto,
+            authored || stretched ? new(1, GridUnitType.Star) : GridLength.Auto,
             double.IsInfinity(ceiling) ? double.PositiveInfinity : ceiling,
             Math.Min(floor, ceiling));
     }

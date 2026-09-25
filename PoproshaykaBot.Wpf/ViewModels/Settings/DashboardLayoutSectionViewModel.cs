@@ -442,7 +442,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         ContentArea = Reference.ContentArea(_navCollapsed);
         Stacked = DashboardPaneSurface.ShouldStack(ContentArea.Width, Pane);
 
-        DashboardPaneBuilder.ApplyCollapsedStrips(Pane, false, Stacked);
+        DashboardPaneBuilder.ApplyCollapsedStrips(Pane, Stacked);
 
         if (Pane is null)
         {

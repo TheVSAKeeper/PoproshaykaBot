@@ -95,7 +95,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             StopEditing();
         }
 
-        DashboardPaneBuilder.ApplyCollapsedStrips(Pane, false, _stacked);
+        DashboardPaneBuilder.ApplyCollapsedStrips(Pane, _stacked);
 
         OnPropertyChanged(nameof(CanEdit));
     }
@@ -389,7 +389,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         Bands = model.Bands;
         HasTiles = model.Placements.Count > 0;
 
-        DashboardPaneBuilder.ApplyCollapsedStrips(Pane, false, _stacked);
+        DashboardPaneBuilder.ApplyCollapsedStrips(Pane, _stacked);
 
         HiddenTiles = layout.Tiles
             .Where(tile => !tile.IsVisible && _tilesByTypeId.ContainsKey(tile.TypeId))
@@ -565,8 +565,14 @@ public abstract record PaneLayout(TrackSize Width, TrackSize Height, int[] Path)
     }
 }
 
-public sealed record TilePaneLayout(DashboardTileViewModel Tile, TrackSize Width, TrackSize Height, int[] Path, bool Fills, double ContentHeight)
-    : PaneLayout(Width, Height, Path);
+public sealed record TilePaneLayout(
+    DashboardTileViewModel Tile,
+    TrackSize Width,
+    TrackSize Height,
+    int[] Path,
+    bool Fills,
+    double ContentHeight,
+    bool Strip = false) : PaneLayout(Width, Height, Path);
 
 public sealed record EmptyPaneLayout(TrackSize Width, TrackSize Height, int[] Path)
     : PaneLayout(Width, Height, Path);
