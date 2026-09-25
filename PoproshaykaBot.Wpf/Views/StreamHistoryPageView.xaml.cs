@@ -60,7 +60,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public static readonly Thickness TrendValueFirstMargin = new(0, 0, -48, 2);
     public static readonly Thickness TrendValueLastMargin = new(-48, 0, 0, 2);
 
-    private readonly IClipboardService _clipboard = new ClipboardService();
+    private readonly IClipboardService _clipboard;
 
     private bool _sideBySide;
     private bool _layoutApplied;
@@ -69,7 +69,14 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     private double _segmentCardsWidth;
 
     public StreamHistoryPageView()
+        : this(new ClipboardService())
     {
+    }
+
+    public StreamHistoryPageView(IClipboardService clipboard)
+    {
+        _clipboard = clipboard;
+
         InitializeComponent();
         ApplyScaledFloors();
 
