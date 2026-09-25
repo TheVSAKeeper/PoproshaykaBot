@@ -5,6 +5,8 @@ namespace PoproshaykaBot.Wpf.Tests;
 
 internal sealed class FakeBoxArtCache : IGameBoxArtCache
 {
+    private readonly Lock _sync = new();
+
     public Dictionary<string, string> Cached { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public Dictionary<string, string> Downloadable { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -15,22 +17,32 @@ internal sealed class FakeBoxArtCache : IGameBoxArtCache
 
     public List<string> Invalidated { get; } = [];
 
+    public List<int> RequestThreads { get; } = [];
+
     public TaskCompletionSource Gate { get; } = new();
 
     public bool WaitForGate { get; set; }
 
     public IReadOnlyDictionary<string, string> GetCachedPaths(IReadOnlyCollection<string> gameNames)
     {
-        CachedRequests.Add([.. gameNames]);
+        lock (_sync)
+        {
+            CachedRequests.Add([.. gameNames]);
+            RequestThreads.Add(Environment.CurrentManagedThreadId);
 
-        return Pick(gameNames, Cached);
+            return Pick(gameNames, Cached);
+        }
     }
 
     public async Task<IReadOnlyDictionary<string, string>> GetPathsAsync(
         IReadOnlyCollection<string> gameNames,
         CancellationToken cancellationToken = default)
     {
-        NetworkRequests.Add([.. gameNames]);
+        lock (_sync)
+        {
+            NetworkRequests.Add([.. gameNames]);
+            RequestThreads.Add(Environment.CurrentManagedThreadId);
+        }
 
         if (WaitForGate)
         {
@@ -39,26 +51,35 @@ internal sealed class FakeBoxArtCache : IGameBoxArtCache
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var found = new Dictionary<string, string>(Pick(gameNames, Cached), StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (game, path) in Pick(gameNames, Downloadable))
+        lock (_sync)
         {
-            found[game] = path;
-            Cached[game] = path;
-        }
+            var found = new Dictionary<string, string>(Pick(gameNames, Cached), StringComparer.OrdinalIgnoreCase);
 
-        return found;
+            foreach (var (game, path) in Pick(gameNames, Downloadable))
+            {
+                found[game] = path;
+                Cached[game] = path;
+            }
+
+            return found;
+        }
     }
 
     public void Invalidate(string gameName)
     {
-        Invalidated.Add(gameName);
-        Cached.Remove(gameName);
+        lock (_sync)
+        {
+            Invalidated.Add(gameName);
+            Cached.Remove(gameName);
+        }
     }
 
     public GameBoxArtCacheStatus GetStatus()
     {
-        return new(Path.GetTempPath(), Cached.Count, 0, GameBoxArtCacheOptions.DefaultMissLifetime, CacheOnly: false);
+        lock (_sync)
+        {
+            return new(Path.GetTempPath(), Cached.Count, 0, GameBoxArtCacheOptions.DefaultMissLifetime, CacheOnly: false);
+        }
     }
 
     private static Dictionary<string, string> Pick(IReadOnlyCollection<string> gameNames, Dictionary<string, string> source)

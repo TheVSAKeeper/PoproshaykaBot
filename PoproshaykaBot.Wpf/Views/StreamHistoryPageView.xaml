@@ -1495,10 +1495,6 @@
                          HorizontalContentAlignment="Stretch"
                          ItemContainerStyle="{StaticResource SessionCardItem}"
                          ItemTemplate="{StaticResource SessionCardTemplate}"
-                         VirtualizingStackPanel.IsVirtualizing="True"
-                         VirtualizingStackPanel.VirtualizationMode="Recycling"
-                         VirtualizingPanel.ScrollUnit="Pixel"
-                         ScrollViewer.CanContentScroll="True"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
                          Visibility="{Binding IsCardsView, Converter={StaticResource BoolToVisibility}}">
@@ -1674,10 +1670,6 @@
                              Background="Transparent"
                              BorderThickness="0"
                              Padding="0"
-                             VirtualizingStackPanel.IsVirtualizing="True"
-                             VirtualizingStackPanel.VirtualizationMode="Recycling"
-                             VirtualizingPanel.ScrollUnit="Pixel"
-                             ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Visible">
                         <ListBox.CommandBindings>
@@ -1720,7 +1712,6 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <ContentPresenter Grid.Column="0"
@@ -1750,38 +1741,35 @@
                             </TextBlock.Style>
                         </TextBlock>
 
-                        <StackPanel Orientation="Horizontal"
-                                    Margin="0,2,0,0">
+                        <WrapPanel Orientation="Horizontal"
+                                   Margin="0,2,0,0">
                             <TextBlock Text="{Binding DetailGame}"
                                        Foreground="{DynamicResource Fg.Secondary}"
                                        FontSize="{DynamicResource Font.Size.Caption}"
                                        TextWrapping="NoWrap"
                                        TextTrimming="CharacterEllipsis"
+                                       Margin="0,0,8,0"
                                        MaxWidth="260" />
 
                             <TextBlock Text="{Binding DetailComposition}"
                                        Foreground="{DynamicResource Fg.Muted}"
                                        FontSize="{DynamicResource Font.Size.Caption}"
                                        TextWrapping="NoWrap"
-                                       Margin="8,0,0,0"
                                        Visibility="{Binding DetailComposition, Converter={StaticResource NullToVisibility}}" />
-                        </StackPanel>
-                    </StackPanel>
+                        </WrapPanel>
 
-                    <StackPanel Grid.Column="2"
-                                Margin="16,0,0,0">
                         <TextBlock Text="{Binding DetailPeriodText}"
                                    FontFamily="{DynamicResource Font.Mono}"
                                    FontSize="{DynamicResource Font.Size.Caption}"
                                    Foreground="{DynamicResource Fg.Secondary}"
                                    TextWrapping="NoWrap"
-                                   HorizontalAlignment="Right" />
+                                   TextTrimming="CharacterEllipsis"
+                                   Margin="0,6,0,0" />
 
                         <TextBlock Text="{Binding DetailTrackingText}"
                                    FontSize="{DynamicResource Font.Size.Caption}"
                                    Foreground="{DynamicResource Fg.Secondary}"
-                                   TextWrapping="NoWrap"
-                                   HorizontalAlignment="Right"
+                                   TextWrapping="Wrap"
                                    Margin="0,2,0,0"
                                    ToolTip="Столько времени эфира бот был подключён к чату. Сообщения, написанные без него, в статистику стрима не попали."
                                    Visibility="{Binding DetailTrackingText, Converter={StaticResource NullToVisibility}}" />
@@ -1931,7 +1919,8 @@
                                          ScrollViewer.VerticalScrollBarVisibility="Auto">
                                     <ListBox.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <UniformGrid Columns="{Binding SegmentColumns, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}" />
+                                            <UniformGrid VerticalAlignment="Top"
+                                                         Columns="{Binding SegmentColumns, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}" />
                                         </ItemsPanelTemplate>
                                     </ListBox.ItemsPanel>
                                 </ListBox>
@@ -1972,10 +1961,6 @@
                                          Background="Transparent"
                                          BorderThickness="0"
                                          Padding="0"
-                                         VirtualizingStackPanel.IsVirtualizing="True"
-                                         VirtualizingStackPanel.VirtualizationMode="Recycling"
-                                         VirtualizingPanel.ScrollUnit="Pixel"
-                                         ScrollViewer.CanContentScroll="True"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                          ScrollViewer.VerticalScrollBarVisibility="Auto" />
                             </Grid>

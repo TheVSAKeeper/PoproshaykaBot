@@ -10,7 +10,7 @@ public partial class TitleBarView : UserControl
         InitializeComponent();
     }
 
-    private void OnAddTileClick(object sender, RoutedEventArgs e)
+    private void OnMenuButtonClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || button.ContextMenu is not { } menu)
         {

@@ -92,6 +92,8 @@ public sealed class GalleryHost : IGalleryHost
         {
             HostLog.Warning(exception, "Статистика команд не прочитана – страница «Команды» останется без счётчиков");
         }
+
+        await _services.GetRequiredService<StreamHistoryPageViewModel>().BoxArtLoading.ConfigureAwait(true);
     }
 
     public async Task<GalleryShot> CaptureAsync(GalleryCase item, GalleryContext context)

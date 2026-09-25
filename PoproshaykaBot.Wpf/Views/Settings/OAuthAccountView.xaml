@@ -9,18 +9,7 @@
              d:DataContext="{d:DesignInstance vm:OAuthAccountViewModel}"
              d:DesignWidth="640">
 
-    <UserControl.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Views/Settings/SettingsResources.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
-    </UserControl.Resources>
-
     <StackPanel>
-        <TextBlock Text="{Binding HeaderText}"
-                   Style="{StaticResource Setting.BlockTitle}" />
-
         <TextBlock Text="Scopes"
                    Foreground="{DynamicResource Fg.Muted}"
                    FontSize="{DynamicResource Font.Size.S}"

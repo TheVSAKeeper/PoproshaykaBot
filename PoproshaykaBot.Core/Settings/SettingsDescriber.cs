@@ -93,7 +93,7 @@ public static class SettingsDescriber
         ArgumentNullException.ThrowIfNull(settings);
 
         return $"отладочный канал {OnOff(settings.IsEnabled)}, канал {Value(settings.Channel)}, "
-            + $"отправка сообщений {OnOff(settings.AllowSending)}";
+            + $"отправка сообщений {OnOff(settings.AllowSending)}, недавних каналов {settings.RecentChannels?.Count ?? 0}";
     }
 
     public static string Describe(BroadcastProfilesSettings settings)

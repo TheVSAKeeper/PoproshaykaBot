@@ -4,12 +4,14 @@ using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Server.Images;
 
+public sealed record MessageImage(string Url, int StartIndex, int EndIndex);
+
 public static class MessageImagePolicy
 {
     public const string ProxyPath = "/api/image";
     public const string UrlQueryKey = "u";
 
-    public static IReadOnlyList<string> BuildImageUrls(ChatMessageData message, ObsChatSettings settings)
+    public static IReadOnlyList<MessageImage> BuildImages(ChatMessageData message, ObsChatSettings settings)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(settings);
@@ -24,12 +26,12 @@ public static class MessageImagePolicy
             return [];
         }
 
-        if (!MessageImageLinkDetector.TryFindFirst(message.Message, settings.MessageImageAllowedHosts, out var uri))
+        if (!MessageImageLinkDetector.TryFindFirst(message.Message, settings.MessageImageAllowedHosts, out var link))
         {
             return [];
         }
 
-        return [BuildProxyUrl(uri)];
+        return [new(BuildProxyUrl(link.Uri), link.StartIndex, link.EndIndex)];
     }
 
     public static string BuildProxyUrl(Uri uri)

@@ -16,8 +16,21 @@ public sealed class MessageImageLinkDetectorTests
     [TestCase("https://evil.example/x.png https://cdn.7tv.app/ok.png", "https://cdn.7tv.app/ok.png")]
     public void TryFindFirst_AllowedLink_IsFound(string message, string expected)
     {
-        Assert.That(MessageImageLinkDetector.TryFindFirst(message, AllowedHosts, out var uri), Is.True);
-        Assert.That(uri.AbsoluteUri, Is.EqualTo(expected));
+        Assert.That(MessageImageLinkDetector.TryFindFirst(message, AllowedHosts, out var link), Is.True);
+        Assert.That(link.Uri.AbsoluteUri, Is.EqualTo(expected));
+    }
+
+    [TestCase("https://i.imgur.com/abc.png", "https://i.imgur.com/abc.png")]
+    [TestCase("смотри https://i.imgur.com/abc.JPG вот", "https://i.imgur.com/abc.JPG")]
+    [TestCase("(https://i.imgur.com/abc.gif)", "https://i.imgur.com/abc.gif")]
+    [TestCase("«https://i.imgur.com/abc.webp».", "https://i.imgur.com/abc.webp")]
+    [TestCase("  https://i.imgur.com/a.png  ", "https://i.imgur.com/a.png")]
+    [TestCase("https://evil.example/x.png https://cdn.7tv.app/ok.png", "https://cdn.7tv.app/ok.png")]
+    public void TryFindFirst_RangeCoversLinkTextWithoutNoise(string message, string linkText)
+    {
+        Assert.That(MessageImageLinkDetector.TryFindFirst(message, AllowedHosts, out var link), Is.True);
+        Assert.That(message[link.StartIndex..(link.EndIndex + 1)], Is.EqualTo(linkText),
+            "Оверлей прячет ровно этот отрезок текста, когда картинка загрузилась.");
     }
 
     [TestCase("")]
@@ -48,10 +61,10 @@ public sealed class MessageImageLinkDetectorTests
         var found = MessageImageLinkDetector.TryFindFirst(
             "https://i.imgur.com/one.png https://i.imgur.com/two.png",
             AllowedHosts,
-            out var uri);
+            out var link);
 
         Assert.That(found, Is.True);
-        Assert.That(uri.AbsoluteUri, Is.EqualTo("https://i.imgur.com/one.png"));
+        Assert.That(link.Uri.AbsoluteUri, Is.EqualTo("https://i.imgur.com/one.png"));
     }
 
     [Test]

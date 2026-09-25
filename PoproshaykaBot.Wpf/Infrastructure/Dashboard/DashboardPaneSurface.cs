@@ -96,8 +96,9 @@ public sealed class DashboardPaneSurface
         ArgumentNullException.ThrowIfNull(leaf);
 
         var ceiling = leaf.ContentHeight;
+        var floor = leaf.Strip ? leaf.Height.Min : Floor(leaf.Height, ScaledStarBandMinHeight);
 
-        return new(GridLength.Auto, ceiling, Math.Min(Floor(leaf.Height, ScaledStarBandMinHeight), ceiling));
+        return new(GridLength.Auto, ceiling, Math.Min(floor, ceiling));
     }
 
     public static double TrackFloor(PaneLayoutSlot slot, bool alongColumns)
@@ -547,6 +548,36 @@ public sealed class DashboardPaneSurface
         return content;
     }
 
+    public static bool SameShape(PaneLayout previous, PaneLayout next)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        ArgumentNullException.ThrowIfNull(next);
+
+        return (previous, next) switch
+        {
+            (EmptyPaneLayout, EmptyPaneLayout) => true,
+            (TilePaneLayout before, TilePaneLayout after) => ReferenceEquals(before.Tile, after.Tile),
+            (SplitPaneLayout before, SplitPaneLayout after) => before.Orientation == after.Orientation
+                && before.IsComplete == after.IsComplete
+                && before.Scrollable == after.Scrollable
+                && before.Children.Count == after.Children.Count
+                && before.Children.Zip(after.Children).All(pair => SameShape(pair.First.Pane, pair.Second.Pane)),
+            _ => false,
+        };
+    }
+
+    public void Update(FrameworkElement root, PaneLayout pane)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(pane);
+
+        ApplyRootConstraints(root, pane);
+
+        var content = pane is TilePaneLayout && root is Border { Child: FrameworkElement child } ? child : Unwrap(pane, root);
+
+        Refresh(content, pane);
+    }
+
     public FrameworkElement Build(PaneLayout pane)
     {
         ArgumentNullException.ThrowIfNull(pane);
@@ -769,6 +800,43 @@ public sealed class DashboardPaneSurface
     private static TrackSize Axis(PaneLayout pane, bool alongColumns)
     {
         return alongColumns ? pane.Width : pane.Height;
+    }
+
+    private static FrameworkElement Unwrap(PaneLayout pane, FrameworkElement element)
+    {
+        return pane is SplitPaneLayout && pane.Scrollable && element is ScrollViewer { Content: FrameworkElement content }
+            ? content
+            : element;
+    }
+
+    private void Refresh(FrameworkElement element, PaneLayout pane)
+    {
+        if (pane is TilePaneLayout leaf)
+        {
+            DashboardTileSlot.SetFills(element, leaf.Fills);
+        }
+
+        if (pane is not SplitPaneLayout split || element is not Grid grid)
+        {
+            Registered?.Invoke(pane, element);
+
+            return;
+        }
+
+        var alongColumns = split.Orientation == SplitOrientation.Columns;
+
+        ApplySplitTracks(grid, split, alongColumns);
+
+        for (var index = 0; index < split.Children.Count; index++)
+        {
+            var childPane = split.Children[index].Pane;
+            var content = (FrameworkElement)grid.Children[index];
+
+            ApplyCrossConstraints(content, childPane, alongColumns);
+            Refresh(Unwrap(childPane, content), childPane);
+        }
+
+        SplitBuilt?.Invoke(split, grid);
     }
 
     private Grid BuildBand(TileBand band)

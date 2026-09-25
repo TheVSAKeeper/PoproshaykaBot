@@ -51,6 +51,8 @@ public partial class App : Application
     private const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
     private static int _fatalErrorHandled;
+    private static int _restartRequested;
+    private static string[] _startupArguments = [];
 
     private ServiceProvider? _services;
     private KeepShellLogging? _logging;
@@ -71,6 +73,8 @@ public partial class App : Application
 
     internal static bool IsFatalShutdown => Volatile.Read(ref _fatalErrorHandled) == 1;
 
+    internal static bool IsRestartRequested => Volatile.Read(ref _restartRequested) == 1;
+
     private static Serilog.ILogger HostLog => Log.ForContext<App>();
 
     internal static bool IsHeadless { get; private set; }
@@ -84,6 +88,11 @@ public partial class App : Application
         base.OnStartup(e);
 
         ApplyUiCulture();
+
+        _startupArguments = e.Args;
+        var previousInstance = AppRestart.FindPreviousProcessId(e.Args);
+        var previousInstanceExited = previousInstance is not { } previousProcessId
+                                     || AppRestart.WaitForExit(previousProcessId, AppRestart.HandoffTimeout);
 
         IsHeadless = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         DebugChannel = DebugChannelOverride.Parse(e.Args);
@@ -126,6 +135,11 @@ public partial class App : Application
         _logging = KeepShellLogging.Bootstrap(_loggingOptions);
 
         HostLog.Information(AppInfo.SessionStartMarker + "...");
+
+        if (previousInstance is { } restartedAfter)
+        {
+            ReportRestartHandoff(restartedAfter, previousInstanceExited);
+        }
 
         _bindingErrors = BindingErrorSink.Attach();
         _bindingErrors.Captured += OnBindingErrorCaptured;
@@ -268,12 +282,19 @@ public partial class App : Application
 
             if (_exitReason is AppExitReason.None)
             {
-                _exitReason = AppExitReason.Normal;
+                _exitReason = IsRestartRequested ? AppExitReason.Restart : AppExitReason.Normal;
             }
 
-            if (!IsHeadless && !IsFatalShutdown && ApplyPendingUpdate())
+            var updateApplied = !IsHeadless && !IsFatalShutdown && ApplyPendingUpdate();
+
+            if (updateApplied)
             {
                 _exitReason = AppExitReason.UpdatePending;
+            }
+
+            if (AppRestart.ShouldLaunch(IsRestartRequested, updateApplied, IsFatalShutdown))
+            {
+                LaunchReplacement();
             }
         }
 
@@ -530,9 +551,9 @@ public partial class App : Application
             return;
         }
 
-        // TODO: после фатальной ошибки хост только закрывается – автоматический перезапуск невозможен,
-        //  пока шлюз одного экземпляра держит мьютекс до выхода процесса; заводить, когда
-        //  SingleInstanceGate.TryAcquire научится ждать освобождения мьютекса
+        // TODO: после фатальной ошибки хост только закрывается – передачу мьютекса новому процессу
+        //  уже умеет LaunchReplacement (--restart-after), но падение на старте зациклило бы перезапуск;
+        //  заводить вместе со счётчиком падений подряд
         ShowFatalErrorNotice();
 
         try

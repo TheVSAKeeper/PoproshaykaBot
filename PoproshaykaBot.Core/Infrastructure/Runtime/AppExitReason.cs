@@ -7,4 +7,6 @@ public enum AppExitReason
     AlreadyRunning = 2,
     Failed = 3,
     UpdatePending = 4,
+    Restart = 5,
+    ForcedRestart = 6,
 }

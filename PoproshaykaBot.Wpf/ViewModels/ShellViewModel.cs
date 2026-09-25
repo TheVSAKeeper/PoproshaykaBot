@@ -157,6 +157,13 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         if (!await ConfirmDirtyPagesOnCloseAsync())
         {
             UpdateBanner.ResetInstallState();
+
+            if (App.IsRestartRequested)
+            {
+                App.CancelRestart();
+                _logger.RestartCancelled();
+            }
+
             return false;
         }
 
@@ -432,6 +439,52 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private bool CanToggleConnect()
     {
         return Phase != BotLifecyclePhase.Disconnecting;
+    }
+
+    [RelayCommand]
+    private void Restart()
+    {
+        _logger.RestartRequested();
+
+        if (App.IsHeadless)
+        {
+            _logger.RestartUnavailableHeadless();
+            return;
+        }
+
+        if (!App.TryRequestRestart())
+        {
+            return;
+        }
+
+        Application.Current.MainWindow?.Close();
+    }
+
+    [RelayCommand]
+    private void RestartForced()
+    {
+        _logger.ForcedRestartRequested();
+
+        if (App.IsHeadless)
+        {
+            _logger.RestartUnavailableHeadless();
+            return;
+        }
+
+        if (!_dialogService.ConfirmWarning("Принудительный перезапуск",
+                "Приложение закроется сразу, без штатной остановки бота.\n\n"
+                + "Несохранённые изменения настроек будут потеряны, прощание в чат не отправится, "
+                + "положение окна не запомнится.\n\nПерезапустить принудительно?"))
+        {
+            _logger.ForcedRestartDeclined();
+            return;
+        }
+
+        if (!App.TryRestartForced())
+        {
+            _dialogService.Error("Перезапуск не удался",
+                "Не получилось запустить приложение заново, поэтому текущее окно осталось открытым. Подробности – в журнале.");
+        }
     }
 
     private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)

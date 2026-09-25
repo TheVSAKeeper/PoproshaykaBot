@@ -10,6 +10,7 @@ public static class DebuggingServiceCollectionExtensions
 
         services.AddSingleton(commandLine);
         services.AddSingleton<ITargetChannelProvider, TargetChannelProvider>();
+        services.AddSingleton<ChannelLiveStatusReader>();
         return services;
     }
 }

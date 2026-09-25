@@ -8,7 +8,9 @@ using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
 using PoproshaykaBot.Wpf.Views.Settings;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 
 namespace PoproshaykaBot.Wpf.Tests;
@@ -119,6 +121,46 @@ public class DashboardPreviewGeometryTests
 
         Assert.That(section.Scale, Is.EqualTo(drawn).Within(0.01),
             "Подпись называет масштаб, в котором превью нарисовано, уже на первом проходе – галерея снимает именно его.");
+    }
+
+    [Test]
+    public void A_dragged_column_slider_is_one_undo_step_and_the_new_cell_is_drawn_as_a_place_to_drop()
+    {
+        var section = new DashboardLayoutSectionViewModel(Tiles());
+
+        section.LoadSettings(WeightedLayout());
+        section.Reference = DashboardPreviewReference.Window1920;
+
+        var view = new DashboardLayoutSectionView { DataContext = section };
+        var host = new Grid { Width = 900, Height = 700, Children = { view } };
+
+        host.Measure(new(900, 700));
+        host.Arrange(new(0, 0, 900, 700));
+        host.UpdateLayout();
+
+        var slider = (Slider)DescendantByName(view, "ColumnSlider");
+        var thumb = Descendants(slider).OfType<Thumb>().First();
+        var start = section.ColumnCount;
+
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0));
+        slider.Value = start + 1;
+        slider.Value = start + 2;
+        slider.Value = start + 1;
+        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false));
+        host.UpdateLayout();
+
+        var holes = Descendants(view)
+            .OfType<FrameworkElement>()
+            .Count(static element => AutomationProperties.GetName(element).StartsWith("Пусто", StringComparison.Ordinal));
+
+        section.UndoCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(holes, Is.EqualTo(1), "Прибавленная колонка нарисована местом для броска с подписью, а не прозрачной ячейкой.");
+            Assert.That(section.ColumnCount, Is.EqualTo(start), "Одна отмена возвращает сетку к началу жеста ползунка.");
+            Assert.That(section.CanUndo, Is.False, "Протаскивание ползунка оставляет одну запись отмены, а не по записи на шаг.");
+        });
     }
 
     private static FrameworkElement DescendantByName(DependencyObject root, string name)

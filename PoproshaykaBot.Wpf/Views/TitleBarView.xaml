@@ -158,7 +158,7 @@
                     <Button x:Name="AddTileButton"
                             Content="Добавить плитку"
                             Style="{StaticResource Button.Ghost}"
-                            Click="OnAddTileClick"
+                            Click="OnMenuButtonClick"
                             MinHeight="26"
                             Padding="10,3"
                             Margin="0,0,6,0"
@@ -236,6 +236,30 @@
                         MinHeight="26"
                         Padding="14,3"
                         Margin="0,0,10,0" />
+
+                <Button x:Name="RestartButton"
+                        Style="{StaticResource Theme.SegmentButton}"
+                        Click="OnMenuButtonClick"
+                        Width="36"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,0"
+                        ToolTip="Перезапустить"
+                        AutomationProperties.Name="Перезапустить приложение"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.RotateCw}"
+                                              Width="16"
+                                              Height="16" />
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Перезапустить"
+                                      Command="{Binding PlacementTarget.DataContext.RestartCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      ToolTip="Закрыть как обычно – с вопросом о несохранённом и прощанием в чате – и запустить заново" />
+                            <MenuItem Header="Перезапустить принудительно"
+                                      Command="{Binding PlacementTarget.DataContext.RestartForcedCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      ToolTip="Без штатной остановки бота – если приложение зависло или не закрывается" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
 
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center"

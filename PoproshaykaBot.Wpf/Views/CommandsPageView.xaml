@@ -432,6 +432,7 @@
                                      Background="Transparent"
                                      BorderThickness="0"
                                      Padding="0"
+                                     ScrollViewer.CanContentScroll="False"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      ScrollViewer.VerticalScrollBarVisibility="Visible" />
                         </Grid>

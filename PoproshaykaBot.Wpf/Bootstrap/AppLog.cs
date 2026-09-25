@@ -33,6 +33,21 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1008, Level = LogLevel.Information, Message = "Агент по MCP запросил отключение бота")]
     public static partial void McpBotDisconnectRequested(this ILogger logger);
 
+    [LoggerMessage(EventId = 1009, Level = LogLevel.Information, Message = "Пользователь запросил перезапуск приложения")]
+    public static partial void RestartRequested(this ILogger logger);
+
+    [LoggerMessage(EventId = 1010, Level = LogLevel.Information, Message = "Пользователь запросил принудительный перезапуск приложения")]
+    public static partial void ForcedRestartRequested(this ILogger logger);
+
+    [LoggerMessage(EventId = 1011, Level = LogLevel.Information, Message = "Пользователь отказался от принудительного перезапуска")]
+    public static partial void ForcedRestartDeclined(this ILogger logger);
+
+    [LoggerMessage(EventId = 1012, Level = LogLevel.Warning, Message = "Перезапуск недоступен в режиме без окна (smoke-тест, галерея)")]
+    public static partial void RestartUnavailableHeadless(this ILogger logger);
+
+    [LoggerMessage(EventId = 1013, Level = LogLevel.Information, Message = "Перезапуск отменён: закрытие окна не подтверждено")]
+    public static partial void RestartCancelled(this ILogger logger);
+
     [LoggerMessage(EventId = 1100, Level = LogLevel.Error, Message = "OAuth-поток мастера упал для роли {Role}")]
     public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
 
@@ -203,6 +218,18 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1208, Level = LogLevel.Warning, Message = "Перенос данных предыдущей версии недоступен в автоматическом режиме")]
     public static partial void LegacyImportSuppressedHeadless(this ILogger logger);
+
+    [LoggerMessage(EventId = 1209, Level = LogLevel.Information, Message = "Пользователь подставил недавний канал отладки {Channel}")]
+    public static partial void RecentDebugChannelChosen(this ILogger logger, string channel);
+
+    [LoggerMessage(EventId = 1210, Level = LogLevel.Information, Message = "Пользователь убрал канал {Channel} из недавних каналов отладки")]
+    public static partial void RecentDebugChannelRemoved(this ILogger logger, string channel);
+
+    [LoggerMessage(EventId = 1211, Level = LogLevel.Error, Message = "Не удалось убрать канал {Channel} из недавних каналов отладки")]
+    public static partial void RecentDebugChannelRemoveFailed(this ILogger logger, Exception? exception, string channel);
+
+    [LoggerMessage(EventId = 1212, Level = LogLevel.Warning, Message = "Проверка состояния недавних каналов отладки сорвалась")]
+    public static partial void RecentDebugChannelsStatusFailed(this ILogger logger, Exception? exception);
 
     [LoggerMessage(EventId = 1500, Level = LogLevel.Information, Message = "Обновление {Version} загружено, приложение перезапустится")]
     public static partial void UpdateDownloaded(this ILogger logger, string version);

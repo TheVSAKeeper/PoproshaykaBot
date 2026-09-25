@@ -43,6 +43,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     private const string ObsSectionKey = "obs";
 
+    private const string DebugSectionKey = "debug";
+
     private const string NotWrittenNotice = "Настройки применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните настройки ещё раз.";
 
     private static readonly string[] DraftlessSectionKeys = ["appearance", "misc", "mcp"];
@@ -179,7 +181,16 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                     new SettingsSubsection("limits", "Ограничения отправки"),
                     new SettingsSubsection("messages", "Шаблоны сообщений"),
                 ]),
-            new SettingsSection("oauth", "Авторизация", PackIconLucideKind.KeyRound, "oauth токен client id secret redirect uri scopes бот стример вещатель права доступа вход"),
+            new SettingsSection(
+                "oauth",
+                "Авторизация",
+                PackIconLucideKind.KeyRound,
+                "oauth токен client id secret redirect uri scopes бот стример вещатель права доступа вход приложение аккаунт",
+                [
+                    new SettingsSubsection("app", "Приложение Twitch"),
+                    new SettingsSubsection("bot", "Аккаунт бота"),
+                    new SettingsSubsection("broadcaster", "Аккаунт стримера"),
+                ]),
             new SettingsSection(
                 "obs",
                 "OBS",
@@ -305,7 +316,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
 
         ResetDirty();
-        RunObsAutoCheckIfSelected();
+        RunSelectedSectionEntryChecks();
     }
 
     public void Dispose()
@@ -358,7 +369,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             && Sections.Selected is not null)
         {
             OnPropertyChanged(nameof(HasDraft));
-            RunObsAutoCheckIfSelected();
+            RunSelectedSectionEntryChecks();
         }
     }
 
@@ -372,11 +383,16 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
     }
 
-    private void RunObsAutoCheckIfSelected()
+    private void RunSelectedSectionEntryChecks()
     {
         if (string.Equals(Sections.Selected?.Key, ObsSectionKey, StringComparison.Ordinal))
         {
             ObsIntegration.RunAutoConnectionCheck();
+        }
+
+        if (string.Equals(Sections.Selected?.Key, DebugSectionKey, StringComparison.Ordinal))
+        {
+            DebugChannel.Recent.OnShown();
         }
     }
 

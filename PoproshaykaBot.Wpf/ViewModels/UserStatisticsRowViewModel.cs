@@ -67,8 +67,10 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
         var now = DateTimeOffset.Now;
         var days = Math.Max(1, (int)(now.Date - source.FirstSeen.ToLocalTime().Date).TotalDays + 1);
 
-        FirstSeenText = $"В чате с {RelativeTime.FormatDate(source.FirstSeen)}";
-        LastSeenText = $"Писал {RelativeTime.Describe(source.LastSeen, now)}";
+        FirstSeenDisplay = RelativeTime.FormatDate(source.FirstSeen);
+        FirstSeenMoment = RelativeTime.FormatMoment(source.FirstSeen);
+        LastSeenDisplay = RelativeTime.DescribeMoment(source.LastSeen, now);
+        LastSeenMoment = RelativeTime.FormatMoment(source.LastSeen);
         DaysInChatDisplay = days.ToString("N0", UiCulture.Russian);
         DailyRateDisplay = ((double)messageCount / days).ToString("N1", UiCulture.Russian);
     }
@@ -102,8 +104,10 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
     public string PointsToNextText { get; }
     public GridLength RankProgressTrack { get; }
     public GridLength RankRemainderTrack { get; }
-    public string FirstSeenText { get; }
-    public string LastSeenText { get; }
+    public string FirstSeenDisplay { get; }
+    public string FirstSeenMoment { get; }
+    public string LastSeenDisplay { get; }
+    public string LastSeenMoment { get; }
     public string DaysInChatDisplay { get; }
     public string DailyRateDisplay { get; }
 

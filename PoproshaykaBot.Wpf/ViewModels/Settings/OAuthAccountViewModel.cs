@@ -93,12 +93,6 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
 
     public event EventHandler? SettingChanged;
 
-    public string HeaderText => _role switch
-    {
-        TwitchOAuthRole.Broadcaster => "Авторизация стримера",
-        _ => "Авторизация бота",
-    };
-
     public string AuthorizeButtonText => _role switch
     {
         TwitchOAuthRole.Broadcaster => "Авторизовать стримера в браузере",

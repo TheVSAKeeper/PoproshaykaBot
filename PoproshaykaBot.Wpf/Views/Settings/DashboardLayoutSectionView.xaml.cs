@@ -8,10 +8,13 @@ using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views.Settings;
@@ -20,17 +23,23 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 {
     private const string DragFormat = "DashboardTileTypeId";
     private const double MaxPreviewHeight = 560;
+    private const double MinPreviewHeight = 380;
+    private const double PreviewBottomReserve = 32;
     private const double MiniatureFontSize = 11;
     private const double MiniatureIconSize = 14;
     private const double MiniaturePadding = 8;
     private const double MiniatureLineHeight = 6;
     private const double DropFillOpacity = 0.35;
+    private const string HoleCaption = "Пусто – перетащите сюда плитку";
+    private const string HoleStrokeKey = "Border.Default";
+    private const string HoleCaptionKey = "Fg.Secondary";
 
     private readonly Dictionary<FrameworkElement, int[]> _panePaths = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<DashboardTileViewModel, FrameworkElement> _tileHosts = [];
     private readonly Dictionary<string, int[]> _tilePaths = new(StringComparer.Ordinal);
 
     private DashboardLayoutSectionViewModel? _viewModel;
+    private ScrollViewer? _scroll;
     private Border? _dropHint;
     private Border? _dropFill;
     private double _scale = 1;
@@ -46,6 +55,22 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         Unloaded += OnUnloaded;
         PreviewArea.SizeChanged += OnPreviewAreaSizeChanged;
         PreviewArea.LayoutUpdated += OnPreviewAreaLayoutUpdated;
+
+        foreach (var slider in new[] { ColumnSlider, RowSlider })
+        {
+            slider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnGridSliderDragStarted), handledEventsToo: true);
+            slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnGridSliderDragCompleted), handledEventsToo: true);
+        }
+    }
+
+    private void OnGridSliderDragStarted(object sender, DragStartedEventArgs e)
+    {
+        _viewModel?.BeginGridGesture();
+    }
+
+    private void OnGridSliderDragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        _viewModel?.EndGridGesture();
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -61,6 +86,58 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         Subscribe();
+
+        DetachScroll();
+        _scroll = FindScroll();
+
+        if (_scroll is not null)
+        {
+            _scroll.SizeChanged += OnScrollSizeChanged;
+        }
+
+        RebuildPreview();
+    }
+
+    private void DetachScroll()
+    {
+        if (_scroll is not null)
+        {
+            _scroll.SizeChanged -= OnScrollSizeChanged;
+            _scroll = null;
+        }
+    }
+
+    private ScrollViewer? FindScroll()
+    {
+        for (var node = VisualTreeHelper.GetParent(this); node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is ScrollViewer scroll)
+            {
+                return scroll;
+            }
+        }
+
+        return null;
+    }
+
+    private void OnScrollSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.HeightChanged)
+        {
+            RebuildPreview();
+        }
+    }
+
+    private double PreviewCeiling()
+    {
+        if (_scroll is not { ViewportHeight: > 0 } scroll || !PreviewArea.IsDescendantOf(scroll))
+        {
+            return MaxPreviewHeight;
+        }
+
+        var top = PreviewArea.TransformToAncestor(scroll).Transform(default).Y + scroll.VerticalOffset;
+
+        return Math.Max(MinPreviewHeight, scroll.ViewportHeight - top - PreviewBottomReserve);
     }
 
     private void Subscribe()
@@ -79,6 +156,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         Unsubscribe();
+        DetachScroll();
     }
 
     private void Unsubscribe()
@@ -192,10 +270,11 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             return;
         }
 
-        e.Effects = DragDropEffects.Move;
-        e.Handled = true;
+        e.Effects = ShowDropHint(typeId, e.GetPosition(PreviewArea))
+            ? e.AllowedEffects & (DragDropEffects.Copy | DragDropEffects.Move)
+            : DragDropEffects.None;
 
-        ShowDropHint(typeId, e.GetPosition(PreviewArea));
+        e.Handled = true;
     }
 
     private void OnPreviewDragLeave(object sender, DragEventArgs e)
@@ -257,13 +336,13 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         return nearest < 0 ? null : new(paths[nearest], bounds[nearest]);
     }
 
-    private void ShowDropHint(string typeId, Point position)
+    private bool ShowDropHint(string typeId, Point position)
     {
         if (_viewModel is null || TargetAt(position) is not { } target)
         {
             HideDropHint();
 
-            return;
+            return false;
         }
 
         var side = DashboardPaneSurface.Side(position, target.Bounds);
@@ -273,7 +352,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         {
             HideDropHint();
 
-            return;
+            return false;
         }
 
         var pane = placed
@@ -287,7 +366,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         {
             HideDropHint();
 
-            return;
+            return false;
         }
 
         var origin = PreviewBox.TransformToAncestor(PreviewArea).Transform(default);
@@ -325,6 +404,8 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 
         Canvas.SetLeft(_dropHint, origin.X + (rect.X * _scale));
         Canvas.SetTop(_dropHint, origin.Y + (rect.Y * _scale));
+
+        return true;
     }
 
     private void HideDropHint()
@@ -358,8 +439,10 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             return;
         }
 
-        var ceiling = PreviewArea.ActualHeight > 0 ? Math.Min(PreviewArea.ActualHeight, MaxPreviewHeight) : MaxPreviewHeight;
+        var ceiling = PreviewCeiling();
         var canvas = CanvasSize(area);
+
+        PreviewBox.MaxHeight = ceiling;
 
         _builtWidth = PreviewArea.ActualWidth;
         _scale = Math.Min(_builtWidth / canvas.Width, ceiling / canvas.Height);
@@ -369,7 +452,11 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 
     private Size CanvasSize(Size area)
     {
-        return new(area.Width, Math.Max(area.Height, RequiredHeight()));
+        var width = _viewModel?.Pane is { } pane
+            ? Math.Max(area.Width, pane.MinWidth(DashboardPaneSurface.ScaledStarBandMinWidth))
+            : area.Width;
+
+        return new(width, Math.Max(area.Height, RequiredHeight()));
     }
 
     private double RequiredHeight()
@@ -379,34 +466,16 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             return _viewModel?.Bands.Select(band => band.MinHeight).DefaultIfEmpty(0).Max() ?? 0;
         }
 
-        if (!_viewModel.Stacked)
-        {
-            return DashboardPaneSurface.RequiredHeight(pane);
-        }
-
-        var leaves = new List<TilePaneLayout>();
-
-        DashboardPaneSurface.CollectLeaves(pane, leaves);
-
-        return leaves.Sum(leaf => DashboardPaneSurface.StackedRow(leaf).Min);
+        return DashboardPaneSurface.RequiredHeight(pane);
     }
 
     private FrameworkElement BuildContent(DashboardLayoutSectionViewModel viewModel)
     {
-        var surface = Surface(viewModel);
+        var surface = Surface();
 
         if (viewModel.Pane is { } pane)
         {
-            if (!viewModel.Stacked)
-            {
-                return surface.BuildRoot(pane);
-            }
-
-            var stack = new Grid();
-
-            surface.Stack(stack, pane);
-
-            return stack;
+            return surface.BuildRoot(pane);
         }
 
         var bands = new Grid();
@@ -435,7 +504,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         return bands;
     }
 
-    private DashboardPaneSurface Surface(DashboardLayoutSectionViewModel viewModel)
+    private DashboardPaneSurface Surface()
     {
         return new()
         {
@@ -447,7 +516,6 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
                 split,
                 alongColumns,
                 completed: (_, canceled) => CommitShares(grid, split.Path, alongColumns, canceled)),
-            Stacked = viewModel.Stacked,
         };
     }
 
@@ -474,17 +542,42 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     {
         var inverse = 1 / _scale;
 
-        var border = new Border
+        var outline = new Rectangle
         {
-            BorderThickness = new(inverse),
-            CornerRadius = new(4 * inverse),
-            Margin = new(2 * inverse),
-            Background = Brushes.Transparent,
+            StrokeThickness = 1.5 * inverse,
+            StrokeDashArray = new DoubleCollection { 4, 3 },
+            RadiusX = 4 * inverse,
+            RadiusY = 4 * inverse,
         };
 
-        border.SetResourceReference(Border.BorderBrushProperty, ThemeKeys.BorderSubtle);
+        outline.SetResourceReference(Shape.StrokeProperty, HoleStrokeKey);
 
-        return border;
+        var caption = new TextBlock
+        {
+            Text = HoleCaption,
+            FontSize = MiniatureFontSize * inverse,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new(MiniaturePadding * inverse),
+        };
+
+        caption.SetResourceReference(ForegroundProperty, HoleCaptionKey);
+
+        var hole = new Grid
+        {
+            Margin = new(2 * inverse),
+            Background = Brushes.Transparent,
+            ClipToBounds = true,
+        };
+
+        AutomationProperties.SetName(hole, HoleCaption);
+
+        hole.Children.Add(outline);
+        hole.Children.Add(caption);
+
+        return hole;
     }
 
     private FrameworkElement CreateMiniature(DashboardTileViewModel tile)

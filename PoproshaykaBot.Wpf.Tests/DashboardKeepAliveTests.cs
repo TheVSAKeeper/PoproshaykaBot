@@ -108,6 +108,52 @@ public class DashboardKeepAliveTests
             "Хост ушедшей плитки освобождён по Unloaded вместе с WebView2, и выданный заново он остался бы пустым до перезапуска.");
     }
 
+    [Test]
+    public void Collapsing_tiles_moves_no_host_and_folds_a_fully_collapsed_column_into_a_strip()
+    {
+        var tiles = DashboardPaneLayoutTests.MiddleColumnTiles();
+        var store = new FakeLayoutStore(DashboardPaneLayoutTests.MiddleColumnLayout());
+
+        using var viewModel = new DashboardViewModel(tiles, new(store), TimeProvider.System);
+
+        var host = Arrange(viewModel, 1600, 900);
+        var view = (DashboardView)host.Children[0];
+        var parents = tiles.ToDictionary(tile => tile.TypeId, tile => VisualTreeHelper.GetParent(HostOf(view, tile.TypeId)!), StringComparer.Ordinal);
+        var chatWidth = HostOf(view, "twitch-chat")!.ActualWidth;
+        var preview = HostOf(view, "stream-preview")!;
+        var overlay = HostOf(view, "chat-overlay")!;
+
+        Collapse(tiles, "stream-preview");
+        Update(host);
+
+        Assert.That(preview.ActualWidth, Is.EqualTo(overlay.ActualWidth).Within(0.5),
+            "Свёрнутая плитка – шапка во всю ширину колонки, а не узкий заголовок у её левого края.");
+
+        Collapse(tiles, "chat-overlay");
+        Update(host);
+
+        Assert.Multiple(() =>
+        {
+            foreach (var tile in tiles)
+            {
+                Assert.That(VisualTreeHelper.GetParent(HostOf(view, tile.TypeId)!), Is.SameAs(parents[tile.TypeId]),
+                    $"Свёртка не меняет форму дерева, и хост «{tile.TypeId}» обязан остаться на месте: перецепление уводит окно WebView2 из дерева и обратно, это и есть мигание.");
+            }
+
+            Assert.That(preview.ActualWidth, Is.LessThan(DashboardTileViewModel.ScaledCollapsedStripWidth + 12),
+                "Колонка из одних свёрнутых плиток – вертикальная полоса шириной с полосу.");
+            Assert.That(preview.ActualHeight + overlay.ActualHeight, Is.EqualTo(view.ActualHeight - 16).Within(1),
+                "Полосы делят высоту колонки между собой.");
+            Assert.That(HostOf(view, "twitch-chat")!.ActualWidth, Is.GreaterThan(chatWidth + 200),
+                "Ширину свёрнутой колонки забирает сосед, а не пустое место.");
+        });
+    }
+
+    private static void Collapse(IEnumerable<DashboardTileViewModel> tiles, string typeId)
+    {
+        tiles.Single(tile => string.Equals(tile.TypeId, typeId, StringComparison.Ordinal)).IsCollapsed = true;
+    }
+
     private static Grid Arrange(DashboardViewModel viewModel, double width, double height)
     {
         var host = new Grid();

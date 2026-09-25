@@ -8,6 +8,8 @@ public static class DtoMapper
 {
     public static object ToServerMessage(ChatMessageData chatMessage, ObsChatSettings obsChatSettings)
     {
+        var images = MessageImagePolicy.BuildImages(chatMessage, obsChatSettings);
+
         return new
         {
             messageId = chatMessage.MessageId,
@@ -36,7 +38,13 @@ public static class DtoMapper
                     imageUrl = chatMessage.BadgeUrls.GetValueOrDefault($"{b.Key}/{b.Value}", ""),
                 })
                 .ToArray(),
-            images = MessageImagePolicy.BuildImageUrls(chatMessage, obsChatSettings),
+            images = images.Select(i => i.Url).ToArray(),
+            imageLinks = images.Select(i => new
+                {
+                    startIndex = i.StartIndex,
+                    endIndex = i.EndIndex,
+                })
+                .ToArray(),
         };
     }
 }

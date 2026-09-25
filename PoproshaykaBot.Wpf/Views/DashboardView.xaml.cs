@@ -24,6 +24,8 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
     private readonly Dictionary<SplitPaneLayout, Grid> _splitGrids = new(ReferenceEqualityComparer.Instance);
 
     private DashboardViewModel? _viewModel;
+    private FrameworkElement? _builtRoot;
+    private PaneLayout? _builtPane;
     private bool _subscribed;
     private bool _rebuildPending;
     private DashboardTileViewModel? _dragTile;
@@ -183,6 +185,14 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
         _rebuildPending = false;
 
+        if (TryUpdateInPlace(width, height))
+        {
+            return;
+        }
+
+        _builtRoot = null;
+        _builtPane = null;
+
         DetachHosts();
         BandsGrid.Children.Clear();
         BandsGrid.ColumnDefinitions.Clear();
@@ -294,7 +304,39 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return;
         }
 
-        BandsGrid.Children.Add(surface.BuildRoot(pane));
+        var root = surface.BuildRoot(pane);
+
+        BandsGrid.Children.Add(root);
+
+        if (_viewModel?.IsEditing != true)
+        {
+            _builtRoot = root;
+            _builtPane = pane;
+        }
+    }
+
+    private bool TryUpdateInPlace(double width, double height)
+    {
+        if (_viewModel is not { IsEditing: false, Pane: { } pane }
+            || _builtRoot is null
+            || _builtPane is null
+            || ComputeStacked(width)
+            || !DashboardPaneSurface.SameShape(_builtPane, pane))
+        {
+            return false;
+        }
+
+        _panePaths.Clear();
+        _splitGrids.Clear();
+        _preview = null;
+
+        Surface().Update(_builtRoot, pane);
+
+        _builtPane = pane;
+
+        ApplyVerticalOverflow(height);
+
+        return true;
     }
 
     private void CommitShares(Grid grid, int[] path, bool alongColumns, bool canceled)
