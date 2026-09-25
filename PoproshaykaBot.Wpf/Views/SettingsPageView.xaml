@@ -260,13 +260,13 @@
                                 </StackPanel>
                             </HeaderedContentControl>
                         </StackPanel>
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[dashboard].Title}"
-                                                Visibility="{Binding Sections[dashboard].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <ContentControl Content="{Binding DashboardLayout}" />
-                        </HeaderedContentControl>
                     </Grid>
+
+                    <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                            Header="{Binding Sections[dashboard].Title}"
+                                            Visibility="{Binding Sections[dashboard].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                        <ContentControl Content="{Binding DashboardLayout}" />
+                    </HeaderedContentControl>
                 </Grid>
             </ScrollViewer>
         </Grid>

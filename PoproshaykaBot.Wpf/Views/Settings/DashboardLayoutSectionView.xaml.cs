@@ -23,6 +23,8 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
 {
     private const string DragFormat = "DashboardTileTypeId";
     private const double MaxPreviewHeight = 560;
+    private const double MinPreviewHeight = 380;
+    private const double PreviewBottomReserve = 32;
     private const double MiniatureFontSize = 11;
     private const double MiniatureIconSize = 14;
     private const double MiniaturePadding = 8;
@@ -37,6 +39,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     private readonly Dictionary<string, int[]> _tilePaths = new(StringComparer.Ordinal);
 
     private DashboardLayoutSectionViewModel? _viewModel;
+    private ScrollViewer? _scroll;
     private Border? _dropHint;
     private Border? _dropFill;
     private double _scale = 1;
@@ -83,6 +86,58 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         Subscribe();
+
+        DetachScroll();
+        _scroll = FindScroll();
+
+        if (_scroll is not null)
+        {
+            _scroll.SizeChanged += OnScrollSizeChanged;
+        }
+
+        RebuildPreview();
+    }
+
+    private void DetachScroll()
+    {
+        if (_scroll is not null)
+        {
+            _scroll.SizeChanged -= OnScrollSizeChanged;
+            _scroll = null;
+        }
+    }
+
+    private ScrollViewer? FindScroll()
+    {
+        for (var node = VisualTreeHelper.GetParent(this); node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is ScrollViewer scroll)
+            {
+                return scroll;
+            }
+        }
+
+        return null;
+    }
+
+    private void OnScrollSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.HeightChanged)
+        {
+            RebuildPreview();
+        }
+    }
+
+    private double PreviewCeiling()
+    {
+        if (_scroll is not { ViewportHeight: > 0 } scroll || !PreviewArea.IsDescendantOf(scroll))
+        {
+            return MaxPreviewHeight;
+        }
+
+        var top = PreviewArea.TransformToAncestor(scroll).Transform(default).Y + scroll.VerticalOffset;
+
+        return Math.Max(MinPreviewHeight, scroll.ViewportHeight - top - PreviewBottomReserve);
     }
 
     private void Subscribe()
@@ -101,6 +156,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         Unsubscribe();
+        DetachScroll();
     }
 
     private void Unsubscribe()
@@ -383,8 +439,10 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             return;
         }
 
-        var ceiling = PreviewArea.ActualHeight > 0 ? Math.Min(PreviewArea.ActualHeight, MaxPreviewHeight) : MaxPreviewHeight;
+        var ceiling = PreviewCeiling();
         var canvas = CanvasSize(area);
+
+        PreviewBox.MaxHeight = ceiling;
 
         _builtWidth = PreviewArea.ActualWidth;
         _scale = Math.Min(_builtWidth / canvas.Width, ceiling / canvas.Height);
