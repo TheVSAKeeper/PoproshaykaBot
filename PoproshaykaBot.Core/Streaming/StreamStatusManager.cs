@@ -649,9 +649,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                     retried => _ledger.RecordAsync(generation, type, retried),
                     cancellationToken);
 
-                await _ledger.RecordAsync(generation, type, result);
-
-                if (result.IsSubscribed)
+                if (await _ledger.RecordAsync(generation, type, result) && result.IsSubscribed)
                 {
                     subscriptionsCreated++;
                 }

@@ -58,6 +58,7 @@ public sealed class EventSubSubscriptionRetry(
 
         foreach (var pending in running)
         {
+            pending.Stopping = true;
             await pending.Cancellation.CancelAsync();
         }
 
@@ -177,8 +178,10 @@ public sealed class EventSubSubscriptionRetry(
 
                 if (pending.Cancellation.IsCancellationRequested || cancellationToken.IsCancellationRequested || !IsCurrent(sessionId))
                 {
-                    // TODO: остановка подписчика тоже попадает сюда и оставляет несвязанную Reused-подписку до конца сессии EventSub – различить отмену и остановку, если сироты появятся в журнале
-                    if (result.Outcome == EventSubSubscribeOutcome.Reused && IsCurrent(sessionId))
+                    if (result.Outcome == EventSubSubscribeOutcome.Reused
+                        && !pending.Stopping
+                        && !cancellationToken.IsCancellationRequested
+                        && IsCurrent(sessionId))
                     {
                         logger.LogInformation("Подписка EventSub {Type} {SubscriptionIds} найдена повтором после его отмены уже на текущей сессии {SessionId} – её создал новый запрос, не удаляем",
                             type, result.SubscriptionIds, sessionId);
@@ -259,6 +262,8 @@ public sealed class EventSubSubscriptionRetry(
     private sealed class Pending
     {
         public CancellationTokenSource Cancellation { get; } = new();
+
+        public volatile bool Stopping;
 
         public TaskCompletionSource Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }

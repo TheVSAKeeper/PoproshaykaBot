@@ -237,10 +237,14 @@ public sealed class EventSubSubscriptionRetryTests
         Assert.That(_retried.Task.IsCompleted, Is.False);
     }
 
-    [Test]
-    public async Task Отменённый_повтор_не_удаляет_подписку_текущей_сессии_созданную_новым_запросом()
+    [TestCase(StopKind.Cancel, TestName = "Отменённый повтор не удаляет подписку текущей сессии, созданную новым запросом")]
+    [TestCase(StopKind.CancelAndDrain, TestName = "Повтор, остановленный вместе с подписчиком, удаляет найденную подписку текущей сессии")]
+    [TestCase(StopKind.CallerToken, TestName = "Повтор, отменённый токеном вызывающего, удаляет найденную подписку текущей сессии")]
+    public async Task Повтор_после_отмены_решает_судьбу_переиспользованной_подписки_по_виду_отмены(StopKind stop)
     {
+        using var cts = new CancellationTokenSource();
         var calls = 0;
+        Task? drain = null;
 
         _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult<IReadOnlyList<EventSubSubscriptionInfo>>([
@@ -260,17 +264,45 @@ public sealed class EventSubSubscriptionRetryTests
             {
                 if (Interlocked.Increment(ref calls) == 2)
                 {
-                    _retry.Cancel();
+                    switch (stop)
+                    {
+                        case StopKind.Cancel:
+                            _retry.Cancel();
+                            break;
+
+                        case StopKind.CancelAndDrain:
+                            drain = _retry.CancelAndDrainAsync(CancellationToken.None);
+                            break;
+
+                        case StopKind.CallerToken:
+                            cts.Cancel();
+                            break;
+                    }
                 }
 
                 return Conflict();
             });
 
-        await CreateAsync(CancellationToken.None);
+        var deleted = TrackDeletes();
+
+        await CreateAsync(cts.Token);
         await _time.WaitForPendingTimersAsync(1);
         _time.Advance(EventSubSubscriptionRetry.FirstDelay);
 
-        await _retry.CancelAndDrainAsync(CancellationToken.None);
+        if (stop == StopKind.Cancel)
+        {
+            await _retry.CancelAndDrainAsync(CancellationToken.None);
+            Assert.That(deleted.Task.IsCompleted, Is.False);
+        }
+        else
+        {
+            Assert.That(await deleted.Task.WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo("sub-replacement"));
+
+            if (drain is not null)
+            {
+                await drain.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
 
         using (Assert.EnterMultipleScope())
         {
@@ -278,8 +310,6 @@ public sealed class EventSubSubscriptionRetryTests
             Assert.That(_retried.Task.IsCompleted, Is.False);
             Assert.That(_logger.Entries.Any(x => x.Message.Contains("sub-replacement")), Is.True);
         }
-
-        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [TestCase(StopKind.Cancel, TestName = "Отмена, пока первое создание ищет подписку после 409, не оставляет повтора")]

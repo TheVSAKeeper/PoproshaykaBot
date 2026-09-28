@@ -68,7 +68,8 @@ public static class EventSubSubscriptions
             }
 
             var own = matches
-                .Where(x => string.Equals(x.SessionId, sessionId, StringComparison.Ordinal))
+                .Where(x => string.Equals(x.SessionId, sessionId, StringComparison.Ordinal)
+                            && string.Equals(x.Status, EnabledStatus, StringComparison.Ordinal))
                 .Select(x => x.Id)
                 .ToArray();
 

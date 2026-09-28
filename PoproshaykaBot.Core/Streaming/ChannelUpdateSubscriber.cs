@@ -86,7 +86,7 @@ public sealed class ChannelUpdateSubscriber(
         {
             var result = await SubscribeAsync(generation, broadcasterId, args.SessionId, cancellationToken);
 
-            IsHealthy = result.IsSubscribed;
+            IsHealthy = _ledger.Holds(SubscriptionType);
 
             if (result.Outcome == EventSubSubscribeOutcome.Created)
             {
@@ -166,7 +166,7 @@ public sealed class ChannelUpdateSubscriber(
         {
             var result = await SubscribeAsync(generation, broadcasterId, sessionId, cancellationToken);
 
-            IsHealthy = result.IsSubscribed;
+            IsHealthy = _ledger.Holds(SubscriptionType);
 
             if (result.Outcome == EventSubSubscribeOutcome.Created)
             {

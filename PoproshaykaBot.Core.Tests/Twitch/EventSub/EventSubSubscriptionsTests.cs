@@ -96,6 +96,7 @@ public sealed class EventSubSubscriptionsTests
             .Returns([
                 Subscription("sub-stale-1", "session-old", "websocket_disconnected"),
                 Subscription("sub-stale-2", "session-older", "websocket_network_timeout"),
+                Subscription("sub-revoked", CurrentSession, "authorization_revoked"),
             ]);
 
         var result = await CreateAsync();
@@ -108,6 +109,7 @@ public sealed class EventSubSubscriptionsTests
 
         await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-stale-1", Arg.Any<CancellationToken>());
         await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-stale-2", Arg.Any<CancellationToken>());
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-revoked", Arg.Any<CancellationToken>());
         await _helix.Received(2).CreateEventSubSubscriptionAsync(Type, "1", Condition, CurrentSession, Arg.Any<CancellationToken>());
     }
 
