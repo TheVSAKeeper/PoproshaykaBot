@@ -262,6 +262,59 @@ public sealed class PollEventSubscriberTests
         await subscriber.StopAsync(NullProgress, CancellationToken.None);
     }
 
+    [Test]
+    public async Task Отзыв_подписки_опросов_пересоздаёт_ровно_отозванный_тип()
+    {
+        _helix.CreateEventSubSubscriptionAsync("channel.poll.begin",
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns("sub-begin-first", "sub-begin-restored");
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+        _helix.ClearReceivedCalls();
+
+        _eventSubClient.OnRevocation += Raise.Event<EventSubAsyncHandler<EventSubRevocationArgs>>(new EventSubRevocationArgs("sub-begin-first", "channel.poll.begin", "user_removed"),
+            CancellationToken.None);
+
+        await _helix.Received(1)
+            .CreateEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        await _helix.Received(1)
+            .CreateEventSubSubscriptionAsync("channel.poll.begin",
+                "1",
+                Arg.Is<IReadOnlyDictionary<string, string>>(d => d["broadcaster_user_id"] == BroadcasterId),
+                "session-1",
+                Arg.Any<CancellationToken>());
+
+        Assert.That(_subscriber.IsHealthy, Is.True);
+
+        await _subscriber.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-begin-restored", Arg.Any<CancellationToken>());
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-begin-first", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Отзыв_при_недоступных_опросах_не_пересоздаёт_подписку()
+    {
+        _eventSubClient.SessionId.Returns("session-1");
+        await _subscriber.StartAsync(NullProgress, CancellationToken.None);
+        _helix.ClearReceivedCalls();
+
+        _availability.GetAsync(Arg.Any<CancellationToken>()).Returns(PollsAvailability.NoBroadcasterToken);
+
+        _eventSubClient.OnRevocation += Raise.Event<EventSubAsyncHandler<EventSubRevocationArgs>>(new EventSubRevocationArgs("sub-id", "channel.poll.end", "authorization_revoked"),
+            CancellationToken.None);
+
+        await _helix.DidNotReceive()
+            .CreateEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        Assert.That(_subscriber.IsHealthy, Is.False);
+    }
+
     private static EventSubSubscriptionInfo ForeignPollSubscription(string type)
     {
         return new(type + "-foreign",
