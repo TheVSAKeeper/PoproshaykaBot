@@ -8,6 +8,7 @@ public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger
     private readonly object _lock = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _idsByType = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HashSet<string>> _undeletedByType = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _revoked = new(StringComparer.Ordinal);
     private long _generation;
 
     public long Generation
@@ -53,6 +54,8 @@ public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger
     {
         lock (_lock)
         {
+            _revoked.Add(subscriptionId);
+
             if (!_idsByType.TryGetValue(type, out var ids))
             {
                 return;
@@ -75,20 +78,23 @@ public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger
     {
         string[] displaced = [];
         bool recorded;
+        bool revoked;
 
         lock (_lock)
         {
-            recorded = generation == _generation;
+            var ids = result.SubscriptionIds.Where(x => !_revoked.Contains(x)).ToArray();
+            revoked = result.IsSubscribed && ids.Length == 0;
+            recorded = generation == _generation && !revoked;
 
             if (recorded)
             {
                 displaced = _idsByType.TryGetValue(type, out var previous)
-                    ? previous.Except(result.SubscriptionIds, StringComparer.Ordinal).ToArray()
+                    ? previous.Except(ids, StringComparer.Ordinal).ToArray()
                     : [];
 
                 if (result.IsSubscribed)
                 {
-                    _idsByType[type] = result.SubscriptionIds;
+                    _idsByType[type] = ids;
                 }
                 else
                 {
@@ -106,6 +112,12 @@ public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger
             }
 
             return true;
+        }
+
+        if (revoked)
+        {
+            logger.LogInformation("Подписка EventSub {Type} {SubscriptionIds} получена уже отозванной – не записываем", type, result.SubscriptionIds);
+            return false;
         }
 
         if (!result.IsSubscribed)
@@ -149,6 +161,7 @@ public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger
 
         _idsByType.Clear();
         _undeletedByType.Clear();
+        _revoked.Clear();
         return all.ToArray();
     }
 

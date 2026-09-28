@@ -76,6 +76,28 @@ public sealed class EventSubSubscriptionLedgerTests
         Assert.That(_deleted, Is.Empty);
     }
 
+    [Test]
+    public async Task Отозванный_до_записи_id_не_вытесняет_восстановленную_подписку()
+    {
+        var generation = _ledger.Generation;
+
+        _ledger.Forget(Type, "sub-retried");
+        await _ledger.RecordAsync(generation, Type, new(EventSubSubscribeOutcome.Created, ["sub-restored"]));
+
+        var recorded = await _ledger.RecordAsync(generation, Type, new(EventSubSubscribeOutcome.Created, ["sub-retried"]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorded, Is.False);
+            Assert.That(_ledger.Holds(Type), Is.True);
+            Assert.That(_deleted, Is.Empty);
+        }
+
+        await _ledger.CloseAsync(CancellationToken.None);
+
+        Assert.That(_deleted, Is.EqualTo(new[] { "sub-restored" }));
+    }
+
     [TestCase(false, TestName = "Опоздавшая подписка остановленного подписчика удаляется своим токеном")]
     [TestCase(true, TestName = "Опоздавшая подписка прошлой сессии удаляется своим токеном и не считается удержанной")]
     public async Task Опоздавшая_подписка_прошлого_поколения_удаляется(bool newSession)
