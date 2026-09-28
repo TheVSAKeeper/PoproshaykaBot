@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.Bootstrap;
+using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -22,6 +23,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private readonly DashboardLayoutCoordinator _coordinator;
     private readonly TimeProvider _time;
     private readonly ILogger<DashboardEditSession>? _sessionLogger;
+    private readonly ModalHostViewModel? _modal;
     private readonly HashSet<DashboardTileViewModel> _observed = [];
     private DashboardEditSession? _session;
     private DashboardLayoutSettings? _layout;
@@ -34,11 +36,13 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         IEnumerable<DashboardTileViewModel> tiles,
         DashboardLayoutCoordinator coordinator,
         TimeProvider time,
-        ILogger<DashboardEditSession>? sessionLogger = null)
+        ILogger<DashboardEditSession>? sessionLogger = null,
+        ModalHostViewModel? modal = null)
     {
         _coordinator = coordinator;
         _time = time;
         _sessionLogger = sessionLogger;
+        _modal = modal;
         _tilesByTypeId = new(StringComparer.Ordinal);
 
         foreach (var tile in tiles)
@@ -49,6 +53,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         Reload();
 
         FontScaleManager.Changed += OnFontScaleChanged;
+
+        if (_modal is not null)
+        {
+            _modal.PropertyChanged += OnModalPropertyChanged;
+            SetTilesModalDialogOpen(_modal.HasActive);
+        }
     }
 
     public event EventHandler? LayoutChanged;
@@ -210,10 +220,16 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     {
         FontScaleManager.Changed -= OnFontScaleChanged;
 
+        if (_modal is not null)
+        {
+            _modal.PropertyChanged -= OnModalPropertyChanged;
+        }
+
         _session?.Dispose();
         _session = null;
 
         SetTilesLayoutEditing(false);
+        SetTilesModalDialogOpen(false);
 
         foreach (var tile in _observed)
         {
@@ -253,6 +269,23 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         foreach (var tile in _tilesByTypeId.Values)
         {
             tile.IsLayoutEditing = editing;
+        }
+    }
+
+    private void SetTilesModalDialogOpen(bool open)
+    {
+        foreach (var tile in _tilesByTypeId.Values)
+        {
+            tile.IsModalDialogOpen = open;
+        }
+    }
+
+    private void OnModalPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_modal is not null
+            && string.Equals(e.PropertyName, nameof(ModalHostViewModel.HasActive), StringComparison.Ordinal))
+        {
+            SetTilesModalDialogOpen(_modal.HasActive);
         }
     }
 

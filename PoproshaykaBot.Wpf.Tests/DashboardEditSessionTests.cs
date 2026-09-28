@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.Core.Dashboard;
+﻿using KeepShell.Services.Modal;
+using KeepShell.ViewModels;
+using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.ViewModels;
@@ -380,6 +382,100 @@ public class DashboardEditSessionTests
 
         Assert.That(chat.IsLayoutEditing, Is.False,
             "Плитки переживают страницу «Обзор»: метка, оставшаяся после закрытия, держала бы чат скрытым до перезапуска.");
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void A_modal_dialog_marks_every_tile_until_it_closes(bool closesItself)
+    {
+        var streamInfo = new FakeTile("stream-info");
+        var chat = new FakeTile("twitch-chat", fills: true);
+        var modal = new ModalHostViewModel();
+        var dialog = new FakeDialog();
+
+        using var dashboard = new DashboardViewModel(
+            [streamInfo, chat],
+            new(new FakeLayoutStore(SideBySide())),
+            TimeProvider.System,
+            modal: modal);
+
+        _ = modal.ShowAsync(dialog);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(chat.IsModalDialogOpen, Is.True, "WebView2 – своё окно поверх WPF и закрыл бы собой диалог.");
+            Assert.That(streamInfo.IsModalDialogOpen, Is.True);
+        });
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        if (closesItself)
+        {
+            dialog.Close(true);
+        }
+        else
+        {
+            modal.RequestCancelCommand.Execute(null);
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(chat.IsModalDialogOpen, Is.False, "Закрытый диалог обязан вернуть браузер.");
+            Assert.That(chat.IsLayoutEditing, Is.True, "Закрытие диалога не выводит из режима правки: признаки независимы.");
+        });
+
+        _ = modal.ShowAsync(dialog);
+        dashboard.ToggleEditCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(chat.IsLayoutEditing, Is.False);
+            Assert.That(chat.IsModalDialogOpen, Is.True, "Выход из режима правки под открытым диалогом не должен показать браузер поверх диалога.");
+        });
+
+        modal.RequestCancelCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(chat.IsModalDialogOpen, Is.False);
+            Assert.That(chat.IsLayoutEditing, Is.False);
+        });
+    }
+
+    [Test]
+    public void A_dialog_open_before_the_dashboard_marks_the_tiles_and_disposing_clears_the_mark()
+    {
+        var chat = new FakeTile("twitch-chat", fills: true);
+        var modal = new ModalHostViewModel();
+
+        _ = modal.ShowAsync(new FakeDialog());
+
+        var dashboard = new DashboardViewModel(
+            [new FakeTile("stream-info"), chat],
+            new(new FakeLayoutStore(SideBySide())),
+            TimeProvider.System,
+            modal: modal);
+
+        Assert.That(chat.IsModalDialogOpen, Is.True, "Диалог, открытый до создания «Обзора», тоже закрыл бы собой браузер.");
+
+        dashboard.Dispose();
+
+        Assert.That(chat.IsModalDialogOpen, Is.False, "Плитки переживают страницу «Обзор»: метка после закрытия держала бы чат скрытым.");
+
+        modal.RequestCancelCommand.Execute(null);
+        _ = modal.ShowAsync(new FakeDialog());
+
+        Assert.That(chat.IsModalDialogOpen, Is.False, "Освобождённая панель отписана от хоста диалогов.");
+    }
+
+    private sealed class FakeDialog : IDialogViewModel
+    {
+        public event EventHandler<bool>? RequestClose;
+
+        public void Close(bool result)
+        {
+            RequestClose?.Invoke(this, result);
+        }
     }
 
     [Test]

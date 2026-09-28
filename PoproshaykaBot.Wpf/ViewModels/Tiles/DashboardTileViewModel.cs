@@ -21,6 +21,9 @@ public abstract partial class DashboardTileViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLayoutEditing;
 
+    [ObservableProperty]
+    private bool _isModalDialogOpen;
+
     protected DashboardTileViewModel(
         string typeId,
         string title,

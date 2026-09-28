@@ -28,6 +28,11 @@
                             <Setter Property="Visibility"
                                     Value="Collapsed" />
                         </DataTrigger>
+                        <DataTrigger Binding="{Binding IsModalDialogOpen}"
+                                     Value="True">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </wv2:WebView2.Style>
@@ -35,7 +40,6 @@
 
         <controls:EmptyState Icon="Monitor"
                              Heading="Превью скрыто"
-                             Description="Превью оверлея вернётся, когда закончится настройка дашборда."
                              DescriptionMaxWidth="300"
                              VerticalAlignment="Center"
                              HorizontalAlignment="Center">
@@ -43,6 +47,8 @@
                 <Style TargetType="controls:EmptyState">
                     <Setter Property="Visibility"
                             Value="Collapsed" />
+                    <Setter Property="Description"
+                            Value="Превью оверлея вернётся, когда закончится настройка дашборда." />
                     <Style.Triggers>
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
@@ -53,6 +59,18 @@
                             </MultiDataTrigger.Conditions>
                             <Setter Property="Visibility"
                                     Value="Visible" />
+                        </MultiDataTrigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsModalDialogOpen}"
+                                           Value="True" />
+                                <Condition Binding="{Binding HasError}"
+                                           Value="False" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility"
+                                    Value="Visible" />
+                            <Setter Property="Description"
+                                    Value="Превью оверлея вернётся, когда закроется диалог." />
                         </MultiDataTrigger>
                     </Style.Triggers>
                 </Style>
