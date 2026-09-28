@@ -177,6 +177,15 @@ public sealed class EventSubSubscriptionRetry(
 
                 if (pending.Cancellation.IsCancellationRequested || cancellationToken.IsCancellationRequested || !IsCurrent(sessionId))
                 {
+                    // TODO: остановка подписчика тоже попадает сюда и оставляет несвязанную Reused-подписку до конца сессии EventSub – различить отмену и остановку, если сироты появятся в журнале
+                    if (result.Outcome == EventSubSubscribeOutcome.Reused && IsCurrent(sessionId))
+                    {
+                        logger.LogInformation("Подписка EventSub {Type} {SubscriptionIds} найдена повтором после его отмены уже на текущей сессии {SessionId} – её создал новый запрос, не удаляем",
+                            type, result.SubscriptionIds, sessionId);
+
+                        return;
+                    }
+
                     logger.LogInformation("Подписка EventSub {Type} {SubscriptionIds} получена повтором уже после его отмены или смены сессии {SessionId} – удаляем",
                         type, result.SubscriptionIds, sessionId);
 

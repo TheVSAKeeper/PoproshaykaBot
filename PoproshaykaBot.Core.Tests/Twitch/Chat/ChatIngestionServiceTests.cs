@@ -480,10 +480,18 @@ public sealed class ChatIngestionServiceTests
     }
 
     [Test]
-    public async Task Отзыв_подписки_на_чат_заканчивает_приём()
+    public async Task Отзыв_подписки_на_чат_пересоздаёт_её_в_текущей_сессии()
     {
-        var stops = 0;
-        _eventBus.Subscribe<ChatIngestionStopped>(_ => stops++);
+        var facts = new List<string>();
+        _eventBus.Subscribe<ChatIngestionStarted>(_ => facts.Add("start"));
+        _eventBus.Subscribe<ChatIngestionStopped>(_ => facts.Add("stop"));
+
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns("sub-1", "sub-2");
 
         _eventSubClient.SessionId.Returns("session-1");
         await _service.StartAsync(NullProgress, CancellationToken.None);
@@ -492,17 +500,51 @@ public sealed class ChatIngestionServiceTests
             new EventSubRevocationArgs("sub-other", "stream.online", "authorization_revoked"),
             CancellationToken.None);
 
-        Assert.That(stops, Is.Zero);
+        _eventSubClient.OnRevocation += Raise.Event<EventSubAsyncHandler<EventSubRevocationArgs>>(
+            new EventSubRevocationArgs("sub-1", "channel.chat.message", "moderator_removed"),
+            CancellationToken.None);
+
+        _eventSubClient.OnRevocation += Raise.Event<EventSubAsyncHandler<EventSubRevocationArgs>>(
+            new EventSubRevocationArgs("sub-1", "channel.chat.message", "moderator_removed"),
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(facts, Is.EqualTo(new[] { "start", "stop", "start" }));
+            Assert.That(_service.IsJoined, Is.True);
+        }
+
+        await _helix.Received(2).CreateEventSubSubscriptionAsync("channel.chat.message",
+            "1",
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            "session-1",
+            Arg.Any<CancellationToken>());
+
+        await _service.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-2", Arg.Any<CancellationToken>());
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-1", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Отзыв_подписки_на_чат_без_активной_сессии_заканчивает_приём()
+    {
+        _eventSubClient.SessionId.Returns("session-1");
+        await _service.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.SessionId.Returns((string?)null);
 
         _eventSubClient.OnRevocation += Raise.Event<EventSubAsyncHandler<EventSubRevocationArgs>>(
             new EventSubRevocationArgs("sub-id", "channel.chat.message", "authorization_revoked"),
             CancellationToken.None);
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(stops, Is.EqualTo(1));
-            Assert.That(_service.IsJoined, Is.False);
-        });
+        Assert.That(_service.IsJoined, Is.False);
+
+        await _helix.Received(1).CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]

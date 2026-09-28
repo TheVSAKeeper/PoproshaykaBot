@@ -237,6 +237,51 @@ public sealed class EventSubSubscriptionRetryTests
         Assert.That(_retried.Task.IsCompleted, Is.False);
     }
 
+    [Test]
+    public async Task Отменённый_повтор_не_удаляет_подписку_текущей_сессии_созданную_новым_запросом()
+    {
+        var calls = 0;
+
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyList<EventSubSubscriptionInfo>>([
+                new EventSubSubscriptionInfo(calls == 1 ? "sub-foreign" : "sub-replacement",
+                    Type,
+                    "enabled",
+                    calls == 1 ? "session-other" : CurrentSession,
+                    new Dictionary<string, string> { ["broadcaster_user_id"] = BroadcasterId }),
+            ]));
+
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref calls) == 2)
+                {
+                    _retry.Cancel();
+                }
+
+                return Conflict();
+            });
+
+        await CreateAsync(CancellationToken.None);
+        await _time.WaitForPendingTimersAsync(1);
+        _time.Advance(EventSubSubscriptionRetry.FirstDelay);
+
+        await _retry.CancelAndDrainAsync(CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(calls, Is.EqualTo(2));
+            Assert.That(_retried.Task.IsCompleted, Is.False);
+            Assert.That(_logger.Entries.Any(x => x.Message.Contains("sub-replacement")), Is.True);
+        }
+
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     [TestCase(StopKind.Cancel, TestName = "Отмена, пока первое создание ищет подписку после 409, не оставляет повтора")]
     [TestCase(StopKind.CancelAndDrain, TestName = "Остановка, пока первое создание ищет подписку после 409, не оставляет повтора")]
     public async Task Отмена_до_постановки_повтора_не_даёт_ему_стартовать(StopKind stop)

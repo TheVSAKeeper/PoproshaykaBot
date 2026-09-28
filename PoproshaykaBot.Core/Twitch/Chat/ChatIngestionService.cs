@@ -96,7 +96,11 @@ public sealed class ChatIngestionService(
         logger.LogInformation("ChatIngestionService: EventSub сессия открыта ({SessionId}), регистрируем channel.chat.message", args.SessionId);
 
         await MarkLeftAsync(out var generation, out _);
+        await SubscribeAsync(generation, args.SessionId, ct);
+    }
 
+    private async Task SubscribeAsync(long generation, string sessionId, CancellationToken ct)
+    {
         try
         {
             var settings = settingsManager.Current.Twitch;
@@ -136,7 +140,7 @@ public sealed class ChatIngestionService(
                     var result = await _retry.CreateAsync(ChatMessageSubscriptionType,
                         "1",
                         condition,
-                        args.SessionId,
+                        sessionId,
                         retried => JoinAsync(generation, retried),
                         ct);
 
@@ -200,16 +204,35 @@ public sealed class ChatIngestionService(
         return MarkLeftAsync();
     }
 
-    private Task HandleRevocationAsync(EventSubRevocationArgs args, CancellationToken ct)
+    private async Task HandleRevocationAsync(EventSubRevocationArgs args, CancellationToken ct)
     {
-        if (!string.Equals(args.SubscriptionType, "channel.chat.message", StringComparison.Ordinal))
+        if (!string.Equals(args.SubscriptionType, ChatMessageSubscriptionType, StringComparison.Ordinal))
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        logger.LogWarning("ChatIngestionService: Twitch отозвал подписку channel.chat.message ({Status}) – сообщения чата больше не приходят", args.Status);
+        lock (_joinLock)
+        {
+            if (_subscriptionIds.Count > 0 && !_subscriptionIds.Contains(args.SubscriptionId, StringComparer.Ordinal))
+            {
+                logger.LogInformation("ChatIngestionService: отзыв подписки channel.chat.message {SubscriptionId} не относится к текущей {SubscriptionIds} – пропускаем",
+                    args.SubscriptionId, _subscriptionIds);
 
-        return MarkLeftAsync();
+                return;
+            }
+        }
+
+        logger.LogWarning("ChatIngestionService: Twitch отозвал подписку channel.chat.message ({Status}) – пересоздаём", args.Status);
+
+        await MarkLeftAsync(out var generation, out _);
+
+        if (eventSubClient.SessionId is not { Length: > 0 } sessionId)
+        {
+            logger.LogError("ChatIngestionService: подписка channel.chat.message отозвана, нет активной сессии для восстановления – сообщения чата не приходят");
+            return;
+        }
+
+        await SubscribeAsync(generation, sessionId, ct);
     }
 
     private async Task<bool> JoinAsync(long generation, EventSubSubscribeResult result)
@@ -219,6 +242,21 @@ public sealed class ChatIngestionService(
         if (current)
         {
             return true;
+        }
+
+        bool held;
+
+        lock (_joinLock)
+        {
+            held = result.SubscriptionIds.Any(x => _subscriptionIds.Contains(x, StringComparer.Ordinal));
+        }
+
+        if (held)
+        {
+            logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionIds} переиспользована устаревшим запросом – её держит текущий, не удаляем",
+                result.SubscriptionIds);
+
+            return false;
         }
 
         logger.LogInformation("ChatIngestionService: подписка channel.chat.message {SubscriptionIds} получена, когда приём чата уже остановлен – удаляем",
