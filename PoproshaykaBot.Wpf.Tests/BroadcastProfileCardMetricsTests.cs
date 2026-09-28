@@ -54,6 +54,7 @@ public class BroadcastProfileCardMetricsTests
 
         Measure(card, (BroadcastProfilesTileView.ThreeColumnsWidth / 3) - CardChrome);
 
+
         Assert.That(card.ActualHeight, Is.LessThanOrEqualTo(CardHeightBudget),
             $"Карточка профиля со всеми сведениями занимает {card.ActualHeight:F1} DIP при бюджете {CardHeightBudget} – при десятке профилей плитка живёт прокруткой");
     }
@@ -89,17 +90,33 @@ public class BroadcastProfileCardMetricsTests
         });
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public void Панель_действий_не_заходит_на_строку_имени(bool withDetails)
+    {
+        var card = Card(out var actions, withDetails, isActive: true);
+        var header = (FrameworkElement)card.FindName("CardHeader");
+
+        Measure(card, (BroadcastProfilesTileView.ThreeColumnsWidth / 3) - CardChrome);
+
+        var headerBottom = header.TranslatePoint(new(0, header.ActualHeight), card).Y;
+        var actionsTop = actions.TranslatePoint(new(0, 0), card).Y;
+
+        Assert.That(actionsTop, Is.GreaterThanOrEqualTo(headerBottom),
+            $"Панель действий начинается на {actionsTop:F1} DIP, а строка имени кончается на {headerBottom:F1} – панель закрывает бейджи «#N» и «Активен»");
+    }
+
     private static DataTemplate Template()
     {
         return (DataTemplate)new BroadcastProfilesTileView().Resources["ProfileCardTemplate"];
     }
 
-    private static Border Card(out FrameworkElement actions)
+    private static Border Card(out FrameworkElement actions, bool withDetails = true, bool isActive = false)
     {
         var template = Template();
         var card = (Border)template.LoadContent();
 
-        card.DataContext = Item();
+        card.DataContext = Item(withDetails, isActive);
         actions = (FrameworkElement)card.FindName("CardActions");
 
         return card;
@@ -116,22 +133,24 @@ public class BroadcastProfileCardMetricsTests
         host.UpdateLayout();
     }
 
-    private static BroadcastProfileItemViewModel Item()
+    private static BroadcastProfileItemViewModel Item(bool withDetails, bool isActive)
     {
-        var profile = new BroadcastProfile
-        {
-            Name = "Утренний стрим",
-            Title = "Проходим сюжет, серия {n}",
-            GameName = "Software and Game Development",
-            BroadcasterLanguage = "ru",
-            Tags = ["РусскийЯзык"],
-            CurrentNumber = 1000,
-        };
+        var profile = withDetails
+            ? new BroadcastProfile
+            {
+                Name = "Утренний стрим",
+                Title = "Проходим сюжет, серия {n}",
+                GameName = "Software and Game Development",
+                BroadcasterLanguage = "ru",
+                Tags = ["РусскийЯзык"],
+                CurrentNumber = 1000,
+            }
+            : new BroadcastProfile { Name = "Утренний стрим" };
 
         return new(
             profile,
-            isActive: false,
-            hasDrift: true,
+            isActive,
+            hasDrift: withDetails,
             _ => Task.CompletedTask,
             (_, _) => Task.CompletedTask,
             _ => Task.CompletedTask,

@@ -38,6 +38,17 @@
                     Value="CharacterEllipsis" />
         </Style>
 
+        <Style x:Key="ProfileCardAction"
+               TargetType="Button"
+               BasedOn="{StaticResource Button.Secondary}">
+            <Setter Property="MinHeight"
+                    Value="0" />
+            <Setter Property="Padding"
+                    Value="10,3" />
+            <Setter Property="FontSize"
+                    Value="{DynamicResource Font.Size.S}" />
+        </Style>
+
         <DataTemplate x:Key="ProfileCardTemplate"
                       DataType="{x:Type vm:BroadcastProfileItemViewModel}">
             <Border x:Name="Card"
@@ -54,39 +65,46 @@
                 </Border.ContextMenu>
 
                 <Grid>
-                    <StackPanel>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                        <Grid Margin="0,0,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" MinWidth="64" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                    <Grid x:Name="CardHeader"
+                          Grid.Row="0"
+                          Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="64" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center">
-                                <Border Style="{StaticResource Badge}"
-                                        Margin="4,0,0,0"
-                                        Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="{Binding NumberBadge}"
-                                               FontFamily="{DynamicResource Font.Mono}" />
-                                </Border>
-                                <Border Style="{StaticResource Badge.Success}"
-                                        Margin="4,0,0,0"
-                                        Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="Активен" />
-                                </Border>
-                            </StackPanel>
-                            <TextBlock Grid.Column="0"
-                                       Text="{Binding Name}"
-                                       FontSize="{DynamicResource Font.Size.M}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Fg.Primary}"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding Name}"
-                                       VerticalAlignment="Center" />
-                        </Grid>
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <Border Style="{StaticResource Badge}"
+                                    Margin="4,0,0,0"
+                                    Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding NumberBadge}"
+                                           FontFamily="{DynamicResource Font.Mono}" />
+                            </Border>
+                            <Border Style="{StaticResource Badge.Success}"
+                                    Margin="4,0,0,0"
+                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Активен" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Name}"
+                                   FontSize="{DynamicResource Font.Size.M}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Fg.Primary}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Name}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
 
+                    <StackPanel Grid.Row="1"
+                                MinHeight="{Binding ActualHeight, ElementName=CardActions}">
                         <TextBlock Text="Расходится с текущим стримом"
                                    Foreground="{DynamicResource State.WarningText}"
                                    FontSize="{DynamicResource Font.Size.XS}"
@@ -108,30 +126,61 @@
 
                     </StackPanel>
 
-                    <Border x:Name="CardActions"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Bottom"
-                            Background="{Binding Background, ElementName=Card}"
-                            BorderBrush="{Binding BorderBrush, ElementName=Card}"
-                            BorderThickness="1"
-                            CornerRadius="{DynamicResource Radius.S}"
-                            Padding="4,3"
-                            Opacity="0"
-                            IsHitTestVisible="False"
-                            ToolTip="{Binding MetaLine}"
-                            ToolTipService.IsEnabled="{Binding HasMetaLine}">
-                        <WrapPanel>
-                            <Button Content="Применить"
-                                    ToolTip="Применить профиль к каналу"
-                                    Command="{Binding ApplyCommand}"
-                                    Style="{StaticResource Button.Secondary}" />
+                    <Grid x:Name="CardActions"
+                          Grid.Row="1"
+                          HorizontalAlignment="Right"
+                          VerticalAlignment="Bottom"
+                          Opacity="0"
+                          IsHitTestVisible="False"
+                          ToolTip="{Binding MetaLine}"
+                          ToolTipService.IsEnabled="{Binding HasMetaLine}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0"
+                                Background="{Binding Background, ElementName=Card}">
+                            <Border.OpacityMask>
+                                <LinearGradientBrush StartPoint="0,0.5"
+                                                     EndPoint="1,0.5">
+                                    <GradientStop Color="Transparent"
+                                                  Offset="0" />
+                                    <GradientStop Color="Black"
+                                                  Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.OpacityMask>
+                        </Border>
+
+                        <WrapPanel Grid.Column="1"
+                                   Background="{Binding Background, ElementName=Card}">
+                            <Button Command="{Binding ApplyCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button"
+                                           BasedOn="{StaticResource ProfileCardAction}">
+                                        <Setter Property="Content"
+                                                Value="Применить" />
+                                        <Setter Property="ToolTip"
+                                                Value="Применить профиль к каналу" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsApplyInFlight}"
+                                                         Value="True">
+                                                <Setter Property="Content"
+                                                        Value="Применяю…" />
+                                                <Setter Property="ToolTip"
+                                                        Value="Профиль применяется к каналу" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                             <StackPanel Orientation="Horizontal"
                                         Margin="8,0,0,0"
                                         Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
                                 <Button Content="–"
                                         Command="{Binding DecrementNumberCommand}"
-                                        Style="{StaticResource Button.Secondary}"
-                                        Padding="8,2"
+                                        Style="{StaticResource ProfileCardAction}"
+                                        Padding="8,3"
                                         ToolTip="Уменьшить номер"
                                         AutomationProperties.Name="Уменьшить номер" />
                                 <TextBlock Text="{Binding NumberBadge}"
@@ -142,19 +191,13 @@
                                            Margin="6,0" />
                                 <Button Content="+"
                                         Command="{Binding IncrementNumberCommand}"
-                                        Style="{StaticResource Button.Secondary}"
-                                        Padding="8,2"
+                                        Style="{StaticResource ProfileCardAction}"
+                                        Padding="8,3"
                                         ToolTip="Увеличить номер"
                                         AutomationProperties.Name="Увеличить номер" />
                             </StackPanel>
-                            <ProgressBar IsIndeterminate="True"
-                                         Width="40"
-                                         Height="4"
-                                         Margin="8,0,0,0"
-                                         VerticalAlignment="Center"
-                                         Visibility="{Binding IsApplyInFlight, Converter={StaticResource BoolToVisibility}}" />
                         </WrapPanel>
-                    </Border>
+                    </Grid>
 
                 </Grid>
             </Border>
