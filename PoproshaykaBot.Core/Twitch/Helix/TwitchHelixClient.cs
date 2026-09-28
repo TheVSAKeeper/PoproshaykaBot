@@ -244,17 +244,17 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
         return true;
     }
 
-    public async Task<IReadOnlyList<EventSubSubscriptionInfo>> GetEventSubSubscriptionsAsync(string type, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<EventSubSubscriptionInfo>> GetEventSubSubscriptionsByUserAsync(string userId, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(type);
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
 
         var result = new List<EventSubSubscriptionInfo>();
         string? cursor = null;
 
-        // TODO: потолок в MaxEventSubSubscriptionPages страниц по 100 подписок одного типа; упрётся, когда у клиента станут жить сотни подписок типа – тогда фильтр по subscription_id или user_id
+        // TODO: потолок в MaxEventSubSubscriptionPages страниц по 100 подписок с одним пользователем в условии; упрётся, если на одного пользователя у клиента накопится больше тысячи подписок – тогда листать без потолка с защитой от повторяющегося курсора
         for (var page = 0; page < MaxEventSubSubscriptionPages; page++)
         {
-            var uri = $"{TwitchEndpoints.HelixEventSubSubscriptions}?type={Uri.EscapeDataString(type)}";
+            var uri = $"{TwitchEndpoints.HelixEventSubSubscriptions}?user_id={Uri.EscapeDataString(userId)}";
 
             if (cursor is not null)
             {

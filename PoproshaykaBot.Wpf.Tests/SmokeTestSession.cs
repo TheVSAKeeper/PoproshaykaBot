@@ -23,6 +23,7 @@ internal sealed class SmokeTestSession : IDisposable
     private const string LogsDirectoryName = "logs";
     private const string MainWindowCaptureFileName = "main-window.png";
     private const uint PrintWindowFullContent = 2;
+    private const uint OwnerWindowRelation = 4;
     private const int CaptureRenderDelayMilliseconds = 300;
 
     private static readonly TimeSpan DefaultWindowAppearTimeout = TimeSpan.FromSeconds(30);
@@ -210,36 +211,44 @@ internal sealed class SmokeTestSession : IDisposable
         return null;
     }
 
-    private static IReadOnlyList<Window?> EnumerateTopLevelWindows(FlaUIApplication app, UIA3Automation automation)
+    private static List<Window?> EnumerateTopLevelWindows(FlaUIApplication app, UIA3Automation automation)
     {
-        Window[]? topLevels = null;
+        var processId = (uint)app.ProcessId;
+        var handles = new List<IntPtr>();
 
-        try
+        EnumWindows((handle, _) =>
         {
-            topLevels = app.GetAllTopLevelWindows(automation);
-        }
-        catch
+            if (IsWindowVisible(handle)
+                && !IsWindowVisible(GetWindow(handle, OwnerWindowRelation))
+                && GetWindowThreadProcessId(handle, out var owner) != 0
+                && owner == processId)
+            {
+                handles.Add(handle);
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        var windows = new List<Window?>(handles.Count);
+
+        foreach (var handle in handles)
         {
-            // fallback to desktop enumeration below
+            try
+            {
+                var element = automation.FromHandle(handle);
+
+                if (element.ControlType == ControlType.Window)
+                {
+                    windows.Add(element.AsWindow());
+                }
+            }
+            catch
+            {
+                // best-effort: window handle may be transitioning
+            }
         }
 
-        if (topLevels is { Length: > 0 })
-        {
-            return topLevels;
-        }
-
-        try
-        {
-            var children = automation.GetDesktop()
-                .FindAllChildren(cf =>
-                    cf.ByProcessId(app.ProcessId).And(cf.ByControlType(ControlType.Window)));
-
-            return children.Select(c => c.AsWindow()).ToList();
-        }
-        catch
-        {
-            return Array.Empty<Window?>();
-        }
+        return windows;
     }
 
     internal static string ResolveAppExePath()
@@ -264,6 +273,22 @@ internal sealed class SmokeTestSession : IDisposable
 
     [DllImport("user32.dll")]
     private static extern int PrintWindow(IntPtr hwnd, IntPtr deviceContext, uint flags);
+
+    private delegate bool EnumWindowsCallback(IntPtr hwnd, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsCallback callback, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr hwnd, uint relation);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr hwnd);
 
     private static (string TestAssemblyDirectory, int SeparatorIndex) LocateTestProjectSegment()
     {

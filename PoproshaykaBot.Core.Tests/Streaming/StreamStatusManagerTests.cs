@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Tests.Polls;
 using PoproshaykaBot.Core.Tests.Server;
+using PoproshaykaBot.Core.Tests.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -467,7 +468,7 @@ public sealed class StreamStatusManagerTests
     }
 
     [Test]
-    public async Task OnSessionWelcome_WhenSubscriptionConflict_DoesNotLogError_AfterFix()
+    public async Task OnSessionWelcome_WhenConflictOnOwnSession_ReusesAndDeletesOnStop()
     {
         var recordingLogger = new RecordingLogger<StreamStatusManager>();
         await using var manager = new StreamStatusManager(_eventSubClient,
@@ -498,6 +499,13 @@ public sealed class StreamStatusManagerTests
                 return Task.FromResult<HelixStreamInfo?>(null);
             });
 
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([
+                StreamSubscription("sub-online", "stream.online", "session-1"),
+                StreamSubscription("sub-offline", "stream.offline", "session-1"),
+                StreamSubscription("sub-foreign", "stream.online", "session-0"),
+            ]);
+
         await manager.StartAsync(NullProgress, CancellationToken.None);
 
         _eventSubClient.OnSessionWelcome +=
@@ -505,9 +513,115 @@ public sealed class StreamStatusManagerTests
 
         await initSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-        var errorEntries = recordingLogger.Entries.Where(e => e.Level == LogLevel.Error).ToArray();
-        Assert.That(errorEntries, Is.Empty,
-            $"409 Conflict при session_reconnect – нормальная ситуация (подписка уже создана и перенесена Twitch'ом), не должна логироваться как Error. Найдено: {string.Join(" | ", errorEntries.Select(e => e.Message))}");
+        var complaints = recordingLogger.Entries.Where(e => e.Level >= LogLevel.Warning).ToArray();
+        Assert.That(complaints, Is.Empty,
+            $"409 с подписками текущей сессии – переиспользование, а не сбой. Найдено: {string.Join(" | ", complaints.Select(e => e.Message))}");
+
+        await manager.StopAsync(NullProgress, CancellationToken.None);
+
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-online", Arg.Any<CancellationToken>());
+        await _helix.Received(1).DeleteEventSubSubscriptionAsync("sub-offline", Arg.Any<CancellationToken>());
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync("sub-foreign", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Разрыв_сокета_гасит_повтор_подписки()
+    {
+        var time = new ManualTimeProvider();
+        await using var manager = new StreamStatusManager(_eventSubClient,
+            _helix,
+            _broadcasterIdProvider,
+            _targetChannel,
+            _settingsManager,
+            _eventBus,
+            time,
+            NullLogger<StreamStatusManager>.Instance);
+
+        _helix.CreateEventSubSubscriptionAsync("stream.online",
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<string>(new HelixRequestException(HttpMethod.Post,
+                    "helix/eventsub/subscriptions",
+                    HttpStatusCode.Conflict,
+                    "subscription already exists",
+                    null)),
+                Task.FromResult("sub-dead"));
+
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([StreamSubscription("sub-foreign", "stream.online", "session-0")]);
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await time.WaitForPendingTimersAsync(1);
+
+        _eventSubClient.OnDisconnected +=
+            Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(new EventSubDisconnectedArgs("обрыв"), CancellationToken.None);
+
+        time.Advance(EventSubSubscriptionRetry.MaxDelay);
+        await Task.Yield();
+
+        await _helix.Received(1)
+            .CreateEventSubSubscriptionAsync("stream.online", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        Assert.That(time.PendingTimers, Is.Zero);
+
+        await manager.StopAsync(NullProgress, CancellationToken.None);
+    }
+
+    [Test]
+    public async Task OnSessionWelcome_WhenConflictHeldByOtherLiveSession_WarnsAndDoesNotTouchIt()
+    {
+        var recordingLogger = new RecordingLogger<StreamStatusManager>();
+        await using var manager = new StreamStatusManager(_eventSubClient,
+            _helix,
+            _broadcasterIdProvider,
+            _targetChannel,
+            _settingsManager,
+            _eventBus,
+            _clock,
+            recordingLogger);
+
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HelixRequestException(HttpMethod.Post,
+                "helix/eventsub/subscriptions",
+                HttpStatusCode.Conflict,
+                "subscription already exists",
+                null));
+
+        _helix.GetEventSubSubscriptionsByUserAsync(BroadcasterId, Arg.Any<CancellationToken>())
+            .Returns([
+                StreamSubscription("sub-online", "stream.online", "session-0"),
+                StreamSubscription("sub-offline", "stream.offline", "session-0"),
+            ]);
+
+        await manager.StartAsync(NullProgress, CancellationToken.None);
+
+        _eventSubClient.OnSessionWelcome +=
+            Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-1", 60), CancellationToken.None);
+
+        await manager.StopAsync(NullProgress, CancellationToken.None);
+
+        Assert.That(recordingLogger.Entries.Count(e => e.Level == LogLevel.Warning && e.Message.Contains("session-0")), Is.EqualTo(2));
+        await _helix.DidNotReceive().DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    private static EventSubSubscriptionInfo StreamSubscription(string id, string type, string sessionId)
+    {
+        return new(id,
+            type,
+            "enabled",
+            sessionId,
+            new Dictionary<string, string> { ["broadcaster_user_id"] = BroadcasterId });
     }
 
     [Test]

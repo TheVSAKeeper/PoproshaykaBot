@@ -96,15 +96,28 @@ public sealed class UiSettingsWriteGuard(ISettingsStore inner) : ISettingsStore
 
     public void Suspend()
     {
+        var unsent = 0;
+
         lock (_lock)
         {
             if (!_suspended && !_revoked)
             {
-                // TODO: сорвавшаяся досылка оставляет ключи отложенными у каркасного стора, и его Close допишет их поверх принесённого файла; сбрасывать отложенное без записи, когда каркас даст такую операцию или отказ досылки появится в журналах
                 inner.Flush();
+
+                foreach (var (key, value) in inner.DiscardPending())
+                {
+                    _held[key] = value;
+                }
+
+                unsent = _held.Count;
             }
 
             _suspended = true;
+        }
+
+        if (unsent > 0)
+        {
+            Logger.Warning("Настройки вида не удалось записать в {Path} перед переносом ({Count} ключей): они приняты в памяти и в файл попадут, только если перенос не принесёт свой", FilePath, unsent);
         }
     }
 

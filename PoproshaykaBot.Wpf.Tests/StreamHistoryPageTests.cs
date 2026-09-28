@@ -1,4 +1,5 @@
 ﻿using KeepShell.Bootstrap;
+using KeepShell.Services.Platform;
 using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -687,9 +688,8 @@ public class StreamHistoryPageTests
     public void Копирование_строки_кладёт_колонки_в_буфер_через_табуляцию(string listName)
     {
         var page = Create(new MemorySettings(), Session(0, "Just Chatting"));
-        var list = (ListBox)CreateView(page).FindName(listName)!;
-
-        Clipboard.SetText("прежнее содержимое буфера");
+        var clipboard = new FakeClipboard();
+        var list = (ListBox)CreateView(page, clipboard).FindName(listName)!;
 
         var idle = ApplicationCommands.Copy.CanExecute(null, list);
 
@@ -703,7 +703,7 @@ public class StreamHistoryPageTests
         {
             Assert.That(idle, Is.False, "Без выбранной строки копировать нечего – пункт меню и Ctrl+C неактивны");
             Assert.That(ready, Is.True);
-            Assert.That(Clipboard.GetText(),
+            Assert.That(clipboard.Text,
                 Is.EqualTo("01.09.2026 18:00\t3 ч 0 мин\tэфир\tJust Chatting\t100\t1\t10\t5"),
                 "Порядок колонок таблицы и разделитель-табуляция – так отдавал строку DataGrid до переезда на список");
         }
@@ -713,7 +713,8 @@ public class StreamHistoryPageTests
     public void Копирование_берёт_строку_под_курсором_а_не_выбранную()
     {
         var page = Create(new MemorySettings(), Session(0, "Just Chatting"), Session(1, "Minecraft"));
-        var list = (ListBox)CreateView(page).FindName("SessionsList")!;
+        var clipboard = new FakeClipboard();
+        var list = (ListBox)CreateView(page, clipboard).FindName("SessionsList")!;
 
         page.TrySelectAt(0);
 
@@ -721,13 +722,13 @@ public class StreamHistoryPageTests
 
         ApplicationCommands.Copy.Execute(other, list);
 
-        Assert.That(Clipboard.GetText(), Does.Contain("Minecraft"),
+        Assert.That(clipboard.Text, Does.Contain("Minecraft"),
             "Правый клик по строке её не выбирает, поэтому меню передаёт свою строку параметром");
     }
 
-    private static StreamHistoryPageView CreateView(StreamHistoryPageViewModel page)
+    private static StreamHistoryPageView CreateView(StreamHistoryPageViewModel page, IClipboardService clipboard)
     {
-        return new() { DataContext = page };
+        return new(clipboard) { DataContext = page };
     }
 
     private static StreamSessionRecord Session(
@@ -788,5 +789,16 @@ public class StreamHistoryPageTests
         var boxArt = new GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<GameBoxArtProvider>.Instance);
 
         return new(store, users, settings, boxArt, new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
+    }
+
+    private sealed class FakeClipboard : IClipboardService
+    {
+        public string? Text { get; private set; }
+
+        public bool TrySetText(string? text)
+        {
+            Text = text;
+            return true;
+        }
     }
 }

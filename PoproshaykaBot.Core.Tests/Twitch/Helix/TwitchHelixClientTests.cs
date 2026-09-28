@@ -351,6 +351,45 @@ public sealed class TwitchHelixClientTests
     }
 
     [Test]
+    public async Task GetEventSubSubscriptionsByUserAsync_FiltersByUserIdAndFollowsCursor()
+    {
+        var handler = new StubHttpMessageHandler
+        {
+            Responder = request => new(HttpStatusCode.OK)
+            {
+                Content = new StringContent(request.RequestUri!.Query.Contains("after=")
+                        ? """{"data":[{"id":"sub-2","status":"websocket_disconnected","type":"stream.offline","condition":{"broadcaster_user_id":"42"},"transport":{"method":"websocket","session_id":"s-0"}}],"pagination":{}}"""
+                        : """{"data":[{"id":"sub-1","status":"enabled","type":"stream.online","condition":{"broadcaster_user_id":"42"},"transport":{"method":"websocket","session_id":"s-1"}}],"pagination":{"cursor":"page 2"}}""",
+                    System.Text.Encoding.UTF8,
+                    "application/json"),
+            },
+        };
+
+        var factory = Substitute.For<IHttpClientFactory>();
+        factory.CreateClient(Arg.Any<string>())
+            .Returns(_ => new HttpClient(handler, disposeHandler: false) { BaseAddress = new(HelixBaseUrl) });
+
+        var client = new BotHelixClient(factory, NullLogger<BotHelixClient>.Instance);
+
+        var subscriptions = await client.GetEventSubSubscriptionsByUserAsync("42");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handler.Requests.Select(r => r.RequestUri!.AbsoluteUri), Is.EqualTo(new[]
+            {
+                HelixBaseUrl + "helix/eventsub/subscriptions?user_id=42",
+                HelixBaseUrl + "helix/eventsub/subscriptions?user_id=42&after=page%202",
+            }));
+
+            Assert.That(subscriptions.Select(s => (s.Id, s.Type, s.Status, s.SessionId)), Is.EqualTo(new[]
+            {
+                ("sub-1", "stream.online", "enabled", (string?)"s-1"),
+                ("sub-2", "stream.offline", "websocket_disconnected", (string?)"s-0"),
+            }));
+        }
+    }
+
+    [Test]
     public void DeleteEventSubSubscriptionAsync_ServerError_ThrowsHelixRequestException()
     {
         var (client, _) = Build(StubHttpMessageHandler.ReturnsJson(HttpStatusCode.InternalServerError,

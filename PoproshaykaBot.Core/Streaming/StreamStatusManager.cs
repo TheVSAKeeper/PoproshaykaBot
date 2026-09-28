@@ -8,7 +8,6 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
-using System.Net;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Streaming;
@@ -31,6 +30,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     private readonly StreamMetadataRetryLoop _metadataRetryLoop;
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
+    private readonly EventSubSubscriptionLedger _ledger;
+    private readonly EventSubSubscriptionRetry _retry;
 
     private IDisposable? _channelUpdatedSubscription;
     private CancellationTokenSource? _runCts;
@@ -58,6 +59,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _timeProvider = timeProvider;
         _logger = logger;
         _metadataRetryLoop = new(FetchMetadataAttemptAsync, IsCurrentlyOnline, logger);
+        _ledger = new(helix, logger);
+        _retry = new(helix, eventSubClient, timeProvider, logger);
     }
 
     public StreamStatus CurrentStatus => _state.CurrentStatus;
@@ -124,6 +127,9 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         _state.ResetToUnknown();
 
+        await _retry.CancelAndDrainAsync(cancellationToken).ConfigureAwait(false);
+        await _ledger.CloseAsync(cancellationToken).ConfigureAwait(false);
+
         _logger.LogInformation("StreamStatusManager: подписки на EventSub сняты, состояние сброшено в Unknown");
     }
 
@@ -143,6 +149,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         {
             await _runCts.CancelAsync();
         }
+
+        _retry.Cancel();
 
         await _metadataRetryLoop.DisposeAsync().ConfigureAwait(false);
 
@@ -264,6 +272,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
     {
         _logger.LogInformation("EventSub WebSocket подключен. SessionId: {SessionId}", args.SessionId);
 
+        _retry.Cancel();
         _state.ForgetChannelUpdate();
 
         await CreateEventSubSubscriptionsAsync(args.SessionId, cancellationToken);
@@ -303,12 +312,17 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         }
 
         _logger.LogWarning("EventSub revocation: id={Id}, type={Type}, status={Status}", args.SubscriptionId, args.SubscriptionType, args.Status);
+        _ledger.Forget(args.SubscriptionType, args.SubscriptionId);
 
-        if (string.IsNullOrEmpty(_eventSubClient.SessionId))
+        var sessionId = _eventSubClient.SessionId;
+
+        if (string.IsNullOrEmpty(sessionId))
         {
             _logger.LogDebug("Восстановление подписки {Type} пропущено: SessionId уже отсутствует", args.SubscriptionType);
             return;
         }
+
+        var generation = _ledger.Generation;
 
         try
         {
@@ -325,17 +339,24 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 { "broadcaster_user_id", broadcasterId },
             };
 
-            var newId = await _helix.CreateEventSubSubscriptionAsync(args.SubscriptionType,
+            var result = await _retry.CreateAsync(args.SubscriptionType,
                 "1",
                 condition,
-                _eventSubClient.SessionId,
+                sessionId,
+                retried => _ledger.RecordAsync(generation, args.SubscriptionType, retried),
                 cancellationToken);
 
-            _logger.LogInformation("Подписка {Type} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, newId);
-        }
-        catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-        {
-            _logger.LogInformation(ex, "Подписка {Type} уже существует для текущей EventSub-сессии – переиспользуем", args.SubscriptionType);
+            await _ledger.RecordAsync(generation, args.SubscriptionType, result);
+
+            if (result.Outcome == EventSubSubscribeOutcome.Created)
+            {
+                _logger.LogInformation("Подписка {Type} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, result.SubscriptionIds[0]);
+            }
+            else if (result.Outcome == EventSubSubscribeOutcome.Reused)
+            {
+                _logger.LogInformation("Подписка {Type} {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем",
+                    args.SubscriptionType, result.SubscriptionIds);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -351,6 +372,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             _state.CurrentStatus,
             CurrentStream?.Id);
 
+        _retry.Cancel();
         _state.ResetToUnknown();
         return Task.CompletedTask;
     }
@@ -599,6 +621,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
     private async Task CreateEventSubSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
     {
+        var generation = await _ledger.BeginSessionAsync(cancellationToken);
         var broadcasterId = await _broadcasterIdProvider.GetAsync(cancellationToken);
 
         if (string.IsNullOrEmpty(broadcasterId))
@@ -619,23 +642,28 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         {
             try
             {
-                var subscriptionId = await _helix.CreateEventSubSubscriptionAsync(type,
+                var result = await _retry.CreateAsync(type,
                     "1",
                     condition,
                     sessionId,
+                    retried => _ledger.RecordAsync(generation, type, retried),
                     cancellationToken);
 
-                subscriptionsCreated++;
+                if (await _ledger.RecordAsync(generation, type, result) && result.IsSubscribed)
+                {
+                    subscriptionsCreated++;
+                }
 
-                _logger.LogInformation("Подписка '{Type}' создана. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}",
-                    type, subscriptionId, sessionId);
-            }
-            catch (HelixRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-            {
-                subscriptionsCreated++;
-
-                _logger.LogInformation(ex, "Подписка '{Type}' уже существует для текущей EventSub-сессии – переиспользуем (SessionId: {SessionId})",
-                    type, sessionId);
+                if (result.Outcome == EventSubSubscribeOutcome.Created)
+                {
+                    _logger.LogInformation("Подписка '{Type}' создана. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}",
+                        type, result.SubscriptionIds[0], sessionId);
+                }
+                else if (result.Outcome == EventSubSubscribeOutcome.Reused)
+                {
+                    _logger.LogInformation("Подписка '{Type}' {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем (SessionId: {SessionId})",
+                        type, result.SubscriptionIds, sessionId);
+                }
             }
             catch (Exception ex)
             {
