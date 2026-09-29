@@ -14,6 +14,8 @@ internal sealed class FakeLayoutStore(DashboardLayoutSettings? persisted)
 
     public int SaveCount { get; private set; }
 
+    public bool FailSaves { get; set; }
+
     public override DashboardLayoutSettings? LoadDashboard()
     {
         return JsonStoreClone.DeepCloneNullable(_current);
@@ -21,6 +23,11 @@ internal sealed class FakeLayoutStore(DashboardLayoutSettings? persisted)
 
     public override void SaveDashboard(DashboardLayoutSettings layout)
     {
+        if (FailSaves)
+        {
+            throw new IOException("Файл раскладки занят другим процессом.");
+        }
+
         var snapshot = JsonStoreClone.DeepClone(layout);
 
         DashboardLayoutReconciler.SyncRoot(snapshot);

@@ -413,7 +413,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     {
         _layout = layout;
 
-        var model = DashboardPaneBuilder.Build(layout, _tilesByTypeId, showCollapsed: !IsEditing);
+        var model = DashboardPaneBuilder.Build(layout, _tilesByTypeId);
 
         ObserveCollapse(model.Placements);
 
@@ -474,12 +474,30 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         if (string.Equals(e.PropertyName, nameof(DashboardTileViewModel.GrowsWithSpace), StringComparison.Ordinal))
         {
-            Reload();
+            if (_session is { } editing)
+            {
+                ApplyLayout(editing.Draft);
+            }
+            else
+            {
+                Reload();
+            }
+
             return;
         }
 
         if (!string.Equals(e.PropertyName, nameof(DashboardTileViewModel.IsCollapsed), StringComparison.Ordinal))
         {
+            return;
+        }
+
+        if (_session is { } session)
+        {
+            if (!session.SetCollapsed(tile.TypeId, tile.IsCollapsed))
+            {
+                ApplyLayout(session.Draft);
+            }
+
             return;
         }
 

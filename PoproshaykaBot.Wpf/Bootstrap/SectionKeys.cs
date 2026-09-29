@@ -16,6 +16,7 @@ public static class SectionKeys
     public const string ParamsSuffix = ":params";
     public const string ObsSuffix = ":obs";
     public const string ObsFullSuffix = ":obs-full";
+    public const string EditSuffix = ":edit";
 
     public const string UsersSelected = Users + SelectedSuffix;
     public const string StreamsSelected = Streams + SelectedSuffix;
@@ -25,6 +26,7 @@ public static class SectionKeys
     public const string CommandsParams = Commands + ParamsSuffix;
     public const string OverviewObs = Overview + ObsSuffix;
     public const string OverviewObsFull = Overview + ObsFullSuffix;
+    public const string OverviewEdit = Overview + EditSuffix;
 
     public static IReadOnlyList<string> All { get; } = [Overview, Users, Streams, Commands, Logs, Diagnostics, Settings];
 
@@ -37,6 +39,8 @@ public static class SectionKeys
     public static IReadOnlyList<string> Params { get; } = [CommandsParams];
 
     public static IReadOnlyList<string> Obs { get; } = [OverviewObs, OverviewObsFull];
+
+    public static IReadOnlyList<string> Edit { get; } = [OverviewEdit];
 
     public static IReadOnlyDictionary<string, string> LegacyTitles { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -83,11 +87,18 @@ public static class SectionKeys
         return Obs.Contains(key, StringComparer.OrdinalIgnoreCase);
     }
 
+    public static bool IsEditCase(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        return Edit.Contains(key, StringComparer.OrdinalIgnoreCase);
+    }
+
     public static string PageOf(string key)
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        if (IsObsCase(key))
+        if (IsObsCase(key) || IsEditCase(key))
         {
             return Overview;
         }

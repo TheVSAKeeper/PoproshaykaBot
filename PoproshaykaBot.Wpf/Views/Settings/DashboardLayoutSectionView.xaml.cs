@@ -42,6 +42,7 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
     private ScrollViewer? _scroll;
     private Border? _dropHint;
     private Border? _dropFill;
+    private TextBlock? _shareHint;
     private double _scale = 1;
     private double _builtWidth;
     private Size _canvas;
@@ -511,12 +512,34 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
             Tile = CreateMiniature,
             Hole = CreateHole,
             Registered = Register,
-            Splitters = (grid, split, alongColumns) => DashboardPaneSurface.AddSplitters(
-                grid,
-                split,
-                alongColumns,
-                completed: (_, canceled) => CommitShares(grid, split.Path, alongColumns, canceled)),
+            Splitters = AddSplitters,
         };
+    }
+
+    private void AddSplitters(Grid grid, SplitPaneLayout split, bool alongColumns)
+    {
+        DashboardPaneSurface.AddSplitters(
+            grid,
+            split,
+            alongColumns,
+            index => ShowShareHint(grid, split, alongColumns, index),
+            (index, canceled) => CommitShares(grid, split, alongColumns, index, canceled));
+
+        var thickness = DashboardPaneSurface.SplitterThickness / Math.Clamp(_scale, 0.25, 1);
+
+        foreach (var splitter in grid.Children.OfType<GridSplitter>())
+        {
+            if (alongColumns)
+            {
+                splitter.Width = thickness;
+                splitter.Margin = new(-thickness / 2, 0, 0, 0);
+            }
+            else
+            {
+                splitter.Height = thickness;
+                splitter.Margin = new(0, -thickness / 2, 0, 0);
+            }
+        }
     }
 
     private void Register(PaneLayout pane, FrameworkElement element)
@@ -530,12 +553,47 @@ public partial class DashboardLayoutSectionView : UserControl, IView<DashboardLa
         }
     }
 
-    private void CommitShares(Grid grid, int[] path, bool alongColumns, bool canceled)
+    private void CommitShares(Grid grid, SplitPaneLayout split, bool alongColumns, int index, bool canceled)
     {
-        if (canceled || _viewModel?.Resize(path, DashboardPaneSurface.Shares(grid, alongColumns)) != true)
+        HideDropHint();
+
+        if (canceled
+            || DashboardPaneSurface.ResizedWeights(grid, split, alongColumns, index) is not { } weights
+            || _viewModel?.Resize(split.Path, weights) != true)
         {
             RebuildPreview();
         }
+    }
+
+    private void ShowShareHint(Grid grid, SplitPaneLayout split, bool alongColumns, int index)
+    {
+        if (DashboardPaneSurface.ShareHint(grid, split, alongColumns, index) is not { } hint)
+        {
+            return;
+        }
+
+        if (_shareHint is null)
+        {
+            _shareHint = new()
+            {
+                Padding = new(8, 4, 8, 4),
+            };
+
+            _shareHint.SetResourceReference(TextBlock.BackgroundProperty, ThemeKeys.BgSurface);
+            _shareHint.SetResourceReference(TextBlock.ForegroundProperty, ThemeKeys.FgPrimary);
+        }
+
+        if (!PreviewOverlay.Children.Contains(_shareHint))
+        {
+            PreviewOverlay.Children.Add(_shareHint);
+        }
+
+        _shareHint.Text = hint;
+
+        var position = Mouse.GetPosition(PreviewOverlay);
+
+        Canvas.SetLeft(_shareHint, position.X + 12);
+        Canvas.SetTop(_shareHint, position.Y + 12);
     }
 
     private FrameworkElement CreateHole()

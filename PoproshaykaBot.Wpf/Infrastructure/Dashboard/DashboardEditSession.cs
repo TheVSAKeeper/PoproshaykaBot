@@ -19,6 +19,7 @@ public sealed class DashboardEditSession : IDisposable
     private int _baseRevision;
     private bool _dirty;
     private bool _writing;
+    private bool _collapsing;
     private bool _disposed;
 
     public DashboardEditSession(DashboardLayoutCoordinator coordinator, TimeProvider time, ILogger? logger = null)
@@ -65,6 +66,53 @@ public sealed class DashboardEditSession : IDisposable
     public DashboardEditStatus Move(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
     {
         return Edit(draft => draft.Move(sourcePath, targetPath, side));
+    }
+
+    public bool SetCollapsed(string typeId, bool isCollapsed)
+    {
+        ArgumentNullException.ThrowIfNull(typeId);
+
+        lock (_gate)
+        {
+            if (_disposed || !_draft.SetCollapsed(typeId, isCollapsed))
+            {
+                return false;
+            }
+
+            _collapsing = true;
+
+            try
+            {
+                _coordinator.Mutate(current =>
+                {
+                    var setting = current?.Tiles.FirstOrDefault(tile => string.Equals(tile.TypeId, typeId, StringComparison.Ordinal));
+
+                    if (setting is null || setting.IsCollapsed == isCollapsed)
+                    {
+                        return null;
+                    }
+
+                    setting.IsCollapsed = isCollapsed;
+
+                    return current;
+                });
+            }
+            catch (Exception exception)
+            {
+                _logger?.DashboardLayoutSaveFailed(exception);
+                _draft.SetCollapsed(typeId, !isCollapsed);
+
+                return false;
+            }
+            finally
+            {
+                _collapsing = false;
+            }
+        }
+
+        Raise();
+
+        return true;
     }
 
     public DashboardPane? PreviewMove(IReadOnlyList<int> sourcePath, IReadOnlyList<int> targetPath, PaneSide side)
@@ -265,7 +313,14 @@ public sealed class DashboardEditSession : IDisposable
     {
         lock (_gate)
         {
-            if (_writing || _disposed || e.Snapshot.Revision == _baseRevision
+            if (_collapsing)
+            {
+                _baseRevision = Math.Max(_baseRevision, e.Snapshot.Revision);
+
+                return;
+            }
+
+            if (_writing || _disposed || e.Snapshot.Revision <= _baseRevision
                 || DashboardLayoutDraft.Clone(e.Snapshot.Layout) is not { } layout)
             {
                 return;

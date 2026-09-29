@@ -163,6 +163,90 @@ public class DashboardPreviewGeometryTests
         });
     }
 
+    [Test]
+    public void A_splitter_across_the_strips_of_the_preview_moves_the_draft_and_one_undo_takes_it_back()
+    {
+        var section = new DashboardLayoutSectionViewModel(StripTiles());
+
+        section.LoadSettings(StripsLayout());
+        section.Reference = DashboardPreviewReference.Window1920;
+
+        var view = new DashboardLayoutSectionView { DataContext = section };
+        var host = new Grid { Width = 900, Height = 700, Children = { view } };
+
+        host.Measure(new(900, 700));
+        host.Arrange(new(0, 0, 900, 700));
+        host.UpdateLayout();
+
+        var splitters = Descendants(view).OfType<GridSplitter>().ToArray();
+
+        Assert.That(splitters, Has.Length.EqualTo(2),
+            "Первая колонка и чат разделены двумя полосами: разделитель стоит у обоих краёв ряда полос, внутри ряда его нет.");
+
+        splitters[0].RaiseEvent(new DragDeltaEventArgs(120, 0));
+        host.UpdateLayout();
+        splitters[0].RaiseEvent(new DragCompletedEventArgs(120, 0, false));
+
+        var weights = ((SplitPane)section.BuildLayout().Root!).Children.Select(slot => slot.Weight ?? 0).ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(section.TreeEdited, Is.True, "Сдвиг разделителя превью – правка дерева, и сохранение настроек обязано взять дерево черновика.");
+            Assert.That(weights[0], Is.GreaterThan(0.25), "Первая колонка выросла.");
+            Assert.That(weights[0] + weights[3], Is.EqualTo(0.5).Within(0.001), "Чат отдал ровно то, что забрала первая колонка.");
+            Assert.That(weights[1], Is.EqualTo(0.25).Within(0.001), "Доли полос сдвиг не трогает.");
+            Assert.That(weights[2], Is.EqualTo(0.25).Within(0.001));
+        });
+
+        section.UndoCommand.Execute(null);
+
+        Assert.That(((SplitPane)section.BuildLayout().Root!).Children[0].Weight, Is.EqualTo(0.25).Within(0.001),
+            "«Отменить» снимает сдвиг разделителя, как любую правку дерева в разделе.");
+    }
+
+    private static DashboardLayoutSettings StripsLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 4,
+            RowCount = 2,
+            Root = new SplitPane(SplitOrientation.Columns, [
+                new(new TilePane("stream-info"), 0.25),
+                new(new SplitPane(SplitOrientation.Rows, [
+                    new(new TilePane("stream-preview"), 0.5),
+                    new(new TilePane("chat-overlay"), 0.5),
+                ]), 0.25),
+                new(new TilePane("obs-info"), 0.25),
+                new(new TilePane("twitch-chat"), 0.25),
+            ]),
+        };
+
+        Add(layout, "stream-info", 0, 0, 2, 1);
+        Add(layout, "stream-preview", 0, 1, 1, 1);
+        Add(layout, "chat-overlay", 1, 1, 1, 1);
+        Add(layout, "obs-info", 0, 2, 2, 1);
+        Add(layout, "twitch-chat", 0, 3, 2, 1);
+
+        foreach (var tile in layout.Tiles.Where(tile => tile.TypeId is "stream-preview" or "chat-overlay" or "obs-info"))
+        {
+            tile.IsCollapsed = true;
+        }
+
+        return layout;
+    }
+
+    private static DashboardTileViewModel[] StripTiles()
+    {
+        return
+        [
+            new FakeTile("stream-info", fills: true),
+            new FakeTile("stream-preview", sizesToContent: true),
+            new FakeTile("chat-overlay", fills: true),
+            new FakeTile("obs-info", sizesToContent: true),
+            new FakeTile("twitch-chat", fills: true),
+        ];
+    }
+
     private static FrameworkElement DescendantByName(DependencyObject root, string name)
     {
         var found = Descendants(root).OfType<FrameworkElement>().FirstOrDefault(element => element.Name == name);

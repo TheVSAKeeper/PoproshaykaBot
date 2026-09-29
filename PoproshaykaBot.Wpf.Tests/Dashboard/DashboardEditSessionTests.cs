@@ -108,6 +108,127 @@ public class DashboardEditSessionTests
     }
 
     [Test]
+    public void A_collapse_during_the_edit_reaches_the_file_at_once_and_keeps_the_draft_with_its_undo()
+    {
+        var store = new FakeLayoutStore(SideBySide());
+        var time = new ManualTimeProvider();
+
+        using var session = new DashboardEditSession(new(store), time);
+
+        session.Resize([], [0.6, 0.4]);
+
+        Assert.That(session.SetCollapsed("stream-info", true), Is.True);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(store.Saved!.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed, Is.True,
+                "Свёртку файл хранит сам, и коммит черновика берёт её с диска – поэтому она пишется сразу, а не дебаунсом.");
+            Assert.That(Weights(session.Draft)[0], Is.EqualTo(0.6).Within(0.001), "Своя запись свёртки не заменяет черновик снимком с диска.");
+            Assert.That(session.CanUndo, Is.True, "…и не чистит стек отмены.");
+        });
+
+        time.Advance(DashboardEditSession.WriteDelay);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Weights(store.Saved)[0], Is.EqualTo(0.6).Within(0.001), "Отложенный сдвиг доезжает до файла следом.");
+            Assert.That(store.Saved!.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed, Is.True);
+            Assert.That(session.CanUndo, Is.True, "Запись после своей же свёртки не считается слиянием с чужой правкой.");
+        });
+
+        session.Undo();
+
+        Assert.That(session.Draft.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed, Is.True,
+            "Отмена возвращает дерево, а свёртку оставляет той, что лежит в файле.");
+    }
+
+    [Test]
+    public void A_collapse_the_file_refused_is_taken_back_from_the_draft_and_its_undo()
+    {
+        var store = new FakeLayoutStore(SideBySide());
+        var time = new ManualTimeProvider();
+
+        using var session = new DashboardEditSession(new(store), time);
+
+        session.Resize([], [0.6, 0.4]);
+        store.FailSaves = true;
+
+        Assert.That(session.SetCollapsed("stream-info", true), Is.False,
+            "Сорвавшаяся запись свёртки – отказ, иначе вью-модель оставит плитку свёрнутой поверх несвёрнутого файла.");
+        Assert.That(session.Draft.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed, Is.False,
+            "Черновик возвращается к файлу: коммит всё равно взял бы свёртку с диска, но молча и без перерисовки.");
+
+        store.FailSaves = false;
+        session.Undo();
+
+        Assert.That(session.Draft.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed, Is.False,
+            "Снимки отмены откатываются вместе с черновиком.");
+    }
+
+    [Test]
+    public void Reset_to_defaults_keeps_the_collapse_the_file_holds()
+    {
+        var layout = SideBySide();
+
+        layout.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed = true;
+
+        var store = new FakeLayoutStore(layout);
+        var time = new ManualTimeProvider();
+
+        using var session = new DashboardEditSession(new(store), time);
+
+        session.ResetToDefaults();
+
+        Assert.That(session.Draft.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed, Is.True,
+            "Свёртку держит файл, и сброс её не снимает: иначе правка показала бы плитку раскрытой, а коммит молча свернул бы её обратно.");
+
+        time.Advance(DashboardEditSession.WriteDelay);
+
+        Assert.That(store.Saved!.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed, Is.True);
+    }
+
+    [Test]
+    public void A_late_event_of_an_older_revision_does_not_replace_a_newer_draft()
+    {
+        var store = new FakeLayoutStore(SideBySide());
+        var coordinator = new DashboardLayoutCoordinator(store);
+        var nested = false;
+
+        coordinator.LayoutChanged += (_, _) =>
+        {
+            if (nested)
+            {
+                return;
+            }
+
+            nested = true;
+
+            coordinator.Mutate(current =>
+            {
+                current!.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed = true;
+
+                return current;
+            });
+        };
+
+        using var session = new DashboardEditSession(coordinator, new ManualTimeProvider());
+
+        coordinator.Mutate(current =>
+        {
+            current!.Tiles.Single(tile => tile.TypeId == "twitch-chat").IsCollapsed = true;
+
+            return current;
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.Draft.Tiles.Single(tile => tile.TypeId == "stream-info").IsCollapsed, Is.True,
+                "Событие вложенной записи доходит раньше внешней, и запоздавшее событие младшей ревизии не должно откатить черновик к более старому снимку.");
+            Assert.That(session.Draft.Tiles.Single(tile => tile.TypeId == "twitch-chat").IsCollapsed, Is.True);
+        });
+    }
+
+    [Test]
     public void A_split_past_the_grid_ceiling_is_refused()
     {
         var layout = SideBySide();

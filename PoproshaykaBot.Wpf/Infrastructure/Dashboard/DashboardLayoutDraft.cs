@@ -63,10 +63,39 @@ public sealed class DashboardLayoutDraft
         EndGridGesture();
         Remember(Clone(_layout)!);
 
-        _layout = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutDefaults.Create(), _layout);
+        var previous = _layout;
+
+        _layout = DashboardLayoutReconciler.ResetToDefaults(DashboardLayoutDefaults.Create(), previous);
+
+        foreach (var tile in previous.Tiles)
+        {
+            Collapse(_layout, tile.TypeId, tile.IsCollapsed);
+        }
 
         DashboardLayoutReconciler.SyncRoot(_layout);
         Version++;
+    }
+
+    public bool SetCollapsed(string typeId, bool isCollapsed)
+    {
+        ArgumentNullException.ThrowIfNull(typeId);
+
+        if (!Collapse(_layout, typeId, isCollapsed))
+        {
+            return false;
+        }
+
+        foreach (var layout in _undo)
+        {
+            Collapse(layout, typeId, isCollapsed);
+        }
+
+        if (_gestureBase is not null)
+        {
+            Collapse(_gestureBase, typeId, isCollapsed);
+        }
+
+        return true;
     }
 
     public void BeginGridGesture()
@@ -201,6 +230,19 @@ public sealed class DashboardLayoutDraft
         Version++;
 
         return DashboardEditStatus.Applied;
+    }
+
+    private static bool Collapse(DashboardLayoutSettings layout, string typeId, bool isCollapsed)
+    {
+        var found = false;
+
+        foreach (var tile in layout.Tiles.Where(tile => string.Equals(tile.TypeId, typeId, StringComparison.Ordinal)))
+        {
+            tile.IsCollapsed = isCollapsed;
+            found = true;
+        }
+
+        return found;
     }
 
     private static DashboardPane CarryWeights(DashboardPane rebuilt, DashboardPane previous)

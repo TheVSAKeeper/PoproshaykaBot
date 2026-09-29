@@ -8,6 +8,7 @@ using PoproshaykaBot.Wpf.Views;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 
 namespace PoproshaykaBot.Wpf.Tests.Dashboard;
 
@@ -689,34 +690,323 @@ public class DashboardPaneLayoutTests
     }
 
     [Test]
-    public void Edit_mode_unfolds_a_collapsed_tile_and_folds_it_back_on_exit()
+    public void Edit_mode_keeps_collapsed_tiles_folded_and_the_chevron_keeps_the_draft_and_its_undo()
     {
-        var layout = AuthoredWeightsLayout();
+        var store = new FakeLayoutStore(StripsLayout());
+        var tiles = StripsTiles();
+        var preview = tiles.Single(tile => string.Equals(tile.TypeId, "stream-preview", StringComparison.Ordinal));
 
-        layout.Tiles.Single(tile => string.Equals(tile.TypeId, "broadcast-status", StringComparison.Ordinal)).IsCollapsed = true;
-
-        var store = new FakeLayoutStore(layout);
-        var status = new FakeTile("broadcast-status");
-
-        using var dashboard = new DashboardViewModel([new FakeTile("stream-info"), status], new(store), TimeProvider.System);
-
-        Assert.That(status.IsCollapsed, Is.True, "Вне правки свёрнутая плитка остаётся свёрнутой.");
+        using var dashboard = new DashboardViewModel(tiles, new(store), TimeProvider.System);
 
         dashboard.ToggleEditCommand.Execute(null);
 
-        Assert.That(status.IsCollapsed, Is.False,
-            "В правке плитку надо видеть целиком: свёрнутая идёт по содержимому, её нельзя ни растянуть, ни поймать за ручку.");
-
-        dashboard.ToggleEditCommand.Execute(null);
+        var root = (SplitPaneLayout)dashboard.Pane!;
 
         Assert.Multiple(() =>
         {
-            Assert.That(status.IsCollapsed, Is.True, "Выход из правки возвращает свёрнутость.");
-            Assert.That(
-                store.LoadDashboard()!.Tiles.Single(tile => string.Equals(tile.TypeId, "broadcast-status", StringComparison.Ordinal)).IsCollapsed,
-                Is.True,
-                "Раскрытие на время правки не должно уезжать в файл.");
+            Assert.That(preview.IsCollapsed, Is.True, "Правка показывает панель такой, какая она есть: свёрнутые плитки остаются свёрнутыми.");
+            Assert.That(root.Children[1].SizesToContent, Is.True, "Свёрнутая колонка и в правке – полоса по содержимому.");
         });
+
+        Assert.That(dashboard.Resize([], [0.3, 0.25, 0.25, 0.2]), Is.True);
+
+        preview.IsCollapsed = false;
+
+        var saved = store.LoadDashboard()!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.Tiles.Single(tile => string.Equals(tile.TypeId, "stream-preview", StringComparison.Ordinal)).IsCollapsed, Is.False,
+                "Свёртку файл хранит сам (владелец поля – диск), поэтому шеврон в правке пишет её сразу, как и вне правки.");
+            Assert.That(dashboard.CanUndo, Is.True, "Своя запись свёртки не выдаётся за чужую и не чистит стек отмены.");
+            Assert.That(((SplitPaneLayout)dashboard.Pane!).Children[0].Weight, Is.EqualTo(0.3).Within(0.001),
+                "Черновик правки не заменяется снимком с диска: сдвиг, ещё не дошедший до файла, остаётся на экране.");
+        });
+
+        dashboard.UndoCommand.Execute(null);
+
+        Assert.That(preview.IsCollapsed, Is.False, "Отмена откатывает дерево, а не свёртку: её владелец – файл.");
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        Assert.That(store.LoadDashboard()!.Tiles.Single(tile => string.Equals(tile.TypeId, "stream-preview", StringComparison.Ordinal)).IsCollapsed,
+            Is.False,
+            "«Готово» сохраняет черновик, но свёртку берёт с диска – раскрытие в правке не теряется.");
+    }
+
+    [TestCase(1, 0, 3)]
+    [TestCase(2, -1, -1)]
+    [TestCase(3, 0, 3)]
+    public void A_splitter_reaches_across_the_strips_to_the_nearest_stretching_neighbours(int boundary, int previous, int current)
+    {
+        using var dashboard = CreateDashboard(StripsLayout(), StripsTiles());
+
+        var root = (SplitPaneLayout)dashboard.Pane!;
+        var pair = DashboardPaneSurface.SplitterPair(root, boundary);
+        (int, int)? expected = previous < 0 ? null : (previous, current);
+
+        Assert.That(pair, Is.EqualTo(expected),
+            "Разделитель стоит у краёв ряда полос и двигает первую колонку с чатом, а между самими полосами его нет.");
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void Dragging_across_the_strips_moves_only_the_two_stretching_columns_and_unfolding_returns_the_strip_share()
+    {
+        var store = new FakeLayoutStore(StripsLayout());
+        var tiles = StripsTiles();
+
+        using var dashboard = new DashboardViewModel(tiles, new(store), TimeProvider.System);
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        var root = (SplitPaneLayout)dashboard.Pane!;
+        var (grid, splitters) = ArrangeWithSplitters(root);
+        var before = Widths(grid);
+
+        Assert.That(splitters.Select(Grid.GetColumn), Is.EqualTo(new[] { 1, 3 }),
+            "Полосы фиксированы, но первая колонка и чат – нет: разделитель есть у обоих краёв ряда полос.");
+
+        splitters[0].RaiseEvent(new DragDeltaEventArgs(100, 0));
+        Arrange(grid);
+
+        var after = Widths(grid);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(after[0] - before[0], Is.EqualTo(100).Within(0.5), "Первая колонка забрала сдвиг.");
+            Assert.That(before[3] - after[3], Is.EqualTo(100).Within(0.5), "Чат его отдал.");
+            Assert.That(after[1], Is.EqualTo(before[1]).Within(0.5), "Полоса ширину не меняет – она едет вместе с границей.");
+            Assert.That(after[2], Is.EqualTo(before[2]).Within(0.5));
+        });
+
+        var weights = DashboardPaneSurface.ResizedWeights(grid, root, alongColumns: true, 1);
+
+        Assert.That(weights, Is.Not.Null);
+        Assert.That(dashboard.Resize(root.Path, weights!), Is.True);
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        var saved = store.Saved!.Root as SplitPane;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved?.Children[1].Weight, Is.EqualTo(0.25).Within(0.001), "Доля свёрнутой колонки в файле не тронута – её вернёт раскрытие.");
+            Assert.That(saved!.Children[0].Weight!.Value / saved.Children[3].Weight!.Value, Is.EqualTo(after[0] / after[3]).Within(0.01),
+                "Пропорция первой колонки и чата – ровно та, что вышла под мышью.");
+        });
+
+        foreach (var tile in tiles.Where(tile => tile.TypeId is "stream-preview" or "chat-overlay"))
+        {
+            tile.IsCollapsed = false;
+        }
+
+        var unfolded = (SplitPaneLayout)dashboard.Pane!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(unfolded.Children[1].HasWeight, Is.True, "Раскрытая колонка снова берёт свою долю.");
+            Assert.That(unfolded.Children[1].Weight, Is.EqualTo(0.25).Within(0.001));
+        });
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void A_splitter_across_the_strips_names_the_floor_of_the_column_it_squeezes()
+    {
+        using var dashboard = CreateDashboard(StripsLayout(), StripsTiles());
+
+        var root = (SplitPaneLayout)dashboard.Pane!;
+        var (grid, splitters) = ArrangeWithSplitters(root);
+
+        splitters[1].RaiseEvent(new DragDeltaEventArgs(5000, 0));
+        Arrange(grid);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Widths(grid)[3], Is.EqualTo(DashboardPaneSurface.ScaledStarBandMinWidth).Within(0.5), "Сдвиг упирается в пол чата, а не проезжает его.");
+            Assert.That(DashboardPaneSurface.Blocked(grid, root, alongColumns: true, 3, forward: true),
+                Is.EqualTo(new[] { "колонка не бывает уже 320 px" }),
+                "Упор разделителя через полосы называет пол той колонки, которую он сжимает, а не соседней полосы.");
+            Assert.That(DashboardPaneSurface.Blocked(grid, root, alongColumns: true, 3, forward: false), Is.Empty);
+        });
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void A_splitter_across_the_strips_keeps_the_built_in_resize_idle_through_the_whole_gesture()
+    {
+        using var dashboard = CreateDashboard(StripsLayout(), StripsTiles());
+
+        var root = (SplitPaneLayout)dashboard.Pane!;
+        var (grid, splitters) = ArrangeWithSplitters(root);
+
+        foreach (var (splitter, change) in new[] { (splitters[0], -60.0), (splitters[1], 60.0) })
+        {
+            var before = Widths(grid);
+
+            Drag(splitter, change);
+            Arrange(grid);
+
+            var after = Widths(grid);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(after[1], Is.EqualTo(before[1]).Within(0.5), "Полоса не растёт встроенным ресайзом соседних дорожек.");
+                Assert.That(after[2], Is.EqualTo(before[2]).Within(0.5));
+                Assert.That(after[0] - before[0], Is.EqualTo(change).Within(0.5), "Сдвиг достаётся паре ровно один раз, а не дважды.");
+                Assert.That(before[3] - after[3], Is.EqualTo(change).Within(0.5));
+            });
+        }
+
+        var strip = Widths(grid)[1];
+
+        Grid.SetColumnSpan(splitters[0], 1);
+        Drag(splitters[0], -60);
+        Arrange(grid);
+
+        Assert.That(Widths(grid)[1], Is.Not.EqualTo(strip).Within(0.5),
+            "Проверка настоящая: с размахом 1 тот же жест встроенный ресайз уводит в полосу – выключает его именно размах моста.");
+    }
+
+    [Test]
+    [Apartment(ApartmentState.STA)]
+    public void Dragging_across_the_strips_keeps_an_unset_share_unset()
+    {
+        var layout = StripsLayout();
+        var columns = (SplitPane)layout.Root!;
+
+        layout.Root = new SplitPane(SplitOrientation.Columns,
+        [
+            columns.Children[0],
+            new(columns.Children[1].Pane, null),
+            columns.Children[2],
+            columns.Children[3],
+        ]);
+
+        var store = new FakeLayoutStore(layout);
+
+        using var dashboard = new DashboardViewModel(StripsTiles(), new(store), TimeProvider.System);
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        var root = (SplitPaneLayout)dashboard.Pane!;
+        var (grid, splitters) = ArrangeWithSplitters(root);
+
+        splitters[0].RaiseEvent(new DragDeltaEventArgs(100, 0));
+        Arrange(grid);
+
+        var after = Widths(grid);
+        var weights = DashboardPaneSurface.ResizedWeights(grid, root, alongColumns: true, 1);
+
+        Assert.That(weights, Is.Not.Null);
+        Assert.That(dashboard.Resize(root.Path, weights!), Is.True);
+
+        dashboard.ToggleEditCommand.Execute(null);
+
+        var saved = (SplitPane)store.Saved!.Root!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.Children[1].Weight, Is.Null,
+                "Незаданная доля свёрнутой колонки остаётся незаданной: разрешённое значение уходит в TryResize, но тот пишет только заданные.");
+            Assert.That(saved.Children[0].Weight!.Value / saved.Children[3].Weight!.Value, Is.EqualTo(after[0] / after[3]).Within(0.01));
+        });
+    }
+
+    private static void Drag(GridSplitter splitter, double change)
+    {
+        splitter.RaiseEvent(new DragStartedEventArgs(0, 0));
+        splitter.RaiseEvent(new DragDeltaEventArgs(change, 0));
+        splitter.RaiseEvent(new DragCompletedEventArgs(change, 0, false));
+    }
+
+    private static (Grid Grid, GridSplitter[] Splitters) ArrangeWithSplitters(SplitPaneLayout root)
+    {
+        Grid? built = null;
+
+        var surface = new DashboardPaneSurface
+        {
+            Tile = _ => new Border(),
+            SplitBuilt = (split, grid) =>
+            {
+                if (ReferenceEquals(split, root))
+                {
+                    built = grid;
+                }
+            },
+            Splitters = static (grid, split, alongColumns) => DashboardPaneSurface.AddSplitters(grid, split, alongColumns),
+        };
+
+        var host = new Grid { Children = { surface.BuildRoot(root) } };
+
+        Arrange(host);
+
+        return (built!, built!.Children.OfType<GridSplitter>().ToArray());
+    }
+
+    private static void Arrange(FrameworkElement element)
+    {
+        var root = element;
+
+        while (root.Parent is FrameworkElement parent)
+        {
+            root = parent;
+        }
+
+        root.Measure(new(1600, 800));
+        root.Arrange(new(0, 0, 1600, 800));
+        root.UpdateLayout();
+    }
+
+    private static double[] Widths(Grid grid)
+    {
+        return grid.ColumnDefinitions.Select(column => column.ActualWidth).ToArray();
+    }
+
+    private static DashboardLayoutSettings StripsLayout()
+    {
+        var layout = new DashboardLayoutSettings
+        {
+            ColumnCount = 4,
+            RowCount = 2,
+            Root = new SplitPane(SplitOrientation.Columns,
+            [
+                new(new TilePane("stream-info"), 0.25),
+                new(new SplitPane(SplitOrientation.Rows,
+                [
+                    new(new TilePane("stream-preview"), 0.5),
+                    new(new TilePane("chat-overlay"), 0.5),
+                ]), 0.25),
+                new(new TilePane("obs-info"), 0.25),
+                new(new TilePane("twitch-chat"), 0.25),
+            ]),
+        };
+
+        AddTile(layout, "stream-info", 0, 0, 2, 1);
+        AddTile(layout, "stream-preview", 0, 1, 1, 1);
+        AddTile(layout, "chat-overlay", 1, 1, 1, 1);
+        AddTile(layout, "obs-info", 0, 2, 2, 1);
+        AddTile(layout, "twitch-chat", 0, 3, 2, 1);
+
+        foreach (var tile in layout.Tiles.Where(tile => tile.TypeId is "stream-preview" or "chat-overlay" or "obs-info"))
+        {
+            tile.IsCollapsed = true;
+        }
+
+        return layout;
+    }
+
+    private static DashboardTileViewModel[] StripsTiles()
+    {
+        return
+        [
+            new FakeTile("stream-info"),
+            new FakeTile("stream-preview", sizesToContent: true),
+            new FakeTile("chat-overlay", fills: true, minWidth: 320, minHeight: 220),
+            new FakeTile("obs-info", sizesToContent: true),
+            new FakeTile("twitch-chat", fills: true, minWidth: 280, minHeight: 220),
+        ];
     }
 
     [Test]
