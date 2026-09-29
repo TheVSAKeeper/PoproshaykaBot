@@ -292,7 +292,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
         try
         {
             using var stopCts = new CancellationTokenSource(ForcedStopTimeout);
-            await _appHost.StopAsync(new Progress<string>(ReportProgress), stopCts.Token).WaitAsync(ForcedStopTimeout);
+            await _appHost.StopAsync(new Progress<string>(ReportProgress), stopCts.Token).WaitAsync(ForcedStopTimeout, CancellationToken.None);
         }
         catch (Exception exception)
         {

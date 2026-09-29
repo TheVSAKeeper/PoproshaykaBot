@@ -91,7 +91,11 @@ public partial class StreamPreviewTileView : UserControl, IView<StreamPreviewTil
 
     private void ApplyHeightCap(double cap)
     {
-        if (cap == _heightCap || Math.Abs(cap - _heightCap) <= Tolerance)
+        var unchanged = double.IsPositiveInfinity(cap)
+            ? double.IsPositiveInfinity(_heightCap)
+            : Math.Abs(cap - _heightCap) <= Tolerance;
+
+        if (unchanged)
         {
             return;
         }
