@@ -11,8 +11,14 @@ public static class UpdateApplier
 
     public static bool TryApplyPending(string stagingDirectory, string currentExecutablePath, ILogger logger)
     {
+        return TryApplyPending(stagingDirectory, currentExecutablePath, UpdateEnvironment.ResolveCurrentVersion(), logger);
+    }
+
+    internal static bool TryApplyPending(string stagingDirectory, string currentExecutablePath, Version currentVersion, ILogger logger)
+    {
         ArgumentException.ThrowIfNullOrEmpty(stagingDirectory);
         ArgumentException.ThrowIfNullOrEmpty(currentExecutablePath);
+        ArgumentNullException.ThrowIfNull(currentVersion);
         ArgumentNullException.ThrowIfNull(logger);
 
         var pendingPath = Path.Combine(stagingDirectory, UpdateInstaller.PendingFileName);
@@ -36,6 +42,15 @@ public static class UpdateApplier
             return false;
         }
 
+        if (!UpdateVersioning.TryParseTag(pending.Version, out var pendingVersion)
+            || !UpdateVersioning.IsNewer(pendingVersion, currentVersion))
+        {
+            logger.LogWarning("Запланированное обновление {PendingVersion} не новее текущей версии {CurrentVersion} – удалено без установки",
+                pending.Version, currentVersion);
+            DiscardFiles(stagingDirectory, pending, logger);
+            return false;
+        }
+
         var plan = UpdateSwapPlanner.Plan(currentExecutablePath, pending.StagedExecutablePath);
 
         if (!TrySwap(plan, pendingPath, logger))
@@ -45,6 +60,25 @@ public static class UpdateApplier
 
         logger.LogInformation("Версия {Version} установлена, перезапуск приложения", pending.Version);
         Relaunch(plan.CurrentExecutable, logger);
+        return true;
+    }
+
+    internal static bool DiscardFiles(string stagingDirectory, PendingUpdate pending, ILogger logger)
+    {
+        var fullStagingDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(stagingDirectory));
+
+        if (!TryDelete(Path.Combine(fullStagingDirectory, UpdateInstaller.PendingFileName), logger))
+        {
+            return false;
+        }
+
+        if (string.Equals(Path.GetDirectoryName(Path.GetFullPath(pending.StagedExecutablePath)),
+                fullStagingDirectory,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            TryDelete(pending.StagedExecutablePath, logger);
+        }
+
         return true;
     }
 
@@ -137,7 +171,7 @@ public static class UpdateApplier
         }
     }
 
-    private static void TryDelete(string path, ILogger logger)
+    private static bool TryDelete(string path, ILogger logger)
     {
         try
         {
@@ -145,10 +179,13 @@ public static class UpdateApplier
             {
                 File.Delete(path);
             }
+
+            return true;
         }
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Не удалось удалить {Path}", path);
+            return false;
         }
     }
 }
