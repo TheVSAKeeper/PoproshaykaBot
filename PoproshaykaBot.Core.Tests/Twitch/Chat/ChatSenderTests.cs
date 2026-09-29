@@ -292,4 +292,34 @@ public class ChatSenderTests
         await _helix.DidNotReceiveWithAnyArgs().SendWhisperAsync(default!, default!, default!, default);
         await _helix.DidNotReceiveWithAnyArgs().SendChatMessageAsync(default!, default!, default!, default, default);
     }
+
+    [TestCase("пустое", 0, ChatEnqueueResult.EmptyMessage)]
+    [TestCase("наблюдатель", 0, ChatEnqueueResult.ObserverMode)]
+    [TestCase("закрыта", 0, ChatEnqueueResult.QueueClosed)]
+    [TestCase("переполнена", 1000, ChatEnqueueResult.QueueFull)]
+    [TestCase("часть кусков", 999, ChatEnqueueResult.Queued)]
+    public async Task Enqueue_возвращает_исход_постановки(string scenario, int prefilled, ChatEnqueueResult expected)
+    {
+        for (var i = 0; i < prefilled; i++)
+        {
+            _sender.Enqueue("x", null, null);
+        }
+
+        var message = new string('a', 600);
+
+        switch (scenario)
+        {
+            case "пустое":
+                message = "   ";
+                break;
+            case "наблюдатель":
+                _targetChannel.IsSendingAllowed = false;
+                break;
+            case "закрыта":
+                await _sender.StopAsync(new Progress<string>(), CancellationToken.None);
+                break;
+        }
+
+        Assert.That(_sender.Enqueue(message, null, null), Is.EqualTo(expected));
+    }
 }

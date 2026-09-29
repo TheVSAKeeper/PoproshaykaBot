@@ -4,15 +4,15 @@ namespace PoproshaykaBot.Core.Chat;
 
 public interface IChatMessenger
 {
-    void Send(string text);
+    ChatEnqueueResult Send(string text);
     void Reply(string replyToMessageId, string text);
 }
 
 public sealed class TwitchChatMessenger(ChatSender chatSender) : IChatMessenger
 {
-    public void Send(string text)
+    public ChatEnqueueResult Send(string text)
     {
-        Send(text, null);
+        return Send(text, null);
     }
 
     public void Reply(string replyToMessageId, string text)
@@ -20,9 +20,9 @@ public sealed class TwitchChatMessenger(ChatSender chatSender) : IChatMessenger
         Reply(replyToMessageId, text, null);
     }
 
-    public void Send(string text, CommandResponseMark? commandResponse)
+    public ChatEnqueueResult Send(string text, CommandResponseMark? commandResponse)
     {
-        _ = chatSender.EnqueueAsync(text, null, commandResponse, CancellationToken.None);
+        return chatSender.Enqueue(text, null, commandResponse);
     }
 
     public void Reply(string replyToMessageId, string text, CommandResponseMark? commandResponse)

@@ -1,0 +1,59 @@
+﻿using KeepShell.Services.Platform;
+using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Twitch.Chat;
+using PoproshaykaBot.Wpf.ViewModels.Onboarding;
+
+namespace PoproshaykaBot.Wpf.Tests.Onboarding;
+
+[TestFixture]
+public sealed class HealthCheckPageViewModelTests
+{
+    [TestCase(ChatEnqueueResult.Queued, true, "✓ Сообщение поставлено в очередь отправки.")]
+    [TestCase(ChatEnqueueResult.ObserverMode, false, "✗ Сообщение не отправлено: режим наблюдателя.")]
+    public void Тест_чата_показывает_исход_постановки(ChatEnqueueResult outcome, bool success, string expectedText)
+    {
+        var messenger = new FakeChatMessenger(outcome);
+
+        using var viewModel = new HealthCheckPageViewModel(messenger,
+            new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
+            NullLogger<HealthCheckPageViewModel>.Instance,
+            new FakeShellLauncher());
+
+        viewModel.ChatTestMessage = "проверка";
+        viewModel.SendChatTestCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(messenger.Sent, Is.EqualTo(new[] { "проверка" }));
+            Assert.That(viewModel.ChatTestStatusText, Is.EqualTo(expectedText));
+            Assert.That(viewModel.ChatTestSuccess, Is.EqualTo(success));
+            Assert.That(viewModel.ChatTestError, Is.EqualTo(!success));
+        });
+    }
+
+    private sealed class FakeChatMessenger(ChatEnqueueResult outcome) : IChatMessenger
+    {
+        public List<string> Sent { get; } = [];
+
+        public ChatEnqueueResult Send(string text)
+        {
+            Sent.Add(text);
+            return outcome;
+        }
+
+        public void Reply(string replyToMessageId, string text)
+        {
+        }
+    }
+
+    private sealed class FakeShellLauncher : IShellLauncher
+    {
+        public bool Open(string pathOrUrl) => true;
+
+        public bool Reveal(string path) => true;
+
+        public bool Start(string executable, params string[] arguments) => true;
+    }
+}

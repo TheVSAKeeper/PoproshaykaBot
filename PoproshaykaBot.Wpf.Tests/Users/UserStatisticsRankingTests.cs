@@ -334,13 +334,14 @@ public class UserStatisticsRankingTests
         }
     }
 
-    [TestCase(375UL, 2_900UL, 10UL, false, false, true)]
-    [TestCase(5UL, 1_000UL, 0UL, true, false, false)]
-    [TestCase(97UL, 3UL, 0UL, false, false, false)]
-    [TestCase(100UL, 0UL, 0UL, false, false, false)]
-    [TestCase(0UL, 0UL, 0UL, false, false, false)]
+    [TestCase(5UL, 1_000UL, 0UL, true, false)]
+    [TestCase(97UL, 3UL, 0UL, false, false)]
+    [TestCase(100UL, 0UL, 0UL, false, false)]
+    [TestCase(0UL, 0UL, 0UL, false, false)]
+    [TestCase(0UL, 0UL, 50UL, false, false)]
+    [TestCase(1_000UL, 20UL, 990UL, false, true)]
     public void Marks_a_composition_part_too_small_to_see_on_the_bar(
-        ulong messages, ulong bonus, ulong penalty, bool messagesTiny, bool bonusTiny, bool penaltyTiny)
+        ulong messages, ulong bonus, ulong penalty, bool messagesTiny, bool bonusTiny)
     {
         var row = Row("mix", messages, bonus, penalty);
 
@@ -348,9 +349,30 @@ public class UserStatisticsRankingTests
         {
             Assert.That(row.IsMessagesTrackTiny, Is.EqualTo(messagesTiny));
             Assert.That(row.IsBonusTrackTiny, Is.EqualTo(bonusTiny));
-            Assert.That(row.IsPenaltyTrackTiny, Is.EqualTo(penaltyTiny));
-            Assert.That(row.HasTinyTrack, Is.EqualTo(messagesTiny || bonusTiny || penaltyTiny));
-            Assert.That(row.PenaltyTrack.Value, Is.EqualTo(penalty), "Ширина сегмента остаётся пропорциональной");
+            Assert.That(row.HasTinyTrack, Is.EqualTo(messagesTiny || bonusTiny));
+            Assert.That(row.MessagesTrack.Value, Is.EqualTo(messages), "Сегменты делят заработанное без штрафа");
+            Assert.That(row.BonusTrack.Value, Is.EqualTo(bonus), "Сегменты делят заработанное без штрафа");
+        });
+    }
+
+    [TestCase(375UL, 2_900UL, 10UL, 3_265d, 10d, false)]
+    [TestCase(100UL, 0UL, 0UL, 100d, 0d, false)]
+    [TestCase(100UL, 20UL, 120UL, 0d, 1d, true)]
+    [TestCase(100UL, 20UL, 500UL, 0d, 1d, true)]
+    [TestCase(0UL, 0UL, 50UL, 0d, 1d, true)]
+    [TestCase(0UL, 0UL, 0UL, 0d, 0d, false)]
+    [TestCase(9_007_199_254_740_993UL, 0UL, 9_007_199_254_740_992UL, 1d, 9_007_199_254_740_992d, false)]
+    public void Cuts_the_penalty_out_of_the_earned_bar(
+        ulong messages, ulong bonus, ulong penalty, double net, double cut, bool cutWhole)
+    {
+        var row = Row("cut", messages, bonus, penalty);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.EarnedNetTrack.Value, Is.EqualTo(net));
+            Assert.That(row.PenaltyCutTrack.Value, Is.EqualTo(cut));
+            Assert.That(row.IsPenaltyCutWhole, Is.EqualTo(cutWhole));
+            Assert.That(row.HasPenalty, Is.EqualTo(penalty > 0), "Засечка и вырез видны при любом ненулевом штрафе");
         });
     }
 

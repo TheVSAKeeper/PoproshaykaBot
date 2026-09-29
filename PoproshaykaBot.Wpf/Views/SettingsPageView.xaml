@@ -194,6 +194,16 @@
                         </StackPanel>
 
                         <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                Header="{Binding Sections[ranks].Title}"
+                                                Visibility="{Binding Sections[ranks].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel>
+                                <TextBlock Text="Ступени, которые бот присваивает зрителям по баллам: сообщение в чате – один балл, плюс бонусы, минус штрафы."
+                                           Style="{StaticResource Setting.BlockHint}" />
+                                <ContentControl Content="{Binding Ranks}" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
                                                 Header="{Binding Sections[update].Title}"
                                                 Visibility="{Binding Sections[update].IsSelected, Converter={StaticResource BoolToVisibility}}">
                             <ContentControl Content="{Binding Update}" />

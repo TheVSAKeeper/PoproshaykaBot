@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Broadcast;
 
@@ -18,7 +19,9 @@ public sealed class BroadcastScheduler(
     : IBroadcastScheduler, IAsyncDisposable
 {
     private readonly object _stateLock = new();
+    private readonly object _sendLock = new();
     private int _sentMessagesCount;
+    private int _runEpoch;
     private DateTimeOffset? _lastBroadcastAt;
     private string? _lastError;
 
@@ -81,6 +84,7 @@ public sealed class BroadcastScheduler(
         {
             _channel = channel;
             _lastError = null;
+            _runEpoch++;
             Interlocked.Exchange(ref _sentMessagesCount, 0);
 
             var minutes = Math.Max(1, settingsManager.Current.Twitch.AutoBroadcast.BroadcastIntervalMinutes);
@@ -111,6 +115,7 @@ public sealed class BroadcastScheduler(
             logger.LogInformation("Остановка планировщика рассылки для канала {Channel}", _channel);
 
             _channel = null;
+            _runEpoch++;
             Interlocked.Exchange(ref _sentMessagesCount, 0);
             NextBroadcastTime = null;
             _stopCts?.Cancel();
@@ -135,17 +140,10 @@ public sealed class BroadcastScheduler(
             return Task.CompletedTask;
         }
 
-        var newCount = Interlocked.Increment(ref _sentMessagesCount);
-        var message = GetMessage(newCount);
-
-        if (string.IsNullOrWhiteSpace(message))
+        if (TrySend(currentChannel, true) is not ChatEnqueueResult.Queued)
         {
-            logger.LogWarning("Ручная отправка отменена: провайдер вернул пустое сообщение");
             return Task.CompletedTask;
         }
-
-        messenger.Send(message);
-        logger.LogInformation("Сообщение отправлено вручную в канал {Channel}. Всего отправлено: {SentMessagesCount}", currentChannel, newCount);
 
         lock (_stateLock)
         {
@@ -190,6 +188,72 @@ public sealed class BroadcastScheduler(
         _disposed = true;
 
         logger.LogDebug("Освобождение ресурсов планировщика успешно завершено");
+    }
+
+    private ChatEnqueueResult TrySend(string channel, bool manual)
+    {
+        lock (_sendLock)
+        {
+            int epoch;
+            int number;
+
+            lock (_stateLock)
+            {
+                epoch = _runEpoch;
+                number = _sentMessagesCount + 1;
+            }
+
+            var message = GetMessage(number);
+
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                if (manual)
+                {
+                    logger.LogWarning("Ручная отправка отменена: провайдер вернул пустое сообщение");
+                }
+                else
+                {
+                    logger.LogWarning("Запланированная отправка пропущена: провайдер вернул пустое сообщение");
+                }
+
+                return ChatEnqueueResult.EmptyMessage;
+            }
+
+            var result = messenger.Send(message);
+
+            if (result is not ChatEnqueueResult.Queued)
+            {
+                if (manual)
+                {
+                    logger.LogDebug("Ручная отправка в канал {Channel} не состоялась: {Reason}", channel, ChatEnqueueResults.DescribeRefusal(result));
+                }
+                else
+                {
+                    logger.LogDebug("Запланированное сообщение в канал {Channel} не отправлено: {Reason}", channel, ChatEnqueueResults.DescribeRefusal(result));
+                }
+
+                return result;
+            }
+
+            lock (_stateLock)
+            {
+                if (_runEpoch == epoch)
+                {
+                    Interlocked.Exchange(ref _sentMessagesCount, number);
+                }
+            }
+
+            if (manual)
+            {
+                logger.LogInformation("Сообщение отправлено вручную в канал {Channel}. Всего отправлено: {SentMessagesCount}", channel, number);
+            }
+            else
+            {
+                logger.LogInformation("Запланированное сообщение отправлено в канал {Channel}. Всего отправлено: {SentMessagesCount}", channel, number);
+            }
+
+            return result;
+        }
     }
 
     private string GetMessage(int counter)
@@ -248,22 +312,21 @@ public sealed class BroadcastScheduler(
                     break;
                 }
 
-                var newCount = Interlocked.Increment(ref _sentMessagesCount);
-                var message = GetMessage(newCount);
+                var attempt = TrySend(currentChannel, false);
 
-                if (string.IsNullOrWhiteSpace(message))
+                if (attempt is ChatEnqueueResult.EmptyMessage)
                 {
-                    logger.LogWarning("Запланированная отправка пропущена: провайдер вернул пустое сообщение");
                     continue;
                 }
-
-                messenger.Send(message);
-                logger.LogInformation("Запланированное сообщение отправлено в канал {Channel}. Всего отправлено: {SentMessagesCount}", currentChannel, newCount);
 
                 lock (_stateLock)
                 {
                     NextBroadcastTime = timeProvider.GetLocalNow().DateTime + _interval;
-                    _lastBroadcastAt = timeProvider.GetUtcNow();
+
+                    if (attempt is ChatEnqueueResult.Queued)
+                    {
+                        _lastBroadcastAt = timeProvider.GetUtcNow();
+                    }
                 }
 
                 PublishStateChanged();

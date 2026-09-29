@@ -53,12 +53,14 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
 
         MessagesTrack = new(messageCount, GridUnitType.Star);
         BonusTrack = new(bonus, GridUnitType.Star);
-        PenaltyTrack = new(penalty, GridUnitType.Star);
 
-        var turnover = (double)messageCount + bonus + penalty;
-        IsMessagesTrackTiny = IsBelowVisibleShare(messageCount, turnover);
-        IsBonusTrackTiny = IsBelowVisibleShare(bonus, turnover);
-        IsPenaltyTrackTiny = IsBelowVisibleShare(penalty, turnover);
+        var earned = (double)messageCount + bonus;
+        IsPenaltyCutWhole = HasPenalty && penalty - bonus >= messageCount;
+        EarnedNetTrack = new(IsPenaltyCutWhole ? 0 : (double)(messageCount - penalty) + bonus, GridUnitType.Star);
+        PenaltyCutTrack = new(IsPenaltyCutWhole ? 1 : penalty, GridUnitType.Star);
+
+        IsMessagesTrackTiny = IsBelowVisibleShare(messageCount, earned);
+        IsBonusTrackTiny = IsBelowVisibleShare(bonus, earned);
 
         _pointTerm = pointTerm;
 
@@ -98,11 +100,12 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
     public string PenaltyPartText { get; }
     public GridLength MessagesTrack { get; }
     public GridLength BonusTrack { get; }
-    public GridLength PenaltyTrack { get; }
+    public GridLength EarnedNetTrack { get; }
+    public GridLength PenaltyCutTrack { get; }
+    public bool IsPenaltyCutWhole { get; }
     public bool IsMessagesTrackTiny { get; }
     public bool IsBonusTrackTiny { get; }
-    public bool IsPenaltyTrackTiny { get; }
-    public bool HasTinyTrack => IsMessagesTrackTiny || IsBonusTrackTiny || IsPenaltyTrackTiny;
+    public bool HasTinyTrack => IsMessagesTrackTiny || IsBonusTrackTiny;
     public int Place { get; set; }
     public UserRankLadder? RankLadder => _rankLadder ??= UserRankLadder.Build(Points, Standing, _pointTerm);
     public bool HasRankLadder => RankLadder is not null;
@@ -115,8 +118,8 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
 
     public bool IsTopThree => Position is > 0 and <= 3;
 
-    private static bool IsBelowVisibleShare(long part, double turnover)
+    private static bool IsBelowVisibleShare(long part, double earned)
     {
-        return part > 0 && part / turnover < VisibleTrackShare;
+        return part > 0 && part / earned < VisibleTrackShare;
     }
 }

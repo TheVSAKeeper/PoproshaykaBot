@@ -136,8 +136,13 @@ public sealed class ChatSender(
         CommandResponseMark? commandResponse,
         CancellationToken cancellationToken)
     {
-        Enqueue(message, replyParentMessageId, commandResponse, null);
+        Enqueue(message, replyParentMessageId, commandResponse);
         return Task.CompletedTask;
+    }
+
+    public ChatEnqueueResult Enqueue(string message, string? replyParentMessageId, CommandResponseMark? commandResponse)
+    {
+        return Enqueue(message, replyParentMessageId, commandResponse, null);
     }
 
     public Task EnqueueWhisperAsync(
@@ -162,7 +167,7 @@ public sealed class ChatSender(
         return Task.CompletedTask;
     }
 
-    private void Enqueue(
+    private ChatEnqueueResult Enqueue(
         string message,
         string? replyParentMessageId,
         CommandResponseMark? commandResponse,
@@ -170,7 +175,7 @@ public sealed class ChatSender(
     {
         if (string.IsNullOrWhiteSpace(message))
         {
-            return;
+            return ChatEnqueueResult.EmptyMessage;
         }
 
         var target = targetChannelProvider.Current;
@@ -181,10 +186,12 @@ public sealed class ChatSender(
                 target.Login,
                 message);
 
-            return;
+            return ChatEnqueueResult.ObserverMode;
         }
 
         var channel = _channel;
+        var anyQueued = false;
+        var refusal = ChatEnqueueResult.QueueFull;
 
         foreach (var chunk in SplitByLength(message, MaxMessageLength))
         {
@@ -192,6 +199,7 @@ public sealed class ChatSender(
 
             if (channel.Writer.TryWrite(item))
             {
+                anyQueued = true;
                 continue;
             }
 
@@ -200,12 +208,16 @@ public sealed class ChatSender(
             if (channel.Reader.Completion.IsCompleted)
             {
                 logger.LogWarning("ChatSender: канал закрыт, сообщение отброшено (длина сообщения {Length} символов)", chunk.Length);
+                refusal = ChatEnqueueResult.QueueClosed;
             }
             else
             {
                 logger.LogWarning("ChatSender: очередь переполнена, сообщение отброшено (длина сообщения {Length} символов)", chunk.Length);
+                refusal = ChatEnqueueResult.QueueFull;
             }
         }
+
+        return anyQueued ? ChatEnqueueResult.Queued : refusal;
     }
 
     private static Channel<ChatSendItem> CreateChannel()

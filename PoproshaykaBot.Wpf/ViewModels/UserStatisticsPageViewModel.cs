@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
+using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
@@ -133,6 +134,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
         _subscriptions.Add(eventBus.SubscribeOnUi<UserPunished>(_ => Reload()));
         _subscriptions.Add(eventBus.SubscribeOnUi<UserRewarded>(_ => Reload()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<RanksSettingsChanged>(_ => Reload()));
 
         Reload();
     }

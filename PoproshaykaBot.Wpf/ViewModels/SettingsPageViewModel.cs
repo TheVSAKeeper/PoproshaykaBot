@@ -76,6 +76,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private DebugChannelSettings _debugChannelDraft = new();
     private int _dashboardRevision;
     private bool _dashboardEdited;
+    private bool _ranksEdited;
     private bool _suppressDirty;
     private string _rememberedSection = string.Empty;
 
@@ -101,6 +102,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         DebugChannelSectionViewModel debugChannel,
         McpSettingsSectionViewModel mcp,
         DashboardLayoutSectionViewModel dashboardLayout,
+        RanksSettingsSectionViewModel ranks,
         ShellPreferences shell,
         ThemeViewModel theme,
         SettingsManager settingsManager,
@@ -133,6 +135,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         DebugChannel = debugChannel;
         Mcp = mcp;
         DashboardLayout = dashboardLayout;
+        Ranks = ranks;
         Shell = shell;
         Theme = theme;
 
@@ -211,6 +214,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                     new SettingsSubsection("lifecycle", "Автозапуск бота"),
                     new SettingsSubsection("polls", "Опросы"),
                 ]),
+            new SettingsSection("ranks", "Ранги", PackIconLucideKind.Crown, "ранги ступени пороги баллы король ферзь ладья слон конь пешка значок лестница"),
             new SettingsSection("dashboard", "Дашборд", PackIconLucideKind.LayoutDashboard, "раскладка плитки сетка колонки строки обзор палитра перетаскивание"),
             new SettingsSection("update", "Обновления", PackIconLucideKind.Download, "github релизы версия репозиторий проверка загрузка установка портативная сборка"),
             new SettingsSection("debug", "Отладка", PackIconLucideKind.Bug, "чужой канал наблюдение чтение чата тестирование только чтение отправка сообщений"),
@@ -248,6 +252,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public McpSettingsSectionViewModel Mcp { get; }
 
     public DashboardLayoutSectionViewModel DashboardLayout { get; }
+
+    public RanksSettingsSectionViewModel Ranks { get; }
 
     public ShellPreferences Shell { get; }
 
@@ -306,6 +312,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             _dashboardRevision = dashboardSnapshot.Revision;
             _dashboardEdited = false;
             DashboardLayout.LoadSettings(dashboardSnapshot.Layout);
+            Ranks.Load(_settings.Ranks.Ranks);
+            _ranksEdited = false;
             Polls.RevertCommand.Execute(null);
 
             OAuth.RefreshChannel(Basic.GetChannel());
@@ -334,6 +342,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         OAuth.SettingChanged -= OnOAuthSettingChanged;
         Polls.PropertyChanged -= OnPollsPropertyChanged;
         DashboardLayout.Edited -= OnDashboardLayoutEdited;
+        Ranks.Edited -= OnRanksEdited;
         Sections.PropertyChanged -= OnSectionsPropertyChanged;
     }
 
@@ -354,6 +363,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         OAuth.SettingChanged += OnOAuthSettingChanged;
         Polls.PropertyChanged += OnPollsPropertyChanged;
         DashboardLayout.Edited += OnDashboardLayoutEdited;
+        Ranks.Edited += OnRanksEdited;
     }
 
     private void OnSectionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -399,8 +409,19 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     [RelayCommand(CanExecute = nameof(HasChanges))]
     private async Task SaveAsync()
     {
+        if (_ranksEdited && Ranks.HasErrors)
+        {
+            _dialogService.Warning("Настройки", "В разделе «Ранги» есть ошибки, под полями написано, что не так. Исправьте их и сохраните ещё раз.");
+            return;
+        }
+
         try
         {
+            if (_ranksEdited)
+            {
+                _settings.Ranks.Ranks = Ranks.BuildRanks();
+            }
+
             Basic.SaveSettings(_settings.Twitch);
             RateLimiting.SaveSettings(_settings.Twitch);
             Messages.SaveSettings(_settings.Twitch.Messages);
@@ -422,6 +443,13 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             var newPort = _settings.Twitch.HttpServerPort;
 
             var written = _settingsManager.SaveSettings(_settings);
+
+            if (_ranksEdited)
+            {
+                _ranksEdited = !written;
+                await _eventBus.PublishAsync(new RanksSettingsChanged());
+            }
+
             written &= _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
             SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
@@ -629,6 +657,15 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         if (!_suppressDirty)
         {
             _dashboardEdited = true;
+            Dirty = true;
+        }
+    }
+
+    private void OnRanksEdited(object? sender, EventArgs e)
+    {
+        if (!_suppressDirty)
+        {
+            _ranksEdited = true;
             Dirty = true;
         }
     }

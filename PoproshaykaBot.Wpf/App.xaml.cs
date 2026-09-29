@@ -487,6 +487,7 @@ public partial class App : Application
         services.AddSingleton<PollsSettingsSectionViewModel>();
         services.AddSingleton<UpdateSettingsSectionViewModel>();
         services.AddTransient<DashboardLayoutSectionViewModel>();
+        services.AddTransient<RanksSettingsSectionViewModel>();
         services.AddTransient<DebugChannelSectionViewModel>();
         services.AddSingleton<McpSettingsSectionViewModel>();
 

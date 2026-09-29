@@ -1,9 +1,12 @@
-﻿using PoproshaykaBot.Core.Chat;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Handlers;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Tests.Server;
+using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Tests.Chat.Handlers;
 
@@ -138,5 +141,34 @@ public sealed class FarewellMessageHandlerTests
         await _handler.HandleAsync(new(BotLifecyclePhase.Disconnecting), CancellationToken.None);
 
         _messenger.DidNotReceive().Send(Arg.Any<string>());
+    }
+
+    [TestCase(ChatEnqueueResult.Queued, LogLevel.Information, "поставлено в очередь")]
+    [TestCase(ChatEnqueueResult.ObserverMode, LogLevel.Debug, "не поставлено в очередь ChatSender: режим наблюдателя")]
+    [TestCase(ChatEnqueueResult.QueueClosed, LogLevel.Debug, "не поставлено в очередь ChatSender: очередь отправки закрыта")]
+    public async Task LogsFarewellByEnqueueOutcome(ChatEnqueueResult outcome, LogLevel expectedLevel, string expectedText)
+    {
+        _settings.Twitch.Messages.DisconnectionEnabled = true;
+        _settings.Twitch.Messages.Disconnection = "Пока-пока!";
+        _messenger.Send(Arg.Any<string>()).Returns(outcome);
+
+        var logger = new RecordingLogger<FarewellMessageHandler>();
+        using var handler = new FarewellMessageHandler(_channelProvider,
+            _audienceTracker,
+            _messenger,
+            _settingsManager,
+            _eventBus,
+            logger);
+
+        await handler.HandleAsync(new(BotLifecyclePhase.Disconnecting), CancellationToken.None);
+
+        var farewellLines = logger.Entries.Where(e => e.Message.Contains("Прощальное сообщение")).ToList();
+
+        Assert.That(farewellLines, Has.Count.EqualTo(1));
+        Assert.Multiple(() =>
+        {
+            Assert.That(farewellLines[0].Level, Is.EqualTo(expectedLevel));
+            Assert.That(farewellLines[0].Message, Does.Contain(expectedText));
+        });
     }
 }

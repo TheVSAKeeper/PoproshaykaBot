@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Chat.Handlers;
 
@@ -86,8 +87,16 @@ public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChan
 
         try
         {
-            _messenger.Send(text);
-            _logger.LogInformation("Прощальное сообщение поставлено в очередь ChatSender ({Length} симв.)", text.Length);
+            var result = _messenger.Send(text);
+
+            if (result is ChatEnqueueResult.Queued)
+            {
+                _logger.LogInformation("Прощальное сообщение поставлено в очередь ChatSender ({Length} симв.)", text.Length);
+            }
+            else
+            {
+                _logger.LogDebug("Прощальное сообщение не поставлено в очередь ChatSender: {Reason}", ChatEnqueueResults.DescribeRefusal(result));
+            }
         }
         catch (Exception exception)
         {

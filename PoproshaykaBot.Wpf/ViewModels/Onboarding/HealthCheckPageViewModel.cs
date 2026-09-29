@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -82,10 +83,20 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
         try
         {
-            _chatMessenger.Send(message);
-            ChatTestStatusText = "✓ Сообщение поставлено в очередь отправки.";
-            ChatTestSuccess = true;
-            ChatTestError = false;
+            var result = _chatMessenger.Send(message);
+
+            if (result is ChatEnqueueResult.Queued)
+            {
+                ChatTestStatusText = "✓ Сообщение поставлено в очередь отправки.";
+                ChatTestSuccess = true;
+                ChatTestError = false;
+            }
+            else
+            {
+                ChatTestStatusText = $"✗ Сообщение не отправлено: {ChatEnqueueResults.DescribeRefusal(result)}.";
+                ChatTestSuccess = false;
+                ChatTestError = true;
+            }
         }
         catch (Exception exception)
         {

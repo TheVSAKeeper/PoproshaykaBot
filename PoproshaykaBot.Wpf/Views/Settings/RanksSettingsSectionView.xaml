@@ -1,0 +1,211 @@
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.RanksSettingsSectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             x:Name="Root"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:RanksSettingsSectionViewModel}"
+             d:DesignHeight="600"
+             d:DesignWidth="700">
+
+    <UserControl.Resources>
+        <Style x:Key="RankField"
+               TargetType="TextBox"
+               BasedOn="{StaticResource TextBox.Form}">
+            <Setter Property="VerticalContentAlignment"
+                    Value="Center" />
+            <Style.Triggers>
+                <Trigger Property="Tag">
+                    <Trigger.Value>
+                        <sys:Boolean>True</sys:Boolean>
+                    </Trigger.Value>
+                    <Setter Property="BorderBrush"
+                            Value="{DynamicResource State.Error}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="RankFieldError"
+               TargetType="TextBlock">
+            <Setter Property="Foreground"
+                    Value="{DynamicResource State.ErrorText}" />
+            <Setter Property="FontSize"
+                    Value="{DynamicResource Font.Size.S}" />
+            <Setter Property="TextWrapping"
+                    Value="Wrap" />
+            <Setter Property="Margin"
+                    Value="2,4,8,0" />
+        </Style>
+
+        <Style x:Key="RankColumnCaption"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource Form.Label}">
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Secondary}" />
+            <Setter Property="Margin"
+                    Value="0,0,8,0" />
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel Grid.IsSharedSizeScope="True">
+        <TextBlock Text="Сверху – старшая ступень. Зритель получает самую высокую ступень, порог которой набрал."
+                   Style="{StaticResource Form.Hint}"
+                   TextWrapping="Wrap" />
+
+        <WrapPanel Margin="0,10,0,12">
+            <Button Style="{StaticResource Button.Secondary}"
+                    Command="{Binding AddCommand}"
+                    AutomationProperties.Name="Добавить ступень"
+                    Margin="0,0,8,8">
+                <StackPanel Orientation="Horizontal">
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Plus}"
+                                              Width="14"
+                                              Height="14"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,6,0" />
+                    <TextBlock Text="Добавить ступень"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+            <Button Style="{StaticResource Button.Secondary}"
+                    Content="Сбросить к умолчаниям"
+                    Command="{Binding ResetToDefaultsCommand}"
+                    ToolTip="Вернуть шестнадцать ступеней по умолчанию. В файл они попадут после «Сохранить»."
+                    Margin="0,0,0,8" />
+        </WrapPanel>
+
+        <Grid Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"
+                                  MinWidth="64"
+                                  SharedSizeGroup="RankEmoji" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto"
+                                  MinWidth="88"
+                                  SharedSizeGroup="RankTier" />
+                <ColumnDefinition Width="Auto"
+                                  MinWidth="128"
+                                  SharedSizeGroup="RankThreshold" />
+                <ColumnDefinition Width="Auto"
+                                  MinWidth="40"
+                                  SharedSizeGroup="RankRemove" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0"
+                       Text="Значок"
+                       Style="{StaticResource RankColumnCaption}" />
+            <TextBlock Grid.Column="1"
+                       Text="Название"
+                       Style="{StaticResource RankColumnCaption}" />
+            <TextBlock Grid.Column="2"
+                       Text="Номер"
+                       Style="{StaticResource RankColumnCaption}" />
+            <TextBlock Grid.Column="3"
+                       Text="От баллов"
+                       Style="{StaticResource RankColumnCaption}" />
+        </Grid>
+
+        <ItemsControl ItemsSource="{Binding Entries}"
+                      Focusable="False">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:RankEntryViewModel}">
+                    <Border BorderBrush="{DynamicResource Border.Subtle}"
+                            BorderThickness="0,1,0,0"
+                            Padding="0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"
+                                                  MinWidth="64"
+                                                  SharedSizeGroup="RankEmoji" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto"
+                                                  MinWidth="88"
+                                                  SharedSizeGroup="RankTier" />
+                                <ColumnDefinition Width="Auto"
+                                                  MinWidth="128"
+                                                  SharedSizeGroup="RankThreshold" />
+                                <ColumnDefinition Width="Auto"
+                                                  MinWidth="40"
+                                                  SharedSizeGroup="RankRemove" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBox Grid.Column="0"
+                                     Style="{StaticResource RankField}"
+                                     Text="{Binding Emoji, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="{Binding HasEmojiError}"
+                                     FontSize="{DynamicResource Font.Size.L}"
+                                     HorizontalContentAlignment="Center"
+                                     MaxLength="16"
+                                     Margin="0,0,8,0"
+                                     AutomationProperties.Name="{Binding DisplayName, StringFormat=Значок ступени {0}}" />
+
+                            <TextBox Grid.Column="1"
+                                     Style="{StaticResource RankField}"
+                                     Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="{Binding HasNameError}"
+                                     Margin="0,0,8,0"
+                                     AutomationProperties.Name="{Binding DisplayName, StringFormat=Название ступени {0}}" />
+
+                            <ComboBox Grid.Column="2"
+                                      Style="{StaticResource ComboBox.Form}"
+                                      ItemsSource="{Binding TierOptions}"
+                                      DisplayMemberPath="Label"
+                                      SelectedValuePath="Value"
+                                      SelectedValue="{Binding Tier}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,8,0"
+                                      AutomationProperties.Name="{Binding DisplayName, StringFormat=Номер ступени {0}}" />
+
+                            <TextBox Grid.Column="3"
+                                     Style="{StaticResource RankField}"
+                                     Text="{Binding ThresholdText, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="{Binding HasThresholdError}"
+                                     HorizontalContentAlignment="Right"
+                                     Margin="0,0,8,0"
+                                     AutomationProperties.Name="{Binding DisplayName, StringFormat=Порог ступени {0} в баллах}" />
+
+                            <Button Grid.Column="4"
+                                    Style="{StaticResource Button.Icon}"
+                                    Command="{Binding DataContext.RemoveCommand, ElementName=Root}"
+                                    CommandParameter="{Binding}"
+                                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Center"
+                                    ToolTip="Удалить ступень"
+                                    AutomationProperties.Name="{Binding DisplayName, StringFormat=Удалить ступень {0}}">
+                                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Trash2}"
+                                                          Width="14"
+                                                          Height="14" />
+                            </Button>
+
+                            <TextBlock Grid.Row="1"
+                                       Grid.Column="0"
+                                       Style="{StaticResource RankFieldError}"
+                                       Text="{Binding EmojiError}"
+                                       Visibility="{Binding HasEmojiError, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Grid.Row="1"
+                                       Grid.Column="1"
+                                       Style="{StaticResource RankFieldError}"
+                                       Text="{Binding NameError}"
+                                       Visibility="{Binding HasNameError, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Grid.Row="1"
+                                       Grid.Column="2"
+                                       Grid.ColumnSpan="2"
+                                       Style="{StaticResource RankFieldError}"
+                                       TextAlignment="Right"
+                                       Text="{Binding ThresholdError}"
+                                       Visibility="{Binding HasThresholdError, Converter={StaticResource BoolToVisibility}}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>
