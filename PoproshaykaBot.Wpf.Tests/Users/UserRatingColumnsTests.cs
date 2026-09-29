@@ -11,7 +11,9 @@ using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.Views;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace PoproshaykaBot.Wpf.Tests.Users;
 
@@ -102,6 +104,85 @@ public class UserRatingColumnsTests
         finally
         {
             ApplyScale(FontScaleManager.DefaultScale);
+        }
+    }
+
+    [TestCase(1.0, "1")]
+    [TestCase(1.6, "1")]
+    [TestCase(1.0, "2")]
+    [TestCase(1.6, "2")]
+    [TestCase(1.6, "3")]
+    public void Лестница_рангов_влезает_в_инспектор_на_полу_и_не_режет_названий(double scale, string userId)
+    {
+        try
+        {
+            ApplyScale(scale);
+
+            var page = CreatePage();
+            var view = new UserStatisticsPageView { DataContext = page };
+
+            Assert.That(page.TrySelect(userId), Is.True);
+
+            page.IsRankLadderExpanded = true;
+            Arrange(view, NarrowestPage);
+
+            var ladder = (ItemsControl)view.FindName("RankLadder")!;
+            var names = Enumerable.Range(0, ladder.Items.Count)
+                .Select(index => (ContentPresenter)ladder.ItemContainerGenerator.ContainerFromIndex(index)!)
+                .SelectMany(FindChildren<TextBlock>)
+                .Where(text => text.TextTrimming != TextTrimming.None)
+                .ToList();
+
+            var clipped = names
+                .Select(text => (text.Text, Slack: TextSlack(view, text)))
+                .Where(item => item.Slack < 0)
+                .Select(item => $"{item.Text} ({item.Slack:F1})")
+                .ToList();
+
+            var peers = UIElementAutomationPeer.CreatePeerForElement(ladder);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ladder.ActualWidth, Is.GreaterThan(0), "Лестница видна у выбранного");
+                Assert.That(names, Has.Count.EqualTo(ladder.Items.Count), "У каждой ступени своё название");
+                Assert.That(clipped, Is.Empty, $"Масштаб {scale}: названия ступеней режутся на полу инспектора");
+                Assert.That(peers.GetName(), Is.EqualTo(page.SelectedRow!.RankLadder!.Summary));
+                Assert.That(peers.GetChildren().Select(child => child.GetName()),
+                    Is.EqualTo(page.RankLadderSteps.Select(step => step.AutomationName)),
+                    "Ступень звучит своим названием, порогом и состоянием, а не именем типа");
+            }
+        }
+        finally
+        {
+            ApplyScale(FontScaleManager.DefaultScale);
+        }
+    }
+
+    private static double TextSlack(FrameworkElement view, TextBlock text)
+    {
+        text.Measure(new(double.PositiveInfinity, double.PositiveInfinity));
+        var natural = text.DesiredSize.Width;
+        text.InvalidateMeasure();
+        view.UpdateLayout();
+
+        return text.ActualWidth - natural;
+    }
+
+    private static IEnumerable<T> FindChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var nested in FindChildren<T>(child))
+            {
+                yield return nested;
+            }
         }
     }
 

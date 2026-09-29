@@ -554,45 +554,282 @@
                             </WrapPanel>
 
                             <StackPanel Margin="0,16,0,0"
-                                        Visibility="{Binding SelectedRow.HasRankPath, Converter={StaticResource BoolToVisibility}}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
+                                        Visibility="{Binding SelectedRow.HasRankLadder, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Style="{StaticResource StatLabel}"
+                                           Text="путь по рангам" />
 
-                                    <TextBlock Grid.Column="0"
-                                               Text="{Binding SelectedRow.NextRankText}"
-                                               Foreground="{DynamicResource Fg.Secondary}"
-                                               FontSize="{DynamicResource Font.Size.Caption}"
-                                               TextTrimming="CharacterEllipsis"
-                                               TextWrapping="NoWrap" />
+                                <ItemsControl x:Name="RankLadder"
+                                              ItemsSource="{Binding RankLadderSteps}"
+                                              Focusable="False"
+                                              Grid.IsSharedSizeScope="True"
+                                              AutomationProperties.Name="{Binding SelectedRow.RankLadder.Summary}"
+                                              Margin="0,6,0,0">
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="AutomationProperties.Name"
+                                                    Value="{Binding AutomationName}" />
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
 
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding SelectedRow.PointsToNextText}"
-                                               Foreground="{DynamicResource Fg.Primary}"
-                                               FontSize="{DynamicResource Font.Size.Caption}"
-                                               FontWeight="{DynamicResource Font.Weight.SemiBold}"
-                                               Margin="8,0,0,0"
-                                               TextWrapping="NoWrap" />
-                                </Grid>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:UserRankLadderStep}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="18" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
 
-                                <Border Background="{DynamicResource Bg.SurfaceMute}"
-                                        CornerRadius="3"
-                                        Height="6"
-                                        Margin="0,6,0,0"
-                                        Visibility="{Binding SelectedRow.HasNextRank, Converter={StaticResource BoolToVisibility}}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="{Binding SelectedRow.RankProgressTrack}" />
-                                            <ColumnDefinition Width="{Binding SelectedRow.RankRemainderTrack}" />
-                                        </Grid.ColumnDefinitions>
+                                                <Grid Grid.Column="0"
+                                                      Grid.Row="0">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="*" />
+                                                        <RowDefinition Height="*" />
+                                                    </Grid.RowDefinitions>
 
-                                        <Border Grid.Column="0"
-                                                Background="{DynamicResource Accent.Primary}"
-                                                CornerRadius="3" />
-                                    </Grid>
-                                </Border>
+                                                    <Border Grid.Row="0"
+                                                            Width="2"
+                                                            HorizontalAlignment="Center"
+                                                            Visibility="{Binding HasAbove, Converter={StaticResource BoolToVisibility}}">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background"
+                                                                        Value="{DynamicResource Border.Default}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsAboveReached}"
+                                                                                 Value="True">
+                                                                        <Setter Property="Background"
+                                                                                Value="{DynamicResource Accent.Primary}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                    </Border>
+
+                                                    <Border Grid.Row="1"
+                                                            Width="2"
+                                                            HorizontalAlignment="Center"
+                                                            Visibility="{Binding HasBelow, Converter={StaticResource BoolToVisibility}}">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background"
+                                                                        Value="{DynamicResource Border.Default}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsReached}"
+                                                                                 Value="True">
+                                                                        <Setter Property="Background"
+                                                                                Value="{DynamicResource Accent.Primary}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                    </Border>
+
+                                                    <Border Grid.RowSpan="2"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Width"
+                                                                        Value="10" />
+                                                                <Setter Property="Height"
+                                                                        Value="10" />
+                                                                <Setter Property="CornerRadius"
+                                                                        Value="5" />
+                                                                <Setter Property="Background"
+                                                                        Value="{DynamicResource Bg.Surface}" />
+                                                                <Setter Property="BorderBrush"
+                                                                        Value="{DynamicResource Border.Strong}" />
+                                                                <Setter Property="BorderThickness"
+                                                                        Value="1.5" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsPassed}"
+                                                                                 Value="True">
+                                                                        <Setter Property="Width"
+                                                                                Value="14" />
+                                                                        <Setter Property="Height"
+                                                                                Value="14" />
+                                                                        <Setter Property="CornerRadius"
+                                                                                Value="7" />
+                                                                        <Setter Property="Background"
+                                                                                Value="{DynamicResource Accent.Primary}" />
+                                                                        <Setter Property="BorderThickness"
+                                                                                Value="0" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsCurrent}"
+                                                                                 Value="True">
+                                                                        <Setter Property="Width"
+                                                                                Value="14" />
+                                                                        <Setter Property="Height"
+                                                                                Value="14" />
+                                                                        <Setter Property="CornerRadius"
+                                                                                Value="7" />
+                                                                        <Setter Property="BorderBrush"
+                                                                                Value="{DynamicResource Accent.Primary}" />
+                                                                        <Setter Property="BorderThickness"
+                                                                                Value="4" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsGap}"
+                                                                                 Value="True">
+                                                                        <Setter Property="Visibility"
+                                                                                Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+
+                                                        <TextBlock Text="✓"
+                                                                   FontSize="10"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="{DynamicResource Fg.OnAccent}"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   Visibility="{Binding IsPassed, Converter={StaticResource BoolToVisibility}}" />
+                                                    </Border>
+                                                </Grid>
+
+                                                <Border Grid.Column="0"
+                                                        Grid.Row="1"
+                                                        Width="2"
+                                                        HorizontalAlignment="Center"
+                                                        Visibility="{Binding HasBelow, Converter={StaticResource BoolToVisibility}}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background"
+                                                                    Value="{DynamicResource Border.Default}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsReached}"
+                                                                             Value="True">
+                                                                    <Setter Property="Background"
+                                                                            Value="{DynamicResource Accent.Primary}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+
+                                                <Border Grid.Column="1"
+                                                        Grid.Row="0"
+                                                        Grid.RowSpan="2"
+                                                        Margin="4,1,0,1"
+                                                        CornerRadius="{DynamicResource Radius.S}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background"
+                                                                    Value="Transparent" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCurrent}"
+                                                                             Value="True">
+                                                                    <Setter Property="Background"
+                                                                            Value="{DynamicResource Accent.Soft}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+
+                                                <Grid Grid.Column="1"
+                                                      Grid.Row="0"
+                                                      Margin="8,4,8,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"
+                                                                          SharedSizeGroup="LadderEmoji" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto"
+                                                                          SharedSizeGroup="LadderThreshold" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding Emoji}"
+                                                               Foreground="{DynamicResource Fg.Secondary}"
+                                                               TextWrapping="NoWrap"
+                                                               Margin="0,0,8,0" />
+
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding Name}"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding Name}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground"
+                                                                        Value="{DynamicResource Fg.Primary}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsReached}"
+                                                                                 Value="False">
+                                                                        <Setter Property="Foreground"
+                                                                                Value="{DynamicResource Fg.Secondary}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsCurrent}"
+                                                                                 Value="True">
+                                                                        <Setter Property="FontWeight"
+                                                                                Value="{DynamicResource Font.Weight.SemiBold}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsGap}"
+                                                                                 Value="True">
+                                                                        <Setter Property="Foreground"
+                                                                                Value="{DynamicResource Fg.Secondary}" />
+                                                                        <Setter Property="FontSize"
+                                                                                Value="{DynamicResource Font.Size.Caption}" />
+                                                                        <Setter Property="Grid.ColumnSpan"
+                                                                                Value="2" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding ThresholdText}"
+                                                               Foreground="{DynamicResource Fg.Secondary}"
+                                                               TextAlignment="Right"
+                                                               TextWrapping="NoWrap"
+                                                               VerticalAlignment="Center"
+                                                               Margin="8,0,0,0" />
+                                                </Grid>
+
+                                                <StackPanel Grid.Column="1"
+                                                            Grid.Row="1"
+                                                            Margin="8,0,8,8"
+                                                            Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVisibility}}">
+                                                    <Border Background="{DynamicResource Bg.Surface}"
+                                                            CornerRadius="3"
+                                                            Height="6"
+                                                            Margin="0,2,0,6"
+                                                            Visibility="{Binding HasProgress, Converter={StaticResource BoolToVisibility}}">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="{Binding ProgressTrack}" />
+                                                                <ColumnDefinition Width="{Binding RemainderTrack}" />
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <Border Grid.Column="0"
+                                                                    Background="{DynamicResource Accent.Primary}"
+                                                                    CornerRadius="3" />
+                                                        </Grid>
+                                                    </Border>
+
+                                                    <TextBlock Text="{Binding ProgressText}"
+                                                               FontSize="{DynamicResource Font.Size.Caption}"
+                                                               Foreground="{DynamicResource Fg.Secondary}"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Button x:Name="RankLadderToggle"
+                                        Style="{StaticResource Button.Link}"
+                                        FontSize="{DynamicResource Font.Size.Caption}"
+                                        Content="{Binding RankLadderToggleText}"
+                                        Command="{Binding ToggleRankLadderCommand}"
+                                        HorizontalAlignment="Left"
+                                        Margin="30,4,0,0"
+                                        Visibility="{Binding SelectedRow.RankLadder.CanCollapse, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
