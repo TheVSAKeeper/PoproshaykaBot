@@ -8,10 +8,13 @@ public sealed class CommandSettings
 
     public const CommandResponseTarget CallerOnly = CommandResponseTarget.Chat | CommandResponseTarget.Caller;
 
+    public const CommandResponseTarget WhisperToCaller = CallerOnly | CommandResponseTarget.Whisper;
+
     public static CommandResponseTarget KnownTargets { get; } = Enum
         .GetValues<CommandResponseTarget>()
         .Aggregate(CommandResponseTarget.None, static (mask, value) => mask | value);
 
+    [JsonConverter(typeof(CommandResponseTargetJsonConverter))]
     public CommandResponseTarget DefaultResponseTarget { get; set; } = ChatAndOverlay;
 
     [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]

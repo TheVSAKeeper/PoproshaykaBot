@@ -20,8 +20,8 @@
                Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibility}}" />
 
         <controls:EmptyState Icon="ImageOff"
-                             Heading="Нет превью"
-                             Description="Кадр появится, когда канал выйдет в эфир."
+                             Heading="{Binding EmptyHeading}"
+                             Description="{Binding EmptyDescription}"
                              DescriptionMaxWidth="300"
                              HorizontalAlignment="Center"
                              VerticalAlignment="Center">

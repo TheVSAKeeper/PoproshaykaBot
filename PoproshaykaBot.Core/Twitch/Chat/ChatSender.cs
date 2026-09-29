@@ -130,11 +130,43 @@ public sealed class ChatSender(
         }
     }
 
-    public async Task EnqueueAsync(
+    public Task EnqueueAsync(
         string message,
         string? replyParentMessageId,
         CommandResponseMark? commandResponse,
         CancellationToken cancellationToken)
+    {
+        Enqueue(message, replyParentMessageId, commandResponse, null);
+        return Task.CompletedTask;
+    }
+
+    public Task EnqueueWhisperAsync(
+        string message,
+        string toUserId,
+        string fallbackReplyParentMessageId,
+        CommandResponseMark? commandResponse,
+        CancellationToken cancellationToken)
+    {
+        WhisperRoute? whisper = null;
+
+        if (string.IsNullOrWhiteSpace(toUserId))
+        {
+            logger.LogWarning("ChatSender: шёпот не отправлен – неизвестен id вызвавшего, ответ уходит реплаем на его сообщение");
+        }
+        else
+        {
+            whisper = new(toUserId);
+        }
+
+        Enqueue(message, fallbackReplyParentMessageId, commandResponse, whisper);
+        return Task.CompletedTask;
+    }
+
+    private void Enqueue(
+        string message,
+        string? replyParentMessageId,
+        CommandResponseMark? commandResponse,
+        WhisperRoute? whisper)
     {
         if (string.IsNullOrWhiteSpace(message))
         {
@@ -156,7 +188,7 @@ public sealed class ChatSender(
 
         foreach (var chunk in SplitByLength(message, MaxMessageLength))
         {
-            var item = new ChatSendItem(chunk, replyParentMessageId, target.Login, commandResponse);
+            var item = new ChatSendItem(chunk, replyParentMessageId, target.Login, commandResponse, whisper);
 
             if (channel.Writer.TryWrite(item))
             {
@@ -307,6 +339,12 @@ public sealed class ChatSender(
                 return SendOutcome.Done;
             }
 
+            if (item.Whisper is { Refused: false } whisper
+                && await TryWhisperAsync(item.Message, whisper, senderId, ct))
+            {
+                return SendOutcome.Done;
+            }
+
             var messageId = await helix.SendChatMessageAsync(broadcasterId, senderId, item.Message, item.ReplyParentMessageId, ct);
 
             Interlocked.Increment(ref _sentCount);
@@ -361,6 +399,53 @@ public sealed class ChatSender(
         }
     }
 
+    private async Task<bool> TryWhisperAsync(string message, WhisperRoute whisper, string senderId, CancellationToken ct)
+    {
+        if (string.Equals(senderId, whisper.ToUserId, StringComparison.Ordinal))
+        {
+            whisper.Refused = true;
+            logger.LogWarning("ChatSender: шёпот не отправлен – команду вызвал сам аккаунт бота, ответ уходит реплаем на его сообщение");
+            return false;
+        }
+
+        try
+        {
+            await helix.SendWhisperAsync(senderId, whisper.ToUserId, message, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (HelixRequestException ex)
+        {
+            whisper.Refused = true;
+            logger.LogWarning("ChatSender: Twitch не принял шёпот пользователю {UserId} ({Status}: {Reason}) – ответ уходит реплаем на его сообщение",
+                whisper.ToUserId,
+                (int)ex.StatusCode,
+                ex.TwitchErrorMessage ?? "причина не названа");
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            whisper.Refused = true;
+            logger.LogWarning("ChatSender: шёпот пользователю {UserId} не отправлен ({Error}) – ответ уходит реплаем на его сообщение",
+                whisper.ToUserId,
+                ex.Message);
+
+            return false;
+        }
+
+        Interlocked.Increment(ref _sentCount);
+        Interlocked.Exchange(ref _lastSentAtUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+
+        logger.LogInformation("ChatSender: ответ отправлен шёпотом пользователю {UserId} ({Length} симв.)",
+            whisper.ToUserId,
+            message.Length);
+
+        return true;
+    }
+
     private async Task<bool> WaitForRateLimitAsync(int attempt, TimeSpan delay, CancellationToken ct)
     {
         if (attempt >= MaxSendAttempts)
@@ -388,5 +473,13 @@ public sealed class ChatSender(
         string Message,
         string? ReplyParentMessageId,
         string TargetLogin,
-        CommandResponseMark? CommandResponse);
+        CommandResponseMark? CommandResponse,
+        WhisperRoute? Whisper);
+
+    private sealed class WhisperRoute(string toUserId)
+    {
+        public string ToUserId { get; } = toUserId;
+
+        public bool Refused { get; set; }
+    }
 }

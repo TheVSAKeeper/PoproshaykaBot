@@ -134,6 +134,10 @@ internal sealed record HelixSendChatMessageDto(
     [property: JsonPropertyName("reply_parent_message_id")]
     string? ReplyParentMessageId);
 
+internal sealed record HelixSendWhisperDto(
+    [property: JsonPropertyName("message")]
+    string Message);
+
 internal sealed record HelixChatMessageSendResponse(
     [property: JsonPropertyName("data")]
     IReadOnlyList<HelixChatMessageSendItemDto>? Data);

@@ -239,9 +239,84 @@ public sealed class DashboardPaneSurface
 
     public static bool HasSplitter(SplitPaneLayout split, int index)
     {
+        return SplitterPair(split, index) is not null;
+    }
+
+    public static (int Previous, int Current)? SplitterPair(SplitPaneLayout split, int boundary)
+    {
         ArgumentNullException.ThrowIfNull(split);
 
-        return !split.Children[index - 1].SizesToContent && !split.Children[index].SizesToContent;
+        if (boundary < 1 || boundary >= split.Children.Count)
+        {
+            return null;
+        }
+
+        var previous = boundary - 1;
+
+        while (previous >= 0 && split.Children[previous].SizesToContent)
+        {
+            previous--;
+        }
+
+        var current = boundary;
+
+        while (current < split.Children.Count && split.Children[current].SizesToContent)
+        {
+            current++;
+        }
+
+        if (previous < 0 || current >= split.Children.Count)
+        {
+            return null;
+        }
+
+        return previous == boundary - 1 || current == boundary ? (previous, current) : null;
+    }
+
+    public static double[]? ResizedWeights(Grid grid, SplitPaneLayout split, bool alongColumns, int boundary)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+
+        if (SplitterPair(split, boundary) is not { } pair
+            || pair.Current >= (alongColumns ? grid.ColumnDefinitions.Count : grid.RowDefinitions.Count))
+        {
+            return null;
+        }
+
+        var first = Extent(grid, alongColumns, pair.Previous).Actual;
+        var second = Extent(grid, alongColumns, pair.Current).Actual;
+        var weights = split.Children.Select(child => child.Weight).ToArray();
+        var shared = weights[pair.Previous] + weights[pair.Current];
+
+        if (first + second <= 0 || !double.IsFinite(shared) || shared <= 0)
+        {
+            return null;
+        }
+
+        weights[pair.Previous] = shared * first / (first + second);
+        weights[pair.Current] = shared - weights[pair.Previous];
+
+        return weights;
+    }
+
+    public static string? ShareHint(Grid grid, SplitPaneLayout split, bool alongColumns, int boundary)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+
+        var shares = Shares(grid, alongColumns);
+
+        if (SplitterPair(split, boundary) is not { } pair || pair.Current >= shares.Length)
+        {
+            return null;
+        }
+
+        var proportions = $"{shares[pair.Previous] * 100:0} % / {shares[pair.Current] * 100:0} %";
+
+        var obstacle = Obstacle(
+            Blocked(grid, split, alongColumns, boundary, false),
+            Blocked(grid, split, alongColumns, boundary, true));
+
+        return obstacle is null ? proportions : $"{proportions}{Environment.NewLine}{obstacle}";
     }
 
     public static GridSplitter CreateSplitter(bool alongColumns, int index)
@@ -289,7 +364,7 @@ public sealed class DashboardPaneSurface
 
         for (var index = 1; index < split.Children.Count; index++)
         {
-            if (!HasSplitter(split, index))
+            if (SplitterPair(split, index) is not { } pair)
             {
                 continue;
             }
@@ -300,6 +375,20 @@ public sealed class DashboardPaneSurface
             System.Windows.Automation.AutomationProperties.SetName(
                 splitter,
                 alongColumns ? "Разделитель по вертикали" : "Разделитель по горизонтали");
+
+            if (pair.Current - pair.Previous > 1)
+            {
+                Bridge(splitter, grid, alongColumns, pair.Previous, pair.Current);
+            }
+
+            splitter.PreviewKeyDown += (_, args) =>
+            {
+                if (args.Key == Key.Escape && splitter.IsDragging)
+                {
+                    splitter.CancelDrag();
+                    args.Handled = true;
+                }
+            };
 
             if (dragged is not null)
             {
@@ -346,13 +435,13 @@ public sealed class DashboardPaneSurface
 
         var tracks = alongColumns ? grid.ColumnDefinitions.Count : grid.RowDefinitions.Count;
 
-        if (index < 1 || index >= tracks || index >= split.Children.Count)
+        if (SplitterPair(split, index) is not { } pair || pair.Current >= tracks)
         {
             return [];
         }
 
-        var shrinking = forward ? index : index - 1;
-        var growing = forward ? index - 1 : index;
+        var shrinking = forward ? pair.Current : pair.Previous;
+        var growing = forward ? pair.Previous : pair.Current;
         var shrink = Extent(grid, alongColumns, shrinking);
         var grow = Extent(grid, alongColumns, growing);
         var canShrink = shrink.Actual > shrink.Min + RoomTolerance;
@@ -725,6 +814,83 @@ public sealed class DashboardPaneSurface
         var vertical = Math.Max(Math.Max(bounds.Y - position.Y, position.Y - bounds.Bottom), 0);
 
         return Math.Sqrt((horizontal * horizontal) + (vertical * vertical));
+    }
+
+    private static void Bridge(GridSplitter splitter, Grid grid, bool alongColumns, int previous, int current)
+    {
+        if (alongColumns)
+        {
+            Grid.SetColumnSpan(splitter, 2);
+        }
+        else
+        {
+            Grid.SetRowSpan(splitter, 2);
+        }
+
+        splitter.DragDelta += (_, args) => MovePair(grid, alongColumns, previous, current, alongColumns ? args.HorizontalChange : args.VerticalChange);
+    }
+
+    private static void MovePair(Grid grid, bool alongColumns, int previous, int current, double change)
+    {
+        var count = alongColumns ? grid.ColumnDefinitions.Count : grid.RowDefinitions.Count;
+
+        if (current >= count || change == 0 || !double.IsFinite(change))
+        {
+            return;
+        }
+
+        var first = Extent(grid, alongColumns, previous);
+        var second = Extent(grid, alongColumns, current);
+        var lower = Math.Max(first.Min - first.Actual, second.Actual - second.Max);
+        var upper = Math.Min(first.Max - first.Actual, second.Actual - second.Min);
+
+        if (lower > upper)
+        {
+            return;
+        }
+
+        var delta = Math.Clamp(change, lower, upper);
+
+        if (delta == 0 || Math.Sign(delta) != Math.Sign(change))
+        {
+            return;
+        }
+
+        for (var index = 0; index < count; index++)
+        {
+            var length = LengthOf(grid, alongColumns, index);
+            var unit = length.IsStar ? GridUnitType.Star : GridUnitType.Pixel;
+
+            if (index == previous)
+            {
+                SetLength(grid, alongColumns, index, new(first.Actual + delta, unit));
+            }
+            else if (index == current)
+            {
+                SetLength(grid, alongColumns, index, new(second.Actual - delta, unit));
+            }
+            else if (length.IsStar)
+            {
+                SetLength(grid, alongColumns, index, new(Extent(grid, alongColumns, index).Actual, GridUnitType.Star));
+            }
+        }
+    }
+
+    private static GridLength LengthOf(Grid grid, bool alongColumns, int index)
+    {
+        return alongColumns ? grid.ColumnDefinitions[index].Width : grid.RowDefinitions[index].Height;
+    }
+
+    private static void SetLength(Grid grid, bool alongColumns, int index, GridLength length)
+    {
+        if (alongColumns)
+        {
+            grid.ColumnDefinitions[index].Width = length;
+        }
+        else
+        {
+            grid.RowDefinitions[index].Height = length;
+        }
     }
 
     private static (double Actual, double Min, double Max) Extent(Grid grid, bool alongColumns, int index)

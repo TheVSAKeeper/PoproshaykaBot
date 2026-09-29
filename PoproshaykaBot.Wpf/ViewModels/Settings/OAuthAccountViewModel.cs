@@ -13,7 +13,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
 public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposable
 {
-    private static readonly string[] BotDefaultScopes = [..TwitchScopes.BotRequired];
+    private static readonly string[] BotDefaultScopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional];
     private static readonly string[] BroadcasterDefaultScopes = [..TwitchScopes.BroadcasterRequired];
 
     private readonly TwitchOAuthRole _role;
@@ -137,12 +137,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
             return;
         }
 
-        var scopes = ParseScopes();
-
-        if (scopes.Length == 0)
-        {
-            scopes = GetDefaultScopes();
-        }
+        var scopes = GetRequestedScopes();
 
         var cts = new CancellationTokenSource();
         _authCts = cts;
@@ -207,12 +202,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
             return;
         }
 
-        var scopes = ParseScopes();
-
-        if (scopes.Length == 0)
-        {
-            scopes = GetDefaultScopes();
-        }
+        var scopes = GetRequestedScopes();
 
         var request = new EmbeddedTwitchAuthRequest(
             _role,
@@ -327,6 +317,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
             _draft.Login = refreshedLive.Login;
             _draft.UserId = refreshedLive.UserId;
             _draft.Scopes = refreshedLive.Scopes;
+            _draft.StoredScopes = refreshedLive.StoredScopes;
             _draft.AccessTokenExpiresAt = refreshedLive.AccessTokenExpiresAt;
 
             LoadTokenInformation();
@@ -358,6 +349,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         _draft.Login = string.Empty;
         _draft.UserId = string.Empty;
         _draft.AccessTokenExpiresAt = null;
+        _draft.StoredScopes = [];
 
         LoadTokenInformation();
         SetTokenStatus("Токены очищены (применятся после «Сохранить»)", StatusSeverity.Warning);
@@ -380,14 +372,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
 
     private void ApplyAuthResult(OAuthFlowResult result)
     {
-        _draft.AccessToken = result.AccessToken;
-        _draft.RefreshToken = result.RefreshToken;
-        _draft.Login = result.Login;
-        _draft.UserId = result.UserId;
-        _draft.Scopes = result.Scopes;
-        _draft.AccessTokenExpiresAt = result.ExpiresInSeconds > 0
-            ? DateTimeOffset.UtcNow.AddSeconds(result.ExpiresInSeconds)
-            : null;
+        result.ApplyTo(_draft, DateTimeOffset.UtcNow);
 
         ScopesText = string.Join(" ", _draft.Scopes);
         LoadTokenInformation();
@@ -450,6 +435,13 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
     private string[] ParseScopes()
     {
         return ScopesText.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private string[] GetRequestedScopes()
+    {
+        var required = _role == TwitchOAuthRole.Broadcaster ? TwitchScopes.BroadcasterRequired : TwitchScopes.BotRequired;
+
+        return ParseScopes().Union(required, StringComparer.Ordinal).ToArray();
     }
 
     private string[] GetDefaultScopes()

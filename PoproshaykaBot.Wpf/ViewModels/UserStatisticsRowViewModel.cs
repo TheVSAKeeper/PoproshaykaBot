@@ -10,6 +10,9 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
 {
     private static readonly PointTerm MessageTerm = ChatMessageTerm.Instance;
 
+    private readonly PointTerm _pointTerm;
+    private UserRankLadder? _rankLadder;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTopThree))]
     private int _position;
@@ -50,19 +53,7 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
         BonusTrack = new(bonus, GridUnitType.Star);
         PenaltyTrack = new(penalty, GridUnitType.Star);
 
-        HasNextRank = standing.NextDisplay is { Length: > 0 };
-        HasRankPath = HasNextRank || standing.IsTopRank;
-
-        NextRankText = HasNextRank
-            ? $"До ранга {standing.NextDisplay}"
-            : standing.IsTopRank ? "Максимальный ранг" : string.Empty;
-
-        PointsToNextText = HasNextRank
-            ? string.Create(UiCulture.Russian, $"{standing.PointsToNext:N0} {pointTerm.ForCount(standing.PointsToNext)}")
-            : string.Empty;
-
-        RankProgressTrack = new(standing.Progress, GridUnitType.Star);
-        RankRemainderTrack = new(1 - standing.Progress, GridUnitType.Star);
+        _pointTerm = pointTerm;
 
         var now = DateTimeOffset.Now;
         var days = Math.Max(1, (int)(now.Date - source.FirstSeen.ToLocalTime().Date).TotalDays + 1);
@@ -98,12 +89,8 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
     public GridLength MessagesTrack { get; }
     public GridLength BonusTrack { get; }
     public GridLength PenaltyTrack { get; }
-    public bool HasNextRank { get; }
-    public bool HasRankPath { get; }
-    public string NextRankText { get; }
-    public string PointsToNextText { get; }
-    public GridLength RankProgressTrack { get; }
-    public GridLength RankRemainderTrack { get; }
+    public UserRankLadder? RankLadder => _rankLadder ??= UserRankLadder.Build(Points, Standing, _pointTerm);
+    public bool HasRankLadder => RankLadder is not null;
     public string FirstSeenDisplay { get; }
     public string FirstSeenMoment { get; }
     public string LastSeenDisplay { get; }

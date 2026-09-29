@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Tests.Polls;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Chat;
 using System.Net;
 using System.Text;
 
@@ -267,6 +268,38 @@ public sealed class TwitchOAuthServiceTests
         Assert.That(_service.GetAccessTokenAsync(TwitchOAuthRole.Bot).Result, Is.Null);
         Assert.That(_handler.Requests, Has.Count.EqualTo(requestsAfterManual),
             "Неудачная ручная попытка ставит роль на выдержку, а не снимает её");
+    }
+
+    [Test]
+    public async Task Черновик_переавторизации_с_новым_правом_не_сбрасывает_токен_как_смену_набора()
+    {
+        string[] previous = [TwitchScopes.UserReadChat, TwitchScopes.UserWriteChat, TwitchScopes.UserBot];
+
+        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
+        {
+            account.AccessToken = "old-access";
+            account.Scopes = previous;
+            account.StoredScopes = previous;
+        });
+
+        var draft = _accountsStore.Load(TwitchOAuthRole.Bot);
+
+        new OAuthFlowResult("fresh-access", "fresh-refresh", [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional], "bot-login", "bot-id", 3600)
+            .ApplyTo(draft, _clock.UtcNow);
+
+        _accountsStore.SaveAll(draft, _accountsStore.Load(TwitchOAuthRole.Broadcaster));
+
+        var token = await _service.GetAccessTokenAsync(TwitchOAuthRole.Bot);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(token, Is.EqualTo("fresh-access"),
+                "Выданные права черновик несёт вместе с запрошенными – иначе первая же выдача токена приняла бы переавторизацию за смену набора");
+
+            Assert.That(TwitchScopes.IsGranted(_accountsStore.LoadBot(), TwitchScopes.UserManageWhispers), Is.True);
+        });
+
+        await _eventBus.DidNotReceiveWithAnyArgs().PublishAsync(default(BotConnectionStatusUpdated)!, default);
     }
 
     private void SeedExpiredBotTokens()

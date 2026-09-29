@@ -428,7 +428,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
         _gridFromDraft = false;
 
-        var model = DashboardPaneBuilder.Build(_draft.Layout, _previewTiles, showCollapsed: true);
+        var model = DashboardPaneBuilder.Build(_draft.Layout, _previewTiles);
 
         foreach (var placement in model.Placements)
         {

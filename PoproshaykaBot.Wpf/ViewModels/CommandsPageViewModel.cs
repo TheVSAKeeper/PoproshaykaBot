@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Collections.ObjectModel;
@@ -15,6 +16,8 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeader, IUnsavedChangesPage
 {
+    private const string WhisperReauthorizationNotice = "Шёпот необязателен. Пока у бота нет разрешения на личные сообщения, он отвечает на такие команды в общем чате – ответом на сообщение зрителя. Чтобы включить шёпот, откройте в настройках раздел «Авторизация». Добавьте user:manage:whispers в права бота и авторизуйте бота заново.";
+
     private const string NotWrittenNotice = "Параметры применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните параметры ещё раз.";
 
     private static readonly CommandContext ViewerProbe = new()
@@ -41,6 +44,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     private readonly SettingsManager _settingsManager;
     private readonly CommandUsageRepository _usageRepository;
     private readonly IUnsavedChangesPrompt _unsavedChangesPrompt;
+    private readonly AccountsStore _accountsStore;
     private readonly ILogger<CommandsPageViewModel> _logger;
     private readonly List<CommandRowViewModel> _allRows = [];
     private readonly ObservableCollection<CommandRowViewModel> _rows = [];
@@ -74,6 +78,9 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     private string? _notice;
 
     [ObservableProperty]
+    private string? _whisperNotice;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasParameters))]
     private CommandParametersViewModel? _parameters;
 
@@ -89,10 +96,12 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         SettingsManager settingsManager,
         CommandUsageRepository usageRepository,
         IUnsavedChangesPrompt unsavedChangesPrompt,
+        AccountsStore accountsStore,
         ILogger<CommandsPageViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(processor);
 
+        _accountsStore = accountsStore;
         _settingsStore = settingsStore;
         _settingsManager = settingsManager;
         _usageRepository = usageRepository;
@@ -270,6 +279,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         }
 
         RefreshUsage();
+        RefreshWhisperNotice();
 
         RebuildView();
     }
@@ -497,6 +507,17 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         {
             _applying = false;
         }
+
+        RefreshWhisperNotice();
+    }
+
+    private void RefreshWhisperNotice()
+    {
+        var whispers = _allRows.Any(row => row.EffectiveTarget.WhispersToCaller());
+
+        WhisperNotice = whispers && !TwitchScopes.IsGranted(_accountsStore.LoadBot(), TwitchScopes.UserManageWhispers)
+            ? WhisperReauthorizationNotice
+            : null;
     }
 
     private void RebuildView()

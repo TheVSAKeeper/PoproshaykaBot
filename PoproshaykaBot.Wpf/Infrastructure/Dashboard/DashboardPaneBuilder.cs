@@ -38,8 +38,7 @@ public static class DashboardPaneBuilder
 {
     public static DashboardPaneModel Build(
         DashboardLayoutSettings layout,
-        IReadOnlyDictionary<string, DashboardTileViewModel> tiles,
-        bool showCollapsed)
+        IReadOnlyDictionary<string, DashboardTileViewModel> tiles)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(tiles);
@@ -47,7 +46,7 @@ public static class DashboardPaneBuilder
         var columnCount = Math.Clamp(layout.ColumnCount, DashboardLayoutDefaults.MinColumnCount, DashboardLayoutDefaults.MaxColumnCount);
         var rowCount = Math.Clamp(layout.RowCount, DashboardLayoutDefaults.MinRowCount, DashboardLayoutDefaults.MaxRowCount);
 
-        var placements = BuildPlacements(layout, tiles, columnCount, rowCount, showCollapsed);
+        var placements = BuildPlacements(layout, tiles, columnCount, rowCount);
 
         layout.ColumnCount = columnCount;
         layout.RowCount = rowCount;
@@ -100,8 +99,7 @@ public static class DashboardPaneBuilder
         DashboardLayoutSettings layout,
         IReadOnlyDictionary<string, DashboardTileViewModel> tiles,
         int columnCount,
-        int rowCount,
-        bool showCollapsed)
+        int rowCount)
     {
         var placements = new List<DashboardTilePlacement>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -123,7 +121,7 @@ public static class DashboardPaneBuilder
                 ResolveMaxSize(tile.MaxHeight, vm.MaxHeight),
                 ResolveMaxSize(tile.MaxWidth, null),
                 ResolveMaxSize(tile.MaxHeight, null),
-                showCollapsed && tile.IsCollapsed));
+                tile.IsCollapsed));
         }
 
         return placements;

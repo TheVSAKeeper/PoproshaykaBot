@@ -187,7 +187,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             split,
             alongColumns,
             index => ShowShareHint(grid, split, alongColumns, index),
-            (_, canceled) => CommitShares(grid, split.Path, alongColumns, canceled));
+            (index, canceled) => CommitShares(grid, split, alongColumns, index, canceled));
     }
 
     private void RebuildGrid()
@@ -360,11 +360,13 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         return true;
     }
 
-    private void CommitShares(Grid grid, int[] path, bool alongColumns, bool canceled)
+    private void CommitShares(Grid grid, SplitPaneLayout split, bool alongColumns, int index, bool canceled)
     {
         HideOverlay();
 
-        if (canceled || _viewModel?.Resize(path, DashboardPaneSurface.Shares(grid, alongColumns)) != true)
+        if (canceled
+            || DashboardPaneSurface.ResizedWeights(grid, split, alongColumns, index) is not { } weights
+            || _viewModel?.Resize(split.Path, weights) != true)
         {
             RebuildGrid();
         }
@@ -372,16 +374,10 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private void ShowShareHint(Grid grid, SplitPaneLayout split, bool alongColumns, int index)
     {
-        var shares = DashboardPaneSurface.Shares(grid, alongColumns);
-
-        if (index >= shares.Length)
+        if (DashboardPaneSurface.ShareHint(grid, split, alongColumns, index) is not { } hint)
         {
             return;
         }
-
-        var obstacle = DashboardPaneSurface.Obstacle(
-            DashboardPaneSurface.Blocked(grid, split, alongColumns, index, false),
-            DashboardPaneSurface.Blocked(grid, split, alongColumns, index, true));
 
         if (_shareHint is null)
         {
@@ -399,9 +395,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             EditOverlay.Children.Add(_shareHint);
         }
 
-        var proportions = $"{shares[index - 1] * 100:0} % / {shares[index] * 100:0} %";
-
-        _shareHint.Text = obstacle is null ? proportions : $"{proportions}{Environment.NewLine}{obstacle}";
+        _shareHint.Text = hint;
 
         var position = Mouse.GetPosition(EditOverlay);
 
@@ -681,6 +675,11 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
                 e.Handled = true;
                 return;
 
+            case Key.Escape when Mouse.Captured is GridSplitter { IsDragging: true } splitter:
+                splitter.CancelDrag();
+                e.Handled = true;
+                return;
+
             case Key.Escape:
                 viewModel.StopEditing();
                 e.Handled = true;
@@ -826,6 +825,13 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
             return ResizeRefused;
         }
 
+        if (node.Children[index].SizesToContent && tile.IsCollapsed)
+        {
+            return alongColumns
+                ? $"Плитка «{tile.Title}» свёрнута, и её ширина не меняется. Разверните плитку, чтобы задать ей долю."
+                : $"Плитка «{tile.Title}» свёрнута, и её высота не меняется. Разверните плитку, чтобы задать ей долю.";
+        }
+
         if (node.Children[index].SizesToContent)
         {
             return alongColumns
@@ -873,8 +879,7 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
 
     private string? Resistance(SplitPaneLayout node, bool alongColumns, int index, int neighbour, double step)
     {
-        if (Math.Abs(index - neighbour) != 1
-            || !_splitGrids.TryGetValue(node, out var grid)
+        if (!_splitGrids.TryGetValue(node, out var grid)
             || !DashboardPaneSurface.HasReliableLayout(grid))
         {
             return null;

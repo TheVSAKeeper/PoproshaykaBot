@@ -12,6 +12,8 @@ public abstract class TwitchAuthHandlerBase(
     ILogger logger)
     : DelegatingHandler
 {
+    public static readonly HttpRequestOptionsKey<bool> KeepTokenOnUnauthorized = new("poproshayka.keep-token-on-401");
+
     protected abstract TwitchOAuthRole Role { get; }
 
     protected abstract string MissingTokenHint { get; }
@@ -34,6 +36,16 @@ public abstract class TwitchAuthHandlerBase(
 
         if ((int)response.StatusCode != 401)
         {
+            return response;
+        }
+
+        if (request.Options.TryGetValue(KeepTokenOnUnauthorized, out var keepToken) && keepToken)
+        {
+            logger.LogDebug("Helix запрос {Method} {Path} (роль {Role}) вернул 401 – отказ относится к самой операции, токен не очищается",
+                request.Method,
+                request.RequestUri?.AbsolutePath,
+                Role);
+
             return response;
         }
 

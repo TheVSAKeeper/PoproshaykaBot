@@ -15,7 +15,9 @@ public sealed class CommandResponseTargetOption
 
     public static CommandResponseTargetOption Chat { get; } = new(CommandResponseTarget.Chat, "Только в чат", "Ответ уходит в чат Twitch, в оверлее его нет");
 
-    public static CommandResponseTargetOption Caller { get; } = new(CommandSettings.CallerOnly, "Только вызвавшему", "Ответ уходит в чат Twitch ответом на сообщение вызвавшего, отдельной строкой не идёт");
+    public static CommandResponseTargetOption Caller { get; } = new(CommandSettings.CallerOnly, "Ответом на сообщение", "Ответ уходит в общий чат Twitch ответом на сообщение вызвавшего – его видят все зрители");
+
+    public static CommandResponseTargetOption Whisper { get; } = new(CommandSettings.WhisperToCaller, "Лично (шёпотом)", "Ответ приходит вызвавшему личным сообщением Twitch, в общем чате его нет. У аккаунта бота должен быть подтверждён телефон. Если Twitch откажет, ответ уйдёт ответом на сообщение в чате");
 
     public static CommandResponseTargetOption Overlay { get; } = new(CommandResponseTarget.Overlay, "Только в оверлей", "Ответ виден в оверлее и в чате приложения, в чат Twitch не уходит");
 
@@ -23,9 +25,9 @@ public sealed class CommandResponseTargetOption
 
     public static CommandResponseTargetOption Silent { get; } = new(CommandResponseTarget.None, "Молча", "Команда выполняется, но ответа не показывает нигде");
 
-    public static IReadOnlyList<CommandResponseTargetOption> ForCommand { get; } = [Inherit, Chat, Caller, Overlay, Both, Silent];
+    public static IReadOnlyList<CommandResponseTargetOption> ForCommand { get; } = [Inherit, Chat, Caller, Whisper, Overlay, Both, Silent];
 
-    public static IReadOnlyList<CommandResponseTargetOption> ForDefault { get; } = [Chat, Caller, Overlay, Both, Silent];
+    public static IReadOnlyList<CommandResponseTargetOption> ForDefault { get; } = [Chat, Caller, Whisper, Overlay, Both, Silent];
 
     public CommandResponseTarget? Target { get; }
 
@@ -56,6 +58,11 @@ public sealed class CommandResponseTargetOption
     private static CommandResponseTargetOption Resolve(CommandResponseTarget target)
     {
         var known = target & CommandSettings.KnownTargets;
+
+        if (known.WhispersToCaller())
+        {
+            return Whisper;
+        }
 
         if (known.RepliesToCaller())
         {

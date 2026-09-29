@@ -34,7 +34,14 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     [NotifyPropertyChangedFor(nameof(HasSelectedRow))]
     [NotifyPropertyChangedFor(nameof(SelectedPlaceText))]
     [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
+    [NotifyPropertyChangedFor(nameof(RankLadderSteps))]
+    [NotifyPropertyChangedFor(nameof(RankLadderToggleText))]
     private UserStatisticsRowViewModel? _selectedRow;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RankLadderSteps))]
+    [NotifyPropertyChangedFor(nameof(RankLadderToggleText))]
+    private bool _isRankLadderExpanded;
 
     [ObservableProperty]
     private string _filterText = string.Empty;
@@ -151,6 +158,12 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     public string SelectedPlaceText => SelectedRow is { } row
         ? UserStatisticsRanking.DescribePlace(row.Position, _rows.Count)
         : string.Empty;
+
+    public IReadOnlyList<UserRankLadderStep> RankLadderSteps => SelectedRow?.RankLadder?.Arrange(IsRankLadderExpanded) ?? [];
+
+    public string RankLadderToggleText => IsRankLadderExpanded
+        ? "Свернуть"
+        : SelectedRow?.RankLadder?.ExpandText ?? string.Empty;
 
     public long AdjustmentAmount => ParseAdjustment(AdjustmentText).Amount;
 
@@ -279,6 +292,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     [RelayCommand]
     private void ClearFilter() => FilterText = string.Empty;
+
+    [RelayCommand]
+    private void ToggleRankLadder() => IsRankLadderExpanded = !IsRankLadderExpanded;
 
     [RelayCommand]
     private void SetAdjustment(double amount) => SetAdjustmentAmount((long)amount);
@@ -463,7 +479,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         long totalPenalty = 0;
 
         var pointTerm = _userRankService.PointTerm;
-        var ranks = _settingsManager.Current.Ranks.Ranks;
+        var ranks = _settingsManager.Current.Ranks.Ranks.ToArray();
 
         foreach (var user in all)
         {

@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Tests.Server;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Net;
 
 namespace PoproshaykaBot.Core.Tests.Twitch.Chat;
 
@@ -188,5 +189,107 @@ public class ChatSenderTests
         await _sender.StopAsync(progress, CancellationToken.None);
 
         Assert.That(_tracker.TryConsume("msg-1"), Is.Null);
+    }
+
+    [Test]
+    public async Task Шёпот_уходит_лично_каждым_чанком_и_в_чат_не_пишет()
+    {
+        var whispered = new List<string>();
+
+        _helix.SendWhisperAsync("2", "u1", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                whispered.Add(call.ArgAt<string>(2));
+                return Task.CompletedTask;
+            });
+
+        var mark = new CommandResponseMark("помощь", CommandSettings.WhisperToCaller);
+        var progress = new Progress<string>();
+
+        await _sender.StartAsync(progress, CancellationToken.None);
+        await _sender.EnqueueWhisperAsync(new string('a', 700), "u1", "incoming-1", mark, CancellationToken.None);
+        await _sender.StopAsync(progress, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(whispered.Select(x => x.Length), Is.EqualTo(new[] { 500, 200 }),
+                "Шёпот режется по 500 символов – больше Twitch не принимает от незнакомого получателя");
+
+            Assert.That(_sender.SentCount, Is.EqualTo(2));
+        });
+
+        await _helix.DidNotReceiveWithAnyArgs().SendChatMessageAsync(default!, default!, default!, default, default);
+    }
+
+    [TestCase(HttpStatusCode.Unauthorized, "Missing scope: user:manage:whispers")]
+    [TestCase(HttpStatusCode.Unauthorized, "The user in the from_user_id query parameter must have a verified phone number")]
+    [TestCase(HttpStatusCode.Forbidden, "Suspended users may not send whispers")]
+    [TestCase(HttpStatusCode.BadRequest, "The recipient's settings prevent this sender from whispering them")]
+    [TestCase(HttpStatusCode.TooManyRequests, "Too many whisper recipients")]
+    public async Task Отказ_шёпота_уводит_весь_ответ_в_реплай_с_одной_строкой_журнала(HttpStatusCode status, string reason)
+    {
+        _helix.SendWhisperAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new HelixRequestException(HttpMethod.Post, "/helix/whispers", status, reason, null));
+
+        var replies = new List<string?>();
+
+        _helix.SendChatMessageAsync("1", "2", Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                replies.Add(call.ArgAt<string?>(3));
+                return Task.FromResult<string?>($"msg-{replies.Count}");
+            });
+
+        var mark = new CommandResponseMark("помощь", CommandSettings.WhisperToCaller);
+        var progress = new Progress<string>();
+
+        await _sender.StartAsync(progress, CancellationToken.None);
+        await _sender.EnqueueWhisperAsync(new string('a', 700), "u1", "incoming-1", mark, CancellationToken.None);
+        await _sender.StopAsync(progress, CancellationToken.None);
+
+        var refusals = _logger.Entries.Count(entry => entry.Level == LogLevel.Warning
+                                                      && entry.Message.Contains("шёпот", StringComparison.Ordinal));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(replies, Is.EqualTo(new[] { "incoming-1", "incoming-1" }), "Оба чанка уходят реплаем на сообщение вызвавшего");
+            Assert.That(refusals, Is.EqualTo(1), "Отказ пишется одной строкой, второй чанк шёпот уже не пробует");
+            Assert.That(_tracker.TryConsume("msg-1"), Is.EqualTo(mark), "Эхо отката опознаётся как ответ команды");
+            Assert.That(_tracker.TryConsume("msg-2"), Is.EqualTo(mark));
+        });
+
+        await _helix.Received(1).SendWhisperAsync("2", "u1", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Шёпот_самому_боту_не_запрашивается_и_уходит_реплаем()
+    {
+        _helix.SendChatMessageAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("msg-1"));
+
+        var progress = new Progress<string>();
+
+        await _sender.StartAsync(progress, CancellationToken.None);
+        await _sender.EnqueueWhisperAsync("ответ", "2", "incoming-1", null, CancellationToken.None);
+        await _sender.StopAsync(progress, CancellationToken.None);
+
+        await _helix.DidNotReceiveWithAnyArgs().SendWhisperAsync(default!, default!, default!, default);
+        await _helix.Received(1).SendChatMessageAsync("1", "2", "ответ", "incoming-1", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Шёпот_в_режиме_наблюдателя_не_уходит_никуда()
+    {
+        _targetChannel.IsDebugSession = true;
+        _targetChannel.IsSendingAllowed = false;
+
+        var progress = new Progress<string>();
+
+        await _sender.StartAsync(progress, CancellationToken.None);
+        await _sender.EnqueueWhisperAsync("ответ", "u1", "incoming-1", null, CancellationToken.None);
+        await _sender.StopAsync(progress, CancellationToken.None);
+
+        await _helix.DidNotReceiveWithAnyArgs().SendWhisperAsync(default!, default!, default!, default);
+        await _helix.DidNotReceiveWithAnyArgs().SendChatMessageAsync(default!, default!, default!, default, default);
     }
 }
