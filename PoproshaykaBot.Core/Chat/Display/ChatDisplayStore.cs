@@ -12,6 +12,8 @@ public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger, string? d
     public const double MinZoom = 0.25;
     public const double MaxZoom = 5.0;
 
+    private const double ZoomTolerance = 0.0005;
+
     private const string HideClutterScriptTemplate = """
                                                      (function () {
                                                          const selectors = __SELECTORS__;
@@ -109,7 +111,7 @@ public sealed class ChatDisplayStore(ILogger<ChatDisplayStore> logger, string? d
     {
         if (_zoomReadFailed)
         {
-            if (zoom.Equals(DefaultZoom))
+            if (Math.Abs(zoom - DefaultZoom) < ZoomTolerance)
             {
                 logger.LogDebug("Масштаб чата {Zoom} не сохранён: чтение {FilePath} сорвалось", zoom, _zoomFilePath);
                 return;

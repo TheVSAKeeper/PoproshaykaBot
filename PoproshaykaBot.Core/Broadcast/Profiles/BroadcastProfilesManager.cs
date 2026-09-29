@@ -69,7 +69,7 @@ public class BroadcastProfilesManager(
             profileToApply = profile;
         }
 
-        _ = eventBus.PublishAsync(new BroadcastProfileApplying(profileToApply));
+        _ = eventBus.PublishAsync(new BroadcastProfileApplying(profileToApply), cancellationToken);
 
         var success = await applier.ApplyAsync(profileToApply, cancellationToken);
 

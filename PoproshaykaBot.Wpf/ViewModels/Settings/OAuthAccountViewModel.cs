@@ -275,7 +275,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
 
         try
         {
-            var isValid = await _oauthService.IsTokenValidAsync(accessToken);
+            var isValid = await _oauthService.IsTokenValidAsync(accessToken, CancellationToken.None);
 
             SetTokenStatus(
                 isValid ? "Действителен" : "Недействителен",
@@ -309,7 +309,7 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
 
         try
         {
-            await _oauthService.RefreshTokenAsync(_role, credentials.ClientId, credentials.ClientSecret, refreshToken);
+            await _oauthService.RefreshTokenAsync(_role, credentials.ClientId, credentials.ClientSecret, refreshToken, CancellationToken.None);
 
             var refreshedLive = _accountsStore.Load(_role);
             _draft.AccessToken = refreshedLive.AccessToken;

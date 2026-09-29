@@ -85,8 +85,9 @@ public sealed class SseService : IAsyncDisposable
             var writeTimeoutSeconds = Math.Max(1, _settingsManager.Current.Twitch.Infrastructure.SseClientWriteTimeoutSeconds);
             _clientWriteTimeout = TimeSpan.FromSeconds(writeTimeoutSeconds);
 
-            _keepAliveTask = Task.Run(() => KeepAliveLoopAsync(keepAliveSeconds, _cts.Token));
-            _broadcastTask = Task.Run(() => BroadcastLoopAsync(_cts.Token));
+            var token = _cts.Token;
+            _keepAliveTask = Task.Run(() => KeepAliveLoopAsync(keepAliveSeconds, token), CancellationToken.None);
+            _broadcastTask = Task.Run(() => BroadcastLoopAsync(token), CancellationToken.None);
 
             _isRunning = true;
             _logger.LogInformation("Сервис SSE успешно запущен. Интервал keep-alive: {KeepAliveSeconds} сек", keepAliveSeconds);
@@ -175,7 +176,7 @@ public sealed class SseService : IAsyncDisposable
         {
             var pipeline = new SseClientPipeline(response, _options.ClientChannelCapacity);
             var clientCount = _registry.Add(response, pipeline);
-            pipeline.WriterTask = Task.Run(() => ClientWriterLoopAsync(pipeline, token));
+            pipeline.WriterTask = Task.Run(() => ClientWriterLoopAsync(pipeline, token), CancellationToken.None);
 
             _logger.LogInformation("Установлено SSE подключение {ClientId}. Всего активных клиентов: {ClientCount}", pipeline.ClientId, clientCount);
             return true;

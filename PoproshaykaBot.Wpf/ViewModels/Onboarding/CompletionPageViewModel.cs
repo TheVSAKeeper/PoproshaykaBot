@@ -138,8 +138,8 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             return false;
         }
 
-        await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
-        await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
+        await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot), CancellationToken.None);
+        await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster), CancellationToken.None);
 
         if (!settingsWritten || !accountsWritten)
         {

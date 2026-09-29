@@ -190,7 +190,7 @@ public sealed class ProfileSceneBinder :
 
         try
         {
-            _workerTask.Wait(TimeSpan.FromSeconds(2));
+            _workerTask.Wait(TimeSpan.FromSeconds(2), CancellationToken.None);
         }
         catch (AggregateException)
         {
