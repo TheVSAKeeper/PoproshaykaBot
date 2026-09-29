@@ -897,24 +897,22 @@
                                          Style="{StaticResource AdjustmentInput}"
                                          AutomationProperties.Name="Изменение баланса"
                                          AutomationProperties.HelpText="{Binding AdjustmentError, TargetNullValue={x:Static sys:String.Empty}}" />
-                                <StackPanel HorizontalAlignment="Right"
-                                            VerticalAlignment="Center"
-                                            Margin="0,0,1,0">
-                                    <RepeatButton Style="{StaticResource RepeatButton.Stepper}"
+                                <UniformGrid Style="{StaticResource UniformGrid.Steppers}">
+                                    <RepeatButton Style="{StaticResource RepeatButton.StepperUp}"
                                                   Command="{Binding IncreaseAdjustmentCommand}"
                                                   AutomationProperties.Name="Увеличить">
                                         <iconPacks:PackIconLucide Kind="ChevronUp"
                                                                   Width="10"
                                                                   Height="10" />
                                     </RepeatButton>
-                                    <RepeatButton Style="{StaticResource RepeatButton.Stepper}"
+                                    <RepeatButton Style="{StaticResource RepeatButton.StepperDown}"
                                                   Command="{Binding DecreaseAdjustmentCommand}"
                                                   AutomationProperties.Name="Уменьшить">
                                         <iconPacks:PackIconLucide Kind="ChevronDown"
                                                                   Width="10"
                                                                   Height="10" />
                                     </RepeatButton>
-                                </StackPanel>
+                                </UniformGrid>
                             </Grid>
 
                             <TextBlock x:Name="AdjustmentErrorText"
