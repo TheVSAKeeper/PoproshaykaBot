@@ -25,73 +25,78 @@
 
         <CheckBox Content="Поднимать сервер"
                   IsChecked="{Binding Preferences.Enabled, Mode=TwoWay}"
-                  Margin="0,14,0,0"
+                  Margin="0,14,0,16"
                   VerticalAlignment="Center" />
 
-        <TextBlock Text="Порт"
-                   Style="{StaticResource Form.Label}"
-                   Margin="0,18,0,0" />
-        <TextBox Text="{Binding Preferences.Port, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                 Margin="0,8,0,0"
-                 HorizontalAlignment="Left"
-                 MinWidth="120"
-                 FontFamily="{DynamicResource Font.Mono}"
-                 AutomationProperties.Name="Порт MCP-сервера" />
-        <TextBlock Style="{StaticResource Form.Hint}"
-                   Text="1024…65535, только 127.0.0.1. Смена порта применяется сразу – сервер перезапускается." />
-
-        <TextBlock Text="Токен"
-                   Style="{StaticResource Form.Label}"
-                   Margin="0,18,0,0" />
-        <Grid Margin="0,8,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-
-            <TextBox Grid.Column="0"
-                     Text="{Binding Preferences.Token, Mode=OneWay}"
-                     IsReadOnly="True"
-                     FontFamily="{DynamicResource Font.Mono}"
-                     FontSize="{DynamicResource Font.Size.S}"
-                     AutomationProperties.Name="Токен доступа MCP" />
-
-            <StackPanel Grid.Column="1"
-                        Orientation="Horizontal"
-                        Margin="8,0,0,0">
-                <Button Style="{StaticResource Button.Icon}"
-                        Command="{Binding Preferences.RegenerateTokenCommand}"
-                        Margin="0,0,4,0"
-                        AutomationProperties.Name="Перегенерировать токен"
-                        ToolTip="Выдать новый токен – старые подключения агентов отвалятся">
-                    <iconPacks:PackIconLucide Kind="RefreshCw"
-                                              Width="16"
-                                              Height="16"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center" />
-                </Button>
-                <Button Style="{StaticResource Button.Icon}"
-                        Command="{Binding CopyTokenCommand}"
-                        AutomationProperties.Name="Скопировать токен"
-                        ToolTip="Скопировать токен в буфер обмена">
-                    <iconPacks:PackIconLucide Kind="Clipboard"
-                                              Width="16"
-                                              Height="16"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center" />
-                </Button>
-            </StackPanel>
-        </Grid>
+        <StackPanel Style="{StaticResource Setting.DependentBlock}"
+                    IsEnabled="{Binding Preferences.Enabled}">
+            <DockPanel>
+                <TextBlock Text="Порт"
+                           Style="{StaticResource Setting.RowLabel}" />
+                <TextBox Text="{Binding Preferences.Port, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                         HorizontalAlignment="Left"
+                         Width="240"
+                         FontFamily="{DynamicResource Font.Mono}"
+                         AutomationProperties.Name="Порт MCP-сервера" />
+            </DockPanel>
+            <TextBlock Style="{StaticResource Form.Hint}"
+                       Margin="200,6,0,0"
+                       Text="1024…65535, только 127.0.0.1. Смена порта применяется сразу – сервер перезапускается." />
+        </StackPanel>
 
         <CheckBox Content="Разрешить изменяющие операции"
                   IsChecked="{Binding Preferences.AllowMutations, Mode=TwoWay}"
-                  Margin="0,18,0,0"
+                  Margin="0,16,0,0"
                   VerticalAlignment="Center" />
         <TextBlock Style="{StaticResource Form.CheckHint}"
                    Text="Один флаг на всё: агент сможет нажимать кнопки, вводить текст, закрывать приложение, подключать и отключать бота. Без флага доступно только чтение." />
 
+        <DockPanel Margin="0,16,0,0">
+            <TextBlock Text="Токен"
+                       Style="{StaticResource Setting.RowLabel}" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBox Grid.Column="0"
+                         Text="{Binding Preferences.Token, Mode=OneWay}"
+                         IsReadOnly="True"
+                         FontFamily="{DynamicResource Font.Mono}"
+                         FontSize="{DynamicResource Font.Size.S}"
+                         AutomationProperties.Name="Токен доступа MCP" />
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Margin="8,0,0,0">
+                    <Button Style="{StaticResource Button.Icon}"
+                            Command="{Binding Preferences.RegenerateTokenCommand}"
+                            Margin="0,0,4,0"
+                            AutomationProperties.Name="Перегенерировать токен"
+                            ToolTip="Выдать новый токен – старые подключения агентов отвалятся">
+                        <iconPacks:PackIconLucide Kind="RefreshCw"
+                                                  Width="16"
+                                                  Height="16"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center" />
+                    </Button>
+                    <Button Style="{StaticResource Button.Icon}"
+                            Command="{Binding CopyTokenCommand}"
+                            AutomationProperties.Name="Скопировать токен"
+                            ToolTip="Скопировать токен в буфер обмена">
+                        <iconPacks:PackIconLucide Kind="Clipboard"
+                                                  Width="16"
+                                                  Height="16"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </DockPanel>
+
         <StackPanel Orientation="Horizontal"
-                    Margin="0,18,0,0">
+                    Margin="0,16,0,0">
             <iconPacks:PackIconLucide Kind="Radio"
                                       Width="14"
                                       Height="14"
@@ -139,25 +144,26 @@
             </Grid>
         </Border>
 
-        <Grid Margin="0,18,0,0">
+        <Grid Margin="0,16,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0">
+            <DockPanel Grid.Column="0">
                 <TextBlock Text="Строка подключения"
-                           Style="{StaticResource Form.Label}" />
+                           Style="{StaticResource Setting.RowLabel}"
+                           VerticalAlignment="Top"
+                           Margin="0,6,12,0" />
                 <TextBox Text="{Binding ConnectSnippet, Mode=OneWay}"
                          IsReadOnly="True"
-                         Margin="0,8,0,0"
                          MaxHeight="180"
                          AcceptsReturn="True"
                          VerticalScrollBarVisibility="Auto"
                          FontFamily="{DynamicResource Font.Mono}"
                          FontSize="{DynamicResource Font.Size.S}"
                          AutomationProperties.Name="Строка подключения к MCP-серверу в формате JSON" />
-            </StackPanel>
+            </DockPanel>
 
             <Button Grid.Column="1"
                     Style="{StaticResource Button.Icon}"

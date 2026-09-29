@@ -80,7 +80,7 @@ public class DashboardPreviewGeometryTests
         host.UpdateLayout();
         host.UpdateLayout();
 
-        var box = Descendants(view).OfType<Viewbox>().First();
+        var box = (Viewbox)DescendantByName(view, "PreviewBox");
         var area = DescendantByName(view, "PreviewArea");
 
         Assert.Multiple(() =>
@@ -113,7 +113,7 @@ public class DashboardPreviewGeometryTests
         host.Arrange(new(0, 0, width, 700));
         host.UpdateLayout();
 
-        var box = Descendants(view).OfType<Viewbox>().First();
+        var box = (Viewbox)DescendantByName(view, "PreviewBox");
 
         Assert.That(box.Child, Is.InstanceOf<FrameworkElement>(), "Превью обязано быть построено первым же проходом.");
 

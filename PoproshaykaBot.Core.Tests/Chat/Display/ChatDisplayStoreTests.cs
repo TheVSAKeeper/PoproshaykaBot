@@ -99,8 +99,10 @@ public sealed class ChatDisplayStoreTests
         }
     }
 
-    [Test]
-    public void Сорвавшееся_чтение_масштаба_запрещает_перезапись_до_удачного_чтения()
+    [TestCase(0.0)]
+    [TestCase(1e-9)]
+    [TestCase(-1e-9)]
+    public void Сорвавшееся_чтение_масштаба_запрещает_перезапись_до_удачного_чтения(double drift)
     {
         File.WriteAllText(_zoomPath, "1.250");
         var store = Store();
@@ -112,7 +114,7 @@ public sealed class ChatDisplayStoreTests
             zoom = store.LoadZoom();
         }
 
-        store.SaveZoom(ChatDisplayStore.DefaultZoom);
+        store.SaveZoom(ChatDisplayStore.DefaultZoom + drift);
 
         using (Assert.EnterMultipleScope())
         {

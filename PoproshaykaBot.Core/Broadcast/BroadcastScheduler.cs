@@ -298,6 +298,6 @@ public sealed class BroadcastScheduler(
             nextBroadcast = NextBroadcastTime;
         }
 
-        _ = eventBus.PublishAsync(new BroadcastSchedulerStateChanged(IsActive, channel, sentMessages, nextBroadcast));
+        _ = eventBus.PublishAsync(new BroadcastSchedulerStateChanged(IsActive, channel, sentMessages, nextBroadcast), CancellationToken.None);
     }
 }

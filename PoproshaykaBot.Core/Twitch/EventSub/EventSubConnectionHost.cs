@@ -346,6 +346,6 @@ public sealed class EventSubConnectionHost :
         }
 
         _logger.LogDebug("Публикация StreamMonitoringStatusChanged: {Role} {Status} ({Detail})", _role, status, detail ?? "–");
-        return _eventBus.PublishAsync(new StreamMonitoringStatusChanged(_role, status, detail));
+        return _eventBus.PublishAsync(new StreamMonitoringStatusChanged(_role, status, detail), CancellationToken.None);
     }
 }

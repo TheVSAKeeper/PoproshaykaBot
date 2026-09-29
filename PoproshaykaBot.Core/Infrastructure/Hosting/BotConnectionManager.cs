@@ -113,14 +113,14 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
             }
         }
 
-        await _stopGate.WaitAsync().ConfigureAwait(false);
+        await _stopGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
 
         try
         {
             SetPhase(BotLifecyclePhase.Disconnecting,
                 mode == BotStopMode.Forced ? "принудительная остановка" : "штатная остановка");
 
-            await _eventBus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnecting));
+            await _eventBus.PublishAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnecting), CancellationToken.None);
 
             var progressReporter = new Progress<string>(ReportProgress);
             var stopTimeout = mode == BotStopMode.Forced ? ForcedStopTimeout : GracefulStopTimeout;
@@ -277,7 +277,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
 
     private void ReportProgress(string message)
     {
-        _ = _eventBus.PublishAsync(new BotConnectionStatusUpdated(message));
+        _ = _eventBus.PublishAsync(new BotConnectionStatusUpdated(message), CancellationToken.None);
         _logger.LogInformation("{Message}", message);
     }
 
@@ -294,7 +294,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
     private void PublishPhase(BotLifecyclePhase phase, Exception? exception = null, string? reason = null)
     {
         SetPhase(phase, reason);
-        _ = _eventBus.PublishAsync(new BotLifecyclePhaseChanged(phase, exception));
+        _ = _eventBus.PublishAsync(new BotLifecyclePhaseChanged(phase, exception), CancellationToken.None);
     }
 
     private void SetPhase(BotLifecyclePhase phase, string? reason)

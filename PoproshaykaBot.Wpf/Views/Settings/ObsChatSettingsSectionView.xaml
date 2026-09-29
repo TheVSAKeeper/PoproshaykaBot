@@ -14,21 +14,13 @@
                 <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Views/Settings/SettingsResources.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <Style x:Key="RowLabel"
-                   TargetType="TextBlock"
-                   BasedOn="{StaticResource TextBlock.Subtle}">
-                <Setter Property="VerticalAlignment"
-                        Value="Center" />
+            <Style x:Key="RowCombo"
+                   TargetType="ComboBox"
+                   BasedOn="{StaticResource ComboBox.Form}">
                 <Setter Property="Width"
-                        Value="200" />
-                <Setter Property="Margin"
-                        Value="0,0,12,0" />
-            </Style>
-            <Style x:Key="SectionHeading"
-                   TargetType="TextBlock"
-                   BasedOn="{StaticResource Setting.BlockTitle}">
-                <Setter Property="Margin"
-                        Value="0,16,0,10" />
+                        Value="240" />
+                <Setter Property="HorizontalAlignment"
+                        Value="Left" />
             </Style>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -36,12 +28,12 @@
     <StackPanel>
 
         <TextBlock Text="Цвета"
-                   Style="{StaticResource SectionHeading}"
+                   Style="{StaticResource Setting.GroupHeading}"
                    Margin="0,0,0,10" />
 
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Фон"
-                       Style="{StaticResource RowLabel}" />
+                       Style="{StaticResource Setting.RowLabel}" />
             <Button DockPanel.Dock="Right"
                     Content="Сброс"
                     Style="{StaticResource Button.Ghost}"
@@ -63,7 +55,7 @@
 
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Текст"
-                       Style="{StaticResource RowLabel}" />
+                       Style="{StaticResource Setting.RowLabel}" />
             <Button DockPanel.Dock="Right"
                     Content="Сброс"
                     Style="{StaticResource Button.Ghost}"
@@ -85,7 +77,7 @@
 
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Имя пользователя"
-                       Style="{StaticResource RowLabel}" />
+                       Style="{StaticResource Setting.RowLabel}" />
             <Button DockPanel.Dock="Right"
                     Content="Сброс"
                     Style="{StaticResource Button.Ghost}"
@@ -107,7 +99,7 @@
 
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Системные сообщения"
-                       Style="{StaticResource RowLabel}" />
+                       Style="{StaticResource Setting.RowLabel}" />
             <Button DockPanel.Dock="Right"
                     Content="Сброс"
                     Style="{StaticResource Button.Ghost}"
@@ -129,7 +121,7 @@
 
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Время"
-                       Style="{StaticResource RowLabel}" />
+                       Style="{StaticResource Setting.RowLabel}" />
             <Button DockPanel.Dock="Right"
                     Content="Сброс"
                     Style="{StaticResource Button.Ghost}"
@@ -150,11 +142,11 @@
         </DockPanel>
 
         <TextBlock Text="Шрифт"
-                   Style="{StaticResource SectionHeading}" />
+                   Style="{StaticResource Setting.GroupHeading}" />
 
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Семейство шрифтов"
-                       Style="{StaticResource RowLabel}" />
+                       Style="{StaticResource Setting.RowLabel}" />
             <TextBox Style="{StaticResource TextBox.Form}"
                      keepshell:PlaceholderBehavior.Placeholder="Например: Inter, Arial, sans-serif"
                      AutomationProperties.Name="Семейство шрифтов"
@@ -180,7 +172,7 @@
         <WrapPanel>
             <StackPanel Style="{StaticResource Setting.PairCell}">
                 <TextBlock Text="Геометрия"
-                           Style="{StaticResource SectionHeading}" />
+                           Style="{StaticResource Setting.GroupHeading}" />
 
                 <keepshell:NumericSettingField Label="Внутренний отступ"
                                                Value="{Binding Padding, Mode=TwoWay}"
@@ -208,7 +200,7 @@
 
             <StackPanel Style="{StaticResource Setting.PairCell}">
                 <TextBlock Text="Сообщения"
-                           Style="{StaticResource SectionHeading}" />
+                           Style="{StaticResource Setting.GroupHeading}" />
 
                 <keepshell:NumericSettingField Label="Максимум сообщений"
                                                Value="{Binding MaxMessages, Mode=TwoWay}"
@@ -240,126 +232,158 @@
             </StackPanel>
         </WrapPanel>
 
-        <TextBlock Text="Анимация появления"
-                   Style="{StaticResource SectionHeading}" />
+        <DockPanel>
+            <Button DockPanel.Dock="Right"
+                    Content="Открыть демо анимаций"
+                    Style="{StaticResource Button.Secondary}"
+                    VerticalAlignment="Bottom"
+                    Command="{Binding OpenAnimationsDemoCommand}"
+                    Margin="12,0,0,6" />
+            <TextBlock Text="Анимация"
+                       Style="{StaticResource Setting.GroupHeading}" />
+        </DockPanel>
 
-        <WrapPanel>
-            <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
-                                           Label="Длительность анимации, мс"
+        <CheckBox Style="{StaticResource CheckBox.Default}"
+                  Content="Анимировать появление сообщений"
+                  IsChecked="{Binding EnableAnimations, Mode=TwoWay}"
+                  Margin="0,0,0,8" />
+
+        <StackPanel Style="{StaticResource Setting.DependentBlock}"
+                    IsEnabled="{Binding EnableAnimations}">
+            <keepshell:NumericSettingField Label="Длительность появления, мс"
                                            Value="{Binding AnimationDuration, Mode=TwoWay}"
                                            IncreaseCommand="{Binding IncreaseAnimationDurationCommand}"
                                            DecreaseCommand="{Binding DecreaseAnimationDurationCommand}"
-                                           IncreaseAutomationName="Увеличить длительность анимации"
-                                           DecreaseAutomationName="Уменьшить длительность анимации" />
+                                           IncreaseAutomationName="Увеличить длительность появления"
+                                           DecreaseAutomationName="Уменьшить длительность появления"
+                                           Margin="0,0,0,8" />
 
-            <CheckBox Style="{StaticResource CheckBox.Default}"
-                      Content="Включить анимации"
-                      IsChecked="{Binding EnableAnimations, Mode=TwoWay}"
-                      VerticalAlignment="Center"
-                      Margin="0,0,0,8" />
+            <DockPanel Margin="0,0,0,8">
+                <TextBlock Text="Сообщения пользователей"
+                           Style="{StaticResource Setting.RowLabel}" />
+                <ComboBox Style="{StaticResource RowCombo}"
+                          ItemsSource="{Binding EntryAnimationOptions}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления сообщений пользователей"
+                          SelectedValue="{Binding UserMessageAnimation, Mode=TwoWay}" />
+            </DockPanel>
+
+            <DockPanel Margin="0,0,0,8">
+                <TextBlock Text="Сообщения бота"
+                           Style="{StaticResource Setting.RowLabel}" />
+                <ComboBox Style="{StaticResource RowCombo}"
+                          ItemsSource="{Binding EntryAnimationOptions}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления сообщений бота"
+                          SelectedValue="{Binding BotMessageAnimation, Mode=TwoWay}" />
+            </DockPanel>
+
+            <DockPanel Margin="0,0,0,8">
+                <TextBlock Text="Системные сообщения"
+                           Style="{StaticResource Setting.RowLabel}" />
+                <ComboBox Style="{StaticResource RowCombo}"
+                          ItemsSource="{Binding EntryAnimationOptions}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления системных сообщений"
+                          SelectedValue="{Binding SystemMessageAnimation, Mode=TwoWay}" />
+            </DockPanel>
+
+            <DockPanel Margin="0,0,0,8">
+                <TextBlock Text="Сообщения стримера"
+                           Style="{StaticResource Setting.RowLabel}" />
+                <ComboBox Style="{StaticResource RowCombo}"
+                          ItemsSource="{Binding EntryAnimationOptions}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления сообщений стримера"
+                          SelectedValue="{Binding BroadcasterMessageAnimation, Mode=TwoWay}" />
+            </DockPanel>
+
+            <DockPanel Margin="0,0,0,8">
+                <TextBlock Text="Первое сообщение зрителя"
+                           Style="{StaticResource Setting.RowLabel}" />
+                <ComboBox Style="{StaticResource RowCombo}"
+                          ItemsSource="{Binding EntryAnimationOptions}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация появления первого сообщения зрителя"
+                          SelectedValue="{Binding FirstTimeUserMessageAnimation, Mode=TwoWay}" />
+            </DockPanel>
+        </StackPanel>
+
+        <CheckBox Style="{StaticResource CheckBox.Default}"
+                  Content="Скрывать старые сообщения"
+                  IsChecked="{Binding EnableMessageFadeOut, Mode=TwoWay}"
+                  Margin="0,12,0,8" />
+
+        <StackPanel Style="{StaticResource Setting.DependentBlock}"
+                    IsEnabled="{Binding EnableMessageFadeOut}">
+            <keepshell:NumericSettingField Label="Время жизни, с"
+                                           Value="{Binding MessageLifetimeSeconds, Mode=TwoWay}"
+                                           IncreaseCommand="{Binding IncreaseMessageLifetimeCommand}"
+                                           DecreaseCommand="{Binding DecreaseMessageLifetimeCommand}"
+                                           IncreaseAutomationName="Увеличить время жизни"
+                                           DecreaseAutomationName="Уменьшить время жизни"
+                                           Margin="0,0,0,8" />
+
+            <DockPanel Margin="0,0,0,8">
+                <TextBlock Text="Анимация исчезновения"
+                           Style="{StaticResource Setting.RowLabel}" />
+                <ComboBox Style="{StaticResource RowCombo}"
+                          ItemsSource="{Binding ExitAnimationOptions}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Value"
+                          AutomationProperties.Name="Анимация исчезновения сообщений"
+                          SelectedValue="{Binding FadeOutAnimationType, Mode=TwoWay}" />
+            </DockPanel>
+
+            <keepshell:NumericSettingField Label="Длительность исчезновения, мс"
+                                           Value="{Binding FadeOutAnimationDurationMs, Mode=TwoWay}"
+                                           IncreaseCommand="{Binding IncreaseFadeOutAnimationDurationCommand}"
+                                           DecreaseCommand="{Binding DecreaseFadeOutAnimationDurationCommand}"
+                                           IncreaseAutomationName="Увеличить длительность исчезновения"
+                                           DecreaseAutomationName="Уменьшить длительность исчезновения"
+                                           Margin="0,0,0,8" />
+        </StackPanel>
+
+        <TextBlock Text="Подсветка и эффекты"
+                   Style="{StaticResource Setting.GroupHeading}" />
+
+        <WrapPanel>
+            <CheckBox Style="{StaticResource Setting.CheckCell}"
+                      Content="Рамки по типу пользователя"
+                      IsChecked="{Binding ShowUserTypeBorders, Mode=TwoWay}" />
+            <CheckBox Style="{StaticResource Setting.CheckCell}"
+                      Content="Выделять новых зрителей"
+                      IsChecked="{Binding HighlightFirstTimeUsers, Mode=TwoWay}" />
+            <CheckBox Style="{StaticResource Setting.CheckCell}"
+                      Content="Выделять упоминания"
+                      IsChecked="{Binding HighlightMentions, Mode=TwoWay}" />
+            <CheckBox Style="{StaticResource Setting.CheckCell}"
+                      Content="Тени сообщений"
+                      IsChecked="{Binding EnableMessageShadows, Mode=TwoWay}" />
+            <CheckBox Style="{StaticResource Setting.CheckCell}"
+                      Content="Специальные эффекты"
+                      IsChecked="{Binding EnableSpecialEffects, Mode=TwoWay}" />
         </WrapPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Сообщения пользователей"
-                       Style="{StaticResource RowLabel}" />
-            <ComboBox Style="{StaticResource ComboBox.Form}"
-                      ItemsSource="{Binding EntryAnimationOptions}"
-                      DisplayMemberPath="DisplayName"
-                      SelectedValuePath="Value"
-                      AutomationProperties.Name="Анимация появления сообщений пользователей"
-                      SelectedValue="{Binding UserMessageAnimation, Mode=TwoWay}" />
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Сообщения бота"
-                       Style="{StaticResource RowLabel}" />
-            <ComboBox Style="{StaticResource ComboBox.Form}"
-                      ItemsSource="{Binding EntryAnimationOptions}"
-                      DisplayMemberPath="DisplayName"
-                      SelectedValuePath="Value"
-                      AutomationProperties.Name="Анимация появления сообщений бота"
-                      SelectedValue="{Binding BotMessageAnimation, Mode=TwoWay}" />
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Системные сообщения"
-                       Style="{StaticResource RowLabel}" />
-            <ComboBox Style="{StaticResource ComboBox.Form}"
-                      ItemsSource="{Binding EntryAnimationOptions}"
-                      DisplayMemberPath="DisplayName"
-                      SelectedValuePath="Value"
-                      AutomationProperties.Name="Анимация появления системных сообщений"
-                      SelectedValue="{Binding SystemMessageAnimation, Mode=TwoWay}" />
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Сообщения стримера"
-                       Style="{StaticResource RowLabel}" />
-            <ComboBox Style="{StaticResource ComboBox.Form}"
-                      ItemsSource="{Binding EntryAnimationOptions}"
-                      DisplayMemberPath="DisplayName"
-                      SelectedValuePath="Value"
-                      AutomationProperties.Name="Анимация появления сообщений стримера"
-                      SelectedValue="{Binding BroadcasterMessageAnimation, Mode=TwoWay}" />
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Первое сообщение зрителя"
-                       Style="{StaticResource RowLabel}" />
-            <ComboBox Style="{StaticResource ComboBox.Form}"
-                      ItemsSource="{Binding EntryAnimationOptions}"
-                      DisplayMemberPath="DisplayName"
-                      SelectedValuePath="Value"
-                      AutomationProperties.Name="Анимация появления первого сообщения зрителя"
-                      SelectedValue="{Binding FirstTimeUserMessageAnimation, Mode=TwoWay}" />
-        </DockPanel>
-
-        <Button Content="Открыть демо анимаций"
-                Style="{StaticResource Button.Ghost}"
-                HorizontalAlignment="Left"
-                Command="{Binding OpenAnimationsDemoCommand}"
-                Margin="0,4,0,8" />
 
         <WrapPanel>
             <StackPanel Style="{StaticResource Setting.PairCell}">
-                <TextBlock Text="Подсветка и эффекты"
-                           Style="{StaticResource SectionHeading}" />
-
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Рамки по типу пользователя"
-                          IsChecked="{Binding ShowUserTypeBorders, Mode=TwoWay}"
-                          Margin="0,0,0,8" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Выделять новых зрителей"
-                          IsChecked="{Binding HighlightFirstTimeUsers, Mode=TwoWay}"
-                          Margin="0,0,0,8" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Выделять упоминания"
-                          IsChecked="{Binding HighlightMentions, Mode=TwoWay}"
-                          Margin="0,0,0,8" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Тени сообщений"
-                          IsChecked="{Binding EnableMessageShadows, Mode=TwoWay}"
-                          Margin="0,0,0,8" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Специальные эффекты"
-                          IsChecked="{Binding EnableSpecialEffects, Mode=TwoWay}" />
-            </StackPanel>
-
-            <StackPanel Style="{StaticResource Setting.PairCell}">
                 <TextBlock Text="Прокрутка"
-                           Style="{StaticResource SectionHeading}" />
+                           Style="{StaticResource Setting.GroupHeading}" />
 
-                <WrapPanel>
-                    <CheckBox Style="{StaticResource CheckBox.Default}"
-                              Content="Плавная прокрутка"
-                              IsChecked="{Binding EnableSmoothScroll, Mode=TwoWay}"
-                              Margin="0,0,16,8" />
-                    <CheckBox Style="{StaticResource CheckBox.Default}"
-                              Content="Автопрокрутка"
-                              IsChecked="{Binding AutoScrollEnabled, Mode=TwoWay}"
-                              Margin="0,0,0,8" />
-                </WrapPanel>
+                <CheckBox Style="{StaticResource CheckBox.Default}"
+                          Content="Автопрокрутка"
+                          IsChecked="{Binding AutoScrollEnabled, Mode=TwoWay}"
+                          Margin="0,0,0,8" />
+
+                <CheckBox Style="{StaticResource CheckBox.Default}"
+                          Content="Плавная прокрутка"
+                          IsChecked="{Binding EnableSmoothScroll, Mode=TwoWay}"
+                          Margin="0,0,0,8" />
 
                 <keepshell:NumericSettingField Label="Длительность прокрутки, мс"
                                                Value="{Binding ScrollAnimationDuration, Mode=TwoWay}"
@@ -367,126 +391,96 @@
                                                DecreaseCommand="{Binding DecreaseScrollAnimationDurationCommand}"
                                                IncreaseAutomationName="Увеличить длительность прокрутки"
                                                DecreaseAutomationName="Уменьшить длительность прокрутки" />
+            </StackPanel>
 
+            <StackPanel Style="{StaticResource Setting.PairCell}">
                 <TextBlock Text="Аватары"
-                           Style="{StaticResource SectionHeading}" />
+                           Style="{StaticResource Setting.GroupHeading}" />
 
                 <CheckBox Style="{StaticResource CheckBox.Default}"
                           Content="Показывать аватары пользователей"
                           IsChecked="{Binding ShowUserAvatars, Mode=TwoWay}"
                           Margin="0,0,0,8" />
 
-                <keepshell:NumericSettingField Label="Размер аватара, px"
-                                               Value="{Binding UserAvatarSizePixels, Mode=TwoWay}"
-                                               IncreaseCommand="{Binding IncreaseUserAvatarSizeCommand}"
-                                               DecreaseCommand="{Binding DecreaseUserAvatarSizeCommand}"
-                                               IncreaseAutomationName="Увеличить размер аватара"
-                                               DecreaseAutomationName="Уменьшить размер аватара" />
+                <StackPanel Style="{StaticResource Setting.DependentBlock}"
+                            IsEnabled="{Binding ShowUserAvatars}">
+                    <keepshell:NumericSettingField Label="Размер аватара, px"
+                                                   Value="{Binding UserAvatarSizePixels, Mode=TwoWay}"
+                                                   IncreaseCommand="{Binding IncreaseUserAvatarSizeCommand}"
+                                                   DecreaseCommand="{Binding DecreaseUserAvatarSizeCommand}"
+                                                   IncreaseAutomationName="Увеличить размер аватара"
+                                                   DecreaseAutomationName="Уменьшить размер аватара" />
+                </StackPanel>
             </StackPanel>
         </WrapPanel>
 
-        <TextBlock Text="Исчезновение сообщений"
-                   Style="{StaticResource SectionHeading}" />
-
-        <WrapPanel>
-            <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
-                                           Label="Время жизни, с"
-                                           Value="{Binding MessageLifetimeSeconds, Mode=TwoWay}"
-                                           IncreaseCommand="{Binding IncreaseMessageLifetimeCommand}"
-                                           DecreaseCommand="{Binding DecreaseMessageLifetimeCommand}"
-                                           IncreaseAutomationName="Увеличить время жизни"
-                                           DecreaseAutomationName="Уменьшить время жизни" />
-
-            <CheckBox Style="{StaticResource CheckBox.Default}"
-                      Content="Скрывать старые сообщения"
-                      IsChecked="{Binding EnableMessageFadeOut, Mode=TwoWay}"
-                      VerticalAlignment="Center"
-                      Margin="0,0,0,8" />
-        </WrapPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Анимация исчезновения"
-                       Style="{StaticResource RowLabel}" />
-            <ComboBox Style="{StaticResource ComboBox.Form}"
-                      ItemsSource="{Binding ExitAnimationOptions}"
-                      DisplayMemberPath="DisplayName"
-                      SelectedValuePath="Value"
-                      AutomationProperties.Name="Анимация исчезновения сообщений"
-                      SelectedValue="{Binding FadeOutAnimationType, Mode=TwoWay}" />
-        </DockPanel>
-
-        <keepshell:NumericSettingField Label="Длительность исчезновения, мс"
-                                       Value="{Binding FadeOutAnimationDurationMs, Mode=TwoWay}"
-                                       IncreaseCommand="{Binding IncreaseFadeOutAnimationDurationCommand}"
-                                       DecreaseCommand="{Binding DecreaseFadeOutAnimationDurationCommand}"
-                                       IncreaseAutomationName="Увеличить длительность исчезновения"
-                                       DecreaseAutomationName="Уменьшить длительность исчезновения"
-                                       Margin="0,0,0,8" />
-
         <TextBlock Text="Картинки в сообщениях"
-                   Style="{StaticResource SectionHeading}" />
+                   Style="{StaticResource Setting.GroupHeading}" />
 
         <CheckBox Style="{StaticResource CheckBox.Default}"
                   Content="Показывать картинку по ссылке из сообщения"
                   IsChecked="{Binding ShowMessageImages, Mode=TwoWay}"
                   Margin="0,0,0,8" />
 
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Чьи ссылки показывать"
-                       Style="{StaticResource RowLabel}" />
-            <WrapPanel VerticalAlignment="Center">
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Стример"
-                          IsChecked="{Binding MessageImagesFromBroadcaster, Mode=TwoWay}"
-                          Margin="0,2,16,2" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Модераторы"
-                          IsChecked="{Binding MessageImagesFromModerators, Mode=TwoWay}"
-                          Margin="0,2,16,2" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="VIP"
-                          IsChecked="{Binding MessageImagesFromVips, Mode=TwoWay}"
-                          Margin="0,2,16,2" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Подписчики"
-                          IsChecked="{Binding MessageImagesFromSubscribers, Mode=TwoWay}"
-                          Margin="0,2,16,2" />
-                <CheckBox Style="{StaticResource CheckBox.Default}"
-                          Content="Все зрители"
-                          IsChecked="{Binding MessageImagesFromEveryone, Mode=TwoWay}"
-                          Margin="0,2,0,2" />
+        <StackPanel Style="{StaticResource Setting.DependentBlock}"
+                    IsEnabled="{Binding ShowMessageImages}">
+            <DockPanel Margin="0,0,0,8">
+                <TextBlock Text="Чьи ссылки показывать"
+                           Style="{StaticResource Setting.RowLabel}" />
+                <WrapPanel VerticalAlignment="Center">
+                    <CheckBox Style="{StaticResource CheckBox.Default}"
+                              Content="Стример"
+                              IsChecked="{Binding MessageImagesFromBroadcaster, Mode=TwoWay}"
+                              Margin="0,2,16,2" />
+                    <CheckBox Style="{StaticResource CheckBox.Default}"
+                              Content="Модераторы"
+                              IsChecked="{Binding MessageImagesFromModerators, Mode=TwoWay}"
+                              Margin="0,2,16,2" />
+                    <CheckBox Style="{StaticResource CheckBox.Default}"
+                              Content="VIP"
+                              IsChecked="{Binding MessageImagesFromVips, Mode=TwoWay}"
+                              Margin="0,2,16,2" />
+                    <CheckBox Style="{StaticResource CheckBox.Default}"
+                              Content="Подписчики"
+                              IsChecked="{Binding MessageImagesFromSubscribers, Mode=TwoWay}"
+                              Margin="0,2,16,2" />
+                    <CheckBox Style="{StaticResource CheckBox.Default}"
+                              Content="Все зрители"
+                              IsChecked="{Binding MessageImagesFromEveryone, Mode=TwoWay}"
+                              Margin="0,2,0,2" />
+                </WrapPanel>
+            </DockPanel>
+
+            <DockPanel Margin="0,0,0,8">
+                <TextBlock Text="Разрешённые хосты"
+                           Style="{StaticResource Setting.RowLabel}"
+                           VerticalAlignment="Top" />
+                <TextBox Style="{StaticResource TextBox.Form}"
+                         AcceptsReturn="True"
+                         MinHeight="96"
+                         VerticalScrollBarVisibility="Auto"
+                         TextWrapping="NoWrap"
+                         AutomationProperties.Name="Разрешённые хосты для картинок, по одному в строке"
+                         keepshell:PlaceholderBehavior.Placeholder="По одному хосту в строке, например i.imgur.com"
+                         Text="{Binding MessageImageAllowedHostsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </DockPanel>
+
+            <WrapPanel>
+                <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
+                                               Label="Высота картинки, px"
+                                               Value="{Binding MessageImageMaxHeightPixels, Mode=TwoWay}"
+                                               IncreaseCommand="{Binding IncreaseMessageImageMaxHeightCommand}"
+                                               DecreaseCommand="{Binding DecreaseMessageImageMaxHeightCommand}"
+                                               IncreaseAutomationName="Увеличить высоту картинки"
+                                               DecreaseAutomationName="Уменьшить высоту картинки" />
+
+                <Button Style="{StaticResource Button.Secondary}"
+                        Content="Вернуть хосты по умолчанию"
+                        VerticalAlignment="Center"
+                        Command="{Binding ResetMessageImageHostsCommand}"
+                        Margin="0,0,0,8" />
             </WrapPanel>
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Разрешённые хосты"
-                       Style="{StaticResource RowLabel}"
-                       VerticalAlignment="Top" />
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     AcceptsReturn="True"
-                     MinHeight="96"
-                     VerticalScrollBarVisibility="Auto"
-                     TextWrapping="NoWrap"
-                     AutomationProperties.Name="Разрешённые хосты для картинок, по одному в строке"
-                     keepshell:PlaceholderBehavior.Placeholder="По одному хосту в строке, например i.imgur.com"
-                     Text="{Binding MessageImageAllowedHostsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-        </DockPanel>
-
-        <WrapPanel>
-            <keepshell:NumericSettingField Style="{StaticResource Setting.PairCell}"
-                                           Label="Высота картинки, px"
-                                           Value="{Binding MessageImageMaxHeightPixels, Mode=TwoWay}"
-                                           IncreaseCommand="{Binding IncreaseMessageImageMaxHeightCommand}"
-                                           DecreaseCommand="{Binding DecreaseMessageImageMaxHeightCommand}"
-                                           IncreaseAutomationName="Увеличить высоту картинки"
-                                           DecreaseAutomationName="Уменьшить высоту картинки" />
-
-            <Button Style="{StaticResource Button.Secondary}"
-                    Content="Вернуть хосты по умолчанию"
-                    VerticalAlignment="Center"
-                    Command="{Binding ResetMessageImageHostsCommand}"
-                    Margin="0,0,0,8" />
-        </WrapPanel>
+        </StackPanel>
 
         <Button Content="Сбросить все настройки чата"
                 Style="{StaticResource Button.Ghost}"

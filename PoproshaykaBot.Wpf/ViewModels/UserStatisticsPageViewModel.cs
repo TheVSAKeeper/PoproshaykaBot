@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Collections.ObjectModel;
@@ -26,6 +27,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private readonly IChannelProvider _channelProvider;
     private readonly SettingsManager _settingsManager;
     private readonly IDialogService _dialogService;
+    private readonly ISettingsStore _settings;
     private readonly List<UserStatisticsRowViewModel> _allRows = [];
     private readonly ObservableCollection<UserStatisticsRowViewModel> _rows = [];
     private readonly List<IDisposable> _subscriptions = [];
@@ -42,6 +44,10 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     [NotifyPropertyChangedFor(nameof(RankLadderSteps))]
     [NotifyPropertyChangedFor(nameof(RankLadderToggleText))]
     private bool _isRankLadderExpanded;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BalanceToggleCaption))]
+    private bool _isBalanceExpanded;
 
     [ObservableProperty]
     private string _filterText = string.Empty;
@@ -107,7 +113,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         IChannelProvider channelProvider,
         SettingsManager settingsManager,
         IDialogService dialogService,
-        IEventBus eventBus)
+        IEventBus eventBus,
+        ISettingsStore settings)
     {
         _userStatistics = userStatistics;
         _statisticsAutoSaver = statisticsAutoSaver;
@@ -116,6 +123,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         _channelProvider = channelProvider;
         _settingsManager = settingsManager;
         _dialogService = dialogService;
+        _settings = settings;
+        _isBalanceExpanded = settings.GetBool(SettingsKeys.UserBalanceExpanded, true);
 
         _subscriptions.Add(eventBus.SubscribeOnUi<UserPunished>(_ => Reload()));
         _subscriptions.Add(eventBus.SubscribeOnUi<UserRewarded>(_ => Reload()));
@@ -164,6 +173,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     public string RankLadderToggleText => IsRankLadderExpanded
         ? "Свернуть"
         : SelectedRow?.RankLadder?.ExpandText ?? string.Empty;
+
+    public string BalanceToggleCaption => IsBalanceExpanded ? "Свернуть блок «Баланс»" : "Развернуть блок «Баланс»";
 
     public long AdjustmentAmount => ParseAdjustment(AdjustmentText).Amount;
 
@@ -295,6 +306,14 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     [RelayCommand]
     private void ToggleRankLadder() => IsRankLadderExpanded = !IsRankLadderExpanded;
+
+    [RelayCommand]
+    private void ToggleBalance() => IsBalanceExpanded = !IsBalanceExpanded;
+
+    partial void OnIsBalanceExpandedChanged(bool value)
+    {
+        _settings.SetBool(SettingsKeys.UserBalanceExpanded, value);
+    }
 
     [RelayCommand]
     private void SetAdjustment(double amount) => SetAdjustmentAmount((long)amount);

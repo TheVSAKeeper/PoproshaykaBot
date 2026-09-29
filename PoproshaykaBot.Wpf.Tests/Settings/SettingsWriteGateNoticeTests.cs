@@ -1,5 +1,6 @@
 ﻿using KeepShell.Services;
 using KeepShell.Services.Modal;
+using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
@@ -277,7 +278,8 @@ public class SettingsWriteGateNoticeTests
             new FakeChannelProvider(),
             settingsManager,
             dialogs,
-            eventBus);
+            eventBus,
+            new MemorySettings());
     }
 
     private sealed class FakeChannelProvider : IChannelProvider

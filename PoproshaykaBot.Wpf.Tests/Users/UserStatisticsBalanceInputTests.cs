@@ -218,7 +218,31 @@ public class UserStatisticsBalanceInputTests
         view.UpdateLayout();
     }
 
-    private UserStatisticsPageViewModel CreatePage()
+    [Test]
+    public void Свёрнутый_баланс_прячет_тело_оставляет_заголовок_и_запоминается()
+    {
+        var settings = new MemorySettings();
+        var page = CreatePage(settings);
+        var view = new UserStatisticsPageView { DataContext = page };
+
+        page.TrySelectAt(0);
+        page.ToggleBalanceCommand.Execute(null);
+        Arrange(view, NarrowPage);
+
+        var body = (FrameworkElement)view.FindName("BalanceBody")!;
+        var toggle = (FrameworkElement)view.FindName("BalanceToggle")!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.IsBalanceExpanded, Is.False);
+            Assert.That(body.Visibility, Is.EqualTo(Visibility.Collapsed));
+            Assert.That(toggle.ActualHeight, Is.GreaterThan(0), "Заголовок с шевроном остаётся на месте");
+            Assert.That(CreatePage(settings).IsBalanceExpanded, Is.False, "Свёрнутость переживает новую вью-модель");
+            Assert.That(CreatePage().IsBalanceExpanded, Is.True, "По умолчанию блок раскрыт");
+        }
+    }
+
+    private UserStatisticsPageViewModel CreatePage(MemorySettings? settings = null)
     {
         var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));
         var statistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
@@ -238,7 +262,8 @@ public class UserStatisticsBalanceInputTests
             new FakeChannelProvider(),
             settingsManager,
             null!,
-            eventBus);
+            eventBus,
+            settings ?? new MemorySettings());
     }
 
     private sealed class FakeChannelProvider : IChannelProvider

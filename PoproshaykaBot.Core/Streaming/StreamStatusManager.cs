@@ -154,7 +154,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         await _metadataRetryLoop.DisposeAsync().ConfigureAwait(false);
 
-        if (await _refreshGate.WaitAsync(RefreshGateDrainTimeout).ConfigureAwait(false))
+        if (await _refreshGate.WaitAsync(RefreshGateDrainTimeout, CancellationToken.None).ConfigureAwait(false))
         {
             _refreshGate.Dispose();
         }
@@ -599,8 +599,8 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
 
         return newStatus switch
         {
-            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(channel, CurrentStream, isCatchUp)),
-            StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(channel, isCatchUp)),
+            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(channel, CurrentStream, isCatchUp), CancellationToken.None),
+            StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(channel, isCatchUp), CancellationToken.None),
             _ => Task.CompletedTask,
         };
     }
@@ -616,7 +616,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             return Task.CompletedTask;
         }
 
-        return _eventBus.PublishAsync(new StreamMetadataResolved(channel, stream));
+        return _eventBus.PublishAsync(new StreamMetadataResolved(channel, stream), CancellationToken.None);
     }
 
     private async Task CreateEventSubSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
