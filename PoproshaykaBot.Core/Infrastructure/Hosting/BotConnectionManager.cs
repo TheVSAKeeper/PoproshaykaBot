@@ -222,6 +222,8 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
     {
         PublishPhase(BotLifecyclePhase.Connecting, reason: "запрошено подключение бота");
 
+        var ownsHost = false;
+
         try
         {
             ReportProgress("Получение токена доступа...");
@@ -251,6 +253,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
             _logger.LogInformation("Запуск AppHost для канала {Channel}", target.Login);
 
             var progressReporter = new Progress<string>(ReportProgress);
+            ownsHost = !_appHost.IsRunning;
             await _appHost.StartAsync(progressReporter, ct);
 
             _logger.LogDebug("Публикация BotJoinedChannel для канала {Channel}", target.Login);
@@ -262,16 +265,38 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
         }
         catch (OperationCanceledException ex)
         {
-            _targetChannelProvider.EndSession();
             _logger.LogWarning(ex, "Процесс подключения бота был отменен");
+            await StopUnfinishedHostAsync(ownsHost);
+            _targetChannelProvider.EndSession();
             PublishPhase(BotLifecyclePhase.Cancelled, reason: DescribeCancellation(_cancellationReason));
         }
         catch (Exception exception)
         {
-            _targetChannelProvider.EndSession();
             _logger.LogError(exception, "Произошла ошибка в процессе подключения бота");
             ReportProgress($"Ошибка подключения: {exception.Message}");
+            await StopUnfinishedHostAsync(ownsHost);
+            _targetChannelProvider.EndSession();
             PublishPhase(BotLifecyclePhase.Failed, exception, "ошибка подключения");
+        }
+    }
+
+    private async Task StopUnfinishedHostAsync(bool ownsHost)
+    {
+        if (!ownsHost || !_appHost.IsRunning)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Подключение не завершено – останавливаю уже запущенные компоненты бота");
+
+        try
+        {
+            using var stopCts = new CancellationTokenSource(ForcedStopTimeout);
+            await _appHost.StopAsync(new Progress<string>(ReportProgress), stopCts.Token).WaitAsync(ForcedStopTimeout);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Не удалось остановить компоненты незавершённого подключения");
         }
     }
 
