@@ -9,7 +9,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
-using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Core.Users.Avatars;
 using System.Net;
 using System.Text;
 
@@ -200,7 +200,7 @@ public sealed class ImageProxyEndpointTests
             services.AddSingleton(BuildSettingsManager());
             services.AddSingleton(sp => new ChatHistoryManager(sp.GetRequiredService<SettingsManager>(), sp.GetRequiredService<IEventBus>()));
             services.AddSingleton(Substitute.For<ITwitchOAuthService>());
-            services.AddSingleton(sp => new UserProfileImageProvider(sp, NullLogger<UserProfileImageProvider>.Instance));
+            services.AddSingleton(Substitute.For<IUserAvatarCache>());
             services.AddHttpServer();
         });
 

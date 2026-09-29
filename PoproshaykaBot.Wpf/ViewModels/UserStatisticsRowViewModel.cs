@@ -8,6 +8,8 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class UserStatisticsRowViewModel : ObservableObject
 {
+    public const double VisibleTrackShare = 0.03;
+
     private static readonly PointTerm MessageTerm = ChatMessageTerm.Instance;
 
     private readonly PointTerm _pointTerm;
@@ -47,27 +49,35 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
 
         MessagesPartText = $"{MessageCountDisplay} {MessageTerm.ForCount(messageCount)}";
         BonusPartText = string.Create(UiCulture.Russian, $"+{bonus:N0} бонус");
-        PenaltyPartText = string.Create(UiCulture.Russian, $"−{penalty:N0} штраф");
+        PenaltyPartText = string.Create(UiCulture.Russian, $"−{penalty:N0} вычтено штрафом");
 
         MessagesTrack = new(messageCount, GridUnitType.Star);
         BonusTrack = new(bonus, GridUnitType.Star);
         PenaltyTrack = new(penalty, GridUnitType.Star);
 
+        var turnover = (double)messageCount + bonus + penalty;
+        IsMessagesTrackTiny = IsBelowVisibleShare(messageCount, turnover);
+        IsBonusTrackTiny = IsBelowVisibleShare(bonus, turnover);
+        IsPenaltyTrackTiny = IsBelowVisibleShare(penalty, turnover);
+
         _pointTerm = pointTerm;
 
         var now = DateTimeOffset.Now;
-        var days = Math.Max(1, (int)(now.Date - source.FirstSeen.ToLocalTime().Date).TotalDays + 1);
+        var firstSeen = RelativeTime.ToOffset(source.FirstSeen);
+        var lastSeen = RelativeTime.ToOffset(source.LastSeen);
+        var days = Math.Max(1, (int)(now.Date - firstSeen.ToLocalTime().Date).TotalDays + 1);
 
-        FirstSeenDisplay = RelativeTime.FormatDate(source.FirstSeen);
-        FirstSeenMoment = RelativeTime.FormatMoment(source.FirstSeen);
-        LastSeenDisplay = RelativeTime.DescribeMoment(source.LastSeen, now);
-        LastSeenMoment = RelativeTime.FormatMoment(source.LastSeen);
+        FirstSeenDisplay = RelativeTime.FormatDate(firstSeen);
+        FirstSeenMoment = RelativeTime.FormatMoment(firstSeen);
+        LastSeenDisplay = RelativeTime.DescribeMoment(lastSeen, now);
+        LastSeenMoment = RelativeTime.FormatMoment(lastSeen);
         DaysInChatDisplay = days.ToString("N0", UiCulture.Russian);
         DailyRateDisplay = ((double)messageCount / days).ToString("N1", UiCulture.Russian);
     }
 
     public UserStatistics Source { get; }
     public UserRankStanding Standing { get; }
+    public UserAvatarViewModel Avatar { get; init; } = UserAvatarViewModel.None;
     public string UserId => Source.UserId;
     public string Name => Source.Name;
     public ulong MessageCount => Source.MessageCount;
@@ -89,6 +99,11 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
     public GridLength MessagesTrack { get; }
     public GridLength BonusTrack { get; }
     public GridLength PenaltyTrack { get; }
+    public bool IsMessagesTrackTiny { get; }
+    public bool IsBonusTrackTiny { get; }
+    public bool IsPenaltyTrackTiny { get; }
+    public bool HasTinyTrack => IsMessagesTrackTiny || IsBonusTrackTiny || IsPenaltyTrackTiny;
+    public int Place { get; set; }
     public UserRankLadder? RankLadder => _rankLadder ??= UserRankLadder.Build(Points, Standing, _pointTerm);
     public bool HasRankLadder => RankLadder is not null;
     public string FirstSeenDisplay { get; }
@@ -99,4 +114,9 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
     public string DailyRateDisplay { get; }
 
     public bool IsTopThree => Position is > 0 and <= 3;
+
+    private static bool IsBelowVisibleShare(long part, double turnover)
+    {
+        return part > 0 && part / turnover < VisibleTrackShare;
+    }
 }

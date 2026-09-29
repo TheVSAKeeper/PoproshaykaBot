@@ -249,6 +249,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1322, Level = LogLevel.Debug, Message = "Кадр превью стрима не загружен: {Address}")]
     public static partial void StreamPreviewFrameFailed(this ILogger logger, Exception? exception, string address);
 
+    [LoggerMessage(EventId = 1323, Level = LogLevel.Warning, Message = "Не удалось получить аватарки пользователей, вместо них останутся буквы ников")]
+    public static partial void UserAvatarLoadFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1324, Level = LogLevel.Debug, Message = "Аватарка пользователя не прочитана из кеша: {Path}")]
+    public static partial void UserAvatarDecodeFailed(this ILogger logger, Exception? exception, string path);
+
     [LoggerMessage(EventId = 1600, Level = LogLevel.Information, Message = "Команда {Command} {State} на странице «Команды»")]
     public static partial void CommandEnabledChanged(this ILogger logger, string command, string state);
 

@@ -6,7 +6,7 @@ public sealed class RanksSettings
 
     public List<UserRank> Ranks { get; set; } =
     [
-        new("♔", "КОРОЛЬ", 5000),
+        new("♚", "КОРОЛЬ", 5000),
 
         new("♛", "ФЕРЗЬ", 4000, 1),
         new("♛", "ФЕРЗЬ", 3500, 2),

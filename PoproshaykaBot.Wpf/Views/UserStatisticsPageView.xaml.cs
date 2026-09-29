@@ -15,7 +15,7 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
         typeof(UserStatisticsPageView),
         new PropertyMetadata(true));
 
-    public const double RankColumnListWidth = 430;
+    public const double RankColumnListWidth = 462;
 
     private double _listWidth;
     private string? _announcedAdjustmentError;
@@ -119,6 +119,14 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
 
             peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
         }));
+    }
+
+    private void OnRowAvatarDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is UserAvatarViewModel avatar && DataContext is UserStatisticsPageViewModel page)
+        {
+            page.RequestAvatar(avatar);
+        }
     }
 
     private void ScrollToSelected()

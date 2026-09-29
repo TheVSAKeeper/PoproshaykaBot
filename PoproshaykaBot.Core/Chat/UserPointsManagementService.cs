@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Chat.Commands;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
 using PoproshaykaBot.Core.Settings;
@@ -10,13 +11,17 @@ namespace PoproshaykaBot.Core.Chat;
 public sealed class UserPointsManagementService(
     IUserStatisticsRepository userStatistics,
     SettingsManager settingsManager,
-    IEventBus eventBus)
+    IEventBus eventBus,
+    ILogger<UserPointsManagementService> logger)
 {
+    private const string UnknownSource = "не указан";
+
     public async Task<bool> PunishUserAsync(
         string userId,
         string userName,
         ulong removedPoints,
         string? channel,
+        string? source = null,
         CancellationToken cancellationToken = default)
     {
         if (removedPoints == 0)
@@ -31,6 +36,9 @@ public sealed class UserPointsManagementService(
             return false;
         }
 
+        logger.LogInformation("Пользователю {UserName} ({UserId}) начислено {Delta} штрафных баллов, источник: {Source}",
+            userName, userId, removedPoints, source ?? UnknownSource);
+
         await eventBus.PublishAsync(new UserPunished(userId, userName, removedPoints, channel), cancellationToken);
 
         return true;
@@ -41,6 +49,7 @@ public sealed class UserPointsManagementService(
         string userName,
         ulong addedPoints,
         string? channel,
+        string? source = null,
         CancellationToken cancellationToken = default)
     {
         if (addedPoints == 0)
@@ -54,6 +63,9 @@ public sealed class UserPointsManagementService(
         {
             return false;
         }
+
+        logger.LogInformation("Пользователю {UserName} ({UserId}) начислено {Delta} бонусных баллов, источник: {Source}",
+            userName, userId, addedPoints, source ?? UnknownSource);
 
         await eventBus.PublishAsync(new UserRewarded(userId, userName, addedPoints, channel), cancellationToken);
 

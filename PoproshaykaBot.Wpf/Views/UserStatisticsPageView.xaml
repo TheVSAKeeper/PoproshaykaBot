@@ -88,13 +88,133 @@
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="AvatarTint"
+               TargetType="Ellipse">
+            <Setter Property="StrokeThickness"
+                    Value="1" />
+            <Setter Property="Fill"
+                    Value="{DynamicResource Bg.SurfaceMute}" />
+            <Setter Property="Stroke"
+                    Value="{DynamicResource Border.Strong}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="0">
+                    <Setter Property="Fill"
+                            Value="{DynamicResource Accent.Soft}" />
+                    <Setter Property="Stroke"
+                            Value="{DynamicResource Accent.Primary}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="1">
+                    <Setter Property="Fill"
+                            Value="{DynamicResource State.InfoSoft}" />
+                    <Setter Property="Stroke"
+                            Value="{DynamicResource State.Info}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="2">
+                    <Setter Property="Fill"
+                            Value="{DynamicResource State.SuccessSoft}" />
+                    <Setter Property="Stroke"
+                            Value="{DynamicResource State.Success}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="3">
+                    <Setter Property="Fill"
+                            Value="{DynamicResource State.WarningSoft}" />
+                    <Setter Property="Stroke"
+                            Value="{DynamicResource State.Warning}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="4">
+                    <Setter Property="Fill"
+                            Value="{DynamicResource State.ErrorSoft}" />
+                    <Setter Property="Stroke"
+                            Value="{DynamicResource State.Error}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="AvatarInitial"
+               TargetType="TextBlock">
+            <Setter Property="FontWeight"
+                    Value="{DynamicResource Font.Weight.SemiBold}" />
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Secondary}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="0">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource Accent.Text}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="1">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.InfoText}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="2">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.SuccessText}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="3">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.WarningText}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding PaletteIndex}"
+                             Value="4">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.ErrorText}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate x:Key="UserAvatarCircle"
+                      DataType="{x:Type vm:UserAvatarViewModel}">
+            <Grid>
+                <Ellipse Fill="{DynamicResource Bg.Surface}" />
+                <Ellipse Style="{StaticResource AvatarTint}" />
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="1*" />
+                        <RowDefinition Height="3*" />
+                        <RowDefinition Height="1*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*" />
+                        <ColumnDefinition Width="3*" />
+                        <ColumnDefinition Width="1*" />
+                    </Grid.ColumnDefinitions>
+                    <Viewbox Grid.Row="1"
+                             Grid.Column="1">
+                        <TextBlock Style="{StaticResource AvatarInitial}"
+                                   Text="{Binding Initial}" />
+                    </Viewbox>
+                </Grid>
+                <Image Source="{Binding Image}"
+                       Stretch="UniformToFill"
+                       Visibility="{Binding HasImage, Converter={StaticResource BoolToVisibility}}">
+                    <Image.OpacityMask>
+                        <VisualBrush>
+                            <VisualBrush.Visual>
+                                <Ellipse Width="1"
+                                         Height="1"
+                                         Fill="Black" />
+                            </VisualBrush.Visual>
+                        </VisualBrush>
+                    </Image.OpacityMask>
+                </Image>
+            </Grid>
+        </DataTemplate>
+
         <DataTemplate x:Key="UserRatingRowTemplate">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"
                                       SharedSizeGroup="RatingPosition" />
                     <ColumnDefinition Width="*"
-                                      MinWidth="60" />
+                                      MinWidth="92" />
                     <ColumnDefinition Width="Auto"
                                       SharedSizeGroup="RatingRank" />
                     <ColumnDefinition Width="Auto"
@@ -107,10 +227,20 @@
                                   Content="{Binding}"
                                   ContentTemplate="{StaticResource RatingPositionCell}" />
 
-                <TextBlock Grid.Column="1"
-                           Style="{StaticResource RatingName}"
-                           Text="{Binding Name}"
-                           Margin="10,0,10,0" />
+                <DockPanel Grid.Column="1"
+                           Margin="10,0,10,0">
+                    <ContentPresenter DockPanel.Dock="Left"
+                                      Width="24"
+                                      Height="24"
+                                      Margin="0,0,8,0"
+                                      VerticalAlignment="Center"
+                                      Content="{Binding Avatar}"
+                                      ContentTemplate="{StaticResource UserAvatarCircle}"
+                                      DataContextChanged="OnRowAvatarDataContextChanged" />
+
+                    <TextBlock Style="{StaticResource RatingName}"
+                               Text="{Binding Name}" />
+                </DockPanel>
 
                 <Border Grid.Column="2"
                         Style="{StaticResource Badge}"
@@ -299,7 +429,7 @@
                             <ColumnDefinition Width="Auto"
                                               SharedSizeGroup="RatingPosition" />
                             <ColumnDefinition Width="*"
-                                              MinWidth="60" />
+                                              MinWidth="92" />
                             <ColumnDefinition Width="Auto"
                                               SharedSizeGroup="RatingRank" />
                             <ColumnDefinition Width="Auto"
@@ -316,7 +446,7 @@
                         <Button Grid.Column="1"
                                 Style="{StaticResource TableSortButton}"
                                 HorizontalAlignment="Left"
-                                Margin="2,0,0,0"
+                                Margin="34,0,0,0"
                                 Command="{Binding SortByCommand}"
                                 CommandParameter="{x:Static vm:UserStatisticsSortKey.Name}"
                                 AutomationProperties.Name="Сортировать по нику">
@@ -403,44 +533,62 @@
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled"
                                   Visibility="{Binding HasSelectedRow, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel>
+                        <StackPanel Margin="0,0,12,0">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <TextBlock Grid.Column="0"
-                                           Text="{Binding SelectedRow.Name}"
-                                           FontSize="{DynamicResource Font.Size.XL}"
-                                           FontWeight="{DynamicResource Font.Weight.SemiBold}"
-                                           Foreground="{DynamicResource Fg.Primary}"
-                                           TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"
-                                           ToolTip="{Binding SelectedRow.Name}"
-                                           VerticalAlignment="Center" />
+                                <ContentPresenter Grid.Column="0"
+                                                  Width="56"
+                                                  Height="56"
+                                                  Margin="0,0,12,0"
+                                                  VerticalAlignment="Center"
+                                                  Content="{Binding SelectedRow.Avatar}"
+                                                  ContentTemplate="{StaticResource UserAvatarCircle}" />
 
-                                <Border Grid.Column="1"
-                                        Style="{StaticResource Badge}"
-                                        VerticalAlignment="Center"
-                                        Margin="10,0,0,0">
-                                    <TextBlock Text="{Binding SelectedRow.RankDisplay}"
+                                <StackPanel Grid.Column="1"
+                                            VerticalAlignment="Center">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding SelectedRow.Name}"
+                                                   FontSize="{DynamicResource Font.Size.XL}"
+                                                   FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                                   Foreground="{DynamicResource Fg.Primary}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding SelectedRow.Name}"
+                                                   VerticalAlignment="Center" />
+
+                                        <Border Grid.Column="1"
+                                                Style="{StaticResource Badge}"
+                                                VerticalAlignment="Center"
+                                                Margin="10,0,0,0">
+                                            <TextBlock Text="{Binding SelectedRow.RankDisplay}"
+                                                       FontSize="{DynamicResource Font.Size.Caption}"
+                                                       Foreground="{DynamicResource Fg.Secondary}"
+                                                       TextWrapping="NoWrap" />
+                                        </Border>
+                                    </Grid>
+
+                                    <TextBlock Text="{Binding SelectedRow.UserId}"
+                                               FontFamily="{DynamicResource Font.Mono}"
                                                FontSize="{DynamicResource Font.Size.Caption}"
+                                               Foreground="{DynamicResource Fg.Muted}"
+                                               TextWrapping="NoWrap"
+                                               Margin="0,4,0,0" />
+
+                                    <TextBlock Text="{Binding SelectedPlaceText}"
                                                Foreground="{DynamicResource Fg.Secondary}"
-                                               TextWrapping="NoWrap" />
-                                </Border>
+                                               Margin="0,2,0,0" />
+                                </StackPanel>
                             </Grid>
-
-                            <TextBlock Text="{Binding SelectedRow.UserId}"
-                                       FontFamily="{DynamicResource Font.Mono}"
-                                       FontSize="{DynamicResource Font.Size.Caption}"
-                                       Foreground="{DynamicResource Fg.Muted}"
-                                       TextWrapping="NoWrap"
-                                       Margin="0,4,0,0" />
-
-                            <TextBlock Text="{Binding SelectedPlaceText}"
-                                       Foreground="{DynamicResource Fg.Secondary}"
-                                       Margin="0,2,0,0" />
 
                             <UniformGrid Columns="2"
                                          Margin="0,16,0,0">
@@ -476,7 +624,7 @@
                                     <TextBlock Style="{StaticResource StatValue.Small}"
                                                Text="{Binding SelectedRow.DaysInChatDisplay}" />
                                     <TextBlock Style="{StaticResource StatLabel}"
-                                               Text="в чате дней" />
+                                               Text="дней в чате" />
                                 </StackPanel>
 
                                 <StackPanel Margin="0,0,0,10">
@@ -485,72 +633,167 @@
                                     <TextBlock Style="{StaticResource StatLabel}"
                                                Text="сообщений в день" />
                                 </StackPanel>
-
-                                <StackPanel Margin="0,0,12,0"
-                                            Background="Transparent"
-                                            ToolTip="{Binding SelectedRow.FirstSeenMoment}">
-                                    <TextBlock Style="{StaticResource StatValue.Small}"
-                                               Text="{Binding SelectedRow.FirstSeenDisplay}" />
-                                    <TextBlock Style="{StaticResource StatLabel}"
-                                               Text="в чате с" />
-                                </StackPanel>
-
-                                <StackPanel Background="Transparent"
-                                            ToolTip="{Binding SelectedRow.LastSeenMoment}">
-                                    <TextBlock Style="{StaticResource StatValue.Small}"
-                                               Text="{Binding SelectedRow.LastSeenDisplay}" />
-                                    <TextBlock Style="{StaticResource StatLabel}"
-                                               Text="писал" />
-                                    <TextBlock Style="{StaticResource StatLabel}"
-                                               FontFamily="{DynamicResource Font.Mono}"
-                                               Text="{Binding SelectedRow.LastSeenMoment}" />
-                                </StackPanel>
                             </UniformGrid>
+
+                            <Grid x:Name="ActivityStats">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Border Grid.Column="0"
+                                        Grid.RowSpan="3"
+                                        Background="Transparent"
+                                        ToolTip="{Binding SelectedRow.FirstSeenMoment}" />
+                                <TextBlock Grid.Column="0"
+                                           Grid.Row="0"
+                                           Style="{StaticResource StatValue.Small}"
+                                           Margin="0,0,12,0"
+                                           IsHitTestVisible="False"
+                                           Text="{Binding SelectedRow.FirstSeenDisplay}" />
+                                <TextBlock Grid.Column="0"
+                                           Grid.Row="1"
+                                           Style="{StaticResource StatLabel}"
+                                           Margin="0,2,12,0"
+                                           TextWrapping="Wrap"
+                                           IsHitTestVisible="False"
+                                           Text="в чате с" />
+                                <TextBlock Grid.Column="0"
+                                           Grid.Row="2"
+                                           Style="{StaticResource StatLabel}"
+                                           FontFamily="{DynamicResource Font.Mono}"
+                                           Margin="0,2,8,0"
+                                           TextWrapping="Wrap"
+                                           IsHitTestVisible="False"
+                                           Text="{Binding SelectedRow.FirstSeenMoment}" />
+
+                                <Border Grid.Column="1"
+                                        Grid.RowSpan="3"
+                                        Background="Transparent"
+                                        ToolTip="{Binding SelectedRow.LastSeenMoment}" />
+                                <TextBlock Grid.Column="1"
+                                           Grid.Row="0"
+                                           Style="{StaticResource StatValue.Small}"
+                                           IsHitTestVisible="False"
+                                           Text="{Binding SelectedRow.LastSeenDisplay}" />
+                                <TextBlock Grid.Column="1"
+                                           Grid.Row="1"
+                                           Style="{StaticResource StatLabel}"
+                                           TextWrapping="Wrap"
+                                           IsHitTestVisible="False"
+                                           Text="последнее сообщение" />
+                                <TextBlock Grid.Column="1"
+                                           Grid.Row="2"
+                                           Style="{StaticResource StatLabel}"
+                                           FontFamily="{DynamicResource Font.Mono}"
+                                           TextWrapping="Wrap"
+                                           IsHitTestVisible="False"
+                                           Text="{Binding SelectedRow.LastSeenMoment}" />
+                            </Grid>
 
                             <TextBlock Style="{StaticResource StatLabel}"
                                        Text="состав баллов"
                                        Margin="0,16,0,0" />
 
-                            <Border Background="{DynamicResource Bg.SurfaceMute}"
-                                    CornerRadius="5"
-                                    Height="10"
-                                    Margin="0,6,0,0">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="{Binding SelectedRow.MessagesTrack}" />
-                                        <ColumnDefinition Width="{Binding SelectedRow.BonusTrack}" />
-                                        <ColumnDefinition Width="{Binding SelectedRow.PenaltyTrack}" />
-                                    </Grid.ColumnDefinitions>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
-                                    <Border Grid.Column="0"
-                                            Background="{DynamicResource Accent.Primary}"
-                                            CornerRadius="5"
-                                            Margin="0,0,2,0" />
-                                    <Border Grid.Column="1"
-                                            Background="{DynamicResource State.Success}"
-                                            CornerRadius="5"
-                                            Margin="0,0,2,0" />
-                                    <Border Grid.Column="2"
-                                            Background="{DynamicResource State.Error}"
-                                            CornerRadius="5" />
-                                </Grid>
-                            </Border>
+                                <Border x:Name="CompositionBar"
+                                        Grid.Column="0"
+                                        Background="{DynamicResource Bg.SurfaceMute}"
+                                        CornerRadius="5"
+                                        Height="10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="{Binding SelectedRow.MessagesTrack}" />
+                                            <ColumnDefinition Width="{Binding SelectedRow.BonusTrack}" />
+                                            <ColumnDefinition Width="{Binding SelectedRow.PenaltyTrack}" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Border Grid.Column="0"
+                                                Background="{DynamicResource Accent.Primary}"
+                                                CornerRadius="5"
+                                                Margin="0,0,2,0" />
+                                        <Border Grid.Column="1"
+                                                Background="{DynamicResource State.Success}"
+                                                CornerRadius="5"
+                                                Margin="0,0,2,0" />
+                                        <Border Grid.Column="2"
+                                                Background="{DynamicResource State.Error}"
+                                                CornerRadius="5" />
+                                    </Grid>
+                                </Border>
+
+                                <StackPanel x:Name="TinyTrackMarkers"
+                                            Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center"
+                                            Margin="4,0,0,0"
+                                            Background="Transparent"
+                                            ToolTip="Часть слишком мала, чтобы быть видной на полосе"
+                                            Visibility="{Binding SelectedRow.HasTinyTrack, Converter={StaticResource BoolToVisibility}}">
+                                    <Ellipse Width="6"
+                                             Height="6"
+                                             Margin="2,0,0,0"
+                                             Fill="{DynamicResource Accent.Primary}"
+                                             Visibility="{Binding SelectedRow.IsMessagesTrackTiny, Converter={StaticResource BoolToVisibility}}" />
+                                    <Ellipse Width="6"
+                                             Height="6"
+                                             Margin="2,0,0,0"
+                                             Fill="{DynamicResource State.Success}"
+                                             Visibility="{Binding SelectedRow.IsBonusTrackTiny, Converter={StaticResource BoolToVisibility}}" />
+                                    <Ellipse Width="6"
+                                             Height="6"
+                                             Margin="2,0,0,0"
+                                             Fill="{DynamicResource State.Error}"
+                                             Visibility="{Binding SelectedRow.IsPenaltyTrackTiny, Converter={StaticResource BoolToVisibility}}" />
+                                </StackPanel>
+                            </Grid>
 
                             <WrapPanel Orientation="Horizontal"
                                        Margin="0,8,0,0">
-                                <TextBlock Text="{Binding SelectedRow.MessagesPartText}"
-                                           FontSize="{DynamicResource Font.Size.Caption}"
-                                           Foreground="{DynamicResource Fg.Secondary}"
-                                           Margin="0,0,12,0" />
-                                <TextBlock Text="{Binding SelectedRow.BonusPartText}"
-                                           FontSize="{DynamicResource Font.Size.Caption}"
-                                           Foreground="{DynamicResource State.SuccessText}"
-                                           Margin="0,0,12,0"
-                                           Visibility="{Binding SelectedRow.HasBonus, Converter={StaticResource BoolToVisibility}}" />
-                                <TextBlock Text="{Binding SelectedRow.PenaltyPartText}"
-                                           FontSize="{DynamicResource Font.Size.Caption}"
-                                           Foreground="{DynamicResource State.ErrorText}"
-                                           Visibility="{Binding SelectedRow.HasPenalty, Converter={StaticResource BoolToVisibility}}" />
+                                <StackPanel Orientation="Horizontal"
+                                            Margin="0,0,12,0">
+                                    <Ellipse Width="8"
+                                             Height="8"
+                                             VerticalAlignment="Center"
+                                             Fill="{DynamicResource Accent.Primary}" />
+                                    <TextBlock Text="{Binding SelectedRow.MessagesPartText}"
+                                               FontSize="{DynamicResource Font.Size.Caption}"
+                                               Foreground="{DynamicResource Fg.Secondary}"
+                                               Margin="5,0,0,0" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal"
+                                            Margin="0,0,12,0"
+                                            Visibility="{Binding SelectedRow.HasBonus, Converter={StaticResource BoolToVisibility}}">
+                                    <Ellipse Width="8"
+                                             Height="8"
+                                             VerticalAlignment="Center"
+                                             Fill="{DynamicResource State.Success}" />
+                                    <TextBlock Text="{Binding SelectedRow.BonusPartText}"
+                                               FontSize="{DynamicResource Font.Size.Caption}"
+                                               Foreground="{DynamicResource State.SuccessText}"
+                                               Margin="5,0,0,0" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal"
+                                            Visibility="{Binding SelectedRow.HasPenalty, Converter={StaticResource BoolToVisibility}}">
+                                    <Ellipse Width="8"
+                                             Height="8"
+                                             VerticalAlignment="Center"
+                                             Fill="{DynamicResource State.Error}" />
+                                    <TextBlock Text="{Binding SelectedRow.PenaltyPartText}"
+                                               FontSize="{DynamicResource Font.Size.Caption}"
+                                               Foreground="{DynamicResource State.ErrorText}"
+                                               Margin="5,0,0,0" />
+                                </StackPanel>
                             </WrapPanel>
 
                             <StackPanel Margin="0,16,0,0"

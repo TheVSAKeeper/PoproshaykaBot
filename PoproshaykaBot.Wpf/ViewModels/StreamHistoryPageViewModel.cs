@@ -16,6 +16,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 {
     public const int DefaultTrendLength = 40;
     public const double FlatDeltaPercent = 5;
+    public const double MinDeltaPercentBase = 10;
 
     public static readonly int[] TrendLengths = [20, 40, 80];
 
@@ -113,6 +114,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     [ObservableProperty]
     private string _detailComposition = string.Empty;
+
+    [ObservableProperty]
+    private string? _detailCategoriesHint;
 
     [ObservableProperty]
     private string _detailPeriodText = Placeholder;
@@ -477,7 +481,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             : string.Create(UiCulture.Russian, $"{from:dd.MM.yyyy}, {from:HH:mm} – {to:dd.MM.yyyy}, {to:HH:mm}");
     }
 
-    public static (string Text, TrendTone Tone) DescribeDelta(double value, double average, int sessionCount)
+    public static (string Text, TrendTone Tone) DescribeDelta(double value, double average, int sessionCount, bool withValue = false)
     {
         if (sessionCount < 2 || average <= 0)
         {
@@ -491,11 +495,36 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             return ("как обычно", TrendTone.Flat);
         }
 
-        var rounded = (int)Math.Round(percent, MidpointRounding.AwayFromZero);
+        var tone = percent >= 0 ? TrendTone.Up : TrendTone.Down;
+        var absolute = withValue
+            ? string.Create(UiCulture.Russian, $"{value:N0} вместо {FormatAverage(average)}")
+            : string.Create(UiCulture.Russian, $"обычно {FormatAverage(average)}");
 
-        return rounded >= 0
-            ? (string.Create(UiCulture.Russian, $"+{rounded:N0} % к обычному"), TrendTone.Up)
-            : (string.Create(UiCulture.Russian, $"−{-rounded:N0} % к обычному"), TrendTone.Down);
+        if (average < MinDeltaPercentBase)
+        {
+            return (absolute, tone);
+        }
+
+        var rounded = (int)Math.Round(percent, MidpointRounding.AwayFromZero);
+        var relative = rounded >= 0
+            ? string.Create(UiCulture.Russian, $"+{rounded:N0} %")
+            : string.Create(UiCulture.Russian, $"−{-rounded:N0} %");
+
+        return withValue
+            ? (string.Create(UiCulture.Russian, $"{absolute} · {relative}"), tone)
+            : (string.Create(UiCulture.Russian, $"{relative} к обычному"), tone);
+    }
+
+    private static string FormatAverage(double average)
+    {
+        if (average >= MinDeltaPercentBase)
+        {
+            return average.ToString("N0", UiCulture.Russian);
+        }
+
+        return average < 0.05
+            ? "почти 0"
+            : average.ToString("0.#", UiCulture.Russian);
     }
 
     public static string DescribeTracking(StreamSessionRecord session)
@@ -517,12 +546,30 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             return "Учёт вёлся весь эфир";
         }
 
-        var trackedText = FormatDuration(tracked);
-        var durationText = FormatDuration(duration);
+        var gap = duration - tracked;
 
-        return trackedText == durationText
+        return gap < TimeSpan.FromMinutes(1) && gap.Ticks * 20 <= duration.Ticks
             ? "Учёт вёлся почти весь эфир"
-            : string.Create(UiCulture.Russian, $"Учёт вёлся {trackedText} из {durationText}");
+            : string.Create(UiCulture.Russian, $"Учёт вёлся {FormatDuration(tracked)} из {FormatDuration(duration)}");
+    }
+
+    public static string? DescribeCategories(StreamSessionRecord session)
+    {
+        var categories = session.Segments
+            .Where(segment => segment.Game is { Length: > 0 })
+            .GroupBy(segment => segment.Game!, StringComparer.OrdinalIgnoreCase)
+            .Select(group => (Game: group.First().Game!, AirTime: group.Aggregate(TimeSpan.Zero, (sum, segment) => sum + segment.Duration)))
+            .OrderByDescending(category => category.AirTime)
+            .ToList();
+
+        if (categories.Count < 2)
+        {
+            return null;
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            categories.Select(category => string.Create(UiCulture.Russian, $"{category.Game} – {FormatDuration(category.AirTime)}")));
     }
 
     public static string DescribeComposition(StreamSessionRecord session)
@@ -1063,7 +1110,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
                                 && segment.Game is { Length: > 0 }
                                 && string.Equals(previous.Game, segment.Game, StringComparison.OrdinalIgnoreCase);
 
-            segments.Add(new(segment, share, continuesGame) { BoxArt = _boxArt.For(segment.Game) });
+            segments.Add(new(segment, share, continuesGame, segments.Count + 1) { BoxArt = _boxArt.For(segment.Game) });
             previous = segment;
         }
 
@@ -1109,6 +1156,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             DetailGame = Placeholder;
             DetailBoxArt = GameBoxArtViewModel.None;
             DetailComposition = string.Empty;
+            DetailCategoriesHint = null;
             DetailPeriodText = Placeholder;
             DetailTrackingText = string.Empty;
             DetailMessagesDelta = string.Empty;
@@ -1127,13 +1175,14 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         DetailGame = row.Source.Game is { Length: > 0 } game ? game : Placeholder;
         DetailBoxArt = row.BoxArt;
         DetailComposition = DescribeComposition(row.Source);
+        DetailCategoriesHint = DescribeCategories(row.Source);
         DetailPeriodText = FormatPeriod(row.StartedAt, row.Source.EndedAt);
         DetailTrackingText = DescribeTracking(row.Source);
 
-        (DetailMessagesDelta, DetailMessagesDeltaTone) = DescribeDelta(row.MessageCount, _averageMessages, _visibleSessions.Count);
-        (DetailChattersDelta, DetailChattersDeltaTone) = DescribeDelta(row.ChatterCount, _averageChatters, _visibleSessions.Count);
-        (DetailPeakViewersDelta, DetailPeakViewersDeltaTone) = DescribeDelta(row.PeakViewers, _averagePeakViewers, _visibleSessions.Count);
-        (DetailAverageViewersDelta, DetailAverageViewersDeltaTone) = DescribeDelta(row.AverageViewers, _averageViewers, _visibleSessions.Count);
+        (DetailMessagesDelta, DetailMessagesDeltaTone) = DescribeDelta(row.MessageCount, _averageMessages, _visibleSessions.Count, withValue: true);
+        (DetailChattersDelta, DetailChattersDeltaTone) = DescribeDelta(row.ChatterCount, _averageChatters, _visibleSessions.Count, withValue: true);
+        (DetailPeakViewersDelta, DetailPeakViewersDeltaTone) = DescribeDelta(row.PeakViewers, _averagePeakViewers, _visibleSessions.Count, withValue: true);
+        (DetailAverageViewersDelta, DetailAverageViewersDeltaTone) = DescribeDelta(row.AverageViewers, _averageViewers, _visibleSessions.Count, withValue: true);
     }
 
     private void UpdateAverages()
@@ -1434,6 +1483,8 @@ public sealed partial class StreamSessionSegmentRowViewModel : ObservableObject
 
     public GameBoxArtViewModel BoxArt { get; init; } = GameBoxArtViewModel.None;
 
+    public int Number { get; }
+    public string NumberText { get; }
     public string Game { get; }
     public string GameCellText => Game;
     public string Title { get; }
@@ -1453,8 +1504,10 @@ public sealed partial class StreamSessionSegmentRowViewModel : ObservableObject
         ? string.Create(UiCulture.Russian, $"Снять фильтр по игре «{Game}»")
         : string.Create(UiCulture.Russian, $"Фильтровать по игре «{Game}»");
 
-    public StreamSessionSegmentRowViewModel(StreamSessionSegment segment, double share, bool continuesGame)
+    public StreamSessionSegmentRowViewModel(StreamSessionSegment segment, double share, bool continuesGame, int number)
     {
+        Number = number;
+        NumberText = number.ToString(UiCulture.Russian);
         GameKey = segment.Game is { Length: > 0 } key ? key : null;
         Game = GameKey ?? "–";
         Title = segment.Title is { Length: > 0 } title ? title : "Без названия";
@@ -1474,7 +1527,7 @@ public sealed partial class StreamSessionSegmentRowViewModel : ObservableObject
         Caption = continuesGame ? Title : Game;
         TimelineText = string.Create(
             UiCulture.Russian,
-            $"{Game} · {Title}, {Duration} · {MessagesText} · {PeakViewersText}");
+            $"{number}. {Game} · {Title}, {Duration} · {MessagesText} · {PeakViewersText}");
     }
 }
 

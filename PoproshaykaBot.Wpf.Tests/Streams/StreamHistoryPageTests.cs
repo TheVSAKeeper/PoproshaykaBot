@@ -8,6 +8,7 @@ using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.Views;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -155,6 +156,20 @@ public class StreamHistoryPageTests
                 ? [new() { StartedAt = session.StartedAt, EndedAt = session.StartedAt.AddMinutes(trackedMinutes) }]
                 : [];
         }
+
+        Assert.That(StreamHistoryPageViewModel.DescribeTracking(session), Is.EqualTo(expected));
+    }
+
+    [TestCase("01:01:00", "01:00:59", "Учёт вёлся почти весь эфир")]
+    [TestCase("01:01:00", "01:00:01", "Учёт вёлся почти весь эфир")]
+    [TestCase("01:01:00", "01:00:00", "Учёт вёлся 1 ч 0 мин из 1 ч 1 мин")]
+    [TestCase("01:00:59", "00:59:59", "Учёт вёлся 59 мин из 1 ч 0 мин")]
+    [TestCase("00:00:50", "00:00:05", "Учёт вёлся 5 с из 50 с")]
+    public void Почти_весь_эфир_решает_разница_длительностей_а_не_их_подписи(string duration, string tracked, string expected)
+    {
+        var session = Session(0, "Just Chatting");
+        session.EndedAt = session.StartedAt + TimeSpan.Parse(duration, CultureInfo.InvariantCulture);
+        session.TrackedIntervals = [new() { StartedAt = session.StartedAt, EndedAt = session.StartedAt + TimeSpan.Parse(tracked, CultureInfo.InvariantCulture) }];
 
         Assert.That(StreamHistoryPageViewModel.DescribeTracking(session), Is.EqualTo(expected));
     }

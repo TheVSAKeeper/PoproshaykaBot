@@ -156,12 +156,13 @@ public class StatisticsPagesPerformanceTests
                 statistics,
                 null!,
                 new UserRankService(settingsManager),
-                new UserPointsManagementService(statistics, settingsManager, eventBus),
+                new UserPointsManagementService(statistics, settingsManager, eventBus, NullLogger<UserPointsManagementService>.Instance),
                 new FakeChannelProvider(),
                 settingsManager,
                 null!,
                 eventBus,
-                new MemorySettings());
+                new MemorySettings(),
+                FakeAvatarCache.CreateProvider());
 
             view = new() { DataContext = page };
             Arrange(view);

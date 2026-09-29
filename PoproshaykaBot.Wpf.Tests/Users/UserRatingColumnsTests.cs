@@ -25,6 +25,9 @@ public class UserRatingColumnsTests
     private const double PageHeight = 640;
     private const double NarrowestPage = 600;
     private const double WidthStep = 2;
+    private const double MeasuredSlackCeiling = 8;
+    private const double AvatarSize = 24;
+    private const double RowHeight = 40;
     private const int NameColumn = 1;
     private const int RankColumn = 2;
     private const string FontSizePrefix = "Font.Size.";
@@ -96,6 +99,8 @@ public class UserRatingColumnsTests
                 Assert.That(atThreshold.Rank, Is.GreaterThan(0));
                 Assert.That(atThreshold.Slack, Is.GreaterThanOrEqualTo(0),
                     $"Масштаб {scale}: на пороге заголовку «Участник» не хватает {-atThreshold.Slack:F1} DIP – порог занижен");
+                Assert.That(atThreshold.Slack, Is.LessThan(scale == FontScaleManager.DefaultScale ? MeasuredSlackCeiling : double.MaxValue),
+                    "При 1.0 порог мерен впритык: запас шире значит, что раскладка строки поменялась и порог пора перемерить");
                 Assert.That(below.ShowsRankColumn, Is.False, "Уже порога колонка «Ранг» скрыта");
                 Assert.That(below.Rank, Is.Zero, "Скрытая колонка не держит ширину ни в шапке, ни в строках");
                 Assert.That(below.Slack, Is.GreaterThanOrEqualTo(0));
@@ -150,6 +155,48 @@ public class UserRatingColumnsTests
                 Assert.That(peers.GetChildren().Select(child => child.GetName()),
                     Is.EqualTo(page.RankLadderSteps.Select(step => step.AutomationName)),
                     "Ступень звучит своим названием, порогом и состоянием, а не именем типа");
+            }
+        }
+        finally
+        {
+            ApplyScale(FontScaleManager.DefaultScale);
+        }
+    }
+
+    [TestCase(1.0)]
+    [TestCase(1.6)]
+    public void Кружок_стоит_перед_ником_а_заголовок_Участник_над_ником(double scale)
+    {
+        try
+        {
+            ApplyScale(scale);
+
+            var view = new UserStatisticsPageView { DataContext = CreatePage() };
+            Arrange(view, 1000);
+
+            var header = (Grid)view.FindName("RatingHeader")!;
+            var list = (ListBox)view.FindName("RatingList")!;
+            var row = (ListBoxItem)list.ItemContainerGenerator.ContainerFromIndex(0);
+            var name = ((UserStatisticsRowViewModel)row.DataContext).Name;
+
+            var headerText = FindChildren<TextBlock>(header).Single(text => text.Text == "Участник");
+            var nameText = FindChildren<TextBlock>(row).Single(text => text.Text == name);
+            var avatar = FindChildren<ContentPresenter>(row).Single(presenter => presenter.Content is UserAvatarViewModel);
+
+            var headerLeft = headerText.TranslatePoint(new(0, 0), view).X;
+            var nameLeft = nameText.TranslatePoint(new(0, 0), view).X;
+            var avatarCenter = avatar.TranslatePoint(new(0, avatar.ActualHeight / 2), view).Y;
+            var nameCenter = nameText.TranslatePoint(new(0, nameText.ActualHeight / 2), view).Y;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(avatar.ActualWidth, Is.EqualTo(AvatarSize));
+                Assert.That(avatar.ActualHeight, Is.EqualTo(AvatarSize));
+                Assert.That(row.ActualHeight, Is.EqualTo(RowHeight), "кружок не поднимает строку выше 40");
+                Assert.That(avatar.TranslatePoint(new(avatar.ActualWidth, 0), view).X, Is.LessThan(nameLeft),
+                    "кружок стоит перед ником");
+                Assert.That(headerLeft, Is.EqualTo(nameLeft).Within(0.5), "заголовок «Участник» стоит над ником, а не над кружком");
+                Assert.That(avatarCenter, Is.EqualTo(nameCenter).Within(1), "кружок выровнен по середине ника");
             }
         }
         finally
@@ -255,12 +302,13 @@ public class UserRatingColumnsTests
             statistics,
             null!,
             new UserRankService(settingsManager),
-            new UserPointsManagementService(statistics, settingsManager, eventBus),
+            new UserPointsManagementService(statistics, settingsManager, eventBus, NullLogger<UserPointsManagementService>.Instance),
             new FakeChannelProvider(),
             settingsManager,
             null!,
             eventBus,
-            new MemorySettings());
+            new MemorySettings(),
+            FakeAvatarCache.CreateProvider());
     }
 
     private sealed class FakeChannelProvider : IChannelProvider

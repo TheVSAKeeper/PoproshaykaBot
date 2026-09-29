@@ -15,7 +15,7 @@ public sealed class UserRankSerializationTests
 
         TestContext.Out.WriteLine(json);
 
-        Assert.That(json, Does.Contain("\"♔\""), "King emoji must be preserved");
+        Assert.That(json, Does.Contain("\"♚\""), "King emoji must be preserved");
         Assert.That(json, Does.Contain("КОРОЛЬ"));
         Assert.That(json, Does.Contain("\"minMessages\": 5000"));
     }

@@ -258,12 +258,13 @@ public class UserStatisticsBalanceInputTests
             statistics,
             null!,
             new UserRankService(settingsManager),
-            new UserPointsManagementService(statistics, settingsManager, eventBus),
+            new UserPointsManagementService(statistics, settingsManager, eventBus, NullLogger<UserPointsManagementService>.Instance),
             new FakeChannelProvider(),
             settingsManager,
             null!,
             eventBus,
-            settings ?? new MemorySettings());
+            settings ?? new MemorySettings(),
+            FakeAvatarCache.CreateProvider());
     }
 
     private sealed class FakeChannelProvider : IChannelProvider

@@ -104,6 +104,8 @@
                     Value="NoWrap" />
             <Setter Property="Margin"
                     Value="0,2,0,0" />
+            <Setter Property="ToolTip"
+                    Value="Сравнение со средним по стримам в статистике с учётом фильтра по игре" />
             <Style.Triggers>
                 <Trigger Property="Tag"
                          Value="{x:Static vm:TrendTone.Up}">
@@ -333,6 +335,8 @@
 
         <Style x:Key="SegmentCaption"
                TargetType="TextBlock">
+            <Setter Property="Text"
+                    Value="{Binding Caption}" />
             <Setter Property="FontSize"
                     Value="{DynamicResource Font.Size.Caption}" />
             <Setter Property="VerticalAlignment"
@@ -371,6 +375,17 @@
                 </DataTrigger>
                 <DataTrigger Value="False"
                              Binding="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Border}, Converter={StaticResource ScaledWidthFits}, ConverterParameter=56}">
+                    <Setter Property="Text"
+                            Value="{Binding NumberText}" />
+                    <Setter Property="HorizontalAlignment"
+                            Value="Center" />
+                    <Setter Property="TextTrimming"
+                            Value="None" />
+                    <Setter Property="Margin"
+                            Value="-6,0" />
+                </DataTrigger>
+                <DataTrigger Value="False"
+                             Binding="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Border}, Converter={StaticResource ScaledWidthFits}, ConverterParameter=12}">
                     <Setter Property="Visibility"
                             Value="Collapsed" />
                 </DataTrigger>
@@ -596,6 +611,32 @@
                     Value="0,4,12,0" />
         </Style>
 
+        <Style x:Key="SegmentNumber"
+               TargetType="TextBlock">
+            <Setter Property="FontSize"
+                    Value="{DynamicResource Font.Size.S}" />
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Muted}" />
+            <Setter Property="TextWrapping"
+                    Value="NoWrap" />
+            <Setter Property="Margin"
+                    Value="0,0,6,0" />
+        </Style>
+
+        <Style x:Key="SegmentDuration"
+               TargetType="TextBlock">
+            <Setter Property="FontSize"
+                    Value="{DynamicResource Font.Size.S}" />
+            <Setter Property="Foreground"
+                    Value="{DynamicResource Fg.Secondary}" />
+            <Setter Property="TextWrapping"
+                    Value="NoWrap" />
+            <Setter Property="VerticalAlignment"
+                    Value="Top" />
+            <Setter Property="Margin"
+                    Value="8,0,0,0" />
+        </Style>
+
         <DataTemplate x:Key="SegmentCardTemplate">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -628,16 +669,18 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Row="0"
-                               Grid.Column="0"
-                               Style="{StaticResource SessionCardTitle}"
-                               Text="{Binding Game}" />
+                    <DockPanel Grid.Row="0"
+                               Grid.Column="0">
+                        <TextBlock DockPanel.Dock="Left"
+                                   Style="{StaticResource SegmentNumber}"
+                                   Text="{Binding NumberText}" />
+                        <TextBlock Style="{StaticResource SessionCardTitle}"
+                                   Text="{Binding Game}" />
+                    </DockPanel>
 
                     <TextBlock Grid.Row="0"
                                Grid.Column="1"
-                               Style="{StaticResource RatingNumber.Strong}"
-                               Margin="8,0,0,0"
-                               VerticalAlignment="Top"
+                               Style="{StaticResource SegmentDuration}"
                                Text="{Binding Duration}" />
 
                     <TextBlock Grid.Row="1"
@@ -1755,11 +1798,13 @@
                                        Foreground="{DynamicResource Fg.Muted}"
                                        FontSize="{DynamicResource Font.Size.Caption}"
                                        TextWrapping="NoWrap"
+                                       ToolTip="{Binding DetailCategoriesHint}"
+                                       ToolTipService.ShowDuration="60000"
+                                       AutomationProperties.HelpText="{Binding DetailCategoriesHint, TargetNullValue=''}"
                                        Visibility="{Binding DetailComposition, Converter={StaticResource NullToVisibility}}" />
                         </WrapPanel>
 
                         <TextBlock Text="{Binding DetailPeriodText}"
-                                   FontFamily="{DynamicResource Font.Mono}"
                                    FontSize="{DynamicResource Font.Size.Caption}"
                                    Foreground="{DynamicResource Fg.Secondary}"
                                    TextWrapping="NoWrap"
@@ -1852,7 +1897,8 @@
                             </Grid.ColumnDefinitions>
 
                             <Grid x:Name="SegmentsPane"
-                                  Grid.Column="0">
+                                  Grid.Column="0"
+                                  ScrollViewer.ScrollChanged="OnDetailListScrollChanged">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -1886,8 +1932,7 @@
                                         <DataTemplate>
                                             <Border Style="{StaticResource SegmentBlock}"
                                                     ToolTip="{Binding TimelineText}">
-                                                <TextBlock Style="{StaticResource SegmentCaption}"
-                                                           Text="{Binding Caption}" />
+                                                <TextBlock Style="{StaticResource SegmentCaption}" />
                                             </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -1928,10 +1973,13 @@
 
                             <GridSplitter x:Name="DetailSplitter"
                                           Grid.Column="1"
-                                          ResizeDirection="Columns" />
+                                          ResizeDirection="Columns"
+                                          PreviewMouseLeftButtonDown="OnDetailSplitterMouseDown"
+                                          PreviewKeyDown="OnDetailSplitterKeyDown" />
 
                             <Grid x:Name="ChattersPane"
-                                  Grid.Column="2">
+                                  Grid.Column="2"
+                                  ScrollViewer.ScrollChanged="OnDetailListScrollChanged">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
@@ -1949,7 +1997,8 @@
                                            Text="Чаттеров нет"
                                            Visibility="{Binding HasChatters, Converter={StaticResource InverseBoolToVisibility}}" />
 
-                                <ListBox Grid.Row="1"
+                                <ListBox x:Name="ChatterList"
+                                         Grid.Row="1"
                                          Margin="0,10,0,0"
                                          ItemsSource="{Binding Chatters}"
                                          AutomationProperties.Name="Чаттеры выбранного стрима"

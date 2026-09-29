@@ -274,12 +274,13 @@ public class SettingsWriteGateNoticeTests
             statistics,
             null!,
             new UserRankService(settingsManager),
-            new UserPointsManagementService(statistics, settingsManager, eventBus),
+            new UserPointsManagementService(statistics, settingsManager, eventBus, NullLogger<UserPointsManagementService>.Instance),
             new FakeChannelProvider(),
             settingsManager,
             dialogs,
             eventBus,
-            new MemorySettings());
+            new MemorySettings(),
+            FakeAvatarCache.CreateProvider());
     }
 
     private sealed class FakeChannelProvider : IChannelProvider

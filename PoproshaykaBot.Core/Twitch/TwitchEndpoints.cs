@@ -21,6 +21,7 @@ public static class TwitchEndpoints
     public const string HelixEventSubSubscriptions = "helix/eventsub/subscriptions";
     public const string HelixPolls = "helix/polls";
     public const string BoxArtClient = "twitch-box-art";
+    public const string AvatarClient = "twitch-avatars";
     public const string HelixBotClient = "twitch-helix-bot";
     public const string HelixBroadcasterClient = "twitch-helix-broadcaster";
     public const string HelixAppClient = "twitch-helix-app";

@@ -105,26 +105,12 @@ public sealed class UserStatisticsRepository(ILogger<UserStatisticsRepository> l
 
     public bool IncrementBonusPoints(string userId, ulong delta)
     {
-        var updated = AdjustPoints(userId, delta, (stats, d) => stats.BonusPoints += d);
-
-        if (updated)
-        {
-            logger.LogInformation("Пользователю {UserId} начислено {Delta} бонусных баллов", userId, delta);
-        }
-
-        return updated;
+        return AdjustPoints(userId, delta, (stats, d) => stats.BonusPoints += d);
     }
 
     public bool IncrementPenaltyPoints(string userId, ulong delta)
     {
-        var updated = AdjustPoints(userId, delta, (stats, d) => stats.PenaltyPoints += d);
-
-        if (updated)
-        {
-            logger.LogInformation("Пользователю {UserId} начислено {Delta} штрафных баллов", userId, delta);
-        }
-
-        return updated;
+        return AdjustPoints(userId, delta, (stats, d) => stats.PenaltyPoints += d);
     }
 
     public void ReplaceAll(IEnumerable<UserStatistics> users)

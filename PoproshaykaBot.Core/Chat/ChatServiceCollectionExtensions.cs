@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Core.Users.Avatars;
 
 namespace PoproshaykaBot.Core.Chat;
 
@@ -25,7 +26,11 @@ public static class ChatServiceCollectionExtensions
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();
         services.AddSingleton<UserPointsManagementService>();
-        services.AddSingleton<UserProfileImageProvider>();
+
+        if (services.All(descriptor => descriptor.ServiceType != typeof(IUserAvatarCache)))
+        {
+            services.AddUserAvatars();
+        }
 
         services.AddSingleton<TwitchChatMessenger>();
         services.AddSingleton<IChatMessenger>(sp => sp.GetRequiredService<TwitchChatMessenger>());

@@ -4,12 +4,12 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
-using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Core.Users.Avatars;
 
 namespace PoproshaykaBot.Core.Server.Endpoints;
 
 internal sealed class AvatarEndpoint(
-    UserProfileImageProvider userProfileImageProvider,
+    IUserAvatarCache avatarCache,
     IServiceProvider serviceProvider) : IEndpointMapper
 {
     public void Map(IEndpointRouteBuilder endpoints)
@@ -27,7 +27,7 @@ internal sealed class AvatarEndpoint(
             string? url;
             if (!string.IsNullOrWhiteSpace(userId))
             {
-                url = await userProfileImageProvider.GetAsync(userId, ctx.RequestAborted);
+                url = await avatarCache.GetUrlAsync(userId, ctx.RequestAborted);
             }
             else
             {

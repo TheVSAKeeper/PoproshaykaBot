@@ -9,6 +9,7 @@ namespace PoproshaykaBot.Core.Twitch.Helix;
 public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, ILogger<TwitchHelixClient> logger) : ITwitchHelixClient
 {
     public const int MaxGamesPerRequest = 100;
+    public const int MaxUsersPerRequest = 100;
     public const int MaxEventSubSubscriptionPages = 10;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -36,7 +37,7 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
 
     public async Task<IReadOnlyList<UserInfo>> GetUsersByIdsAsync(IEnumerable<string> ids, CancellationToken cancellationToken = default)
     {
-        var idList = ids.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().Take(100).ToArray();
+        var idList = ids.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().Take(MaxUsersPerRequest).ToArray();
         if (idList.Length == 0)
         {
             return [];

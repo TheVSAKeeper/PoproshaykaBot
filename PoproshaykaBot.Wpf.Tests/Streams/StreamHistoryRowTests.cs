@@ -19,21 +19,30 @@ public class StreamHistoryRowTests
         });
     }
 
-    [TestCase(131, 100, 5, "+31 % к обычному", TrendTone.Up)]
-    [TestCase(60, 100, 5, "−40 % к обычному", TrendTone.Down)]
-    [TestCase(102, 100, 5, "как обычно", TrendTone.Flat)]
-    [TestCase(96, 100, 5, "как обычно", TrendTone.Flat)]
-    [TestCase(95, 100, 5, "−5 % к обычному", TrendTone.Down)]
-    [TestCase(131, 100, 1, "", TrendTone.None)]
-    [TestCase(131, 0, 5, "", TrendTone.None)]
+    [TestCase(131, 100, 5, false, "+31 % к обычному", TrendTone.Up)]
+    [TestCase(60, 100, 5, false, "−40 % к обычному", TrendTone.Down)]
+    [TestCase(102, 100, 5, false, "как обычно", TrendTone.Flat)]
+    [TestCase(96, 100, 5, false, "как обычно", TrendTone.Flat)]
+    [TestCase(95, 100, 5, false, "−5 % к обычному", TrendTone.Down)]
+    [TestCase(131, 100, 1, false, "", TrendTone.None)]
+    [TestCase(131, 0, 5, false, "", TrendTone.None)]
+    [TestCase(3, 18, 5, true, "3 вместо 18 · −83 %", TrendTone.Down)]
+    [TestCase(125, 110, 5, true, "125 вместо 110 · +14 %", TrendTone.Up)]
+    [TestCase(10, 10, 5, true, "как обычно", TrendTone.Flat)]
+    [TestCase(3, 8, 5, true, "3 вместо 8", TrendTone.Down)]
+    [TestCase(5, 2.4, 5, true, "5 вместо 2,4", TrendTone.Up)]
+    [TestCase(1, 0.04, 5, true, "1 вместо почти 0", TrendTone.Up)]
+    [TestCase(3, 8, 5, false, "обычно 8", TrendTone.Down)]
+    [TestCase(3, 18, 1, true, "", TrendTone.None)]
     public void Compares_a_session_with_the_average(
         double value,
         double average,
         int sessionCount,
+        bool withValue,
         string expectedText,
         TrendTone expectedTone)
     {
-        var (text, tone) = StreamHistoryPageViewModel.DescribeDelta(value, average, sessionCount);
+        var (text, tone) = StreamHistoryPageViewModel.DescribeDelta(value, average, sessionCount, withValue);
 
         Assert.Multiple(() =>
         {
@@ -143,13 +152,15 @@ public class StreamHistoryRowTests
         var segment = new StreamSessionSegmentRowViewModel(
             new() { StartedAt = Start, EndedAt = Start.AddHours(1), Game = "Just Chatting", Title = "вторая часть" },
             0.5,
-            continuesGame: true);
+            continuesGame: true,
+            number: 2);
 
         Assert.Multiple(() =>
         {
             Assert.That(segment.Caption, Is.EqualTo("вторая часть"));
             Assert.That(segment.ContinuesGame, Is.True);
-            Assert.That(segment.TimelineText, Is.EqualTo("Just Chatting · вторая часть, 1 ч 0 мин · 0 сообщ. · пик 0"));
+            Assert.That(segment.NumberText, Is.EqualTo("2"));
+            Assert.That(segment.TimelineText, Is.EqualTo("2. Just Chatting · вторая часть, 1 ч 0 мин · 0 сообщ. · пик 0"));
             Assert.That(segment.CanFilter, Is.True);
         });
     }
@@ -160,7 +171,8 @@ public class StreamHistoryRowTests
         var segment = new StreamSessionSegmentRowViewModel(
             new() { StartedAt = Start, EndedAt = Start.AddHours(1), Game = "Just Chatting", Title = "эфир" },
             1,
-            continuesGame: false);
+            continuesGame: false,
+            number: 1);
 
         Assert.That(segment.Caption, Is.EqualTo("Just Chatting"));
     }
@@ -171,7 +183,8 @@ public class StreamHistoryRowTests
         var segment = new StreamSessionSegmentRowViewModel(
             new() { StartedAt = Start, EndedAt = Start.AddHours(1), Title = null },
             1,
-            continuesGame: false);
+            continuesGame: false,
+            number: 1);
 
         Assert.Multiple(() =>
         {
@@ -201,6 +214,45 @@ public class StreamHistoryRowTests
         }
 
         Assert.That(StreamHistoryPageViewModel.DescribeComposition(session), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Подсказка_состава_перечисляет_категории_с_суммой_эфира()
+    {
+        var session = new StreamSessionRecord
+        {
+            StartedAt = Start,
+            EndedAt = Start.AddHours(3),
+            Segments =
+            [
+                new() { StartedAt = Start, EndedAt = Start.AddMinutes(40), Game = "Just Chatting" },
+                new() { StartedAt = Start.AddMinutes(40), EndedAt = Start.AddMinutes(40).AddSeconds(31), Game = "Tarot" },
+                new() { StartedAt = Start.AddMinutes(41), EndedAt = Start.AddHours(2), Game = "just chatting", Title = "вторая часть" },
+                new() { StartedAt = Start.AddHours(2), EndedAt = Start.AddHours(3), Game = "Minecraft" },
+                new() { StartedAt = Start.AddHours(3), EndedAt = Start.AddHours(3).AddMinutes(5) },
+            ],
+        };
+
+        var expected = string.Join(Environment.NewLine, "Just Chatting – 1 ч 59 мин", "Minecraft – 1 ч 0 мин", "Tarot – 31 с");
+
+        Assert.That(StreamHistoryPageViewModel.DescribeCategories(session), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Подсказки_состава_нет_у_стрима_одной_категории()
+    {
+        var session = new StreamSessionRecord
+        {
+            StartedAt = Start,
+            EndedAt = Start.AddHours(2),
+            Segments =
+            [
+                new() { StartedAt = Start, EndedAt = Start.AddHours(1), Game = "Just Chatting", Title = "первая часть" },
+                new() { StartedAt = Start.AddHours(1), EndedAt = Start.AddHours(2), Game = "Just Chatting", Title = "вторая часть" },
+            ],
+        };
+
+        Assert.That(StreamHistoryPageViewModel.DescribeCategories(session), Is.Null);
     }
 
     [Test]

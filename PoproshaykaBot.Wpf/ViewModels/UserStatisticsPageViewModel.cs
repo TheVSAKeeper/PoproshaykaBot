@@ -20,6 +20,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 {
     public const long MaxAdjustment = 1_000_000;
 
+    private const string AdjustmentSource = "WPF, страница «Пользователи», блок «Баланс»";
+
     private readonly IUserStatisticsRepository _userStatistics;
     private readonly StatisticsAutoSaver _statisticsAutoSaver;
     private readonly UserRankService _userRankService;
@@ -28,6 +30,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private readonly SettingsManager _settingsManager;
     private readonly IDialogService _dialogService;
     private readonly ISettingsStore _settings;
+    private readonly UserAvatarProvider _avatars;
     private readonly List<UserStatisticsRowViewModel> _allRows = [];
     private readonly ObservableCollection<UserStatisticsRowViewModel> _rows = [];
     private readonly List<IDisposable> _subscriptions = [];
@@ -114,7 +117,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         SettingsManager settingsManager,
         IDialogService dialogService,
         IEventBus eventBus,
-        ISettingsStore settings)
+        ISettingsStore settings,
+        UserAvatarProvider avatars)
     {
         _userStatistics = userStatistics;
         _statisticsAutoSaver = statisticsAutoSaver;
@@ -124,6 +128,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         _settingsManager = settingsManager;
         _dialogService = dialogService;
         _settings = settings;
+        _avatars = avatars;
         _isBalanceExpanded = settings.GetBool(SettingsKeys.UserBalanceExpanded, true);
 
         _subscriptions.Add(eventBus.SubscribeOnUi<UserPunished>(_ => Reload()));
@@ -165,7 +170,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         : string.Empty;
 
     public string SelectedPlaceText => SelectedRow is { } row
-        ? UserStatisticsRanking.DescribePlace(row.Position, _rows.Count)
+        ? UserStatisticsRanking.DescribePlace(row.Place, _allRows.Count)
         : string.Empty;
 
     public IReadOnlyList<UserRankLadderStep> RankLadderSteps => SelectedRow?.RankLadder?.Arrange(IsRankLadderExpanded) ?? [];
@@ -229,6 +234,19 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         SelectedRow = _rows.FirstOrDefault(row => string.Equals(row.UserId, userId, StringComparison.Ordinal));
 
         return SelectedRow is not null;
+    }
+
+    public void RequestAvatar(UserAvatarViewModel avatar)
+    {
+        _avatars.Request(avatar);
+    }
+
+    partial void OnSelectedRowChanged(UserStatisticsRowViewModel? value)
+    {
+        if (value is not null)
+        {
+            _avatars.Request(value.Avatar);
+        }
     }
 
     partial void OnFilterTextChanged(string value)
@@ -348,14 +366,14 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
                 var amount = (ulong)-delta;
                 var notification = _pointsManagement.GetPunishmentNotification(row.Name, amount);
                 _dialogService.Info("Наказание", notification);
-                updated = await _pointsManagement.PunishUserAsync(row.UserId, row.Name, amount, _channelProvider.Channel);
+                updated = await _pointsManagement.PunishUserAsync(row.UserId, row.Name, amount, _channelProvider.Channel, AdjustmentSource);
             }
             else
             {
                 var amount = (ulong)delta;
                 var notification = _pointsManagement.GetRewardNotification(row.Name, amount);
                 _dialogService.Info("Поощрение", notification);
-                updated = await _pointsManagement.RewardUserAsync(row.UserId, row.Name, amount, _channelProvider.Channel);
+                updated = await _pointsManagement.RewardUserAsync(row.UserId, row.Name, amount, _channelProvider.Channel, AdjustmentSource);
             }
 
             if (!updated)
@@ -504,7 +522,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         {
             var rank = _userRankService.GetRank(user.Points);
             var standing = UserRankStanding.Create(user.Points, _userRankService.GetRankDisplay(user.Points), rank, ranks);
-            _allRows.Add(new UserStatisticsRowViewModel(user, standing, pointTerm));
+            _allRows.Add(new UserStatisticsRowViewModel(user, standing, pointTerm) { Avatar = _avatars.For(user.UserId, user.Name) });
 
             totalMessages += (long)user.MessageCount;
             totalPoints += user.Points;
@@ -520,6 +538,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         HasTotalBonus = totalBonus > 0;
         HasTotalPenalty = totalPenalty > 0;
 
+        _avatars.Track(_allRows.Select(row => row.UserId));
+        UserStatisticsRanking.AssignPlaces(_allRows);
         RebuildView();
     }
 }

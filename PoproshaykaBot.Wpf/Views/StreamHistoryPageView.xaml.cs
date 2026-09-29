@@ -66,6 +66,11 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     private bool _layoutApplied;
     private bool _detailStacked;
     private bool _detailApplied;
+    private bool _detailRowsQueued;
+    private bool _detailRowsByHand;
+    private Guid? _detailRowsSession;
+    private ScrollViewer? _segmentsViewer;
+    private ScrollViewer? _chattersViewer;
     private double _segmentCardsWidth;
     private double _detailWidth = DetailMinWidth;
     private double _detailWidthScale = 1;
@@ -183,6 +188,134 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     private void OnDetailSplitSizeChanged(object sender, SizeChangedEventArgs e)
     {
         UpdateDetailMode();
+        QueueDetailRows();
+    }
+
+    private void OnDetailListScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.OriginalSource is not ScrollViewer { TemplatedParent: ListBox list } viewer)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(list, SegmentCards))
+        {
+            _segmentsViewer = viewer;
+        }
+        else if (ReferenceEquals(list, ChatterList))
+        {
+            _chattersViewer = viewer;
+        }
+        else
+        {
+            return;
+        }
+
+        if (e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0)
+        {
+            QueueDetailRows();
+        }
+    }
+
+    private void OnDetailSplitterMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        TakeDetailRowsByHand();
+    }
+
+    private void OnDetailSplitterKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right)
+        {
+            TakeDetailRowsByHand();
+        }
+    }
+
+    private void TakeDetailRowsByHand()
+    {
+        _detailRowsByHand = true;
+
+        var rows = DetailSplit.RowDefinitions;
+
+        if (!_detailStacked || rows.Count != 3 || rows[0].ActualHeight <= 0 || rows[2].ActualHeight <= 0)
+        {
+            return;
+        }
+
+        rows[0].Height = new(rows[0].ActualHeight, GridUnitType.Star);
+        rows[2].Height = new(rows[2].ActualHeight, GridUnitType.Star);
+    }
+
+    private void QueueDetailRows()
+    {
+        if (_detailRowsQueued || _detailRowsByHand || !_detailStacked)
+        {
+            return;
+        }
+
+        _detailRowsQueued = true;
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(ApplyDetailRows));
+    }
+
+    private void ApplyDetailRows()
+    {
+        _detailRowsQueued = false;
+
+        var rows = DetailSplit.RowDefinitions;
+
+        if (_detailRowsByHand || !_detailStacked || rows.Count != 3)
+        {
+            return;
+        }
+
+        var available = DetailSplit.ActualHeight - rows[1].ActualHeight;
+
+        if (available <= 0)
+        {
+            return;
+        }
+
+        var (segments, chatters) = ShareDetailRows(
+            ContentHeight(SegmentsPane, SegmentCards, _segmentsViewer),
+            ContentHeight(ChattersPane, ChatterList, _chattersViewer),
+            available);
+
+        if (!SameLength(rows[0].Height, segments))
+        {
+            rows[0].Height = segments;
+        }
+
+        if (!SameLength(rows[2].Height, chatters))
+        {
+            rows[2].Height = chatters;
+        }
+    }
+
+    private static (GridLength Segments, GridLength Chatters) ShareDetailRows(double segments, double chatters, double available)
+    {
+        var rest = new GridLength(1, GridUnitType.Star);
+
+        if (segments + chatters <= available || segments <= available / 2)
+        {
+            return (new(segments), rest);
+        }
+
+        return chatters <= available / 2
+            ? (rest, new(chatters))
+            : (rest, rest);
+    }
+
+    private static double ContentHeight(FrameworkElement pane, ListBox list, ScrollViewer? viewer)
+    {
+        var overflow = list.Visibility == Visibility.Visible && viewer is not null
+            ? Math.Max(0, viewer.ExtentHeight - viewer.ViewportHeight)
+            : 0;
+
+        return Math.Ceiling(pane.DesiredSize.Height + overflow);
+    }
+
+    private static bool SameLength(GridLength current, GridLength next)
+    {
+        return current.GridUnitType == next.GridUnitType && Math.Abs(current.Value - next.Value) < 0.5;
     }
 
     private void UpdateDetailMode()
@@ -207,6 +340,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
 
         _detailStacked = stacked;
         _detailApplied = true;
+        _detailRowsByHand = false;
 
         DetailSplit.ColumnDefinitions.Clear();
         DetailSplit.RowDefinitions.Clear();
@@ -222,6 +356,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
             Place(ChattersPane, 2, 0);
 
             DetailSplitter.ResizeDirection = GridResizeDirection.Rows;
+            QueueDetailRows();
         }
         else
         {
@@ -418,6 +553,14 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
             or nameof(StreamHistoryPageViewModel.IsCardsView))
         {
             ScrollToSelection(viewModel);
+        }
+
+        if (e.PropertyName is nameof(StreamHistoryPageViewModel.SelectedRow)
+            && viewModel.SelectedRow?.Source.Id != _detailRowsSession)
+        {
+            _detailRowsSession = viewModel.SelectedRow?.Source.Id;
+            _detailRowsByHand = false;
+            QueueDetailRows();
         }
 
         if (e.PropertyName is nameof(StreamHistoryPageViewModel.Notice)

@@ -64,7 +64,7 @@ public static class RelativeTime
         return FormatDate(ToOffset(value));
     }
 
-    private static DateTimeOffset ToOffset(DateTime value)
+    public static DateTimeOffset ToOffset(DateTime value)
     {
         return value.Kind switch
         {

@@ -1,7 +1,14 @@
-﻿using PoproshaykaBot.Core.Statistics;
+﻿using KeepShell.Testing;
+using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
+using System.IO;
 
 namespace PoproshaykaBot.Wpf.Tests.Users;
 
@@ -287,9 +294,64 @@ public class UserStatisticsRankingTests
     [TestCase(12, 12, "12-е место из 12")]
     [TestCase(0, 421, "")]
     [TestCase(3, 0, "")]
-    public void Names_the_place_of_a_row_in_the_visible_set(int position, int total, string expected)
+    public void Names_the_place_out_of_the_set(int position, int total, string expected)
     {
         Assert.That(UserStatisticsRanking.DescribePlace(position, total), Is.EqualTo(expected));
+    }
+
+    [TestCase(UserStatisticsSortKey.None, "", "d", "4-е место из 5")]
+    [TestCase(UserStatisticsSortKey.Name, "", "d", "4-е место из 5")]
+    [TestCase(UserStatisticsSortKey.Messages, "", "a", "1-е место из 5")]
+    [TestCase(UserStatisticsSortKey.None, "dim", "d", "4-е место из 5")]
+    [TestCase(UserStatisticsSortKey.Name, "egor", "e", "5-е место из 5")]
+    [TestCase(UserStatisticsSortKey.None, "", "b", "2-е место из 5")]
+    [TestCase(UserStatisticsSortKey.Name, "clara", "c", "2-е место из 5")]
+    public void Inspector_place_is_by_points_over_the_whole_set(UserStatisticsSortKey sortBy, string filter, string userId, string expected)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "poproshayka-place-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            var page = CreatePage(directory,
+            [
+                new() { UserId = "a", Name = "anna", MessageCount = 10, BonusPoints = 490 },
+                new() { UserId = "b", Name = "boris", MessageCount = 300 },
+                new() { UserId = "c", Name = "clara", MessageCount = 300 },
+                new() { UserId = "d", Name = "dima", MessageCount = 100 },
+                new() { UserId = "e", Name = "egor", MessageCount = 50 },
+            ]);
+
+            page.SortByCommand.Execute(sortBy);
+            page.FilterText = filter;
+
+            Assert.That(page.TrySelect(userId), Is.True);
+            Assert.That(page.SelectedPlaceText, Is.EqualTo(expected));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestCase(375UL, 2_900UL, 10UL, false, false, true)]
+    [TestCase(5UL, 1_000UL, 0UL, true, false, false)]
+    [TestCase(97UL, 3UL, 0UL, false, false, false)]
+    [TestCase(100UL, 0UL, 0UL, false, false, false)]
+    [TestCase(0UL, 0UL, 0UL, false, false, false)]
+    public void Marks_a_composition_part_too_small_to_see_on_the_bar(
+        ulong messages, ulong bonus, ulong penalty, bool messagesTiny, bool bonusTiny, bool penaltyTiny)
+    {
+        var row = Row("mix", messages, bonus, penalty);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.IsMessagesTrackTiny, Is.EqualTo(messagesTiny));
+            Assert.That(row.IsBonusTrackTiny, Is.EqualTo(bonusTiny));
+            Assert.That(row.IsPenaltyTrackTiny, Is.EqualTo(penaltyTiny));
+            Assert.That(row.HasTinyTrack, Is.EqualTo(messagesTiny || bonusTiny || penaltyTiny));
+            Assert.That(row.PenaltyTrack.Value, Is.EqualTo(penalty), "Ширина сегмента остаётся пропорциональной");
+        });
     }
 
     [Test]
@@ -312,5 +374,31 @@ public class UserStatisticsRankingTests
         var ordered = UserStatisticsRanking.Arrange(rows, UserStatisticsSortKey.Points, true);
 
         Assert.That(ordered.Select(row => row.IsTopThree), Is.EqualTo(new[] { true, true, true, false }));
+    }
+
+    private static UserStatisticsPageViewModel CreatePage(string directory, List<UserStatistics> users)
+    {
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(directory, "settings.json"));
+        var statistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
+        var eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+
+        statistics.ReplaceAll(users);
+
+        return new(
+            statistics,
+            null!,
+            new UserRankService(settingsManager),
+            new UserPointsManagementService(statistics, settingsManager, eventBus, NullLogger<UserPointsManagementService>.Instance),
+            new FakeChannelProvider(),
+            settingsManager,
+            null!,
+            eventBus,
+            new MemorySettings(),
+            FakeAvatarCache.CreateProvider());
+    }
+
+    private sealed class FakeChannelProvider : IChannelProvider
+    {
+        public string? Channel => "test";
     }
 }

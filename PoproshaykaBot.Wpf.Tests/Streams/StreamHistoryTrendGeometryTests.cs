@@ -37,12 +37,14 @@ public class StreamHistoryTrendGeometryTests
     private const int EdgePeak = 12317;
     private const int LongTrend = 80;
     private const double Tolerance = 0.5;
+    private const double WholePixel = 1;
     private const int LongHistory = 200;
     private const double CardBorder = 1;
     private const double CompactCoverHeight = 32;
     private const double WideCoverHeight = 72;
     private const double SplitterStep = 250;
     private const double Shift = 200;
+    private const string DetailTitle = "стрим для карточки";
 
     private static readonly string[] Dictionaries =
     [
@@ -791,6 +793,82 @@ public class StreamHistoryTrendGeometryTests
             Assert.That(segment.DataContext, Is.SameAs(segmentRow.DataContext));
             Assert.That(segment.Header, Is.EqualTo(((StreamSessionSegmentRowViewModel)segmentRow.DataContext).FilterCaption));
         }
+    }
+
+    [TestCase(12, 3, true, false)]
+    [TestCase(1, 40, false, true)]
+    [TestCase(2, 3, false, false)]
+    [TestCase(30, 40, true, true)]
+    public void Стопка_карточки_делит_высоту_по_содержимому_списков(int segments, int chatters, bool segmentsScroll, bool chattersScroll)
+    {
+        var page = CreateDetailPage(segments, chatters);
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        Arrange(view, Wide);
+        page.SelectedRow = page.SortedSessions.Single(row => row.Source.Title == DetailTitle);
+        Arrange(view, Wide);
+        Pump(view);
+
+        var split = (Grid)view.FindName("DetailSplit")!;
+        var segmentsPane = (FrameworkElement)view.FindName("SegmentsPane")!;
+        var chattersPane = (FrameworkElement)view.FindName("ChattersPane")!;
+        var segmentsViewer = FindChild<ScrollViewer>((ListBox)view.FindName("SegmentCards")!)!;
+        var chattersViewer = FindChild<ScrollViewer>((ListBox)view.FindName("ChatterList")!)!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(split.RowDefinitions, Has.Count.EqualTo(3), "Карточка шириной в пол колонки обязана идти стопкой");
+            Assert.That(Scrolls(segmentsViewer), Is.EqualTo(segmentsScroll), "Прокрутка сегментов");
+            Assert.That(Scrolls(chattersViewer), Is.EqualTo(chattersScroll), "Прокрутка чаттеров");
+
+            if (!segmentsScroll)
+            {
+                Assert.That(segmentsPane.ActualHeight - segmentsPane.DesiredSize.Height, Is.LessThan(WholePixel),
+                    "Сегменты, которым хватает места, не оставляют пустоты над чаттерами");
+            }
+
+            if (segmentsScroll && !chattersScroll)
+            {
+                Assert.That(chattersPane.ActualHeight - chattersPane.DesiredSize.Height, Is.LessThan(WholePixel),
+                    "Высота, которой чаттерам не нужно, уходит сегментам");
+            }
+        }
+    }
+
+    private static bool Scrolls(ScrollViewer viewer)
+    {
+        return viewer.ExtentHeight > viewer.ViewportHeight + Tolerance;
+    }
+
+    private StreamHistoryPageViewModel CreateDetailPage(int segments, int chatters)
+    {
+        var session = Session(0);
+        session.Title = DetailTitle;
+        session.EndedAt = session.StartedAt.AddMinutes(10 * segments);
+        session.Segments = Enumerable.Range(0, segments)
+            .Select(index => new StreamSessionSegment
+            {
+                StartedAt = session.StartedAt.AddMinutes(10 * index),
+                EndedAt = session.StartedAt.AddMinutes(10 * (index + 1)),
+                Game = "игра " + index,
+                Title = "эфир",
+            })
+            .ToList();
+        session.Chatters = Enumerable.Range(0, chatters)
+            .Select(index => new StreamSessionChatter { UserId = "u" + index, DisplayName = "чаттер " + index, MessageCount = 100 - index })
+            .ToList();
+        session.ChatterCount = chatters;
+
+        var store = new StreamSessionHistoryStore(filePath: Path.Combine(_directory, "sessions.json"));
+        store.Append(session);
+        store.Append(Session(1));
+
+        return new(
+            store,
+            new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance),
+            new MemorySettings(),
+            new GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<GameBoxArtProvider>.Instance),
+            new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
     }
 
     private static (object? DataContext, object? Header) MenuItemState(FrameworkElement owner, int index = 0)

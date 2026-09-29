@@ -18,6 +18,20 @@ public static class UserStatisticsRanking
         return string.Create(UiCulture.Russian, $"Показано {visible:N0} из {total:N0}");
     }
 
+    public static void AssignPlaces(IReadOnlyList<UserStatisticsRowViewModel> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        var byPoints = rows.OrderByDescending(row => row.Points).ToList();
+
+        for (var index = 0; index < byPoints.Count; index++)
+        {
+            byPoints[index].Place = index > 0 && byPoints[index].Points == byPoints[index - 1].Points
+                ? byPoints[index - 1].Place
+                : index + 1;
+        }
+    }
+
     public static List<UserStatisticsRowViewModel> Arrange(
         IReadOnlyList<UserStatisticsRowViewModel> rows,
         UserStatisticsSortKey sortKey,
