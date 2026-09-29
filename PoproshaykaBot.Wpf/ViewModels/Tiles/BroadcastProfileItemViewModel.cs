@@ -72,10 +72,16 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
     private bool _isApplyInFlight;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveStatusText))]
     private bool _isActive;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveStatusText))]
     private bool _hasDrift;
+
+    public string ActiveStatusText => !IsActive
+        ? string.Empty
+        : HasDrift ? "Применён, расходится с каналом" : "Применён";
 
     [RelayCommand]
     private async Task ApplyAsync()

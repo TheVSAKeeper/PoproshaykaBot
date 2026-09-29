@@ -17,15 +17,6 @@
                     Value="0,0,8,8" />
             <Setter Property="Padding"
                     Value="10" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsActive}"
-                             Value="True">
-                    <Setter Property="Background"
-                            Value="{DynamicResource State.SuccessSoft}" />
-                    <Setter Property="BorderBrush"
-                            Value="{DynamicResource State.Success}" />
-                </DataTrigger>
-            </Style.Triggers>
         </Style>
 
         <Style x:Key="ProfileCardMeta"
@@ -52,7 +43,8 @@
         <DataTemplate x:Key="ProfileCardTemplate"
                       DataType="{x:Type vm:BroadcastProfileItemViewModel}">
             <Border x:Name="Card"
-                    Style="{StaticResource ProfileCard}">
+                    Style="{StaticResource ProfileCard}"
+                    AutomationProperties.ItemStatus="{Binding ActiveStatusText}">
                 <Border.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Применить" Command="{Binding ApplyCommand}" />
@@ -70,6 +62,17 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
+                    <Border x:Name="ActiveEdge"
+                            Grid.Row="0"
+                            Grid.RowSpan="2"
+                            Width="3"
+                            Margin="-8,-4,0,-4"
+                            HorizontalAlignment="Left"
+                            CornerRadius="1.5"
+                            Background="{DynamicResource State.Success}"
+                            IsHitTestVisible="False"
+                            Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}" />
+
                     <Grid x:Name="CardHeader"
                           Grid.Row="0"
                           Margin="0,0,0,4">
@@ -78,21 +81,14 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    VerticalAlignment="Center">
-                            <Border Style="{StaticResource Badge}"
-                                    Margin="4,0,0,0"
-                                    Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="{Binding NumberBadge}"
-                                           FontFamily="{DynamicResource Font.Mono}" />
-                            </Border>
-                            <Border Style="{StaticResource Badge.Success}"
-                                    Margin="4,0,0,0"
-                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="Активен" />
-                            </Border>
-                        </StackPanel>
+                        <Border Grid.Column="1"
+                                Style="{StaticResource Badge}"
+                                Margin="4,0,0,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding HasNumberPlaceholder, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding NumberBadge}"
+                                       FontFamily="{DynamicResource Font.Mono}" />
+                        </Border>
                         <TextBlock Grid.Column="0"
                                    Text="{Binding Name}"
                                    FontSize="{DynamicResource Font.Size.M}"
@@ -105,12 +101,6 @@
 
                     <StackPanel Grid.Row="1"
                                 MinHeight="{Binding ActualHeight, ElementName=CardActions}">
-                        <TextBlock Text="Расходится с текущим стримом"
-                                   Foreground="{DynamicResource State.WarningText}"
-                                   FontSize="{DynamicResource Font.Size.XS}"
-                                   TextWrapping="Wrap"
-                                   Visibility="{Binding HasDrift, Converter={StaticResource BoolToVisibility}}" />
-
                         <TextBlock Text="{Binding TitleDisplay}"
                                    Style="{StaticResource ProfileCardMeta}"
                                    FontStyle="Italic"

@@ -101,6 +101,27 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         peer?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
     }
 
+    private void OnTileStatusUpdated(object? sender, System.Windows.Data.DataTransferEventArgs e)
+    {
+        if (sender is not TextBlock text)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+        {
+            if (!text.IsVisible)
+            {
+                return;
+            }
+
+            var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(text)
+                ?? System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(text);
+
+            peer?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
+        }));
+    }
+
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         _preview = null;

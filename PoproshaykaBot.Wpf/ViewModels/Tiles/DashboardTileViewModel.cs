@@ -24,6 +24,9 @@ public abstract partial class DashboardTileViewModel : ObservableObject
     [ObservableProperty]
     private bool _isModalDialogOpen;
 
+    [ObservableProperty]
+    private TileHeaderStatus? _headerStatus;
+
     protected DashboardTileViewModel(
         string typeId,
         string title,

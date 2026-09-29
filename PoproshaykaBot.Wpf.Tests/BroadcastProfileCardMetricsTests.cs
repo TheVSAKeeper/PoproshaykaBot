@@ -103,7 +103,28 @@ public class BroadcastProfileCardMetricsTests
         var actionsTop = actions.TranslatePoint(new(0, 0), card).Y;
 
         Assert.That(actionsTop, Is.GreaterThanOrEqualTo(headerBottom),
-            $"Панель действий начинается на {actionsTop:F1} DIP, а строка имени кончается на {headerBottom:F1} – панель закрывает бейджи «#N» и «Активен»");
+            $"Панель действий начинается на {actionsTop:F1} DIP, а строка имени кончается на {headerBottom:F1} – панель закрывает бейдж «#N»");
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void Применённая_карточка_отмечена_кромкой_без_смены_геометрии(bool isActive)
+    {
+        var card = Card(out _, isActive: isActive);
+        var edge = (FrameworkElement)card.FindName("ActiveEdge");
+
+        Measure(card, (BroadcastProfilesTileView.ThreeColumnsWidth / 3) - CardChrome);
+
+        var plain = Card(out _);
+        Measure(plain, (BroadcastProfilesTileView.ThreeColumnsWidth / 3) - CardChrome);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(edge.Visibility == Visibility.Visible, Is.EqualTo(isActive),
+                "Применённый профиль отмечает только кромка слева – бейджа «Активен» и заливки у карточки больше нет");
+            Assert.That(card.ActualHeight, Is.EqualTo(plain.ActualHeight),
+                "Отметка применённого профиля не меняет высоту карточки");
+        });
     }
 
     private static DataTemplate Template()
