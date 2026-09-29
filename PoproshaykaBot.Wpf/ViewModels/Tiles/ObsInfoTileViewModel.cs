@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -58,9 +57,10 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private bool _refreshing;
     private bool _refreshQueued;
     private bool _disposed;
+    private bool _previewing;
 
     [ObservableProperty]
-    private string _sceneText = "Сцена: –";
+    private string _sceneName = "–";
 
     [ObservableProperty]
     private string _connectionText = "○ OBS выкл.";
@@ -75,7 +75,6 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAudioSources))]
-    [NotifyPropertyChangedFor(nameof(GrowsWithSpace))]
     private bool _audioSourcesEmpty = true;
 
     [ObservableProperty]
@@ -94,7 +93,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         IEventBus bus,
         ILogger<ObsInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher)
-        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 420, minHeight: 154)
+        : base("obs-info", "OBS", maxWidth: 380, maxHeight: 720, minHeight: 154)
     {
         _store = store;
         _obsIntegration = obsIntegration;
@@ -129,8 +128,6 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     public bool IsUnavailable => string.Equals(ConnectionStatus, UnavailableStatus, StringComparison.Ordinal);
 
     public override PackIconLucideKind Icon => PackIconLucideKind.Video;
-
-    public override bool GrowsWithSpace => HasAudioSources;
 
     public override bool SizesToContent => true;
 
@@ -283,7 +280,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         try
         {
             var snapshot = await _obsIntegration.GetDashboardSnapshotAsync(_settings, connectIfNeeded, cts.Token);
-            if (_disposed)
+            if (_disposed || _previewing)
             {
                 return;
             }
@@ -300,7 +297,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         }
         catch (OperationCanceledException)
         {
-            if (_disposed)
+            if (_disposed || _previewing)
             {
                 return;
             }
@@ -310,7 +307,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         }
         catch (Exception exception)
         {
-            if (_disposed)
+            if (_disposed || _previewing)
             {
                 return;
             }
@@ -327,6 +324,11 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
     private bool TryBeginRefresh()
     {
+        if (_previewing)
+        {
+            return false;
+        }
+
         if (_refreshing || _disposed)
         {
             if (!_disposed)
@@ -374,7 +376,43 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         UpdateRefreshTimer(true, _obsIntegration.CurrentStatus.IsConnected);
     }
 
-    private void ApplySnapshot(ObsDashboardSnapshot snapshot)
+    public void BeginPreview(ObsDashboardSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        _previewing = true;
+        _refreshTimer.Stop();
+        _volumeMeterTimer.Stop();
+
+        ApplySnapshot(snapshot, configuredOrder: false);
+
+        foreach (var meter in AudioSources)
+        {
+            var source = snapshot.AudioSources.FirstOrDefault(item =>
+                string.Equals(item.Name, meter.SourceName, StringComparison.OrdinalIgnoreCase));
+
+            if (source is { IsMuted: false })
+            {
+                meter.ApplyLevel(source.VolumeMultiplier ?? 0D);
+            }
+        }
+    }
+
+    public void EndPreview()
+    {
+        if (!_previewing)
+        {
+            return;
+        }
+
+        _previewing = false;
+        _volumeMeterTimer.Start();
+
+        ClearRows();
+        ApplyCurrentConnectionState();
+    }
+
+    private void ApplySnapshot(ObsDashboardSnapshot snapshot, bool configuredOrder = true)
     {
         if (!snapshot.IsConnected)
         {
@@ -384,9 +422,9 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
         UpdateConnectionHeader("● OBS подключён", ConnectedStatus, "OBS WebSocket подключён");
 
-        SceneText = $"Сцена: {ToDisplayValue(snapshot.CurrentSceneName)}";
+        SceneName = ToDisplayValue(snapshot.CurrentSceneName);
 
-        var streamHealth = FormatStreamHealth(snapshot.IsStreaming,
+        var streamHealth = ObsStreamHealth.Describe(snapshot.IsStreaming,
             snapshot.StreamCongestion,
             snapshot.StreamSkippedFrames,
             snapshot.StreamTotalFrames);
@@ -403,12 +441,12 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             snapshot.RecordTimecode,
             FormatRecordBytes(snapshot.IsRecording, snapshot.RecordBytes));
 
-        ApplyAudioSources(snapshot.AudioSources);
+        ApplyAudioSources(snapshot.AudioSources, configuredOrder);
     }
 
-    private void ApplyAudioSources(IReadOnlyList<ObsAudioSourceSnapshot> audioSources)
+    private void ApplyAudioSources(IReadOnlyList<ObsAudioSourceSnapshot> audioSources, bool configuredOrder = true)
     {
-        var configured = _settings.GetDashboardSourceNames();
+        IReadOnlyList<string> configured = configuredOrder ? _settings.GetDashboardSourceNames() : [];
         var orderedNames = configured.Count > 0
             ? configured.ToList()
             : audioSources.Select(source => source.Name).ToList();
@@ -433,7 +471,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
 
             if (snapshot.IsMuted)
             {
-                meter.ShowMuted(snapshot.Name, snapshot.VolumeDecibels);
+                meter.ShowMuted(snapshot.Name);
             }
             else
             {
@@ -480,7 +518,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private void ApplyDisabledState()
     {
         UpdateConnectionHeader("○ OBS выкл.", "off", "OBS интеграция отключена в настройках");
-        SceneText = "Сцена: –";
+        SceneName = "–";
         StreamCard.ApplyUnknown();
         RecordCard.ApplyUnknown();
         ClearRows();
@@ -492,7 +530,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
             UnavailableStatus,
             string.IsNullOrWhiteSpace(message) ? "OBS WebSocket не подключён" : $"OBS WebSocket не подключён: {message}");
 
-        SceneText = "Сцена: –";
+        SceneName = "–";
         StreamCard.ApplyUnknown();
         RecordCard.ApplyUnknown();
         ClearRows();
@@ -612,36 +650,6 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         return string.IsNullOrWhiteSpace(value) ? "–" : value;
     }
 
-    private static (string Text, string? Severity)? FormatStreamHealth(
-        bool? active,
-        double? congestion,
-        long? skippedFrames,
-        long? totalFrames)
-    {
-        if (active != true)
-        {
-            return null;
-        }
-
-        if (skippedFrames is > 0 && totalFrames is > 0)
-        {
-            var ratio = (double)skippedFrames.Value / totalFrames.Value;
-            if (ratio >= 0.001D)
-            {
-                return (string.Create(CultureInfo.InvariantCulture,
-                    $"дропы · {skippedFrames.Value} ({ratio * 100D:0.0}%)"), "Error");
-            }
-        }
-
-        if (congestion is > 0.05D)
-        {
-            return (string.Create(CultureInfo.InvariantCulture,
-                $"сеть · {congestion.Value * 100D:0}%"), "Warning");
-        }
-
-        return ("стабильно", "Success");
-    }
-
     private static string? FormatRecordBytes(bool? active, long? bytes)
     {
         if (active != true || bytes is null or <= 0)
@@ -652,9 +660,9 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         var value = bytes.Value;
         return value switch
         {
-            >= 1L << 30 => string.Create(CultureInfo.InvariantCulture, $"{value / (double)(1L << 30):0.##} ГБ"),
-            >= 1L << 20 => string.Create(CultureInfo.InvariantCulture, $"{value / (double)(1L << 20):0.#} МБ"),
-            _ => string.Create(CultureInfo.InvariantCulture, $"{value / 1024D:0} КБ"),
+            >= 1L << 30 => string.Create(UiCulture.Russian, $"{value / (double)(1L << 30):0.##} ГБ"),
+            >= 1L << 20 => string.Create(UiCulture.Russian, $"{value / (double)(1L << 20):0.#} МБ"),
+            _ => string.Create(UiCulture.Russian, $"{value / 1024D:0} КБ"),
         };
     }
 

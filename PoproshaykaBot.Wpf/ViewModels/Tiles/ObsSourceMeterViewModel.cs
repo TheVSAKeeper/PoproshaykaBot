@@ -1,7 +1,16 @@
 ﻿using System;
 using CommunityToolkit.Mvvm.ComponentModel;
+using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
+
+public enum ObsSourceMeterState
+{
+    None = 0,
+    Active = 1,
+    Muted = 2,
+    Missing = 3,
+}
 
 public sealed partial class ObsSourceMeterViewModel : ObservableObject
 {
@@ -9,10 +18,11 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
     private string _displayName = "–";
 
     [ObservableProperty]
-    private string _detail = string.Empty;
+    [NotifyPropertyChangedFor(nameof(ShowsLevel))]
+    private ObsSourceMeterState _state;
 
     [ObservableProperty]
-    private string? _statusSeverity;
+    private string _stateText = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LevelSeverity))]
@@ -30,6 +40,8 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
 
     public bool Found { get; set; }
 
+    public bool ShowsLevel => State == ObsSourceMeterState.Active;
+
     public string? LevelSeverity => Level switch
     {
         >= 0.9D => "Error",
@@ -40,28 +52,25 @@ public sealed partial class ObsSourceMeterViewModel : ObservableObject
     public void ShowActive(string displayName, double? volumeDecibels)
     {
         SetName(displayName);
-        StatusSeverity = "Success";
-        Detail = volumeDecibels.HasValue
-            ? $"включён · {volumeDecibels.Value:0.#} дБ"
-            : "включён";
+        State = ObsSourceMeterState.Active;
+        StateText = volumeDecibels.HasValue
+            ? string.Create(UiCulture.Russian, $"{volumeDecibels.Value:0.#} дБ")
+            : string.Empty;
     }
 
-    public void ShowMuted(string displayName, double? volumeDecibels)
+    public void ShowMuted(string displayName)
     {
         SetName(displayName);
-        StatusSeverity = "Error";
-        Detail = volumeDecibels.HasValue
-            ? $"выключен · {volumeDecibels.Value:0.#} дБ"
-            : "выключен";
-
+        State = ObsSourceMeterState.Muted;
+        StateText = "выключен";
         Level = 0D;
     }
 
     public void ShowMissing(string displayName)
     {
         SetName(displayName);
-        StatusSeverity = "Warning";
-        Detail = "источник не найден";
+        State = ObsSourceMeterState.Missing;
+        StateText = "не найден в OBS";
         Level = 0D;
     }
 

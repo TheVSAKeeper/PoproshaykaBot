@@ -36,12 +36,11 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
     private bool _actionInFlight;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StateText))]
-    [NotifyPropertyChangedFor(nameof(StatusSeverity))]
+    [NotifyPropertyChangedFor(nameof(Title))]
+    [NotifyPropertyChangedFor(nameof(IsRunning))]
+    [NotifyPropertyChangedFor(nameof(ShowsSecondaryButton))]
     [NotifyPropertyChangedFor(nameof(PrimaryButtonText))]
     [NotifyPropertyChangedFor(nameof(SecondaryButtonText))]
-    [NotifyPropertyChangedFor(nameof(ChipText))]
-    [NotifyPropertyChangedFor(nameof(ChipSeverityResolved))]
     private ObsOutputCardState _state = ObsOutputCardState.Unknown;
 
     [ObservableProperty]
@@ -55,55 +54,41 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
     private bool _metaIsError;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ChipText))]
-    [NotifyPropertyChangedFor(nameof(ChipSeverityResolved))]
-    private string? _chip;
+    private string? _health;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ChipSeverityResolved))]
-    private string? _chipSeverity;
-
-    [ObservableProperty]
-    private string _kicker = string.Empty;
+    private string? _healthSeverity;
 
     public ObsOutputCardViewModel(ObsOutputCardKind kind, ObsIntegrationService obsIntegration, ILogger logger)
     {
         Kind = kind;
         _obsIntegration = obsIntegration;
         _logger = logger;
-        Kicker = kind switch
-        {
-            ObsOutputCardKind.Stream => "ЭФИР",
-            ObsOutputCardKind.Record => "ЗАПИСЬ",
-            _ => string.Empty,
-        };
     }
 
     // TODO: добавить пульсацию точки/ореол и анимированную обводку карточки (Storyboard) для Active/Paused – пока статичная подсветка токенами State.*.
     public ObsOutputCardKind Kind { get; }
 
-    public bool IsStreamMode => Kind == ObsOutputCardKind.Stream;
-
     public bool IsRecordMode => Kind == ObsOutputCardKind.Record;
 
     public bool HasTimecode => !string.IsNullOrWhiteSpace(Timecode);
 
-    public string StateText => (Kind, State) switch
-    {
-        (_, ObsOutputCardState.Idle) => "Готов",
-        (ObsOutputCardKind.Stream, ObsOutputCardState.Active) => "В ЭФИРЕ",
-        (ObsOutputCardKind.Record, ObsOutputCardState.Active) => "ЗАПИСЬ",
-        (_, ObsOutputCardState.Paused) => "ПАУЗА",
-        (_, ObsOutputCardState.Error) => "Ошибка",
-        _ => "–",
-    };
+    public bool IsRunning => State is ObsOutputCardState.Active or ObsOutputCardState.Paused;
 
-    public string? StatusSeverity => State switch
+    public bool ShowsSecondaryButton => IsRecordMode && IsRunning;
+
+    public string Title => (Kind, State) switch
     {
-        ObsOutputCardState.Active => "Success",
-        ObsOutputCardState.Paused => "Warning",
-        ObsOutputCardState.Error => "Error",
-        _ => null,
+        (ObsOutputCardKind.Stream, ObsOutputCardState.Active) => "В эфире",
+        (ObsOutputCardKind.Stream, ObsOutputCardState.Idle) => "Эфир не идёт",
+        (ObsOutputCardKind.Stream, ObsOutputCardState.Error) => "Эфир: ошибка",
+        (ObsOutputCardKind.Stream, _) => "Эфир",
+        (ObsOutputCardKind.Record, ObsOutputCardState.Active) => "Идёт запись",
+        (ObsOutputCardKind.Record, ObsOutputCardState.Paused) => "Запись на паузе",
+        (ObsOutputCardKind.Record, ObsOutputCardState.Idle) => "Запись не идёт",
+        (ObsOutputCardKind.Record, ObsOutputCardState.Error) => "Запись: ошибка",
+        (ObsOutputCardKind.Record, _) => "Запись",
+        _ => "–",
     };
 
     public string PrimaryButtonText => (Kind, State) switch
@@ -123,57 +108,20 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
         _ => "⏸ Пауза",
     };
 
-    public string ChipText
-    {
-        get
-        {
-            if (!string.IsNullOrWhiteSpace(Chip))
-            {
-                return Chip;
-            }
-
-            return State switch
-            {
-                ObsOutputCardState.Active => "в эфире",
-                ObsOutputCardState.Idle => "офлайн",
-                ObsOutputCardState.Error => "OBS WS",
-                _ => "–",
-            };
-        }
-    }
-
-    public string? ChipSeverityResolved
-    {
-        get
-        {
-            if (!string.IsNullOrWhiteSpace(Chip))
-            {
-                return ChipSeverity;
-            }
-
-            return State switch
-            {
-                ObsOutputCardState.Active => "Success",
-                ObsOutputCardState.Error => "Error",
-                _ => null,
-            };
-        }
-    }
-
     public void ApplySnapshot(
         bool? active,
         bool? paused,
         string? timecode,
         string? meta,
-        string? chip = null,
-        string? chipSeverity = null)
+        string? health = null,
+        string? healthSeverity = null)
     {
         State = ResolveState(active, paused);
         Timecode = string.IsNullOrWhiteSpace(timecode) ? null : timecode;
         MetaIsError = false;
         Meta = meta ?? string.Empty;
-        Chip = chip;
-        ChipSeverity = chipSeverity;
+        Health = health;
+        HealthSeverity = healthSeverity;
     }
 
     public void ApplyUnknown()
@@ -182,8 +130,8 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
         Timecode = null;
         MetaIsError = false;
         Meta = string.Empty;
-        Chip = null;
-        ChipSeverity = null;
+        Health = null;
+        HealthSeverity = null;
     }
 
     private static ObsOutputCardState ResolveState(bool? active, bool? paused)

@@ -39,6 +39,22 @@ public class GalleryPageCaseTests
     }
 
     [Test]
+    public void Кейсы_плитки_OBS_снимаются_на_обзоре_с_подложенным_состоянием()
+    {
+        var requested = string.Join(',', SectionKeys.OverviewObs, SectionKeys.OverviewObsFull, "users:obs");
+        var arguments = GalleryHost.Parse(["--pages", requested], "gallery-out");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(arguments.Pages, Is.EqualTo(new[] { SectionKeys.OverviewObs, SectionKeys.OverviewObsFull }));
+            Assert.That(arguments.Unknown, Is.EqualTo(new[] { "users:obs" }));
+            Assert.That(SectionKeys.PageOf(SectionKeys.OverviewObsFull), Is.EqualTo(SectionKeys.Overview));
+            Assert.That(GalleryObs.Find(SectionKeys.OverviewObs)?.AudioSources, Has.Count.EqualTo(1));
+            Assert.That(GalleryObs.Find(SectionKeys.OverviewObsFull)?.AudioSources, Has.Count.EqualTo(5));
+        }
+    }
+
+    [Test]
     public void Кейс_карточек_распознаётся_только_у_истории_стримов()
     {
         var requested = string.Join(',', SectionKeys.StreamsCards, "users:cards");
