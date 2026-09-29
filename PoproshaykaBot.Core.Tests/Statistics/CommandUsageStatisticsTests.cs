@@ -1,5 +1,7 @@
-﻿using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using System.Text.Json;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Tests.Polls;
@@ -231,6 +233,50 @@ public sealed class CommandUsageStatisticsTests
 
         Assert.That(File.Exists(Path.Combine(_directory, UsageFileName)), Is.True,
             "Следующее сохранение обязано дописать счётчики, которые прошлый отказ оставил в памяти.");
+    }
+
+    [TestCase(new[] { "profile" }, 7, false)]
+    [TestCase(new[] { "Profile" }, 7, false)]
+    [TestCase(new[] { "profile", "пресет" }, 3, true)]
+    [TestCase(new[] { "ранг" }, 0, false)]
+    public async Task Счётчик_прежнего_имени_переезжает_к_пресету_только_когда_своего_у_него_нет(
+        string[] canonicals,
+        int presetTotal,
+        bool profileKept)
+    {
+        var path = Path.Combine(_directory, UsageFileName);
+        var data = new CommandUsageData
+        {
+            StreamId = "s1",
+        };
+
+        data.Commands.AddRange(canonicals.Select(canonical => new CommandUsageRecord
+        {
+            Canonical = canonical,
+            TotalCount = canonical == "пресет" ? 3 : 7,
+            StreamCount = 1,
+            LastUsedBy = "Алиса",
+        }));
+
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(data, JsonStoreOptions.Default));
+
+        var repository = new CommandUsageRepository(_time);
+        var saver = CreateSaver(repository, CreateFileStore());
+
+        await saver.StartAsync(new Progress<string>(), CancellationToken.None);
+        repository.Track("пресет", "Борис");
+        await saver.StopAsync(new Progress<string>(), CancellationToken.None);
+
+        var written = JsonSerializer.Deserialize<CommandUsageData>(await File.ReadAllTextAsync(path), JsonStoreOptions.Default)!;
+        var byCanonical = written.Commands.ToDictionary(record => record.Canonical, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(byCanonical["пресет"].TotalCount, Is.EqualTo(presetTotal + 1));
+            Assert.That(byCanonical.ContainsKey("profile"), Is.EqualTo(profileKept));
+            Assert.That(byCanonical.ContainsKey("мойпрофиль"), Is.False, "Прежний счёт не достаётся команде, забравшей токен");
+            Assert.That(byCanonical.ContainsKey("ранг"), Is.EqualTo(canonicals.Contains("ранг")));
+        });
     }
 
     private static InMemoryEventBus CreateBus(CommandUsageRepository repository, out CommandUsageStreamResetHandler handler)

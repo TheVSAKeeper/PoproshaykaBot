@@ -43,11 +43,11 @@ public sealed class ChatCommandProcessor
 
     public void Register(IChatCommand command)
     {
-        _tokenToCommand[command.Canonical] = command;
+        RegisterToken(command.Canonical, command);
 
         foreach (var alias in command.Aliases.Where(a => !string.IsNullOrWhiteSpace(a)))
         {
-            _tokenToCommand[alias] = command;
+            RegisterToken(alias, command);
         }
     }
 
@@ -174,6 +174,21 @@ public sealed class ChatCommandProcessor
             _logger.LogError(ex, "Команда {Canonical} упала на сообщении от {Username}", command.Canonical, enrichedContext.Username);
             return ChatCommandResult.Failed(command.Canonical);
         }
+    }
+
+    private void RegisterToken(string token, IChatCommand command)
+    {
+        if (_tokenToCommand.TryGetValue(token, out var owner) && !ReferenceEquals(owner, command))
+        {
+            _logger.LogWarning("Токен {Token} команды {Canonical} уже занят командой {Owner}, остаётся за ней",
+                token,
+                command.Canonical,
+                owner.Canonical);
+
+            return;
+        }
+
+        _tokenToCommand[token] = command;
     }
 
     private void LogUnknown(string originalText, CommandContext context)

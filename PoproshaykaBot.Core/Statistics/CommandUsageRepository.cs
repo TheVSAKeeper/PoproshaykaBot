@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.Core.Statistics;
+﻿using PoproshaykaBot.Core.Chat.Commands;
+
+namespace PoproshaykaBot.Core.Statistics;
 
 public sealed class CommandUsageRepository(TimeProvider timeProvider)
 {
@@ -104,6 +106,8 @@ public sealed class CommandUsageRepository(TimeProvider timeProvider)
 
                 _records[record.Canonical] = loaded;
             }
+
+            CommandRenames.MoveRenamed(_records, static (record, canonical) => record.Canonical = canonical);
 
             if (!_streamReset)
             {

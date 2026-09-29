@@ -1,10 +1,14 @@
-﻿using PoproshaykaBot.Core.Chat;
+﻿using System.Runtime.CompilerServices;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Tests.Polls;
+using PoproshaykaBot.Core.Tests.Server;
 
 namespace PoproshaykaBot.Core.Tests.Chat;
 
@@ -346,6 +350,72 @@ public sealed class ChatCommandProcessorTests
         });
     }
 
+    [Test]
+    public async Task Токены_настоящей_регистрации_команд_не_пересекаются_и_помощь_называет_каждую_один_раз()
+    {
+        var commands = new ServiceCollection()
+            .AddChatPipeline()
+            .Where(descriptor => descriptor.ServiceType == typeof(IChatCommand))
+            .Select(descriptor => (IChatCommand)RuntimeHelpers.GetUninitializedObject(descriptor.ImplementationType!))
+            .ToList();
+
+        var logger = new RecordingLogger<ChatCommandProcessor>();
+        var processor = new ChatCommandProcessor(commands, _settingsStore, _usage, logger);
+        processor.Register(new HelpCommand(processor.GetEnabledCommands, processor.Prefix));
+
+        var tokens = processor.GetAllCommands()
+            .SelectMany(command => command.Aliases.Prepend(command.Canonical))
+            .ToList();
+
+        var help = await processor.TryProcessAsync("!помощь", CreateContext(), CancellationToken.None);
+        var listed = help.Response!.Text["📋 Команды: ".Length..].Split(", ");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(commands, Has.Count.GreaterThan(1), "Регистрация отдала команды");
+            Assert.That(processor.GetAllCommands(), Has.Count.EqualTo(commands.Count + 1), "Ни одна команда не потеряла канон");
+            Assert.That(tokens, Is.Unique.Using((IEqualityComparer<string>)StringComparer.OrdinalIgnoreCase), "Токен принадлежит одной команде");
+            Assert.That(logger.Entries.Where(entry => entry.Level >= LogLevel.Warning), Is.Empty);
+            Assert.That(listed, Is.Unique);
+            Assert.That(listed, Has.Length.EqualTo(commands.Count + 1));
+
+            var canonicals = processor.GetAllCommands().Select(command => command.Canonical).ToList();
+
+            Assert.That(CommandRenames.All.Select(rename => rename.To), Is.SubsetOf(canonicals),
+                "Перенос ключа ведёт к живому канону");
+
+            Assert.That(CommandRenames.All.Select(rename => rename.From).Intersect(canonicals, StringComparer.OrdinalIgnoreCase),
+                Is.Empty,
+                "Прежнее имя не может снова стать каноном – его ключ в файле ушёл бы к чужой команде");
+        });
+    }
+
+    [TestCase("profile", new string[0], "profile", new string[0], "!profile")]
+    [TestCase("profile", new[] { "профиль" }, "мойпрофиль", new[] { "profile" }, "!profile")]
+    [TestCase("мойпрофиль", new[] { "profile" }, "profile", new string[0], "!PROFILE")]
+    [TestCase("ранг", new[] { "rank" }, "ранги", new[] { "RANK" }, "!rank")]
+    public async Task Занятый_токен_остаётся_за_первой_командой_и_дубль_пишется_в_журнал(
+        string firstCanonical,
+        string[] firstAliases,
+        string secondCanonical,
+        string[] secondAliases,
+        string message)
+    {
+        var first = new FakeCommand(firstCanonical, firstAliases);
+        var second = new FakeCommand(secondCanonical, secondAliases);
+        var logger = new RecordingLogger<ChatCommandProcessor>();
+        var processor = new ChatCommandProcessor([first, second], _settingsStore, _usage, logger);
+
+        await processor.TryProcessAsync(message, CreateContext(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.Calls, Is.EqualTo(1), "Токен не перезаписывается следующей командой");
+            Assert.That(second.Calls, Is.Zero);
+            Assert.That(logger.Entries.Count(entry => entry.Level == LogLevel.Warning), Is.EqualTo(1), "Дубль не молчит");
+        });
+    }
+
     private static CommandContext CreateContext(bool isBroadcaster = false, bool isModerator = false)
     {
         return new()
@@ -365,11 +435,11 @@ public sealed class ChatCommandProcessorTests
         return new(commands, _settingsStore, _usage, NullLogger<ChatCommandProcessor>.Instance);
     }
 
-    private sealed class FakeCommand(string canonical) : IChatCommand
+    private sealed class FakeCommand(string canonical, params string[] aliases) : IChatCommand
     {
         public string Canonical => canonical;
 
-        public IReadOnlyCollection<string> Aliases => [];
+        public IReadOnlyCollection<string> Aliases => aliases;
 
         public string Description => "тестовая команда";
 
