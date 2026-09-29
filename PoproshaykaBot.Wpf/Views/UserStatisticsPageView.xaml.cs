@@ -2,6 +2,7 @@
 using PoproshaykaBot.Wpf.ViewModels;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Threading;
 
 namespace PoproshaykaBot.Wpf.Views;
@@ -17,6 +18,7 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
     public const double RankColumnListWidth = 430;
 
     private double _listWidth;
+    private string? _announcedAdjustmentError;
 
     public UserStatisticsPageView()
     {
@@ -82,12 +84,41 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(UserStatisticsPageViewModel.AdjustmentError))
+        {
+            AnnounceAdjustmentErrorIfChanged((sender as UserStatisticsPageViewModel)?.AdjustmentError);
+            return;
+        }
+
         if (e.PropertyName != nameof(UserStatisticsPageViewModel.SelectedRow))
         {
             return;
         }
 
         ScrollToSelected();
+    }
+
+    private void AnnounceAdjustmentErrorIfChanged(string? error)
+    {
+        if (string.Equals(error, _announcedAdjustmentError, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _announcedAdjustmentError = error;
+
+        if (error is null)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            var peer = UIElementAutomationPeer.FromElement(AdjustmentErrorText)
+                ?? UIElementAutomationPeer.CreatePeerForElement(AdjustmentErrorText);
+
+            peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+        }));
     }
 
     private void ScrollToSelected()

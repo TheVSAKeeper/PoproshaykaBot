@@ -10,11 +10,15 @@ using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Text;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPageHeader, IDisposable
 {
+    public const long MaxAdjustment = 1_000_000;
+
     private readonly IUserStatisticsRepository _userStatistics;
     private readonly StatisticsAutoSaver _statisticsAutoSaver;
     private readonly UserRankService _userRankService;
@@ -54,9 +58,14 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private bool _sortDescending = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AdjustmentAmount))]
+    [NotifyPropertyChangedFor(nameof(AdjustmentError))]
+    [NotifyPropertyChangedFor(nameof(HasAdjustmentError))]
     [NotifyPropertyChangedFor(nameof(ActionButtonText))]
     [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
-    private double _adjustmentAmount;
+    [NotifyCanExecuteChangedFor(nameof(IncreaseAdjustmentCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DecreaseAdjustmentCommand))]
+    private string _adjustmentText = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
@@ -143,11 +152,17 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         ? UserStatisticsRanking.DescribePlace(row.Position, _rows.Count)
         : string.Empty;
 
+    public long AdjustmentAmount => ParseAdjustment(AdjustmentText).Amount;
+
+    public string? AdjustmentError => ParseAdjustment(AdjustmentText).Error;
+
+    public bool HasAdjustmentError => AdjustmentError is not null;
+
     public string ActionButtonText
     {
         get
         {
-            var delta = (long)AdjustmentAmount;
+            var delta = AdjustmentAmount;
             var term = _userRankService.PointTerm;
             return delta switch
             {
@@ -266,7 +281,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private void ClearFilter() => FilterText = string.Empty;
 
     [RelayCommand]
-    private void SetAdjustment(double amount) => AdjustmentAmount = amount;
+    private void SetAdjustment(double amount) => SetAdjustmentAmount((long)amount);
 
     [RelayCommand]
     private void Refresh() => Reload();
@@ -280,9 +295,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         }
 
         var row = SelectedRow;
-        var delta = (long)AdjustmentAmount;
+        var (delta, error) = ParseAdjustment(AdjustmentText);
 
-        if (delta == 0)
+        if (delta == 0 || error is not null)
         {
             return;
         }
@@ -336,24 +351,66 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         }
     }
 
-    private bool CanApplyAdjustment() => SelectedRow is not null && (long)AdjustmentAmount != 0 && !IsBusy;
+    private bool CanApplyAdjustment() => SelectedRow is not null && AdjustmentAmount != 0 && !HasAdjustmentError && !IsBusy;
 
-    [RelayCommand]
-    private void IncreaseAdjustment()
+    [RelayCommand(CanExecute = nameof(CanIncreaseAdjustment))]
+    private void IncreaseAdjustment() => SetAdjustmentAmount(AdjustmentAmount + 1);
+
+    private bool CanIncreaseAdjustment() => !HasAdjustmentError && AdjustmentAmount < MaxAdjustment;
+
+    [RelayCommand(CanExecute = nameof(CanDecreaseAdjustment))]
+    private void DecreaseAdjustment() => SetAdjustmentAmount(AdjustmentAmount - 1);
+
+    private bool CanDecreaseAdjustment() => !HasAdjustmentError && AdjustmentAmount > -MaxAdjustment;
+
+    private void SetAdjustmentAmount(long amount)
     {
-        if (AdjustmentAmount < 1_000_000)
-        {
-            AdjustmentAmount++;
-        }
+        AdjustmentText = amount == 0
+            ? string.Empty
+            : amount.ToString(CultureInfo.InvariantCulture);
     }
 
-    [RelayCommand]
-    private void DecreaseAdjustment()
+    private static (long Amount, string? Error) ParseAdjustment(string? text)
     {
-        if (AdjustmentAmount > -1_000_000)
+        var normalized = new StringBuilder(text?.Length ?? 0);
+
+        foreach (var symbol in text ?? string.Empty)
         {
-            AdjustmentAmount--;
+            if (char.IsWhiteSpace(symbol))
+            {
+                continue;
+            }
+
+            normalized.Append(symbol == '−' ? '-' : symbol);
         }
+
+        if (normalized.Length == 0)
+        {
+            return (0, null);
+        }
+
+        var candidate = normalized.ToString();
+        var digits = candidate.TrimStart('+', '-');
+
+        if (candidate is "+" or "-")
+        {
+            return (0, null);
+        }
+
+        var isInteger = candidate.Length - digits.Length <= 1 && digits.Length > 0 && digits.All(char.IsAsciiDigit);
+
+        if (!isInteger)
+        {
+            return (0, "Введите целое число, например 50 или −20.");
+        }
+
+        if (!long.TryParse(candidate, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var amount)
+            || amount is > MaxAdjustment or < -MaxAdjustment)
+        {
+            return (0, "За один раз можно изменить баланс не больше чем на 1 000 000.");
+        }
+
+        return (amount, null);
     }
 
     [RelayCommand]

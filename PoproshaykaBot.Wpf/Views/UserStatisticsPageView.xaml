@@ -16,6 +16,22 @@
 
     <UserControl.Resources>
 
+        <Style x:Key="AdjustmentInput"
+               TargetType="TextBox"
+               BasedOn="{StaticResource TextBox.Numeric}">
+            <Setter Property="Height"
+                    Value="Auto" />
+            <Setter Property="HorizontalAlignment"
+                    Value="Stretch" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasAdjustmentError}"
+                             Value="True">
+                    <Setter Property="BorderBrush"
+                            Value="{DynamicResource State.Error}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="InspectorBonusValue"
                TargetType="TextBlock"
                BasedOn="{StaticResource StatValue.Small}">
@@ -372,7 +388,8 @@
                 </Grid>
             </Border>
 
-            <Border Grid.Column="1"
+            <Border x:Name="InspectorCard"
+                    Grid.Column="1"
                     Style="{StaticResource Card}"
                     Padding="16"
                     Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}">
@@ -630,15 +647,51 @@
                             </Button>
                         </UniformGrid>
 
-                        <keepshell:NumericSettingField Label="Изменение баланса"
-                                                       Value="{Binding AdjustmentAmount, Mode=TwoWay}"
-                                                       IncreaseCommand="{Binding IncreaseAdjustmentCommand}"
-                                                       DecreaseCommand="{Binding DecreaseAdjustmentCommand}"
-                                                       IncreaseAutomationName="Увеличить"
-                                                       DecreaseAutomationName="Уменьшить"
-                                                       Margin="0,0,0,12" />
+                        <StackPanel x:Name="AdjustmentField"
+                                    Margin="0,0,0,12">
+                            <TextBlock Text="Изменение баланса"
+                                       Style="{StaticResource TextBlock.Subtle}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,4" />
 
-                        <Button Content="{Binding ActionButtonText}"
+                            <Grid>
+                                <TextBox x:Name="AdjustmentBox"
+                                         Text="{Binding AdjustmentText, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource AdjustmentInput}"
+                                         AutomationProperties.Name="Изменение баланса"
+                                         AutomationProperties.HelpText="{Binding AdjustmentError, TargetNullValue={x:Static sys:String.Empty}}" />
+                                <StackPanel HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            Margin="0,0,1,0">
+                                    <RepeatButton Style="{StaticResource RepeatButton.Stepper}"
+                                                  Command="{Binding IncreaseAdjustmentCommand}"
+                                                  AutomationProperties.Name="Увеличить">
+                                        <iconPacks:PackIconLucide Kind="ChevronUp"
+                                                                  Width="10"
+                                                                  Height="10" />
+                                    </RepeatButton>
+                                    <RepeatButton Style="{StaticResource RepeatButton.Stepper}"
+                                                  Command="{Binding DecreaseAdjustmentCommand}"
+                                                  AutomationProperties.Name="Уменьшить">
+                                        <iconPacks:PackIconLucide Kind="ChevronDown"
+                                                                  Width="10"
+                                                                  Height="10" />
+                                    </RepeatButton>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock x:Name="AdjustmentErrorText"
+                                       Text="{Binding AdjustmentError}"
+                                       Foreground="{DynamicResource State.ErrorText}"
+                                       FontSize="{DynamicResource Font.Size.S}"
+                                       TextWrapping="Wrap"
+                                       Margin="2,4,0,0"
+                                       AutomationProperties.LiveSetting="Assertive"
+                                       Visibility="{Binding HasAdjustmentError, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+
+                        <Button x:Name="ApplyAdjustmentButton"
+                                Content="{Binding ActionButtonText}"
                                 Command="{Binding ApplyAdjustmentCommand}"
                                 Style="{StaticResource Button.Primary}"
                                 HorizontalAlignment="Stretch"
