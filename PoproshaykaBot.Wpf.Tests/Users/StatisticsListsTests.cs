@@ -230,7 +230,8 @@ public class StatisticsListsTests
             new FakeChannelProvider(),
             settingsManager,
             null!,
-            eventBus);
+            eventBus,
+            new MemorySettings());
     }
 
     private StreamHistoryPageViewModel CreateStreamsPage(params StreamSessionRecord[] sessions)

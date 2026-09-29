@@ -160,7 +160,8 @@ public class StatisticsPagesPerformanceTests
                 new FakeChannelProvider(),
                 settingsManager,
                 null!,
-                eventBus);
+                eventBus,
+                new MemorySettings());
 
             view = new() { DataContext = page };
             Arrange(view);

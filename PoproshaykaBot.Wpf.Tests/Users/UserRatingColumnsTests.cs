@@ -259,7 +259,8 @@ public class UserRatingColumnsTests
             new FakeChannelProvider(),
             settingsManager,
             null!,
-            eventBus);
+            eventBus,
+            new MemorySettings());
     }
 
     private sealed class FakeChannelProvider : IChannelProvider

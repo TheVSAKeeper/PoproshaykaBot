@@ -840,97 +840,133 @@
                                 Background="{DynamicResource Border.Subtle}"
                                 Margin="0,16,0,0" />
 
-                        <TextBlock Text="Баланс"
-                                   Style="{StaticResource TextBlock.Heading}"
-                                   FontSize="{DynamicResource Font.Size.L}"
-                                   Margin="0,14,0,10" />
+                        <Button x:Name="BalanceToggle"
+                                Style="{StaticResource Button.Ghost}"
+                                Command="{Binding ToggleBalanceCommand}"
+                                HorizontalAlignment="Left"
+                                MinHeight="0"
+                                Padding="6,4"
+                                Margin="-6,10,0,0"
+                                AutomationProperties.Name="{Binding BalanceToggleCaption}"
+                                ToolTip="{Binding BalanceToggleCaption}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Баланс"
+                                           Style="{StaticResource TextBlock.Heading}"
+                                           FontSize="{DynamicResource Font.Size.L}"
+                                           VerticalAlignment="Center" />
 
-                        <UniformGrid Columns="4"
-                                     Margin="0,0,0,10">
-                            <Button Style="{StaticResource QuickAmountButton}"
-                                    Command="{Binding SetAdjustmentCommand}"
-                                    Content="−100"
-                                    Margin="0,0,6,0"
-                                    AutomationProperties.Name="Поставить минус сто баллов">
-                                <Button.CommandParameter>
-                                    <sys:Double>-100</sys:Double>
-                                </Button.CommandParameter>
-                            </Button>
-                            <Button Style="{StaticResource QuickAmountButton}"
-                                    Command="{Binding SetAdjustmentCommand}"
-                                    Content="−10"
-                                    Margin="0,0,6,0"
-                                    AutomationProperties.Name="Поставить минус десять баллов">
-                                <Button.CommandParameter>
-                                    <sys:Double>-10</sys:Double>
-                                </Button.CommandParameter>
-                            </Button>
-                            <Button Style="{StaticResource QuickAmountButton}"
-                                    Command="{Binding SetAdjustmentCommand}"
-                                    Content="+10"
-                                    Margin="0,0,6,0"
-                                    AutomationProperties.Name="Поставить плюс десять баллов">
-                                <Button.CommandParameter>
-                                    <sys:Double>10</sys:Double>
-                                </Button.CommandParameter>
-                            </Button>
-                            <Button Style="{StaticResource QuickAmountButton}"
-                                    Command="{Binding SetAdjustmentCommand}"
-                                    Content="+100"
-                                    AutomationProperties.Name="Поставить плюс сто баллов">
-                                <Button.CommandParameter>
-                                    <sys:Double>100</sys:Double>
-                                </Button.CommandParameter>
-                            </Button>
-                        </UniformGrid>
+                                <iconPacks:PackIconLucide Width="14"
+                                                          Height="14"
+                                                          Margin="8,0,0,0"
+                                                          VerticalAlignment="Center"
+                                                          Foreground="{DynamicResource Fg.Secondary}">
+                                    <iconPacks:PackIconLucide.Style>
+                                        <Style TargetType="iconPacks:PackIconLucide">
+                                            <Setter Property="Kind"
+                                                    Value="ChevronRight" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsBalanceExpanded}"
+                                                             Value="True">
+                                                    <Setter Property="Kind"
+                                                            Value="ChevronDown" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </iconPacks:PackIconLucide.Style>
+                                </iconPacks:PackIconLucide>
+                            </StackPanel>
+                        </Button>
 
-                        <StackPanel x:Name="AdjustmentField"
-                                    Margin="0,0,0,12">
-                            <TextBlock Text="Изменение баланса"
-                                       Style="{StaticResource TextBlock.Subtle}"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,4" />
+                        <StackPanel x:Name="BalanceBody"
+                                    Margin="0,8,0,0"
+                                    Visibility="{Binding IsBalanceExpanded, Converter={StaticResource BoolToVisibility}}">
+                            <UniformGrid Columns="4"
+                                         Margin="0,0,0,10">
+                                <Button Style="{StaticResource QuickAmountButton}"
+                                        Command="{Binding SetAdjustmentCommand}"
+                                        Content="−100"
+                                        Margin="0,0,6,0"
+                                        AutomationProperties.Name="Поставить минус сто баллов">
+                                    <Button.CommandParameter>
+                                        <sys:Double>-100</sys:Double>
+                                    </Button.CommandParameter>
+                                </Button>
+                                <Button Style="{StaticResource QuickAmountButton}"
+                                        Command="{Binding SetAdjustmentCommand}"
+                                        Content="−10"
+                                        Margin="0,0,6,0"
+                                        AutomationProperties.Name="Поставить минус десять баллов">
+                                    <Button.CommandParameter>
+                                        <sys:Double>-10</sys:Double>
+                                    </Button.CommandParameter>
+                                </Button>
+                                <Button Style="{StaticResource QuickAmountButton}"
+                                        Command="{Binding SetAdjustmentCommand}"
+                                        Content="+10"
+                                        Margin="0,0,6,0"
+                                        AutomationProperties.Name="Поставить плюс десять баллов">
+                                    <Button.CommandParameter>
+                                        <sys:Double>10</sys:Double>
+                                    </Button.CommandParameter>
+                                </Button>
+                                <Button Style="{StaticResource QuickAmountButton}"
+                                        Command="{Binding SetAdjustmentCommand}"
+                                        Content="+100"
+                                        AutomationProperties.Name="Поставить плюс сто баллов">
+                                    <Button.CommandParameter>
+                                        <sys:Double>100</sys:Double>
+                                    </Button.CommandParameter>
+                                </Button>
+                            </UniformGrid>
 
-                            <Grid>
-                                <TextBox x:Name="AdjustmentBox"
-                                         Text="{Binding AdjustmentText, UpdateSourceTrigger=PropertyChanged}"
-                                         Style="{StaticResource AdjustmentInput}"
-                                         AutomationProperties.Name="Изменение баланса"
-                                         AutomationProperties.HelpText="{Binding AdjustmentError, TargetNullValue={x:Static sys:String.Empty}}" />
-                                <UniformGrid Style="{StaticResource UniformGrid.Steppers}">
-                                    <RepeatButton Style="{StaticResource RepeatButton.StepperUp}"
-                                                  Command="{Binding IncreaseAdjustmentCommand}"
-                                                  AutomationProperties.Name="Увеличить">
-                                        <iconPacks:PackIconLucide Kind="ChevronUp"
-                                                                  Width="10"
-                                                                  Height="10" />
-                                    </RepeatButton>
-                                    <RepeatButton Style="{StaticResource RepeatButton.StepperDown}"
-                                                  Command="{Binding DecreaseAdjustmentCommand}"
-                                                  AutomationProperties.Name="Уменьшить">
-                                        <iconPacks:PackIconLucide Kind="ChevronDown"
-                                                                  Width="10"
-                                                                  Height="10" />
-                                    </RepeatButton>
-                                </UniformGrid>
-                            </Grid>
+                            <StackPanel x:Name="AdjustmentField"
+                                        Margin="0,0,0,12">
+                                <TextBlock Text="Изменение баланса"
+                                           Style="{StaticResource TextBlock.Subtle}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,4" />
 
-                            <TextBlock x:Name="AdjustmentErrorText"
-                                       Text="{Binding AdjustmentError}"
-                                       Foreground="{DynamicResource State.ErrorText}"
-                                       FontSize="{DynamicResource Font.Size.S}"
-                                       TextWrapping="Wrap"
-                                       Margin="2,4,0,0"
-                                       AutomationProperties.LiveSetting="Assertive"
-                                       Visibility="{Binding HasAdjustmentError, Converter={StaticResource BoolToVisibility}}" />
+                                <Grid>
+                                    <TextBox x:Name="AdjustmentBox"
+                                             Text="{Binding AdjustmentText, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource AdjustmentInput}"
+                                             AutomationProperties.Name="Изменение баланса"
+                                             AutomationProperties.HelpText="{Binding AdjustmentError, TargetNullValue={x:Static sys:String.Empty}}" />
+                                    <UniformGrid Style="{StaticResource UniformGrid.Steppers}">
+                                        <RepeatButton Style="{StaticResource RepeatButton.StepperUp}"
+                                                      Command="{Binding IncreaseAdjustmentCommand}"
+                                                      AutomationProperties.Name="Увеличить">
+                                            <iconPacks:PackIconLucide Kind="ChevronUp"
+                                                                      Width="10"
+                                                                      Height="10" />
+                                        </RepeatButton>
+                                        <RepeatButton Style="{StaticResource RepeatButton.StepperDown}"
+                                                      Command="{Binding DecreaseAdjustmentCommand}"
+                                                      AutomationProperties.Name="Уменьшить">
+                                            <iconPacks:PackIconLucide Kind="ChevronDown"
+                                                                      Width="10"
+                                                                      Height="10" />
+                                        </RepeatButton>
+                                    </UniformGrid>
+                                </Grid>
+
+                                <TextBlock x:Name="AdjustmentErrorText"
+                                           Text="{Binding AdjustmentError}"
+                                           Foreground="{DynamicResource State.ErrorText}"
+                                           FontSize="{DynamicResource Font.Size.S}"
+                                           TextWrapping="Wrap"
+                                           Margin="2,4,0,0"
+                                           AutomationProperties.LiveSetting="Assertive"
+                                           Visibility="{Binding HasAdjustmentError, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+
+                            <Button x:Name="ApplyAdjustmentButton"
+                                    Content="{Binding ActionButtonText}"
+                                    Command="{Binding ApplyAdjustmentCommand}"
+                                    Style="{StaticResource Button.Primary}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center" />
                         </StackPanel>
-
-                        <Button x:Name="ApplyAdjustmentButton"
-                                Content="{Binding ActionButtonText}"
-                                Command="{Binding ApplyAdjustmentCommand}"
-                                Style="{StaticResource Button.Primary}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center" />
                     </StackPanel>
 
                     <StackPanel Grid.Row="0"
