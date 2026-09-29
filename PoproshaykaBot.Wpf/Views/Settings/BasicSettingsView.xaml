@@ -25,7 +25,7 @@
                        Style="{StaticResource Setting.RowLabel}" />
             <StackPanel Orientation="Horizontal">
                 <TextBox Style="{StaticResource TextBox.Form}"
-                         Width="240"
+                         Width="{DynamicResource Setting.ShortFieldWidth}"
                          AutomationProperties.Name="Канал Twitch"
                          Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          keepshell:PlaceholderBehavior.Placeholder="{Binding ChannelPlaceholder}" />
@@ -46,7 +46,7 @@
                       DisplayMemberPath="Display"
                       SelectedValuePath="Role"
                       SelectedValue="{Binding ChatDisplayAccount, Mode=TwoWay}"
-                      Width="240"
+                      Width="{DynamicResource Setting.ShortFieldWidth}"
                       HorizontalAlignment="Left" />
         </DockPanel>
 

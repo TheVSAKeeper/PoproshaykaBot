@@ -164,6 +164,7 @@ public partial class App : Application
             var themeKey = uiSettings.GetStringValue(SettingsKeys.Theme);
             ThemeManager.Apply(string.IsNullOrWhiteSpace(themeKey) ? AppThemes.LightKey : themeKey);
             FontScaleManager.Initialize(uiSettings.GetDouble(SettingsKeys.FontScale, FontScaleManager.DefaultScale));
+            AppScaledSizes.Register(this);
 
             _singleInstanceMutex = SingleInstanceGate.TryAcquire(_isFinalizeUpdate);
 

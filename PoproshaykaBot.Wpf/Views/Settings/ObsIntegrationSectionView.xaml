@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+             xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -62,7 +63,7 @@
             <TextBlock Text="Хост"
                        Style="{StaticResource Setting.RowLabel}" />
             <TextBox Style="{StaticResource TextBox.Form}"
-                     Width="240"
+                     Width="{DynamicResource Setting.ShortFieldWidth}"
                      HorizontalAlignment="Left"
                      AutomationProperties.Name="Хост OBS WebSocket"
                      Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"
@@ -73,7 +74,7 @@
             <TextBlock Text="Пароль OBS WebSocket"
                        Style="{StaticResource Setting.RowLabel}" />
             <keepshell:RevealableTextBox Password="{Binding Password, Mode=TwoWay}"
-                                         Width="240"
+                                         Width="{DynamicResource Setting.ShortFieldWidth}"
                                          HorizontalAlignment="Left" />
         </DockPanel>
 
@@ -201,13 +202,20 @@
                    Style="{StaticResource Setting.GroupHeading}" />
         <TextBlock Text="Уровни каких источников видны на дашборде. Обновите списки, чтобы загрузить их из OBS."
                    Style="{StaticResource SourceHint}" />
-        <Border Style="{StaticResource SourceList}">
+        <Border Style="{StaticResource SourceList}"
+                Visibility="{Binding HasItems, ElementName=DashboardSourceList, Converter={StaticResource BoolToVisibility}}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding DashboardSources}"
+                <ItemsControl x:Name="DashboardSourceList"
+                              ItemsSource="{Binding DashboardSources}"
                               ItemTemplate="{StaticResource SourceItemTemplate}"
                               Padding="8" />
             </ScrollViewer>
         </Border>
+        <controls:EmptyState Icon="Mic"
+                             IconSize="20"
+                             Description="Список пуст: аудиоисточники загружаются из запущенного OBS. Нажмите «Проверить подключение» выше. Если список так и останется пустым, в OBS нет ни одного аудиоисточника – добавьте его в OBS и проверьте подключение снова."
+                             Margin="0,0,0,8"
+                             Visibility="{Binding HasItems, ElementName=DashboardSourceList, Converter={StaticResource InverseBoolToVisibility}}" />
         <keepshell:NumericSettingField Label="Задержка обновления, мс"
                                        Value="{Binding DashboardVolumeMeterDelayMs, Mode=TwoWay}"
                                        IncreaseCommand="{Binding IncreaseDelayCommand}"
@@ -228,12 +236,19 @@
         </DockPanel>
         <TextBlock Text="Какие Browser Source обновляет команда «Обновить чат сейчас» и начало стрима."
                    Style="{StaticResource SourceHint}" />
-        <Border Style="{StaticResource SourceList}">
+        <Border Style="{StaticResource SourceList}"
+                Visibility="{Binding HasItems, ElementName=ChatRefreshSourceList, Converter={StaticResource BoolToVisibility}}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding ChatRefreshSources}"
+                <ItemsControl x:Name="ChatRefreshSourceList"
+                              ItemsSource="{Binding ChatRefreshSources}"
                               ItemTemplate="{StaticResource SourceItemTemplate}"
                               Padding="8" />
             </ScrollViewer>
         </Border>
+        <controls:EmptyState Icon="MessageSquare"
+                             IconSize="20"
+                             Description="Список пуст: Browser Source загружаются из запущенного OBS. Нажмите «Проверить подключение» выше – и список заполнится. Если он так и останется пустым, в OBS нет ни одного Browser Source – создайте его кнопкой «Создать Browser Source»."
+                             Margin="0,0,0,8"
+                             Visibility="{Binding HasItems, ElementName=ChatRefreshSourceList, Converter={StaticResource InverseBoolToVisibility}}" />
     </StackPanel>
 </UserControl>

@@ -47,6 +47,7 @@ public class ThemeMappingTests
         foreach (var theme in ThemeManager.Themes)
         {
             var declared = DeclaredKeys(theme.Palette, theme.Tokens);
+            declared.Add(AppScaledSizes.ShortFieldWidthKey);
             var missing = keys.Where(key => !declared.Contains(key)).ToArray();
 
             Assert.That(missing, Is.Empty, $"Тема «{theme.Key}» не объявляет ключи: {string.Join(", ", missing)}");
