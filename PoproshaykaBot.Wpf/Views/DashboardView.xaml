@@ -5,6 +5,7 @@
              xmlns:tiles="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:dashboard="clr-namespace:PoproshaykaBot.Wpf.Infrastructure.Dashboard"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -119,6 +120,7 @@
                                                   VerticalAlignment="Center"
                                                   Margin="0,0,8,0" />
 
+                        <dashboard:TileHeaderLine VerticalAlignment="Center">
                         <TextBlock x:Name="TileTitle"
                                    Text="{Binding Title}"
                                    ToolTip="{Binding Title}"
@@ -129,6 +131,32 @@
                                    VerticalAlignment="Center"
                                    TextWrapping="NoWrap"
                                    TextTrimming="CharacterEllipsis" />
+
+                        <DockPanel x:Name="TileStatus"
+                                   Margin="10,0,8,0"
+                                   VerticalAlignment="Center"
+                                   ClipToBounds="True"
+                                   ToolTip="{Binding HeaderStatus.Description}"
+                                   Visibility="{Binding HeaderStatus, Converter={StaticResource NullToVisibility}}">
+                            <Ellipse DockPanel.Dock="Left"
+                                     Width="7"
+                                     Height="7"
+                                     Margin="0,0,6,0"
+                                     VerticalAlignment="Center"
+                                     keepshell:SeverityBrushBehavior.Fill="{Binding HeaderStatus.Severity}" />
+                            <TextBlock x:Name="TileStatusText"
+                                       Text="{Binding HeaderStatus.Text}"
+                                       FontFamily="{DynamicResource Font.Sans}"
+                                       FontSize="{DynamicResource Font.Size.S}"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       keepshell:SeverityBrushBehavior.Foreground="{Binding HeaderStatus.Severity}"
+                                       AutomationProperties.Name="{Binding HeaderStatus.Description, NotifyOnTargetUpdated=True}"
+                                       AutomationProperties.LiveSetting="Polite"
+                                       Binding.TargetUpdated="OnTileStatusUpdated" />
+                        </DockPanel>
+                        </dashboard:TileHeaderLine>
                     </DockPanel>
                     </Border>
 
@@ -198,8 +226,19 @@
                                                       Height="14" />
                         </Button>
 
+                        <Ellipse x:Name="TileStripStatus"
+                                 DockPanel.Dock="Top"
+                                 Width="7"
+                                 Height="7"
+                                 Margin="0,0,0,8"
+                                 HorizontalAlignment="Center"
+                                 ToolTip="{Binding HeaderStatus.Description}"
+                                 keepshell:SeverityBrushBehavior.Fill="{Binding HeaderStatus.Severity}"
+                                 Visibility="{Binding HeaderStatus, Converter={StaticResource NullToVisibility}}" />
+
                         <TextBlock Text="{Binding Title}"
                                    ToolTip="{Binding Title}"
+                                   AutomationProperties.HelpText="{Binding HeaderStatus.Description}"
                                    FontFamily="{DynamicResource Font.Sans}"
                                    FontSize="{DynamicResource Font.Size.M}"
                                    FontWeight="SemiBold"

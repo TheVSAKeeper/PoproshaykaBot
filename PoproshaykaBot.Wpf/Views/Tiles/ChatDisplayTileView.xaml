@@ -43,6 +43,11 @@
                             <Setter Property="Visibility"
                                     Value="Collapsed" />
                         </DataTrigger>
+                        <DataTrigger Binding="{Binding IsModalDialogOpen}"
+                                     Value="True">
+                            <Setter Property="Visibility"
+                                    Value="Collapsed" />
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </wv2:WebView2.Style>
@@ -50,7 +55,6 @@
 
         <controls:EmptyState Icon="MessageSquare"
                              Heading="Чат скрыт"
-                             Description="Окно чата вернётся, когда закончится настройка дашборда."
                              DescriptionMaxWidth="320"
                              VerticalAlignment="Center"
                              HorizontalAlignment="Center">
@@ -58,6 +62,8 @@
                 <Style TargetType="controls:EmptyState">
                     <Setter Property="Visibility"
                             Value="Collapsed" />
+                    <Setter Property="Description"
+                            Value="Окно чата вернётся, когда закончится настройка дашборда." />
                     <Style.Triggers>
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
@@ -68,6 +74,18 @@
                             </MultiDataTrigger.Conditions>
                             <Setter Property="Visibility"
                                     Value="Visible" />
+                        </MultiDataTrigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsModalDialogOpen}"
+                                           Value="True" />
+                                <Condition Binding="{Binding HasFallback}"
+                                           Value="False" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility"
+                                    Value="Visible" />
+                            <Setter Property="Description"
+                                    Value="Окно чата вернётся, когда закроется диалог." />
                         </MultiDataTrigger>
                     </Style.Triggers>
                 </Style>

@@ -251,4 +251,35 @@ public sealed class CommandSettingsStoreTests
             Assert.That(Directory.GetFiles(_root, "*invalid*"), Is.Not.Empty);
         });
     }
+
+    [TestCase("""{"commands":{"profile":{"enabled":false}}}""", false, false)]
+    [TestCase("""{"commands":{"PROFILE":{"enabled":false}}}""", false, false)]
+    [TestCase("""{"commands":{"profile":{"enabled":false},"пресет":{"enabled":true}}}""", true, true)]
+    [TestCase("""{"commands":{"ранг":{"enabled":false}}}""", true, false)]
+    public void Настройки_прежнего_имени_переезжают_к_пресету_только_когда_своих_у_него_нет(
+        string json,
+        bool presetEnabled,
+        bool profileKept)
+    {
+        File.WriteAllText(_path, json);
+
+        var store = new CommandSettingsStore(null, _path);
+        var settings = store.Load();
+
+        store.Mutate(_ => { });
+
+        using var written = JsonDocument.Parse(File.ReadAllText(_path));
+        var keys = written.RootElement.GetProperty("commands").EnumerateObject().Select(property => property.Name).ToList();
+        var restored = new CommandSettingsStore(null, _path).Load();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(settings.IsEnabled("пресет"), Is.EqualTo(presetEnabled));
+            Assert.That(settings.IsEnabled("мойпрофиль"), Is.True, "Прежний ключ не достаётся команде, забравшей токен");
+            Assert.That(settings.Commands.ContainsKey("profile"), Is.EqualTo(profileKept));
+            Assert.That(keys.Contains("profile", StringComparer.OrdinalIgnoreCase), Is.EqualTo(profileKept), "В файл уходит перенесённый ключ");
+            Assert.That(restored.IsEnabled("пресет"), Is.EqualTo(presetEnabled));
+            Assert.That(restored.IsEnabled("ранг"), Is.EqualTo(!json.Contains("ранг")));
+        });
+    }
 }

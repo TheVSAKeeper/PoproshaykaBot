@@ -1,7 +1,6 @@
 ﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.ObsOutputCardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -68,7 +67,7 @@
             <Setter Property="FontWeight"
                     Value="SemiBold" />
             <Setter Property="Foreground"
-                    Value="{DynamicResource Fg.Muted}" />
+                    Value="{DynamicResource Fg.Secondary}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding State}"
                              Value="Active">
@@ -81,6 +80,23 @@
                             Value="{DynamicResource State.WarningText}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding State}"
+                             Value="Error">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.ErrorText}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ObsCardHealth"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource TextBlock.Subtle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HealthSeverity}"
+                             Value="Warning">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource State.WarningText}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HealthSeverity}"
                              Value="Error">
                     <Setter Property="Foreground"
                             Value="{DynamicResource State.ErrorText}" />
@@ -111,64 +127,57 @@
             </Grid.RowDefinitions>
 
             <DockPanel Grid.Row="0"
-                       LastChildFill="False"
-                       Margin="0,0,0,6">
+                       LastChildFill="True"
+                       Margin="0,0,0,8">
                 <Ellipse DockPanel.Dock="Left"
                          Style="{StaticResource ObsCardDot}"
                          VerticalAlignment="Center"
                          Margin="0,0,8,0" />
-                <TextBlock DockPanel.Dock="Left"
-                           Text="{Binding Kicker}"
-                           Style="{StaticResource TextBlock.Subtle}"
-                           VerticalAlignment="Center" />
-                <TextBlock DockPanel.Dock="Right"
-                           Text="{Binding StateText}"
+                <TextBlock Text="{Binding Title}"
                            Style="{StaticResource ObsCardStateText}"
+                           TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center" />
             </DockPanel>
 
-            <Grid Grid.Row="1"
-                  Margin="0,0,0,4">
-                <TextBlock Text="–:–:–"
-                           Style="{StaticResource TextBlock.Mono}"
-                           FontSize="{DynamicResource Font.Size.XL}"
-                           Visibility="{Binding HasTimecode, Converter={StaticResource InverseBoolToVisibility}}" />
-                <TextBlock Text="{Binding Timecode, Converter={StaticResource Timecode}}"
-                           Style="{StaticResource TextBlock.Mono}"
-                           FontSize="{DynamicResource Font.Size.XL}"
-                           Visibility="{Binding HasTimecode, Converter={StaticResource BoolToVisibility}}" />
-            </Grid>
+            <StackPanel Grid.Row="1"
+                        Margin="0,0,0,8"
+                        Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                    <TextBlock Text="–:–:–"
+                               Style="{StaticResource TextBlock.Mono}"
+                               FontSize="{DynamicResource Font.Size.XL}"
+                               Visibility="{Binding HasTimecode, Converter={StaticResource InverseBoolToVisibility}}" />
+                    <TextBlock Text="{Binding Timecode, Converter={StaticResource Timecode}}"
+                               Style="{StaticResource TextBlock.Mono}"
+                               FontSize="{DynamicResource Font.Size.XL}"
+                               Visibility="{Binding HasTimecode, Converter={StaticResource BoolToVisibility}}" />
+                </Grid>
+
+                <TextBlock Text="{Binding Health}"
+                           Style="{StaticResource ObsCardHealth}"
+                           Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding Health, Converter={StaticResource NullToVisibility}}" />
+            </StackPanel>
 
             <TextBlock Grid.Row="2"
                        Text="{Binding Meta}"
                        Style="{StaticResource ObsCardMeta}"
-                       Margin="0,0,0,10"
+                       Margin="0,0,0,8"
+                       TextWrapping="Wrap"
                        Visibility="{Binding Meta, Converter={StaticResource NullToVisibility}}" />
 
-            <DockPanel Grid.Row="3"
-                       LastChildFill="False">
-                <Button DockPanel.Dock="Left"
-                        Style="{StaticResource Button.Secondary}"
+            <WrapPanel Grid.Row="3">
+                <Button Style="{StaticResource Button.Secondary}"
+                        Margin="0,0,8,0"
                         Content="{Binding PrimaryButtonText}"
                         Command="{Binding InvokePrimaryCommand}" />
 
-                <Button DockPanel.Dock="Left"
-                        Style="{StaticResource Button.Ghost}"
-                        Margin="8,0,0,0"
+                <Button Style="{StaticResource Button.Ghost}"
                         Content="{Binding SecondaryButtonText}"
                         Command="{Binding InvokeSecondaryCommand}"
-                        Visibility="{Binding IsRecordMode, Converter={StaticResource BoolToVisibility}}" />
-
-                <Border DockPanel.Dock="Right"
-                        Style="{StaticResource Badge}"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding IsStreamMode, Converter={StaticResource BoolToVisibility}}"
-                        keepshell:SeverityBrushBehavior.BorderBrush="{Binding ChipSeverityResolved}">
-                    <TextBlock Text="{Binding ChipText}"
-                               FontSize="{DynamicResource Font.Size.Caption}"
-                               keepshell:SeverityBrushBehavior.Foreground="{Binding ChipSeverityResolved}" />
-                </Border>
-            </DockPanel>
+                        Visibility="{Binding ShowsSecondaryButton, Converter={StaticResource BoolToVisibility}}" />
+            </WrapPanel>
         </Grid>
     </Border>
 </UserControl>

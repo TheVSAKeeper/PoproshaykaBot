@@ -10,28 +10,37 @@
              d:DesignWidth="320">
 
     <StackPanel Margin="0,0,0,8">
-        <DockPanel LastChildFill="False"
-                   Margin="0,0,0,4">
-            <Border DockPanel.Dock="Left"
-                    Style="{StaticResource Badge}"
-                    keepshell:SeverityBrushBehavior.SoftBackground="{Binding StatusSeverity}"
-                    keepshell:SeverityBrushBehavior.BorderBrush="{Binding StatusSeverity}">
-                <TextBlock Text="{Binding DisplayName}"
-                           FontSize="{DynamicResource Font.Size.Caption}"
-                           FontWeight="SemiBold"
-                           keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}" />
-            </Border>
-
+        <DockPanel LastChildFill="True">
             <TextBlock DockPanel.Dock="Right"
-                       Text="{Binding Detail}"
-                       Style="{StaticResource TextBlock.Subtle}"
+                       Text="{Binding StateText}"
+                       Margin="8,0,0,0"
+                       VerticalAlignment="Center">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock"
+                           BasedOn="{StaticResource TextBlock.Subtle}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding State}"
+                                         Value="Missing">
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource State.WarningText}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
+            <TextBlock Text="{Binding DisplayName}"
+                       ToolTip="{Binding DisplayName}"
+                       TextTrimming="CharacterEllipsis"
                        VerticalAlignment="Center" />
         </DockPanel>
 
         <ProgressBar Height="6"
+                     Margin="0,4,0,0"
                      Minimum="0"
                      Maximum="1"
                      Value="{Binding Level, Mode=OneWay}"
+                     Visibility="{Binding ShowsLevel, Converter={StaticResource BoolToVisibility}}"
                      keepshell:SeverityBrushBehavior.Foreground="{Binding LevelSeverity}" />
     </StackPanel>
 </UserControl>

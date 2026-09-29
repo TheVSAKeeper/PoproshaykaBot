@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.ViewModels;
+using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
 using Serilog;
 using System.Windows;
@@ -121,6 +123,11 @@ public sealed class GalleryHost : IGalleryHost
             return await CaptureHiddenAsync(item.Name, context).ConfigureAwait(true);
         }
 
+        if (GalleryObs.Find(item.Name) is { } obs)
+        {
+            return await CaptureObsAsync(item.Name, obs, context).ConfigureAwait(true);
+        }
+
         Navigate(item.Name);
 
         await context.SettleAsync().ConfigureAwait(true);
@@ -168,6 +175,7 @@ public sealed class GalleryHost : IGalleryHost
             .Concat(SectionKeys.Cards)
             .Concat(SectionKeys.Hidden)
             .Concat(SectionKeys.Params)
+            .Concat(SectionKeys.Obs)
             .FirstOrDefault(known => string.Equals(known, requested, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -271,6 +279,28 @@ public sealed class GalleryHost : IGalleryHost
         finally
         {
             streams.ShowHidden = false;
+
+            await context.SettleAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task<GalleryShot> CaptureObsAsync(string name, ObsDashboardSnapshot snapshot, GalleryContext context)
+    {
+        Navigate(SectionKeys.PageOf(name));
+
+        var tile = _services.GetServices<DashboardTileViewModel>().OfType<ObsInfoTileViewModel>().Single();
+
+        tile.BeginPreview(snapshot);
+
+        try
+        {
+            await context.SettleAsync().ConfigureAwait(true);
+
+            return context.Save(ViewCapture.Slug(name));
+        }
+        finally
+        {
+            tile.EndPreview();
 
             await context.SettleAsync().ConfigureAwait(true);
         }

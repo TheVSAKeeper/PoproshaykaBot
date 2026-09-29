@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Broadcast.Profiles;
@@ -38,6 +39,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     private readonly List<IDisposable> _subs = [];
 
     private Guid? _activeProfileId;
+    private Guid? _applyingProfileId;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProfiles))]
@@ -314,6 +316,50 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
                     DuplicateProfile,
                     DeleteProfile);
             }));
+
+        if (_applyingProfileId.HasValue)
+        {
+            var applying = Items.FirstOrDefault(item => item.Profile.Id == _applyingProfileId.Value);
+
+            if (applying is not null)
+            {
+                applying.IsApplyInFlight = true;
+            }
+        }
+
+        RefreshHeaderStatus();
+    }
+
+    public static TileHeaderStatus? DescribeProfileStatus(IReadOnlyList<BroadcastProfileItemViewModel> items)
+    {
+        var applying = items.FirstOrDefault(item => item.IsApplyInFlight);
+
+        if (applying is not null)
+        {
+            return new($"Применяю «{applying.Name}»…",
+                $"Профиль «{applying.Name}» применяется к каналу",
+                StatusSeverity.Info);
+        }
+
+        var active = items.FirstOrDefault(item => item.IsActive);
+
+        if (active is null)
+        {
+            return null;
+        }
+
+        return active.HasDrift
+            ? new($"{active.Name} · расходится с каналом",
+                $"Применён профиль «{active.Name}», но название или категория на канале сейчас другие",
+                StatusSeverity.Warning)
+            : new(active.Name,
+                $"Применён профиль «{active.Name}»",
+                StatusSeverity.Success);
+    }
+
+    private void RefreshHeaderStatus()
+    {
+        HeaderStatus = DescribeProfileStatus(Items);
     }
 
     private async Task ApplyProfileAsync(BroadcastProfileItemViewModel item)
@@ -325,7 +371,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
         catch (Exception ex)
         {
-            item.IsApplyInFlight = false;
+            SetApplyInFlight(item.Profile.Id, false);
             ShowStatus($"✗ {ex.Message}", true);
         }
     }
@@ -390,22 +436,37 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
     private void SetApplyInFlight(Guid profileId, bool value)
     {
+        if (value)
+        {
+            _applyingProfileId = profileId;
+        }
+        else if (_applyingProfileId == profileId)
+        {
+            _applyingProfileId = null;
+        }
+
         foreach (var item in Items)
         {
             if (item.Profile.Id == profileId)
             {
                 item.IsApplyInFlight = value;
-                return;
+                break;
             }
         }
+
+        RefreshHeaderStatus();
     }
 
     private void ClearInFlightStates(string message, bool isError)
     {
+        _applyingProfileId = null;
+
         foreach (var item in Items)
         {
             item.IsApplyInFlight = false;
         }
+
+        RefreshHeaderStatus();
 
         ShowStatus(message, isError);
     }

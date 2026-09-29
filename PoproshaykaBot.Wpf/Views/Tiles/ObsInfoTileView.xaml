@@ -31,10 +31,19 @@
                        behaviors:StreamStatusBrushBehavior.Foreground="{Binding ConnectionStatus}" />
         </DockPanel>
 
-        <TextBlock Text="{Binding SceneText}"
-                   Margin="0,0,0,12"
-                   Foreground="{DynamicResource Fg.Secondary}"
-                   TextTrimming="CharacterEllipsis" />
+        <DockPanel LastChildFill="True"
+                   Margin="0,0,0,12">
+            <TextBlock DockPanel.Dock="Left"
+                       Text="Сцена"
+                       Style="{StaticResource TextBlock.Subtle}"
+                       Margin="0,0,8,0"
+                       VerticalAlignment="Center" />
+            <TextBlock Text="{Binding SceneName}"
+                       ToolTip="{Binding SceneName}"
+                       FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" />
+        </DockPanel>
 
         <ContentControl Content="{Binding StreamCard}"
                         Margin="0,0,0,10"
