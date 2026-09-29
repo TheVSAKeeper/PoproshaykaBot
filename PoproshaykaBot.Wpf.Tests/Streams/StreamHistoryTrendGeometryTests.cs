@@ -13,6 +13,7 @@ using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -27,6 +28,7 @@ public class StreamHistoryTrendGeometryTests
     private static readonly Size Area = new(1024, 640);
     private static readonly Size Wide = new(1360, 800);
     private static readonly Size NarrowSideBySide = new(StreamHistoryPageView.SideBySideWidth, 800);
+    private static readonly Size Tall = new(1024, 1000);
 
     private const int HiddenMenuItemIndex = 1;
     private const int TrendBarCount = 40;
@@ -39,6 +41,8 @@ public class StreamHistoryTrendGeometryTests
     private const double CardBorder = 1;
     private const double CompactCoverHeight = 32;
     private const double WideCoverHeight = 72;
+    private const double SplitterStep = 250;
+    private const double Shift = 200;
 
     private static readonly string[] Dictionaries =
     [
@@ -202,6 +206,208 @@ public class StreamHistoryTrendGeometryTests
         }
     }
 
+    [TestCase(1.0, 1660, 900, false)]
+    [TestCase(1.0, 1660, 900, true)]
+    [TestCase(1.6, 2200, 900, false)]
+    [TestCase(1.6, 2200, 900, true)]
+    [TestCase(1.0, 1024, 640, false)]
+    [TestCase(1.6, 1024, 640, true)]
+    public void Разделитель_упирается_в_пол_соседа_и_не_растит_страницу(double scale, double width, double height, bool keyboard)
+    {
+        var area = new Size(width, height);
+
+        try
+        {
+            FontScaleManager.Apply(scale);
+
+            var page = CreatePage();
+            page.TrySelectAt(0);
+
+            var view = new StreamHistoryPageView { DataContext = page };
+
+            Arrange(view, area);
+
+            var before = SplitOf(view);
+
+            MoveSplitter(view, area, -Math.Max(width, height), keyboard);
+
+            var detailWidest = SplitOf(view);
+
+            MoveSplitter(view, area, Math.Max(width, height), keyboard);
+
+            var tableWidest = SplitOf(view);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(detailWidest.Total, Is.EqualTo(before.Total).Within(Tolerance),
+                    $"Разделитель только делит место: инспектор ушёл за край на {detailWidest.Total - before.Total:F1} DIP");
+                Assert.That(detailWidest.Table, Is.EqualTo(detailWidest.TableFloor).Within(Tolerance), "Ход к таблице кончается на её полу");
+                Assert.That(tableWidest.Total, Is.EqualTo(before.Total).Within(Tolerance));
+                Assert.That(tableWidest.Detail, Is.EqualTo(tableWidest.DetailFloor).Within(Tolerance), "Обратный ход кончается на полу инспектора");
+            }
+        }
+        finally
+        {
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+        }
+    }
+
+    [Test]
+    public void Сужение_страницы_после_сдвига_поджимает_инспектор_а_расширение_возвращает()
+    {
+        var wide = new Size(1660, 900);
+        var narrow = new Size(StreamHistoryPageView.SideBySideWidth, 900);
+
+        var page = CreatePage();
+        page.TrySelectAt(0);
+
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        Arrange(view, wide);
+        MoveSplitter(view, wide, -2 * Shift, keyboard: false);
+
+        var dragged = SplitOf(view);
+
+        Arrange(view, narrow);
+
+        var squeezed = SplitOf(view);
+
+        Arrange(view, wide);
+
+        var restored = SplitOf(view);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dragged.Detail, Is.EqualTo(StreamHistoryPageView.DetailMinWidth + 2 * Shift).Within(Tolerance));
+            Assert.That(squeezed.Total, Is.EqualTo(narrow.Width).Within(Tolerance), "Узкая страница не выносит инспектор за край");
+            Assert.That(squeezed.Table, Is.EqualTo(StreamHistoryPageView.TableMinWidth).Within(Tolerance));
+            Assert.That(restored.Detail, Is.EqualTo(dragged.Detail).Within(Tolerance), "Расширение возвращает ширину, заданную разделителем");
+        }
+    }
+
+    [TestCase(1.0, 1660)]
+    [TestCase(1.6, 2200)]
+    public void Ширина_инспектора_от_разделителя_переживает_смену_вида_и_стопку(double scale, double width)
+    {
+        var area = new Size(width, 900);
+
+        try
+        {
+            FontScaleManager.Apply(scale);
+
+            var page = CreatePage();
+            page.TrySelectAt(0);
+
+            var view = new StreamHistoryPageView { DataContext = page };
+
+            Arrange(view, area);
+            MoveSplitter(view, area, -Shift, keyboard: false);
+
+            var dragged = SplitOf(view).Detail;
+
+            page.IsCardsView = true;
+            Arrange(view, area);
+
+            var cards = SplitOf(view).Detail;
+
+            page.IsCardsView = false;
+            Arrange(view, area);
+
+            var table = SplitOf(view).Detail;
+
+            Arrange(view);
+            Arrange(view, area);
+
+            var unstacked = SplitOf(view).Detail;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(dragged, Is.EqualTo(StreamHistoryPageView.DetailMinWidth * scale + Shift).Within(Tolerance));
+                Assert.That(cards, Is.EqualTo(dragged).Within(Tolerance), "Вид карточками сохраняет ширину инспектора");
+                Assert.That(table, Is.EqualTo(dragged).Within(Tolerance), "Возврат к таблице сохраняет ширину инспектора");
+                Assert.That(unstacked, Is.EqualTo(dragged).Within(Tolerance), "Стопка и обратно сохраняет ширину инспектора");
+            }
+        }
+        finally
+        {
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+        }
+    }
+
+    [Test]
+    public void Ширина_инспектора_от_разделителя_едет_с_масштабом_шрифта()
+    {
+        var area = new Size(2200, 900);
+        var page = CreatePage();
+        page.TrySelectAt(0);
+
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        try
+        {
+            view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+            Arrange(view, area);
+            MoveSplitter(view, area, -Shift, keyboard: false);
+
+            var dragged = SplitOf(view).Detail;
+
+            FontScaleManager.Apply(1.6);
+            Arrange(view, area);
+
+            var scaled = SplitOf(view).Detail;
+
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+            Arrange(view, area);
+
+            var back = SplitOf(view).Detail;
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(scaled, Is.EqualTo(dragged * 1.6).Within(Tolerance), "Ширина от разделителя масштабируется, как пол инспектора");
+                Assert.That(back, Is.EqualTo(dragged).Within(Tolerance));
+            }
+        }
+        finally
+        {
+            FontScaleManager.Apply(FontScaleManager.DefaultScale);
+            view.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+        }
+    }
+
+    [Test]
+    public void Доля_карточки_стрима_от_разделителя_в_стопке_переживает_смену_вида()
+    {
+        var page = CreatePage();
+        page.TrySelectAt(0);
+
+        var view = new StreamHistoryPageView { DataContext = page };
+
+        Arrange(view, Tall);
+
+        var initial = SplitOf(view);
+
+        MoveSplitter(view, Tall, -Shift / 2, keyboard: false);
+
+        var dragged = SplitOf(view);
+
+        page.IsCardsView = true;
+        Arrange(view, Tall);
+
+        var cards = SplitOf(view);
+
+        page.IsCardsView = false;
+        Arrange(view, Tall);
+
+        var table = SplitOf(view);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dragged.Detail, Is.GreaterThan(initial.Detail), "Разделитель поднят – карточка стрима выросла");
+            Assert.That(cards.Share, Is.EqualTo(dragged.Share).Within(0.01), "Вид карточками сохраняет долю, заданную разделителем");
+            Assert.That(table.Share, Is.EqualTo(dragged.Share).Within(0.01), "Возврат к таблице сохраняет долю, заданную разделителем");
+        }
+    }
+
     [TestCase(1.0)]
     [TestCase(1.6)]
     public void Пол_карточки_рекорда_и_колонки_рекордов_едет_с_масштабом_шрифта(double scale)
@@ -273,6 +479,59 @@ public class StreamHistoryTrendGeometryTests
         Assert.That(columns, Has.Count.EqualTo(3), "Раскладка рядом");
 
         return (Math.Round(columns[0].ActualWidth, 2), Math.Round(columns[2].ActualWidth, 2));
+    }
+
+    private static (double Table, double Detail, double Total, double TableFloor, double DetailFloor, double Share) SplitOf(StreamHistoryPageView view)
+    {
+        var grid = (Grid)view.FindName("PageGrid")!;
+
+        if (grid.ColumnDefinitions.Count == 3)
+        {
+            var columns = grid.ColumnDefinitions;
+
+            return (columns[0].ActualWidth, columns[2].ActualWidth, columns.Sum(column => column.ActualWidth),
+                columns[0].MinWidth, columns[2].MinWidth, columns[2].ActualWidth / (columns[0].ActualWidth + columns[2].ActualWidth));
+        }
+
+        var rows = grid.RowDefinitions;
+
+        return (rows[1].ActualHeight, rows[3].ActualHeight, rows.Sum(row => row.ActualHeight),
+            rows[1].MinHeight, rows[3].MinHeight, rows[3].ActualHeight / (rows[1].ActualHeight + rows[3].ActualHeight));
+    }
+
+    private static void MoveSplitter(StreamHistoryPageView view, Size area, double change, bool keyboard)
+    {
+        var splitter = (GridSplitter)view.FindName("LayoutSplitter")!;
+        var columns = splitter.ResizeDirection == GridResizeDirection.Columns;
+
+        if (keyboard)
+        {
+            using var source = new HwndSource(new HwndSourceParameters("splitter-keyboard") { WindowStyle = 0 });
+            var key = columns
+                ? change < 0 ? Key.Left : Key.Right
+                : change < 0 ? Key.Up : Key.Down;
+
+            for (var remaining = Math.Abs(change); remaining > 0; remaining -= SplitterStep)
+            {
+                splitter.KeyboardIncrement = Math.Min(remaining, SplitterStep);
+                splitter.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = Keyboard.KeyDownEvent });
+                Arrange(view, area);
+            }
+
+            return;
+        }
+
+        splitter.RaiseEvent(new DragStartedEventArgs(0, 0));
+
+        for (var remaining = Math.Abs(change); remaining > 0; remaining -= SplitterStep)
+        {
+            var step = Math.Sign(change) * Math.Min(remaining, SplitterStep);
+
+            splitter.RaiseEvent(columns ? new DragDeltaEventArgs(step, 0) : new DragDeltaEventArgs(0, step));
+            Arrange(view, area);
+        }
+
+        splitter.RaiseEvent(new DragCompletedEventArgs(0, 0, false));
     }
 
     private static double[] PageRows(StreamHistoryPageView view)

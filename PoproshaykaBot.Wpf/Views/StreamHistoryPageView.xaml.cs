@@ -67,6 +67,10 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     private bool _detailStacked;
     private bool _detailApplied;
     private double _segmentCardsWidth;
+    private double _detailWidth = DetailMinWidth;
+    private double _detailWidthScale = 1;
+    private double? _detailShare;
+    private GridLength? _stackedDetailHeight;
 
     public StreamHistoryPageView()
         : this(new ClipboardService())
@@ -255,8 +259,11 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
 
         if (_layoutApplied && sideBySide == _sideBySide)
         {
+            ApplyDetailCeiling(width);
             return;
         }
+
+        RememberSplit();
 
         _sideBySide = sideBySide;
         _layoutApplied = true;
@@ -266,11 +273,41 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         if (sideBySide)
         {
             ApplySideBySide(scale);
+            ApplyDetailCeiling(width);
         }
         else
         {
             ApplyStacked();
         }
+    }
+
+    private void RememberSplit()
+    {
+        var columns = PageGrid.ColumnDefinitions;
+        var rows = PageGrid.RowDefinitions;
+
+        if (columns.Count == 3)
+        {
+            _detailWidth = columns[2].Width.Value / _detailWidthScale;
+        }
+        else if (_stackedDetailHeight is { } applied && rows.Count == 4 && rows[3].Height != applied)
+        {
+            _detailShare = rows[3].Height.Value / (rows[1].Height.Value + rows[3].Height.Value);
+        }
+    }
+
+    private void ApplyDetailCeiling(double width)
+    {
+        var columns = PageGrid.ColumnDefinitions;
+
+        if (columns.Count != 3)
+        {
+            return;
+        }
+
+        var splitter = double.IsNaN(LayoutSplitter.Width) ? 0 : LayoutSplitter.Width;
+
+        columns[2].MaxWidth = Math.Max(columns[2].MinWidth, width - columns[0].MinWidth - splitter);
     }
 
     private void ApplyCompactMode(bool compact, double scale)
@@ -290,13 +327,23 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         PageGrid.RowDefinitions.Clear();
 
         var cards = DataContext is StreamHistoryPageViewModel { IsCardsView: true };
+        var listHeight = new GridLength(ListRowShare, GridUnitType.Star);
+        var detailHeight = new GridLength(cards ? DetailCardsRowShare : DetailRowShare, GridUnitType.Star);
+
+        if (_detailShare is { } share)
+        {
+            listHeight = new(1 - share, GridUnitType.Star);
+            detailHeight = new(share, GridUnitType.Star);
+        }
+
+        _stackedDetailHeight = detailHeight;
 
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        PageGrid.RowDefinitions.Add(new() { Height = new(ListRowShare, GridUnitType.Star), MinHeight = 160 });
+        PageGrid.RowDefinitions.Add(new() { Height = listHeight, MinHeight = 160 });
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
         PageGrid.RowDefinitions.Add(new()
         {
-            Height = new(cards ? DetailCardsRowShare : DetailRowShare, GridUnitType.Star),
+            Height = detailHeight,
             MinHeight = cards ? DetailCardsRowMinHeight : DetailRowMinHeight,
         });
 
@@ -322,7 +369,9 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
 
         PageGrid.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star), MinWidth = TableMinWidth * scale });
         PageGrid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        PageGrid.ColumnDefinitions.Add(new() { Width = new(DetailMinWidth * scale), MinWidth = DetailMinWidth * scale });
+        PageGrid.ColumnDefinitions.Add(new() { Width = new(_detailWidth * scale), MinWidth = DetailMinWidth * scale });
+
+        _detailWidthScale = scale;
 
         Place(HeaderStack, 0, 0, columnSpan: 3);
         Place(TableCard, 1, 0);

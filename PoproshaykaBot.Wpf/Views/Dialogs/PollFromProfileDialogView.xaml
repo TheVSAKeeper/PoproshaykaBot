@@ -39,10 +39,10 @@
         <Grid Grid.Row="1"
               Visibility="{Binding IsEmpty, Converter={StaticResource InverseBoolToVisibility}}">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220"
+                <ColumnDefinition Width="3*"
                                   MinWidth="120" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*"
+                <ColumnDefinition Width="5*"
                                   MinWidth="120" />
             </Grid.ColumnDefinitions>
 
