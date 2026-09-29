@@ -163,6 +163,26 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
         return item?.MessageId;
     }
 
+    public async Task SendWhisperAsync(string fromUserId, string toUserId, string message, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fromUserId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(toUserId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+        var query = $"from_user_id={Uri.EscapeDataString(fromUserId)}&to_user_id={Uri.EscapeDataString(toUserId)}";
+
+        using var client = httpClientFactory.CreateClient(HttpClientName);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{TwitchEndpoints.HelixWhispers}?{query}")
+        {
+            Content = JsonContent.Create(new HelixSendWhisperDto(message), options: JsonOptions),
+        };
+
+        httpRequest.Options.Set(TwitchAuthHandlerBase.KeepTokenOnUnauthorized, true);
+
+        using var response = await client.SendAsync(httpRequest, cancellationToken);
+        await EnsureSuccessAsync(httpRequest, response, cancellationToken);
+    }
+
     public async Task<IReadOnlyDictionary<string, GlobalBadgeInfo>> GetGlobalChatBadgesAsync(CancellationToken cancellationToken = default)
     {
         var envelope = await GetRawAsync<HelixGlobalBadgesResponse>(TwitchEndpoints.HelixChatBadgesGlobal, cancellationToken);

@@ -7,20 +7,47 @@ namespace PoproshaykaBot.Core.Tests.Settings;
 [TestFixture]
 public sealed class CommandSettingsStoreTests
 {
-    private const CommandResponseTarget LegacyKnownTargets = CommandResponseTarget.Chat | CommandResponseTarget.Overlay;
-
-    private sealed class LegacySettings
+    [Flags]
+    private enum TargetBeforeCaller
     {
-        public CommandResponseTarget DefaultResponseTarget { get; set; }
-
-        public Dictionary<string, LegacyOverride> Commands { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        None = 0,
+        Chat = 1,
+        Overlay = 2,
     }
 
-    private sealed class LegacyOverride
+    [Flags]
+    private enum TargetBeforeWhisper
+    {
+        None = 0,
+        Chat = 1,
+        Overlay = 2,
+        Caller = 4,
+    }
+
+    private sealed class LegacySettings<TTarget> where TTarget : struct, Enum
+    {
+        public TTarget DefaultResponseTarget { get; set; }
+
+        public Dictionary<string, LegacyOverride<TTarget>> Commands { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class LegacyOverride<TTarget> where TTarget : struct, Enum
     {
         public bool Enabled { get; set; } = true;
 
-        public CommandResponseTarget ResponseTarget { get; set; }
+        public TTarget? ResponseTarget { get; set; }
+    }
+
+    private LegacySettings<TTarget> ReadAsLegacy<TTarget>() where TTarget : struct, Enum
+    {
+        return JsonSerializer.Deserialize<LegacySettings<TTarget>>(File.ReadAllText(_path), JsonStoreOptions.Default)!;
+    }
+
+    private static CommandResponseTarget SeenByLegacy<TTarget>(TTarget? target) where TTarget : struct, Enum
+    {
+        var known = Enum.GetValues<TTarget>().Aggregate(0, static (mask, value) => mask | Convert.ToInt32(value));
+
+        return (CommandResponseTarget)(Convert.ToInt32(target ?? default) & known);
     }
 
     [SetUp]
@@ -92,9 +119,9 @@ public sealed class CommandSettingsStoreTests
         File.WriteAllText(_path,
             """
             {
-              "defaultResponseTarget": 24,
+              "defaultResponseTarget": 48,
               "commands": {
-                "ранг": { "enabled": true, "responseTarget": 10 }
+                "ранг": { "enabled": true, "responseTarget": 18 }
               }
             }
             """);
@@ -221,7 +248,7 @@ public sealed class CommandSettingsStoreTests
             };
         });
 
-        var legacy = JsonSerializer.Deserialize<LegacySettings>(File.ReadAllText(_path), JsonStoreOptions.Default)!;
+        var legacy = ReadAsLegacy<TargetBeforeCaller>();
 
         var rank = legacy.Commands["ранг"];
         var donate = legacy.Commands["донат"];
@@ -229,12 +256,83 @@ public sealed class CommandSettingsStoreTests
         Assert.Multiple(() =>
         {
             Assert.That(rank.Enabled, Is.False, "Выключение команды старая сборка читает как раньше");
-            Assert.That(rank.ResponseTarget & LegacyKnownTargets, Is.EqualTo(CommandResponseTarget.Overlay));
-            Assert.That(donate.ResponseTarget & LegacyKnownTargets,
+            Assert.That(SeenByLegacy(rank.ResponseTarget), Is.EqualTo(CommandResponseTarget.Overlay));
+            Assert.That(SeenByLegacy(donate.ResponseTarget),
                 Is.EqualTo(CommandResponseTarget.Chat),
-                "Цель «только вызвавшему» записана как чат плюс новый бит, поэтому старая сборка отвечает в чат, а не молчит");
+                "Цель «ответом на сообщение» записана как чат плюс новый бит, поэтому старая сборка отвечает в чат, а не молчит");
 
-            Assert.That(legacy.DefaultResponseTarget & LegacyKnownTargets, Is.EqualTo(CommandSettings.ChatAndOverlay));
+            Assert.That(SeenByLegacy<TargetBeforeCaller>(legacy.DefaultResponseTarget), Is.EqualTo(CommandSettings.ChatAndOverlay));
+        });
+    }
+
+    [Test]
+    public void Цель_шёпотом_прошлые_сборки_читают_как_ответ_в_чат()
+    {
+        new CommandSettingsStore(null, _path).Mutate(settings => settings.Commands["донат"] = new()
+        {
+            ResponseTarget = CommandSettings.WhisperToCaller,
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(SeenByLegacy(ReadAsLegacy<TargetBeforeWhisper>().Commands["донат"].ResponseTarget),
+                Is.EqualTo(CommandSettings.CallerOnly),
+                "Шёпот записан поверх «ответом на сообщение», поэтому прошлая сборка отвечает реплаем");
+
+            Assert.That(SeenByLegacy(ReadAsLegacy<TargetBeforeCaller>().Commands["донат"].ResponseTarget),
+                Is.EqualTo(CommandResponseTarget.Chat),
+                "Сборка до цели «ответом на сообщение» отвечает в чат, но не молчит");
+        });
+    }
+
+    [TestCase(CommandResponseTarget.Whisper)]
+    [TestCase(CommandResponseTarget.Caller)]
+    public void Модификатор_без_чата_пишется_так_чтобы_прошлая_сборка_не_замолчала(CommandResponseTarget target)
+    {
+        new CommandSettingsStore(null, _path).Mutate(settings => settings.Commands["донат"] = new()
+        {
+            ResponseTarget = target,
+        });
+
+        Assert.That(SeenByLegacy(ReadAsLegacy<TargetBeforeCaller>().Commands["донат"].ResponseTarget),
+            Is.EqualTo(CommandResponseTarget.Chat));
+    }
+
+    [TestCase("13", CommandSettings.WhisperToCaller)]
+    [TestCase("8", CommandSettings.WhisperToCaller)]
+    [TestCase("\"Chat, Caller\"", CommandSettings.CallerOnly)]
+    [TestCase("\"Overlay\"", CommandResponseTarget.Overlay)]
+    [TestCase("\"Chat, Pigeon\"", CommandResponseTarget.Chat)]
+    public void Цель_из_файла_читается_и_числом_и_строкой_прошлой_сборки(string stored, CommandResponseTarget expected)
+    {
+        File.WriteAllText(_path,
+            $$"""
+              {
+                "defaultResponseTarget": {{stored}},
+                "commands": {
+                  "донат": { "enabled": true, "responseTarget": {{stored}} }
+                }
+              }
+              """);
+
+        var settings = new CommandSettingsStore(null, _path).Load();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(settings.ResolveResponseTarget("донат"), Is.EqualTo(expected));
+            Assert.That(settings.ResolveResponseTarget("ранг"), Is.EqualTo(expected), "Общая цель читается тем же правилом");
+        });
+    }
+
+    [Test]
+    public void Цель_шёпотом_уходит_лично_а_не_в_общий_чат()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(CommandSettings.KnownTargets.HasFlag(CommandResponseTarget.Whisper), Is.True);
+            Assert.That(CommandSettings.WhisperToCaller.WhispersToCaller(), Is.True);
+            Assert.That(CommandSettings.WhisperToCaller.GoesToChat(), Is.False, "Чат для шёпота – только откат");
+            Assert.That(CommandSettings.WhisperToCaller.GoesToOverlay(), Is.False);
         });
     }
 

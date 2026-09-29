@@ -13,7 +13,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
 public abstract partial class AuthorizationPageViewModelBase : OnboardingPageViewModelBase, IDisposable
 {
-    private static readonly string[] BotDefaultScopes = [..TwitchScopes.BotRequired];
+    private static readonly string[] BotDefaultScopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional];
     private static readonly string[] BroadcasterDefaultScopes = [..TwitchScopes.BroadcasterRequired];
 
     private readonly TwitchOAuthRole _role;
@@ -351,14 +351,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
 
         var account = GetAccount();
-        account.AccessToken = result.AccessToken;
-        account.RefreshToken = result.RefreshToken;
-        account.Login = result.Login;
-        account.UserId = result.UserId;
-        account.Scopes = result.Scopes;
-        account.AccessTokenExpiresAt = result.ExpiresInSeconds > 0
-            ? DateTimeOffset.UtcNow.AddSeconds(result.ExpiresInSeconds)
-            : null;
+        result.ApplyTo(account, DateTimeOffset.UtcNow);
 
         if (_role != TwitchOAuthRole.Broadcaster
             || !_context.AutoDetectChannel
@@ -422,6 +415,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         account.RefreshToken = string.Empty;
         account.AccessTokenExpiresAt = null;
         account.Scopes = [];
+        account.StoredScopes = [];
 
         RefreshFromContext();
     }

@@ -27,6 +27,8 @@ public interface ITwitchHelixClient
         string? replyParentMessageId = null,
         CancellationToken cancellationToken = default);
 
+    Task SendWhisperAsync(string fromUserId, string toUserId, string message, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyDictionary<string, GlobalBadgeInfo>> GetGlobalChatBadgesAsync(CancellationToken cancellationToken = default);
 
     Task<IReadOnlyDictionary<string, GlobalEmoteInfo>> GetGlobalChatEmotesAsync(CancellationToken cancellationToken = default);

@@ -4,6 +4,8 @@ using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using System.IO;
@@ -119,6 +121,7 @@ public class CommandRowTests
     [TestCase(CommandResponseTarget.None)]
     [TestCase(CommandSettings.ChatAndOverlay)]
     [TestCase(CommandSettings.CallerOnly)]
+    [TestCase(CommandSettings.WhisperToCaller)]
     public void Reads_the_own_target_of_a_command(CommandResponseTarget target)
     {
         var settings = new CommandSettings();
@@ -137,17 +140,33 @@ public class CommandRowTests
         });
     }
 
-    [Test]
-    public void Цель_только_вызвавшему_предлагается_команде_и_общему_умолчанию()
+    [TestCase(CommandSettings.CallerOnly, "Ответом на сообщение")]
+    [TestCase(CommandSettings.WhisperToCaller, "Лично (шёпотом)")]
+    public void Цели_ответом_и_шёпотом_предлагаются_команде_и_общему_умолчанию(CommandResponseTarget target, string title)
     {
+        var option = CommandResponseTargetOption.ForDefaultTarget(target);
+
         Assert.Multiple(() =>
         {
-            Assert.That(CommandResponseTargetOption.ForCommand, Does.Contain(CommandResponseTargetOption.Caller));
-            Assert.That(CommandResponseTargetOption.ForDefault, Does.Contain(CommandResponseTargetOption.Caller));
-            Assert.That(CommandResponseTargetOption.Caller.Target, Is.EqualTo(CommandSettings.CallerOnly));
-            Assert.That(CommandResponseTargetOption.Describe(CommandSettings.CallerOnly),
-                Is.EqualTo(CommandResponseTargetOption.Caller.Title));
+            Assert.That(option.Target, Is.EqualTo(target));
+            Assert.That(option.Title, Is.EqualTo(title));
+            Assert.That(CommandResponseTargetOption.ForCommand, Does.Contain(option));
+            Assert.That(CommandResponseTargetOption.ForDefault, Does.Contain(option));
         });
+    }
+
+    [TestCase(CommandResponseTarget.Whisper)]
+    [TestCase(CommandResponseTarget.Whisper | CommandResponseTarget.Overlay)]
+    public void Шёпот_из_правленого_руками_файла_показывается_шёпотом(CommandResponseTarget target)
+    {
+        Assert.That(CommandResponseTargetOption.Describe(target), Is.EqualTo(CommandResponseTargetOption.Whisper.Title));
+    }
+
+    [Test]
+    public void Ответ_на_сообщение_не_обещает_приватности()
+    {
+        Assert.That(CommandResponseTargetOption.Caller.Title + CommandResponseTargetOption.Caller.Hint,
+            Does.Not.Contain("только").IgnoreCase.And.Contain("все зрители"));
     }
 
     [Test]
@@ -273,6 +292,28 @@ public class CommandRowTests
             Assert.That(moderators.AccessText, Is.EqualTo("Модераторы"));
             Assert.That(everyone.Invocation, Is.EqualTo("?помощь"), "Префикс страницы приходит из Core");
             Assert.That(everyone.Aliases, Is.EqualTo(new[] { "?help", "?h" }));
+        });
+    }
+
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    public void Шёпот_без_права_у_бота_страница_просит_переавторизовать_бота(bool granted, bool expectsNotice)
+    {
+        new AccountsStore(null, Path.Combine(_root, "accounts.json")).Mutate(TwitchOAuthRole.Bot, account =>
+            account.StoredScopes = granted
+                ? [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional]
+                : [..TwitchScopes.BotRequired]);
+
+        var page = CreatePage("!", new FakeCommand());
+
+        var before = page.WhisperNotice;
+
+        page.Rows.Single().TargetOption = CommandResponseTargetOption.Whisper;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(before, Is.Null, "Пока шёпотом не отвечает ни одна команда, заметки нет");
+            Assert.That(page.WhisperNotice is not null, Is.EqualTo(expectsNotice));
         });
     }
 
@@ -654,6 +695,12 @@ public class CommandRowTests
             NullLogger<ChatCommandProcessor>.Instance,
             prefix);
 
-        return new(processor, settingsStore, settingsManager, usage, _prompt, NullLogger<CommandsPageViewModel>.Instance);
+        return new(processor,
+            settingsStore,
+            settingsManager,
+            usage,
+            _prompt,
+            new AccountsStore(null, Path.Combine(_root, "accounts.json")),
+            NullLogger<CommandsPageViewModel>.Instance);
     }
 }

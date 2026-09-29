@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat;
@@ -32,6 +33,7 @@ public sealed class TwitchChatHandler :
     private readonly IEventBus _eventBus;
     private readonly ILogger<TwitchChatHandler> _logger;
     private readonly List<IDisposable> _subscriptions;
+    private int _whisperScopeMissingReported;
 
     public TwitchChatHandler(
         SettingsManager settingsManager,
@@ -206,6 +208,34 @@ public sealed class TwitchChatHandler :
         }
 
         var mark = new CommandResponseMark(canonical, target);
+
+        if (target.WhispersToCaller())
+        {
+            if (TwitchScopes.IsGranted(_accountsStore.LoadBot(), TwitchScopes.UserManageWhispers))
+            {
+                Volatile.Write(ref _whisperScopeMissingReported, 0);
+                _messenger.Whisper(context.UserId, context.MessageId, response.Text, mark);
+            }
+            else
+            {
+                if (Interlocked.Exchange(ref _whisperScopeMissingReported, 1) == 0)
+                {
+                    _logger.LogWarning("Ответ команды {Canonical} не отправлен шёпотом: у бота нет права {Scope} (необязательное, включается повторной авторизацией бота) – ответ уходит реплаем на сообщение вызвавшего, повторы этой строки пишутся в Debug",
+                        canonical,
+                        TwitchScopes.UserManageWhispers);
+                }
+                else
+                {
+                    _logger.LogDebug("Ответ команды {Canonical} уходит реплаем вместо шёпота: у бота нет права {Scope}",
+                        canonical,
+                        TwitchScopes.UserManageWhispers);
+                }
+
+                _messenger.Reply(context.MessageId, response.Text, mark);
+            }
+
+            return;
+        }
 
         if (target.GoesToChat())
         {

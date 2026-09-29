@@ -29,4 +29,9 @@ public sealed class TwitchChatMessenger(ChatSender chatSender) : IChatMessenger
     {
         _ = chatSender.EnqueueAsync(text, replyToMessageId, commandResponse, CancellationToken.None);
     }
+
+    public void Whisper(string toUserId, string fallbackReplyToMessageId, string text, CommandResponseMark? commandResponse)
+    {
+        _ = chatSender.EnqueueWhisperAsync(text, toUserId, fallbackReplyToMessageId, commandResponse, CancellationToken.None);
+    }
 }

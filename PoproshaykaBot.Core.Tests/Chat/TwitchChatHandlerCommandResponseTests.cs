@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Chat;
+﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
@@ -7,7 +8,9 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Tests.Polls;
+using PoproshaykaBot.Core.Tests.Server;
 using PoproshaykaBot.Core.Twitch;
+using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.Helix;
 
@@ -41,6 +44,19 @@ public sealed class TwitchChatHandlerCommandResponseTests
                     _sentTexts.Add(call.ArgAt<string>(2));
                     return Task.FromResult<string?>($"msg-{_sentTexts.Count}");
                 }
+            });
+
+        _whispers = [];
+
+        _helix.SendWhisperAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                lock (_whispers)
+                {
+                    _whispers.Add(call.ArgAt<string>(2));
+                }
+
+                return Task.CompletedTask;
             });
 
         var broadcasterIdProvider = Substitute.For<IBroadcasterIdProvider>();
@@ -79,6 +95,12 @@ public sealed class TwitchChatHandlerCommandResponseTests
             Path.Combine(_root, "obs-chat.json"));
 
         _command = new();
+        _accountsStore = new(null, Path.Combine(_root, "accounts.json"));
+
+        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
+            account.StoredScopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional]);
+
+        _handlerLogger = new();
 
         var processor = new ChatCommandProcessor([_command],
             _commandSettingsStore,
@@ -88,14 +110,14 @@ public sealed class TwitchChatHandlerCommandResponseTests
         _handler = new(settingsManager,
             obsChatStore,
             _commandSettingsStore,
-            new AccountsStore(null, Path.Combine(_root, "accounts.json")),
+            _accountsStore,
             new AudienceTracker(settingsManager),
             new ChatDecorationsProvider(_helix),
             processor,
             _tracker,
             _messenger,
             _bus,
-            NullLogger<TwitchChatHandler>.Instance);
+            _handlerLogger);
     }
 
     [TearDown]
@@ -116,6 +138,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
     private string _root = null!;
     private AppSettings _settings = null!;
     private List<string> _sentTexts = null!;
+    private List<string> _whispers = null!;
     private ITwitchHelixClient _helix = null!;
     private TestTimeProvider _time = null!;
     private CommandResponseTracker _tracker = null!;
@@ -125,7 +148,9 @@ public sealed class TwitchChatHandlerCommandResponseTests
     private TwitchChatMessenger _messenger = null!;
     private CommandSettingsStore _commandSettingsStore = null!;
     private FakeCommand _command = null!;
+    private AccountsStore _accountsStore = null!;
     private TwitchChatHandler _handler = null!;
+    private RecordingLogger<TwitchChatHandler> _handlerLogger = null!;
 
     [Test]
     public async Task Цель_чат_отправляет_ответ_в_твич_и_синтетического_сообщения_не_публикует()
@@ -232,7 +257,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
     }
 
     [Test]
-    public async Task Цель_только_вызвавшему_шлёт_реплай_даже_команде_отвечающей_обычным_сообщением()
+    public async Task Цель_ответом_на_сообщение_шлёт_реплай_даже_команде_отвечающей_обычным_сообщением()
     {
         SetTarget(CommandSettings.CallerOnly);
 
@@ -335,6 +360,114 @@ public sealed class TwitchChatHandlerCommandResponseTests
             .SendChatMessageAsync("1", "2", WelcomeText, "incoming-1", Arg.Any<CancellationToken>());
 
         Assert.That(SentTexts(), Is.EqualTo(new[] { WelcomeText, SentinelText }));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Цель_шёпотом_отвечает_лично_а_в_чате_и_оверлее_ответа_нет(bool repliesToSender)
+    {
+        SetTarget(CommandSettings.WhisperToCaller);
+        _command.RepliesToSender = repliesToSender;
+
+        await _sender.StartAsync(new Progress<string>(), CancellationToken.None);
+        await _handler.HandleAsync(CreateRaw("!ранг"), CancellationToken.None);
+
+        await SendSentinelAsync();
+
+        await _helix.Received(1).SendWhisperAsync("2", "u1", FakeCommand.ResponseText, Arg.Any<CancellationToken>());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(SentTexts(), Is.EqualTo(new[] { SentinelText }), "В чат Twitch ответ не уходит");
+            Assert.That(_collector.Events.Count(x => x.IsBot), Is.Zero, "Шёпот не публикуется ни в чат приложения, ни в оверлей");
+        });
+    }
+
+    [Test]
+    public async Task Бот_без_права_на_шёпот_отвечает_реплаем_не_спрашивая_Twitch()
+    {
+        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
+            account.StoredScopes = [TwitchScopes.UserReadChat, TwitchScopes.UserWriteChat, TwitchScopes.UserBot]);
+
+        SetTarget(CommandSettings.WhisperToCaller);
+
+        await _sender.StartAsync(new Progress<string>(), CancellationToken.None);
+        await _handler.HandleAsync(CreateRaw("!ранг"), CancellationToken.None);
+
+        await SendSentinelAsync();
+
+        await _helix.DidNotReceiveWithAnyArgs().SendWhisperAsync(default!, default!, default!, default);
+        await _helix.Received(1).SendChatMessageAsync("1", "2", FakeCommand.ResponseText, "incoming-1", Arg.Any<CancellationToken>());
+
+        await _handler.HandleAsync(CreateBotEcho("msg-1", FakeCommand.ResponseText), CancellationToken.None);
+        await WaitForAsync(() => _collector.Events.Any(x => x.IsBot));
+
+        var mark = _collector.Events.First(x => x.IsBot).CommandResponse;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mark, Is.EqualTo(new CommandResponseMark("ранг", CommandSettings.WhisperToCaller)),
+                "Эхо отката опознаётся как ответ команды");
+
+            Assert.That(mark!.Target.GoesToOverlay(), Is.False, "Откат шёпота в оверлей не попадает");
+        });
+    }
+
+    [Test]
+    public async Task Право_вписанное_но_не_выданное_шёпота_не_даёт_а_отказ_предупреждает_один_раз()
+    {
+        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
+        {
+            account.Scopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional];
+            account.StoredScopes = [];
+        });
+
+        SetTarget(CommandSettings.WhisperToCaller);
+
+        await _sender.StartAsync(new Progress<string>(), CancellationToken.None);
+        await _handler.HandleAsync(CreateRaw("!ранг"), CancellationToken.None);
+        await _handler.HandleAsync(CreateRaw("!ранг"), CancellationToken.None);
+
+        await SendSentinelAsync();
+
+        await _helix.DidNotReceiveWithAnyArgs().SendWhisperAsync(default!, default!, default!, default);
+
+        var fallbacks = _handlerLogger.Entries
+            .Where(entry => entry.Message.Contains(TwitchScopes.UserManageWhispers, StringComparison.Ordinal))
+            .Select(entry => entry.Level)
+            .ToArray();
+
+        Assert.That(fallbacks, Is.EqualTo(new[] { LogLevel.Warning, LogLevel.Debug }),
+            "Первый откат – предупреждение, повтор – Debug");
+    }
+
+    [Test]
+    public async Task Приветствие_новичка_уходит_в_чат_а_ответ_шёпотом_без_него()
+    {
+        EnableWelcome();
+        SetTarget(CommandSettings.WhisperToCaller);
+
+        await _sender.StartAsync(new Progress<string>(), CancellationToken.None);
+        await _handler.HandleAsync(CreateRaw("!ранг"), CancellationToken.None);
+
+        await SendSentinelAsync();
+
+        await _helix.Received(1)
+            .SendChatMessageAsync("1", "2", WelcomeText, "incoming-1", Arg.Any<CancellationToken>());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(SentTexts(), Is.EqualTo(new[] { WelcomeText, SentinelText }));
+            Assert.That(Whispers(), Is.EqualTo(new[] { FakeCommand.ResponseText }), "Приветствие с личным ответом не сливается");
+        });
+    }
+
+    private string[] Whispers()
+    {
+        lock (_whispers)
+        {
+            return _whispers.ToArray();
+        }
     }
 
     private void EnableWelcome()
