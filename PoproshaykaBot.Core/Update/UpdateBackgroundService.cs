@@ -89,9 +89,9 @@ public sealed class UpdateBackgroundService(
                 {
                     logger.LogInformation("Проверка обновлений пропущена: сборка {Kind} сейчас не обновляется", coordinator.Kind);
                 }
-                else
+                else if (await coordinator.CheckNowAsync(cancellationToken).ConfigureAwait(false) is { } candidate)
                 {
-                    await coordinator.CheckNowAsync(cancellationToken).ConfigureAwait(false);
+                    await coordinator.TryPrepareSilentlyAsync(candidate, cancellationToken).ConfigureAwait(false);
                 }
 
                 var hours = Math.Max(1, settings.CheckIntervalHours);

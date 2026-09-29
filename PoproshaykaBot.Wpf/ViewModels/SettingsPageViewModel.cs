@@ -425,7 +425,11 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             written &= _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
             SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
+            var storedUpdate = _updateStore.Load();
+            _updateDraft.SkippedVersion = storedUpdate.SkippedVersion;
+            _updateDraft.LastCheckUtc = storedUpdate.LastCheckUtc;
             _updateStore.Save(_updateDraft);
+            await Update.OnSavedAsync(storedUpdate.ApplyMode);
             _debugChannelStore.Save(_debugChannelDraft);
             SaveDashboardLayout();
 

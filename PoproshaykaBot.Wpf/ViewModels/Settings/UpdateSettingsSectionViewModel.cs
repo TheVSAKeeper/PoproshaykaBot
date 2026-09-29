@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Update;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -14,6 +15,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 {
     private readonly IUpdateCoordinator _coordinator;
     private readonly IDialogService _dialogService;
+    private readonly UpdateStore _store;
     private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty]
@@ -59,14 +61,17 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
     [ObservableProperty]
     private StatusSeverity _repositoryHintSeverity;
 
-    public UpdateSettingsSectionViewModel(IUpdateCoordinator coordinator, IEventBus bus, IDialogService dialogService)
+    public UpdateSettingsSectionViewModel(IUpdateCoordinator coordinator, UpdateStore store, IEventBus bus, IDialogService dialogService)
     {
         _coordinator = coordinator;
+        _store = store;
         _dialogService = dialogService;
         IsFrameworkDependentVisible = coordinator.Kind == UpdateKind.FrameworkDependent;
         CurrentVersionText = $"Текущая версия: {coordinator.CurrentVersion} (.NET {Environment.Version.Major})";
-        _subscriptions.Add(bus.SubscribeOnUi<UpdateAvailable>(_ => RefreshStatus(null)));
-        RefreshStatus(null);
+        _subscriptions.Add(bus.SubscribeOnUi<UpdateAvailable>(_ => RefreshStatus()));
+        _subscriptions.Add(bus.SubscribeOnUi<UpdatePrepared>(_ => RefreshStatus()));
+        _subscriptions.Add(bus.SubscribeOnUi<UpdateDiscarded>(_ => RefreshStatus()));
+        RefreshStatus();
     }
 
     public string DefaultRepositorySlug => _coordinator.DefaultRepositorySlug;
@@ -79,7 +84,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         AllowFrameworkDependent = settings.AllowFrameworkDependentUpdate;
         RepositoryOverride = settings.RepositoryOverride ?? string.Empty;
         RefreshRepositoryHint();
-        RefreshStatus(settings);
+        RefreshStatus();
     }
 
     public void SaveSettings(UpdateSettings settings)
@@ -90,6 +95,13 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         settings.AllowFrameworkDependentUpdate = AllowFrameworkDependent;
         var slug = RepositoryOverride.Trim();
         settings.RepositoryOverride = slug.Length == 0 ? null : slug;
+    }
+
+    public Task OnSavedAsync(UpdateApplyMode previousMode)
+    {
+        return previousMode == UpdateApplyMode.SilentOnExit && !AutoInstall
+            ? _coordinator.DiscardPreparedUpdateAsync(CancellationToken.None)
+            : Task.CompletedTask;
     }
 
     public void Dispose()
@@ -125,7 +137,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             }
             else
             {
-                RefreshStatus(null);
+                RefreshStatus();
             }
         }
         catch (Exception exception)
@@ -148,7 +160,11 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             return;
         }
 
-        if (!_dialogService.Confirm("Установка обновления", $"Загрузить и установить версию {candidate.Version}?\n\nПриложение перезапустится автоматически."))
+        var question = string.Equals(_coordinator.PreparedVersion, candidate.Version.ToString(), StringComparison.Ordinal)
+            ? $"Установить загруженную версию {candidate.Version} сейчас?"
+            : $"Загрузить и установить версию {candidate.Version}?";
+
+        if (!_dialogService.Confirm("Установка обновления", question + "\n\nПриложение перезапустится автоматически."))
         {
             return;
         }
@@ -184,7 +200,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 
     private bool CanInstall() => !IsBusy && IsUpdatableNow() && _coordinator.LatestCandidate is not null;
 
-    partial void OnAllowFrameworkDependentChanged(bool value) => RefreshStatus(null);
+    partial void OnAllowFrameworkDependentChanged(bool value) => RefreshStatus();
 
     partial void OnRepositoryOverrideChanged(string value) => RefreshRepositoryHint();
 
@@ -216,7 +232,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         }
     }
 
-    private void RefreshStatus(UpdateSettings? settings)
+    private void RefreshStatus()
     {
         if (_coordinator.Kind == UpdateKind.Unsupported)
         {
@@ -232,20 +248,26 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 
         var candidate = _coordinator.LatestCandidate;
 
-        if (candidate is not null)
+        if (candidate is not null
+            && string.Equals(_coordinator.PreparedVersion, candidate.Version.ToString(), StringComparison.Ordinal))
+        {
+            (StatusText, StatusSeverity) = ($"Обновление {candidate.Version} загружено и установится при выходе из приложения.", StatusSeverity.Success);
+            InstallUpdateCommand.NotifyCanExecuteChanged();
+        }
+        else if (candidate is not null)
         {
             (StatusText, StatusSeverity) = ($"Доступно обновление: {candidate.Version}", StatusSeverity.Success);
             InstallUpdateCommand.NotifyCanExecuteChanged();
         }
         else
         {
-            (StatusText, StatusSeverity) = (FormatLastCheck(settings), StatusSeverity.None);
+            (StatusText, StatusSeverity) = (FormatLastCheck(_store.Load()), StatusSeverity.None);
         }
     }
 
-    private static string FormatLastCheck(UpdateSettings? settings)
+    private static string FormatLastCheck(UpdateSettings settings)
     {
-        if (settings?.LastCheckUtc is { } lastCheck)
+        if (settings.LastCheckUtc is { } lastCheck)
         {
             var local = lastCheck.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
             return $"Последняя проверка: {local}. Обновлений не найдено.";

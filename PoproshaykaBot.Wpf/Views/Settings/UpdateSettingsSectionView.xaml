@@ -94,7 +94,7 @@
                 <TextBlock Text="Репозиторий (owner/repo)"
                            Style="{StaticResource Setting.RowLabel}" />
                 <TextBox Style="{StaticResource TextBox.Form}"
-                         Width="240"
+                         Width="{DynamicResource Setting.ShortFieldWidth}"
                          HorizontalAlignment="Left"
                          AutomationProperties.Name="Репозиторий обновлений в формате owner/repo"
                          Text="{Binding RepositoryOverride, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"

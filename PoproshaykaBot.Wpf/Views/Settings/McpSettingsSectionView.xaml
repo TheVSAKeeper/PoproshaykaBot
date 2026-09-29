@@ -35,7 +35,7 @@
                            Style="{StaticResource Setting.RowLabel}" />
                 <TextBox Text="{Binding Preferences.Port, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                          HorizontalAlignment="Left"
-                         Width="240"
+                         Width="{DynamicResource Setting.ShortFieldWidth}"
                          FontFamily="{DynamicResource Font.Mono}"
                          AutomationProperties.Name="Порт MCP-сервера" />
             </DockPanel>

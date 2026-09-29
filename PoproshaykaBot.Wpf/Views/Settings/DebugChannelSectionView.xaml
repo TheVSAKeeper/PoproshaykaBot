@@ -93,7 +93,7 @@
                        Style="{StaticResource Setting.RowLabel}" />
             <TextBox Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      IsEnabled="{Binding IsEnabled}"
-                     Width="240"
+                     Width="{DynamicResource Setting.ShortFieldWidth}"
                      HorizontalAlignment="Left"
                      AutomationProperties.Name="Канал для режима отладки"
                      keepshell:PlaceholderBehavior.Placeholder="например, dunduk" />

@@ -42,6 +42,8 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
         _logger = logger;
 
         _subscriptions.Add(eventBus.SubscribeOnUi<UpdateAvailable>(_ => Refresh()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<UpdatePrepared>(_ => Refresh()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<UpdateDiscarded>(_ => Refresh()));
 
         Refresh();
     }
@@ -69,6 +71,11 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
 
     private void Refresh()
     {
+        if (IsBusy)
+        {
+            return;
+        }
+
         var candidate = _coordinator.LatestCandidate;
 
         if (candidate is null || !_coordinator.IsUpdatable)
@@ -78,8 +85,15 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
         }
 
         DownloadProgress = 0;
-        Text = $"Доступна новая версия {candidate.Version} (установлена {_coordinator.CurrentVersion}).";
+        Text = IsPrepared(candidate)
+            ? $"Версия {candidate.Version} загружена и установится при выходе из приложения (установлена {_coordinator.CurrentVersion})."
+            : $"Доступна новая версия {candidate.Version} (установлена {_coordinator.CurrentVersion}).";
         IsVisible = true;
+    }
+
+    private bool IsPrepared(UpdateCandidate candidate)
+    {
+        return string.Equals(_coordinator.PreparedVersion, candidate.Version.ToString(), StringComparison.Ordinal);
     }
 
     [RelayCommand(CanExecute = nameof(CanAct))]
@@ -92,8 +106,11 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
             return;
         }
 
-        if (!_dialogService.Confirm("Установка обновления",
-                $"Загрузить и установить версию {candidate.Version}?\n\nПриложение перезапустится автоматически."))
+        var question = IsPrepared(candidate)
+            ? $"Установить загруженную версию {candidate.Version} сейчас?"
+            : $"Загрузить и установить версию {candidate.Version}?";
+
+        if (!_dialogService.Confirm("Установка обновления", question + "\n\nПриложение перезапустится автоматически."))
         {
             return;
         }

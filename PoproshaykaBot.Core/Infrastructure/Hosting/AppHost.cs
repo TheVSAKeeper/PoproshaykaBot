@@ -22,6 +22,8 @@ public class AppHost
         _logger = logger;
     }
 
+    public bool IsRunning => _started.Count > 0;
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         return StartAsync(NullProgress, cancellationToken);
