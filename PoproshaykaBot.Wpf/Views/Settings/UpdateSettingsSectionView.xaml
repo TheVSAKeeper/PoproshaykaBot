@@ -61,42 +61,49 @@
 
         <StackPanel>
             <TextBlock Text="Параметры"
-                       Style="{StaticResource Setting.BlockTitle}" />
+                       Style="{StaticResource Setting.GroupHeading}" />
 
             <CheckBox Content="Проверять обновления автоматически"
                       IsChecked="{Binding AutoCheckEnabled, Mode=TwoWay}"
                       Style="{StaticResource CheckBox.Default}"
                       Margin="0,0,0,8" />
 
-            <keepshell:NumericSettingField Label="Интервал проверки (часов)"
-                                           Value="{Binding CheckIntervalHours, Mode=TwoWay}"
-                                           IncreaseCommand="{Binding IncreaseIntervalCommand}"
-                                           DecreaseCommand="{Binding DecreaseIntervalCommand}"
-                                           IncreaseAutomationName="Увеличить интервал"
-                                           DecreaseAutomationName="Уменьшить интервал"
-                                           Margin="0,0,0,8" />
+            <StackPanel Style="{StaticResource Setting.DependentBlock}"
+                        IsEnabled="{Binding AutoCheckEnabled}">
+                <keepshell:NumericSettingField Label="Интервал проверки (часов)"
+                                               Value="{Binding CheckIntervalHours, Mode=TwoWay}"
+                                               IncreaseCommand="{Binding IncreaseIntervalCommand}"
+                                               DecreaseCommand="{Binding DecreaseIntervalCommand}"
+                                               IncreaseAutomationName="Увеличить интервал"
+                                               DecreaseAutomationName="Уменьшить интервал"
+                                               Margin="0,0,0,8" />
+            </StackPanel>
 
             <CheckBox Content="Устанавливать обновление автоматически при выходе из приложения"
                       IsChecked="{Binding AutoInstall, Mode=TwoWay}"
                       Style="{StaticResource CheckBox.Default}"
-                      Margin="0,0,0,8" />
+                      Margin="0,4,0,8" />
 
             <CheckBox Content="Разрешить автообновление для сборки, требующей .NET (framework-dependent)"
                       IsChecked="{Binding AllowFrameworkDependent, Mode=TwoWay}"
                       Style="{StaticResource CheckBox.Default}"
                       Visibility="{Binding IsFrameworkDependentVisible, Converter={StaticResource BoolToVisibility}}"
-                      Margin="0,0,0,16" />
+                      Margin="0,0,0,8" />
 
-            <TextBlock Text="Репозиторий обновлений (owner/repo):"
-                       Margin="0,0,0,4" />
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     AutomationProperties.Name="Репозиторий обновлений в формате owner/repo"
-                     Text="{Binding RepositoryOverride, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     keepshell:PlaceholderBehavior.Placeholder="{Binding DefaultRepositorySlug}"
-                     Margin="0,0,0,4" />
+            <DockPanel Margin="0,8,0,0">
+                <TextBlock Text="Репозиторий (owner/repo)"
+                           Style="{StaticResource Setting.RowLabel}" />
+                <TextBox Style="{StaticResource TextBox.Form}"
+                         Width="240"
+                         HorizontalAlignment="Left"
+                         AutomationProperties.Name="Репозиторий обновлений в формате owner/repo"
+                         Text="{Binding RepositoryOverride, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         keepshell:PlaceholderBehavior.Placeholder="{Binding DefaultRepositorySlug}" />
+            </DockPanel>
 
             <TextBlock Text="{Binding RepositoryHintText}"
-                       TextWrapping="Wrap">
+                       TextWrapping="Wrap"
+                       Margin="200,6,0,0">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="Foreground"
@@ -122,15 +129,17 @@
 
         <StackPanel>
             <TextBlock Text="Действия"
-                       Style="{StaticResource Setting.BlockTitle}" />
+                       Style="{StaticResource Setting.GroupHeading}" />
             <StackPanel Orientation="Horizontal">
                 <Button Content="Проверить сейчас"
                         Command="{Binding CheckNowCommand}"
-                        Style="{StaticResource Button.Ghost}"
+                        Style="{StaticResource Button.Secondary}"
+                        VerticalAlignment="Center"
                         Margin="0,0,8,0" />
                 <Button Content="Установить обновление"
                         Command="{Binding InstallUpdateCommand}"
-                        Style="{StaticResource Button.Primary}" />
+                        Style="{StaticResource Button.Primary}"
+                        VerticalAlignment="Center" />
             </StackPanel>
         </StackPanel>
 

@@ -88,17 +88,20 @@
                    Style="{StaticResource Form.CheckHint}"
                    Margin="0,0,0,16" />
 
-        <TextBlock Text="Канал"
-                   Style="{StaticResource Form.Label}" />
-
-        <TextBox Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                 IsEnabled="{Binding IsEnabled}"
-                 keepshell:PlaceholderBehavior.Placeholder="например, dunduk"
-                 Margin="0,0,0,4" />
+        <DockPanel>
+            <TextBlock Text="Канал"
+                       Style="{StaticResource Setting.RowLabel}" />
+            <TextBox Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     IsEnabled="{Binding IsEnabled}"
+                     Width="240"
+                     HorizontalAlignment="Left"
+                     AutomationProperties.Name="Канал для режима отладки"
+                     keepshell:PlaceholderBehavior.Placeholder="например, dunduk" />
+        </DockPanel>
 
         <TextBlock Text="{Binding HintText}"
                    TextWrapping="Wrap"
-                   Margin="0,0,0,16">
+                   Margin="200,6,0,16">
             <TextBlock.Style>
                 <Style TargetType="TextBlock">
                     <Setter Property="Foreground"

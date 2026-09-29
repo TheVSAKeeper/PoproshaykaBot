@@ -11,38 +11,47 @@
              d:DesignHeight="320"
              d:DesignWidth="600">
 
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
     <StackPanel>
-        <TextBlock Text="Канал"
-                   Foreground="{DynamicResource Fg.Muted}"
-                   FontSize="{DynamicResource Font.Size.S}"
-                   Margin="0,0,0,4" />
-        <DockPanel Margin="0,0,0,16">
-            <Button DockPanel.Dock="Right"
-                    Content="Сброс"
-                    Style="{StaticResource Button.Ghost}"
-                    Command="{Binding ResetChannelCommand}"
-                    Margin="8,0,0,0" />
-            <TextBox Style="{StaticResource TextBox.Form}"
-                     AutomationProperties.Name="Канал Twitch"
-                     Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     keepshell:PlaceholderBehavior.Placeholder="{Binding ChannelPlaceholder}" />
+        <DockPanel Margin="0,0,0,8">
+            <TextBlock Text="Канал"
+                       Style="{StaticResource Setting.RowLabel}" />
+            <StackPanel Orientation="Horizontal">
+                <TextBox Style="{StaticResource TextBox.Form}"
+                         Width="240"
+                         AutomationProperties.Name="Канал Twitch"
+                         Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         keepshell:PlaceholderBehavior.Placeholder="{Binding ChannelPlaceholder}" />
+                <Button Content="Сброс"
+                        Style="{StaticResource Button.Ghost}"
+                        Command="{Binding ResetChannelCommand}"
+                        VerticalAlignment="Center"
+                        Margin="8,0,0,0" />
+            </StackPanel>
         </DockPanel>
 
-        <TextBlock Text="Аккаунт для отображения чата"
-                   Foreground="{DynamicResource Fg.Muted}"
-                   FontSize="{DynamicResource Font.Size.S}"
-                   Margin="0,0,0,4" />
-        <ComboBox Style="{StaticResource ComboBox.Form}"
-                  AutomationProperties.Name="Аккаунт для отображения чата"
-                  ItemsSource="{Binding ChatAccountOptions}"
-                  DisplayMemberPath="Display"
-                  SelectedValuePath="Role"
-                  SelectedValue="{Binding ChatDisplayAccount, Mode=TwoWay}"
-                  HorizontalAlignment="Left"
-                  MinWidth="220" />
+        <DockPanel Margin="0,0,0,8">
+            <TextBlock Text="Аккаунт отображения"
+                       Style="{StaticResource Setting.RowLabel}" />
+            <ComboBox Style="{StaticResource ComboBox.Form}"
+                      AutomationProperties.Name="Аккаунт для отображения чата"
+                      ItemsSource="{Binding ChatAccountOptions}"
+                      DisplayMemberPath="Display"
+                      SelectedValuePath="Role"
+                      SelectedValue="{Binding ChatDisplayAccount, Mode=TwoWay}"
+                      Width="240"
+                      HorizontalAlignment="Left" />
+        </DockPanel>
 
         <DockPanel LastChildFill="True"
-                   Margin="0,16,0,0">
+                   Margin="0,8,0,0">
             <iconPacks:PackIconLucide DockPanel.Dock="Left"
                                       Kind="{x:Static iconPacks:PackIconLucideKind.Info}"
                                       Width="14"
