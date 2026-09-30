@@ -393,10 +393,10 @@ public class UserAvatarTests
 
     private static double Luminance(Color color)
     {
-        return 0.2126 * Channel(color.R) + 0.7152 * Channel(color.G) + 0.0722 * Channel(color.B);
+        return 0.2126 * LinearChannel(color.R) + 0.7152 * LinearChannel(color.G) + 0.0722 * LinearChannel(color.B);
     }
 
-    private static double Channel(byte value)
+    private static double LinearChannel(byte value)
     {
         var normalized = value / 255.0;
 

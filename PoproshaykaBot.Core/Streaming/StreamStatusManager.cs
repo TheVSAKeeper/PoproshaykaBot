@@ -12,7 +12,7 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Streaming;
 
-public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsyncDisposable
+public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan RefreshGateDrainTimeout = TimeSpan.FromSeconds(2);
@@ -179,8 +179,6 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
             _channelUpdatedSubscription = null;
             _subscribed = false;
         }
-
-        GC.SuppressFinalize(this);
     }
 
     public async Task RefreshLiveSnapshotAsync()
@@ -334,7 +332,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 return;
             }
 
-            var condition = new Dictionary<string, string>
+            var condition = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 { "broadcaster_user_id", broadcasterId },
             };
@@ -343,7 +341,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                 "1",
                 condition,
                 sessionId,
-                retried => _ledger.RecordAsync(generation, args.SubscriptionType, retried),
+                async retried => await _ledger.RecordAsync(generation, args.SubscriptionType, retried),
                 cancellationToken);
 
             await _ledger.RecordAsync(generation, args.SubscriptionType, result);
@@ -633,7 +631,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
         _logger.LogInformation("Создание подписок EventSub для BroadcasterId: {BroadcasterId}", broadcasterId);
 
         var subscriptionsCreated = 0;
-        var condition = new Dictionary<string, string>
+        var condition = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             { "broadcaster_user_id", broadcasterId },
         };
@@ -646,7 +644,7 @@ public class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsync
                     "1",
                     condition,
                     sessionId,
-                    retried => _ledger.RecordAsync(generation, type, retried),
+                    async retried => await _ledger.RecordAsync(generation, type, retried),
                     cancellationToken);
 
                 if (await _ledger.RecordAsync(generation, type, result) && result.IsSubscribed)

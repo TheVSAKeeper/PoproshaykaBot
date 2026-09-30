@@ -33,9 +33,9 @@ public sealed class ProfileSceneBinder :
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _workerTask;
 
-    private readonly object _settingsLock = new();
+    private readonly Lock _settingsLock = new();
 
-    private readonly object _echoLock = new();
+    private readonly Lock _echoLock = new();
     private bool _disposed;
     private ObsIntegrationSettings _settings;
     private string? _expectedEchoScene;

@@ -70,7 +70,7 @@ public sealed class OAuthTokenClient(
         var client = httpClientFactory.CreateClient();
 
         using var content = new FormUrlEncodedContent(formData);
-        var response = await client.PostAsync(TokenUrl, content, ct);
+        using var response = await client.PostAsync(TokenUrl, content, ct);
         var jsonResponse = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)

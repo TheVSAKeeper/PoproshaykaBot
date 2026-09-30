@@ -172,8 +172,9 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         {
             SetAuthStatus($"Ошибка: {SafeMessage(exception)}", StatusSeverity.Error);
         }
-        catch
+        catch (Exception exception)
         {
+            _logger.OAuthAbandonedFlowFailed(exception, _role);
         }
         finally
         {
@@ -252,8 +253,9 @@ public sealed partial class OAuthAccountViewModel : ObservableObject, IDisposabl
         {
             await pending.CancelAsync();
         }
-        catch
+        catch (Exception exception)
         {
+            _logger.OAuthAbandonedFlowFailed(exception, _role);
         }
 
         SetAuthStatus("Авторизация отменена", StatusSeverity.Warning);

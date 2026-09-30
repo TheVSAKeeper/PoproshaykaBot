@@ -31,7 +31,7 @@ public sealed partial class ColorPickerDialogViewModel : ObservableObject, IDial
     private byte _blue;
 
     [ObservableProperty]
-    private string _hexText = "#FF000000";
+    private string _hexText;
 
     public ColorPickerDialogViewModel()
         : this(DrawingColor.Black, null)

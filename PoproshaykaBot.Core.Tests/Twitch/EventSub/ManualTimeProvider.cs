@@ -2,7 +2,7 @@
 
 internal sealed class ManualTimeProvider : TimeProvider
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly List<ManualTimer> _timers = [];
 
     private DateTimeOffset _now = new(2026, 9, 25, 12, 0, 0, TimeSpan.Zero);

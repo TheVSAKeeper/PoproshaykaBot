@@ -8,6 +8,8 @@ namespace PoproshaykaBot.Core.Tests.Settings;
 [TestFixture]
 public sealed class ObsChatThreePointSyncTests
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(5);
+
     [TestCaseSource(nameof(GetMutableSourceProperties))]
     public void MutatingObsChatSettingsField_ChangesObsChatCssSettingsOutput(PropertyInfo sourceProp)
     {
@@ -69,7 +71,7 @@ public sealed class ObsChatThreePointSyncTests
     private static string[] ExtractStringArrayLiteral(string jsSource, string variableName)
     {
         var pattern = $@"const\s+{Regex.Escape(variableName)}\s*=\s*(?:new\s+Set\s*\()?\s*\[(?<body>[^\]]*)\]";
-        var match = Regex.Match(jsSource, pattern);
+        var match = Regex.Match(jsSource, pattern, RegexOptions.None, RegexTimeout);
 
         if (!match.Success)
         {
@@ -77,7 +79,7 @@ public sealed class ObsChatThreePointSyncTests
                                                 + "обновите тест или верните прежнее имя.");
         }
 
-        return Regex.Matches(match.Groups["body"].Value, "'(?<value>[^']*)'")
+        return Regex.Matches(match.Groups["body"].Value, "'(?<value>[^']*)'", RegexOptions.None, RegexTimeout)
             .Select(m => m.Groups["value"].Value)
             .ToArray();
     }

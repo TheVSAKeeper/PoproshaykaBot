@@ -53,7 +53,7 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
         var restored = _sections.SelectedChild;
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => ScrollToBlock(restored));
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => ScrollToBlock(restored));
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

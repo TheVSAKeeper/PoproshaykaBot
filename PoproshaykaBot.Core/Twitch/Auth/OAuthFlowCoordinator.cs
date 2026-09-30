@@ -21,7 +21,7 @@ public sealed class OAuthFlowCoordinator(
     };
 
     private readonly Dictionary<string, PendingAuth> _pendingAuths = new(StringComparer.Ordinal);
-    private readonly object _pendingAuthsLock = new();
+    private readonly Lock _pendingAuthsLock = new();
 
     private bool _isDisposed;
 
@@ -235,7 +235,7 @@ public sealed class OAuthFlowCoordinator(
         bool checkBroadcasterChannel,
         CancellationToken ct)
     {
-        var formData = new Dictionary<string, string>
+        var formData = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             { "client_id", clientId },
             { "client_secret", clientSecret },

@@ -50,7 +50,7 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
 
     private void OnFontScaleChanged(object? sender, double scale)
     {
-        Dispatcher.BeginInvoke(ApplyRankColumn);
+        _ = Dispatcher.BeginInvoke(ApplyRankColumn);
     }
 
     private void OnRatingListSizeChanged(object sender, SizeChangedEventArgs e)
@@ -136,6 +136,6 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
             return;
         }
 
-        Dispatcher.InvokeAsync(() => RatingList.ScrollIntoView(row), DispatcherPriority.Loaded);
+        _ = Dispatcher.InvokeAsync(() => RatingList.ScrollIntoView(row), DispatcherPriority.Loaded);
     }
 }

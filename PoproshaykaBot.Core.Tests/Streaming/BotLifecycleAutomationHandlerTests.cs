@@ -119,6 +119,9 @@ public sealed class BotLifecycleAutomationHandlerTests
         await _eventBus.PublishAsync(new StreamWentOffline(Channel)).WaitAsync(WaitTimeout);
         await stopStarted.Task.WaitAsync(WaitTimeout);
 
+        Assert.That(_continuationsDone.Task.IsCompleted, Is.False,
+            "Публикация вернулась, а остановка ещё идёт – следующие продолжения ждут её.");
+
         releaseStop.SetResult();
         await _continuationsDone.Task.WaitAsync(WaitTimeout);
     }

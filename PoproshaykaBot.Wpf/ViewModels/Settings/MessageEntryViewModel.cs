@@ -12,7 +12,7 @@ public sealed partial class MessageEntryViewModel : ObservableObject
     private bool _isEnabled;
 
     [ObservableProperty]
-    private string _text = string.Empty;
+    private string _text;
 
     public MessageEntryViewModel(string label, bool hasEnabledToggle, bool defaultEnabled, string defaultText)
     {

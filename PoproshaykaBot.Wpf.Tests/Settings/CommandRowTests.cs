@@ -9,6 +9,7 @@ using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using System.IO;
+using System.Net.Http;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
@@ -55,6 +56,14 @@ public class CommandRowTests
         public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
         {
             return Task.FromResult<OutgoingMessage?>(null);
+        }
+    }
+
+    private sealed class NoNetwork : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name)
+        {
+            throw new AssertionException("Настройка команды не должна ходить в сеть");
         }
     }
 
@@ -425,7 +434,7 @@ public class CommandRowTests
     public void Негодный_параметр_не_сохраняется_и_называет_поле()
     {
         var settingsManager = CreateSettingsManager();
-        var page = CreatePage("!", Path.Combine(_root, "commands.json"), settingsManager, new TrumpCommand(settingsManager));
+        var page = CreatePage("!", Path.Combine(_root, "commands.json"), settingsManager, new TrumpCommand(settingsManager, new NoNetwork()));
 
         page.SelectedRow = page.Rows.Single();
 
@@ -507,7 +516,7 @@ public class CommandRowTests
         var settingsManager = CreateSettingsManager();
         var page = CreatePage("!", Path.Combine(_root, "commands.json"), settingsManager,
             new DonateCommand(settingsManager),
-            new TrumpCommand(settingsManager));
+            new TrumpCommand(settingsManager, new NoNetwork()));
 
         var donate = page.Rows.Single(row => row.Canonical == "донат");
         page.SelectedRow = donate;
@@ -582,7 +591,7 @@ public class CommandRowTests
         var settingsManager = CreateSettingsManager();
         var page = CreatePage("!", Path.Combine(_root, "commands.json"), settingsManager,
             new DonateCommand(settingsManager),
-            new TrumpCommand(settingsManager));
+            new TrumpCommand(settingsManager, new NoNetwork()));
 
         var donate = page.Rows.Single(row => row.Canonical == "донат");
         page.SelectedRow = donate;
@@ -605,7 +614,7 @@ public class CommandRowTests
         var settingsManager = CreateSettingsManager();
         var page = CreatePage("!", Path.Combine(_root, "commands.json"), settingsManager,
             new DonateCommand(settingsManager),
-            new TrumpCommand(settingsManager));
+            new TrumpCommand(settingsManager, new NoNetwork()));
 
         var list = new ListBox { ItemsSource = page.Rows };
 

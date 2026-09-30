@@ -47,7 +47,7 @@ public class BroadcastProfilesManagerTests
     private BroadcastProfilesManager _manager = null!;
 
     [Test]
-    public void Add_SavesProfile_AndRaisesChanged()
+    public async Task Add_SavesProfile_AndRaisesChanged()
     {
         var profile = new BroadcastProfile
         {
@@ -57,7 +57,7 @@ public class BroadcastProfilesManagerTests
         _manager.Upsert(profile);
 
         Assert.That(_store.Load().Profiles, Has.Count.EqualTo(1));
-        _eventBus.Received(1).PublishAsync(Arg.Any<BroadcastProfilesChanged>(), Arg.Any<CancellationToken>());
+        await _eventBus.Received(1).PublishAsync(Arg.Any<BroadcastProfilesChanged>(), Arg.Any<CancellationToken>());
     }
 
     [Test]

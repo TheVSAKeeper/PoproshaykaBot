@@ -18,7 +18,7 @@ public sealed class PollChatAnnouncementHandler :
     private readonly PollsStore _pollsStore;
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, DateTime> _lastProgressAnnouncement = new(StringComparer.Ordinal);
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly List<IDisposable> _subscriptions;
 
     public PollChatAnnouncementHandler(

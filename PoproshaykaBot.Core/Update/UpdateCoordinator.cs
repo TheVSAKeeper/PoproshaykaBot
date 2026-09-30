@@ -16,7 +16,7 @@ public sealed class UpdateCoordinator(
     : IUpdateCoordinator, IDisposable
 {
     private readonly SemaphoreSlim _prepareGate = new(1, 1);
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
 
     private UpdateCandidate? _latestCandidate;
 

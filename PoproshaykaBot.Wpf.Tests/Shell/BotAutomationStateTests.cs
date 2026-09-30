@@ -220,7 +220,7 @@ public sealed class BotAutomationStateTests
             return Task.CompletedTask;
         }
 
-        public Task StopAsync(BotStopMode mode)
+        public Task StopAsync(BotStopMode mode = BotStopMode.Graceful)
         {
             StopCalls++;
             CurrentPhase = BotLifecyclePhase.Disconnected;

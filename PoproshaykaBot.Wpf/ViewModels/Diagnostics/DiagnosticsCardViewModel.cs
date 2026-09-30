@@ -84,7 +84,7 @@ public abstract partial class DiagnosticsCardViewModel : ObservableObject, IDiag
             var left = current[index];
             var right = next[index];
 
-            if (left != right with { Columns = left.Columns } || !left.Columns.SequenceEqual(right.Columns))
+            if (left != right with { Columns = left.Columns } || !left.Columns.SequenceEqual(right.Columns, StringComparer.Ordinal))
             {
                 return false;
             }

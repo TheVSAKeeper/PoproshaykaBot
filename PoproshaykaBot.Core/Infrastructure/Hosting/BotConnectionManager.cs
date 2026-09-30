@@ -27,7 +27,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
     private readonly ILogger<BotConnectionManager> _logger;
 
     private readonly SemaphoreSlim _stopGate = new(1, 1);
-    private readonly object _stopSync = new();
+    private readonly Lock _stopSync = new();
 
     private CancellationTokenSource? _cts;
     private CancellationTokenSource? _activeStopCts;
@@ -107,10 +107,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
     {
         if (mode == BotStopMode.Forced)
         {
-            lock (_stopSync)
-            {
-                _activeStopCts?.Cancel();
-            }
+            await CancelActiveStopAsync().ConfigureAwait(false);
         }
 
         await _stopGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
@@ -124,18 +121,17 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
 
             var progressReporter = new Progress<string>(ReportProgress);
             var stopTimeout = mode == BotStopMode.Forced ? ForcedStopTimeout : GracefulStopTimeout;
+            var stopCts = new CancellationTokenSource(stopTimeout);
+            var stopToken = stopCts.Token;
+
+            lock (_stopSync)
+            {
+                _activeStopCts = stopCts;
+            }
 
             try
             {
-                using var stopCts = new CancellationTokenSource(stopTimeout);
-
-                lock (_stopSync)
-                {
-                    _activeStopCts?.Dispose();
-                    _activeStopCts = stopCts;
-                }
-
-                await _appHost.StopAsync(progressReporter, stopCts.Token);
+                await _appHost.StopAsync(progressReporter, stopToken);
             }
             catch (OperationCanceledException exception)
             {
@@ -149,11 +145,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
             }
             finally
             {
-                lock (_stopSync)
-                {
-                    _activeStopCts?.Dispose();
-                    _activeStopCts = null;
-                }
+                ReleaseOwnStop(stopCts);
             }
 
             _twitchChatHandler.Reset();
@@ -164,6 +156,46 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
         {
             _stopGate.Release();
         }
+    }
+
+    private async Task CancelActiveStopAsync()
+    {
+        CancellationTokenSource? runningStop;
+
+        lock (_stopSync)
+        {
+            runningStop = _activeStopCts;
+            _activeStopCts = null;
+        }
+
+        if (runningStop == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await runningStop.CancelAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            runningStop.Dispose();
+        }
+    }
+
+    private void ReleaseOwnStop(CancellationTokenSource stopCts)
+    {
+        lock (_stopSync)
+        {
+            if (!ReferenceEquals(_activeStopCts, stopCts))
+            {
+                return;
+            }
+
+            _activeStopCts = null;
+        }
+
+        stopCts.Dispose();
     }
 
     public async Task ShutdownAsync(BotStopMode mode = BotStopMode.Graceful)

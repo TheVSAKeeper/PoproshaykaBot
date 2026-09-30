@@ -2,7 +2,7 @@
 
 public sealed class BotStatisticsRepository : IBotStatisticsRepository
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private BotStatistics _statistics = BotStatistics.Create();
     private bool _hasChanges;
 

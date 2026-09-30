@@ -457,7 +457,7 @@ public sealed class GameBoxArtCache : IGameBoxArtCache
                 return null;
             }
 
-            buffer.Write(chunk, 0, read);
+            await buffer.WriteAsync(chunk.AsMemory(0, read), cancellationToken);
         }
     }
 
@@ -675,7 +675,7 @@ public sealed class GameBoxArtCache : IGameBoxArtCache
         }
     }
 
-    // TODO: уборка каталога идёт под _indexLock на потоке вызывающего, в том числе UI-потоке через GetCachedPaths;
+    // TODO: уборка каталога идёт под _indexLock на потоке вызывающего, в том числе UI-потоке через GetCachedPaths,
     // TODO: увести в фон, когда каталог дорастёт до тысяч файлов либо список обложек начнёт подвисать
     private void SweepIfRequested()
     {

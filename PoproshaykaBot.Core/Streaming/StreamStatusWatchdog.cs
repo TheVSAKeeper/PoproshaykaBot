@@ -114,7 +114,6 @@ public sealed class StreamStatusWatchdog : IStreamHostedComponent, IAsyncDisposa
         _cts?.Dispose();
         _cts = null;
         _loopTask = null;
-        GC.SuppressFinalize(this);
     }
 
     private async Task RunLoopAsync(CancellationToken cancellationToken)

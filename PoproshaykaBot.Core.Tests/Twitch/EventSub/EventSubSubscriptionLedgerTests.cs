@@ -9,7 +9,7 @@ public sealed class EventSubSubscriptionLedgerTests
     [SetUp]
     public void SetUp()
     {
-        _deleted = [];
+        _deleted.Clear();
         _helix = Substitute.For<ITwitchHelixClient>();
 
         _helix.DeleteEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -42,7 +42,7 @@ public sealed class EventSubSubscriptionLedgerTests
 
     private ITwitchHelixClient _helix = null!;
     private EventSubSubscriptionLedger _ledger = null!;
-    private List<string> _deleted = null!;
+    private readonly List<string> _deleted = [];
     private volatile bool _failDeletes;
 
     [TestCase(EventSubSubscribeOutcome.TakenByOtherSession, TestName = "Снятие набора типа удаляет вытесненную подписку")]

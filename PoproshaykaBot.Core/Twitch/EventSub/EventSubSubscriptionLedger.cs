@@ -5,7 +5,7 @@ namespace PoproshaykaBot.Core.Twitch.EventSub;
 
 public sealed class EventSubSubscriptionLedger(ITwitchHelixClient helix, ILogger logger)
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _idsByType = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HashSet<string>> _undeletedByType = new(StringComparer.Ordinal);
     private readonly HashSet<string> _revoked = new(StringComparer.Ordinal);

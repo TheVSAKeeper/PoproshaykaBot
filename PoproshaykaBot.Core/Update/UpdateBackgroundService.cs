@@ -81,11 +81,11 @@ public sealed class UpdateBackgroundService(
             {
                 var settings = store.Load();
 
-                if (settings.AutoCheckEnabled is false)
+                if (!settings.AutoCheckEnabled)
                 {
                     logger.LogInformation("Проверка обновлений пропущена: автопроверка выключена в настройках");
                 }
-                else if (coordinator.IsUpdatable is false)
+                else if (!coordinator.IsUpdatable)
                 {
                     logger.LogInformation("Проверка обновлений пропущена: сборка {Kind} сейчас не обновляется", coordinator.Kind);
                 }

@@ -30,7 +30,7 @@ public static class PollEventSubMapper
 
     public static PollSnapshot FromCreatedPoll(HelixPollInfo info, Guid sourceProfileId)
     {
-        TryParseHelixStatus(info.Status, out var status);
+        _ = TryParseHelixStatus(info.Status, out var status);
         return FromHelix(info, sourceProfileId, status);
     }
 

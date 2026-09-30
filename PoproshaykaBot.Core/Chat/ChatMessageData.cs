@@ -16,5 +16,5 @@ public class ChatMessageData
 
     public List<EmoteInfo> Emotes { get; init; } = [];
     public List<KeyValuePair<string, string>> Badges { get; init; } = [];
-    public Dictionary<string, string> BadgeUrls { get; init; } = new(); // [badgeType/version] = imageUrl
+    public Dictionary<string, string> BadgeUrls { get; init; } = new(StringComparer.Ordinal); // [badgeType/version] = imageUrl
 }

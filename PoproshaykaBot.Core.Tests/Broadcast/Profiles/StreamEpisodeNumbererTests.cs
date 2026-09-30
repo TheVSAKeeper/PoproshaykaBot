@@ -178,9 +178,9 @@ public class StreamEpisodeNumbererTests
     }
 
     [Test]
-    public async Task ApplyOlderThanWindow_DoesIncrement()
+    public async Task ApplyExactlyWindowAgo_DoesIncrement()
     {
-        var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow.AddMinutes(-30));
+        var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow - StreamEpisodeNumberer.RecentApplyWindow);
 
         await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
 

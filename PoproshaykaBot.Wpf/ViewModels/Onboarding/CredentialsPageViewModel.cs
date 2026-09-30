@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Onboarding;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
@@ -76,8 +77,15 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
         _channelValidator = channelValidator;
         _logger = logger;
 
-        _clientDebounce = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(800), OnClientDebounceTick);
-        _channelDebounce = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(800), OnChannelDebounceTick);
+        _clientDebounce = uiDispatcher.CreateAsyncTimer(
+            TimeSpan.FromMilliseconds(800),
+            OnClientDebounceTickAsync,
+            exception => _logger.OnboardingCredentialsCheckFailed(exception));
+
+        _channelDebounce = uiDispatcher.CreateAsyncTimer(
+            TimeSpan.FromMilliseconds(800),
+            OnChannelDebounceTickAsync,
+            exception => _logger.OnboardingChannelCredentialsCheckFailed(exception, Channel.Trim()));
     }
 
     public override string PageTitle => "Учётные данные приложения";
@@ -174,17 +182,15 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
 
     partial void OnClientIdChanged(string value)
     {
-        if (_suspendValidation)
-        {
-            return;
-        }
-
-        ValidateInputs();
-        ScheduleClientCredentialsCheck();
-        ScheduleChannelCheck();
+        OnClientCredentialsChanged();
     }
 
     partial void OnClientSecretChanged(string value)
+    {
+        OnClientCredentialsChanged();
+    }
+
+    private void OnClientCredentialsChanged()
     {
         if (_suspendValidation)
         {
@@ -283,16 +289,18 @@ public sealed partial class CredentialsPageViewModel : OnboardingPageViewModelBa
         _channelDebounce.Start();
     }
 
-    private async void OnClientDebounceTick()
+    private Task OnClientDebounceTickAsync()
     {
         _clientDebounce.Stop();
-        await RunCredentialsCheckAsync();
+
+        return RunCredentialsCheckAsync();
     }
 
-    private async void OnChannelDebounceTick()
+    private Task OnChannelDebounceTickAsync()
     {
         _channelDebounce.Stop();
-        await RunChannelCheckAsync();
+
+        return RunChannelCheckAsync();
     }
 
     private async Task RunCredentialsCheckAsync()

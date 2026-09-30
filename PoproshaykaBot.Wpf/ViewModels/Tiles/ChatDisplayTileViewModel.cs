@@ -21,7 +21,6 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 {
     private const string WebView2RuntimeDownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 
-    private readonly SettingsManager _settings;
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly ChatDisplayStore _store;
     private readonly IShellLauncher _shellLauncher;
@@ -63,7 +62,6 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         ChatDisplayStore store)
         : base("twitch-chat", "Чат", minWidth: 280, minHeight: 234)
     {
-        _settings = settings;
         _targetChannelProvider = targetChannelProvider;
         _shellLauncher = shellLauncher;
         _dialogService = dialogService;

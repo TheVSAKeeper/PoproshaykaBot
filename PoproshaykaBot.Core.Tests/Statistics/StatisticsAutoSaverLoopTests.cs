@@ -69,7 +69,7 @@ public sealed class StatisticsAutoSaverLoopTests
 
         await WaitForAsync(() => _autoSaver.LastError is not null, "цикл не отметил отказ записи в LastError");
 
-        var frozenNextRunAt = _autoSaver.NextRunAt;
+        var frozenNextRunAt = _autoSaver.NextRunAt ?? throw new AssertionException("цикл после отказа записи не назначил следующий запуск");
 
         Directory.Delete(_writeBlockerPath);
 

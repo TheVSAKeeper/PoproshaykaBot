@@ -14,7 +14,7 @@ public sealed class DashboardEditSession : IDisposable
     private readonly SynchronizationContext? _context;
     private readonly DashboardLayoutDraft _draft;
     private readonly ITimer _timer;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     private int _baseRevision;
     private bool _dirty;
@@ -132,8 +132,8 @@ public sealed class DashboardEditSession : IDisposable
 
     public DashboardRemoveStatus Remove(string typeId)
     {
-        var status = DashboardRemoveStatus.Rejected;
-        var changed = false;
+        DashboardRemoveStatus status;
+        bool changed;
 
         lock (_gate)
         {

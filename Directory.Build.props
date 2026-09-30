@@ -30,4 +30,9 @@
     <AnalysisMode>Default</AnalysisMode>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
+
+  <PropertyGroup Label="Analyzer ratchet" Condition="!$(MSBuildProjectName.StartsWith('PoproshaykaBot.WinForms'))">
+    <WarningsAsErrors>$(WarningsAsErrors);MA0158;CS8123;CS8602;CS8604;CS4014;CA2016;VSTHRD103;VSTHRD110;VSTHRD200</WarningsAsErrors>
+    <WarningsAsErrors>$(WarningsAsErrors);MVVMTK0034;S6667;S6966;S2629;S125;S2696;CA1826;S1854;S3604;S4144;S1066;CA1854;S6618;S4487;S1125;S3218;S2486;S2445;S2094;S1144;S2699;S6580;CA1869;CA1835;MA0009;MA0023;RCS1215;S3459;MA0132;NS5003;S127;MA0061;S1006;CA1806;CA1068;S1994;CA1711;S2365;S6672;CA1309;AsyncFixer03;AsyncFixer06;NUnit2007;NUnit2009</WarningsAsErrors>
+  </PropertyGroup>
 </Project>

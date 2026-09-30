@@ -50,10 +50,10 @@ namespace PoproshaykaBot.Wpf;
 public partial class App : Application
 {
     private const string OutputTemplate = "[{Timestamp:HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
+    private const string SessionStartLine = AppInfo.SessionStartMarker + "...";
 
     private static int _fatalErrorHandled;
     private static int _restartRequested;
-    private static string[] _startupArguments = [];
 
     private ServiceProvider? _services;
     private KeepShellLogging? _logging;
@@ -80,6 +80,8 @@ public partial class App : Application
 
     internal static bool IsHeadless { get; private set; }
 
+    private static string[] StartupArguments { get; set; } = [];
+
     internal static bool IsGallery { get; private set; }
 
     internal static DebugChannelOverride DebugChannel { get; private set; } = DebugChannelOverride.None;
@@ -90,7 +92,7 @@ public partial class App : Application
 
         ApplyUiCulture();
 
-        _startupArguments = e.Args;
+        StartupArguments = e.Args;
         var previousInstance = AppRestart.FindPreviousProcessId(e.Args);
         var previousInstanceExited = previousInstance is not { } previousProcessId
                                      || AppRestart.WaitForExit(previousProcessId, AppRestart.HandoffTimeout);
@@ -121,7 +123,7 @@ public partial class App : Application
             FileSizeLimitBytes = 50L * 1024 * 1024,
             RollOnFileSizeLimit = true,
             MinimumLevel = LogEventLevel.Debug,
-            MinimumLevelOverrides = new Dictionary<string, LogEventLevel>
+            MinimumLevelOverrides = new Dictionary<string, LogEventLevel>(StringComparer.Ordinal)
             {
                 ["Microsoft"] = LogEventLevel.Information,
                 ["Microsoft.AspNetCore"] = LogEventLevel.Warning,
@@ -135,7 +137,7 @@ public partial class App : Application
 
         _logging = KeepShellLogging.Bootstrap(_loggingOptions);
 
-        HostLog.Information(AppInfo.SessionStartMarker + "...");
+        HostLog.Information(SessionStartLine);
 
         if (previousInstance is { } restartedAfter)
         {
@@ -508,9 +510,10 @@ public partial class App : Application
 
     private void StopAllComponents()
     {
+        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
         using var shutdownWatchdog = IsHeadless
             ? null
-            : new ShutdownWatchdog(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(ShutdownWatchdog)),
+            : new ShutdownWatchdog(loggerFactory.CreateLogger(nameof(ShutdownWatchdog)),
                 Log.CloseAndFlush,
                 ShutdownDeadlines.HardDeadline);
 
@@ -557,7 +560,7 @@ public partial class App : Application
         }
 
         // TODO: после фатальной ошибки хост только закрывается – передачу мьютекса новому процессу
-        //  уже умеет LaunchReplacement (--restart-after), но падение на старте зациклило бы перезапуск;
+        //  уже умеет LaunchReplacement (--restart-after), но падение на старте зациклило бы перезапуск –
         //  заводить вместе со счётчиком падений подряд
         ShowFatalErrorNotice();
 

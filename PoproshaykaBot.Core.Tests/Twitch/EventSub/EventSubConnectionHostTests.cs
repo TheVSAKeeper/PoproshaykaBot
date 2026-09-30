@@ -54,7 +54,7 @@ public sealed class EventSubConnectionHostTests
         _accountsStore.Mutate(role, account =>
         {
             account.AccessToken = token;
-            account.AccessTokenExpiresAt = DateTime.UtcNow.AddHours(1);
+            account.AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddHours(1);
             if (account.Scopes.Length == 0)
             {
                 account.Scopes = [..role == TwitchOAuthRole.Bot ? TwitchScopes.BotRequired : TwitchScopes.BroadcasterRequired];

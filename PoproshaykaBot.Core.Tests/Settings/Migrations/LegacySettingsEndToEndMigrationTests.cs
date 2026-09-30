@@ -15,6 +15,11 @@ public sealed class LegacySettingsEndToEndMigrationTests
     private const string FixtureResourceName =
         "PoproshaykaBot.Core.Tests.Settings.Migrations.Fixtures.LegacyMonolithicSettings.json";
 
+    private static readonly JsonSerializerOptions CamelCaseOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     private static string LoadFixtureJson()
     {
         var assembly = typeof(LegacySettingsEndToEndMigrationTests).Assembly;
@@ -49,8 +54,7 @@ public sealed class LegacySettingsEndToEndMigrationTests
 
         SettingsMigrator.Migrate(root);
 
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        var settings = root.Deserialize<AppSettings>(options);
+        var settings = root.Deserialize<AppSettings>(CamelCaseOptions);
 
         Assert.That(settings, Is.Not.Null, "Мигрированный JSON должен валидно десериализоваться в AppSettings");
 

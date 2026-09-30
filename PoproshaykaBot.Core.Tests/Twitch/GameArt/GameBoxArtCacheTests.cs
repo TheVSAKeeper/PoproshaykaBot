@@ -60,7 +60,7 @@ public sealed class GameBoxArtCacheTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(first["Minecraft"], Does.EndWith(".jpg"));
-            Assert.That(File.ReadAllBytes(first["Minecraft"]), Is.EqualTo(Jpeg));
+            Assert.That(await File.ReadAllBytesAsync(first["Minecraft"]), Is.EqualTo(Jpeg));
             Assert.That(second["Minecraft"], Is.EqualTo(first["Minecraft"]));
             Assert.That(cached["Minecraft"], Is.EqualTo(first["Minecraft"]),
                 "кеш ищется по имени игры без учёта регистра");
@@ -134,7 +134,7 @@ public sealed class GameBoxArtCacheTests
     {
         _helix
             .GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
-            .Throws(new TwitchAuthorizationMissingException("нет токена"));
+            .ThrowsAsync(new TwitchAuthorizationMissingException("нет токена"));
 
         var cache = Create();
 
@@ -291,7 +291,7 @@ public sealed class GameBoxArtCacheTests
     [Test]
     public async Task Битый_индекс_не_роняет_кеш_а_читается_как_пустой()
     {
-        File.WriteAllText(Path.Combine(_directory, GameBoxArtCache.IndexFileName), "{ это не json");
+        await File.WriteAllTextAsync(Path.Combine(_directory, GameBoxArtCache.IndexFileName), "{ это не json");
 
         var cache = Create();
         var paths = await cache.GetPathsAsync(["Выдуманная игра"]);
@@ -463,7 +463,7 @@ public sealed class GameBoxArtCacheTests
     {
         _helix
             .GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
-            .Throws(new TwitchAuthorizationMissingException("нет токена"));
+            .ThrowsAsync(new TwitchAuthorizationMissingException("нет токена"));
 
         var cache = Create(failureBackoff: TimeSpan.FromMinutes(5));
 
@@ -494,7 +494,7 @@ public sealed class GameBoxArtCacheTests
 
         _helix
             .GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
-            .Throws(new HttpRequestException("сеть недоступна"));
+            .ThrowsAsync(new HttpRequestException("сеть недоступна"));
 
         var offline = await cache.GetPathsAsync(["Minecraft", "Dota 2"]);
         var repeated = await cache.GetPathsAsync(["Minecraft", "Dota 2"]);
@@ -535,7 +535,7 @@ public sealed class GameBoxArtCacheTests
         {
             _helix
                 .GetGamesByNamesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
-                .Throws(new HttpRequestException("сеть недоступна"));
+                .ThrowsAsync(new HttpRequestException("сеть недоступна"));
         }
         else
         {

@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Infrastructure.Events;
 
 namespace PoproshaykaBot.Core.Tests.Infrastructure.Events;
@@ -17,7 +18,7 @@ public sealed class EventSubscriberRegistrationExtensionsTests
         {
             Assert.That(services.Any(d => d.ServiceType == typeof(SampleSubscriber)), Is.True);
             Assert.That(services.Any(d => d.ServiceType == typeof(AnotherSampleSubscriber)), Is.True);
-            Assert.That(services.Any(d => d.ServiceType == typeof(NonSubscriberClass)), Is.False);
+            Assert.That(services.Any(d => d.ServiceType == typeof(SampleEvent)), Is.False);
             Assert.That(services.Any(d => d.ServiceType == typeof(AbstractBaseSubscriber)), Is.False,
                 "Abstract types must be skipped – they cannot be instantiated.");
         }
@@ -73,6 +74,7 @@ public sealed class EventSubscriberRegistrationExtensionsTests
 
     private abstract class AbstractBaseSubscriber : IEventSubscriber;
 
+    [SuppressMessage("Major Code Smell", "S1144", Justification = "Конструктор зовёт контейнер DI через рефлексию – это и проверяет тест.")]
     private sealed class SampleSubscriber : IEventHandler<SampleEvent>, IEventSubscriber
     {
         public SampleSubscriber(IEventBus eventBus)
@@ -86,6 +88,7 @@ public sealed class EventSubscriberRegistrationExtensionsTests
         }
     }
 
+    [SuppressMessage("Major Code Smell", "S1144", Justification = "Конструктор зовёт контейнер DI через рефлексию – это и проверяет тест.")]
     private sealed class AnotherSampleSubscriber : IEventHandler<AnotherEvent>, IEventSubscriber
     {
         public AnotherSampleSubscriber(IEventBus eventBus)
@@ -98,6 +101,4 @@ public sealed class EventSubscriberRegistrationExtensionsTests
             return Task.CompletedTask;
         }
     }
-
-    private sealed class NonSubscriberClass;
 }

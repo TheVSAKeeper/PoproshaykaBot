@@ -462,7 +462,7 @@ public sealed class UserAvatarCacheTests
     {
         _helix
             .GetUsersByIdsAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
-            .Throws(new TwitchAuthorizationMissingException("нет токена"));
+            .ThrowsAsync(new TwitchAuthorizationMissingException("нет токена"));
 
         var ids = Enumerable.Range(1, 250).Select(index => index.ToString()).ToArray();
         var cache = Create();

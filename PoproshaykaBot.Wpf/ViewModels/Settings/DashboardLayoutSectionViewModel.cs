@@ -121,8 +121,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
     public IReadOnlyList<int> MaxHeightPresets { get; } = [100, 150, 200, 250, 300, 400, 500];
 
-    public IReadOnlyList<TileMeta> AvailablePalette =>
-        _catalog.Values.Where(meta => !IsPlaced(meta.TypeId)).ToList();
+    public IReadOnlyList<TileMeta> AvailablePalette { get; private set; } = [];
 
     public TileMeta? Meta(string typeId)
     {
@@ -194,7 +193,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
     public PaneLayout? PreviewAdd(string typeId, IReadOnlyList<int> targetPath, PaneSide side)
     {
-        if (!_previewTiles.ContainsKey(typeId))
+        if (!_previewTiles.TryGetValue(typeId, out var previewTile))
         {
             return null;
         }
@@ -210,7 +209,7 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
 
         if (!placements.ContainsKey(typeId))
         {
-            placements[typeId] = new(_previewTiles[typeId], 0, 0, 1, 1, null, null, null, null, false);
+            placements[typeId] = new(previewTile, 0, 0, 1, 1, null, null, null, null, false);
         }
 
         return DashboardPaneBuilder.BuildTree(root, placements);
@@ -443,6 +442,8 @@ public sealed partial class DashboardLayoutSectionViewModel : ObservableObject
         Stacked = DashboardPaneSurface.ShouldStack(ContentArea.Width, Pane);
 
         DashboardPaneBuilder.ApplyCollapsedStrips(Pane, Stacked);
+
+        AvailablePalette = _catalog.Values.Where(meta => !IsPlaced(meta.TypeId)).ToList();
 
         if (Pane is null)
         {

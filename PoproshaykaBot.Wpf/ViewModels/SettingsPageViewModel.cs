@@ -583,28 +583,26 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         var current = _obsChatStore.Load();
         var currentJson = SerializeObsChat(current);
 
-        if (!string.Equals(currentJson, _obsChatBaselineJson, StringComparison.Ordinal))
-        {
-            if (!_dialogService.ConfirmWarning(
+        if (!string.Equals(currentJson, _obsChatBaselineJson, StringComparison.Ordinal)
+            && !_dialogService.ConfirmWarning(
                 "Конфликт настроек чат-оверлея",
                 "Настройки чат-оверлея были изменены извне (например, через демо-страницу) уже после открытия этой страницы.\n\nПерезаписать их значениями отсюда?\n\n«Да» – применить значения из этой страницы.\n«Нет» – оставить внешние изменения, не трогая раздел «Оформление чат-оверлея»."))
+        {
+            _obsChatDraft = JsonStoreClone.DeepClone(current);
+
+            _suppressDirty = true;
+
+            try
             {
-                _obsChatDraft = JsonStoreClone.DeepClone(current);
-
-                _suppressDirty = true;
-
-                try
-                {
-                    ObsChat.LoadFrom(_obsChatDraft);
-                }
-                finally
-                {
-                    _suppressDirty = false;
-                }
-
-                _obsChatBaselineJson = currentJson;
-                return;
+                ObsChat.LoadFrom(_obsChatDraft);
             }
+            finally
+            {
+                _suppressDirty = false;
+            }
+
+            _obsChatBaselineJson = currentJson;
+            return;
         }
 
         _obsChatStore.Save(_obsChatDraft);

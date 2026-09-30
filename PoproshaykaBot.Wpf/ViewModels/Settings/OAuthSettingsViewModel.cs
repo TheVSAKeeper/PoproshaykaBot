@@ -34,8 +34,10 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
         IShellLauncher shellLauncher,
         IEmbeddedTwitchAuthDialog embeddedAuth,
         IUiDispatcher uiDispatcher,
-        ILogger<OAuthAccountViewModel> logger)
+        ILoggerFactory loggerFactory)
     {
+        var logger = loggerFactory.CreateLogger<OAuthAccountViewModel>();
+
         Bot = new(TwitchOAuthRole.Bot, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth, uiDispatcher, logger);
         Broadcaster = new(TwitchOAuthRole.Broadcaster, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth, uiDispatcher, logger);
 

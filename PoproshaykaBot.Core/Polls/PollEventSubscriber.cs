@@ -132,7 +132,7 @@ public sealed class PollEventSubscriber(
     {
         var result = await _retry.CreateAsync(type,
             "1",
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["broadcaster_user_id"] = broadcasterId,
             },

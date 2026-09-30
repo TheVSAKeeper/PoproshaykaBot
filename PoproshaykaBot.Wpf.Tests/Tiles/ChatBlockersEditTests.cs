@@ -37,7 +37,7 @@ public sealed class ChatBlockersEditTests
     [Test]
     public async Task Правила_на_сорвавшемся_чтении_не_открываются_пустыми_и_не_перезаписываются()
     {
-        File.WriteAllText(_blockersPath, Selectors);
+        await File.WriteAllTextAsync(_blockersPath, Selectors);
         var fileLock = new FileStream(_blockersPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
         var dialogs = new FakeDialogService(() => fileLock.Dispose());
         var tile = CreateTile(dialogs);
@@ -48,7 +48,7 @@ public sealed class ChatBlockersEditTests
         }
         finally
         {
-            fileLock.Dispose();
+            await fileLock.DisposeAsync();
             tile.Dispose();
         }
 
@@ -58,7 +58,7 @@ public sealed class ChatBlockersEditTests
                 "Пустой редактор на месте непрочитанных правил – это и есть путь, которым их стирало первое же сохранение.");
 
             Assert.That(dialogs.Errors, Has.Count.EqualTo(1), "Пользователю говорят, почему правила не открылись.");
-            Assert.That(File.ReadAllText(_blockersPath), Is.EqualTo(Selectors));
+            Assert.That(await File.ReadAllTextAsync(_blockersPath), Is.EqualTo(Selectors));
         }
     }
 

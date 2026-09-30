@@ -12,7 +12,7 @@ public sealed class UiLogSink : ILogEventSink
 
     private const string DefaultOutputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}";
 
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Queue<UiLogEntry> _buffer = new(BufferCapacity);
     private readonly ITextFormatter _formatter;
 

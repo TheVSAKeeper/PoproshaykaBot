@@ -166,7 +166,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TrendVisibilityCaption))]
-    private bool _isTrendVisible = true;
+    private bool _isTrendVisible;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSummaryOpen))]

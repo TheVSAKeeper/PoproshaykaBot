@@ -7,6 +7,11 @@ namespace PoproshaykaBot.Core.Tests.Server;
 [TestFixture]
 public sealed class DtoMapperTests
 {
+    private static readonly JsonSerializerOptions CamelCaseOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     [Test]
     public void ToServerMessage_IncludesMessageId()
     {
@@ -20,10 +25,7 @@ public sealed class DtoMapperTests
         };
 
         var dto = DtoMapper.ToServerMessage(data, new());
-        var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        });
+        var json = JsonSerializer.Serialize(dto, CamelCaseOptions);
 
         using var doc = JsonDocument.Parse(json);
         using (Assert.EnterMultipleScope())
@@ -48,10 +50,7 @@ public sealed class DtoMapperTests
         };
 
         var dto = DtoMapper.ToServerMessage(data, new());
-        var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        });
+        var json = JsonSerializer.Serialize(dto, CamelCaseOptions);
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -76,10 +75,7 @@ public sealed class DtoMapperTests
         };
 
         var dto = DtoMapper.ToServerMessage(data, new());
-        var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        });
+        var json = JsonSerializer.Serialize(dto, CamelCaseOptions);
 
         using var doc = JsonDocument.Parse(json);
 

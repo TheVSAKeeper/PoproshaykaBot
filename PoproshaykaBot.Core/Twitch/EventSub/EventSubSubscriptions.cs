@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 
 namespace PoproshaykaBot.Core.Twitch.EventSub;
@@ -38,6 +39,7 @@ public static class EventSubSubscriptions
         return CreateAsync(helix, type, version, condition, sessionId, logger, LogLevel.Warning, cancellationToken);
     }
 
+    [SuppressMessage("Minor Code Smell", "S6667", Justification = "409 от Twitch – штатный путь: дальше ищется существующая подписка, стек ошибки ничего не добавляет.")]
     internal static async Task<EventSubSubscribeResult> CreateAsync(
         ITwitchHelixClient helix,
         string type,
@@ -48,7 +50,9 @@ public static class EventSubSubscriptions
         LogLevel transientLevel,
         CancellationToken cancellationToken)
     {
-        for (var attempt = 0;; attempt++)
+        var retried = false;
+
+        while (true)
         {
             try
             {
@@ -106,7 +110,7 @@ public static class EventSubSubscriptions
                 return new(EventSubSubscribeOutcome.Unresolved, []);
             }
 
-            if (attempt > 0)
+            if (retried)
             {
                 logger.LogWarning("Подписки EventSub {Type} отключённых сессий ({Count}) не удалось убрать – Twitch снова ответил 409, на сессию {SessionId} уведомления этого типа не придут",
                     type, matches.Count, sessionId);
@@ -119,9 +123,11 @@ public static class EventSubSubscriptions
 
             await DeleteAsync(helix, type, matches.Select(x => x.Id).ToArray(), logger, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            retried = true;
         }
     }
 
+    [SuppressMessage("Minor Code Smell", "S6667", Justification = "Отмена в ветке catch (OperationCanceledException) when (…IsCancellationRequested) – штатный ход, стек ошибки ничего не добавляет.")]
     public static async Task<IReadOnlyList<string>> DeleteAsync(
         ITwitchHelixClient helix,
         string type,

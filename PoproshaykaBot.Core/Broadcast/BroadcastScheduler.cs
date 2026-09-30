@@ -8,7 +8,6 @@ using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Broadcast;
 
-// TODO: string.IsNullOrWhiteSpace(currentChannel) - рассмотреть обязательность Channel с выкидыванием ошибки
 public sealed class BroadcastScheduler(
     TwitchChatMessenger messenger,
     SettingsManager settingsManager,
@@ -18,8 +17,8 @@ public sealed class BroadcastScheduler(
     ILogger<BroadcastScheduler> logger)
     : IBroadcastScheduler, IAsyncDisposable
 {
-    private readonly object _stateLock = new();
-    private readonly object _sendLock = new();
+    private readonly Lock _stateLock = new();
+    private readonly Lock _sendLock = new();
     private int _sentMessagesCount;
     private int _runEpoch;
     private DateTimeOffset? _lastBroadcastAt;

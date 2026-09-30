@@ -12,7 +12,7 @@ public sealed class TwitchEventSubClient(ILogger<TwitchEventSubClient> logger) :
     private static readonly TimeSpan KeepaliveGrace = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan DefaultKeepaliveTimeout = TimeSpan.FromSeconds(10);
 
-    private readonly object _stateLock = new();
+    private readonly Lock _stateLock = new();
 
     private CancellationTokenSource? _internalCts;
     private Task? _runnerTask;
@@ -219,20 +219,20 @@ public sealed class TwitchEventSubClient(ILogger<TwitchEventSubClient> logger) :
         {
             await RunSessionAsync(session, cancellationToken);
 
-            if (session.WelcomeReceived is false)
+            if (!session.WelcomeReceived)
             {
                 logger.LogWarning("Миграция EventSub не состоялась: сокет по reconnect_url закрылся до session_welcome, работаем на прежней сессии {OldSessionId}",
                     session.OldSessionId);
             }
         }
-        catch (Exception ex) when (session.WelcomeReceived is false)
+        catch (Exception ex) when (!session.WelcomeReceived)
         {
             logger.LogWarning(ex, "Миграция EventSub не состоялась: сокет по reconnect_url оборвался до session_welcome, работаем на прежней сессии {OldSessionId}",
                 session.OldSessionId);
         }
         finally
         {
-            if (session.WelcomeReceived is false)
+            if (!session.WelcomeReceived)
             {
                 DiscardMigration(session);
             }
@@ -440,7 +440,7 @@ public sealed class TwitchEventSubClient(ILogger<TwitchEventSubClient> logger) :
         var dto = message.Payload.Deserialize<EventSubSessionPayloadDto>(JsonOptions);
         if (dto is null
             || string.IsNullOrEmpty(dto.Session.ReconnectUrl)
-            || Uri.TryCreate(dto.Session.ReconnectUrl, UriKind.Absolute, out var reconnectUri) is false)
+            || !Uri.TryCreate(dto.Session.ReconnectUrl, UriKind.Absolute, out var reconnectUri))
         {
             logger.LogWarning("session_reconnect по сессии {SessionId} без пригодного reconnect_url, обычная реконнект-логика", DescribeSession(session));
             return Task.CompletedTask;

@@ -250,6 +250,28 @@ dotnet_diagnostic.CS1591.severity = silent
 dotnet_diagnostic.S6967.severity = silent
 
 dotnet_diagnostic.CA1848.severity = silent
+dotnet_diagnostic.CA1873.severity = silent
+
+dotnet_diagnostic.MA0048.severity = silent
+dotnet_diagnostic.MA0006.severity = silent
+dotnet_diagnostic.MA0051.severity = silent
+dotnet_diagnostic.MA0016.severity = silent
+dotnet_diagnostic.CA1859.severity = silent
+dotnet_diagnostic.MA0026.severity = suggestion
+dotnet_diagnostic.VSTHRD001.severity = silent
+dotnet_diagnostic.VSTHRD003.severity = silent
+
+dotnet_diagnostic.IDISP001.severity = suggestion
+dotnet_diagnostic.IDISP002.severity = suggestion
+dotnet_diagnostic.IDISP003.severity = suggestion
+dotnet_diagnostic.IDISP004.severity = suggestion
+dotnet_diagnostic.IDISP005.severity = suggestion
+dotnet_diagnostic.IDISP006.severity = suggestion
+dotnet_diagnostic.IDISP007.severity = suggestion
+dotnet_diagnostic.IDISP012.severity = suggestion
+dotnet_diagnostic.IDISP013.severity = suggestion
+dotnet_diagnostic.IDISP016.severity = suggestion
+dotnet_diagnostic.IDISP017.severity = suggestion
 
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.MA0004.severity = none
@@ -271,3 +293,28 @@ dotnet_diagnostic.S2139.severity = suggestion
 dotnet_diagnostic.CA1822.severity = suggestion
 dotnet_diagnostic.S2325.severity = suggestion
 dotnet_diagnostic.S1135.severity = silent
+
+dotnet_diagnostic.CA1805.severity = silent
+dotnet_diagnostic.MA0046.severity = silent
+dotnet_diagnostic.S3267.severity = silent
+dotnet_diagnostic.S3358.severity = silent
+dotnet_diagnostic.S1075.severity = silent
+dotnet_diagnostic.RCS1194.severity = silent
+dotnet_diagnostic.CA1716.severity = silent
+dotnet_diagnostic.MA0008.severity = silent
+dotnet_diagnostic.CA1000.severity = silent
+dotnet_diagnostic.S4136.severity = silent
+dotnet_diagnostic.S108.severity = silent
+dotnet_diagnostic.S1244.severity = silent
+dotnet_diagnostic.S3060.severity = silent
+dotnet_diagnostic.AsyncFixer01.severity = silent
+
+[PoproshaykaBot.Wpf/**.cs]
+dotnet_diagnostic.CA1873.severity = error
+
+[PoproshaykaBot.{Core,Wpf}/**.cs]
+dotnet_diagnostic.MA0002.severity = error
+
+[*.Tests/**.cs]
+dotnet_diagnostic.MA0002.severity = silent
+dotnet_diagnostic.S3878.severity = silent

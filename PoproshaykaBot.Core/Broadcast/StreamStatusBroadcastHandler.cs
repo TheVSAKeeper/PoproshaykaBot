@@ -75,7 +75,7 @@ public sealed class StreamStatusBroadcastHandler :
             return Task.CompletedTask;
         }
 
-        return StartBroadcast(channel, sendNotification);
+        return StartBroadcastAsync(channel, sendNotification);
     }
 
     public Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
@@ -97,7 +97,7 @@ public sealed class StreamStatusBroadcastHandler :
             return Task.CompletedTask;
         }
 
-        return StartBroadcast(@event.Channel, !@event.IsCatchUp);
+        return StartBroadcastAsync(@event.Channel, !@event.IsCatchUp);
     }
 
     public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
@@ -145,7 +145,7 @@ public sealed class StreamStatusBroadcastHandler :
         _phaseSubscription.Dispose();
     }
 
-    private Task StartBroadcast(string channel, bool sendNotification)
+    private Task StartBroadcastAsync(string channel, bool sendNotification)
     {
         var settings = _settingsManager.Current.Twitch;
 

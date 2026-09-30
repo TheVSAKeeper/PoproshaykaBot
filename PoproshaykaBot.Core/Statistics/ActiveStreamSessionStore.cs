@@ -11,7 +11,7 @@ public class ActiveStreamSessionStore(ILogger<ActiveStreamSessionStore>? logger 
     private const string FileName = "active_session.json";
 
     private readonly string _filePath = filePath ?? Path.Combine(AppPaths.BaseDirectory, FileName);
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
 
     public virtual ActiveStreamSession? Load()
     {

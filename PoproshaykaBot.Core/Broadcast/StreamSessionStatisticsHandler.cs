@@ -44,7 +44,7 @@ public sealed class StreamSessionStatisticsHandler :
     private readonly IDisposable _ingestionStartedSubscription;
     private readonly IDisposable _ingestionStoppedSubscription;
 
-    private readonly object _stateLock = new();
+    private readonly Lock _stateLock = new();
     private readonly Dictionary<string, ChatterTally> _chatters = new(StringComparer.Ordinal);
     private readonly List<SegmentTally> _segments = [];
     private readonly List<ActiveStreamSessionInterval> _tracked = [];

@@ -35,7 +35,7 @@ public sealed class LegacyUsersStatisticsLoadTest
             Assert.That(thevsakeeper.Points, Is.EqualTo(3351L + 5000L - 217L));
         }
 
-        Assert.That(users.All(u => u.MessageCount >= 0), Is.True);
+        Assert.That(users.Any(u => u.MessageCount > 0), Is.True);
         Assert.That(users.All(u => !string.IsNullOrEmpty(u.UserId)), Is.True);
         Assert.That(users.All(u => !string.IsNullOrEmpty(u.Name)), Is.True);
     }

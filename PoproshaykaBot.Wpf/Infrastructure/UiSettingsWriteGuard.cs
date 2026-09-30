@@ -4,7 +4,7 @@ namespace PoproshaykaBot.Wpf.Infrastructure;
 
 public sealed class UiSettingsWriteGuard(ISettingsStore inner) : ISettingsStore
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Dictionary<string, string> _held = new(StringComparer.Ordinal);
     private bool _suspended;
     private bool _revoked;

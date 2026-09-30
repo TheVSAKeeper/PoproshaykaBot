@@ -103,8 +103,6 @@ public sealed class TwitchOAuthService(
         }
 
         statusReporter.ClearSubscribers();
-        flow.Dispose();
-        refresher.Dispose();
 
         _isDisposed = true;
     }

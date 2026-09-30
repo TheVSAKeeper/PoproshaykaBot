@@ -143,7 +143,7 @@ public sealed class SettingsWriteGateTests
 
         write();
 
-        Assert.That(File.ReadAllText(path), Is.EqualTo(Imported),
+        Assert.That(await File.ReadAllTextAsync(path), Is.EqualTo(Imported),
             "Перенос принёс этот файл, поэтому до перезапуска стор пишет только в память");
     }
 
@@ -180,7 +180,7 @@ public sealed class SettingsWriteGateTests
             Assert.That(store.Load().CheckIntervalHours, Is.EqualTo(9),
                 "Правка принята в памяти и действует до перезапуска, иначе сеанс после переноса живёт с чужими значениями");
 
-            Assert.That(File.ReadAllText(path), Is.EqualTo(Imported),
+            Assert.That(await File.ReadAllTextAsync(path), Is.EqualTo(Imported),
                 "Файл остаётся тем, который принёс перенос");
         }
     }
@@ -234,10 +234,10 @@ public sealed class SettingsWriteGateTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(File.ReadAllText(pollsPath), Is.EqualTo(Imported),
+            Assert.That(await File.ReadAllTextAsync(pollsPath), Is.EqualTo(Imported),
                 "Право, снятое первым переносом, второй возвращать не вправе – принесённое первым никуда не делось");
 
-            Assert.That(File.ReadAllText(updatePath), Is.EqualTo(Imported));
+            Assert.That(await File.ReadAllTextAsync(updatePath), Is.EqualTo(Imported));
         }
     }
 
@@ -260,7 +260,7 @@ public sealed class SettingsWriteGateTests
 
         var import = Task.Run(() => ImportAsync(gate, path, "update.json"));
 
-        Assert.That(import.Wait(TimeSpan.FromMilliseconds(300)), Is.False,
+        Assert.That(await Task.WhenAny(import, Task.Delay(TimeSpan.FromMilliseconds(300))), Is.Not.SameAs(import),
             "Перенос не имеет права начать копирование, пока идёт запись стора: иначе она ляжет поверх принесённого файла");
 
         releaseWrite.Set();
@@ -268,7 +268,7 @@ public sealed class SettingsWriteGateTests
         await storeWrite;
         await import;
 
-        Assert.That(File.ReadAllText(path), Is.EqualTo(Imported),
+        Assert.That(await File.ReadAllTextAsync(path), Is.EqualTo(Imported),
             "Запись стора успела целиком до копирования, а копирование заместило её результат");
     }
 
@@ -288,7 +288,7 @@ public sealed class SettingsWriteGateTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(File.ReadAllText(pollsPath), Does.Contain("777"),
+            Assert.That(await File.ReadAllTextAsync(pollsPath), Does.Contain("777"),
                 "polls.json никто не копировал – его вынул из принесённого монолита разбор настроек, "
                 + "и стор с доимпортным состоянием в памяти переписывать его не вправе");
 
@@ -302,7 +302,7 @@ public sealed class SettingsWriteGateTests
         var (source, target) = CreateMonolithSource();
         var pollsPath = Path.Combine(target, "settings", "polls.json");
         Directory.CreateDirectory(Path.GetDirectoryName(pollsPath)!);
-        File.WriteAllText(pollsPath, """{"historyMaxItems":11}""");
+        await File.WriteAllTextAsync(pollsPath, """{"historyMaxItems":11}""");
 
         var gate = new SettingsWriteGate();
         var polls = new PollsStore(null, pollsPath, gate);
@@ -313,7 +313,7 @@ public sealed class SettingsWriteGateTests
 
         polls.Save(new() { HistoryMaxItems = 22 });
 
-        Assert.That(File.ReadAllText(pollsPath), Does.Contain("22"),
+        Assert.That(await File.ReadAllTextAsync(pollsPath), Does.Contain("22"),
             "С выключенной перезаписью разбор откатили к доимпортному снимку: на диске лежит то же, что у стора в памяти, "
             + "и запрещать ему сохраняться до перезапуска не за что");
     }
@@ -323,7 +323,7 @@ public sealed class SettingsWriteGateTests
     {
         var target = Path.Combine(_directory.FullName, "рабочая");
         Directory.CreateDirectory(target);
-        File.WriteAllText(Path.Combine(target, "accounts.json"),
+        await File.WriteAllTextAsync(Path.Combine(target, "accounts.json"),
             """{"botAccount":{"login":"thebot","accessToken":"принесённый-токен"}}""");
 
         var accountsPath = Path.Combine(target, "settings", "accounts.json");
@@ -336,7 +336,7 @@ public sealed class SettingsWriteGateTests
 
         accounts.SaveAll(new(), new());
 
-        Assert.That(File.ReadAllText(accountsPath), Does.Contain("принесённый-токен"),
+        Assert.That(await File.ReadAllTextAsync(accountsPath), Does.Contain("принесённый-токен"),
             "Перенос на месте ничего не копирует, но миграция раскладки положила этот файл в settings/ мимо стора: "
             + "стор его не читал и до перезапуска переписывать не вправе");
     }

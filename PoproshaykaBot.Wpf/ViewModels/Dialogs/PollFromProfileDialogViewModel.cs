@@ -26,7 +26,7 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
 
     public bool IsEmpty => Profiles.Count == 0;
 
-    public string PreviewText => BuildPreviewText(_selectedProfile);
+    public string PreviewText => BuildPreviewText(SelectedProfile);
 
     public PollProfile? Result { get; private set; }
 
@@ -41,12 +41,12 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
 
     public bool TryAccept()
     {
-        if (_selectedProfile is null)
+        if (SelectedProfile is null)
         {
             return false;
         }
 
-        Result = _selectedProfile;
+        Result = SelectedProfile;
         RequestClose?.Invoke(this, true);
         return true;
     }
@@ -54,7 +54,7 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private void Launch()
     {
-        Result = _selectedProfile;
+        Result = SelectedProfile;
         RequestClose?.Invoke(this, true);
     }
 
@@ -67,13 +67,13 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private async Task EditAsync()
     {
-        if (_selectedProfile is null)
+        if (SelectedProfile is null)
         {
             return;
         }
 
         var editVm = new PollProfileEditDialogViewModel(_manager);
-        editVm.Load(_selectedProfile);
+        editVm.Load(SelectedProfile);
 
         if (!await _dialogService.ShowAsync(editVm))
         {
@@ -124,21 +124,21 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private void Delete()
     {
-        if (_selectedProfile is null)
+        if (SelectedProfile is null)
         {
             return;
         }
 
         var confirmed = _dialogService.ConfirmWarning(
             "Удаление профиля",
-            $"Удалить профиль «{_selectedProfile.Name}»?");
+            $"Удалить профиль «{SelectedProfile.Name}»?");
 
         if (!confirmed)
         {
             return;
         }
 
-        ReportWrite(_manager.Remove(_selectedProfile.Id));
+        ReportWrite(_manager.Remove(SelectedProfile.Id));
         LoadProfiles(null);
     }
 
@@ -148,7 +148,7 @@ public sealed partial class PollFromProfileDialogViewModel : ObservableObject, I
         OnPropertyChanged(nameof(ProfilesNotWritten));
     }
 
-    private bool HasSelection() => _selectedProfile != null;
+    private bool HasSelection() => SelectedProfile != null;
 
     private void LoadProfiles(Guid? preserveId)
     {

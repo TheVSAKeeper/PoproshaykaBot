@@ -35,7 +35,7 @@ public class StreamHistoryMetricsTests
         var root = Themed();
         var caption = MeasureText(root, "Mine…", (double)root.FindResource("Font.Size.Caption"), null);
 
-        Assert.That(SegmentCaptionWidth - SegmentPadding, Is.GreaterThanOrEqualTo(caption),
+        Assert.That(caption, Is.LessThanOrEqualTo(SegmentCaptionWidth - SegmentPadding),
             $"На пороге {SegmentCaptionWidth} DIP подписи остаётся {SegmentCaptionWidth - SegmentPadding:F1} DIP, а четырём буквам с многоточием нужно {caption:F1} – подпись выродится в одно многоточие");
     }
 
@@ -54,9 +54,9 @@ public class StreamHistoryMetricsTests
         {
             Assert.That(available, Is.GreaterThanOrEqualTo(required),
                 $"На пороге {StreamHistoryPageView.SideBySideWidth} DIP таблица получает {available:F1} DIP, а её колонкам на минимуме нужно {required:F1} – рядом с карточкой у последней колонки отрежет заголовок");
-            Assert.That(StreamHistoryPageView.TableMinWidth, Is.GreaterThanOrEqualTo(required),
+            Assert.That(required, Is.LessThanOrEqualTo(StreamHistoryPageView.TableMinWidth),
                 $"Пол колонки таблицы ({StreamHistoryPageView.TableMinWidth} DIP) ниже нужных ей {required:F1} – разделителем её можно будет сузить так, что последняя колонка обрежется");
-            Assert.That(StreamHistoryPageView.TableMinWidth * SmallFontScale, Is.GreaterThanOrEqualTo(small),
+            Assert.That(small, Is.LessThanOrEqualTo(StreamHistoryPageView.TableMinWidth * SmallFontScale),
                 $"Пол колонки едет с масштабом шрифта целиком, а поля кнопок шапки, стрелка, полы колонок и полоса прокрутки – нет: при {SmallFontScale} таблице остаётся {StreamHistoryPageView.TableMinWidth * SmallFontScale:F1} DIP при нужных {small:F1}");
         });
     }
@@ -84,9 +84,9 @@ public class StreamHistoryMetricsTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(StreamHistoryPageView.SegmentsPaneMinWidth, Is.GreaterThanOrEqualTo(head),
+            Assert.That(head, Is.LessThanOrEqualTo(StreamHistoryPageView.SegmentsPaneMinWidth),
                 $"Пол панели сегментов {StreamHistoryPageView.SegmentsPaneMinWidth} DIP ниже нужных карточке {head:F1} – название игры схлопнется в многоточие рядом с эфиром");
-            Assert.That(StreamHistoryPageView.SegmentCardMinWidth, Is.GreaterThanOrEqualTo(metrics),
+            Assert.That(metrics, Is.LessThanOrEqualTo(StreamHistoryPageView.SegmentCardMinWidth),
                 $"Порог второй колонки {StreamHistoryPageView.SegmentCardMinWidth} DIP ниже строки показателей {metrics:F1} – в двух колонках она переносится на вторую строку");
             Assert.That(StreamHistoryPageView.DetailSplitWidth - SplitterWidth - StreamHistoryPageView.ChattersMinWidth,
                 Is.GreaterThanOrEqualTo(StreamHistoryPageView.SegmentsPaneMinWidth),

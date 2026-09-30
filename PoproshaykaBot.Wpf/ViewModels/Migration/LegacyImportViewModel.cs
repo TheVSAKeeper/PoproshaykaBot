@@ -115,7 +115,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         var path = source.Path;
         var overwrite = OverwriteExisting;
 
-        // TODO: перенос идёт на UI-потоке – окно не отвечает, пока копируются файлы, и прогресса не видно;
+        // TODO: перенос идёт на UI-потоке – окно не отвечает, пока копируются файлы, и прогресса не видно –
         // уводить в фоновую задачу с индикатором, когда появится источник, у которого статистика зрителей
         // и история стримов копируются достаточно долго, чтобы застывшее окно бросалось в глаза
         LegacyImportResult Import()
@@ -123,7 +123,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
             return LegacyDataImporter.Import(path, overwrite, _logger);
         }
 
-        Task<LegacyImportResult> WithStatisticsScope()
+        Task<LegacyImportResult> WithStatisticsScopeAsync()
         {
             return _statisticsAutoSaver is null
                 ? Task.FromResult(Import())
@@ -137,9 +137,9 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         try
         {
             result = _settingsWriteGate is null
-                ? await WithStatisticsScope().ConfigureAwait(true)
+                ? await WithStatisticsScopeAsync().ConfigureAwait(true)
                 : await _settingsWriteGate
-                    .RunExternalWriteAsync(WithStatisticsScope, static imported => imported.RewrittenSettingsFiles)
+                    .RunExternalWriteAsync(WithStatisticsScopeAsync, static imported => imported.RewrittenSettingsFiles)
                     .ConfigureAwait(true);
 
             uiPreferencesKept = !result.CopiedUiPreferences;

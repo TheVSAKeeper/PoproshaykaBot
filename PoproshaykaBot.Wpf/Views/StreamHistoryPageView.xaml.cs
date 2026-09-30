@@ -403,7 +403,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         _sideBySide = sideBySide;
         _layoutApplied = true;
 
-        ApplyCompactMode(sideBySide is false, scale);
+        ApplyCompactMode(!sideBySide, scale);
 
         if (sideBySide)
         {
@@ -585,7 +585,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
             return;
         }
 
-        Dispatcher.BeginInvoke(
+        _ = Dispatcher.BeginInvoke(
             () =>
             {
                 if (viewModel.IsCardsView)

@@ -21,8 +21,8 @@ public sealed class SseService : IAsyncDisposable
     private readonly SseDropMetrics _metrics;
 
     private readonly Channel<SseEnvelope> _messageChannel;
-    private readonly object _lifecycleLock = new();
-    private readonly object _enqueueLock = new();
+    private readonly Lock _lifecycleLock = new();
+    private readonly Lock _enqueueLock = new();
 
     private CancellationTokenSource? _cts;
     private Task? _broadcastTask;

@@ -5,7 +5,7 @@ namespace PoproshaykaBot.Core.Settings.Stores;
 public sealed class SettingsWriteGate(ILogger<SettingsWriteGate>? logger = null)
 {
     private readonly HashSet<string> _revoked = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
 
     private int _externalWriteDepth;
     private bool _externalWriteAbandoned;

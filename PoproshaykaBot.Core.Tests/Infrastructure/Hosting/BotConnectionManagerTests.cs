@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Debugging;
+﻿using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
@@ -88,6 +89,83 @@ public sealed class BotConnectionManagerTests
             Assert.That(manager.CurrentPhase, Is.EqualTo(BotLifecyclePhase.Connected));
             Assert.That(trace, Is.EqualTo(["start:sender", "start:slow"]));
         });
+    }
+
+    [TestCase(1)]
+    [TestCase(2)]
+    public async Task ForcedStop_DuringGracefulStop_CancelsItAndBothFinish(int forcedStops)
+    {
+        var component = new BlockingStopComponent();
+
+        var eventBus = Substitute.For<IEventBus>();
+        var tokenService = Substitute.For<ITwitchOAuthService>();
+        tokenService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>()).Returns("token");
+
+        var targetChannel = Substitute.For<ITargetChannelProvider>();
+        targetChannel.Current.Returns(new TargetChannelState("channel", "channel", false, true));
+
+        var chatHandler = new TwitchChatHandler(null!,
+            null!,
+            null!,
+            null!,
+            new(null!),
+            null!,
+            null!,
+            new(TimeProvider.System),
+            null!,
+            eventBus,
+            NullLogger<TwitchChatHandler>.Instance);
+
+        var manager = new BotConnectionManager(tokenService,
+            targetChannel,
+            chatHandler,
+            new([component], NullLogger<AppHost>.Instance),
+            eventBus,
+            NullLogger<BotConnectionManager>.Instance);
+
+        manager.StartConnection();
+        await manager.WaitForConnectionAsync();
+
+        var graceful = manager.StopAsync();
+        var gracefulToken = await component.StopEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var forced = Enumerable.Range(0, forcedStops)
+            .Select(_ => Task.Run(() => manager.StopAsync(BotStopMode.Forced)))
+            .ToArray();
+
+        await Task.WhenAll([graceful, .. forced]).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(gracefulToken.IsCancellationRequested, Is.True, "Принудительная остановка отменяет идущую штатную");
+            Assert.That(component.StopCalls, Is.EqualTo(1));
+            Assert.That(manager.CurrentPhase, Is.EqualTo(BotLifecyclePhase.Disconnected));
+        });
+    }
+
+    private sealed class BlockingStopComponent : IHostedComponent
+    {
+        private int _stopCalls;
+
+        public string Name => "blocking";
+
+        public int StartOrder => 100;
+
+        public int StopCalls => Volatile.Read(ref _stopCalls);
+
+        public TaskCompletionSource<CancellationToken> StopEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _stopCalls);
+            StopEntered.TrySetResult(cancellationToken);
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
     }
 
     private sealed class RecordingComponent(string name, int order, List<string> trace, Action onStart) : IHostedComponent

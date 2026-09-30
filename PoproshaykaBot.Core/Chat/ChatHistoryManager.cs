@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Settings;
 
@@ -6,7 +6,7 @@ namespace PoproshaykaBot.Core.Chat;
 
 public sealed class ChatHistoryManager(SettingsManager settingsManager, IEventBus eventBus)
 {
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly LinkedList<ChatMessageData> _chatHistory = [];
 
     public void AddMessage(ChatMessageData chatMessage)

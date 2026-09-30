@@ -304,7 +304,7 @@ public class SettingsWriteGateNoticeTests
 
         public Task WaitForConnectionAsync() => Task.CompletedTask;
 
-        public Task StopAsync(BotStopMode mode) => Task.CompletedTask;
+        public Task StopAsync(BotStopMode mode = BotStopMode.Graceful) => Task.CompletedTask;
     }
 
     private sealed class FakeDialogService(Action<IDialogViewModel> edit) : IDialogService

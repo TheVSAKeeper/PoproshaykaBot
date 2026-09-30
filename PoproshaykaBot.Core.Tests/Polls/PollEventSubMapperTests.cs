@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Globalization;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.Polls;
@@ -46,8 +47,8 @@ public class PollEventSubMapperTests
             Assert.That(snapshot.Choices[0].Votes, Is.EqualTo(0));
             Assert.That(snapshot.Choices[0].ChoiceId, Is.EqualTo("c1"));
             Assert.That(snapshot.Choices[0].Title, Is.EqualTo("A"));
-            Assert.That(snapshot.StartedAtUtc, Is.EqualTo(DateTime.Parse("2026-04-24T10:00:00Z").ToUniversalTime()));
-            Assert.That(snapshot.EndsAtUtc, Is.EqualTo(DateTime.Parse("2026-04-24T10:01:00Z").ToUniversalTime()));
+            Assert.That(snapshot.StartedAtUtc, Is.EqualTo(DateTime.Parse("2026-04-24T10:00:00Z", CultureInfo.InvariantCulture).ToUniversalTime()));
+            Assert.That(snapshot.EndsAtUtc, Is.EqualTo(DateTime.Parse("2026-04-24T10:01:00Z", CultureInfo.InvariantCulture).ToUniversalTime()));
             Assert.That(snapshot.EndedAtUtc, Is.Null);
             Assert.That(snapshot.ChannelPointsVotingEnabled, Is.False);
         }
@@ -113,7 +114,7 @@ public class PollEventSubMapperTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(snapshot.Status, Is.EqualTo(expected));
-            Assert.That(snapshot.EndedAtUtc, Is.EqualTo(DateTime.Parse("2026-04-24T10:01:00Z").ToUniversalTime()));
+            Assert.That(snapshot.EndedAtUtc, Is.EqualTo(DateTime.Parse("2026-04-24T10:01:00Z", CultureInfo.InvariantCulture).ToUniversalTime()));
         }
     }
 
@@ -168,7 +169,7 @@ public class PollEventSubMapperTests
             0,
             "ACTIVE",
             60,
-            DateTime.Parse("2026-04-24T10:00:00Z").ToUniversalTime(),
+            DateTime.Parse("2026-04-24T10:00:00Z", CultureInfo.InvariantCulture).ToUniversalTime(),
             null);
 
         var snapshot = PollEventSubMapper.FromHelix(helix, null);
@@ -196,7 +197,7 @@ public class PollEventSubMapperTests
             0,
             status,
             60,
-            DateTime.Parse("2026-04-24T10:00:00Z").ToUniversalTime(),
+            DateTime.Parse("2026-04-24T10:00:00Z", CultureInfo.InvariantCulture).ToUniversalTime(),
             null);
 
         var snapshot = PollEventSubMapper.FromCreatedPoll(helix, Guid.NewGuid());
@@ -218,8 +219,8 @@ public class PollEventSubMapperTests
             0,
             status!,
             60,
-            DateTime.Parse("2026-04-24T10:00:00Z").ToUniversalTime(),
-            DateTime.Parse("2026-04-24T10:01:00Z").ToUniversalTime());
+            DateTime.Parse("2026-04-24T10:00:00Z", CultureInfo.InvariantCulture).ToUniversalTime(),
+            DateTime.Parse("2026-04-24T10:01:00Z", CultureInfo.InvariantCulture).ToUniversalTime());
 
         Assert.That(PollEventSubMapper.FromHelix(helix, null), Is.Null);
     }
@@ -227,8 +228,8 @@ public class PollEventSubMapperTests
     [Test]
     public void FromHelix_CompletedWithEndedAt_SetsEndedAt()
     {
-        var started = DateTime.Parse("2026-04-24T10:00:00Z").ToUniversalTime();
-        var ended = DateTime.Parse("2026-04-24T10:01:00Z").ToUniversalTime();
+        var started = DateTime.Parse("2026-04-24T10:00:00Z", CultureInfo.InvariantCulture).ToUniversalTime();
+        var ended = DateTime.Parse("2026-04-24T10:01:00Z", CultureInfo.InvariantCulture).ToUniversalTime();
 
         var helix = new HelixPollInfo("poll-1",
             "1",

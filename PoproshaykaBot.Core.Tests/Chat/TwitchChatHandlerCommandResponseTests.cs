@@ -29,7 +29,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
         _root = Path.Combine(Path.GetTempPath(), "poproshayka-chat-handler-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
 
-        _sentTexts = [];
+        _sentTexts.Clear();
         _helix = Substitute.For<ITwitchHelixClient>();
 
         _helix.SendChatMessageAsync(Arg.Any<string>(),
@@ -46,7 +46,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
                 }
             });
 
-        _whispers = [];
+        _whispers.Clear();
 
         _helix.SendWhisperAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -137,8 +137,8 @@ public sealed class TwitchChatHandlerCommandResponseTests
 
     private string _root = null!;
     private AppSettings _settings = null!;
-    private List<string> _sentTexts = null!;
-    private List<string> _whispers = null!;
+    private readonly List<string> _sentTexts = [];
+    private readonly List<string> _whispers = [];
     private ITwitchHelixClient _helix = null!;
     private TestTimeProvider _time = null!;
     private CommandResponseTracker _tracker = null!;

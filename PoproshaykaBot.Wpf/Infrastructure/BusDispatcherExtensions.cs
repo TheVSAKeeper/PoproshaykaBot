@@ -39,7 +39,7 @@ public static class BusDispatcherExtensions
 
             try
             {
-                dispatcher.BeginInvoke(() => InvokeGuarded(subscription, dispatcher, handler, @event));
+                _ = dispatcher.BeginInvoke(() => InvokeGuarded(subscription, dispatcher, handler, @event));
             }
             catch (InvalidOperationException exception)
             {

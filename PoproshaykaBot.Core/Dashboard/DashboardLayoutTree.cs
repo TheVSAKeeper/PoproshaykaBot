@@ -122,7 +122,7 @@ public static class DashboardLayoutTree
 
         for (var index = 0; index <= extents.Length; index++)
         {
-            var known = index < extents.Length ? extents[index] : (start: end, end: end);
+            var known = index < extents.Length ? extents[index] : (Start: end, End: end);
 
             if (known is null)
             {

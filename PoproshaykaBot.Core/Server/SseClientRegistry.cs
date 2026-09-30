@@ -6,7 +6,7 @@ namespace PoproshaykaBot.Core.Server;
 public sealed class SseClientRegistry
 {
     private readonly Dictionary<HttpResponse, SseClientPipeline> _clients = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public int Count
     {

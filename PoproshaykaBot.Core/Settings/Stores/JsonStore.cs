@@ -15,7 +15,7 @@ internal sealed class JsonStore<T>
     private readonly Func<string, T?>? _parser;
     private readonly Func<T, string>? _describe;
     private readonly SettingsWriteGate? _gate;
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
 
     private T _state;
 

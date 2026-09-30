@@ -188,7 +188,7 @@ public sealed class ChannelUpdateSubscriber(
     {
         var result = await _retry.CreateAsync(SubscriptionType,
             SubscriptionVersion,
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["broadcaster_user_id"] = broadcasterId,
             },

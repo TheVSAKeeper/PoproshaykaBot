@@ -1,6 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NSubstitute;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure;
@@ -105,7 +106,7 @@ public sealed class ChatCommandProcessorTests
         {
             Assert.That(((IChatCommand)new FakeCommand("ранг")).IsRestrictedToAllowedUsers, Is.False, "Обычная команда особым списком не ограничена");
             Assert.That(
-                new TrumpCommand(new(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"))).IsRestrictedToAllowedUsers,
+                new TrumpCommand(new(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json")), Substitute.For<IHttpClientFactory>()).IsRestrictedToAllowedUsers,
                 Is.True);
         });
     }

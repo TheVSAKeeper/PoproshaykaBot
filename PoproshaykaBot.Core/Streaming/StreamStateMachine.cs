@@ -26,7 +26,7 @@ internal readonly record struct OfflineProbeOutcome(OfflineProbeAction Action, T
 
 internal sealed class StreamStateMachine
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     private StreamStatus _status = StreamStatus.Unknown;
     private StreamInfo? _stream;

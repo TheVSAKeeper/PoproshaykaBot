@@ -81,6 +81,14 @@ public sealed class KestrelHttpServer(
         }
         catch (Exception ex)
         {
+            await sseService.StopAsync();
+
+            if (_app != null)
+            {
+                await _app.DisposeAsync();
+                _app = null;
+            }
+
             logger.LogError(ex, "Ошибка запуска HTTP сервера на порту {Port}", port);
             throw new InvalidOperationException($"Не удалось запустить HTTP-сервер на порту {port}", ex);
         }

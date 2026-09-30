@@ -38,7 +38,7 @@ public sealed class PollHistoryStore(
     private readonly string _filePath = filePath ?? AppPaths.Combine("polls-history.json");
 
     private readonly List<PollHistoryEntry> _entries = [];
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private CancellationTokenSource? _backgroundCts;
     private Task? _backgroundTask;
     private StatisticsLoadState _readState = StatisticsLoadState.NotRead;

@@ -198,8 +198,6 @@ public sealed class StatisticsAutoSaver(
         _cts?.Dispose();
         _saveSemaphore.Dispose();
         _disposed = true;
-
-        GC.SuppressFinalize(this);
     }
 
     private async Task<StatisticsInvalidation> InvalidateUnderSaveLockAsync(CancellationToken cancellationToken)

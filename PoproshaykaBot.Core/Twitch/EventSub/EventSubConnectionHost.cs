@@ -27,7 +27,7 @@ public sealed class EventSubConnectionHost :
     private readonly ExponentialBackoffPolicy _reconnectionPolicy = new(MaxReconnectAttempts);
     private readonly IDisposable _authSubscription;
 
-    private readonly object _lockObj = new();
+    private readonly Lock _lockObj = new();
     private CancellationTokenSource? _runCts;
     private CancellationTokenSource? _reconnectCts;
     private bool _stopRequested;

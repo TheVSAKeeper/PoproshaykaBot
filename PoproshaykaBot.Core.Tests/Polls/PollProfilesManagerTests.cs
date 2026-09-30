@@ -47,14 +47,14 @@ public class PollProfilesManagerTests
     }
 
     [Test]
-    public void Upsert_SavesProfile_AndRaisesChanged()
+    public async Task Upsert_SavesProfile_AndRaisesChanged()
     {
         var profile = ValidProfile();
 
         _manager.Upsert(profile);
 
         Assert.That(_store.Load().Profiles, Has.Count.EqualTo(1));
-        _eventBus.Received(1).PublishAsync(Arg.Any<PollProfilesChanged>(), Arg.Any<CancellationToken>());
+        await _eventBus.Received(1).PublishAsync(Arg.Any<PollProfilesChanged>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -155,7 +155,7 @@ public class PollProfilesManagerTests
     }
 
     [Test]
-    public void Remove_DeletesProfile()
+    public async Task Remove_DeletesProfile()
     {
         var profile = ValidProfile();
         _manager.Upsert(profile);
@@ -164,7 +164,7 @@ public class PollProfilesManagerTests
         _manager.Remove(profile.Id);
 
         Assert.That(_store.Load().Profiles, Is.Empty);
-        _eventBus.Received(1).PublishAsync(Arg.Any<PollProfilesChanged>(), Arg.Any<CancellationToken>());
+        await _eventBus.Received(1).PublishAsync(Arg.Any<PollProfilesChanged>(), Arg.Any<CancellationToken>());
     }
 
     [Test]

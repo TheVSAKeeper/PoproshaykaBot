@@ -14,5 +14,5 @@ public interface IBotConnectionController
 
     Task WaitForConnectionAsync();
 
-    Task StopAsync(BotStopMode mode);
+    Task StopAsync(BotStopMode mode = BotStopMode.Graceful);
 }

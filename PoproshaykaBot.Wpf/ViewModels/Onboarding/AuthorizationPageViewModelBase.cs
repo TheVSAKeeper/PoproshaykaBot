@@ -113,19 +113,26 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
 
     public void Dispose()
     {
-        UnsubscribeStatus();
-
-        if (_credentialsSubscriptionContext is not null)
-        {
-            _credentialsSubscriptionContext.CredentialsChanged -= OnCredentialsChanged;
-            _credentialsSubscriptionContext = null;
-        }
-
-        _authCts?.Cancel();
-        _authCts?.Dispose();
-        _authCts = null;
-
+        Dispose(true);
         GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            UnsubscribeStatus();
+
+            if (_credentialsSubscriptionContext is not null)
+            {
+                _credentialsSubscriptionContext.CredentialsChanged -= OnCredentialsChanged;
+                _credentialsSubscriptionContext = null;
+            }
+
+            _authCts?.Cancel();
+            _authCts?.Dispose();
+            _authCts = null;
+        }
     }
 
     [RelayCommand]

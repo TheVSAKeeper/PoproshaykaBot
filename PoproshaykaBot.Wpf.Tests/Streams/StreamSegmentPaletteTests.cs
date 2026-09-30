@@ -5,12 +5,12 @@ namespace PoproshaykaBot.Wpf.Tests.Streams;
 [TestFixture]
 public class StreamSegmentPaletteTests
 {
-    [TestCase("Just Chatting")]
-    [TestCase("Software and Game Development")]
-    [TestCase("Minecraft")]
-    public void Одна_игра_получает_один_оттенок(string game)
+    [TestCase("Just Chatting", 3)]
+    [TestCase("Software and Game Development", 0)]
+    [TestCase("Minecraft", 0)]
+    public void Одна_игра_получает_один_оттенок(string game, int expected)
     {
-        Assert.That(StreamSegmentPalette.IndexOf(game), Is.EqualTo(StreamSegmentPalette.IndexOf(game)));
+        Assert.That(StreamSegmentPalette.IndexOf(game), Is.EqualTo(expected));
     }
 
     [TestCase("Minecraft", "minecraft")]

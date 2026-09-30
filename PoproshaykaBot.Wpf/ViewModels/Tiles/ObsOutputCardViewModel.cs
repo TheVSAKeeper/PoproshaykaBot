@@ -66,7 +66,8 @@ public sealed partial class ObsOutputCardViewModel : ObservableObject
         _logger = logger;
     }
 
-    // TODO: добавить пульсацию точки/ореол и анимированную обводку карточки (Storyboard) для Active/Paused – пока статичная подсветка токенами State.*.
+    // TODO: Active/Paused подсвечены статично токенами State.*, без пульсации точки и анимированной обводки –
+    //  заводить Storyboard, когда идущую запись перестанут замечать по статичной подсветке
     public ObsOutputCardKind Kind { get; }
 
     public bool IsRecordMode => Kind == ObsOutputCardKind.Record;

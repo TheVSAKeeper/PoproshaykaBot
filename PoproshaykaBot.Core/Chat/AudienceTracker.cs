@@ -7,7 +7,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
 {
     private const string UsernamePlaceholder = "username";
 
-    private readonly ConcurrentDictionary<string, string> _userIdToDisplayName = new();
+    private readonly ConcurrentDictionary<string, string> _userIdToDisplayName = new(StringComparer.Ordinal);
 
     public int ActiveUserCount => _userIdToDisplayName.Count;
 

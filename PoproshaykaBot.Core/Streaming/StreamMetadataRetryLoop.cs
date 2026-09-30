@@ -28,7 +28,7 @@ internal sealed class StreamMetadataRetryLoop(
         _activeCts = linkedCts;
         var loopToken = linkedCts.Token;
 
-        CurrentTask = Task.Run(() => RunAsync(loopToken, linkedCts), loopToken);
+        CurrentTask = Task.Run(() => RunAsync(linkedCts, loopToken), loopToken);
     }
 
     public async Task CancelAndDrainAsync()
@@ -94,7 +94,7 @@ internal sealed class StreamMetadataRetryLoop(
         Interlocked.Exchange(ref _activeCts, null);
     }
 
-    private async Task RunAsync(CancellationToken loopToken, CancellationTokenSource ownedCts)
+    private async Task RunAsync(CancellationTokenSource ownedCts, CancellationToken loopToken)
     {
         try
         {

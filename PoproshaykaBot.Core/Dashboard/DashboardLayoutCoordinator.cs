@@ -8,7 +8,7 @@ public sealed class DashboardLayoutCoordinator
 {
     private readonly DashboardLayoutStore _store;
     private readonly ILogger<DashboardLayoutCoordinator>? _logger;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private int _revision;
 
     public DashboardLayoutCoordinator(DashboardLayoutStore store, ILogger<DashboardLayoutCoordinator>? logger = null)

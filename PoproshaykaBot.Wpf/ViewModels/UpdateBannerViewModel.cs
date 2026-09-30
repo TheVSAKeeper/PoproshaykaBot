@@ -128,7 +128,7 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
         {
             await _coordinator.PrepareAsync(candidate, progress, CancellationToken.None);
 
-            _logger.UpdateDownloaded(candidate.Version.ToString());
+            _logger.UpdateDownloaded(candidate.Version);
 
             Application.Current.MainWindow?.Close();
         }
@@ -156,7 +156,7 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
         _coordinator.SkipVersion(candidate.Version.ToString());
         IsVisible = false;
 
-        _logger.UpdateVersionSkipped(candidate.Version.ToString());
+        _logger.UpdateVersionSkipped(candidate.Version);
     }
 
     private bool CanAct()

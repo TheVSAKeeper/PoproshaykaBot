@@ -49,7 +49,7 @@ public sealed class ObsWebSocketClient(ILogger<ObsWebSocketClient> logger) : IOb
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ObsRequestResponse>> _pending = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _sendLock = new(1, 1);
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
 
     private ClientWebSocket? _socket;
     private CancellationTokenSource? _receiveCts;

@@ -241,7 +241,7 @@ public sealed class OAuthTokenRefresher(
     {
         statusReporter.Report(role, "Обновление токена доступа...");
 
-        var formData = new Dictionary<string, string>
+        var formData = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             { "client_id", clientId },
             { "client_secret", clientSecret },

@@ -91,7 +91,7 @@ public partial class App
             return false;
         }
 
-        var arguments = AppRestart.BuildArguments(_startupArguments, Environment.ProcessId);
+        var arguments = AppRestart.BuildArguments(StartupArguments, Environment.ProcessId);
 
         if (!AppRestart.TryLaunch(executablePath, arguments, false, out var failure))
         {
@@ -149,9 +149,9 @@ public partial class App
         {
             host.StopAsync(cancellationToken).GetAwaiter().GetResult();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException exception)
         {
-            HostLog.Warning("Остановка стрим-мониторинга прервана по таймауту завершения");
+            HostLog.Warning(exception, "Остановка стрим-мониторинга прервана по таймауту завершения");
         }
         catch (Exception ex)
         {
@@ -161,8 +161,8 @@ public partial class App
 
     private static bool StartHttpServerIfNeeded(SettingsManager settingsManager, AppLifetime appLifetime)
     {
-        var reconcile = HttpServerPortReconciler.Reconcile(settingsManager,
-            new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(HttpServerPortReconciler)));
+        using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        var reconcile = HttpServerPortReconciler.Reconcile(settingsManager, loggerFactory.CreateLogger(nameof(HttpServerPortReconciler)));
 
         if (reconcile.Notice is { } notice)
         {
@@ -196,9 +196,9 @@ public partial class App
         {
             appLifetime.StopAsync(cancellationToken).GetAwaiter().GetResult();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException exception)
         {
-            HostLog.Warning("Остановка AppLifetime прервана по таймауту завершения");
+            HostLog.Warning(exception, "Остановка AppLifetime прервана по таймауту завершения");
         }
         catch (Exception ex)
         {

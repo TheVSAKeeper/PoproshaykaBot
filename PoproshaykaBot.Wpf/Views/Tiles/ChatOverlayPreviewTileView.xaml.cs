@@ -52,7 +52,7 @@ public partial class ChatOverlayPreviewTileView : UserControl, IView<ChatOverlay
             return;
         }
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
             if (!IsLoaded)
             {

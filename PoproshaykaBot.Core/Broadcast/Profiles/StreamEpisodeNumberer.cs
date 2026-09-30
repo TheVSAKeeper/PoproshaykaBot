@@ -20,7 +20,7 @@ public sealed class StreamEpisodeNumberer :
     private readonly IChannelInformationApplier _applier;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<StreamEpisodeNumberer> _logger;
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly List<IDisposable> _subscriptions;
     private DateTimeOffset? _lastOfflineAt;
 

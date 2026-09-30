@@ -150,6 +150,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1132, Level = LogLevel.Information, Message = "Пользователь начал встроенную авторизацию роли {Role} ({Surface})")]
     public static partial void OAuthEmbeddedFlowStarted(this ILogger logger, TwitchOAuthRole role, OAuthAuthorizationSurface surface);
 
+    [LoggerMessage(EventId = 1137, Level = LogLevel.Debug, Message = "Ошибка в уже отменённом или заменённом OAuth-потоке роли {Role}")]
+    public static partial void OAuthAbandonedFlowFailed(this ILogger logger, Exception exception, TwitchOAuthRole role);
+
     [LoggerMessage(EventId = 1200, Level = LogLevel.Error, Message = "Ошибка сохранения настроек")]
     public static partial void SettingsSaveFailed(this ILogger logger, Exception? exception);
 
@@ -232,13 +235,13 @@ internal static partial class AppLog
     public static partial void RecentDebugChannelsStatusFailed(this ILogger logger, Exception? exception);
 
     [LoggerMessage(EventId = 1500, Level = LogLevel.Information, Message = "Обновление {Version} загружено, приложение перезапустится")]
-    public static partial void UpdateDownloaded(this ILogger logger, string version);
+    public static partial void UpdateDownloaded(this ILogger logger, Version version);
 
     [LoggerMessage(EventId = 1501, Level = LogLevel.Error, Message = "Ошибка загрузки обновления")]
     public static partial void UpdateDownloadFailed(this ILogger logger, Exception? exception);
 
     [LoggerMessage(EventId = 1502, Level = LogLevel.Information, Message = "Версия {Version} пропущена")]
-    public static partial void UpdateVersionSkipped(this ILogger logger, string version);
+    public static partial void UpdateVersionSkipped(this ILogger logger, Version version);
 
     [LoggerMessage(EventId = 1320, Level = LogLevel.Warning, Message = "Не удалось получить обложки игр, категории останутся без картинок")]
     public static partial void BoxArtLoadFailed(this ILogger logger, Exception? exception);
@@ -248,6 +251,14 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1322, Level = LogLevel.Debug, Message = "Кадр превью стрима не загружен: {Address}")]
     public static partial void StreamPreviewFrameFailed(this ILogger logger, Exception? exception, string address);
+
+    public static void StreamPreviewFrameFailed(this ILogger logger, Exception? exception, Uri address)
+    {
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.StreamPreviewFrameFailed(exception, address.GetLeftPart(UriPartial.Path));
+        }
+    }
 
     [LoggerMessage(EventId = 1323, Level = LogLevel.Warning, Message = "Не удалось получить аватарки пользователей, вместо них останутся буквы ников")]
     public static partial void UserAvatarLoadFailed(this ILogger logger, Exception? exception);

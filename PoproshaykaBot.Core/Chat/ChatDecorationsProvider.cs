@@ -103,7 +103,7 @@ public sealed class ChatDecorationsProvider(
     /// <param name="badgeSizePixels">Желаемый размер бэйджа (в пикселях)</param>
     public Dictionary<string, string> ExtractBadgeUrls(IReadOnlyList<(string SetId, string BadgeId)> badges, int badgeSizePixels)
     {
-        var badgeUrls = new Dictionary<string, string>();
+        var badgeUrls = new Dictionary<string, string>(StringComparer.Ordinal);
 
         if (!_isLoaded)
         {

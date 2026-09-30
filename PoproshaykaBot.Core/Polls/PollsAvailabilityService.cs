@@ -79,7 +79,7 @@ public class PollsAvailabilityService(
             }
 
             var users = await helix.GetUsersByIdsAsync([broadcasterId], cancellationToken);
-            var broadcaster = users.FirstOrDefault();
+            var broadcaster = users is [var first, ..] ? first : null;
 
             if (broadcaster is null)
             {

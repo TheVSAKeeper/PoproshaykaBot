@@ -56,7 +56,10 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _logger = logger;
         _shellLauncher = shellLauncher;
 
-        _refreshTimer = uiDispatcher.CreateTimer(TimeSpan.FromSeconds(30), OnRefreshTimerTick);
+        _refreshTimer = uiDispatcher.CreateAsyncTimer(
+            TimeSpan.FromSeconds(30),
+            OnRefreshTimerTickAsync,
+            exception => _logger.StreamInfoAutoUpdateFailed(exception));
 
         _openChannelToolbarItem = new ToolbarItemViewModel(
             PackIconLucideKind.ExternalLink,
@@ -171,22 +174,15 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         }
     }
 
-    private async void OnRefreshTimerTick()
+    private async Task OnRefreshTimerTickAsync()
     {
         if (_stream.CurrentStatus != StreamStatus.Online)
         {
             return;
         }
 
-        try
-        {
-            await _stream.RefreshLiveSnapshotAsync();
-            ApplyCurrentStatus();
-        }
-        catch (Exception ex)
-        {
-            _logger.StreamInfoAutoUpdateFailed(ex);
-        }
+        await _stream.RefreshLiveSnapshotAsync();
+        ApplyCurrentStatus();
     }
 
     public void Dispose()

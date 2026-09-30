@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Threading.Channels;
 
@@ -411,6 +412,7 @@ public sealed class ChatSender(
         }
     }
 
+    [SuppressMessage("Minor Code Smell", "S6667", Justification = "Отказ Helix по шёпоту (HelixRequestException) пишется одной строкой предупреждения: причину несут статус и текст ответа Twitch, стек тут пуст по смыслу. Прочие исключения того же метода пишутся со стеком.")]
     private async Task<bool> TryWhisperAsync(string message, WhisperRoute whisper, string senderId, CancellationToken ct)
     {
         if (string.Equals(senderId, whisper.ToUserId, StringComparison.Ordinal))
@@ -441,7 +443,7 @@ public sealed class ChatSender(
         catch (Exception ex)
         {
             whisper.Refused = true;
-            logger.LogWarning("ChatSender: шёпот пользователю {UserId} не отправлен ({Error}) – ответ уходит реплаем на его сообщение",
+            logger.LogWarning(ex, "ChatSender: шёпот пользователю {UserId} не отправлен ({Error}) – ответ уходит реплаем на его сообщение",
                 whisper.ToUserId,
                 ex.Message);
 

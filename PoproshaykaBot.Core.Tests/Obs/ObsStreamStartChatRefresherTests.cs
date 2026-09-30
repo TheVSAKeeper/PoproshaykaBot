@@ -162,7 +162,7 @@ public sealed class ObsStreamStartChatRefresherTests
     {
         private readonly Dictionary<string, Queue<JsonElement?>> _responses = new(StringComparer.Ordinal);
         private readonly List<string> _pressButtonRequests = [];
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
 
         public event EventHandler<ObsWebSocketEventArgs>? EventReceived;
 

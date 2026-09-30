@@ -65,7 +65,7 @@ public static class GalleryDialogs
         var profiles = services.GetRequiredService<PollProfilesManager>();
         var dialog = new PollProfileEditDialogViewModel(profiles);
 
-        if (profiles.GetAll().FirstOrDefault() is { } profile)
+        if (profiles.GetAll() is [var profile, ..])
         {
             dialog.Load(profile);
         }

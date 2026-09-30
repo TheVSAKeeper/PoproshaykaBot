@@ -188,7 +188,7 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
         }
 
         var unavailable = await Task.Run(() => cache.GetUnavailable(outdated));
-        Discard(outdated.Where(id => unreadable.Contains(id) || unavailable.Contains(id)));
+        Discard(outdated.Where(id => unreadable.Contains(id) || unavailable.Contains(id, StringComparer.Ordinal)));
     }
 
     private string[]? TakeResolve()

@@ -87,7 +87,7 @@ public class BroadcastProfileHeaderStatusTests
     }
 
     [Test]
-    public void Перезагрузка_карточек_посреди_применения_сохраняет_применяю_в_шапке()
+    public async Task Перезагрузка_карточек_посреди_применения_сохраняет_применяю_в_шапке()
     {
         var path = Path.Combine(Path.GetTempPath(), $"broadcast-profiles-{Guid.NewGuid():N}.json");
 
@@ -101,8 +101,8 @@ public class BroadcastProfileHeaderStatusTests
             using var tile = new BroadcastProfilesTileViewModel(manager, store, new IdleStreamStatus(), null!, null!, null!, new SilentDialogService(), null!, bus);
             var profile = manager.GetAll()[0];
 
-            bus.PublishAsync(new BroadcastProfileApplying(profile)).GetAwaiter().GetResult();
-            bus.PublishAsync(new BroadcastProfilesChanged()).GetAwaiter().GetResult();
+            await bus.PublishAsync(new BroadcastProfileApplying(profile));
+            await bus.PublishAsync(new BroadcastProfilesChanged());
 
             Assert.Multiple(() =>
             {
@@ -110,7 +110,7 @@ public class BroadcastProfileHeaderStatusTests
                 Assert.That(tile.HeaderStatus?.Text, Is.EqualTo("Применяю «Вечер»…"));
             });
 
-            bus.PublishAsync(new BroadcastProfileApplied(profile)).GetAwaiter().GetResult();
+            await bus.PublishAsync(new BroadcastProfileApplied(profile));
 
             Assert.That(tile.Items.Any(item => item.IsApplyInFlight), Is.False, "После применения признак не залипает");
         }

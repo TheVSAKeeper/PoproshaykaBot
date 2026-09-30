@@ -269,6 +269,7 @@ public sealed class InMemoryEventBusTests
     {
         var started = CreateSignal();
         var release = CreateSignal();
+        var finished = CreateSignal();
 
         _bus.Subscribe<TestEvent>((_, _) =>
         {
@@ -276,6 +277,7 @@ public sealed class InMemoryEventBusTests
             {
                 started.SetResult();
                 await release.Task;
+                finished.SetResult();
             });
 
             return Task.CompletedTask;
@@ -284,7 +286,10 @@ public sealed class InMemoryEventBusTests
         await _bus.PublishAsync(new TestEvent("offline")).WaitAsync(WaitTimeout);
         await started.Task.WaitAsync(WaitTimeout);
 
+        Assert.That(finished.Task.IsCompleted, Is.False);
+
         release.SetResult();
+        await finished.Task.WaitAsync(WaitTimeout);
     }
 
     [Test]
@@ -361,7 +366,7 @@ public sealed class InMemoryEventBusTests
             });
 
             await _bus.PublishAsync(new OtherEvent(1), ct);
-            await nestedStarted.Task.WaitAsync(WaitTimeout);
+            await nestedStarted.Task.WaitAsync(WaitTimeout, ct);
             outerRanBeforeHandlerReturned = outerStarted.Task.IsCompleted;
         });
 
@@ -397,7 +402,7 @@ public sealed class InMemoryEventBusTests
         _bus.Subscribe<TestEvent>(async (_, ct) =>
         {
             await _bus.PublishAsync(new OtherEvent(1), ct);
-            await chained.Task.WaitAsync(WaitTimeout);
+            await chained.Task.WaitAsync(WaitTimeout, ct);
             outerHandlerReturned.SetResult();
         });
 
@@ -414,7 +419,7 @@ public sealed class InMemoryEventBusTests
         var executed = false;
         Task? escaped = null;
 
-        _bus.Subscribe<TestEvent>((_, _) =>
+        _bus.Subscribe<TestEvent>((_, ct) =>
         {
             escaped = Task.Run(async () =>
             {
@@ -425,7 +430,7 @@ public sealed class InMemoryEventBusTests
                     executed = true;
                     return Task.CompletedTask;
                 });
-            });
+            }, ct);
 
             return Task.CompletedTask;
         });

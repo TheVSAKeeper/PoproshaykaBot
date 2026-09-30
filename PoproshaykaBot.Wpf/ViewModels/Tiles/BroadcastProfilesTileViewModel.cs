@@ -175,7 +175,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         if (string.IsNullOrEmpty(newProfileName))
         {
             ShowStatus("Применяется текущая конфигурация…", false);
-            await ApplyGuardedAsync(() => _applier.ApplyAsync(draft, CancellationToken.None));
+            await ApplyGuardedAsync(async () => await _applier.ApplyAsync(draft, CancellationToken.None));
             return;
         }
 
@@ -200,7 +200,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
 
         ShowStatus($"Применяется «{saved.Name}»…", false);
-        await ApplyGuardedAsync(() => _manager.ApplyAsync(saved.Id, CancellationToken.None));
+        await ApplyGuardedAsync(async () => await _manager.ApplyAsync(saved.Id, CancellationToken.None));
     }
 
     private async Task EditProfileAsync(BroadcastProfileItemViewModel item)

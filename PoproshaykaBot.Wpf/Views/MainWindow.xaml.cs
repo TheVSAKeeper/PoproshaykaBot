@@ -87,7 +87,7 @@ public partial class MainWindow : Window
                 WindowPlacement.Save(this, _settings, WindowKeys);
             }
 
-            Dispatcher.BeginInvoke(() => Close());
+            _ = Dispatcher.BeginInvoke(() => Close());
         }
     }
 }

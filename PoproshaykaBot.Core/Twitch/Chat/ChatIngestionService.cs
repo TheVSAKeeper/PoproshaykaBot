@@ -24,7 +24,7 @@ public sealed class ChatIngestionService(
 {
     private const string ChatMessageSubscriptionType = "channel.chat.message";
 
-    private readonly object _joinLock = new();
+    private readonly Lock _joinLock = new();
     private readonly EventSubSubscriptionRetry _retry = new(helix, eventSubClient, timeProvider, logger);
     private bool _subscribed;
     private long _generation;
@@ -122,7 +122,7 @@ public sealed class ChatIngestionService(
             var delays = new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4) };
             Exception? lastError = null;
 
-            var condition = new Dictionary<string, string>
+            var condition = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["broadcaster_user_id"] = broadcasterId,
                 ["user_id"] = botId,
@@ -141,7 +141,7 @@ public sealed class ChatIngestionService(
                         "1",
                         condition,
                         sessionId,
-                        retried => JoinAsync(generation, retried),
+                        async retried => await JoinAsync(generation, retried),
                         ct);
 
                     if (!result.IsSubscribed || !await JoinAsync(generation, result))

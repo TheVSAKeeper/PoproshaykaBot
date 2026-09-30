@@ -22,7 +22,7 @@ public sealed class TargetChannelProvider(
         OwnChannelAfterInvalidValue = 4,
     }
 
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
 
     private TargetChannelState? _reported;
     private TargetChannelState? _session;

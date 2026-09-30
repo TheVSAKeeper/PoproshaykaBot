@@ -17,9 +17,11 @@ public sealed record DebugChannelOverride(string? Channel, bool AllowSending, st
         string? raw = null;
         var allowSending = false;
 
-        for (var index = 0; index < args.Count; index++)
+        var index = 0;
+
+        while (index < args.Count)
         {
-            var argument = args[index];
+            var argument = args[index++];
 
             if (string.Equals(argument, AllowSendingArgument, StringComparison.OrdinalIgnoreCase))
             {
@@ -29,10 +31,9 @@ public sealed record DebugChannelOverride(string? Channel, bool AllowSending, st
 
             if (string.Equals(argument, ChannelArgument, StringComparison.OrdinalIgnoreCase))
             {
-                if (index + 1 < args.Count && !args[index + 1].StartsWith('-'))
+                if (index < args.Count && !args[index].StartsWith('-'))
                 {
-                    raw = args[index + 1];
-                    index++;
+                    raw = args[index++];
                 }
                 else
                 {

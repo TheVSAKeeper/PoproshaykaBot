@@ -45,9 +45,10 @@ public sealed partial class GameAutocompleteViewModel : ObservableObject, IDispo
     public void Dispose()
     {
         _debounce.Stop();
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _cts = null;
+
+        var cts = Interlocked.Exchange(ref _cts, null);
+        cts?.Cancel();
+        cts?.Dispose();
     }
 
     partial void OnQueryChanged(string value)
@@ -79,13 +80,20 @@ public sealed partial class GameAutocompleteViewModel : ObservableObject, IDispo
             return;
         }
 
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _cts = new CancellationTokenSource();
-        var token = _cts.Token;
+        var cts = new CancellationTokenSource();
+        var token = cts.Token;
+        var previous = Interlocked.Exchange(ref _cts, cts);
 
         try
         {
+            if (previous != null)
+            {
+                using (previous)
+                {
+                    await previous.CancelAsync();
+                }
+            }
+
             var results = await _resolver.SearchAsync(query, token);
 
             if (token.IsCancellationRequested)

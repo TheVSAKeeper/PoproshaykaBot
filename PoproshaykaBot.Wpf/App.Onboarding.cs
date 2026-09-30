@@ -25,7 +25,7 @@ public partial class App
 
         _onboardingLaunched = true;
 
-        Dispatcher.BeginInvoke(ShowStartupWizard, DispatcherPriority.ContextIdle);
+        _ = Dispatcher.BeginInvoke(ShowStartupWizard, DispatcherPriority.ContextIdle);
     }
 
     private void ShowStartupWizard()

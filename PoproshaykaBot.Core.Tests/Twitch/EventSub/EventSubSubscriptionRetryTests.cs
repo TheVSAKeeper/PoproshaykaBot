@@ -260,7 +260,7 @@ public sealed class EventSubSubscriptionRetryTests
                 Arg.Any<IReadOnlyDictionary<string, string>>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(_ =>
+            .Returns(async _ =>
             {
                 if (Interlocked.Increment(ref calls) == 2)
                 {
@@ -275,12 +275,12 @@ public sealed class EventSubSubscriptionRetryTests
                             break;
 
                         case StopKind.CallerToken:
-                            cts.Cancel();
+                            await cts.CancelAsync();
                             break;
                     }
                 }
 
-                return Conflict();
+                return await Conflict();
             });
 
         var deleted = TrackDeletes();

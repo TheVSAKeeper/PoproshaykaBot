@@ -134,7 +134,7 @@ public sealed class OnboardingChannelValidator(
                 return cached.Token;
             }
 
-            using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            using var content = new FormUrlEncodedContent(new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["client_id"] = clientId,
                 ["client_secret"] = clientSecret,

@@ -41,7 +41,7 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
     private readonly IUiDispatcher _uiDispatcher;
 
     private readonly List<IDisposable> _subs = [];
-    private readonly object _volumeMeterLock = new();
+    private readonly Lock _volumeMeterLock = new();
 
     private readonly Dictionary<string, (double Level, DateTimeOffset UpdatedAt)> _volumeTargets =
         new(StringComparer.OrdinalIgnoreCase);
@@ -171,7 +171,8 @@ public sealed partial class ObsInfoTileViewModel : DashboardTileViewModel, IDisp
         }
     }
 
-    // TODO: восстановить плавное сглаживание уровней (CompositionTarget.Rendering 33ms / Storyboard) – сейчас уровень присваивается напрямую.
+    // TODO: уровень присваивается напрямую и прыгает скачками – сглаживание WinForms-хоста (33 мс) не перенесено –
+    //  вернуть через CompositionTarget.Rendering, когда пожалуются на дёрганые индикаторы
 
     private void OnToastTimerTick()
     {

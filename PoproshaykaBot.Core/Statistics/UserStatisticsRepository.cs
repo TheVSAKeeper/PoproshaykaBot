@@ -4,8 +4,8 @@ namespace PoproshaykaBot.Core.Statistics;
 
 public sealed class UserStatisticsRepository(ILogger<UserStatisticsRepository> logger) : IUserStatisticsRepository
 {
-    private readonly Dictionary<string, UserStatistics> _users = new();
-    private readonly object _lock = new();
+    private readonly Dictionary<string, UserStatistics> _users = new(StringComparer.Ordinal);
+    private readonly Lock _lock = new();
     private bool _hasChanges;
 
     public bool HasChanges

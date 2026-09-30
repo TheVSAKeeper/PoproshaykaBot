@@ -37,7 +37,7 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
 
     public async Task<IReadOnlyList<UserInfo>> GetUsersByIdsAsync(IEnumerable<string> ids, CancellationToken cancellationToken = default)
     {
-        var idList = ids.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().Take(MaxUsersPerRequest).ToArray();
+        var idList = ids.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).Take(MaxUsersPerRequest).ToArray();
         if (idList.Length == 0)
         {
             return [];
@@ -152,7 +152,7 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
         await EnsureSuccessAsync(httpRequest, response, cancellationToken);
 
         var envelope = await response.Content.ReadFromJsonAsync<HelixChatMessageSendResponse>(JsonOptions, cancellationToken);
-        var item = envelope?.Data?.FirstOrDefault();
+        var item = envelope?.Data is [var first, ..] ? first : null;
 
         if (item is { IsSent: false })
         {
@@ -192,7 +192,8 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
                 b => new GlobalBadgeInfo(b.SetId,
                     (b.Versions ?? []).Select(v => new GlobalBadgeVersion(v.Id, v.ImageUrl1x, v.ImageUrl2x, v.ImageUrl4x,
                         v.Title, v.Description, v.ClickAction, v.ClickUrl))
-                    .ToArray()));
+                    .ToArray()),
+                StringComparer.Ordinal);
     }
 
     public async Task<IReadOnlyDictionary<string, GlobalEmoteInfo>> GetGlobalChatEmotesAsync(CancellationToken cancellationToken = default)
@@ -207,7 +208,8 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
                         e.Images?.Url4x ?? string.Empty),
                     e.Formats ?? [],
                     e.Scales ?? [],
-                    e.ThemeModes ?? []));
+                    e.ThemeModes ?? []),
+                StringComparer.Ordinal);
     }
 
     public async Task<string> CreateEventSubSubscriptionAsync(
@@ -232,7 +234,7 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
         await EnsureSuccessAsync(httpRequest, response, cancellationToken);
 
         var envelope = await response.Content.ReadFromJsonAsync<HelixEnvelope<HelixEventSubSubscriptionDto>>(JsonOptions, cancellationToken);
-        var subscription = envelope?.Data?.FirstOrDefault();
+        var subscription = envelope?.Data is [var first, ..] ? first : null;
         if (subscription is null)
         {
             throw new InvalidOperationException("EventSub подписка создана, но Twitch не вернул данные подписки.");
@@ -290,7 +292,7 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
                     dto.Type,
                     dto.Status,
                     dto.Transport?.SessionId,
-                    dto.Condition ?? new Dictionary<string, string>()));
+                    dto.Condition ?? new Dictionary<string, string>(StringComparer.Ordinal)));
             }
 
             cursor = envelope?.Pagination?.Cursor;
@@ -323,8 +325,9 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
         await EnsureSuccessAsync(httpRequest, response, cancellationToken);
 
         var envelope = await response.Content.ReadFromJsonAsync<HelixEnvelope<HelixPollDto>>(JsonOptions, cancellationToken);
-        var poll = envelope?.Data?.FirstOrDefault()
-                   ?? throw new InvalidOperationException("Helix вернул пустой ответ на создание голосования.");
+        var poll = envelope?.Data is [{ } first, ..]
+            ? first
+            : throw new InvalidOperationException("Helix вернул пустой ответ на создание голосования.");
 
         return MapPoll(poll);
     }
@@ -345,8 +348,9 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
         await EnsureSuccessAsync(httpRequest, response, cancellationToken);
 
         var envelope = await response.Content.ReadFromJsonAsync<HelixEnvelope<HelixPollDto>>(JsonOptions, cancellationToken);
-        var poll = envelope?.Data?.FirstOrDefault()
-                   ?? throw new InvalidOperationException("Helix вернул пустой ответ на завершение голосования.");
+        var poll = envelope?.Data is [{ } first, ..]
+            ? first
+            : throw new InvalidOperationException("Helix вернул пустой ответ на завершение голосования.");
 
         return MapPoll(poll);
     }
@@ -447,7 +451,7 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
     private async Task<T?> GetSingleAsync<T>(string requestUri, CancellationToken cancellationToken)
     {
         var data = await GetCollectionAsync<T>(requestUri, cancellationToken);
-        return data.FirstOrDefault();
+        return data is [var first, ..] ? first : default;
     }
 
     private async Task<IReadOnlyList<T>> GetCollectionAsync<T>(string requestUri, CancellationToken cancellationToken)

@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Settings.Stores;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.Settings;
@@ -24,6 +25,7 @@ public sealed class CommandSettingsStoreTests
         Caller = 4,
     }
 
+    [SuppressMessage("Major Code Smell", "S1144", Justification = "Сеттеры заполняет System.Text.Json при чтении файла глазами прошлой сборки.")]
     private sealed class LegacySettings<TTarget> where TTarget : struct, Enum
     {
         public TTarget DefaultResponseTarget { get; set; }
@@ -31,6 +33,7 @@ public sealed class CommandSettingsStoreTests
         public Dictionary<string, LegacyOverride<TTarget>> Commands { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
+    [SuppressMessage("Major Code Smell", "S1144", Justification = "Сеттеры заполняет System.Text.Json при чтении файла глазами прошлой сборки.")]
     private sealed class LegacyOverride<TTarget> where TTarget : struct, Enum
     {
         public bool Enabled { get; set; } = true;

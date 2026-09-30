@@ -46,7 +46,7 @@ public partial class BroadcastProfilesTileView : UserControl, IView<BroadcastPro
 
     private void OnFontScaleChanged(object? sender, double scale)
     {
-        Dispatcher.BeginInvoke(ApplyColumns);
+        _ = Dispatcher.BeginInvoke(ApplyColumns);
     }
 
     private void OnCardsSizeChanged(object sender, SizeChangedEventArgs e)

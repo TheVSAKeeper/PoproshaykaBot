@@ -594,7 +594,7 @@ public class DashboardLayoutSectionTests
             coordinator,
             TimeProvider.System);
 
-        var saved = coordinator.Read().Layout;
+        var saved = coordinator.Read().Layout ?? throw new AssertionException("Коммит не оставил раскладки в файле.");
         var chat = saved.Tiles.Single(static tile => tile.TypeId == "twitch-chat");
         var hole = ((SplitPane)saved.Root!).Children[^1];
 

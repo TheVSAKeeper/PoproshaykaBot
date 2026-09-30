@@ -34,16 +34,18 @@ public sealed class TwitchOAuthServiceTests
         var statusReporter = new OAuthStatusReporter(NullLogger<OAuthStatusReporter>.Instance);
         var tokenClient = new OAuthTokenClient(_httpFactory, NullLogger<OAuthTokenClient>.Instance);
         var accountWriter = new OAuthAccountWriter(_accountsStore, _eventBus, statusReporter, NullLogger<OAuthAccountWriter>.Instance);
-        var flow = new OAuthFlowCoordinator(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsManager, NullLogger<OAuthFlowCoordinator>.Instance);
-        var refresher = new OAuthTokenRefresher(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsManager, _eventBus, _clock, NullLogger<OAuthTokenRefresher>.Instance);
+        _flow = new(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsManager, NullLogger<OAuthFlowCoordinator>.Instance);
+        _refresher = new(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsManager, _eventBus, _clock, NullLogger<OAuthTokenRefresher>.Instance);
 
-        _service = new(flow, refresher, tokenClient, accountWriter, statusReporter);
+        _service = new(_flow, _refresher, tokenClient, accountWriter, statusReporter);
     }
 
     [TearDown]
     public void TearDown()
     {
         _service.Dispose();
+        _refresher.Dispose();
+        _flow.Dispose();
         _handler.Dispose();
         try
         {
@@ -62,6 +64,8 @@ public sealed class TwitchOAuthServiceTests
     private FakeHttpMessageHandler _handler = null!;
     private IEventBus _eventBus = null!;
     private TestTimeProvider _clock = null!;
+    private OAuthFlowCoordinator _flow = null!;
+    private OAuthTokenRefresher _refresher = null!;
     private TwitchOAuthService _service = null!;
 
     [Test]
@@ -251,7 +255,7 @@ public sealed class TwitchOAuthServiceTests
     }
 
     [Test]
-    public void RefreshTokenAsync_WhenServerRejectsCredentials_KeepsBackoffForAutomaticPath()
+    public async Task RefreshTokenAsync_WhenServerRejectsCredentials_KeepsBackoffForAutomaticPath()
     {
         SeedExpiredBotTokens();
         _handler.Responder = _ => MakeJson(HttpStatusCode.Forbidden,
@@ -265,7 +269,7 @@ public sealed class TwitchOAuthServiceTests
 
         var requestsAfterManual = _handler.Requests.Count;
 
-        Assert.That(_service.GetAccessTokenAsync(TwitchOAuthRole.Bot).Result, Is.Null);
+        Assert.That(await _service.GetAccessTokenAsync(TwitchOAuthRole.Bot), Is.Null);
         Assert.That(_handler.Requests, Has.Count.EqualTo(requestsAfterManual),
             "Неудачная ручная попытка ставит роль на выдержку, а не снимает её");
     }

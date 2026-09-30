@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.Statistics;
@@ -330,6 +331,8 @@ public sealed class StreamSessionHistoryStoreTests
         public List<PreviousBuildRecord> Sessions { get; set; } = [];
     }
 
+    [SuppressMessage("Major Code Smell", "S1144", Justification = "Свойства – формат записи прошлой сборки: их заполняет System.Text.Json, тест проверяет, что файл ими читается.")]
+    [SuppressMessage("Major Code Smell", "S3459", Justification = "Свойство заполняет System.Text.Json при чтении файла.")]
     private sealed class PreviousBuildRecord
     {
         public Guid Id { get; set; }

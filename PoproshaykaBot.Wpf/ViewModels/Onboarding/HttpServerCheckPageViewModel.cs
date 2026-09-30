@@ -180,20 +180,16 @@ public sealed partial class HttpServerCheckPageViewModel : OnboardingPageViewMod
 
     private static bool TryBindPort(int port)
     {
-        TcpListener? listener = null;
+        using var listener = new TcpListener(IPAddress.Loopback, port);
+
         try
         {
-            listener = new TcpListener(IPAddress.Loopback, port);
             listener.Start();
             return true;
         }
         catch (SocketException)
         {
             return false;
-        }
-        finally
-        {
-            listener?.Stop();
         }
     }
 }

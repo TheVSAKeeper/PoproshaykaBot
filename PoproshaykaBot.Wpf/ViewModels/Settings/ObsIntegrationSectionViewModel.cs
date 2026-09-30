@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Obs;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Windows;
 
@@ -444,7 +445,7 @@ public sealed partial class ObsIntegrationSectionViewModel : ObservableObject, I
     private string BuildOverlayUrl()
     {
         var port = _settingsManager.Current.Twitch.HttpServerPort;
-        return FormattableString.Invariant($"http://localhost:{port}/chat");
+        return string.Create(CultureInfo.InvariantCulture, $"http://localhost:{port}/chat");
     }
 
     private void SetStatus(string text, StatusSeverity severity)

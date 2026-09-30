@@ -18,6 +18,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
     private bool _reloadAttempted;
     private ChatDisplayTileViewModel? _viewModel;
     private string? _clutterScriptId;
+    private int _clutterScriptGeneration;
 
     public ChatDisplayTileView()
     {
@@ -57,7 +58,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             return;
         }
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
             if (!IsLoaded)
             {
@@ -158,38 +159,61 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         }
     }
 
-    private async Task RegisterClutterScriptAsync(ChatDisplayTileViewModel viewModel)
+    private async Task<bool> RegisterClutterScriptAsync(ChatDisplayTileViewModel viewModel)
+    {
+        if (_disposed || WebView.CoreWebView2 is not { } core)
+        {
+            return false;
+        }
+
+        var generation = ++_clutterScriptGeneration;
+
+        try
+        {
+            if (_clutterScriptId is not null)
+            {
+                core.RemoveScriptToExecuteOnDocumentCreated(_clutterScriptId);
+                _clutterScriptId = null;
+            }
+
+            var scriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(viewModel.BuildHideClutterScript());
+
+            if (generation != _clutterScriptGeneration || _disposed)
+            {
+                core.RemoveScriptToExecuteOnDocumentCreated(scriptId);
+                return false;
+            }
+
+            _clutterScriptId = scriptId;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            viewModel.Logger.LogWarning(exception, "Не удалось применить блокираторы баннеров чата");
+            return false;
+        }
+    }
+
+    private void OnClutterScriptChanged()
+    {
+        if (_viewModel is not { } viewModel)
+        {
+            return;
+        }
+
+        _ = UiAsync.RunGuardedAsync(
+            () => ReapplyClutterScriptAsync(viewModel),
+            exception => viewModel.Logger.LogWarning(exception, "Не удалось перезагрузить чат после смены блокираторов баннеров"));
+    }
+
+    private async Task ReapplyClutterScriptAsync(ChatDisplayTileViewModel viewModel)
     {
         if (_disposed || WebView.CoreWebView2 is null)
         {
             return;
         }
 
-        try
-        {
-            if (_clutterScriptId is not null)
-            {
-                WebView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_clutterScriptId);
-            }
-
-            _clutterScriptId = await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(viewModel.BuildHideClutterScript());
-        }
-        catch (Exception exception)
-        {
-            viewModel.Logger.LogWarning(exception, "Не удалось применить блокираторы баннеров чата");
-        }
-    }
-
-    private async void OnClutterScriptChanged()
-    {
-        if (_viewModel is null || WebView.CoreWebView2 is null)
-        {
-            return;
-        }
-
-        await RegisterClutterScriptAsync(_viewModel);
-
-        if (_disposed)
+        if (!await RegisterClutterScriptAsync(viewModel) || _disposed)
         {
             return;
         }
@@ -215,15 +239,15 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         }
     }
 
-    private async void OnResetSessionRequested()
+    private void OnResetSessionRequested()
     {
-        if (_viewModel is null || WebView.CoreWebView2?.Profile is null)
+        if (_viewModel is not { } viewModel || WebView.CoreWebView2?.Profile is not { } profile)
         {
             return;
         }
 
         var confirmed = StyledMessageBox.Show(
-            $"Это разлогинит {_viewModel.AccountLabel} из Twitch-чата и очистит куки профиля. Продолжить?",
+            $"Это разлогинит {viewModel.AccountLabel} из Twitch-чата и очистит куки профиля. Продолжить?",
             "Сброс сессии Twitch",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning) == MessageBoxResult.Yes;
@@ -233,21 +257,21 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             return;
         }
 
-        try
-        {
-            await WebView.CoreWebView2.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.AllSite);
+        _ = UiAsync.RunGuardedAsync(
+            () => ClearSessionAsync(profile),
+            exception => viewModel.Logger.LogError(exception, "Не удалось очистить данные сессии WebView2"));
+    }
 
-            if (_disposed)
-            {
-                return;
-            }
+    private async Task ClearSessionAsync(CoreWebView2Profile profile)
+    {
+        await profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.AllSite);
 
-            WebView.Reload();
-        }
-        catch (Exception exception)
+        if (_disposed)
         {
-            _viewModel.Logger.LogError(exception, "Не удалось очистить данные сессии WebView2");
+            return;
         }
+
+        WebView.Reload();
     }
 
     private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
@@ -261,7 +285,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
         _reloadAttempted = true;
 
-        Dispatcher.BeginInvoke(() =>
+        _ = Dispatcher.BeginInvoke(() =>
         {
             if (WebView.CoreWebView2 is not null)
             {

@@ -268,7 +268,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            _logger.StreamPreviewFrameFailed(ex, uri.GetLeftPart(UriPartial.Path));
+            _logger.StreamPreviewFrameFailed(ex, uri);
             ShowFailure();
             return;
         }
@@ -318,7 +318,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         var uri = bmp.UriSource;
         DropPending();
         IsLoading = false;
-        _logger.StreamPreviewFrameFailed(e.ErrorException, uri.GetLeftPart(UriPartial.Path));
+        _logger.StreamPreviewFrameFailed(e.ErrorException, uri);
         ShowFailure();
     }
 

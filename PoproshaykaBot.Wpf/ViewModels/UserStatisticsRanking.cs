@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Wpf.Infrastructure;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -63,6 +64,7 @@ public static class UserStatisticsRanking
         return ordered;
     }
 
+    [SuppressMessage("Globalization", "CA1309", Justification = "Имена сортируются для показа на экране, порядок по культуре намеренный.")]
     private static int Compare(
         UserStatisticsRowViewModel left,
         UserStatisticsRowViewModel right,

@@ -57,7 +57,7 @@ public class SettingsPageRanksSaveTests
     public async Task Ошибка_в_правленых_рангах_останавливает_сохранение_до_записи()
     {
         using var harness = new Harness(_root);
-        var before = File.ReadAllText(harness.SettingsPath);
+        var before = await File.ReadAllTextAsync(harness.SettingsPath);
 
         harness.Page.Ranks.Entries[0].Emoji = "";
         await harness.Page.SaveCommand.ExecuteAsync(null);
@@ -178,7 +178,7 @@ public class SettingsPageRanksSaveTests
                 new(),
                 new(kestrel, Dialogs, null!),
                 new(),
-                new(DispatchProxy.Create<ITwitchOAuthService, InertProxy>(), accountsStore, Dialogs, null!, null!, null!, NullLogger<OAuthAccountViewModel>.Instance),
+                new(DispatchProxy.Create<ITwitchOAuthService, InertProxy>(), accountsStore, Dialogs, null!, null!, null!, NullLoggerFactory.Instance),
                 new(obsChatStore, SettingsManager, Dialogs, null!),
                 new(null!, SettingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, Dialogs, null!),
                 new(),

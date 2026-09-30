@@ -8,7 +8,7 @@ public sealed class InMemoryEventBus(ILogger<InMemoryEventBus> logger, EventBusM
     private const string OutsidePublishScopeName = "вне публикации";
 
     private readonly Dictionary<Type, List<HandlerRegistration>> _handlers = new();
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
     private readonly AsyncLocal<PublishScope?> _currentScope = new();
     private readonly EventBusMetrics _metrics = metrics ?? new();
 
@@ -187,7 +187,7 @@ public sealed class InMemoryEventBus(ILogger<InMemoryEventBus> logger, EventBusM
     private sealed class PublishScope
     {
         private readonly List<Func<Task>> _continuations = [];
-        private readonly object _sync = new();
+        private readonly Lock _sync = new();
 
         private bool _closed;
 

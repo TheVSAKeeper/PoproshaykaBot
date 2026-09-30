@@ -14,7 +14,7 @@ public class SettingsManager
     private readonly ILogger<SettingsManager> _logger;
     private readonly string _settingsFilePath;
     private readonly JsonStore<AppSettings> _store;
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
 
     private AppSettings? _currentSettings;
 

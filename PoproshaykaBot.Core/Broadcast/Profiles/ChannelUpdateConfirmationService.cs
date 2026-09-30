@@ -5,7 +5,7 @@ namespace PoproshaykaBot.Core.Broadcast.Profiles;
 
 public sealed class ChannelUpdateConfirmationService : IChannelUpdateConfirmation, IEventSubscriber, IDisposable
 {
-    private readonly object _expectationsLock = new();
+    private readonly Lock _expectationsLock = new();
     private readonly List<Expectation> _expectations = [];
     private readonly IDisposable _subscription;
 

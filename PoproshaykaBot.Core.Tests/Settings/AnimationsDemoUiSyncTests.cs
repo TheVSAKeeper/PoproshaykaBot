@@ -7,6 +7,8 @@ namespace PoproshaykaBot.Core.Tests.Settings;
 [TestFixture]
 public sealed class AnimationsDemoUiSyncTests
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(5);
+
     [TestCaseSource(nameof(GetMutableSourceProperties))]
     public void EveryObsChatSettingsProperty_HasMatchingCfgControl(PropertyInfo prop)
     {
@@ -76,7 +78,7 @@ public sealed class AnimationsDemoUiSyncTests
 
     private static IReadOnlyList<string> ExtractRangeFieldKeys(string jsSource)
     {
-        var arrayMatch = Regex.Match(jsSource, @"const\s+rangeFields\s*=\s*\[(?<body>[\s\S]*?)\];");
+        var arrayMatch = Regex.Match(jsSource, @"const\s+rangeFields\s*=\s*\[(?<body>[\s\S]*?)\];", RegexOptions.None, RegexTimeout);
         if (!arrayMatch.Success)
         {
             throw new InvalidOperationException("Не нашли массив 'rangeFields' в animations-demo-config.js. "
@@ -84,7 +86,9 @@ public sealed class AnimationsDemoUiSyncTests
         }
 
         return Regex.Matches(arrayMatch.Groups["body"].Value,
-                """\[\s*['"][^'"]+['"]\s*,\s*['"](?<key>[^'"]+)['"]\s*\]""")
+                """\[\s*['"][^'"]+['"]\s*,\s*['"](?<key>[^'"]+)['"]\s*\]""",
+                RegexOptions.None,
+                RegexTimeout)
             .Select(m => m.Groups["key"].Value)
             .ToArray();
     }

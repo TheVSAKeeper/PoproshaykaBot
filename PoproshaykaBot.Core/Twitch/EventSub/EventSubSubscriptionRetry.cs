@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Twitch.Helix;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PoproshaykaBot.Core.Twitch.EventSub;
 
@@ -14,7 +15,7 @@ public sealed class EventSubSubscriptionRetry(
     internal static readonly TimeSpan FirstDelay = TimeSpan.FromSeconds(5);
     internal static readonly TimeSpan MaxDelay = TimeSpan.FromMinutes(1);
 
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Dictionary<string, Pending> _pending = new(StringComparer.Ordinal);
     private readonly HashSet<Pending> _running = [];
     private long _epoch;
@@ -52,6 +53,7 @@ public sealed class EventSubSubscriptionRetry(
         }
     }
 
+    [SuppressMessage("Minor Code Smell", "S6667", Justification = "Отмена в ветке catch (OperationCanceledException) when (…IsCancellationRequested) – штатный ход, стек ошибки ничего не добавляет.")]
     public async Task CancelAndDrainAsync(CancellationToken cancellationToken)
     {
         var running = Detach();
@@ -115,6 +117,7 @@ public sealed class EventSubSubscriptionRetry(
         _ = RunAsync(type, version, condition, sessionId, pending, onRetrySubscribed, cancellationToken);
     }
 
+    [SuppressMessage("Minor Code Smell", "S6667", Justification = "Отмена в ветке catch (OperationCanceledException) when (…IsCancellationRequested) – штатный ход, стек ошибки ничего не добавляет.")]
     private async Task RunAsync(
         string type,
         string version,

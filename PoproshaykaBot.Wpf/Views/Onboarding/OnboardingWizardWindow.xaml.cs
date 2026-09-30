@@ -44,7 +44,7 @@ public partial class OnboardingWizardWindow : Window
         if (await _viewModel.RequestCloseAsync())
         {
             _closeConfirmed = true;
-            Dispatcher.BeginInvoke(() => Close());
+            _ = Dispatcher.BeginInvoke(() => Close());
         }
     }
 }

@@ -8,14 +8,12 @@ public sealed class TrumpCommand : IChatCommand
     private const string CryptoApiUrl = "https://api.coingecko.com/api/v3/coins/official-trump?localization=false&tickers=true&market_data=true&community_data=false&developer_data=false";
 
     private readonly SettingsManager _settingsManager;
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public TrumpCommand(SettingsManager settingsManager)
+    public TrumpCommand(SettingsManager settingsManager, IHttpClientFactory httpClientFactory)
     {
         _settingsManager = settingsManager;
-
-        _httpClient = new();
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "PoproshaykaBot/1.0");
+        _httpClientFactory = httpClientFactory;
     }
 
     public string Canonical => "x2illson";
@@ -96,7 +94,10 @@ public sealed class TrumpCommand : IChatCommand
     {
         try
         {
-            var response = await _httpClient.GetAsync(CryptoApiUrl, cancellationToken);
+            using var client = _httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, CryptoApiUrl);
+            request.Headers.Add("User-Agent", "PoproshaykaBot/1.0");
+            using var response = await client.SendAsync(request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {

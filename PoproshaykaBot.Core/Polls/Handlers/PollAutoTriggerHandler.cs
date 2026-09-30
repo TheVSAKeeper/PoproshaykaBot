@@ -19,7 +19,7 @@ public sealed class PollAutoTriggerHandler :
     private readonly PollsStore _pollsStore;
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<Guid, DateTime> _lastAutoStartedAt = new();
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly List<IDisposable> _subscriptions;
     private readonly ILogger<PollAutoTriggerHandler> _logger;
 

@@ -12,7 +12,7 @@ public class StreamSessionHistoryStore
 
     private readonly ILogger<StreamSessionHistoryStore>? _logger;
     private readonly string _filePath;
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
 
     private readonly StreamSessionHistory _state;
 

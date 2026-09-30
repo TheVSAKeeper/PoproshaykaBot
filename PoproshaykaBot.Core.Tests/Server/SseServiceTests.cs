@@ -247,7 +247,7 @@ public sealed class SseServiceTests
         public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             await _gate.Task.WaitAsync(cancellationToken);
-            await base.WriteAsync(buffer, offset, count, cancellationToken);
+            await base.WriteAsync(buffer.AsMemory(offset, count), cancellationToken);
         }
 
         public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
