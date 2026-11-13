@@ -1,4 +1,4 @@
-﻿{
+{
   "version": 2,
   "dependencies": {
     "net10.0-windows7.0": {
@@ -25,12 +25,6 @@
         "requested": "[3.0.79, )",
         "resolved": "3.0.79",
         "contentHash": "x9I5cxEwTFvueIH2FY5cIukbv3zNj09oPRyKU7jqkLw3yBZn2qwKb3vn8QNGeMkCQrlSTn9hIgB/etJy5mgQHQ=="
-      },
-      "Microsoft.NET.ILLink.Tasks": {
-        "type": "Direct",
-        "requested": "[10.0.12, )",
-        "resolved": "10.0.12",
-        "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
       },
       "Microsoft.VisualStudio.Threading.Analyzers": {
         "type": "Direct",
@@ -104,14 +98,6 @@
         "requested": "[4.3.1, )",
         "resolved": "4.3.1",
         "contentHash": "savYe7h5yRlkqBVOwP8cIRDOdqKiPmYCU4W87JH38sBmcKD5EBoXvQIw6bNEvZ/pTe1gsiye3VFCzBsoppGkXQ=="
-      }
-    },
-    "net10.0-windows7.0/win-x64": {
-      "Microsoft.Web.WebView2": {
-        "type": "Direct",
-        "requested": "[1.0.3650.58, )",
-        "resolved": "1.0.3650.58",
-        "contentHash": "BrfpVqOuWtW8yA/it365aB6K6H6EYCXjqJkX730UiO7weVsSYjUyKPFVY5WGa+IfRHqknh619uXHMYTOR4WFRw=="
       }
     }
   }
