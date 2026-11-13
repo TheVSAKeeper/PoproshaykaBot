@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
+using System.Drawing;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.Settings;

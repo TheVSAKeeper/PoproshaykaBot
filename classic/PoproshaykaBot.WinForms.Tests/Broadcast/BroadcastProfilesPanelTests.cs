@@ -6,7 +6,7 @@ using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.WinForms.Forms.Broadcast;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 
-namespace PoproshaykaBot.Core.Tests.Broadcast;
+namespace PoproshaykaBot.WinForms.Tests.Broadcast;
 
 [TestFixture]
 [Apartment(ApartmentState.STA)]

@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationIcon>..\PoproshaykaBot.Core\Assets\icon.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\PoproshaykaBot.Core\Assets\icon.ico</ApplicationIcon>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
     <ForceDesignerDpiUnaware>true</ForceDesignerDpiUnaware>
   </PropertyGroup>
@@ -34,7 +34,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
-    <InternalsVisibleTo Include="PoproshaykaBot.Core.Tests" />
+    <InternalsVisibleTo Include="PoproshaykaBot.WinForms.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,7 +51,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PoproshaykaBot.Core\PoproshaykaBot.Core.csproj" />
+    <ProjectReference Include="..\..\PoproshaykaBot.Core\PoproshaykaBot.Core.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Settings.Obs;
+using System.Drawing;
 using System.Reflection;
 using System.Text.RegularExpressions;
 

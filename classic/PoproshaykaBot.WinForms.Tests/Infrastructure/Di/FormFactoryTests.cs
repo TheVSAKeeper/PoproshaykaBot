@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.WinForms.Infrastructure.Di;
 
-namespace PoproshaykaBot.Core.Tests.Infrastructure.Di;
+namespace PoproshaykaBot.WinForms.Tests.Infrastructure.Di;
 
 [TestFixture]
 [Apartment(ApartmentState.STA)]

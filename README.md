@@ -46,3 +46,12 @@ Twitch-чат-бот с OBS-оверлеем для Windows.
     </tr>
   </tbody>
 </table>
+
+## Архив WinForms
+
+Классический интерфейс на WinForms перенесён в `classic/PoproshaykaBot.WinForms` (вместе с тестами в `classic/PoproshaykaBot.WinForms.Tests`) и исключён из `PoproshaykaBot.sln`. Основное приложение развивается на WPF (`PoproshaykaBot.Wpf`).
+
+```powershell
+dotnet restore classic/PoproshaykaBot.WinForms/PoproshaykaBot.WinForms.csproj --locked-mode
+dotnet run --project classic/PoproshaykaBot.WinForms/PoproshaykaBot.WinForms.csproj --no-restore
+```

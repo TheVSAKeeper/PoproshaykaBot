@@ -8,7 +8,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Tests.Server;
 using System.Text;
 
-namespace PoproshaykaBot.WinForms.Tests.Server;
+namespace PoproshaykaBot.Core.Tests.Server;
 
 [TestFixture]
 public sealed class SseServiceTests

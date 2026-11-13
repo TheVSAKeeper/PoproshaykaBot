@@ -46,7 +46,12 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
-$projectDir = Join-Path $repoRoot "PoproshaykaBot.$UiHost"
+$projectDir = if ($UiHost -eq 'WinForms') {
+    Join-Path $repoRoot 'classic' 'PoproshaykaBot.WinForms'
+}
+else {
+    Join-Path $repoRoot "PoproshaykaBot.$UiHost"
+}
 $csprojPath = Join-Path $projectDir "PoproshaykaBot.$UiHost.csproj"
 $propsPath = Join-Path $repoRoot 'Directory.Build.props'
 

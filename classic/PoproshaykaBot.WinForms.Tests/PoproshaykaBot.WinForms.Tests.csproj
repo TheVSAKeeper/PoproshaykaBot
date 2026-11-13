@@ -19,13 +19,15 @@
     <PackageReference Include="FlaUI.UIA3">
       <NoWarn>$(NoWarn);NU1701</NoWarn>
     </PackageReference>
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="NSubstitute.Analyzers.CSharp">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PoproshaykaBot.WinForms\PoproshaykaBot.WinForms.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <Private>false</Private>
-    </ProjectReference>
+    <ProjectReference Include="..\PoproshaykaBot.WinForms\PoproshaykaBot.WinForms.csproj" />
   </ItemGroup>
 
 </Project>

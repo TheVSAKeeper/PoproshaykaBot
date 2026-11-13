@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Server.Endpoints;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
+using System.Drawing;
 using System.Net;
 using System.Text;
 using System.Text.Json;

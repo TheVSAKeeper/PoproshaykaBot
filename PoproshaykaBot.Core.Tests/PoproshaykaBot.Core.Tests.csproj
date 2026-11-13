@@ -1,8 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
@@ -25,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PoproshaykaBot.WinForms\PoproshaykaBot.WinForms.csproj" />
+    <ProjectReference Include="..\PoproshaykaBot.Core\PoproshaykaBot.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

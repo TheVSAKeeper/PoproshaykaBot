@@ -2,7 +2,7 @@
 using PoproshaykaBot.WinForms.Forms.Settings;
 using PoproshaykaBot.WinForms.Tiles;
 
-namespace PoproshaykaBot.Core.Tests.Settings;
+namespace PoproshaykaBot.WinForms.Tests.Settings;
 
 [TestFixture]
 public sealed class DashboardSettingsControlTests

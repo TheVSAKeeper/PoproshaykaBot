@@ -1,4 +1,4 @@
-namespace PoproshaykaBot.WinForms.Controls;
+﻿namespace PoproshaykaBot.WinForms.Controls;
 
 public sealed class ClickThroughToolStrip : ToolStrip
 {

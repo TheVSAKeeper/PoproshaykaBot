@@ -1,6 +1,6 @@
 ﻿using PoproshaykaBot.WinForms.Controls;
 
-namespace PoproshaykaBot.Core.Tests.Controls;
+namespace PoproshaykaBot.WinForms.Tests.Controls;
 
 [TestFixture]
 [Apartment(ApartmentState.STA)]
