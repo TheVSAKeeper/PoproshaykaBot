@@ -103,7 +103,7 @@
                                 <ProgressBar Grid.Row="2"
                                              Grid.Column="0"
                                              Grid.ColumnSpan="2"
-                                             Value="{Binding Percent}"
+                                             Value="{Binding Percent, Mode=OneWay}"
                                              Minimum="0"
                                              Maximum="100"
                                              Height="6" />

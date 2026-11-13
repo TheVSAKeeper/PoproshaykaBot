@@ -7,7 +7,6 @@ using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Globalization;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
@@ -16,6 +15,8 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
     private readonly IUpdateCoordinator _coordinator;
     private readonly IDialogService _dialogService;
     private readonly UpdateStore _store;
+    private readonly IUiDispatcher _uiDispatcher;
+    private readonly IMainWindowController _mainWindow;
     private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty]
@@ -61,11 +62,19 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
     [ObservableProperty]
     private StatusSeverity _repositoryHintSeverity;
 
-    public UpdateSettingsSectionViewModel(IUpdateCoordinator coordinator, UpdateStore store, IEventBus bus, IDialogService dialogService)
+    public UpdateSettingsSectionViewModel(
+        IUpdateCoordinator coordinator,
+        UpdateStore store,
+        IEventBus bus,
+        IDialogService dialogService,
+        IUiDispatcher uiDispatcher,
+        IMainWindowController mainWindow)
     {
         _coordinator = coordinator;
         _store = store;
         _dialogService = dialogService;
+        _uiDispatcher = uiDispatcher;
+        _mainWindow = mainWindow;
         IsFrameworkDependentVisible = coordinator.Kind == UpdateKind.FrameworkDependent;
         CurrentVersionText = $"Текущая версия: {coordinator.CurrentVersion} (.NET {Environment.Version.Major})";
         _subscriptions.Add(bus.SubscribeOnUi<UpdateAvailable>(_ => RefreshStatus()));
@@ -172,7 +181,7 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
         IsBusy = true;
         DownloadProgress = 0;
 
-        var progress = new Progress<int>(pct =>
+        var progress = new UiProgressPoller<int>(_uiDispatcher, pct =>
         {
             (StatusText, StatusSeverity) = ($"Загрузка обновления… {pct}%", StatusSeverity.Info);
             DownloadProgress = pct;
@@ -180,11 +189,14 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 
         try
         {
-            await _coordinator.PrepareAsync(candidate, progress, CancellationToken.None);
+            using (progress.StartScope())
+            {
+                await _coordinator.PrepareAsync(candidate, progress.Progress, CancellationToken.None);
+            }
 
             _dialogService.Info("Установка обновления", "Обновление загружено. Приложение закроется и установит новую версию.");
 
-            Application.Current.MainWindow?.Close();
+            _mainWindow.RequestClose();
         }
         catch (Exception exception)
         {

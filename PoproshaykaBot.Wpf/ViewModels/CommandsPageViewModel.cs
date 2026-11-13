@@ -11,10 +11,11 @@ using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
-public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeader, IUnsavedChangesPage
+public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeader, IPageRefresh, IUnsavedChangesPage
 {
     private const string WhisperReauthorizationNotice = "Шёпот необязателен. Пока у бота нет разрешения на личные сообщения, он отвечает на такие команды в общем чате – ответом на сообщение зрителя. Чтобы включить шёпот, откройте в настройках раздел «Авторизация». Добавьте user:manage:whispers в права бота и авторизуйте бота заново.";
 
@@ -650,6 +651,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     {
         FilterText = string.Empty;
     }
+
+    ICommand IPageRefresh.RefreshCommand => RefreshCommand;
 
     [RelayCommand]
     private void Refresh()

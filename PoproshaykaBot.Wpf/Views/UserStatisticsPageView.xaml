@@ -307,7 +307,7 @@
                         AutomationProperties.Name="Очистить поиск"
                         ToolTip="Очистить поиск"
                         Visibility="{Binding IsFilterActive, Converter={StaticResource BoolToVisibility}}">
-                    <iconPacks:PackIconLucide Kind="X"
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.X}"
                                               Width="14"
                                               Height="14" />
                 </Button>
@@ -324,7 +324,7 @@
                         Command="{Binding RefreshCommand}"
                         AutomationProperties.Name="Перечитать статистику"
                         ToolTip="Перечитать статистику">
-                    <iconPacks:PackIconLucide Kind="RefreshCw"
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.RefreshCw}"
                                               Width="14"
                                               Height="14" />
                 </Button>
@@ -1217,14 +1217,14 @@
                                         <RepeatButton Style="{StaticResource RepeatButton.StepperUp}"
                                                       Command="{Binding IncreaseAdjustmentCommand}"
                                                       AutomationProperties.Name="Увеличить">
-                                            <iconPacks:PackIconLucide Kind="ChevronUp"
+                                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.ChevronUp}"
                                                                       Width="10"
                                                                       Height="10" />
                                         </RepeatButton>
                                         <RepeatButton Style="{StaticResource RepeatButton.StepperDown}"
                                                       Command="{Binding DecreaseAdjustmentCommand}"
                                                       AutomationProperties.Name="Уменьшить">
-                                            <iconPacks:PackIconLucide Kind="ChevronDown"
+                                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.ChevronDown}"
                                                                       Width="10"
                                                                       Height="10" />
                                         </RepeatButton>
@@ -1254,7 +1254,7 @@
                                 Grid.RowSpan="2"
                                 VerticalAlignment="Center"
                                 Visibility="{Binding HasSelectedRow, Converter={StaticResource InverseBoolToVisibility}}">
-                        <iconPacks:PackIconLucide Kind="MousePointerClick"
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.MousePointerClick}"
                                                   Width="20"
                                                   Height="20"
                                                   HorizontalAlignment="Center"

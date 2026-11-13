@@ -51,17 +51,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <BuildStampScript>$(MSBuildThisFileDirectory)..\scripts\write-build-stamp.ps1</BuildStampScript>
-    <BuildStampEnabled Condition="'$(WriteBuildStamp)' == 'true' or '$(Configuration)' == 'Debug'">true</BuildStampEnabled>
-    <BuildStampEnabled Condition="'$(DesignTimeBuild)' == 'true' or !Exists('$(BuildStampScript)')">false</BuildStampEnabled>
+    <KeepShellBuildStamp Condition="'$(WriteBuildStamp)' == 'true'">true</KeepShellBuildStamp>
   </PropertyGroup>
-
-  <Target Name="WriteBuildStampToOutput" AfterTargets="Build" Condition="'$(BuildStampEnabled)' == 'true' and '$(_IsPublishing)' != 'true'">
-    <Exec Command="pwsh -NoProfile -File &quot;$(BuildStampScript)&quot; -Exe &quot;$(TargetDir)$(AssemblyName).exe&quot; -Version &quot;$(Version)&quot;" ContinueOnError="true" StandardOutputImportance="low" />
-  </Target>
-
-  <Target Name="WriteBuildStampToPublish" AfterTargets="Publish" Condition="'$(BuildStampEnabled)' == 'true'">
-    <Exec Command="pwsh -NoProfile -File &quot;$(BuildStampScript)&quot; -Exe &quot;$(PublishDir)$(AssemblyName).exe&quot; -Version &quot;$(Version)&quot;" ContinueOnError="true" StandardOutputImportance="low" />
-  </Target>
 
 </Project>

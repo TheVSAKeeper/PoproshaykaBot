@@ -14,6 +14,8 @@ using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
@@ -185,7 +187,7 @@ public class SettingsPageRanksSaveTests
                 new(),
                 new(pollsStore, TimeProvider.System),
                 new(SettingsManager, null!, Dialogs, null!, null!, null!),
-                new(UpdateCoordinator, updateStore, bus, Dialogs),
+                new(UpdateCoordinator, updateStore, bus, Dialogs, new ManualUiDispatcher(), DispatchProxy.Create<IMainWindowController, InertProxy>()),
                 new(DebugChannelOverride.None, debugChannelStore, null!, TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance),
                 new(mcpPreferences, new(mcpPreferences, null!, null!, mcpOptions, new EmptyServiceProvider()), mcpOptions, Dialogs, null!),
                 new(Array.Empty<DashboardTileViewModel>(), uiSettings, layoutStore),

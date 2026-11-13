@@ -273,7 +273,7 @@
                             </Grid.ColumnDefinitions>
 
                             <iconPacks:PackIconLucide Grid.Column="0"
-                                                      Kind="Check"
+                                                      Kind="{x:Static iconPacks:PackIconLucideKind.Check}"
                                                       Width="12"
                                                       Height="12"
                                                       VerticalAlignment="Center"
@@ -1109,7 +1109,7 @@
                              AutomationProperties.Name="Показать стримы таблицей"
                              ToolTip="Показать стримы таблицей">
                     <StackPanel Orientation="Horizontal">
-                        <iconPacks:PackIconLucide Kind="Table"
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Table}"
                                                   Width="13"
                                                   Height="13"
                                                   VerticalAlignment="Center" />
@@ -1126,7 +1126,7 @@
                              AutomationProperties.Name="Показать стримы карточками"
                              ToolTip="Показать стримы карточками">
                     <StackPanel Orientation="Horizontal">
-                        <iconPacks:PackIconLucide Kind="LayoutList"
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.LayoutList}"
                                                   Width="13"
                                                   Height="13"
                                                   VerticalAlignment="Center" />
@@ -1146,7 +1146,7 @@
                     AutomationProperties.Name="{Binding SortCaption}"
                     ToolTip="{Binding SortCaption}"
                     Visibility="{Binding IsCardsView, Converter={StaticResource BoolToVisibility}}">
-                <iconPacks:PackIconLucide Kind="ArrowUpDown"
+                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.ArrowUpDown}"
                                           Width="14"
                                           Height="14" />
                 <Button.ContextMenu>
@@ -1167,7 +1167,7 @@
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Перечитать историю стримов"
                     ToolTip="Перечитать историю стримов">
-                <iconPacks:PackIconLucide Kind="RefreshCw"
+                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.RefreshCw}"
                                           Width="14"
                                           Height="14" />
             </Button>
@@ -1181,7 +1181,7 @@
                     AutomationProperties.Name="Настройки полосы зрителей"
                     ToolTip="Что показывать на полосе зрителей"
                     Visibility="{Binding CanShowTrend, Converter={StaticResource BoolToVisibility}}">
-                <iconPacks:PackIconLucide Kind="Settings2"
+                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings2}"
                                           Width="14"
                                           Height="14" />
                 <Button.ContextMenu>
@@ -1208,7 +1208,7 @@
                           ToolTip="{Binding HiddenToggleHint}"
                           Visibility="{Binding HasHiddenSessions, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel Orientation="Horizontal">
-                    <iconPacks:PackIconLucide Kind="EyeOff"
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.EyeOff}"
                                               Width="13"
                                               Height="13"
                                               VerticalAlignment="Center" />
@@ -1239,7 +1239,7 @@
                             Height="20"
                             AutomationProperties.Name="Снять фильтр по игре"
                             ToolTip="Снять фильтр по игре">
-                        <iconPacks:PackIconLucide Kind="X"
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.X}"
                                                   Width="10"
                                                   Height="10" />
                     </Button>

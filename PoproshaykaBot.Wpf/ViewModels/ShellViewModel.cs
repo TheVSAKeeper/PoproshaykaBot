@@ -32,6 +32,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly StreamHistoryPageViewModel _streamHistoryPage;
     private readonly NavigationItem _overviewSection;
     private readonly IUnsavedChangesPrompt _unsavedChangesPrompt;
+    private readonly IMainWindowController _mainWindow;
     private NavigationItem? _current;
     private bool _returningToPage;
 
@@ -62,10 +63,12 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         ChatHistoryManager chatHistory,
         ISettingsStore uiSettings,
         IUiDispatcher uiDispatcher,
-        IUnsavedChangesPrompt unsavedChangesPrompt)
+        IUnsavedChangesPrompt unsavedChangesPrompt,
+        IMainWindowController mainWindow)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
+        _mainWindow = mainWindow;
         _connectionManager = connectionManager;
         _logger = logger;
         _preferences = preferences;
@@ -457,7 +460,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             return;
         }
 
-        Application.Current.MainWindow?.Close();
+        _mainWindow.RequestClose();
     }
 
     [RelayCommand]

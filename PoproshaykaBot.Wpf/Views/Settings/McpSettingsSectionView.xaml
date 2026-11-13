@@ -75,7 +75,7 @@
                             Margin="0,0,4,0"
                             AutomationProperties.Name="Перегенерировать токен"
                             ToolTip="Выдать новый токен – старые подключения агентов отвалятся">
-                        <iconPacks:PackIconLucide Kind="RefreshCw"
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.RefreshCw}"
                                                   Width="16"
                                                   Height="16"
                                                   HorizontalAlignment="Center"
@@ -85,7 +85,7 @@
                             Command="{Binding CopyTokenCommand}"
                             AutomationProperties.Name="Скопировать токен"
                             ToolTip="Скопировать токен в буфер обмена">
-                        <iconPacks:PackIconLucide Kind="Clipboard"
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Clipboard}"
                                                   Width="16"
                                                   Height="16"
                                                   HorizontalAlignment="Center"
@@ -97,12 +97,12 @@
 
         <StackPanel Orientation="Horizontal"
                     Margin="0,16,0,0">
-            <iconPacks:PackIconLucide Kind="Radio"
+            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Radio}"
                                       Width="14"
                                       Height="14"
                                       VerticalAlignment="Center"
                                       Margin="0,0,8,0"
-                                      Foreground="{DynamicResource State.Success}"
+                                      Foreground="{DynamicResource State.SuccessText}"
                                       Visibility="{Binding Server.IsRunning, Converter={StaticResource BoolToVisibility}}"
                                       AutomationProperties.Name="Сервер работает" />
             <TextBlock Text="{Binding StatusText}"
@@ -111,7 +111,7 @@
         </StackPanel>
 
         <TextBlock Text="{Binding Server.LastError}"
-                   Foreground="{DynamicResource State.Error}"
+                   Foreground="{DynamicResource State.ErrorText}"
                    Margin="0,6,0,0"
                    TextWrapping="Wrap"
                    Visibility="{Binding Server.LastError, Converter={StaticResource NullToVisibility}}" />
@@ -130,10 +130,10 @@
                 </Grid.ColumnDefinitions>
 
                 <iconPacks:PackIconLucide Grid.Column="0"
-                                          Kind="TriangleAlert"
+                                          Kind="{x:Static iconPacks:PackIconLucideKind.TriangleAlert}"
                                           Width="14"
                                           Height="14"
-                                          Foreground="{DynamicResource State.Warning}"
+                                          Foreground="{DynamicResource State.WarningText}"
                                           VerticalAlignment="Center"
                                           Margin="0,0,10,0"
                                           AutomationProperties.Name="Внимание" />
@@ -172,7 +172,7 @@
                     VerticalAlignment="Bottom"
                     AutomationProperties.Name="Скопировать строку подключения"
                     ToolTip="Скопировать JSON для .mcp.json агента">
-                <iconPacks:PackIconLucide Kind="Clipboard"
+                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Clipboard}"
                                           Width="16"
                                           Height="16"
                                           HorizontalAlignment="Center"

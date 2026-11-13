@@ -221,7 +221,7 @@
                                 ToolTip="Развернуть плитку"
                                 AutomationProperties.Name="Развернуть плитку"
                                 Margin="0,0,0,6">
-                            <iconPacks:PackIconLucide Kind="ChevronRight"
+                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.ChevronRight}"
                                                       Width="14"
                                                       Height="14" />
                         </Button>

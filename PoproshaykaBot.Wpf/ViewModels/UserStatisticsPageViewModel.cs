@@ -14,10 +14,11 @@ using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
+using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
-public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPageHeader, IDisposable
+public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPageHeader, IPageRefresh, IDisposable
 {
     public const long MaxAdjustment = 1_000_000;
 
@@ -337,6 +338,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     [RelayCommand]
     private void SetAdjustment(double amount) => SetAdjustmentAmount((long)amount);
+
+    ICommand IPageRefresh.RefreshCommand => RefreshCommand;
 
     [RelayCommand]
     private void Refresh() => Reload();

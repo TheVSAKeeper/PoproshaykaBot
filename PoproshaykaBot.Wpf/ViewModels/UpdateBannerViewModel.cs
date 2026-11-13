@@ -6,7 +6,6 @@ using PoproshaykaBot.Core.Infrastructure.Events.Update;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
-using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
@@ -15,6 +14,8 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
     private readonly IUpdateCoordinator _coordinator;
     private readonly IDialogService _dialogService;
     private readonly ILogger<UpdateBannerViewModel> _logger;
+    private readonly IUiDispatcher _uiDispatcher;
+    private readonly IMainWindowController _mainWindow;
     private readonly List<IDisposable> _subscriptions = [];
 
     [ObservableProperty]
@@ -35,11 +36,15 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
         IUpdateCoordinator coordinator,
         IEventBus eventBus,
         IDialogService dialogService,
-        ILogger<UpdateBannerViewModel> logger)
+        ILogger<UpdateBannerViewModel> logger,
+        IUiDispatcher uiDispatcher,
+        IMainWindowController mainWindow)
     {
         _coordinator = coordinator;
         _dialogService = dialogService;
         _logger = logger;
+        _uiDispatcher = uiDispatcher;
+        _mainWindow = mainWindow;
 
         _subscriptions.Add(eventBus.SubscribeOnUi<UpdateAvailable>(_ => Refresh()));
         _subscriptions.Add(eventBus.SubscribeOnUi<UpdatePrepared>(_ => Refresh()));
@@ -118,7 +123,7 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
         IsBusy = true;
         DownloadProgress = 0;
 
-        var progress = new Progress<int>(percent =>
+        var progress = new UiProgressPoller<int>(_uiDispatcher, percent =>
         {
             Text = $"Загрузка обновления {candidate.Version}… {percent}%";
             DownloadProgress = percent;
@@ -126,11 +131,14 @@ public sealed partial class UpdateBannerViewModel : ObservableObject, IDisposabl
 
         try
         {
-            await _coordinator.PrepareAsync(candidate, progress, CancellationToken.None);
+            using (progress.StartScope())
+            {
+                await _coordinator.PrepareAsync(candidate, progress.Progress, CancellationToken.None);
+            }
 
             _logger.UpdateDownloaded(candidate.Version);
 
-            Application.Current.MainWindow?.Close();
+            _mainWindow.RequestClose();
         }
         catch (Exception exception)
         {

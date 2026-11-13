@@ -27,31 +27,8 @@
 
             <TextBlock Text="{Binding StatusText}"
                        TextWrapping="Wrap"
-                       Visibility="{Binding IsBusy, Converter={StaticResource InverseBoolToVisibility}}">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Foreground"
-                                Value="{DynamicResource Fg.Muted}" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding StatusSeverity}"
-                                         Value="Success">
-                                <Setter Property="Foreground"
-                                        Value="{DynamicResource State.SuccessText}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding StatusSeverity}"
-                                         Value="Error">
-                                <Setter Property="Foreground"
-                                        Value="{DynamicResource State.ErrorText}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding StatusSeverity}"
-                                         Value="Info">
-                                <Setter Property="Foreground"
-                                        Value="{DynamicResource State.InfoText}" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
+                       keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
+                       Visibility="{Binding IsBusy, Converter={StaticResource InverseBoolToVisibility}}" />
 
             <keepshell:ProgressStatusBlock StatusText="{Binding StatusText}"
                                            Value="{Binding DownloadProgress}"

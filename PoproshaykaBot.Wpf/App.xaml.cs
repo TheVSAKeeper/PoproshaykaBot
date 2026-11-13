@@ -467,6 +467,7 @@ public partial class App : Application
         services.AddSingleton<IEmbeddedTwitchAuthDialog, EmbeddedTwitchAuthDialog>();
         services.AddSingleton<ILegacyImportDialog, LegacyImportDialog>();
         services.AddSingleton<StreamMonitoringViewModel>();
+        services.AddSingleton<IMainWindowController, MainWindowController>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
 

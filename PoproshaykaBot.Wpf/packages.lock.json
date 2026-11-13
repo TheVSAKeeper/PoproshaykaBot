@@ -10,9 +10,9 @@
       },
       "CommunityToolkit.Mvvm": {
         "type": "Direct",
-        "requested": "[8.3.2, )",
-        "resolved": "8.3.2",
-        "contentHash": "m8EolE1A0Updj68WTsZSGI6VWb6mUqHPh7QFo0kt7+JPhYMNXRS1ch8TS/oITAdcxTLrwMOp3ku1KjeG1/Zdpg=="
+        "requested": "[8.4.2, )",
+        "resolved": "8.4.2",
+        "contentHash": "WadCzGEc2U+3e20avRLng4qNtt4zoOGWrdUISqJWrHe3/FSnrYjuM5Sb4yQb09LhkBXrrI4Zt3dLKgRMbItsrg=="
       },
       "IDisposableAnalyzers": {
         "type": "Direct",
@@ -22,36 +22,36 @@
       },
       "KeepShell": {
         "type": "Direct",
-        "requested": "[0.1.236, )",
-        "resolved": "0.1.236",
-        "contentHash": "Bav3ThdJb2hfG3zkmPPfGjdCGz/XuRRTzHjt1XnAvxRYFyk8SQEXiGRNJB7m9WyweNbo8CoMsdindmxMFvd4gA==",
+        "requested": "[0.1.273, )",
+        "resolved": "0.1.273",
+        "contentHash": "NTNtRbHjRkeAtn8rzMrST7l4lKJ9afuXy7zFJBe0FvQRmRmdgyaHyba7NSyiKz0LPuVJ6PXk1KX4ktnO3a9A/w==",
         "dependencies": {
-          "CommunityToolkit.Mvvm": "8.3.2",
+          "CommunityToolkit.Mvvm": "8.4.2",
           "MahApps.Metro.IconPacks.Lucide": "6.2.1",
-          "Serilog": "4.2.0",
-          "Serilog.Extensions.Logging": "8.0.0",
-          "Serilog.Sinks.Debug": "2.0.0",
-          "Serilog.Sinks.File": "6.0.0",
-          "Tomlyn": "2.4.0"
+          "Serilog": "4.4.0",
+          "Serilog.Extensions.Logging": "10.0.0",
+          "Serilog.Sinks.Debug": "3.0.0",
+          "Serilog.Sinks.File": "7.0.0",
+          "Tomlyn": "2.11.1"
         }
       },
       "KeepShell.Automation": {
         "type": "Direct",
-        "requested": "[0.1.236, )",
-        "resolved": "0.1.236",
-        "contentHash": "cgl5M7KyQsvVNmbn18omV4P0acLgSKdWe/LWFirs0kPqs2p9uH5WIqQlNRoHzXEMCQO59n0InuFMqNO4uoSWLw==",
+        "requested": "[0.1.273, )",
+        "resolved": "0.1.273",
+        "contentHash": "ssguC/JraGfjyzdjSbYTwiQY6pKXWt71hIKezgbKaCzjGG+FRBrwSEAbOmGRbAPlORqqub4FwuH1jEUZGQdTwA==",
         "dependencies": {
-          "KeepShell": "0.1.236"
+          "KeepShell": "0.1.273"
         }
       },
       "KeepShell.Mcp": {
         "type": "Direct",
-        "requested": "[0.1.236, )",
-        "resolved": "0.1.236",
-        "contentHash": "tpcwLf6gIW49AWKIZZvEdIZqs9vaJxgfMPZK/PUWheJS3o+/xHp4UhuyNcuf5Xc0sL0l5dMTEFM0h2f/wwbWXw==",
+        "requested": "[0.1.273, )",
+        "resolved": "0.1.273",
+        "contentHash": "AcgpMAPI0K7dDZYXn3Ctfci+ppE4Ss0KB2c6Z8OaP8KZQcJDV+6zCzX/lgSCSVon28by4K2IgEWKtDXolVgcGQ==",
         "dependencies": {
-          "KeepShell": "0.1.236",
-          "ModelContextProtocol.AspNetCore": "1.4.1"
+          "KeepShell": "0.1.273",
+          "ModelContextProtocol.AspNetCore": "2.4.0"
         }
       },
       "MahApps.Metro.IconPacks.Lucide": {
@@ -89,11 +89,11 @@
       },
       "Serilog.Extensions.Logging": {
         "type": "Direct",
-        "requested": "[8.0.0, )",
-        "resolved": "8.0.0",
-        "contentHash": "YEAMWu1UnWgf1c1KP85l1SgXGfiVo0Rz6x08pCiPOIBt2Qe18tcZLvdBUuV5o1QHvrs8FAry9wTIhgBRtjIlEg==",
+        "requested": "[10.0.0, )",
+        "resolved": "10.0.0",
+        "contentHash": "vx0kABKl2dWbBhhqAfTOk53/i8aV/5VaT3a6il9gn72Wqs2pM7EK2OB6No6xdqK2IaY6Zf9gdjLuK9BVa2rT+Q==",
         "dependencies": {
-          "Serilog": "3.1.1"
+          "Serilog": "4.2.0"
         }
       },
       "Serilog.Sinks.Console": {
@@ -136,50 +136,50 @@
       },
       "Microsoft.Extensions.AI.Abstractions": {
         "type": "Transitive",
-        "resolved": "10.5.2",
-        "contentHash": "Ei+YWV9Ybnps7pR1dgjlG29gelXEwZkhLVAcWmKe6HvXS6LNBYgSdWiY3Hk9OZXYtK34rv/NtLWBQYQGOBQYPQ=="
+        "resolved": "10.11.0",
+        "contentHash": "h4DX/TdJU4fk1GGaf19n6Kujkj6VXbGeL4UEOsQ8+ZJC5fVApPauokCtvBP684BYbczUYZQNfo1mbmyHG4WVSg=="
       },
       "ModelContextProtocol": {
         "type": "Transitive",
-        "resolved": "1.4.1",
-        "contentHash": "mP5hvBpoWe5EbWBqHWD09A4Dy6Pq+/vV2dumOV4uegCZcg+yqf8q8wrxtuZ3EQyXEJn9jzsnoiI/qyfJAihlZQ==",
+        "resolved": "2.4.0",
+        "contentHash": "3oMhK5W0G3H8+1SbMosV7meE6sKQfmzLKSNtjQ3dGZ+IJU5RomKTs/bKWHFyOJQNMWk//+iClQJfcMpHnwCFsg==",
         "dependencies": {
-          "ModelContextProtocol.Core": "1.4.1"
+          "ModelContextProtocol.Core": "[2.4.0]"
         }
       },
       "ModelContextProtocol.AspNetCore": {
         "type": "Transitive",
-        "resolved": "1.4.1",
-        "contentHash": "AoI+00fRxb0GAMMabMUgpV5QhNoa/F7I9oiVGHfJKtBZ4g/DEyoDdTS9Rp/m4e3MnXhhvSBeu2wTafhesdf52w==",
+        "resolved": "2.4.0",
+        "contentHash": "qo04FrgNKc5obyjzqd8CTu1vofrxcbKnOFVzxQ1+b3G9SBluwRMT31NZTztegJ1QDri4Z/3jUe8UqaIc+2xmCw==",
         "dependencies": {
-          "ModelContextProtocol": "1.4.1"
+          "ModelContextProtocol": "[2.4.0]"
         }
       },
       "ModelContextProtocol.Core": {
         "type": "Transitive",
-        "resolved": "1.4.1",
-        "contentHash": "G/hOBZkJsvF3MSy0sOvXdxca5uRe2Sb4xk7xRuTWNZI45khVBjOLo6nSzGilctIICavNVxbxUF908fLYI9RxkQ==",
+        "resolved": "2.4.0",
+        "contentHash": "q98pZMlcxhsh0LpGXcT2ow7sGNveCPhDlJT3zJ7Cz5nNyPmPkm8P57dUIUpzv1w6qWbdSZcR/Z+RbZtNYjEmXQ==",
         "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.5.2"
+          "Microsoft.Extensions.AI.Abstractions": "10.11.0"
         }
       },
       "Tomlyn": {
         "type": "Transitive",
-        "resolved": "2.4.0",
-        "contentHash": "6w9WetXD5WrsToN21uAH7vXIvP29z5V/tvb4h4FD4bSB+nL6M6e9uK5QWdEzlA6EolR1/VV9htEqi0Fm/9Qq5g=="
+        "resolved": "2.11.1",
+        "contentHash": "ePC5kPidQngNoOi7jCDeRo5hbXS5uV3o4CAzz5QaxkDo1IhgM0QtGinuI03tqj8/Dl/FigRG4gRiatUsV3pcrA=="
       },
       "poproshaykabot.core": {
         "type": "Project",
         "dependencies": {
-          "Serilog": "[4.3.1, )",
-          "Serilog.Extensions.Logging": "[8.0.0, )"
+          "Serilog": "[4.4.0, )",
+          "Serilog.Extensions.Logging": "[10.0.0, )"
         }
       },
       "Serilog": {
         "type": "CentralTransitive",
-        "requested": "[4.3.1, )",
-        "resolved": "4.3.1",
-        "contentHash": "savYe7h5yRlkqBVOwP8cIRDOdqKiPmYCU4W87JH38sBmcKD5EBoXvQIw6bNEvZ/pTe1gsiye3VFCzBsoppGkXQ=="
+        "requested": "[4.4.0, )",
+        "resolved": "4.4.0",
+        "contentHash": "ZC6Le3rr4TVJJjS4KsQAesxeF1EhW9qcZmmG7eP5Y2G3+gTGkJEUXkq4+tZNPtyp05I0wWOxnIjwtxFweJsObw=="
       }
     }
   }

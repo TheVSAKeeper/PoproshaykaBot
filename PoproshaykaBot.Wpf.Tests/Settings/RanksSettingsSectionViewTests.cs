@@ -46,7 +46,7 @@ public class RanksSettingsSectionViewTests
         view.UpdateLayout();
         view.UpdateLayout();
 
-        var fields = Descendants<TextBox>(view).Take(3).ToArray();
+        var fields = Descendants<TextBox>(view).Where(box => box.TemplatedParent is not ComboBox).Take(3).ToArray();
         var error = (SolidColorBrush)view.FindResource("State.Error");
 
         Assert.That(fields, Has.Length.EqualTo(3));

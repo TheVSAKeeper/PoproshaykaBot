@@ -15,7 +15,7 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
         typeof(UserStatisticsPageView),
         new PropertyMetadata(true));
 
-    public const double RankColumnListWidth = 462;
+    public const double RankColumnListWidth = 464;
 
     private double _listWidth;
     private string? _announcedAdjustmentError;

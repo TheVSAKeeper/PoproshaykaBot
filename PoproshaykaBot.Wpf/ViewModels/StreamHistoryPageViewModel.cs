@@ -9,10 +9,11 @@ using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using System.Collections.ObjectModel;
 using System.Windows;
+using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
-public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPageHeader, IDisposable
+public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPageHeader, IPageRefresh, IDisposable
 {
     public const int DefaultTrendLength = 40;
     public const double FlatDeltaPercent = 5;
@@ -776,6 +777,8 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             UserRequested?.Invoke(this, chatter.UserId);
         }
     }
+
+    ICommand IPageRefresh.RefreshCommand => RefreshCommand;
 
     [RelayCommand]
     private void Refresh()

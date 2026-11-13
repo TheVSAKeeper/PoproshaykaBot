@@ -27,6 +27,7 @@
         <KeyBinding Modifiers="Alt" Key="U" Command="{Binding NavigateToStatisticsCommand}" />
         <KeyBinding Modifiers="Alt" Key="H" Command="{Binding NavigateToStreamHistoryCommand}" />
         <KeyBinding Modifiers="Control+Shift" Key="Delete" Command="{Binding ClearChatHistoryCommand}" />
+        <KeyBinding Key="F5" Command="{Binding PageRefreshCommand}" />
     </Window.InputBindings>
 
     <shell:WindowChrome.WindowChrome>

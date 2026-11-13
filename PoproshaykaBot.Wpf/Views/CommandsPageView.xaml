@@ -281,7 +281,7 @@
                         AutomationProperties.Name="Очистить поиск"
                         ToolTip="Очистить поиск"
                         Visibility="{Binding IsFilterActive, Converter={StaticResource BoolToVisibility}}">
-                    <iconPacks:PackIconLucide Kind="X"
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.X}"
                                               Width="14"
                                               Height="14" />
                 </Button>
@@ -308,7 +308,7 @@
                         Command="{Binding RefreshCommand}"
                         AutomationProperties.Name="Перечитать настройки и счётчики команд"
                         ToolTip="Перечитать настройки и счётчики команд">
-                    <iconPacks:PackIconLucide Kind="RefreshCw"
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.RefreshCw}"
                                               Width="14"
                                               Height="14" />
                 </Button>
@@ -607,7 +607,7 @@
 
                     <StackPanel VerticalAlignment="Center"
                                 Visibility="{Binding HasSelectedRow, Converter={StaticResource InverseBoolToVisibility}}">
-                        <iconPacks:PackIconLucide Kind="MousePointerClick"
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.MousePointerClick}"
                                                   Width="20"
                                                   Height="20"
                                                   HorizontalAlignment="Center"
