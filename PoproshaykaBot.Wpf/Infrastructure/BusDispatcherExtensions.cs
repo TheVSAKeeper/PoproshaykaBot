@@ -24,7 +24,9 @@ public static class BusDispatcherExtensions
                 return;
             }
 
-            var dispatcher = Application.Current?.Dispatcher;
+            // В тестовом проекте TestResources создаёт голый Application без цикла Dispatcher.Run
+            // на потоке первой STA-фикстуры; маршалинг туда из других фикстур теряет события.
+            var dispatcher = Application.Current is App app ? app.Dispatcher : null;
 
             if (dispatcher is null || dispatcher.CheckAccess())
             {
