@@ -11,7 +11,8 @@ public class BroadcastProfilesManager(
     IChannelInformationApplier applier,
     IEventBus eventBus,
     TimeProvider timeProvider,
-    ILogger<BroadcastProfilesManager> logger)
+    ILogger<BroadcastProfilesManager> logger,
+    BroadcastProfilePlatformsStore? profilePlatformsStore = null)
 {
     private enum AdvanceOutcome
     {
@@ -218,6 +219,7 @@ public class BroadcastProfilesManager(
 
         if (removed > 0)
         {
+            profilePlatformsStore?.RemoveProfile(id);
             logger.LogInformation("Удалён профиль трансляции Id={ProfileId}", id);
         }
         else

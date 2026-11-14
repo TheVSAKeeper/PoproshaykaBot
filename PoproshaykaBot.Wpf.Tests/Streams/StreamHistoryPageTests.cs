@@ -36,7 +36,7 @@ public class StreamHistoryPageTests
     ];
 
     private string _directory = null!;
-    private StreamSessionHistoryStore _store = null!;
+    private BroadcastHistoryStore _store = null!;
 
     [OneTimeSetUp]
     public void EnsureApplication()
@@ -122,7 +122,7 @@ public class StreamHistoryPageTests
     {
         var legacy = Session(0, "Just Chatting");
         var tracked = Session(1, "Minecraft");
-        tracked.TrackedIntervals = [new() { StartedAt = tracked.StartedAt.AddMinutes(5), EndedAt = tracked.EndedAt }];
+        tracked.Platforms[0].TrackedIntervals = [new() { StartedAt = tracked.StartedAt.AddMinutes(5), EndedAt = tracked.EndedAt }];
 
         var page = Create(new MemorySettings(), legacy, tracked);
         var texts = new Dictionary<string, string>();
@@ -150,10 +150,11 @@ public class StreamHistoryPageTests
     {
         var session = Session(0, "Just Chatting");
         session.EndedAt += TimeSpan.FromSeconds(30);
+        session.Platforms[0].EndedAt = session.EndedAt;
 
         if (trackedMinutes >= 0)
         {
-            session.TrackedIntervals = trackedMinutes > 0
+            session.Platforms[0].TrackedIntervals = trackedMinutes > 0
                 ? [new() { StartedAt = session.StartedAt, EndedAt = session.StartedAt.AddMinutes(trackedMinutes) }]
                 : [];
         }
@@ -170,7 +171,8 @@ public class StreamHistoryPageTests
     {
         var session = Session(0, "Just Chatting");
         session.EndedAt = session.StartedAt + TimeSpan.Parse(duration, CultureInfo.InvariantCulture);
-        session.TrackedIntervals = [new() { StartedAt = session.StartedAt, EndedAt = session.StartedAt + TimeSpan.Parse(tracked, CultureInfo.InvariantCulture) }];
+        session.Platforms[0].EndedAt = session.EndedAt;
+        session.Platforms[0].TrackedIntervals = [new() { StartedAt = session.StartedAt, EndedAt = session.StartedAt + TimeSpan.Parse(tracked, CultureInfo.InvariantCulture) }];
 
         Assert.That(StreamHistoryPageViewModel.DescribeTracking(session), Is.EqualTo(expected));
     }
@@ -592,7 +594,7 @@ public class StreamHistoryPageTests
 
         page.SetSessionHiddenCommand.Execute(target);
 
-        var afterHide = _store.Load().Sessions.Single(session => session.Id == target.Source.Id);
+        var afterHide = _store.Load().Broadcasts.Single(session => session.Id == target.Source.Id);
 
         using (Assert.EnterMultipleScope())
         {
@@ -608,7 +610,7 @@ public class StreamHistoryPageTests
 
         page.SetSessionHiddenCommand.Execute(hiddenRow);
 
-        var afterRestore = _store.Load().Sessions.Single(session => session.Id == target.Source.Id);
+        var afterRestore = _store.Load().Broadcasts.Single(session => session.Id == target.Source.Id);
 
         using (Assert.EnterMultipleScope())
         {
@@ -747,7 +749,7 @@ public class StreamHistoryPageTests
         return new(clipboard) { DataContext = page };
     }
 
-    private static StreamSessionRecord Session(
+    private static BroadcastRecord Session(
         int index,
         string? game,
         long messages = 100,
@@ -756,7 +758,7 @@ public class StreamHistoryPageTests
     {
         var started = Start.AddDays(index);
 
-        return new()
+        return BroadcastRecord.FromTwitchSession(new StreamSessionRecord
         {
             Channel = "bobito217",
             StartedAt = started,
@@ -785,16 +787,20 @@ public class StreamHistoryPageTests
                     AverageViewers = 5,
                 },
             ],
-        };
+        });
     }
 
-    private StreamHistoryPageViewModel Create(ISettingsStore settings, params StreamSessionRecord[] sessions)
+    private StreamHistoryPageViewModel Create(ISettingsStore settings, params BroadcastRecord[] sessions)
     {
-        var store = new StreamSessionHistoryStore(filePath: Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".json"));
+        var id = Guid.NewGuid().ToString("N");
+        var store = new BroadcastHistoryStore(
+            null,
+            Path.Combine(_directory, id + ".broadcasts.json"),
+            Path.Combine(_directory, id + ".json"));
 
         foreach (var session in sessions)
         {
-            store.Append(session);
+            store.TryAppend(session);
         }
 
         _store = store;

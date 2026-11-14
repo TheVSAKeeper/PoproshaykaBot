@@ -74,9 +74,12 @@ public class StatisticsPagesPerformanceTests
 
         var cache = new FakeBoxArtCache();
         var images = BoxArtImages(profile);
-        var store = new StreamSessionHistoryStore(filePath: sessionsPath);
+        var store = new BroadcastHistoryStore(
+            null,
+            Path.Combine(_directory, "broadcasts.json"),
+            sessionsPath);
 
-        var games = store.Load().Sessions
+        var games = store.Load().Broadcasts
             .SelectMany(session => session.Segments.Select(segment => segment.Game).Append(session.Game))
             .OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)

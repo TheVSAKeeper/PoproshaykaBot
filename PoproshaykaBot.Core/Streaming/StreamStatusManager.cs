@@ -232,6 +232,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
                     await PublishMetadataResolvedAsync().ConfigureAwait(false);
                 }
 
+                await PublishViewerSampleObservedAsync(stream).ConfigureAwait(false);
                 return;
             }
 
@@ -452,6 +453,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
             if (stream != null)
             {
+                await PublishViewerSampleObservedAsync(stream).ConfigureAwait(false);
                 _logger.LogInformation("Начальный статус по данным API: онлайн, стрим {StreamId}, начат {StartedAt}", stream.Id, stream.StartedAt);
             }
             else
@@ -564,6 +566,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
                 }
 
                 await PublishMetadataResolvedAsync().ConfigureAwait(false);
+                await PublishViewerSampleObservedAsync(stream).ConfigureAwait(false);
                 return true;
             }
             finally
@@ -619,6 +622,27 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         }
 
         return _eventBus.PublishAsync(new StreamMetadataResolved(StreamingPlatform.Twitch, channel, stream), CancellationToken.None);
+    }
+
+    private Task PublishViewerSampleObservedAsync(HelixStreamInfo stream)
+    {
+        var channel = _targetChannelProvider.Current.Login;
+
+        if (string.IsNullOrWhiteSpace(channel))
+        {
+            return Task.CompletedTask;
+        }
+
+        var sampledAtUtc = _state.GetSnapshot().ViewerSampledAtUtc ?? _timeProvider.GetUtcNow();
+
+        return _eventBus.PublishAsync(
+            new ViewerSampleObserved(
+                StreamingPlatform.Twitch,
+                channel,
+                stream.ViewerCount,
+                sampledAtUtc,
+                string.IsNullOrEmpty(stream.Id) ? null : stream.Id),
+            CancellationToken.None);
     }
 
     private async Task CreateEventSubSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)

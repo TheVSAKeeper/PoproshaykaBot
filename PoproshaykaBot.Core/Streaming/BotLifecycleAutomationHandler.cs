@@ -1,4 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Broadcast;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
@@ -23,7 +25,8 @@ public sealed class BotLifecycleAutomationHandler :
 
     private readonly IBotConnectionController _connectionManager;
     private readonly IBotLifecycleAutomationSettingsProvider _settingsProvider;
-    private readonly IEventBus _eventBus;
+    private readonly IBroadcastOfflineStopCoordinator _offlineStopCoordinator;
+    private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly ILogger<BotLifecycleAutomationHandler> _logger;
     private readonly IDisposable _onlineSubscription;
     private readonly IDisposable _offlineSubscription;
@@ -34,12 +37,15 @@ public sealed class BotLifecycleAutomationHandler :
     public BotLifecycleAutomationHandler(
         IBotConnectionController connectionManager,
         IBotLifecycleAutomationSettingsProvider settingsProvider,
+        IBroadcastOfflineStopCoordinator offlineStopCoordinator,
+        ITargetChannelProvider targetChannelProvider,
         IEventBus eventBus,
         ILogger<BotLifecycleAutomationHandler> logger)
     {
         _connectionManager = connectionManager;
         _settingsProvider = settingsProvider;
-        _eventBus = eventBus;
+        _offlineStopCoordinator = offlineStopCoordinator;
+        _targetChannelProvider = targetChannelProvider;
         _logger = logger;
 
         _onlineSubscription = eventBus.Subscribe<StreamWentOnline>(this);
@@ -66,6 +72,12 @@ public sealed class BotLifecycleAutomationHandler :
             var state = GetOrCreateStateLocked(@event.Platform);
             state.IsStreamOnline = true;
             phase = state.Phase;
+        }
+
+        if (!_targetChannelProvider.Current.RecordsUserData)
+        {
+            _logger.LogDebug("Авто-подключение {Platform} пропущено – режим отладки без записи данных", @event.Platform);
+            return Task.CompletedTask;
         }
 
         var settings = _settingsProvider.Get(@event.Platform);
@@ -111,6 +123,12 @@ public sealed class BotLifecycleAutomationHandler :
             phase = state.Phase;
         }
 
+        if (!_targetChannelProvider.Current.RecordsUserData)
+        {
+            _logger.LogDebug("Авто-отключение {Platform} пропущено – режим отладки без записи данных", @event.Platform);
+            return Task.CompletedTask;
+        }
+
         var settings = _settingsProvider.Get(@event.Platform);
 
         if (!settings.AutoDisconnectOnStreamOffline)
@@ -135,7 +153,7 @@ public sealed class BotLifecycleAutomationHandler :
         _logger.LogInformation("⚫ Стрим офлайн ({Platform}, {Channel}) – автоматически отключаю бота", @event.Platform, @event.Channel);
 
         var platform = @event.Platform;
-        _eventBus.ContinueAfterPublish(() => StopBotAsync(platform));
+        _offlineStopCoordinator.ScheduleOfflineStop(platform, _ => StopBotAsync(platform));
 
         return Task.CompletedTask;
     }

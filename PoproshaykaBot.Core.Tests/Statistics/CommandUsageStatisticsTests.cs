@@ -112,10 +112,10 @@ public sealed class CommandUsageStatisticsTests
 
         repository.Track("ранг", "Алиса");
 
-        await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "test-channel", new StreamInfo
+        await bus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, "test-channel", new StreamInfo
         {
             Id = "stream-1",
-        }));
+        }, DateTimeOffset.UtcNow));
 
         var record = repository.GetSnapshot().Single();
 
@@ -134,16 +134,17 @@ public sealed class CommandUsageStatisticsTests
         var repository = new CommandUsageRepository(_time);
         var bus = CreateBus(repository, out var handler);
 
+        var broadcastId = Guid.NewGuid();
         var stream = new StreamInfo
         {
             Id = "stream-1",
         };
 
-        await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "test-channel", stream));
+        await bus.PublishAsync(new BroadcastStarted(broadcastId, StreamingPlatform.Twitch, "test-channel", stream, DateTimeOffset.UtcNow));
 
         repository.Track("ранг", "Алиса");
 
-        await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "test-channel", stream, true));
+        await bus.PublishAsync(new BroadcastStarted(broadcastId, StreamingPlatform.Twitch, "test-channel", stream, DateTimeOffset.UtcNow, true));
 
         Assert.That(repository.GetSnapshot().Single().StreamCount, Is.EqualTo(1),
             "Догоняющее событие того же стрима не должно терять счёт этого стрима");
@@ -162,10 +163,10 @@ public sealed class CommandUsageStatisticsTests
         var repository = new CommandUsageRepository(_time);
         var bus = CreateBus(repository, out var handler);
 
-        await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "test-channel", new StreamInfo
+        await bus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, "test-channel", new StreamInfo
         {
             Id = "stream-2",
-        }));
+        }, DateTimeOffset.UtcNow));
 
         var saver = CreateSaver(repository);
 
@@ -240,7 +241,7 @@ public sealed class CommandUsageStatisticsTests
         var path = Path.Combine(_directory, UsageFileName);
         var data = new CommandUsageData
         {
-            StreamId = "s1",
+            BroadcastId = "s1",
         };
 
         data.Commands.AddRange(canonicals.Select(canonical => new CommandUsageRecord

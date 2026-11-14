@@ -187,12 +187,12 @@ public sealed class GalleryHost : IGalleryHost
 
     private static int DetailedSessionIndex(IReadOnlyList<StreamSessionRowViewModel> sessions)
     {
-        var detailed = IndexOf(sessions, session => session.Segments.Count > 1 && session.Chatters.Count > 0);
+        var detailed = IndexOf(sessions, session => session.Segments.Count > 1 && session.EnumerateChatters().Any());
 
-        return detailed >= 0 ? detailed : Math.Max(IndexOf(sessions, session => session.Chatters.Count > 0), 0);
+        return detailed >= 0 ? detailed : Math.Max(IndexOf(sessions, session => session.EnumerateChatters().Any()), 0);
     }
 
-    private static int IndexOf(IReadOnlyList<StreamSessionRowViewModel> sessions, Func<StreamSessionRecord, bool> predicate)
+    private static int IndexOf(IReadOnlyList<StreamSessionRowViewModel> sessions, Func<BroadcastRecord, bool> predicate)
     {
         for (var index = 0; index < sessions.Count; index++)
         {

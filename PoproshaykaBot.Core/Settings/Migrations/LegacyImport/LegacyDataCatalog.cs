@@ -12,6 +12,7 @@ internal enum LegacyDataCategory
     ChatRuntime = 5,
     Settings = 6,
     UiPreferences = 7,
+    YouTubeQuota = 8,
 }
 
 internal sealed record LegacyDataEntry(
@@ -28,7 +29,11 @@ internal static class LegacyDataCatalog
     public const string AccountsFileName = "accounts.json";
     public const string UserStatisticsFileName = "users_statistics.json";
     public const string BotStatisticsFileName = "bot_statistics.json";
+    public const string BroadcastsFileName = "broadcasts.json";
+    public const string ActiveBroadcastFileName = "active_broadcast.json";
     public const string StreamSessionsFileName = "stream_sessions.json";
+    public const string BroadcastProfilePlatformsFileName = "broadcast-profile-platforms.json";
+    public const string YouTubeQuotaFileName = "youtube/quota.json";
     public const string PollsHistoryFileName = "polls-history.json";
     public const string UiPreferencesFileName = "ui-preferences.toml";
 
@@ -39,6 +44,9 @@ internal static class LegacyDataCatalog
             descriptor.RelativePath,
             LegacyDataCategory.UserStatistics)),
         new(BotStatisticsFileName, BotStatisticsFileName, LegacyDataCategory.BotStatistics),
+        new("quota.json", YouTubeQuotaFileName, LegacyDataCategory.YouTubeQuota),
+        new(BroadcastsFileName, BroadcastsFileName, LegacyDataCategory.StreamHistory),
+        new(ActiveBroadcastFileName, ActiveBroadcastFileName, LegacyDataCategory.StreamHistory),
         new(StreamSessionsFileName, StreamSessionsFileName, LegacyDataCategory.StreamHistory),
         new(PollsHistoryFileName, PollsHistoryFileName, LegacyDataCategory.PollHistory),
         new("unknown_commands.txt", "unknown_commands.txt", LegacyDataCategory.ChatRuntime),
@@ -47,6 +55,7 @@ internal static class LegacyDataCatalog
         new(SettingsFileName, $"{SettingsFolderName}/{SettingsFileName}", LegacyDataCategory.Settings, true),
         new(AccountsFileName, $"{SettingsFolderName}/{AccountsFileName}", LegacyDataCategory.Settings, true),
         new("broadcast-profiles.json", $"{SettingsFolderName}/broadcast-profiles.json", LegacyDataCategory.Settings, true),
+        new(BroadcastProfilePlatformsFileName, $"{SettingsFolderName}/{BroadcastProfilePlatformsFileName}", LegacyDataCategory.Settings, true),
         new("dashboard-layout.json", $"{SettingsFolderName}/dashboard-layout.json", LegacyDataCategory.Settings, true),
         new("obs-chat.json", $"{SettingsFolderName}/obs-chat.json", LegacyDataCategory.Settings, true),
         new("obs-integration.json", $"{SettingsFolderName}/obs-integration.json", LegacyDataCategory.Settings, true),

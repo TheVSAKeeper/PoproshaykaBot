@@ -2,23 +2,54 @@
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
-using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Tests.Debugging;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
 namespace PoproshaykaBot.Core.Tests.Broadcast;
 
 [TestFixture]
 public sealed class StreamStatusBroadcastHandlerTests
 {
+    private const string Channel = "test_channel";
+
+    private IBroadcastMessenger _messenger = null!;
+    private IBroadcastScheduler _scheduler = null!;
+    private IBroadcastState _broadcastState = null!;
+    private IBroadcastPlatformTargetsProvider _targetsProvider = null!;
+    private AppSettings _settings = null!;
+    private SettingsManager _settingsManager = null!;
+    private InMemoryEventBus _eventBus = null!;
+    private FakeTargetChannelProvider _targetChannel = null!;
+    private StreamStatusBroadcastHandler _handler = null!;
+    private bool _schedulerActive;
+    private HashSet<StreamingPlatform> _livePlatforms = [];
+    private HashSet<StreamingPlatform> _targetPlatforms = [];
+
     [SetUp]
     public void SetUp()
     {
         _messenger = Substitute.For<IBroadcastMessenger>();
         _scheduler = Substitute.For<IBroadcastScheduler>();
-        _streamStatus = Substitute.For<IStreamStatus>();
+        _schedulerActive = false;
+        _scheduler.IsActive.Returns(_ => _schedulerActive);
+        _scheduler.When(s => s.Start(Arg.Any<string>())).Do(_ => _schedulerActive = true);
+        _scheduler.When(s => s.Stop()).Do(_ => _schedulerActive = false);
+
+        _livePlatforms = [];
+        _broadcastState = Substitute.For<IBroadcastState>();
+        _broadcastState.IsAnyLive.Returns(_ => _livePlatforms.Count > 0);
+        _broadcastState.LivePlatforms.Returns(_ => _livePlatforms);
+        _broadcastState.IsPlatformLive(Arg.Any<StreamingPlatform>())
+            .Returns(callInfo => _livePlatforms.Contains(callInfo.Arg<StreamingPlatform>()));
+
+        _targetPlatforms = [StreamingPlatform.Twitch, StreamingPlatform.YouTube];
+        _targetsProvider = Substitute.For<IBroadcastPlatformTargetsProvider>();
+        _targetsProvider.GetTargetPlatforms().Returns(_ => _targetPlatforms);
 
         _settings = new()
         {
@@ -37,16 +68,16 @@ public sealed class StreamStatusBroadcastHandlerTests
         };
 
         _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
-
         _settingsManager.Current.Returns(_settings);
 
         _eventBus = new(NullLogger<InMemoryEventBus>.Instance);
-
         _targetChannel = new(Channel);
 
-        _handler = new(_scheduler,
+        _handler = new(
+            _scheduler,
             _messenger,
-            _streamStatus,
+            _broadcastState,
+            _targetsProvider,
             _targetChannel,
             _settingsManager,
             _eventBus,
@@ -59,184 +90,181 @@ public sealed class StreamStatusBroadcastHandlerTests
         _handler.Dispose();
     }
 
-    private const string Channel = "test-channel";
-
-    private IBroadcastMessenger _messenger = null!;
-    private IBroadcastScheduler _scheduler = null!;
-    private IStreamStatus _streamStatus = null!;
-    private FakeTargetChannelProvider _targetChannel = null!;
-    private SettingsManager _settingsManager = null!;
-    private AppSettings _settings = null!;
-    private InMemoryEventBus _eventBus = null!;
-    private StreamStatusBroadcastHandler _handler = null!;
-
     [Test]
-    public async Task StreamWentOnline_BotDisconnected_DoesNotStartScheduler()
+    public async Task BroadcastStarted_BotDisconnected_DoesNotStartScheduler()
     {
-        _scheduler.IsActive.Returns(false);
+        _livePlatforms.Add(StreamingPlatform.Twitch);
 
-        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
 
         _scheduler.DidNotReceive().Start(Arg.Any<string>());
         _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
     }
 
     [Test]
-    public async Task StreamWentOnline_AfterBotConnected_StartsSchedulerAndSendsStartMessage()
+    public async Task BroadcastStarted_AfterBotConnected_StartsSchedulerAndSendsStartMessage()
     {
-        _scheduler.IsActive.Returns(false);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+        _livePlatforms.Add(StreamingPlatform.Twitch);
 
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
 
         _scheduler.Received(1).Start(Channel);
         _messenger.Received(1).SendToConnected("Стрим начался");
     }
 
     [Test]
-    public async Task BotConnects_WhileStreamIsOnline_StartsSchedulerOnConnect()
+    public async Task BotConnects_WhileBroadcastIsLive_StartsSchedulerOnConnect()
     {
-        _scheduler.IsActive.Returns(false);
-        _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
+        _livePlatforms.Add(StreamingPlatform.Twitch);
 
-        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
-        _scheduler.DidNotReceive().Start(Arg.Any<string>());
-
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
 
         _scheduler.Received(1).Start(Channel);
     }
 
     [Test]
-    public async Task BotConnects_WhileStreamIsOffline_DoesNotStartScheduler()
+    public async Task BotConnects_WhileBroadcastIsOffline_DoesNotStartScheduler()
     {
-        _scheduler.IsActive.Returns(false);
-        _streamStatus.CurrentStatus.Returns(StreamStatus.Offline);
-
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
 
         _scheduler.DidNotReceive().Start(Arg.Any<string>());
     }
 
     [Test]
-    public async Task StreamWentOffline_BotDisconnected_DoesNotSendStopMessage()
+    public async Task BroadcastEnded_BotDisconnected_DoesNotSendStopMessage()
     {
-        _scheduler.IsActive.Returns(false);
-
-        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel), CancellationToken.None);
+        await _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, DateTimeOffset.UtcNow));
 
         _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
     }
 
     [Test]
-    public async Task StreamWentOffline_AfterBotConnected_StopsSchedulerAndSendsMessage()
+    public async Task BroadcastEnded_AfterBotConnected_StopsSchedulerAndSendsMessage()
     {
-        _scheduler.IsActive.Returns(true);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
+        _livePlatforms.Clear();
 
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel), CancellationToken.None);
+        await _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, DateTimeOffset.UtcNow));
 
         _scheduler.Received(1).Stop();
         _messenger.Received(1).SendToConnected("Стрим закончился");
     }
 
     [Test]
-    public async Task StreamWentOffline_WithIsCatchUpTrue_DoesNotSendStopMessage()
+    public async Task BroadcastStarted_WithIsCatchUpTrue_StartsSchedulerButDoesNotSendStartMessage()
     {
-        _scheduler.IsActive.Returns(true);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+        _livePlatforms.Add(StreamingPlatform.Twitch);
 
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, true), CancellationToken.None);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow, IsCatchUp: true));
 
+        _scheduler.Received(1).Start(Channel);
+        _messenger.DidNotReceive().SendToConnected("Стрим начался");
+    }
+
+    [Test]
+    public async Task BotConnects_WhileBroadcastIsOnlineWithoutPending_DoesNotSendStartMessage()
+    {
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+        _messenger.DidNotReceive().SendToConnected("Стрим начался");
+    }
+
+    [Test]
+    public async Task BroadcastStarted_BotDisconnected_SendsStartMessageOnceOnTargetConnect()
+    {
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
+        _messenger.DidNotReceive().SendToConnected("Стрим начался");
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+
+        _messenger.Received(1).Send(StreamingPlatform.Twitch, "Стрим начался");
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Disconnected));
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+
+        _messenger.Received(1).Send(StreamingPlatform.Twitch, "Стрим начался");
+    }
+
+    [Test]
+    public async Task BroadcastStarted_BroadcastOfflineOnConnect_DropsPendingStartNotification()
+    {
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Disconnected));
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+    }
+
+    [Test]
+    public async Task BroadcastStarted_BotDisconnectedWithCatchUp_DoesNotSendStartMessageOnConnect()
+    {
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow, IsCatchUp: true));
+
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+    }
+
+    [Test]
+    public async Task BroadcastEnded_BotDisconnected_DropsPendingStartNotification()
+    {
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
+        await _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, DateTimeOffset.UtcNow));
+
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+    }
+
+    [Test]
+    public async Task BroadcastStarted_ConnectedPlatformOutsideTargets_DoesNotStartSchedulerOrNotify()
+    {
+        _targetPlatforms = [StreamingPlatform.YouTube];
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
+
+        _scheduler.DidNotReceive().Start(Arg.Any<string>());
+        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
+
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+
+        _scheduler.Received(1).Start(Channel);
+        _messenger.Received(1).Send(StreamingPlatform.YouTube, "Стрим начался");
+    }
+
+    [Test]
+    public async Task PlatformDisconnects_WhenLastConnectedTargetLeaves_StopsScheduler()
+    {
+        _targetPlatforms = [StreamingPlatform.Twitch, StreamingPlatform.YouTube];
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Disconnected));
         _scheduler.DidNotReceive().Stop();
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
-    }
 
-    [Test]
-    public async Task StreamWentOnline_WithIsCatchUpTrue_StartsSchedulerButDoesNotSendStartMessage()
-    {
-        _scheduler.IsActive.Returns(false);
-
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null, true), CancellationToken.None);
-
-        _scheduler.Received(1).Start(Channel);
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
-    }
-
-    [Test]
-    public async Task BotConnects_WhileStreamIsOnline_DoesNotSendStartMessage()
-    {
-        _scheduler.IsActive.Returns(false);
-        _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
-
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-
-        _scheduler.Received(1).Start(Channel);
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
-    }
-
-    [Test]
-    public async Task StreamWentOnline_BotDisconnected_SendsStartMessageOnceOnConnect()
-    {
-        _scheduler.IsActive.Returns(false);
-        _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
-
-        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-
-        _messenger.Received(1).SendToConnected("Стрим начался");
-
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Disconnected), CancellationToken.None);
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-
-        _messenger.Received(1).SendToConnected("Стрим начался");
-    }
-
-    [Test]
-    public async Task StreamWentOnline_StatusUnknownOnConnect_DropsPendingStartNotification()
-    {
-        _scheduler.IsActive.Returns(false);
-        _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
-
-        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
-
-        _streamStatus.CurrentStatus.Returns(StreamStatus.Unknown);
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
-
-        _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Disconnected), CancellationToken.None);
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
-    }
-
-    [Test]
-    public async Task StreamWentOnline_BotDisconnectedWithCatchUp_DoesNotSendStartMessageOnConnect()
-    {
-        _scheduler.IsActive.Returns(false);
-        _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
-
-        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null, true), CancellationToken.None);
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-
-        _scheduler.Received(1).Start(Channel);
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
-    }
-
-    [TestCase(false)]
-    [TestCase(true)]
-    public async Task StreamWentOffline_BotDisconnected_DropsPendingStartNotification(bool isCatchUpOffline)
-    {
-        _scheduler.IsActive.Returns(false);
-        _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
-
-        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, isCatchUpOffline), CancellationToken.None);
-        await _handler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Disconnected));
+        _scheduler.Received(1).Stop();
     }
 }

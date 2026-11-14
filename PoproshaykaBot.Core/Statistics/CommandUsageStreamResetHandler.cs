@@ -1,34 +1,42 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
-using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Core.Statistics;
 
-public sealed class CommandUsageStreamResetHandler : IEventHandler<StreamWentOnline>, IEventSubscriber, IDisposable
+public sealed class CommandUsageStreamResetHandler : IEventHandler<BroadcastStarted>, IEventSubscriber, IDisposable
 {
     private readonly CommandUsageRepository _repository;
+    private readonly ITargetChannelProvider? _targetChannelProvider;
     private readonly ILogger<CommandUsageStreamResetHandler> _logger;
     private readonly IDisposable _subscription;
 
     public CommandUsageStreamResetHandler(
         CommandUsageRepository repository,
         IEventBus eventBus,
-        ILogger<CommandUsageStreamResetHandler> logger)
+        ILogger<CommandUsageStreamResetHandler> logger,
+        ITargetChannelProvider? targetChannelProvider = null)
     {
         _repository = repository;
+        _targetChannelProvider = targetChannelProvider;
         _logger = logger;
-        _subscription = eventBus.SubscribePlatform<StreamWentOnline>(StreamingPlatform.Twitch, this);
+        _subscription = eventBus.Subscribe(this);
     }
 
-    public Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
+    public Task HandleAsync(BroadcastStarted @event, CancellationToken cancellationToken)
     {
-        var streamId = @event.Stream?.Id ?? string.Empty;
-
-        if (_repository.ResetStreamCounters(streamId))
+        if (_targetChannelProvider is not null && !_targetChannelProvider.Current.RecordsUserData)
         {
-            var reportedStreamId = string.IsNullOrEmpty(streamId) ? "–" : streamId;
-            _logger.LogInformation("Счётчики команд за стрим обнулены (стрим {StreamId})", reportedStreamId);
+            _logger.LogDebug("Сброс счётчиков команд пропущен – режим отладки без записи данных");
+            return Task.CompletedTask;
+        }
+
+        var broadcastId = @event.BroadcastId.ToString("D");
+
+        if (_repository.ResetStreamCounters(broadcastId))
+        {
+            _logger.LogInformation("Счётчики команд за эфир обнулены (эфир {BroadcastId})", broadcastId);
         }
 
         return Task.CompletedTask;

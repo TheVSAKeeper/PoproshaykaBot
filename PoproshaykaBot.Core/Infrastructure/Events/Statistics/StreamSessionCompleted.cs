@@ -2,4 +2,4 @@
 
 namespace PoproshaykaBot.Core.Infrastructure.Events.Statistics;
 
-public sealed record StreamSessionCompleted(StreamSessionRecord Session) : EventBase;
+public sealed record StreamSessionCompleted(BroadcastRecord Broadcast) : EventBase;

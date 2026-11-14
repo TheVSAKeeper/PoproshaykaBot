@@ -56,7 +56,7 @@ public class StreamHistorySummaryTests
     [Test]
     public void Эфир_по_категориям_совпадает_с_суммарным_эфиром()
     {
-        var sessions = new List<StreamSessionRecord>
+        var sessions = new List<BroadcastRecord>
         {
             Session(0, hours: 6, ("Just Chatting", 1), ("Minecraft", 5)),
             Session(1, hours: 4, ("Minecraft", 4)),
@@ -76,7 +76,7 @@ public class StreamHistorySummaryTests
     [Test]
     public void Сегмент_созданный_хранилищем_считается_как_обычный()
     {
-        var legacy = new StreamSessionRecord
+        var legacySession = new StreamSessionRecord
         {
             Channel = "bobito217",
             StartedAt = Start,
@@ -89,7 +89,8 @@ public class StreamHistorySummaryTests
             AverageViewers = 3,
         };
 
-        legacy.EnsureSegments();
+        legacySession.EnsureSegments();
+        var legacy = BroadcastRecord.FromTwitchSession(legacySession);
 
         var summary = StreamHistorySummary.Build([legacy]);
 
@@ -174,7 +175,7 @@ public class StreamHistorySummaryTests
         Assert.That(summary.Records.Single(record => record.Kind == StreamRecordKind.Messages).Session.Title, Is.EqualTo("свежий"));
     }
 
-    private static StreamSessionRecord Titled(
+    private static BroadcastRecord Titled(
         string title,
         int hours,
         long messages,
@@ -184,7 +185,7 @@ public class StreamHistorySummaryTests
     {
         var started = Start.AddDays(dayOffset);
 
-        return new()
+        return BroadcastRecord.FromTwitchSession(new StreamSessionRecord
         {
             Channel = "bobito217",
             StartedAt = started,
@@ -208,10 +209,10 @@ public class StreamHistorySummaryTests
                     AverageViewers = peak / 2,
                 },
             ],
-        };
+        });
     }
 
-    private static StreamSessionRecord Session(int index, int hours, params (string? Game, int Hours)[] segments)
+    private static BroadcastRecord Session(int index, int hours, params (string? Game, int Hours)[] segments)
     {
         var started = Start.AddDays(index);
         var session = new StreamSessionRecord
@@ -245,6 +246,6 @@ public class StreamHistorySummaryTests
             cursor = cursor.AddHours(length);
         }
 
-        return session;
+        return BroadcastRecord.FromTwitchSession(session);
     }
 }

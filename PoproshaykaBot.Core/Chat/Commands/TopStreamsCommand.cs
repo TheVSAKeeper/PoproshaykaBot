@@ -2,7 +2,7 @@
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class TopStreamsCommand(StreamSessionHistoryStore historyStore) : IChatCommand
+public sealed class TopStreamsCommand(BroadcastHistoryStore historyStore) : IChatCommand
 {
     private static readonly HashSet<string> MessagesKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -44,25 +44,25 @@ public sealed class TopStreamsCommand(StreamSessionHistoryStore historyStore) : 
             }
         }
 
-        var sessions = historyStore.LoadVisible().Sessions;
+        var broadcasts = historyStore.LoadVisible().Broadcasts;
 
-        if (sessions.Count == 0)
+        if (broadcasts.Count == 0)
         {
             return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Normal("Истории стримов пока нет"));
         }
 
         var ordered = byViewers
-            ? sessions.OrderByDescending(s => s.PeakViewers).ThenByDescending(s => s.StartedAt)
-            : sessions.OrderByDescending(s => s.MessageCount).ThenByDescending(s => s.StartedAt);
+            ? broadcasts.OrderByDescending(b => b.PeakViewers).ThenByDescending(b => b.StartedAt)
+            : broadcasts.OrderByDescending(b => b.MessageCount).ThenByDescending(b => b.StartedAt);
 
         var top = ordered.Take(count).ToList();
 
-        var parts = top.Select((s, i) =>
+        var parts = top.Select((b, i) =>
         {
-            var title = string.IsNullOrWhiteSpace(s.Title) ? "Без названия" : Truncate(s.Title, 30);
+            var title = string.IsNullOrWhiteSpace(b.Title) ? "Без названия" : Truncate(b.Title, 30);
             var value = byViewers
-                ? $"👥 {s.PeakViewers}"
-                : $"💬 {FormattingUtils.FormatNumber(s.MessageCount)}";
+                ? $"👥 {b.PeakViewers}"
+                : $"💬 {FormattingUtils.FormatNumber(b.MessageCount)}";
 
             return $"{i + 1}. {title} ({value})";
         });

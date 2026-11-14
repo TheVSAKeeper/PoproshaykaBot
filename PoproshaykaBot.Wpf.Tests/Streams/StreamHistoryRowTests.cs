@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Statistics;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.ViewModels;
 
 namespace PoproshaykaBot.Wpf.Tests.Streams;
@@ -10,12 +11,25 @@ public class StreamHistoryRowTests
 
     private static StreamSessionRowViewModel Row(int peakViewers, string? title = "эфир")
     {
-        return new(new()
+        var endedAt = Start.AddHours(3);
+
+        return new(new BroadcastRecord
         {
             StartedAt = Start,
-            EndedAt = Start.AddHours(3),
-            Title = title,
+            EndedAt = endedAt,
             PeakViewers = peakViewers,
+            Platforms =
+            [
+                new BroadcastPlatformRecord
+                {
+                    Platform = Core.Platforms.StreamingPlatform.Twitch,
+                    Channel = "chan",
+                    StartedAt = Start,
+                    EndedAt = endedAt,
+                    Title = title,
+                    PeakViewers = peakViewers,
+                },
+            ],
         });
     }
 
@@ -111,7 +125,7 @@ public class StreamHistoryRowTests
         bool expectedTopThree)
     {
         var row = new StreamSessionChatterRowViewModel(
-            new() { UserId = "42", DisplayName = "qp_illson", MessageCount = messageCount },
+            new(new PlatformUserKey(StreamingPlatform.Twitch, "42"), "qp_illson", messageCount),
             position,
             leader,
             canOpen: true);
@@ -213,7 +227,7 @@ public class StreamHistoryRowTests
             });
         }
 
-        Assert.That(StreamHistoryPageViewModel.DescribeComposition(session), Is.EqualTo(expected));
+        Assert.That(StreamHistoryPageViewModel.DescribeComposition(BroadcastRecord.FromTwitchSession(session)), Is.EqualTo(expected));
     }
 
     [Test]
@@ -235,7 +249,7 @@ public class StreamHistoryRowTests
 
         var expected = string.Join(Environment.NewLine, "Just Chatting – 1 ч 59 мин", "Minecraft – 1 ч 0 мин", "Tarot – 31 с");
 
-        Assert.That(StreamHistoryPageViewModel.DescribeCategories(session), Is.EqualTo(expected));
+        Assert.That(StreamHistoryPageViewModel.DescribeCategories(BroadcastRecord.FromTwitchSession(session)), Is.EqualTo(expected));
     }
 
     [Test]
@@ -252,7 +266,7 @@ public class StreamHistoryRowTests
             ],
         };
 
-        Assert.That(StreamHistoryPageViewModel.DescribeCategories(session), Is.Null);
+        Assert.That(StreamHistoryPageViewModel.DescribeCategories(BroadcastRecord.FromTwitchSession(session)), Is.Null);
     }
 
     [Test]
@@ -271,6 +285,6 @@ public class StreamHistoryRowTests
             ],
         };
 
-        Assert.That(new StreamSessionRowViewModel(session).GameFormatted, Is.EqualTo("Just Chatting (+1)"));
+        Assert.That(new StreamSessionRowViewModel(BroadcastRecord.FromTwitchSession(session)).GameFormatted, Is.EqualTo("Just Chatting (+1)"));
     }
 }

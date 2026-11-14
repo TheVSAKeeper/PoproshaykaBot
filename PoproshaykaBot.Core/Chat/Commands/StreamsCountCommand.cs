@@ -2,7 +2,7 @@
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class StreamsCountCommand(StreamSessionHistoryStore historyStore, TimeProvider timeProvider) : IChatCommand
+public sealed class StreamsCountCommand(BroadcastHistoryStore historyStore, TimeProvider timeProvider) : IChatCommand
 {
     public string Canonical => "стримов";
     public IReadOnlyCollection<string> Aliases => ["streams", "streamscount"];
@@ -15,9 +15,9 @@ public sealed class StreamsCountCommand(StreamSessionHistoryStore historyStore, 
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var sessions = historyStore.LoadVisible().Sessions;
+        var broadcasts = historyStore.LoadVisible().Broadcasts;
 
-        if (sessions.Count == 0)
+        if (broadcasts.Count == 0)
         {
             return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Normal("Истории стримов пока нет"));
         }
@@ -26,17 +26,17 @@ public sealed class StreamsCountCommand(StreamSessionHistoryStore historyStore, 
         var totalDuration = TimeSpan.Zero;
         var monthCount = 0;
 
-        foreach (var session in sessions)
+        foreach (var broadcast in broadcasts)
         {
-            totalDuration += session.Duration;
+            totalDuration += broadcast.Duration;
 
-            if (session.StartedAt >= monthAgo)
+            if (broadcast.StartedAt >= monthAgo)
             {
                 monthCount++;
             }
         }
 
-        var total = FormattingUtils.FormatNumber(sessions.Count);
+        var total = FormattingUtils.FormatNumber(broadcasts.Count);
         var totalDurationText = FormattingUtils.FormatTimeSpan(totalDuration);
         var month = FormattingUtils.FormatNumber(monthCount);
 

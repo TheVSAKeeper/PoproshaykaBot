@@ -20,7 +20,8 @@ public sealed class StatisticsLoadOwnershipTests
 
     private const string UsersFileName = "users_statistics.json";
     private const string BotFileName = "bot_statistics.json";
-    private const string HistoryFileName = "stream_sessions.json";
+    private const string HistoryFileName = "broadcasts.json";
+    private const string SessionsProjectionFileName = "stream_sessions.json";
     private const string CommandUsageFileName = "command-usage.json";
     private const string PollHistoryFileName = "polls-history.json";
 
@@ -613,6 +614,7 @@ public sealed class StatisticsLoadOwnershipTests
     public async Task Перенос_гасит_право_записи_ровно_у_тех_файлов_которые_принёс(bool importsHistory)
     {
         var historyPath = Path.Combine(_directory, HistoryFileName);
+        var sessionsPath = Path.Combine(_directory, SessionsProjectionFileName);
 
         await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
         await File.WriteAllTextAsync(historyPath, HistoryJson("свой-канал"));
@@ -621,10 +623,10 @@ public sealed class StatisticsLoadOwnershipTests
             Path.Combine(_source, importsHistory ? HistoryFileName : UsersFileName),
             importsHistory ? HistoryJson("принесённый-канал") : ImportedUsersContent);
 
-        var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
+        var history = new BroadcastHistoryStore(NullLogger<BroadcastHistoryStore>.Instance, historyPath, sessionsPath);
         var (_, _, _, loader, saver) = CreateGraph(history);
 
-        var ownSessionId = history.Load().Sessions.Single().Id;
+        var ownBroadcastId = history.Load().Broadcasts.Single().Id;
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -646,14 +648,16 @@ public sealed class StatisticsLoadOwnershipTests
             Assert.That(history.IsLoaded, Is.EqualTo(!importsHistory),
                 "Холостой для истории прогон возвращает право записи, принесённая история оставляет его снятым");
 
-            history.Append(Session("конец-стрима"));
-            var hidden = history.TrySetHidden(ownSessionId, true);
+            var appended = history.TryAppend(Broadcast("конец-стрима"));
+            var hidden = history.TrySetHidden(ownBroadcastId, true);
 
             using (Assert.EnterMultipleScope())
             {
+                Assert.That(appended, Is.EqualTo(!importsHistory),
+                    "При снятом праве запись принимается в память, а на диск не идёт");
                 Assert.That(hidden, Is.True,
                     "Снятое право – это про файл, а не про память: скрытие применяется и без права, а на диск не идёт");
-                Assert.That(history.Load().Sessions.Select(session => session.Channel), Does.Contain("конец-стрима"),
+                Assert.That(history.Load().Broadcasts.SelectMany(b => b.Platforms.Select(p => p.Channel)), Does.Contain("конец-стрима"),
                     "Сессию нельзя выбрасывать из-за снятого права – иначе она теряется безвозвратно");
                 Assert.That(ChannelsOnDisk(historyPath),
                     Is.EqualTo(importsHistory ? new[] { "принесённый-канал" } : new[] { "свой-канал", "конец-стрима" }),
@@ -672,11 +676,12 @@ public sealed class StatisticsLoadOwnershipTests
     public async Task Сессия_завершившаяся_во_время_несвязанного_переноса_доезжает_до_файла()
     {
         var historyPath = Path.Combine(_directory, HistoryFileName);
+        var sessionsPath = Path.Combine(_directory, SessionsProjectionFileName);
 
         await File.WriteAllTextAsync(historyPath, HistoryJson("свой-канал"));
         await File.WriteAllTextAsync(Path.Combine(_source, "chat-zoom.txt"), "1,25");
 
-        var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
+        var history = new BroadcastHistoryStore(NullLogger<BroadcastHistoryStore>.Instance, historyPath, sessionsPath);
         var (_, _, _, _, saver) = CreateGraph(history);
 
         try
@@ -684,7 +689,7 @@ public sealed class StatisticsLoadOwnershipTests
             var imported = await saver.RunExternalWriteAsync(
                 () =>
                 {
-                    history.Append(Session("конец-стрима"));
+                    history.TryAppend(Broadcast("конец-стрима"));
 
                     Assert.That(ChannelsOnDisk(historyPath), Is.EqualTo(new[] { "свой-канал" }),
                         "Пока идёт копирование, файл истории не переписывается – перенос мог принести и его");
@@ -712,11 +717,12 @@ public sealed class StatisticsLoadOwnershipTests
     public async Task Сорвавшаяся_запись_истории_дотаскивается_ближайшим_тиком_автосохранения(bool failsInsideRestore)
     {
         var historyPath = Path.Combine(_directory, HistoryFileName);
+        var sessionsPath = Path.Combine(_directory, SessionsProjectionFileName);
         var blockedTemporaryPath = historyPath + ".tmp";
 
         Directory.CreateDirectory(blockedTemporaryPath);
 
-        var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
+        var history = new BroadcastHistoryStore(NullLogger<BroadcastHistoryStore>.Instance, historyPath, sessionsPath);
         var (_, _, _, _, saver) = CreateGraph(history);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
@@ -730,7 +736,7 @@ public sealed class StatisticsLoadOwnershipTests
                 await saver.RunExternalWriteAsync(
                     () =>
                     {
-                        history.Append(Session("конец-стрима"));
+                        history.TryAppend(Broadcast("конец-стрима"));
 
                         return LegacyDataImporter.Import(_source, _directory, true, null);
                     },
@@ -738,11 +744,12 @@ public sealed class StatisticsLoadOwnershipTests
             }
             else
             {
-                Assert.Throws<UnauthorizedAccessException>(() => history.Append(Session("конец-стрима")),
-                    "Отказ записи истории не проглатывается – о нём узнаёт вызывающий");
+                Assert.That(history.TryAppend(Broadcast("конец-стрима")), Is.False,
+                    "Отказ записи истории сообщает вызывающему через false, оставляя данные в памяти");
             }
 
             Assert.That(File.Exists(historyPath), Is.False, "Записывать было некуда: файла истории на диске нет");
+            Assert.That(history.HasPendingFlush, Is.True);
 
             Directory.Delete(blockedTemporaryPath);
 
@@ -765,6 +772,7 @@ public sealed class StatisticsLoadOwnershipTests
     public async Task Остановка_без_единой_прочитанной_статистики_дотаскивает_историю()
     {
         var historyPath = Path.Combine(_directory, HistoryFileName);
+        var sessionsPath = Path.Combine(_directory, SessionsProjectionFileName);
         var usersPath = Path.Combine(_directory, UsersFileName);
         var blockedTemporaryPath = historyPath + ".tmp";
 
@@ -774,7 +782,7 @@ public sealed class StatisticsLoadOwnershipTests
 
         Directory.CreateDirectory(blockedTemporaryPath);
 
-        var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
+        var history = new BroadcastHistoryStore(NullLogger<BroadcastHistoryStore>.Instance, historyPath, sessionsPath);
         var (_, _, _, loader, saver) = CreateGraph(history);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
@@ -783,7 +791,7 @@ public sealed class StatisticsLoadOwnershipTests
         {
             Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.False, "Повреждённый файл пользователей права сохранять не даёт");
 
-            Assert.Throws<UnauthorizedAccessException>(() => history.Append(Session("конец-стрима")),
+            Assert.That(history.TryAppend(Broadcast("конец-стрима")), Is.False,
                 "Записывать было некуда, сессия осталась несохранённой в памяти");
 
             Directory.Delete(blockedTemporaryPath);
@@ -808,13 +816,14 @@ public sealed class StatisticsLoadOwnershipTests
     public async Task Отмена_после_удавшейся_записи_не_оставляет_нетронутые_половины_погашенными()
     {
         var historyPath = Path.Combine(_directory, HistoryFileName);
+        var sessionsPath = Path.Combine(_directory, SessionsProjectionFileName);
         var botPath = Path.Combine(_directory, BotFileName);
 
         await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
         await File.WriteAllTextAsync(historyPath, HistoryJson("свой-канал"));
         await File.WriteAllTextAsync(Path.Combine(_source, "chat-zoom.txt"), "1,25");
 
-        var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
+        var history = new BroadcastHistoryStore(NullLogger<BroadcastHistoryStore>.Instance, historyPath, sessionsPath);
         var (_, _, _, loader, saver) = CreateGraph(history);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
@@ -856,6 +865,7 @@ public sealed class StatisticsLoadOwnershipTests
     public async Task Контейнер_отдаёт_области_внешней_записи_тот_же_стор_истории()
     {
         var historyPath = Path.Combine(_directory, HistoryFileName);
+        var sessionsPath = Path.Combine(_directory, SessionsProjectionFileName);
         await File.WriteAllTextAsync(historyPath, HistoryJson("свой-канал"));
 
         var services = new ServiceCollection();
@@ -864,12 +874,12 @@ public sealed class StatisticsLoadOwnershipTests
         services.AddSingleton(TimeProvider.System);
         services.AddStatistics();
         services.AddPolls();
-        services.AddSingleton(new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath));
+        services.AddSingleton(new BroadcastHistoryStore(NullLogger<BroadcastHistoryStore>.Instance, historyPath, sessionsPath));
         services.AddSingleton(CreatePollHistoryStore());
 
         await using var provider = services.BuildServiceProvider();
 
-        var history = provider.GetRequiredService<StreamSessionHistoryStore>();
+        var history = provider.GetRequiredService<BroadcastHistoryStore>();
         var pollHistory = provider.GetRequiredService<PollHistoryStore>();
 
         Assert.That(pollHistory.GetAll(), Is.Empty);
@@ -887,6 +897,36 @@ public sealed class StatisticsLoadOwnershipTests
                 "Необязательный параметр конструктора превращает гашение в тихую пустышку, и увидеть это можно только на настоящей композиции");
             Assert.That(pollHistory.IsLoaded, Is.False,
                 "У истории голосований тот же необязательный параметр и та же цена подмены его на null");
+        }
+    }
+
+    [Test]
+    public async Task Компонент_жизненного_цикла_истории_эфиров_дотаскивает_отложенную_запись()
+    {
+        var historyPath = Path.Combine(_directory, HistoryFileName);
+        var sessionsPath = Path.Combine(_directory, SessionsProjectionFileName);
+        var blockedTemporaryPath = historyPath + ".tmp";
+
+        Directory.CreateDirectory(blockedTemporaryPath);
+
+        var history = new BroadcastHistoryStore(NullLogger<BroadcastHistoryStore>.Instance, historyPath, sessionsPath);
+        Assert.That(history.TryAppend(Broadcast("отложенный-канал")), Is.False);
+        Assert.That(history.HasPendingFlush, Is.True);
+
+        Directory.Delete(blockedTemporaryPath);
+
+        using var lifetime = new BroadcastHistoryLifetimeComponent(
+            history,
+            TimeProvider.System,
+            NullLogger<BroadcastHistoryLifetimeComponent>.Instance);
+
+        await lifetime.StartAsync(CancellationToken.None);
+        await lifetime.StopAsync(CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(history.HasPendingFlush, Is.False);
+            Assert.That(ChannelsOnDisk(historyPath), Is.EqualTo(new[] { "отложенный-канал" }));
         }
     }
 
@@ -961,28 +1001,28 @@ public sealed class StatisticsLoadOwnershipTests
 
     private static string[] ChannelsOnDisk(string path)
     {
-        var history = JsonSerializer.Deserialize<StreamSessionHistory>(File.ReadAllText(path), JsonStoreOptions.Default)!;
+        var history = JsonSerializer.Deserialize<BroadcastHistoryDocument>(File.ReadAllText(path), JsonStoreOptions.Default)!;
 
-        return [.. history.Sessions.Select(session => session.Channel)];
+        return [.. history.Broadcasts.SelectMany(record => record.Platforms.Select(platform => platform.Channel))];
     }
 
     private static string HistoryJson(string channel)
     {
-        return JsonSerializer.Serialize(new StreamSessionHistory { Sessions = [Session(channel)] }, JsonStoreOptions.Default);
+        return JsonSerializer.Serialize(new BroadcastHistoryDocument { Broadcasts = [Broadcast(channel)] }, JsonStoreOptions.Default);
     }
 
-    private static StreamSessionRecord Session(string channel)
+    private static BroadcastRecord Broadcast(string channel)
     {
         var startedAt = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero).AddDays(channel.Length);
 
-        return new()
+        return BroadcastRecord.FromTwitchSession(new()
         {
             Channel = channel,
             StartedAt = startedAt,
             EndedAt = startedAt.AddHours(2),
             Title = "Эфир",
             MessageCount = 10,
-        };
+        });
     }
 
     private string[] BackupsOf(string fileName)

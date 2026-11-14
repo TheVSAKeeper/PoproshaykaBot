@@ -188,7 +188,10 @@ public sealed class StreamCommandsMultiplatformTests
         twitch.FakeStreamStatus.SetOffline();
         var registry = new ChatPlatformRegistry([twitch]);
 
-        var historyStore = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, Path.Combine(_root, "history.json"));
+        var historyStore = new BroadcastHistoryStore(
+            NullLogger<BroadcastHistoryStore>.Instance,
+            Path.Combine(_root, "broadcasts.json"),
+            Path.Combine(_root, "history.json"));
         var commandSettingsStore = new CommandSettingsStore(null, Path.Combine(_root, "commands.json"));
 
         var processor = new ChatCommandProcessor(

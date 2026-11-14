@@ -106,10 +106,15 @@ public sealed class BroadcastMessengerRoutingTests
         audience.ForPlatform(StreamingPlatform.YouTube).OnUserMessage("y1", "YouTubeViewer");
 
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var broadcastState = Substitute.For<IBroadcastState>();
+        var targetsProvider = Substitute.For<IBroadcastPlatformTargetsProvider>();
+        targetsProvider.GetTargetPlatforms().Returns(new HashSet<StreamingPlatform> { StreamingPlatform.Twitch, StreamingPlatform.YouTube });
+
         using var statusHandler = new StreamStatusBroadcastHandler(
             Substitute.For<IBroadcastScheduler>(),
             messenger,
-            twitch.StreamStatus,
+            broadcastState,
+            targetsProvider,
             new FakeTargetChannelProvider(),
             settingsManager,
             bus,
@@ -123,7 +128,7 @@ public sealed class BroadcastMessengerRoutingTests
             NullLogger<FarewellMessageHandler>.Instance);
 
         await statusHandler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
-        await statusHandler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
+        await statusHandler.HandleAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, "chan", null, DateTimeOffset.UtcNow), CancellationToken.None);
         await farewellHandler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Disconnecting), CancellationToken.None);
         await farewellHandler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Disconnecting), CancellationToken.None);
 

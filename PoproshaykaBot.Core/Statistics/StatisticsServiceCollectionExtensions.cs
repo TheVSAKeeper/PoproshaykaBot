@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 
@@ -14,10 +15,12 @@ public static class StatisticsServiceCollectionExtensions
         services.AddSingleton<IBotStatisticsRepository>(sp => sp.GetRequiredService<BotStatisticsRepository>());
         services.AddSingleton<CommandUsageRepository>();
         services.AddSingleton<StatisticsFileStore>();
-        services.AddSingleton<StreamSessionHistoryStore>();
-        services.AddSingleton<ActiveStreamSessionStore>();
-        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<StreamSessionHistoryStore>());
-        services.AddSingleton<IFlushableHistoryStore>(sp => sp.GetRequiredService<StreamSessionHistoryStore>());
+        services.AddSingleton<BroadcastHistoryStore>();
+        services.AddSingleton<ActiveBroadcastStore>();
+        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<BroadcastHistoryStore>());
+        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<ActiveBroadcastStore>());
+        services.AddSingleton<IFlushableHistoryStore>(sp => sp.GetRequiredService<BroadcastHistoryStore>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAppLifetimeComponent, BroadcastHistoryLifetimeComponent>());
 
         foreach (var descriptor in UserStatisticsPlatformCatalog.All)
         {

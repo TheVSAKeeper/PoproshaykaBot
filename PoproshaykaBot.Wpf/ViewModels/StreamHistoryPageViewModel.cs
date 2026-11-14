@@ -65,7 +65,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         Many = "категорий",
     };
 
-    private readonly StreamSessionHistoryStore _historyStore;
+    private readonly BroadcastHistoryStore _historyStore;
     private readonly IUserStatisticsRepository _userStatistics;
     private readonly ISettingsStore _settings;
     private readonly GameBoxArtProvider _boxArt;
@@ -196,7 +196,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private bool _rebuildingSortedView;
 
     public StreamHistoryPageViewModel(
-        StreamSessionHistoryStore historyStore,
+        BroadcastHistoryStore historyStore,
         IUserStatisticsRepository userStatistics,
         ISettingsStore settings,
         GameBoxArtProvider boxArt,
@@ -529,7 +529,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             : average.ToString("0.#", UiCulture.Russian);
     }
 
-    public static string DescribeTracking(StreamSessionRecord session)
+    public static string DescribeTracking(BroadcastRecord session)
     {
         if (session.TrackedDuration is not { } tracked)
         {
@@ -555,7 +555,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             : string.Create(UiCulture.Russian, $"Учёт вёлся {FormatDuration(tracked)} из {FormatDuration(duration)}");
     }
 
-    public static string? DescribeCategories(StreamSessionRecord session)
+    public static string? DescribeCategories(BroadcastRecord session)
     {
         var categories = session.Segments
             .Where(segment => segment.Game is { Length: > 0 })
@@ -574,7 +574,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             categories.Select(category => string.Create(UiCulture.Russian, $"{category.Game} – {FormatDuration(category.AirTime)}")));
     }
 
-    public static string DescribeComposition(StreamSessionRecord session)
+    public static string DescribeComposition(BroadcastRecord session)
     {
         var titles = session.Segments
             .Select(segment => segment.Title)
@@ -788,7 +788,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         _allSessions.Clear();
 
-        foreach (var record in history.Sessions.OrderByDescending(record => record.StartedAt))
+        foreach (var record in history.Broadcasts.OrderByDescending(record => record.StartedAt))
         {
             _allSessions.Add(new(record) { BoxArt = _boxArt.For(record.Game) });
         }
@@ -1100,7 +1100,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         return [.. games];
     }
 
-    private List<StreamSessionSegmentRowViewModel> BuildSegments(StreamSessionRecord session)
+    private List<StreamSessionSegmentRowViewModel> BuildSegments(BroadcastRecord session)
     {
         var longest = session.Segments.Aggregate(TimeSpan.Zero, (max, segment) => segment.Duration > max ? segment.Duration : max);
         var segments = new List<StreamSessionSegmentRowViewModel>(session.Segments.Count);
@@ -1131,12 +1131,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         }
     }
 
-    private List<StreamSessionChatterRowViewModel> BuildChatters(StreamSessionRecord session)
+    private List<StreamSessionChatterRowViewModel> BuildChatters(BroadcastRecord session)
     {
-        var ordered = session.Chatters
-            .OrderByDescending(chatter => chatter.MessageCount)
-            .ThenBy(chatter => chatter.DisplayName, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
+        var ordered = session.EnumerateChatters().ToList();
 
         var leader = ordered.Count > 0 ? ordered[0].MessageCount : 0;
         var chatters = new List<StreamSessionChatterRowViewModel>(ordered.Count);
@@ -1144,10 +1141,12 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         for (var index = 0; index < ordered.Count; index++)
         {
-            var known = ordered[index].UserId is { Length: > 0 } userId
+            var entry = ordered[index];
+            var known = entry.Key.Platform == StreamingPlatform.Twitch
+                        && entry.Key.UserId is { Length: > 0 } userId
                         && twitchUsers.GetById(userId) is not null;
 
-            chatters.Add(new(ordered[index], index + 1, leader, known));
+            chatters.Add(new(entry, index + 1, leader, known));
         }
 
         return chatters;
@@ -1316,7 +1315,7 @@ public sealed partial class StreamSessionRowViewModel : ObservableObject
     [ObservableProperty]
     private TrendTone _averageViewersDeltaTone;
 
-    public StreamSessionRecord Source { get; }
+    public BroadcastRecord Source { get; }
 
     public DateTimeOffset StartedAt => Source.StartedAt;
     public bool IsHidden => Source.IsHidden;
@@ -1348,7 +1347,7 @@ public sealed partial class StreamSessionRowViewModel : ObservableObject
     public string CardMetaText { get; }
     public string CardSummary { get; }
 
-    public StreamSessionRowViewModel(StreamSessionRecord source)
+    public StreamSessionRowViewModel(BroadcastRecord source)
     {
         Source = source;
         HasTitle = source.Title is { Length: > 0 };
@@ -1383,7 +1382,7 @@ public sealed partial class StreamSessionRowViewModel : ObservableObject
         (AverageViewersDelta, AverageViewersDeltaTone) = averageViewers;
     }
 
-    private static IReadOnlyList<StreamSessionStripeViewModel> BuildStripes(StreamSessionRecord source)
+    private static IReadOnlyList<StreamSessionStripeViewModel> BuildStripes(BroadcastRecord source)
     {
         var total = source.Segments.Aggregate(TimeSpan.Zero, (sum, segment) => sum + segment.Duration);
 
@@ -1402,7 +1401,7 @@ public sealed partial class StreamSessionRowViewModel : ObservableObject
         return stripes;
     }
 
-    private static string BuildGameDisplay(StreamSessionRecord source)
+    private static string BuildGameDisplay(BroadcastRecord source)
     {
         var game = string.IsNullOrEmpty(source.Game) ? "–" : source.Game;
 
@@ -1612,12 +1611,12 @@ public sealed class StreamSessionChatterRowViewModel
     public string Hint { get; }
 
     public StreamSessionChatterRowViewModel(
-        StreamSessionChatter chatter,
+        BroadcastChatterEntry chatter,
         int position,
         long leaderMessageCount,
         bool canOpen)
     {
-        UserId = chatter.UserId;
+        UserId = chatter.Key.UserId;
         DisplayName = chatter.DisplayName;
         MessageCount = chatter.MessageCount;
         MessageCountFormatted = StreamHistoryPageViewModel.FormatNumber(chatter.MessageCount);

@@ -11,9 +11,21 @@ internal static class JsonStoreBackup
 
     public static void CreateBackup(string filePath, string suffix, ILogger? logger, Func<string, string>? redactor)
     {
+        TryCreateBackup(filePath, suffix, logger, redactor, out _);
+    }
+
+    public static bool TryCreateBackup(
+        string filePath,
+        string suffix,
+        ILogger? logger,
+        Func<string, string>? redactor,
+        out string? backupPath)
+    {
+        backupPath = null;
+
         if (!File.Exists(filePath))
         {
-            return;
+            return false;
         }
 
         try
@@ -22,13 +34,14 @@ internal static class JsonStoreBackup
             var directory = Path.GetDirectoryName(filePath)!;
             var name = Path.GetFileNameWithoutExtension(filePath);
             var extension = Path.GetExtension(filePath);
-            var backupPath = Path.Combine(directory, $"{name}.{suffix}-{timestamp}{extension}");
+            var candidatePath = Path.Combine(directory, $"{name}.{suffix}-{timestamp}{extension}");
 
             if (redactor == null)
             {
-                File.Copy(filePath, backupPath, true);
-                logger?.LogInformation("Создан бэкап файла настроек: {BackupPath}", backupPath);
-                return;
+                File.Copy(filePath, candidatePath, true);
+                backupPath = candidatePath;
+                logger?.LogInformation("Создан бэкап файла: {BackupPath}", candidatePath);
+                return true;
             }
 
             string raw;
@@ -42,7 +55,7 @@ internal static class JsonStoreBackup
                     "Не удалось прочитать {FilePath} для редактируемого бэкапа – бэкап не создан, чтобы не утечь сырое содержимое",
                     filePath);
 
-                return;
+                return false;
             }
 
             string redacted;
@@ -56,15 +69,18 @@ internal static class JsonStoreBackup
                     "Сбой редактора при подготовке бэкапа {FilePath} – бэкап не создан",
                     filePath);
 
-                return;
+                return false;
             }
 
-            File.WriteAllText(backupPath, redacted);
-            logger?.LogInformation("Создан редактированный бэкап файла настроек: {BackupPath}", backupPath);
+            File.WriteAllText(candidatePath, redacted);
+            backupPath = candidatePath;
+            logger?.LogInformation("Создан редактированный бэкап файла: {BackupPath}", candidatePath);
+            return true;
         }
         catch (Exception exception)
         {
             logger?.LogError(exception, "Ошибка при создании бэкапа для файла {FilePath}", filePath);
+            return false;
         }
     }
 }

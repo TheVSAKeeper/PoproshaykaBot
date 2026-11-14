@@ -22,10 +22,18 @@ public sealed class LegacyImportResult
 
     public IReadOnlyList<string> MigratedSettingsFiles { get; init; } = [];
 
+    public bool CopiedTwitchUserStatistics => Copied(LegacyDataCatalog.UserStatisticsFileName);
+
+    public bool CopiedYouTubeUserStatistics => Copied($"{LegacyDataCatalog.YouTubeFolderName}/{LegacyDataCatalog.UserStatisticsFileName}");
+
+    public bool CopiedYouTubeQuota => Copied(LegacyDataCatalog.YouTubeQuotaFileName);
+
     public bool CopiedStatistics => CopiedAny(LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics))
         || Copied(LegacyDataCatalog.BotStatisticsFileName);
 
-    public bool CopiedStreamHistory => Copied(LegacyDataCatalog.StreamSessionsFileName);
+    public bool CopiedStreamHistory => Copied(LegacyDataCatalog.BroadcastsFileName)
+        || Copied(LegacyDataCatalog.StreamSessionsFileName)
+        || Copied(LegacyDataCatalog.ActiveBroadcastFileName);
 
     public bool CopiedPollHistory => Copied(LegacyDataCatalog.PollsHistoryFileName);
 

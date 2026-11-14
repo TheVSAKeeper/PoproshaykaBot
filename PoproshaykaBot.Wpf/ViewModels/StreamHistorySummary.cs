@@ -13,7 +13,7 @@ public enum StreamRecordKind
 
 public sealed record StreamCategoryStat(string Game, TimeSpan AirTime, int SessionCount, double Share);
 
-public sealed record StreamRecordStat(StreamRecordKind Kind, StreamSessionRecord Session, long Value);
+public sealed record StreamRecordStat(StreamRecordKind Kind, BroadcastRecord Session, long Value);
 
 public sealed record StreamHistorySummary(
     IReadOnlyList<StreamCategoryStat> Categories,
@@ -24,7 +24,7 @@ public sealed record StreamHistorySummary(
 
     public static readonly StreamHistorySummary Empty = new([], []);
 
-    public static StreamHistorySummary Build(IReadOnlyList<StreamSessionRecord> sessions)
+    public static StreamHistorySummary Build(IReadOnlyList<BroadcastRecord> sessions)
     {
         ArgumentNullException.ThrowIfNull(sessions);
 
@@ -36,7 +36,7 @@ public sealed record StreamHistorySummary(
         return new(BuildCategories(sessions), BuildRecords(sessions));
     }
 
-    private static List<StreamCategoryStat> BuildCategories(IReadOnlyList<StreamSessionRecord> sessions)
+    private static List<StreamCategoryStat> BuildCategories(IReadOnlyList<BroadcastRecord> sessions)
     {
         var totals = new Dictionary<string, CategoryAccumulator>(StringComparer.OrdinalIgnoreCase);
 
@@ -80,7 +80,7 @@ public sealed record StreamHistorySummary(
             .ToList();
     }
 
-    private static List<StreamRecordStat> BuildRecords(IReadOnlyList<StreamSessionRecord> sessions)
+    private static List<StreamRecordStat> BuildRecords(IReadOnlyList<BroadcastRecord> sessions)
     {
         if (sessions.Count < MinSessionsForRecords)
         {
@@ -96,9 +96,9 @@ public sealed record StreamHistorySummary(
 
         return records;
 
-        void Add(StreamRecordKind kind, Func<StreamSessionRecord, long> value)
+        void Add(StreamRecordKind kind, Func<BroadcastRecord, long> value)
         {
-            StreamSessionRecord? leader = null;
+            BroadcastRecord? leader = null;
             var leaderValue = 0L;
 
             foreach (var session in sessions)

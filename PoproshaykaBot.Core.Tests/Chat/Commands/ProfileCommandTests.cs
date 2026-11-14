@@ -20,7 +20,8 @@ public class ProfileCommandTests
             Substitute.For<IChannelInformationApplier>(),
             Substitute.For<IEventBus>(),
             TimeProvider.System,
-            NullLogger<BroadcastProfilesManager>.Instance);
+            NullLogger<BroadcastProfilesManager>.Instance,
+            null);
 
         _command = new(_manager, NullLogger<ProfileCommand>.Instance);
     }

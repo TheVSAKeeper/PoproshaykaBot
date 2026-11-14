@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.Core.Platforms;
+﻿using PoproshaykaBot.Core.Broadcast;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
@@ -46,9 +48,18 @@ public sealed class BotLifecycleAutomationHandlerTests
         _connectionController.When(x => x.StartConnection(Arg.Any<StreamingPlatform>())).Do(_ => _order.Add("старт бота"));
 
         _eventBus = new(NullLogger<InMemoryEventBus>.Instance);
+        _targetChannelProvider = new(Channel);
+        _aggregator = new(
+            _eventBus,
+            Substitute.For<IBroadcastDraftCoordinator>(),
+            _targetChannelProvider,
+            TimeProvider.System,
+            NullLogger<BroadcastAggregator>.Instance);
 
         _handler = new(_connectionController,
             new BotLifecycleAutomationSettingsProvider(_settingsManager),
+            _aggregator,
+            _targetChannelProvider,
             _eventBus,
             NullLogger<BotLifecycleAutomationHandler>.Instance);
 
@@ -78,6 +89,7 @@ public sealed class BotLifecycleAutomationHandlerTests
     public void TearDown()
     {
         _handler.Dispose();
+        _aggregator.Dispose();
     }
 
     private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(5);
@@ -208,6 +220,25 @@ public sealed class BotLifecycleAutomationHandlerTests
 
         _connectionController.DidNotReceive().StartConnection(Arg.Any<StreamingPlatform>());
     }
+
+    [Test]
+    public async Task StreamWentOnlineAndOffline_DebugChannel_DoesNotConnectOrDisconnect()
+    {
+        _targetChannelProvider.OwnChannel = "own-channel";
+        _targetChannelProvider.IsDebugSession = true;
+        _targetChannelProvider.Login = "debug-chan";
+        await SetPhaseAsync(BotLifecyclePhase.Idle);
+        await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null));
+
+        await SetPhaseAsync(BotLifecyclePhase.Connected);
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel));
+
+        _connectionController.DidNotReceive().StartConnection(Arg.Any<StreamingPlatform>());
+        await _connectionController.DidNotReceive().StopAsync(Arg.Any<StreamingPlatform>(), Arg.Any<BotStopMode>());
+    }
+
+    private FakeTargetChannelProvider _targetChannelProvider = null!;
+    private BroadcastAggregator _aggregator = null!;
 
     private Task SetPhaseAsync(BotLifecyclePhase phase)
     {

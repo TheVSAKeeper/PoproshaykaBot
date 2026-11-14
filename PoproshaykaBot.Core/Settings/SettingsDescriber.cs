@@ -105,6 +105,13 @@ public static class SettingsDescriber
         return $"профилей {settings.Profiles.Count}, последний применённый {lastApplied}";
     }
 
+    public static string Describe(BroadcastProfilePlatformsSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return $"записей={settings.Profiles.Count}";
+    }
+
     public static string Describe(CommandSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);

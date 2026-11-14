@@ -179,7 +179,21 @@ public partial class App
         }
     }
 
-    private static bool StartHttpServerIfNeeded(SettingsManager settingsManager, AppLifetime appLifetime)
+    private static bool StartAppLifetime(AppLifetime appLifetime)
+    {
+        try
+        {
+            appLifetime.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            HostLog.Error(ex, "Ошибка запуска фоновых компонентов приложения");
+            return false;
+        }
+    }
+
+    private static bool StartHttpServerIfNeeded(SettingsManager settingsManager, KestrelHttpServer kestrelServer)
     {
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
         var reconcile = HttpServerPortReconciler.Reconcile(settingsManager, loggerFactory.CreateLogger(nameof(HttpServerPortReconciler)));
@@ -198,7 +212,7 @@ public partial class App
 
         try
         {
-            appLifetime.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            kestrelServer.StartAsync().GetAwaiter().GetResult();
             HostLog.Information("HTTP сервер успешно запущен");
             return true;
         }
@@ -207,6 +221,21 @@ public partial class App
             HostLog.Error(ex, "Ошибка запуска HTTP сервера");
             StyledMessageBox.Show($"Ошибка запуска HTTP сервера: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
+        }
+    }
+
+    private static void StopHttpServer(KestrelHttpServer kestrelServer)
+    {
+        try
+        {
+            if (kestrelServer.IsRunning)
+            {
+                kestrelServer.StopAsync().GetAwaiter().GetResult();
+            }
+        }
+        catch (Exception ex)
+        {
+            HostLog.Error(ex, "Ошибка остановки HTTP сервера");
         }
     }
 

@@ -28,6 +28,7 @@ public sealed class SettingsWriteGateTests
         typeof(SettingsManager),
         typeof(AccountsStore),
         typeof(BroadcastProfilesStore),
+        typeof(BroadcastProfilePlatformsStore),
         typeof(DashboardLayoutStore),
         typeof(ObsChatStore),
         typeof(ObsIntegrationStore),
@@ -56,6 +57,12 @@ public sealed class SettingsWriteGateTests
         {
             var store = new BroadcastProfilesStore(null, path, gate);
             return () => store.Save(new());
+        });
+
+        yield return Owner("broadcast-profile-platforms.json", (path, gate) =>
+        {
+            var store = new BroadcastProfilePlatformsStore(null, path, gate);
+            return () => store.SetPlatforms(Guid.NewGuid(), [Core.Platforms.StreamingPlatform.Twitch]);
         });
 
         yield return Owner("dashboard-layout.json", (path, gate) =>

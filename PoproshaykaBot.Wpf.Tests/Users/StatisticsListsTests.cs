@@ -236,13 +236,16 @@ public class StatisticsListsTests
             FakeAvatarCache.CreateProvider());
     }
 
-    private StreamHistoryPageViewModel CreateStreamsPage(params StreamSessionRecord[] sessions)
+    private StreamHistoryPageViewModel CreateStreamsPage(params BroadcastRecord[] sessions)
     {
-        var store = new StreamSessionHistoryStore(filePath: Path.Combine(_directory, "sessions.json"));
+        var store = new BroadcastHistoryStore(
+            null,
+            Path.Combine(_directory, "broadcasts.json"),
+            Path.Combine(_directory, "sessions.json"));
 
         foreach (var session in sessions)
         {
-            store.Append(session);
+            store.TryAppend(session);
         }
 
         return new(
@@ -253,7 +256,7 @@ public class StatisticsListsTests
             new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
     }
 
-    private static StreamSessionRecord Session(int index, int segments)
+    private static BroadcastRecord Session(int index, int segments)
     {
         var started = Start.AddDays(index);
         var length = TimeSpan.FromMinutes(30 + (index * 37 % 200));
@@ -270,7 +273,7 @@ public class StatisticsListsTests
             })
             .ToList();
 
-        return new()
+        return BroadcastRecord.FromTwitchSession(new StreamSessionRecord
         {
             Channel = "bobito217",
             StartedAt = started,
@@ -282,7 +285,7 @@ public class StatisticsListsTests
             PeakViewers = 10 + index,
             AverageViewers = 5,
             Segments = parts,
-        };
+        });
     }
 
     private sealed class FakeChannelProvider : IChannelProvider

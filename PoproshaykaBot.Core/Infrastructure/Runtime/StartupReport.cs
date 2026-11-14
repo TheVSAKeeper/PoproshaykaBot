@@ -86,6 +86,11 @@ public static class StartupReport
             LogSnapshot(logger, "BroadcastProfilesSettings", SettingsDescriber.Describe(broadcastProfilesStore.Load()));
         }
 
+        if (services.GetService<BroadcastProfilePlatformsStore>() is { } broadcastProfilePlatformsStore)
+        {
+            LogSnapshot(logger, "BroadcastProfilePlatformsSettings", SettingsDescriber.Describe(broadcastProfilePlatformsStore.Load()));
+        }
+
         if (services.GetService<PollsStore>() is { } pollsStore)
         {
             LogSnapshot(logger, "PollsSettings", SettingsDescriber.Describe(pollsStore.Load()));

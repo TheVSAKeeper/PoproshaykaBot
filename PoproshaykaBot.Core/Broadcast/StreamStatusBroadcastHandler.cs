@@ -4,36 +4,44 @@ using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Core.Broadcast;
 
 public sealed class StreamStatusBroadcastHandler :
-    IEventHandler<StreamWentOnline>,
-    IEventHandler<StreamWentOffline>,
+    IEventHandler<BroadcastStarted>,
+    IEventHandler<BroadcastPlatformJoined>,
+    IEventHandler<BroadcastPlatformLeft>,
+    IEventHandler<BroadcastEnded>,
     IEventHandler<PlatformConnectionChanged>,
     IEventSubscriber,
     IDisposable
 {
     private readonly IBroadcastScheduler _scheduler;
     private readonly IBroadcastMessenger _messenger;
-    private readonly IStreamStatus _streamStatus;
+    private readonly IBroadcastState _broadcastState;
+    private readonly IBroadcastPlatformTargetsProvider _targetsProvider;
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly SettingsManager _settingsManager;
     private readonly ILogger<StreamStatusBroadcastHandler> _logger;
-    private readonly IDisposable _onlineSubscription;
-    private readonly IDisposable _offlineSubscription;
+    private readonly IDisposable _startedSubscription;
+    private readonly IDisposable _joinedSubscription;
+    private readonly IDisposable _leftSubscription;
+    private readonly IDisposable _endedSubscription;
     private readonly IDisposable _phaseSubscription;
+    private readonly Lock _stateLock = new();
 
-    private bool _botConnected;
-    private bool _pendingStartNotification;
+    private readonly HashSet<StreamingPlatform> _connectedPlatforms = [];
+    private readonly HashSet<StreamingPlatform> _pendingStartNotifications = [];
+    private readonly Dictionary<StreamingPlatform, string> _platformChannels = [];
 
     public StreamStatusBroadcastHandler(
         IBroadcastScheduler scheduler,
         IBroadcastMessenger messenger,
-        IStreamStatus streamStatus,
+        IBroadcastState broadcastState,
+        IBroadcastPlatformTargetsProvider targetsProvider,
         ITargetChannelProvider targetChannelProvider,
         SettingsManager settingsManager,
         IEventBus eventBus,
@@ -41,115 +49,185 @@ public sealed class StreamStatusBroadcastHandler :
     {
         _scheduler = scheduler;
         _messenger = messenger;
-        _streamStatus = streamStatus;
+        _broadcastState = broadcastState;
+        _targetsProvider = targetsProvider;
         _targetChannelProvider = targetChannelProvider;
         _settingsManager = settingsManager;
         _logger = logger;
 
-        _onlineSubscription = eventBus.SubscribePlatform<StreamWentOnline>(StreamingPlatform.Twitch, this);
-        _offlineSubscription = eventBus.SubscribePlatform<StreamWentOffline>(StreamingPlatform.Twitch, this);
-        _phaseSubscription = eventBus.SubscribePlatform<PlatformConnectionChanged>(StreamingPlatform.Twitch, this);
+        _startedSubscription = eventBus.Subscribe<BroadcastStarted>(this);
+        _joinedSubscription = eventBus.Subscribe<BroadcastPlatformJoined>(this);
+        _leftSubscription = eventBus.Subscribe<BroadcastPlatformLeft>(this);
+        _endedSubscription = eventBus.Subscribe<BroadcastEnded>(this);
+        _phaseSubscription = eventBus.Subscribe<PlatformConnectionChanged>(this);
     }
 
     public Task HandleAsync(PlatformConnectionChanged @event, CancellationToken cancellationToken)
     {
-        if (@event.Platform != StreamingPlatform.Twitch)
-        {
-            return Task.CompletedTask;
-        }
+        var targets = _targetsProvider.GetTargetPlatforms();
+        var connected = @event.Phase == BotLifecyclePhase.Connected;
+        var shouldStartScheduler = false;
+        var shouldStopScheduler = false;
+        var sendDeferredStart = false;
+        string? channelToStart = null;
 
-        var wasConnected = _botConnected;
-        _botConnected = @event.Phase == BotLifecyclePhase.Connected;
-
-        if (!_botConnected)
+        lock (_stateLock)
         {
-            if (wasConnected && _scheduler.IsActive)
+            if (!connected)
             {
-                _logger.LogInformation("Остановка планировщика автоматической рассылки при отключении площадки {Platform}", @event.Platform);
-                _scheduler.Stop();
-            }
-
-            return Task.CompletedTask;
-        }
-
-        if (wasConnected)
-        {
-            return Task.CompletedTask;
-        }
-
-        var sendNotification = _pendingStartNotification;
-        _pendingStartNotification = false;
-
-        if (_streamStatus.CurrentStatus != StreamStatus.Online)
-        {
-            return Task.CompletedTask;
-        }
-
-        var channel = _targetChannelProvider.Current.Login;
-
-        if (string.IsNullOrWhiteSpace(channel))
-        {
-            return Task.CompletedTask;
-        }
-
-        return StartBroadcastAsync(channel, sendNotification);
-    }
-
-    public Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Обработка события стрима ONLINE для канала {Channel}", @event.Channel);
-
-        if (!_botConnected)
-        {
-            if (@event.IsCatchUp)
-            {
-                _logger.LogDebug("Бот не подключён – рассылка не запускается, уведомление не отправляется");
+                var wasConnected = _connectedPlatforms.Remove(@event.Platform);
+                if (wasConnected && _scheduler.IsActive && !_connectedPlatforms.Overlaps(targets))
+                {
+                    shouldStopScheduler = true;
+                }
             }
             else
             {
-                _pendingStartNotification = true;
-                _logger.LogDebug("Бот не подключён – рассылка не запускается, уведомление отложено до подключения бота");
-            }
+                var newlyConnected = _connectedPlatforms.Add(@event.Platform);
+                if (newlyConnected)
+                {
+                    if (!_broadcastState.IsAnyLive)
+                    {
+                        _pendingStartNotifications.Remove(@event.Platform);
+                    }
+                    else
+                    {
+                        sendDeferredStart = _pendingStartNotifications.Remove(@event.Platform);
 
+                        if (targets.Contains(@event.Platform) && !_scheduler.IsActive)
+                        {
+                            channelToStart = ResolveSchedulerChannelLocked();
+                            shouldStartScheduler = !string.IsNullOrWhiteSpace(channelToStart);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (shouldStopScheduler)
+        {
+            _logger.LogInformation("Остановка планировщика автоматической рассылки при отключении площадки {Platform}", @event.Platform);
+            _scheduler.Stop();
             return Task.CompletedTask;
         }
 
-        return StartBroadcastAsync(@event.Channel, !@event.IsCatchUp);
+        if (shouldStartScheduler && channelToStart is not null)
+        {
+            StartSchedulerIfEnabled(channelToStart);
+        }
+
+        if (sendDeferredStart && targets.Contains(@event.Platform))
+        {
+            SendStartNotificationToPlatform(@event.Platform);
+        }
+
+        return Task.CompletedTask;
     }
 
-    public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
+    public Task HandleAsync(BroadcastStarted @event, CancellationToken cancellationToken)
     {
-        var settings = _settingsManager.Current.Twitch;
-        var channel = @event.Channel;
+        _logger.LogInformation("Обработка старта эфира {BroadcastId} для канала {Channel}", @event.BroadcastId, @event.Channel);
 
-        _logger.LogInformation("Обработка события стрима OFFLINE для канала {Channel}", channel);
+        var targets = _targetsProvider.GetTargetPlatforms();
+        IReadOnlySet<StreamingPlatform> connectedTargets;
+        string channelToStart;
+        var shouldStartScheduler = false;
 
-        _pendingStartNotification = false;
-
-        if (@event.IsCatchUp)
+        lock (_stateLock)
         {
-            _logger.LogDebug("Офлайн-снимок при подключении (catch-up) – рассылка не останавливается и стоп-сообщение не отправляется");
-            return Task.CompletedTask;
+            _platformChannels[@event.FirstPlatform] = @event.Channel;
+
+            connectedTargets = _connectedPlatforms
+                .Where(targets.Contains)
+                .ToHashSet();
+
+            if (!@event.IsCatchUp)
+            {
+                foreach (var target in targets)
+                {
+                    if (!_connectedPlatforms.Contains(target))
+                    {
+                        _pendingStartNotifications.Add(target);
+                    }
+                }
+            }
+
+            if (connectedTargets.Count > 0 && !_scheduler.IsActive)
+            {
+                channelToStart = ResolveSchedulerChannelLocked();
+                shouldStartScheduler = !string.IsNullOrWhiteSpace(channelToStart);
+            }
+            else
+            {
+                channelToStart = @event.Channel;
+            }
         }
 
-        if (!_botConnected)
+        if (shouldStartScheduler)
         {
-            _logger.LogDebug("Бот не подключён – обработка офлайн пропущена");
-            return Task.CompletedTask;
+            StartSchedulerIfEnabled(channelToStart);
         }
 
-        if (settings.AutoBroadcast.AutoBroadcastEnabled && _scheduler.IsActive)
+        if (!@event.IsCatchUp && connectedTargets.Count > 0)
         {
-            _logger.LogInformation("Остановка планировщика автоматической рассылки для канала {Channel}", channel);
+            SendStartNotification(@event.Channel);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(BroadcastPlatformJoined @event, CancellationToken cancellationToken)
+    {
+        lock (_stateLock)
+        {
+            _platformChannels[@event.Platform] = @event.Channel;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(BroadcastPlatformLeft @event, CancellationToken cancellationToken)
+    {
+        lock (_stateLock)
+        {
+            _platformChannels.Remove(@event.Platform);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(BroadcastEnded @event, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Обработка окончания эфира {BroadcastId} для канала {Channel}", @event.BroadcastId, @event.LastChannel);
+
+        var targets = _targetsProvider.GetTargetPlatforms();
+        IReadOnlySet<StreamingPlatform> connectedTargets;
+
+        lock (_stateLock)
+        {
+            _pendingStartNotifications.Clear();
+            _platformChannels.Clear();
+
+            connectedTargets = _connectedPlatforms
+                .Where(targets.Contains)
+                .ToHashSet();
+        }
+
+        var settings = _settingsManager.Current.Twitch.AutoBroadcast;
+
+        if (settings.AutoBroadcastEnabled && _scheduler.IsActive)
+        {
+            _logger.LogInformation("Остановка планировщика автоматической рассылки для эфира {BroadcastId}", @event.BroadcastId);
             _scheduler.Stop();
             _logger.LogInformation("⚫ Стрим офлайн. Автоматически останавливаю рассылку.");
         }
 
-        if (settings.AutoBroadcast.StreamStatusNotificationsEnabled
-            && !string.IsNullOrEmpty(settings.AutoBroadcast.StreamStopMessage))
+        if (connectedTargets.Count > 0
+            && settings.StreamStatusNotificationsEnabled
+            && !string.IsNullOrEmpty(settings.StreamStopMessage))
         {
-            _logger.LogDebug("Отправка уведомления об окончании стрима в канал {Channel}", channel);
-            _messenger.SendToConnected(settings.AutoBroadcast.StreamStopMessage);
+            _logger.LogDebug("Отправка уведомления об окончании эфира на подключённые площадки");
+            _messenger.SendToConnected(settings.StreamStopMessage);
         }
 
         return Task.CompletedTask;
@@ -157,30 +235,65 @@ public sealed class StreamStatusBroadcastHandler :
 
     public void Dispose()
     {
-        _onlineSubscription.Dispose();
-        _offlineSubscription.Dispose();
+        _startedSubscription.Dispose();
+        _joinedSubscription.Dispose();
+        _leftSubscription.Dispose();
+        _endedSubscription.Dispose();
         _phaseSubscription.Dispose();
     }
 
-    private Task StartBroadcastAsync(string channel, bool sendNotification)
+    private string ResolveSchedulerChannelLocked()
     {
-        var settings = _settingsManager.Current.Twitch;
+        if (_platformChannels.TryGetValue(StreamingPlatform.Twitch, out var twitchChannel)
+            && !string.IsNullOrWhiteSpace(twitchChannel))
+        {
+            return twitchChannel;
+        }
 
-        if (settings.AutoBroadcast.AutoBroadcastEnabled && !_scheduler.IsActive)
+        foreach (var channel in _platformChannels.Values)
+        {
+            if (!string.IsNullOrWhiteSpace(channel))
+            {
+                return channel;
+            }
+        }
+
+        return _targetChannelProvider.Current.Login;
+    }
+
+    private void StartSchedulerIfEnabled(string channel)
+    {
+        var settings = _settingsManager.Current.Twitch.AutoBroadcast;
+
+        if (settings.AutoBroadcastEnabled && !_scheduler.IsActive)
         {
             _logger.LogInformation("Запуск планировщика автоматической рассылки для канала {Channel}", channel);
             _scheduler.Start(channel);
             _logger.LogInformation("🔴 Стрим онлайн. Автоматически запускаю рассылку.");
         }
+    }
 
-        if (sendNotification
-            && settings.AutoBroadcast.StreamStatusNotificationsEnabled
-            && !string.IsNullOrEmpty(settings.AutoBroadcast.StreamStartMessage))
+    private void SendStartNotification(string channel)
+    {
+        var settings = _settingsManager.Current.Twitch.AutoBroadcast;
+
+        if (settings.StreamStatusNotificationsEnabled
+            && !string.IsNullOrEmpty(settings.StreamStartMessage))
         {
             _logger.LogDebug("Отправка уведомления о начале стрима в канал {Channel}", channel);
-            _messenger.SendToConnected(settings.AutoBroadcast.StreamStartMessage);
+            _messenger.SendToConnected(settings.StreamStartMessage);
         }
+    }
 
-        return Task.CompletedTask;
+    private void SendStartNotificationToPlatform(StreamingPlatform platform)
+    {
+        var settings = _settingsManager.Current.Twitch.AutoBroadcast;
+
+        if (settings.StreamStatusNotificationsEnabled
+            && !string.IsNullOrEmpty(settings.StreamStartMessage))
+        {
+            _logger.LogDebug("Отправка отложенного уведомления о начале стрима на площадку {Platform}", platform);
+            _messenger.Send(platform, settings.StreamStartMessage);
+        }
     }
 }

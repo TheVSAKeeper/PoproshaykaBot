@@ -65,9 +65,9 @@ public sealed class PlatformEventIsolationTests
         {
             await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.YouTube, "yt-channel", new StreamInfo { Id = "yt-stream" }));
             Assert.That(commandUsage.GetSnapshot().Single().StreamCount, Is.EqualTo(1),
-                "YouTube stream going online must not reset Twitch command stream counters");
+                "Raw StreamWentOnline must not bypass BroadcastAggregator for CommandUsageStreamResetHandler");
 
-            await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "tw-channel", new StreamInfo { Id = "tw-stream" }));
+            await bus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, "tw-channel", new StreamInfo { Id = "tw-stream" }, DateTimeOffset.UtcNow));
             Assert.That(commandUsage.GetSnapshot().Single().StreamCount, Is.Zero);
 
             await bus.PublishAsync(new ChatHistoryCleared(StreamingPlatform.YouTube, "yt-channel"));

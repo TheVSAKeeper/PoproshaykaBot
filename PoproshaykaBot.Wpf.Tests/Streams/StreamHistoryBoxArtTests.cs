@@ -221,11 +221,11 @@ public class StreamHistoryBoxArtTests
         return path;
     }
 
-    private static StreamSessionRecord Session(int index, string? game)
+    private static BroadcastRecord Session(int index, string? game)
     {
         var started = Start.AddDays(index);
 
-        return new()
+        return BroadcastRecord.FromTwitchSession(new StreamSessionRecord
         {
             Channel = "bobito217",
             StartedAt = started,
@@ -249,21 +249,25 @@ public class StreamHistoryBoxArtTests
                     AverageViewers = 5,
                 },
             ],
-        };
+        });
     }
 
-    private StreamHistoryPageViewModel Create(params StreamSessionRecord[] sessions)
+    private StreamHistoryPageViewModel Create(params BroadcastRecord[] sessions)
     {
         return Create(new GameBoxArtProvider(_cache, NullLogger<GameBoxArtProvider>.Instance), sessions);
     }
 
-    private StreamHistoryPageViewModel Create(GameBoxArtProvider boxArt, params StreamSessionRecord[] sessions)
+    private StreamHistoryPageViewModel Create(GameBoxArtProvider boxArt, params BroadcastRecord[] sessions)
     {
-        var store = new StreamSessionHistoryStore(filePath: Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".json"));
+        var id = Guid.NewGuid().ToString("N");
+        var store = new BroadcastHistoryStore(
+            null,
+            Path.Combine(_directory, id + ".broadcasts.json"),
+            Path.Combine(_directory, id + ".json"));
 
         foreach (var session in sessions)
         {
-            store.Append(session);
+            store.TryAppend(session);
         }
 
         var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);

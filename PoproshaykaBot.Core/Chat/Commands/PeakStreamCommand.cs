@@ -2,7 +2,7 @@
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class PeakStreamCommand(StreamSessionHistoryStore historyStore) : IChatCommand
+public sealed class PeakStreamCommand(BroadcastHistoryStore historyStore) : IChatCommand
 {
     public string Canonical => "рекордстрима";
     public IReadOnlyCollection<string> Aliases => ["peak", "recordstream"];
@@ -15,16 +15,16 @@ public sealed class PeakStreamCommand(StreamSessionHistoryStore historyStore) : 
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var sessions = historyStore.LoadVisible().Sessions;
+        var broadcasts = historyStore.LoadVisible().Broadcasts;
 
-        if (sessions.Count == 0)
+        if (broadcasts.Count == 0)
         {
             return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply("Истории стримов пока нет", context.MessageId));
         }
 
-        var record = sessions
-            .OrderByDescending(s => s.PeakViewers)
-            .ThenByDescending(s => s.StartedAt)
+        var record = broadcasts
+            .OrderByDescending(b => b.PeakViewers)
+            .ThenByDescending(b => b.StartedAt)
             .First();
 
         if (record.PeakViewers <= 0)

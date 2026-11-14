@@ -7,7 +7,7 @@ public sealed class CommandUsageRepository(TimeProvider timeProvider)
     private readonly Lock _lock = new();
     private readonly Dictionary<string, CommandUsageRecord> _records = new(StringComparer.OrdinalIgnoreCase);
 
-    private string _streamId = string.Empty;
+    private string _broadcastId = string.Empty;
     private bool _hasChanges;
     private bool _streamReset;
 
@@ -49,19 +49,20 @@ public sealed class CommandUsageRepository(TimeProvider timeProvider)
         }
     }
 
-    public bool ResetStreamCounters(string streamId)
+    public bool ResetStreamCounters(string broadcastId)
     {
         lock (_lock)
         {
-            var sameStream = !string.IsNullOrEmpty(streamId)
-                             && string.Equals(streamId, _streamId, StringComparison.Ordinal);
+            var normalized = broadcastId ?? string.Empty;
+            var sameBroadcast = !string.IsNullOrEmpty(normalized)
+                                && string.Equals(normalized, _broadcastId, StringComparison.Ordinal);
 
-            if (sameStream)
+            if (sameBroadcast)
             {
                 return false;
             }
 
-            _streamId = streamId ?? string.Empty;
+            _broadcastId = normalized;
             _hasChanges = true;
             _streamReset = true;
 
@@ -88,6 +89,10 @@ public sealed class CommandUsageRepository(TimeProvider timeProvider)
 
         lock (_lock)
         {
+            var sameBroadcastOnDisk = _streamReset
+                                      && !string.IsNullOrEmpty(_broadcastId)
+                                      && string.Equals(data.BroadcastId, _broadcastId, StringComparison.Ordinal);
+
             _records.Clear();
 
             foreach (var record in data.Commands ?? [])
@@ -99,7 +104,7 @@ public sealed class CommandUsageRepository(TimeProvider timeProvider)
 
                 var loaded = record.Clone();
 
-                if (_streamReset)
+                if (_streamReset && !sameBroadcastOnDisk)
                 {
                     loaded.StreamCount = 0;
                 }
@@ -111,10 +116,10 @@ public sealed class CommandUsageRepository(TimeProvider timeProvider)
 
             if (!_streamReset)
             {
-                _streamId = data.StreamId ?? string.Empty;
+                _broadcastId = data.BroadcastId ?? string.Empty;
             }
 
-            _hasChanges = _streamReset;
+            _hasChanges = _streamReset && !sameBroadcastOnDisk;
         }
     }
 
@@ -124,7 +129,7 @@ public sealed class CommandUsageRepository(TimeProvider timeProvider)
         {
             var snapshot = new CommandUsageData
             {
-                StreamId = _streamId,
+                BroadcastId = _broadcastId,
             };
 
             snapshot.Commands.AddRange(CloneRecords());

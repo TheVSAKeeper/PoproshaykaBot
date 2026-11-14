@@ -59,6 +59,7 @@ public partial class App : Application
     private KeepShellLogging? _logging;
     private KeepShellLoggingOptions? _loggingOptions;
     private AppLifetime? _appLifetime;
+    private KestrelHttpServer? _kestrelServer;
     private readonly List<StreamMonitoringHost> _startedStreamMonitoringHosts = [];
     private MemoryWatchdog? _memoryWatchdog;
     private BindingErrorSink? _bindingErrors;
@@ -213,6 +214,7 @@ public partial class App : Application
                 ValidateScopes = true,
             });
 
+            _services.GetRequiredService<IBroadcastDraftCoordinator>().RecoverCompletedDraftOnStartup();
             _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
             ReportConfiguration(_services);
             StatisticsBootstrap.LoadUserStatistics(_services);
@@ -226,7 +228,9 @@ public partial class App : Application
             else
             {
                 var settingsManager = _services.GetRequiredService<SettingsManager>();
-                _appLifetimeStarted = StartHttpServerIfNeeded(settingsManager, _appLifetime);
+                _appLifetimeStarted = StartAppLifetime(_appLifetime);
+                _kestrelServer = _services.GetRequiredService<KestrelHttpServer>();
+                _ = StartHttpServerIfNeeded(settingsManager, _kestrelServer);
                 _startedStreamMonitoringHosts.AddRange(StartStreamMonitoring(_services.GetServices<StreamMonitoringHost>()));
                 _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)),
                     Log.CloseAndFlush,
@@ -518,6 +522,11 @@ public partial class App : Application
 
         using var shutdownTimeout = IsHeadless ? null : new CancellationTokenSource(ShutdownDeadlines.SoftDeadline);
         var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
+
+        if (_kestrelServer is not null)
+        {
+            StopHttpServer(_kestrelServer);
+        }
 
         if (_startedStreamMonitoringHosts.Count > 0)
         {

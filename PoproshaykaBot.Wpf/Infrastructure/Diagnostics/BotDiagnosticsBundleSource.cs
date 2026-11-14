@@ -16,6 +16,7 @@ public sealed class BotDiagnosticsBundleSource(
     UpdateStore update,
     DebugChannelStore debugChannel,
     BroadcastProfilesStore broadcastProfiles,
+    BroadcastProfilePlatformsStore broadcastProfilePlatforms,
     CommandSettingsStore commands,
     PollsStore polls,
     DiagnosticsSnapshotSource snapshots,
@@ -74,6 +75,7 @@ public sealed class BotDiagnosticsBundleSource(
         Append(builder, "UpdateSettings", SettingsDescriber.Describe(update.Load()));
         Append(builder, "DebugChannelSettings", SettingsDescriber.Describe(debugChannel.Load()));
         Append(builder, "BroadcastProfilesSettings", SettingsDescriber.Describe(broadcastProfiles.Load()));
+        Append(builder, "BroadcastProfilePlatformsSettings", SettingsDescriber.Describe(broadcastProfilePlatforms.Load()));
         Append(builder, "CommandSettings", SettingsDescriber.Describe(commands.Load()));
         Append(builder, "PollsSettings", SettingsDescriber.Describe(polls.Load()));
 

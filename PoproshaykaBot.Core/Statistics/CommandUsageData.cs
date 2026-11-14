@@ -1,8 +1,11 @@
-﻿namespace PoproshaykaBot.Core.Statistics;
+﻿using System.Text.Json.Serialization;
+
+namespace PoproshaykaBot.Core.Statistics;
 
 public sealed class CommandUsageData
 {
-    public string StreamId { get; set; } = string.Empty;
+    [JsonPropertyName("streamId")]
+    public string BroadcastId { get; set; } = string.Empty;
 
     public List<CommandUsageRecord> Commands { get; set; } = [];
 }

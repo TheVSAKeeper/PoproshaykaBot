@@ -843,9 +843,10 @@ public class StreamHistoryTrendGeometryTests
     private StreamHistoryPageViewModel CreateDetailPage(int segments, int chatters)
     {
         var session = Session(0);
-        session.Title = DetailTitle;
         session.EndedAt = session.StartedAt.AddMinutes(10 * segments);
-        session.Segments = Enumerable.Range(0, segments)
+        session.Platforms[0].EndedAt = session.EndedAt;
+        session.Platforms[0].Title = DetailTitle;
+        session.Platforms[0].Segments = Enumerable.Range(0, segments)
             .Select(index => new StreamSessionSegment
             {
                 StartedAt = session.StartedAt.AddMinutes(10 * index),
@@ -854,14 +855,17 @@ public class StreamHistoryTrendGeometryTests
                 Title = "эфир",
             })
             .ToList();
-        session.Chatters = Enumerable.Range(0, chatters)
+        session.Platforms[0].Chatters = Enumerable.Range(0, chatters)
             .Select(index => new StreamSessionChatter { UserId = "u" + index, DisplayName = "чаттер " + index, MessageCount = 100 - index })
             .ToList();
-        session.ChatterCount = chatters;
+        session.Platforms[0].ChatterCount = chatters;
 
-        var store = new StreamSessionHistoryStore(filePath: Path.Combine(_directory, "sessions.json"));
-        store.Append(session);
-        store.Append(Session(1));
+        var store = new BroadcastHistoryStore(
+            null,
+            Path.Combine(_directory, "broadcasts.json"),
+            Path.Combine(_directory, "sessions.json"));
+        store.TryAppend(session);
+        store.TryAppend(Session(1));
 
         return new(
             store,
@@ -948,13 +952,16 @@ public class StreamHistoryTrendGeometryTests
 
     private StreamHistoryPageViewModel CreatePage(int sessions = 4, int peak = 0, int firstPeak = 0, int trendLength = StreamHistoryPageViewModel.DefaultTrendLength)
     {
-        var store = new StreamSessionHistoryStore(filePath: Path.Combine(_directory, "sessions.json"));
+        var store = new BroadcastHistoryStore(
+            null,
+            Path.Combine(_directory, "broadcasts.json"),
+            Path.Combine(_directory, "sessions.json"));
 
         for (var index = 0; index < sessions; index++)
         {
             var value = index == sessions - 1 ? peak : index == 0 ? firstPeak : 0;
 
-            store.Append(Session(index, value));
+            store.TryAppend(Session(index, value));
         }
 
         var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
@@ -971,11 +978,11 @@ public class StreamHistoryTrendGeometryTests
             new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
     }
 
-    private static StreamSessionRecord Session(int index, int peak = 0)
+    private static BroadcastRecord Session(int index, int peak = 0)
     {
         var started = Start.AddDays(index);
 
-        return new()
+        return BroadcastRecord.FromTwitchSession(new StreamSessionRecord
         {
             Channel = "bobito217",
             StartedAt = started,
@@ -986,6 +993,6 @@ public class StreamHistoryTrendGeometryTests
             ChatterCount = 1,
             PeakViewers = peak > 0 ? peak : 10 + index,
             AverageViewers = 5,
-        };
+        });
     }
 }

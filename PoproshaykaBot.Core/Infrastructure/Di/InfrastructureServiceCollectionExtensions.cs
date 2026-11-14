@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
@@ -29,6 +30,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton(sp => new AppHost(
             sp.GetKeyedServices<IHostedComponent>(HostingKeys.Shared),
             sp.GetRequiredService<ILogger<AppHost>>()));
+        services.TryAddSingleton<AppLifetime>();
 
         services.AddKeyedSingleton<IHostedComponent, BroadcastSchedulerHostedComponent>(HostingKeys.Shared);
 

@@ -352,8 +352,13 @@ public sealed class MultiPlatformHostingIntegrationTests
         scheduler.When(x => x.Start(Arg.Any<string>())).Do(_ => isSchedulerActive = true);
         scheduler.When(x => x.Stop()).Do(_ => isSchedulerActive = false);
 
-        var streamStatus = Substitute.For<IStreamStatus>();
-        streamStatus.CurrentStatus.Returns(StreamStatus.Offline);
+        var broadcastAggregator = new BroadcastAggregator(
+            eventBus,
+            Substitute.For<IBroadcastDraftCoordinator>(),
+            targetChannelProvider,
+            TimeProvider.System,
+            NullLogger<BroadcastAggregator>.Instance);
+        var broadcastTargetsProvider = new DefaultBroadcastPlatformTargetsProvider();
 
         var automationSettings = new FakeBotLifecycleAutomationSettingsProvider();
         var farewellHandler = new FarewellMessageHandler(
@@ -366,7 +371,8 @@ public sealed class MultiPlatformHostingIntegrationTests
         var streamBroadcastHandler = new StreamStatusBroadcastHandler(
             scheduler,
             broadcastMessenger,
-            streamStatus,
+            broadcastAggregator,
+            broadcastTargetsProvider,
             targetChannelProvider,
             settingsManager,
             eventBus,
@@ -374,6 +380,8 @@ public sealed class MultiPlatformHostingIntegrationTests
         var automationHandler = new BotLifecycleAutomationHandler(
             manager,
             automationSettings,
+            broadcastAggregator,
+            targetChannelProvider,
             eventBus,
             NullLogger<BotLifecycleAutomationHandler>.Instance);
         var botUserIdProvider = new BotUserIdProvider(helix, eventBus, NullLogger<BotUserIdProvider>.Instance);
@@ -398,6 +406,7 @@ public sealed class MultiPlatformHostingIntegrationTests
             helix,
             scheduler,
             automationSettings,
+            broadcastAggregator,
             farewellHandler,
             streamBroadcastHandler,
             automationHandler,
@@ -472,6 +481,7 @@ public sealed class MultiPlatformHostingIntegrationTests
         ITwitchHelixClient helix,
         IBroadcastScheduler broadcastScheduler,
         FakeBotLifecycleAutomationSettingsProvider automationSettings,
+        BroadcastAggregator broadcastAggregator,
         FarewellMessageHandler farewellHandler,
         StreamStatusBroadcastHandler streamBroadcastHandler,
         BotLifecycleAutomationHandler automationHandler,
@@ -497,6 +507,7 @@ public sealed class MultiPlatformHostingIntegrationTests
         public IBroadcastScheduler BroadcastScheduler { get; } = broadcastScheduler;
         public FakeBotLifecycleAutomationSettingsProvider AutomationSettings { get; } = automationSettings;
 
+        private readonly BroadcastAggregator _broadcastAggregator = broadcastAggregator;
         private readonly FarewellMessageHandler _farewellHandler = farewellHandler;
         private readonly StreamStatusBroadcastHandler _streamBroadcastHandler = streamBroadcastHandler;
         private readonly BotLifecycleAutomationHandler _automationHandler = automationHandler;
@@ -507,6 +518,7 @@ public sealed class MultiPlatformHostingIntegrationTests
             _farewellHandler.Dispose();
             _streamBroadcastHandler.Dispose();
             _automationHandler.Dispose();
+            _broadcastAggregator.Dispose();
             BotUserIdProvider.Dispose();
             ChatPipeline.Dispose();
         }
