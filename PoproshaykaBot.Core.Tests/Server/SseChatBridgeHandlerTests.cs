@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using PoproshaykaBot.Core.Platforms;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
@@ -77,6 +78,7 @@ public sealed class SseChatBridgeHandlerTests
     {
         var historyEntry = new ChatMessageData
         {
+            Platform = StreamingPlatform.Twitch,
             MessageId = "msg-1",
             Timestamp = DateTime.UtcNow,
             UserId = "u1",
@@ -85,7 +87,8 @@ public sealed class SseChatBridgeHandlerTests
             MessageType = mark is null ? ChatMessageType.UserMessage : ChatMessageType.BotResponse,
         };
 
-        return new("test-channel",
+        return new(StreamingPlatform.Twitch,
+            "test-channel",
             "msg-1",
             "u1",
             "bot",

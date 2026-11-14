@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Chat.Handlers;
@@ -17,7 +18,7 @@ public sealed class ConnectionGreetingHandler : IEventHandler<BotJoinedChannel>,
     {
         _messenger = messenger;
         _settingsManager = settingsManager;
-        _subscription = eventBus.Subscribe(this);
+        _subscription = eventBus.SubscribePlatform<BotJoinedChannel>(StreamingPlatform.Twitch, this);
     }
 
     public Task HandleAsync(BotJoinedChannel @event, CancellationToken cancellationToken)

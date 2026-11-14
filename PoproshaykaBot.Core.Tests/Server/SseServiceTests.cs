@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using PoproshaykaBot.Core.Platforms;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Server;
@@ -279,6 +280,7 @@ public sealed class SseServiceTests
     {
         return new()
         {
+            Platform = StreamingPlatform.Twitch,
             Timestamp = DateTime.UtcNow,
             DisplayName = "tester",
             Message = "hello",

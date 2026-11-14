@@ -2,6 +2,7 @@
 using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Settings;
@@ -248,7 +249,7 @@ public class UserStatisticsBalanceInputTests
         var statistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         var eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
-        statistics.ReplaceAll(
+        statistics.SeedPlatform(StreamingPlatform.Twitch,
         [
             new() { UserId = "1", Name = "koshied", MessageCount = 1_234, BonusPoints = 600 },
             new() { UserId = "2", Name = "новичок", MessageCount = 3 },

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -23,7 +24,7 @@ public class BusDispatcherExtensionsTests
 
         using var subscription = bus.SubscribeOnUi<StreamWentOffline>(_ => received++);
 
-        await bus.PublishAsync(new StreamWentOffline("channel"));
+        await bus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, "channel"));
 
         Assert.That(received, Is.EqualTo(1));
     }
@@ -37,8 +38,24 @@ public class BusDispatcherExtensionsTests
         var subscription = bus.SubscribeOnUi<StreamWentOffline>(_ => received++);
         subscription.Dispose();
 
-        await bus.PublishAsync(new StreamWentOffline("channel"));
+        await bus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, "channel"));
 
         Assert.That(received, Is.Zero);
+    }
+
+    [Test]
+    public async Task SubscribePlatformOnUi_IgnoresEventsFromOtherPlatforms()
+    {
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var platforms = new List<StreamingPlatform>();
+
+        using var subscription = bus.SubscribePlatformOnUi<StreamWentOffline>(
+            StreamingPlatform.Twitch,
+            e => platforms.Add(e.Platform));
+
+        await bus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, "yt-channel"));
+        await bus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, "tw-channel"));
+
+        Assert.That(platforms, Is.EqualTo(new[] { StreamingPlatform.Twitch }));
     }
 }

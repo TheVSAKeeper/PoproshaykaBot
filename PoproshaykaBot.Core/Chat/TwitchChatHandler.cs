@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Chat;
@@ -62,8 +63,8 @@ public sealed class TwitchChatHandler :
 
         _subscriptions =
         [
-            eventBus.Subscribe<RawChatMessageReceived>(this),
-            eventBus.Subscribe<BotJoinedChannel>(this),
+            eventBus.SubscribePlatform<RawChatMessageReceived>(StreamingPlatform.Twitch, this),
+            eventBus.SubscribePlatform<BotJoinedChannel>(StreamingPlatform.Twitch, this),
         ];
     }
 
@@ -109,6 +110,7 @@ public sealed class TwitchChatHandler :
 
         var historyEntry = new ChatMessageData
         {
+            Platform = chatMessage.Platform,
             MessageId = chatMessage.Id,
             Timestamp = @event.Timestamp.UtcDateTime,
             UserId = chatMessage.UserId,
@@ -126,7 +128,8 @@ public sealed class TwitchChatHandler :
 
         var commandResponse = chatMessage.IsBot ? _commandResponseTracker.TryConsume(chatMessage.Id) : null;
 
-        _ = _eventBus.PublishAsync(new ChatMessageReceived(chatMessage.Channel,
+        _ = _eventBus.PublishAsync(new ChatMessageReceived(chatMessage.Platform,
+            chatMessage.Channel,
             chatMessage.Id,
             chatMessage.UserId,
             chatMessage.Username,
@@ -146,6 +149,7 @@ public sealed class TwitchChatHandler :
 
         var context = new CommandContext
         {
+            Platform = chatMessage.Platform,
             Channel = chatMessage.Channel,
             MessageId = chatMessage.Id,
             UserId = chatMessage.UserId,
@@ -272,6 +276,7 @@ public sealed class TwitchChatHandler :
 
         var historyEntry = new ChatMessageData
         {
+            Platform = source.Platform,
             MessageId = messageId,
             Timestamp = DateTime.UtcNow,
             UserId = botAccount.UserId,
@@ -281,7 +286,8 @@ public sealed class TwitchChatHandler :
             Status = UserStatus.None,
         };
 
-        return _eventBus.PublishAsync(new ChatMessageReceived(source.Channel,
+        return _eventBus.PublishAsync(new ChatMessageReceived(source.Platform,
+            source.Channel,
             messageId,
             botAccount.UserId,
             displayName,

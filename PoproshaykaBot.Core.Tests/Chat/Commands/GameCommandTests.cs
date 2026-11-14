@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 
 namespace PoproshaykaBot.Core.Tests.Chat.Commands;
@@ -26,10 +28,14 @@ public class GameCommandTests
         {
             Assert.That(_command.CanExecute(new()
             {
+                Platform = StreamingPlatform.Twitch,
                 IsBroadcaster = true,
             }), Is.True);
 
-            Assert.That(_command.CanExecute(new()), Is.False);
+            Assert.That(_command.CanExecute(new()
+            {
+                Platform = StreamingPlatform.Twitch,
+            }), Is.False);
         }
     }
 
@@ -38,6 +44,7 @@ public class GameCommandTests
     {
         var response = await _command.ExecuteAsync(new()
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
             Arguments = [],
         }, CancellationToken.None);
@@ -53,6 +60,7 @@ public class GameCommandTests
 
         var response = await _command.ExecuteAsync(new()
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
             MessageId = "m1",
             Arguments = ["dota"],
@@ -75,6 +83,7 @@ public class GameCommandTests
 
         var response = await _command.ExecuteAsync(new()
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
             MessageId = "m1",
             Arguments = ["unknown"],
@@ -92,6 +101,7 @@ public class GameCommandTests
 
         var response = await _command.ExecuteAsync(new()
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
             MessageId = "m1",
             Arguments = ["tarkov"],

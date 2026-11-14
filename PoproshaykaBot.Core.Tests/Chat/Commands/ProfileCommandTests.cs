@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -51,6 +52,7 @@ public class ProfileCommandTests
     {
         var ctx = new CommandContext
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = false,
             IsModerator = false,
         };
@@ -63,6 +65,7 @@ public class ProfileCommandTests
     {
         var ctx = new CommandContext
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
         };
 
@@ -74,6 +77,7 @@ public class ProfileCommandTests
     {
         var ctx = new CommandContext
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
             Arguments = [],
         };
@@ -90,6 +94,7 @@ public class ProfileCommandTests
         _manager.FindByName("unknown").Returns((BroadcastProfile?)null);
         var ctx = new CommandContext
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
             MessageId = "m1",
             Arguments = ["unknown"],
@@ -119,6 +124,7 @@ public class ProfileCommandTests
 
         var ctx = new CommandContext
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
             MessageId = "m1",
             Arguments = ["Dota"],

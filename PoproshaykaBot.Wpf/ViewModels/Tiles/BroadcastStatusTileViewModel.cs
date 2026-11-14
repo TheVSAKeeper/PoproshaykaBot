@@ -9,6 +9,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -73,9 +74,9 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         HeaderActions.Add(_sendNowItem);
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BroadcastSchedulerStateChanged>(_ => RefreshState()));
-        _subscriptions.Add(eventBus.SubscribeOnUi<StreamWentOnline>(_ => RefreshState()));
-        _subscriptions.Add(eventBus.SubscribeOnUi<StreamWentOffline>(_ => RefreshState()));
-        _subscriptions.Add(eventBus.SubscribeOnUi<StreamMetadataResolved>(_ => RefreshState()));
+        _subscriptions.Add(eventBus.SubscribePlatformOnUi<StreamWentOnline>(StreamingPlatform.Twitch, _ => RefreshState()));
+        _subscriptions.Add(eventBus.SubscribePlatformOnUi<StreamWentOffline>(StreamingPlatform.Twitch, _ => RefreshState()));
+        _subscriptions.Add(eventBus.SubscribePlatformOnUi<StreamMetadataResolved>(StreamingPlatform.Twitch, _ => RefreshState()));
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(_ => RefreshState()));
 
         RefreshState();

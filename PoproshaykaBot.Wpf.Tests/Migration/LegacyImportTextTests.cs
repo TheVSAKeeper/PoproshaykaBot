@@ -41,6 +41,7 @@ public class LegacyImportTextTests
     }
 
     [TestCase(new[] { "users_statistics.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска статистика не сохраняется – чтобы не затереть перенесённое.")]
+    [TestCase(new[] { "youtube/users_statistics.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска статистика не сохраняется – чтобы не затереть перенесённое.")]
     [TestCase(new[] { "settings/settings.json", "bot_statistics.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска настройки и статистика не сохраняются – чтобы не затереть перенесённое.")]
     [TestCase(new[] { "stream_sessions.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска история стримов не сохраняется – чтобы не затереть перенесённое.")]
     [TestCase(new[] { "users_statistics.json", "stream_sessions.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска статистика и история стримов не сохраняются – чтобы не затереть перенесённое.")]
@@ -61,6 +62,18 @@ public class LegacyImportTextTests
 
         Assert.That(LegacyImportText.BuildRestartNotice(result, isSettingsEntry), Is.Null,
             "На старте перезапуск и так впереди, а без переноса сообщать не о чем.");
+    }
+
+    [Test]
+    public void DescribeFailure_DistinguishesYouTubeUserStatisticsFromTwitch()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LegacyImportText.DescribeFailure(new("users_statistics.json", "io")),
+                Does.StartWith("Статистика зрителей –"));
+            Assert.That(LegacyImportText.DescribeFailure(new("youtube\\users_statistics.json", "io")),
+                Does.StartWith("Статистика зрителей YouTube –"));
+        }
     }
 
     private static LegacyImportResult Build(

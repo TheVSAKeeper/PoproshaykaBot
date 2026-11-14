@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Chat;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Server.Images;
 using PoproshaykaBot.Core.Settings.Obs;
@@ -24,6 +25,7 @@ public sealed class MessageImagePolicyTests
     {
         return new()
         {
+            Platform = StreamingPlatform.Twitch,
             MessageId = "1",
             Timestamp = DateTime.UtcNow,
             UserId = "42",
@@ -99,6 +101,7 @@ public sealed class MessageImagePolicyTests
 
         var message = new ChatMessageData
         {
+            Platform = StreamingPlatform.Twitch,
             MessageId = "1",
             Timestamp = DateTime.UtcNow,
             Message = "смотри " + Link,

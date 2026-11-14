@@ -5,6 +5,7 @@ using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -65,10 +66,10 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
             RefreshFrameCommand,
             toolTip: "Обновить кадр"));
 
-        _subs.Add(bus.SubscribeOnUi<StreamWentOnline>(_ => ApplyCurrentStatus()));
-        _subs.Add(bus.SubscribeOnUi<StreamWentOffline>(_ => ApplyCurrentStatus()));
-        _subs.Add(bus.SubscribeOnUi<StreamMetadataResolved>(_ => ApplyCurrentStatus()));
-        _subs.Add(bus.SubscribeOnUi<ChannelUpdated>(_ => ApplyCurrentStatus()));
+        _subs.Add(bus.SubscribePlatformOnUi<StreamWentOnline>(StreamingPlatform.Twitch, _ => ApplyCurrentStatus()));
+        _subs.Add(bus.SubscribePlatformOnUi<StreamWentOffline>(StreamingPlatform.Twitch, _ => ApplyCurrentStatus()));
+        _subs.Add(bus.SubscribePlatformOnUi<StreamMetadataResolved>(StreamingPlatform.Twitch, _ => ApplyCurrentStatus()));
+        _subs.Add(bus.SubscribePlatformOnUi<ChannelUpdated>(StreamingPlatform.Twitch, _ => ApplyCurrentStatus()));
 
         ApplyCurrentStatus();
     }

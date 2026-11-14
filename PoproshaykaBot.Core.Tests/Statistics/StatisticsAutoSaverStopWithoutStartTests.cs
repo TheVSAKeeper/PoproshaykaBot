@@ -46,11 +46,7 @@ public sealed class StatisticsAutoSaverStopWithoutStartTests
 
         await File.WriteAllTextAsync(statsFile, PreservedContent);
 
-        var userRepo = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
-        var botRepo = new BotStatisticsRepository();
-        var fileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _tempDir);
-        var loader = new UserStatisticsLoader(userRepo, fileStore, NullLogger<UserStatisticsLoader>.Instance);
-        var saver = new StatisticsAutoSaver(userRepo, botRepo, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsTestGraph(_tempDir).AutoSaver;
 
         await saver.StopAsync(new Progress<string>(), CancellationToken.None);
 
@@ -67,11 +63,7 @@ public sealed class StatisticsAutoSaverStopWithoutStartTests
         const string PreservedContent = """[{"userId":"u1","name":"Bob","messageCount":42,"firstSeen":"2024-01-01T00:00:00Z","lastSeen":"2024-01-02T00:00:00Z"}]""";
         await File.WriteAllTextAsync(statsFile, PreservedContent);
 
-        var userRepo = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
-        var botRepo = new BotStatisticsRepository();
-        var fileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _tempDir);
-        var loader = new UserStatisticsLoader(userRepo, fileStore, NullLogger<UserStatisticsLoader>.Instance);
-        var saver = new StatisticsAutoSaver(userRepo, botRepo, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var saver = new StatisticsTestGraph(_tempDir).AutoSaver;
 
         await saver.DisposeAsync();
 

@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
@@ -81,7 +83,7 @@ public class PollAutoTriggerHandlerTests
         var profile = Profile(PollAutoTriggerEvent.StreamOnline);
         _profilesManager.GetAll().Returns([profile]);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _controller.Received(1).StartAsync(profile, Arg.Any<CancellationToken>());
     }
@@ -92,7 +94,7 @@ public class PollAutoTriggerHandlerTests
         var profile = Profile(PollAutoTriggerEvent.None);
         _profilesManager.GetAll().Returns([profile]);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _controller.DidNotReceiveWithAnyArgs().StartAsync(null!, CancellationToken.None);
     }
@@ -140,7 +142,7 @@ public class PollAutoTriggerHandlerTests
         _profilesManager.GetAll().Returns([profile]);
         _polls.AutoTriggerKillSwitchDateUtc = _now.Date;
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _controller.DidNotReceiveWithAnyArgs().StartAsync(null!, CancellationToken.None);
     }
@@ -152,7 +154,7 @@ public class PollAutoTriggerHandlerTests
         _profilesManager.GetAll().Returns([profile]);
         _polls.AutoTriggerKillSwitchDateUtc = _now.Date.AddDays(-1);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _controller.Received(1).StartAsync(profile, Arg.Any<CancellationToken>());
     }
@@ -166,9 +168,9 @@ public class PollAutoTriggerHandlerTests
             .Returns(Task.FromResult<PollSnapshot?>(new("p", profile.Id, "Q", [], _now, _now.AddMinutes(1), false, 0,
                 PollSnapshotStatus.Active, null)));
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
         _clock.UtcNow = _clock.UtcNow.AddMinutes(5);
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _controller.Received(1).StartAsync(profile, Arg.Any<CancellationToken>());
     }
@@ -182,9 +184,9 @@ public class PollAutoTriggerHandlerTests
             .Returns(Task.FromResult<PollSnapshot?>(new("p", profile.Id, "Q", [], _now, _now.AddMinutes(1), false, 0,
                 PollSnapshotStatus.Active, null)));
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
         _clock.UtcNow = _clock.UtcNow.AddMinutes(31);
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _controller.Received(2).StartAsync(profile, Arg.Any<CancellationToken>());
     }
@@ -197,7 +199,7 @@ public class PollAutoTriggerHandlerTests
         _store.Current.Returns(new PollSnapshot("existing", null, "X", [], _now, _now.AddMinutes(1), false, 0,
             PollSnapshotStatus.Active, null));
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _controller.DidNotReceiveWithAnyArgs().StartAsync(null!, CancellationToken.None);
     }
@@ -211,10 +213,10 @@ public class PollAutoTriggerHandlerTests
             .Returns(Task.FromResult<PollSnapshot?>(new("p", profile.Id, "Q", [], _now, _now.AddMinutes(1), false, 0,
                 PollSnapshotStatus.Active, null)));
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOffline("chan"), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, "chan"), CancellationToken.None);
         _clock.UtcNow = _clock.UtcNow.AddMinutes(5);
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _controller.Received(2).StartAsync(profile, Arg.Any<CancellationToken>());
     }

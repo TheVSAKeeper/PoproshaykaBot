@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using PoproshaykaBot.Core.Platforms;
+using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Server.Endpoints;
@@ -63,6 +64,7 @@ public sealed class ChatHistoryEndpointTests
     {
         return new()
         {
+            Platform = StreamingPlatform.Twitch,
             MessageId = id,
             Timestamp = timestamp,
             UserId = "u",

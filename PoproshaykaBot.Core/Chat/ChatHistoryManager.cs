@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Chat;
@@ -39,6 +40,6 @@ public sealed class ChatHistoryManager(SettingsManager settingsManager, IEventBu
             _chatHistory.Clear();
         }
 
-        _ = eventBus.PublishAsync(new ChatHistoryCleared());
+        _ = eventBus.PublishAsync(new ChatHistoryCleared(StreamingPlatform.Twitch));
     }
 }

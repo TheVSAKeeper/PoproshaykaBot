@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Statistics;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
@@ -77,13 +78,13 @@ public sealed class StreamSessionStatisticsHandler :
         _activeSessionStore = activeSessionStore;
         _logger = logger;
 
-        _onlineSubscription = eventBus.Subscribe<StreamWentOnline>(this);
-        _offlineSubscription = eventBus.Subscribe<StreamWentOffline>(this);
-        _metadataResolvedSubscription = eventBus.Subscribe<StreamMetadataResolved>(this);
-        _chatSubscription = eventBus.Subscribe<ChatMessageReceived>(this);
-        _channelUpdatedSubscription = eventBus.Subscribe<ChannelUpdated>(this);
-        _ingestionStartedSubscription = eventBus.Subscribe<ChatIngestionStarted>(this);
-        _ingestionStoppedSubscription = eventBus.Subscribe<ChatIngestionStopped>(this);
+        _onlineSubscription = eventBus.SubscribePlatform<StreamWentOnline>(StreamingPlatform.Twitch, this);
+        _offlineSubscription = eventBus.SubscribePlatform<StreamWentOffline>(StreamingPlatform.Twitch, this);
+        _metadataResolvedSubscription = eventBus.SubscribePlatform<StreamMetadataResolved>(StreamingPlatform.Twitch, this);
+        _chatSubscription = eventBus.SubscribePlatform<ChatMessageReceived>(StreamingPlatform.Twitch, this);
+        _channelUpdatedSubscription = eventBus.SubscribePlatform<ChannelUpdated>(StreamingPlatform.Twitch, this);
+        _ingestionStartedSubscription = eventBus.SubscribePlatform<ChatIngestionStarted>(StreamingPlatform.Twitch, this);
+        _ingestionStoppedSubscription = eventBus.SubscribePlatform<ChatIngestionStopped>(StreamingPlatform.Twitch, this);
     }
 
     public async Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)

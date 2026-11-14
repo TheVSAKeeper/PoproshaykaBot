@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch;
@@ -90,7 +91,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         _eventSubClient.OnRevocation += OnRevocationAsync;
         _eventSubClient.OnDisconnected += OnDisconnectedAsync;
 
-        _channelUpdatedSubscription = _eventBus.Subscribe<ChannelUpdated>(OnChannelUpdated);
+        _channelUpdatedSubscription = _eventBus.SubscribePlatform<ChannelUpdated>(StreamingPlatform.Twitch, OnChannelUpdated);
         _subscribed = true;
 
         _logger.LogInformation("StreamStatusManager: подписки на EventSub установлены");
@@ -597,8 +598,8 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
         return newStatus switch
         {
-            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(channel, CurrentStream, isCatchUp), CancellationToken.None),
-            StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(channel, isCatchUp), CancellationToken.None),
+            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, channel, CurrentStream, isCatchUp), CancellationToken.None),
+            StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, channel, isCatchUp), CancellationToken.None),
             _ => Task.CompletedTask,
         };
     }
@@ -614,7 +615,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
             return Task.CompletedTask;
         }
 
-        return _eventBus.PublishAsync(new StreamMetadataResolved(channel, stream), CancellationToken.None);
+        return _eventBus.PublishAsync(new StreamMetadataResolved(StreamingPlatform.Twitch, channel, stream), CancellationToken.None);
     }
 
     private async Task CreateEventSubSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)

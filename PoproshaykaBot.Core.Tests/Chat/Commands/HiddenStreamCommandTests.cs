@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Chat;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Statistics;
 
@@ -87,6 +88,7 @@ public sealed class HiddenStreamCommandTests
 
         var response = await command.ExecuteAsync(new()
         {
+            Platform = StreamingPlatform.Twitch,
             MessageId = "m1",
             UserId = "u1",
             Username = "alice",

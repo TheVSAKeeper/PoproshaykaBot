@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
@@ -94,10 +95,10 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         _subs.Add(bus.SubscribeOnUi<BroadcastProfileApplyFailed>(OnProfileApplyFailed));
         _subs.Add(bus.SubscribeOnUi<ChannelInformationPatched>(_ => ClearInFlightStates("✓ Применено", false)));
         _subs.Add(bus.SubscribeOnUi<ChannelInformationPatchFailed>(e => ShowStatus($"✗ {e.ErrorMessage}", true)));
-        _subs.Add(bus.SubscribeOnUi<StreamWentOnline>(_ => ReloadItems()));
-        _subs.Add(bus.SubscribeOnUi<StreamWentOffline>(_ => ReloadItems()));
-        _subs.Add(bus.SubscribeOnUi<StreamMetadataResolved>(_ => ReloadItems()));
-        _subs.Add(bus.SubscribeOnUi<ChannelUpdated>(_ => ReloadItems()));
+        _subs.Add(bus.SubscribePlatformOnUi<StreamWentOnline>(StreamingPlatform.Twitch, _ => ReloadItems()));
+        _subs.Add(bus.SubscribePlatformOnUi<StreamWentOffline>(StreamingPlatform.Twitch, _ => ReloadItems()));
+        _subs.Add(bus.SubscribePlatformOnUi<StreamMetadataResolved>(StreamingPlatform.Twitch, _ => ReloadItems()));
+        _subs.Add(bus.SubscribePlatformOnUi<ChannelUpdated>(StreamingPlatform.Twitch, _ => ReloadItems()));
 
         _activeProfileId = profiles.Load().LastAppliedProfileId;
         ReloadItems();

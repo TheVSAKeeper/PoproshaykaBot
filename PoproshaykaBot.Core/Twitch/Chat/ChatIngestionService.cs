@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -286,7 +287,7 @@ public sealed class ChatIngestionService(
             }
         }
 
-        return eventBus.PublishAsync(new ChatIngestionStarted(now), CancellationToken.None);
+        return eventBus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.Twitch, now), CancellationToken.None);
     }
 
     private Task MarkLeftAsync()
@@ -309,7 +310,7 @@ public sealed class ChatIngestionService(
         _retry.Cancel();
 
         return previous != 0
-            ? eventBus.PublishAsync(new ChatIngestionStopped(timeProvider.GetUtcNow()), CancellationToken.None)
+            ? eventBus.PublishAsync(new ChatIngestionStopped(StreamingPlatform.Twitch, timeProvider.GetUtcNow()), CancellationToken.None)
             : Task.CompletedTask;
     }
 }

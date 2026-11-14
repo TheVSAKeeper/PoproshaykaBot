@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -58,7 +59,7 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
         _subs.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnPhaseChanged));
         _subs.Add(eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(OnStatusUpdated));
-        _subs.Add(eventBus.SubscribeOnUi<BotJoinedChannel>(OnJoinedChannel));
+        _subs.Add(eventBus.SubscribePlatformOnUi<BotJoinedChannel>(StreamingPlatform.Twitch, OnJoinedChannel));
     }
 
     public override string PageTitle => "Подключение бота";

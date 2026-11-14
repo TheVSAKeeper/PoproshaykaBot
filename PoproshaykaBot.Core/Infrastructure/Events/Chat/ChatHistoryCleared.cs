@@ -1,3 +1,5 @@
-﻿namespace PoproshaykaBot.Core.Infrastructure.Events.Chat;
+﻿using PoproshaykaBot.Core.Platforms;
 
-public sealed record ChatHistoryCleared : EventBase;
+namespace PoproshaykaBot.Core.Infrastructure.Events.Chat;
+
+public sealed record ChatHistoryCleared(StreamingPlatform Platform, string? Channel = null) : EventBase, IPlatformEvent;

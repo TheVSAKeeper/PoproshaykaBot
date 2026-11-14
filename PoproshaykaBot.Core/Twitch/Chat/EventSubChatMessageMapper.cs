@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Twitch.Chat;
@@ -31,7 +32,8 @@ public static class EventSubChatMessageMapper
                     && !string.IsNullOrEmpty(userId)
                     && string.Equals(userId, botUserId, StringComparison.Ordinal);
 
-        return new(channel,
+        return new(StreamingPlatform.Twitch,
+            channel,
             messageId,
             userId,
             username,

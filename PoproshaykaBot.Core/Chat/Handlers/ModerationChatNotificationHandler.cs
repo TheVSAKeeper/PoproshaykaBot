@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Chat.Handlers;
@@ -22,8 +23,8 @@ public sealed class ModerationChatNotificationHandler :
     {
         _messenger = messenger;
         _settingsManager = settingsManager;
-        _punishedSubscription = eventBus.Subscribe<UserPunished>(this);
-        _rewardedSubscription = eventBus.Subscribe<UserRewarded>(this);
+        _punishedSubscription = eventBus.SubscribePlatform<UserPunished>(StreamingPlatform.Twitch, this);
+        _rewardedSubscription = eventBus.SubscribePlatform<UserRewarded>(StreamingPlatform.Twitch, this);
     }
 
     public Task HandleAsync(UserPunished @event, CancellationToken cancellationToken)

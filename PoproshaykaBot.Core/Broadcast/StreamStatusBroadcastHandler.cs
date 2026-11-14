@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
 
@@ -45,8 +46,8 @@ public sealed class StreamStatusBroadcastHandler :
         _settingsManager = settingsManager;
         _logger = logger;
 
-        _onlineSubscription = eventBus.Subscribe<StreamWentOnline>(this);
-        _offlineSubscription = eventBus.Subscribe<StreamWentOffline>(this);
+        _onlineSubscription = eventBus.SubscribePlatform<StreamWentOnline>(StreamingPlatform.Twitch, this);
+        _offlineSubscription = eventBus.SubscribePlatform<StreamWentOffline>(StreamingPlatform.Twitch, this);
         _phaseSubscription = eventBus.Subscribe<BotLifecyclePhaseChanged>(this);
     }
 

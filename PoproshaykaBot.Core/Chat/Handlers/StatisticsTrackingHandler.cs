@@ -31,7 +31,7 @@ public sealed class StatisticsTrackingHandler : IEventHandler<ChatMessageReceive
             return Task.CompletedTask;
         }
 
-        _userStatistics.TrackMessage(@event.UserId, @event.Username);
+        _userStatistics.TrackMessage(@event.SenderKey, @event.Username);
         _botStatistics.IncrementMessagesProcessed();
         return Task.CompletedTask;
     }

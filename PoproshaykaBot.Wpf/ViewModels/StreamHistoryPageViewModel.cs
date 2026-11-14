@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using KeepShell.ViewModels;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Statistics;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -1139,10 +1140,12 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         var leader = ordered.Count > 0 ? ordered[0].MessageCount : 0;
         var chatters = new List<StreamSessionChatterRowViewModel>(ordered.Count);
+        var twitchUsers = _userStatistics.ForPlatform(StreamingPlatform.Twitch);
 
         for (var index = 0; index < ordered.Count; index++)
         {
-            var known = ordered[index].UserId is { Length: > 0 } userId && _userStatistics.GetById(userId) is not null;
+            var known = ordered[index].UserId is { Length: > 0 } userId
+                        && twitchUsers.GetById(userId) is not null;
 
             chatters.Add(new(ordered[index], index + 1, leader, known));
         }

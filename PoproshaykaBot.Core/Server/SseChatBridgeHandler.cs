@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Core.Server;
 
@@ -18,7 +19,7 @@ public sealed class SseChatBridgeHandler :
     {
         _sseService = sseService;
         _messageSubscription = eventBus.Subscribe<ChatMessageReceived>(this);
-        _clearSubscription = eventBus.Subscribe<ChatHistoryCleared>(this);
+        _clearSubscription = eventBus.SubscribePlatform<ChatHistoryCleared>(StreamingPlatform.Twitch, this);
     }
 
     public Task HandleAsync(ChatMessageReceived @event, CancellationToken cancellationToken)

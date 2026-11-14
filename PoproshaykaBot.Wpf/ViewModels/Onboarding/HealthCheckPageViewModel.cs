@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -52,7 +53,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
         _logger = logger;
         _shellLauncher = shellLauncher;
 
-        _subs.Add(eventBus.SubscribeOnUi<ChatMessageReceived>(OnChatMessageReceived));
+        _subs.Add(eventBus.SubscribePlatformOnUi<ChatMessageReceived>(StreamingPlatform.Twitch, OnChatMessageReceived));
     }
 
     public override string PageTitle => "Диагностика (опционально)";

@@ -1,8 +1,29 @@
-﻿namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+﻿using PoproshaykaBot.Core.Statistics;
+
+namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
+
+internal enum LegacyDataCategory
+{
+    None = 0,
+    UserStatistics = 1,
+    BotStatistics = 2,
+    StreamHistory = 3,
+    PollHistory = 4,
+    ChatRuntime = 5,
+    Settings = 6,
+    UiPreferences = 7,
+}
+
+internal sealed record LegacyDataEntry(
+    string FileName,
+    string RelativeTargetPath,
+    LegacyDataCategory Category,
+    bool AllowFlatFallback = false);
 
 internal static class LegacyDataCatalog
 {
     public const string SettingsFolderName = "settings";
+    public const string YouTubeFolderName = "youtube";
     public const string SettingsFileName = "settings.json";
     public const string AccountsFileName = "accounts.json";
     public const string UserStatisticsFileName = "users_statistics.json";
@@ -11,62 +32,78 @@ internal static class LegacyDataCatalog
     public const string PollsHistoryFileName = "polls-history.json";
     public const string UiPreferencesFileName = "ui-preferences.toml";
 
-    public static readonly string[] RootFiles =
+    private static readonly LegacyDataEntry[] Entries =
     [
-        UserStatisticsFileName,
-        BotStatisticsFileName,
-        StreamSessionsFileName,
-        PollsHistoryFileName,
-        "unknown_commands.txt",
-        "chat-blockers.txt",
-        "chat-zoom.txt",
+        .. UserStatisticsPlatformCatalog.All.Select(static descriptor => new LegacyDataEntry(
+            UserStatisticsFileName,
+            descriptor.RelativePath,
+            LegacyDataCategory.UserStatistics)),
+        new(BotStatisticsFileName, BotStatisticsFileName, LegacyDataCategory.BotStatistics),
+        new(StreamSessionsFileName, StreamSessionsFileName, LegacyDataCategory.StreamHistory),
+        new(PollsHistoryFileName, PollsHistoryFileName, LegacyDataCategory.PollHistory),
+        new("unknown_commands.txt", "unknown_commands.txt", LegacyDataCategory.ChatRuntime),
+        new("chat-blockers.txt", "chat-blockers.txt", LegacyDataCategory.ChatRuntime),
+        new("chat-zoom.txt", "chat-zoom.txt", LegacyDataCategory.ChatRuntime),
+        new(SettingsFileName, $"{SettingsFolderName}/{SettingsFileName}", LegacyDataCategory.Settings, true),
+        new(AccountsFileName, $"{SettingsFolderName}/{AccountsFileName}", LegacyDataCategory.Settings, true),
+        new("broadcast-profiles.json", $"{SettingsFolderName}/broadcast-profiles.json", LegacyDataCategory.Settings, true),
+        new("dashboard-layout.json", $"{SettingsFolderName}/dashboard-layout.json", LegacyDataCategory.Settings, true),
+        new("obs-chat.json", $"{SettingsFolderName}/obs-chat.json", LegacyDataCategory.Settings, true),
+        new("obs-integration.json", $"{SettingsFolderName}/obs-integration.json", LegacyDataCategory.Settings, true),
+        new("polls.json", $"{SettingsFolderName}/polls.json", LegacyDataCategory.Settings, true),
+        new("recent-categories.json", $"{SettingsFolderName}/recent-categories.json", LegacyDataCategory.Settings, true),
+        new("update.json", $"{SettingsFolderName}/update.json", LegacyDataCategory.Settings, true),
+        new(UiPreferencesFileName, $"{SettingsFolderName}/{UiPreferencesFileName}", LegacyDataCategory.UiPreferences, true),
     ];
 
     public static readonly string[] SettingsFiles =
     [
-        SettingsFileName,
-        AccountsFileName,
-        "broadcast-profiles.json",
-        "dashboard-layout.json",
-        "obs-chat.json",
-        "obs-integration.json",
-        "polls.json",
-        "recent-categories.json",
-        "update.json",
-        UiPreferencesFileName,
+        .. Entries
+            .Where(static entry => entry.Category is LegacyDataCategory.Settings or LegacyDataCategory.UiPreferences)
+            .Select(static entry => entry.FileName),
     ];
 
     public static readonly string[] StoreOwnedSettingsFiles =
     [
-        .. SettingsFiles.Where(name => !string.Equals(name, UiPreferencesFileName, StringComparison.OrdinalIgnoreCase)),
+        .. Entries
+            .Where(static entry => entry.Category == LegacyDataCategory.Settings)
+            .Select(static entry => entry.FileName),
     ];
+
+    public static IEnumerable<string> GetRelativePaths(LegacyDataCategory category)
+    {
+        foreach (var entry in Entries)
+        {
+            if (entry.Category == category)
+            {
+                yield return entry.RelativeTargetPath;
+            }
+        }
+    }
 
     public static List<LegacyDataFile> Enumerate(string sourceDirectory)
     {
         var files = new List<LegacyDataFile>();
 
-        foreach (var name in RootFiles)
+        foreach (var entry in Entries)
         {
-            var path = Path.Combine(sourceDirectory, name);
+            var sourcePath = entry.AllowFlatFallback
+                ? ResolveSettingsFile(sourceDirectory, entry.FileName)
+                : Path.Combine(sourceDirectory, ToNativePath(entry.RelativeTargetPath));
 
-            if (TryDescribe(name, path, name) is { } file)
-            {
-                files.Add(file);
-            }
-        }
-
-        foreach (var name in SettingsFiles)
-        {
-            var relativeTarget = Path.Combine(SettingsFolderName, name);
-            var path = ResolveSettingsFile(sourceDirectory, name);
-
-            if (path is not null && TryDescribe(name, path, relativeTarget) is { } file)
+            if (sourcePath is not null
+                && TryDescribe(entry.FileName, sourcePath, ToNativePath(entry.RelativeTargetPath)) is { } file)
             {
                 files.Add(file);
             }
         }
 
         return files;
+    }
+
+    public static string NormalizeRelativePath(string path)
+    {
+        return path.Replace('\\', '/').Trim('/');
     }
 
     public static string? ResolveSettingsFile(string sourceDirectory, string fileName)
@@ -92,6 +129,11 @@ internal static class LegacyDataCatalog
     public static bool HasFlatSettingsFiles(string sourceDirectory)
     {
         return SettingsFiles.Any(name => File.Exists(Path.Combine(sourceDirectory, name)));
+    }
+
+    private static string ToNativePath(string relativePath)
+    {
+        return relativePath.Replace('/', Path.DirectorySeparatorChar);
     }
 
     private static LegacyDataFile? TryDescribe(string name, string path, string relativeTargetPath)

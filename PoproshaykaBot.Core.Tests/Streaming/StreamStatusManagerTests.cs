@@ -1,5 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using PoproshaykaBot.Core.Platforms;
+using Microsoft.Extensions.Logging;
 using NSubstitute.ExceptionExtensions;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
@@ -452,7 +454,7 @@ public sealed class StreamStatusManagerTests
         await onlineSignal.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.That(_manager.CurrentStatus, Is.EqualTo(StreamStatus.Online));
 
-        await _eventBus.PublishAsync(new ChannelUpdated("Новый заголовок", "ru", "999", "Программирование", []));
+        await _eventBus.PublishAsync(new ChannelUpdated(StreamingPlatform.Twitch, "Новый заголовок", "ru", "999", "Программирование", []));
 
         await _manager.RefreshLiveSnapshotAsync();
 

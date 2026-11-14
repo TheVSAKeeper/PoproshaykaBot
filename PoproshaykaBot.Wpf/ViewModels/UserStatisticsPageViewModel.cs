@@ -371,14 +371,14 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
                 var amount = (ulong)-delta;
                 var notification = _pointsManagement.GetPunishmentNotification(row.Name, amount);
                 _dialogService.Info("Наказание", notification);
-                updated = await _pointsManagement.PunishUserAsync(row.UserId, row.Name, amount, _channelProvider.Channel, AdjustmentSource);
+                updated = await _pointsManagement.PunishUserAsync(row.Key, row.Name, amount, _channelProvider.Channel, AdjustmentSource);
             }
             else
             {
                 var amount = (ulong)delta;
                 var notification = _pointsManagement.GetRewardNotification(row.Name, amount);
                 _dialogService.Info("Поощрение", notification);
-                updated = await _pointsManagement.RewardUserAsync(row.UserId, row.Name, amount, _channelProvider.Channel, AdjustmentSource);
+                updated = await _pointsManagement.RewardUserAsync(row.Key, row.Name, amount, _channelProvider.Channel, AdjustmentSource);
             }
 
             if (!updated)

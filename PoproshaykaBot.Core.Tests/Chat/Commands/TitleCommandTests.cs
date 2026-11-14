@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 
@@ -25,15 +26,20 @@ public class TitleCommandTests
         {
             Assert.That(_command.CanExecute(new()
             {
+                Platform = StreamingPlatform.Twitch,
                 IsBroadcaster = true,
             }), Is.True);
 
             Assert.That(_command.CanExecute(new()
             {
+                Platform = StreamingPlatform.Twitch,
                 IsModerator = true,
             }), Is.True);
 
-            Assert.That(_command.CanExecute(new()), Is.False);
+            Assert.That(_command.CanExecute(new()
+            {
+                Platform = StreamingPlatform.Twitch,
+            }), Is.False);
         }
     }
 
@@ -42,6 +48,7 @@ public class TitleCommandTests
     {
         var response = await _command.ExecuteAsync(new()
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
             Arguments = [],
         }, CancellationToken.None);
@@ -54,6 +61,7 @@ public class TitleCommandTests
     {
         var ctx = new CommandContext
         {
+            Platform = StreamingPlatform.Twitch,
             IsBroadcaster = true,
             MessageId = "m1",
             Arguments = ["новое", "название"],

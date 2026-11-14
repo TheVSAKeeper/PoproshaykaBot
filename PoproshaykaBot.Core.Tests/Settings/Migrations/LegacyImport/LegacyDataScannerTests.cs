@@ -154,4 +154,31 @@ public sealed class LegacyDataScannerTests
         Assert.That(candidates.Select(candidate => candidate.Kind),
             Is.EqualTo(new[] { LegacyDataSourceKind.CurrentBaseDirectory }));
     }
+
+    [Test]
+    public void Scan_SumsUserStatisticsAcrossTwitchAndYouTube()
+    {
+        var source = LegacyDataFixture.CreateDirectory("legacy-scan-yt");
+        try
+        {
+            LegacyDataFixture.Write(source, "users_statistics.json", LegacyDataFixture.UserStatistics);
+            LegacyDataFixture.Write(source, Path.Combine("youtube", "users_statistics.json"), """[{"userId":"yt1","name":"Bob"},{"userId":"yt2","name":"Eve"}]""");
+
+            var candidate = Inspect(source);
+
+            Assert.That(candidate, Is.Not.Null);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(candidate!.UserStatisticsCount, Is.EqualTo(5));
+                Assert.That(candidate.Files.Any(f => string.Equals(
+                    LegacyDataCatalog.NormalizeRelativePath(f.RelativeTargetPath),
+                    "youtube/users_statistics.json",
+                    StringComparison.OrdinalIgnoreCase)), Is.True);
+            }
+        }
+        finally
+        {
+            LegacyDataFixture.Delete(source);
+        }
+    }
 }

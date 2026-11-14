@@ -1,6 +1,7 @@
 ﻿using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Settings;
@@ -214,7 +215,7 @@ public class StatisticsListsTests
         var statistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         var eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
-        statistics.ReplaceAll(Enumerable.Range(0, count)
+        statistics.SeedPlatform(StreamingPlatform.Twitch, Enumerable.Range(0, count)
             .Select(index => new UserStatistics
             {
                 UserId = index.ToString(UiCulture.Russian),

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -125,7 +126,7 @@ public sealed class ChannelUpdateSubscriber(
 
         try
         {
-            await eventBus.PublishAsync(new ChannelUpdated(title, language, gameId, gameName, labels), cancellationToken);
+            await eventBus.PublishAsync(new ChannelUpdated(StreamingPlatform.Twitch, title, language, gameId, gameName, labels), cancellationToken);
         }
         catch (Exception ex)
         {

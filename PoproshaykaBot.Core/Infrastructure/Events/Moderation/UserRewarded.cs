@@ -1,7 +1,12 @@
-﻿namespace PoproshaykaBot.Core.Infrastructure.Events.Moderation;
+﻿using PoproshaykaBot.Core.Platforms;
+
+namespace PoproshaykaBot.Core.Infrastructure.Events.Moderation;
 
 public sealed record UserRewarded(
-    string UserId,
+    PlatformUserKey User,
     string UserName,
     ulong AddedPoints,
-    string? Channel) : EventBase;
+    string? Channel) : EventBase, IPlatformEvent
+{
+    public StreamingPlatform Platform => User.Platform;
+}

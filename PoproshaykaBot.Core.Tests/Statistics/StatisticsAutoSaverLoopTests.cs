@@ -1,10 +1,21 @@
-﻿using PoproshaykaBot.Core.Statistics;
+﻿using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Statistics;
 
 namespace PoproshaykaBot.Core.Tests.Statistics;
 
 [TestFixture]
 public sealed class StatisticsAutoSaverLoopTests
 {
+    private static readonly IProgress<string> NullProgress = new Progress<string>(_ => { });
+    private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(10);
+
+    private string _directory = null!;
+    private string _usersFilePath = null!;
+    private string _writeBlockerPath = null!;
+    private UserStatisticsRepository _userRepository = null!;
+    private StatisticsAutoSaver _autoSaver = null!;
+
     [SetUp]
     public void SetUp()
     {
@@ -14,19 +25,9 @@ public sealed class StatisticsAutoSaverLoopTests
         _usersFilePath = Path.Combine(_directory, "users_statistics.json");
         _writeBlockerPath = _usersFilePath + ".tmp";
 
-        var fileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _directory);
-
-        _userRepository = Substitute.For<IUserStatisticsRepository>();
-        _userRepository.HasChanges.Returns(true);
-        _userRepository.CreateSnapshotAndMarkSaved().Returns(_ => new List<UserStatistics>());
-
-        _autoSaver = new(_userRepository,
-            Substitute.For<IBotStatisticsRepository>(),
-            new(TimeProvider.System),
-            new(_userRepository, fileStore, NullLogger<UserStatisticsLoader>.Instance),
-            fileStore,
-            NullLogger<StatisticsAutoSaver>.Instance,
-            TimeSpan.FromMilliseconds(50));
+        var graph = new StatisticsTestGraph(_directory, autoSaveInterval: TimeSpan.FromMilliseconds(50));
+        _userRepository = graph.UserRepository;
+        _autoSaver = graph.AutoSaver;
     }
 
     [TearDown]
@@ -51,21 +52,13 @@ public sealed class StatisticsAutoSaverLoopTests
         }
     }
 
-    private static readonly IProgress<string> NullProgress = new Progress<string>(_ => { });
-    private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(10);
-
-    private string _directory = null!;
-    private string _usersFilePath = null!;
-    private string _writeBlockerPath = null!;
-    private IUserStatisticsRepository _userRepository = null!;
-    private StatisticsAutoSaver _autoSaver = null!;
-
     [Test]
     public async Task Отказ_записи_не_убивает_цикл_и_не_оставляет_обещание_следующего_запуска()
     {
         Directory.CreateDirectory(_writeBlockerPath);
 
         await _autoSaver.StartAsync(NullProgress, CancellationToken.None);
+        _userRepository.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "Alice");
 
         await WaitForAsync(() => _autoSaver.LastError is not null, "цикл не отметил отказ записи в LastError");
 

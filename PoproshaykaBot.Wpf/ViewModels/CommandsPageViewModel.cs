@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
@@ -23,12 +24,14 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private static readonly CommandContext ViewerProbe = new()
     {
+        Platform = StreamingPlatform.Twitch,
         Username = "viewer",
         DisplayName = "viewer",
     };
 
     private static readonly CommandContext ModeratorProbe = new()
     {
+        Platform = StreamingPlatform.Twitch,
         Username = "moderator",
         DisplayName = "moderator",
         IsModerator = true,
@@ -36,6 +39,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private static readonly CommandContext BroadcasterProbe = new()
     {
+        Platform = StreamingPlatform.Twitch,
         Username = "broadcaster",
         DisplayName = "broadcaster",
         IsBroadcaster = true,

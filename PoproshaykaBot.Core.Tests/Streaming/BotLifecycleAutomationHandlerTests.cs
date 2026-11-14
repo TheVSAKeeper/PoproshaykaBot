@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
@@ -93,7 +95,7 @@ public sealed class BotLifecycleAutomationHandlerTests
     {
         await SetPhaseAsync(BotLifecyclePhase.Connected);
 
-        await _eventBus.PublishAsync(new StreamWentOffline(Channel));
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel));
         await _continuationsDone.Task.WaitAsync(WaitTimeout);
 
         Assert.That(_order, Is.EqualTo(new[] { "итоговая статистика поставлена в очередь", "стоп бота", "проба продолжения" }),
@@ -116,7 +118,7 @@ public sealed class BotLifecycleAutomationHandlerTests
 
         await SetPhaseAsync(BotLifecyclePhase.Connected);
 
-        await _eventBus.PublishAsync(new StreamWentOffline(Channel)).WaitAsync(WaitTimeout);
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel)).WaitAsync(WaitTimeout);
         await stopStarted.Task.WaitAsync(WaitTimeout);
 
         Assert.That(_continuationsDone.Task.IsCompleted, Is.False,
@@ -134,7 +136,7 @@ public sealed class BotLifecycleAutomationHandlerTests
         _connectionController.StopAsync(Arg.Any<BotStopMode>())
             .Returns(_ => Task.FromException(new InvalidOperationException("boom")));
 
-        Assert.DoesNotThrowAsync(async () => await _eventBus.PublishAsync(new StreamWentOffline(Channel)));
+        Assert.DoesNotThrowAsync(async () => await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel)));
 
         await _continuationsDone.Task.WaitAsync(WaitTimeout);
 
@@ -147,9 +149,9 @@ public sealed class BotLifecycleAutomationHandlerTests
         await SetPhaseAsync(BotLifecyclePhase.Connected);
 
         using var backOnline = _eventBus.Subscribe<StreamWentOffline>((_, cancellationToken) =>
-            _eventBus.PublishAsync(new StreamWentOnline(Channel, null), cancellationToken));
+            _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), cancellationToken));
 
-        await _eventBus.PublishAsync(new StreamWentOffline(Channel));
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel));
         await _continuationsDone.Task.WaitAsync(WaitTimeout);
 
         await _connectionController.DidNotReceive().StopAsync(Arg.Any<BotStopMode>());
@@ -173,7 +175,7 @@ public sealed class BotLifecycleAutomationHandlerTests
         _settings.Twitch.BotLifecycleAutomation.AutoDisconnectOnStreamOffline = autoDisconnect;
         await SetPhaseAsync(phase);
 
-        await _eventBus.PublishAsync(new StreamWentOffline(Channel, isCatchUp));
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, isCatchUp));
         await _continuationsDone.Task.WaitAsync(WaitTimeout);
 
         await _connectionController.DidNotReceive().StopAsync(Arg.Any<BotStopMode>());
@@ -188,7 +190,7 @@ public sealed class BotLifecycleAutomationHandlerTests
     {
         await SetPhaseAsync(phase);
 
-        await _eventBus.PublishAsync(new StreamWentOnline(Channel, null));
+        await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null));
 
         _connectionController.Received(1).StartConnection();
     }
@@ -202,7 +204,7 @@ public sealed class BotLifecycleAutomationHandlerTests
         _connectionController.IsBusy.Returns(isBusy);
         await SetPhaseAsync(phase);
 
-        await _eventBus.PublishAsync(new StreamWentOnline(Channel, null));
+        await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null));
 
         _connectionController.DidNotReceive().StartConnection();
     }

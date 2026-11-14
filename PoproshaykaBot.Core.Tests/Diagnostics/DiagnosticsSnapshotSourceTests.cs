@@ -85,14 +85,23 @@ public sealed class DiagnosticsSnapshotSourceTests
             TimeProvider.System,
             NullLogger<BroadcastScheduler>.Instance);
 
+        var userRepository = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
+        var botRepository = Substitute.For<IBotStatisticsRepository>();
         var fileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _directory);
-        var userRepository = Substitute.For<IUserStatisticsRepository>();
+        var userUnits = UserStatisticsPlatformCatalog.All
+            .Select(descriptor => new PlatformUserStatisticsUnit(
+                descriptor,
+                userRepository.GetPartition(descriptor.Platform),
+                fileStore,
+                NullLogger<PlatformUserStatisticsUnit>.Instance))
+            .ToArray();
+        var botUnit = new BotStatisticsPersistenceUnit(botRepository, fileStore, NullLogger<BotStatisticsPersistenceUnit>.Instance);
+        var commandUnit = new CommandUsagePersistenceUnit(new(TimeProvider.System), fileStore, NullLogger<CommandUsagePersistenceUnit>.Instance);
 
-        _statisticsAutoSaver = new(userRepository,
-            Substitute.For<IBotStatisticsRepository>(),
-            new(TimeProvider.System),
-            new(userRepository, fileStore, NullLogger<UserStatisticsLoader>.Instance),
-            fileStore,
+        _statisticsAutoSaver = new(
+            [.. userUnits, botUnit, commandUnit],
+            [.. userUnits, botUnit, commandUnit],
+            [],
             NullLogger<StatisticsAutoSaver>.Instance);
 
         var accountsStore = new AccountsStore(filePath: Path.Combine(_directory, "accounts.json"));

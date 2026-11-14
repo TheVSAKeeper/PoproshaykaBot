@@ -1,11 +1,19 @@
-﻿using System.Text.Json.Serialization;
+﻿using PoproshaykaBot.Core.Platforms;
+using System.Text.Json.Serialization;
 
 namespace PoproshaykaBot.Core.Statistics;
 
 public class UserStatistics
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public StreamingPlatform Platform { get; set; } = StreamingPlatform.Twitch;
+
     public string UserId { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+
+    [JsonIgnore]
+    public PlatformUserKey Key => new(Platform, UserId);
+
     public ulong MessageCount { get; set; }
     public ulong PenaltyPoints { get; set; }
     public ulong BonusPoints { get; set; }
@@ -16,12 +24,13 @@ public class UserStatistics
     public DateTime FirstSeen { get; set; } = DateTime.UtcNow;
     public DateTime LastSeen { get; set; } = DateTime.UtcNow;
 
-    public static UserStatistics Create(string userId, string name)
+    public static UserStatistics Create(StreamingPlatform platform, string userId, string name)
     {
         var now = DateTime.UtcNow;
 
         return new()
         {
+            Platform = platform,
             UserId = userId,
             Name = name,
             MessageCount = 0,
@@ -50,6 +59,7 @@ public class UserStatistics
     {
         return new()
         {
+            Platform = Platform,
             UserId = UserId,
             Name = Name,
             MessageCount = MessageCount,

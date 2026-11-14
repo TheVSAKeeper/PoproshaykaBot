@@ -2,6 +2,7 @@
 using KeepShell.Services.Platform;
 using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -799,7 +800,7 @@ public class StreamHistoryPageTests
         _store = store;
 
         var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
-        users.ReplaceAll([new() { UserId = "42", Name = "qp_illson" }]);
+        users.SeedPlatform(StreamingPlatform.Twitch, [new() { UserId = "42", Name = "qp_illson" }]);
 
         var boxArt = new GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<GameBoxArtProvider>.Instance);
 

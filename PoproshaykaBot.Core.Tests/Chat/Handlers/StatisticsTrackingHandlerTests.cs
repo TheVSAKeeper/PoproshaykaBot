@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Chat;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Handlers;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
@@ -41,13 +42,14 @@ public class StatisticsTrackingHandlerTests
 
         await _handler.HandleAsync(Message(), CancellationToken.None);
 
-        _userStatistics.Received(expectTracked ? 1 : 0).TrackMessage("42", "viewer");
+        _userStatistics.Received(expectTracked ? 1 : 0).TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "42"), "viewer");
         _botStatistics.Received(expectTracked ? 1 : 0).IncrementMessagesProcessed();
     }
 
     private static ChatMessageReceived Message()
     {
-        return new("someone-else",
+        return new(StreamingPlatform.Twitch,
+            "someone-else",
             "msg-1",
             "42",
             "viewer",
@@ -55,6 +57,6 @@ public class StatisticsTrackingHandlerTests
             "привет",
             UserStatus.None,
             false,
-            new());
+            new() { Platform = StreamingPlatform.Twitch });
     }
 }

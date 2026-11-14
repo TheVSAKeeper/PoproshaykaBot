@@ -1,5 +1,6 @@
-﻿using PoproshaykaBot.Core.Streaming;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 
-public sealed record StreamWentOnline(string Channel, StreamInfo? Stream, bool IsCatchUp = false) : EventBase;
+public sealed record StreamWentOnline(StreamingPlatform Platform, string Channel, StreamInfo? Stream, bool IsCatchUp = false) : EventBase, IPlatformEvent;

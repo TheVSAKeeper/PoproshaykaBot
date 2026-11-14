@@ -1,3 +1,5 @@
-﻿namespace PoproshaykaBot.Core.Infrastructure.Events.Chat;
+﻿using PoproshaykaBot.Core.Platforms;
 
-public sealed record ChatIngestionStopped(DateTimeOffset At) : EventBase;
+namespace PoproshaykaBot.Core.Infrastructure.Events.Chat;
+
+public sealed record ChatIngestionStopped(StreamingPlatform Platform, DateTimeOffset At) : EventBase, IPlatformEvent;

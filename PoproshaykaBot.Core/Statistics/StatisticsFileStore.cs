@@ -1,22 +1,20 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Text;
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
-using System.Text;
-using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Statistics;
 
 public sealed class StatisticsFileStore
 {
-    private const string UserStatisticsFileName = "users_statistics.json";
-    private const string BotStatisticsFileName = "bot_statistics.json";
-    private const string CommandUsageFileName = "command-usage.json";
+    internal const string CommandUsageFileName = "command-usage.json";
 
     private readonly ILogger<StatisticsFileStore> _logger;
-    private readonly string _userStatisticsFilePath;
-    private readonly string _botStatisticsFilePath;
-    private readonly string _commandUsageFilePath;
+    private readonly string _baseDirectory;
 
     public StatisticsFileStore(ILogger<StatisticsFileStore> logger)
         : this(logger, AppPaths.BaseDirectory)
@@ -26,39 +24,81 @@ public sealed class StatisticsFileStore
     internal StatisticsFileStore(ILogger<StatisticsFileStore> logger, string baseDirectory)
     {
         _logger = logger;
-        _userStatisticsFilePath = Path.Combine(baseDirectory, UserStatisticsFileName);
-        _botStatisticsFilePath = Path.Combine(baseDirectory, BotStatisticsFileName);
-        _commandUsageFilePath = Path.Combine(baseDirectory, CommandUsageFileName);
+        _baseDirectory = baseDirectory;
     }
 
-    public Task<StatisticsReadResult<List<UserStatistics>>> LoadUsersAsync(CancellationToken cancellationToken = default)
+    public Task<StatisticsReadResult<T>> LoadAsync<T>(
+        string relativePath,
+        string entityName,
+        CancellationToken cancellationToken = default)
+        where T : class
     {
-        return Task.FromResult(LoadFromFile<List<UserStatistics>>(_userStatisticsFilePath, "пользователей"));
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(LoadFromFile<T>(ResolvePath(relativePath), entityName));
+    }
+
+    public Task SaveAsync<T>(
+        string relativePath,
+        string entityName,
+        T data,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => SaveToFile(data, ResolvePath(relativePath), entityName), cancellationToken);
+    }
+
+    public async Task<StatisticsReadResult<List<UserStatistics>>> LoadUsersAsync(
+        StreamingPlatform platform,
+        CancellationToken cancellationToken = default)
+    {
+        var descriptor = UserStatisticsPlatformCatalog.Get(platform);
+        var result = await LoadAsync<List<UserStatistics>>(descriptor.RelativePath, descriptor.EntityName, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (result.Value != null)
+        {
+            foreach (var user in result.Value)
+            {
+                user.Platform = platform;
+            }
+        }
+
+        return result;
+    }
+
+    public Task SaveUsersAsync(
+        StreamingPlatform platform,
+        IReadOnlyList<UserStatistics> snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        var descriptor = UserStatisticsPlatformCatalog.Get(platform);
+        return SaveAsync(descriptor.RelativePath, descriptor.EntityName, snapshot, cancellationToken);
     }
 
     public Task<StatisticsReadResult<BotStatistics>> LoadBotAsync(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(LoadFromFile<BotStatistics>(_botStatisticsFilePath, "бота"));
-    }
-
-    public Task<StatisticsReadResult<CommandUsageData>> LoadCommandUsageAsync(CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(LoadFromFile<CommandUsageData>(_commandUsageFilePath, "команд"));
-    }
-
-    public Task SaveCommandUsageAsync(CommandUsageData snapshot, CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => SaveToFile(snapshot, _commandUsageFilePath, "команд"), cancellationToken);
-    }
-
-    public Task SaveUsersAsync(IReadOnlyList<UserStatistics> snapshot, CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => SaveToFile(snapshot, _userStatisticsFilePath, "пользователей"), cancellationToken);
+        return LoadAsync<BotStatistics>(LegacyDataCatalog.BotStatisticsFileName, "бота", cancellationToken);
     }
 
     public Task SaveBotAsync(BotStatistics snapshot, CancellationToken cancellationToken = default)
     {
-        return Task.Run(() => SaveToFile(snapshot, _botStatisticsFilePath, "бота"), cancellationToken);
+        return SaveAsync(LegacyDataCatalog.BotStatisticsFileName, "бота", snapshot, cancellationToken);
+    }
+
+    public Task<StatisticsReadResult<CommandUsageData>> LoadCommandUsageAsync(CancellationToken cancellationToken = default)
+    {
+        return LoadAsync<CommandUsageData>(CommandUsageFileName, "команд", cancellationToken);
+    }
+
+    public Task SaveCommandUsageAsync(CommandUsageData snapshot, CancellationToken cancellationToken = default)
+    {
+        return SaveAsync(CommandUsageFileName, "команд", snapshot, cancellationToken);
+    }
+
+    private string ResolvePath(string relativePath)
+    {
+        var normalized = LegacyDataCatalog.NormalizeRelativePath(relativePath)
+            .Replace('/', Path.DirectorySeparatorChar);
+        return Path.Combine(_baseDirectory, normalized);
     }
 
     private StatisticsReadResult<T> LoadFromFile<T>(string filePath, string entityName)

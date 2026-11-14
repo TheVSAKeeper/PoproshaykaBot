@@ -1,14 +1,15 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
 using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Statistics;
 
-public class StreamSessionHistoryStore
+public class StreamSessionHistoryStore : IExternalWriteParticipant, IFlushableHistoryStore
 {
-    private const string FileName = "stream_sessions.json";
+    private const string FileName = LegacyDataCatalog.StreamSessionsFileName;
 
     private readonly ILogger<StreamSessionHistoryStore>? _logger;
     private readonly string _filePath;
@@ -86,6 +87,29 @@ public class StreamSessionHistoryStore
             _logger?.LogInformation("StreamSessionHistoryStore: файл {FilePath} никто не менял, история снова сохраняется", _filePath);
 
             FlushUnsavedChanges();
+        }
+    }
+
+    IReadOnlyCollection<string> IExternalWriteParticipant.OwnedRelativePaths { get; } = [LegacyDataCatalog.StreamSessionsFileName];
+
+    ValueTask<bool> IExternalWriteParticipant.InvalidateAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Invalidate());
+    }
+
+    ValueTask IExternalWriteParticipant.RestoreAsync(bool wasLoaded)
+    {
+        Restore(wasLoaded);
+        return ValueTask.CompletedTask;
+    }
+
+    void IExternalWriteParticipant.LatchExternalRewrite()
+    {
+        lock (_syncLock)
+        {
+            _isLoaded = false;
+            _rewrittenExternally = true;
         }
     }
 

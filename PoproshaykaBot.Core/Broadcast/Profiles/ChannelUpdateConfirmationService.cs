@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Core.Broadcast.Profiles;
 
@@ -11,7 +12,7 @@ public sealed class ChannelUpdateConfirmationService : IChannelUpdateConfirmatio
 
     public ChannelUpdateConfirmationService(IEventBus eventBus)
     {
-        _subscription = eventBus.Subscribe<ChannelUpdated>(OnChannelUpdated);
+        _subscription = eventBus.SubscribePlatform<ChannelUpdated>(StreamingPlatform.Twitch, OnChannelUpdated);
     }
 
     public void Dispose()

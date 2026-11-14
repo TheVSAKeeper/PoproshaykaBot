@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using PoproshaykaBot.Core.Platforms;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -478,7 +479,8 @@ public sealed class TwitchChatHandlerCommandResponseTests
 
     private static RawChatMessageReceived CreateRaw(string text)
     {
-        return new(new("test-channel",
+        return new(new(StreamingPlatform.Twitch,
+                "test-channel",
                 "incoming-1",
                 "u1",
                 "alice",
@@ -495,7 +497,8 @@ public sealed class TwitchChatHandlerCommandResponseTests
 
     private static RawChatMessageReceived CreateBotEcho(string messageId, string text)
     {
-        return new(new("test-channel",
+        return new(new(StreamingPlatform.Twitch,
+                "test-channel",
                 messageId,
                 "2",
                 "bot",

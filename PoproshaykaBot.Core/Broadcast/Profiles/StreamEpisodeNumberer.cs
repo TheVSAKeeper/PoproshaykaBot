@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Broadcast.Profiles;
@@ -39,8 +40,8 @@ public sealed class StreamEpisodeNumberer :
         _logger = logger;
         _subscriptions =
         [
-            eventBus.Subscribe<StreamWentOnline>(this),
-            eventBus.Subscribe<StreamWentOffline>(this),
+            eventBus.SubscribePlatform<StreamWentOnline>(StreamingPlatform.Twitch, this),
+            eventBus.SubscribePlatform<StreamWentOffline>(StreamingPlatform.Twitch, this),
         ];
     }
 

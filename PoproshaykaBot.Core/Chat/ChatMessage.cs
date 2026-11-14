@@ -1,6 +1,9 @@
-﻿namespace PoproshaykaBot.Core.Chat;
+﻿using PoproshaykaBot.Core.Platforms;
+
+namespace PoproshaykaBot.Core.Chat;
 
 public sealed record ChatMessage(
+    StreamingPlatform Platform,
     string Channel,
     string Id,
     string UserId,

@@ -1,125 +1,43 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Collections.Frozen;
+using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Core.Statistics;
 
-public sealed class UserStatisticsLoader(
-    IUserStatisticsRepository repository,
-    StatisticsFileStore fileStore,
-    ILogger<UserStatisticsLoader> logger)
-    : IDisposable
+public sealed class UserStatisticsLoader
 {
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly FrozenDictionary<StreamingPlatform, PlatformUserStatisticsUnit> _units;
 
-    private volatile StatisticsLoadState _state = StatisticsLoadState.NotRead;
-    private bool _disposed;
+    internal UserStatisticsLoader(IEnumerable<PlatformUserStatisticsUnit> units)
+    {
+        _units = units.ToFrozenDictionary(static unit => unit.Platform);
+    }
 
-    public bool IsLoaded => _state == StatisticsLoadState.Loaded;
+    public bool IsAnyLoaded => _units.Values.Any(static unit => unit.IsLoaded);
+
+    public bool IsLoadedFor(StreamingPlatform platform) => GetUnit(platform).IsLoaded;
 
     public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
-        if (_state != StatisticsLoadState.NotRead)
+        foreach (var unit in _units.Values)
         {
-            return;
-        }
-
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            if (_state != StatisticsLoadState.NotRead)
-            {
-                return;
-            }
-
-            await LoadUnderGateAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            _state = StatisticsLoadState.Abandoned;
-
-            logger.LogError(exception, "Сбой при загрузке статистики пользователей");
-            throw new InvalidOperationException($"Ошибка загрузки статистики пользователей: {exception.Message}", exception);
-        }
-        finally
-        {
-            _gate.Release();
+            await unit.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
-    public async Task<bool> InvalidateAsync(CancellationToken cancellationToken = default)
+    public ValueTask<bool> InvalidateAsync(StreamingPlatform platform, CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            var wasLoaded = _state == StatisticsLoadState.Loaded;
-
-            if (wasLoaded)
-            {
-                _state = StatisticsLoadState.Abandoned;
-
-                logger.LogInformation(
-                    "Статистика пользователей больше не считается прочитанной: её файл меняют мимо приложения, накопленное в этом сеансе сохраняться не будет, а перечитывания до перезапуска не будет");
-            }
-
-            return wasLoaded;
-        }
-        finally
-        {
-            _gate.Release();
-        }
+        return GetUnit(platform).InvalidateAsync(cancellationToken);
     }
 
-    public async Task RestoreAsync(bool wasLoaded)
+    public ValueTask RestoreAsync(StreamingPlatform platform, bool wasLoaded)
     {
-        if (!wasLoaded)
-        {
-            return;
-        }
-
-        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-
-        try
-        {
-            _state = StatisticsLoadState.Loaded;
-
-            logger.LogInformation("Статистика пользователей снова считается прочитанной: её файл никто не менял");
-        }
-        finally
-        {
-            _gate.Release();
-        }
+        return GetUnit(platform).RestoreAsync(wasLoaded);
     }
 
-    public void Dispose()
+    private PlatformUserStatisticsUnit GetUnit(StreamingPlatform platform)
     {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _gate.Dispose();
-        _disposed = true;
-    }
-
-    private async Task LoadUnderGateAsync(CancellationToken cancellationToken)
-    {
-        var result = await fileStore.LoadUsersAsync(cancellationToken).ConfigureAwait(false);
-
-        if (result.Failed)
-        {
-            _state = StatisticsLoadState.Abandoned;
-
-            logger.LogError(
-                "Файл статистики пользователей не прочитан. Накопленное в этом сеансе сохраняться не будет, чтобы не затереть файл, и перечитывать его до перезапуска приложение не станет; рядом с файлом оставлена копия с суффиксом invalid");
-
-            return;
-        }
-
-        var users = result.Value ?? [];
-        repository.ReplaceAll(users);
-        _state = StatisticsLoadState.Loaded;
-
-        logger.LogInformation("Статистика пользователей загружена. Загружено пользователей: {UserCount}", users.Count);
+        return _units.TryGetValue(platform, out var unit)
+            ? unit
+            : throw new ArgumentOutOfRangeException(nameof(platform), platform, "Неизвестная площадка.");
     }
 }

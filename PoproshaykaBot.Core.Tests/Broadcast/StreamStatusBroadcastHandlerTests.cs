@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Broadcast;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Tests.Debugging;
@@ -74,7 +75,7 @@ public sealed class StreamStatusBroadcastHandlerTests
     {
         _scheduler.IsActive.Returns(false);
 
-        await _handler.HandleAsync(new StreamWentOnline(Channel, null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
 
         _scheduler.DidNotReceive().Start(Arg.Any<string>());
         _messenger.DidNotReceive().Send(Arg.Any<string>());
@@ -86,7 +87,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.IsActive.Returns(false);
 
         await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOnline(Channel, null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
 
         _scheduler.Received(1).Start(Channel);
         _messenger.Received(1).Send("Стрим начался");
@@ -98,7 +99,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.IsActive.Returns(false);
         _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
 
-        await _handler.HandleAsync(new StreamWentOnline(Channel, null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
         _scheduler.DidNotReceive().Start(Arg.Any<string>());
 
         await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
@@ -122,7 +123,7 @@ public sealed class StreamStatusBroadcastHandlerTests
     {
         _scheduler.IsActive.Returns(false);
 
-        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel), CancellationToken.None);
 
         _messenger.DidNotReceive().Send(Arg.Any<string>());
     }
@@ -133,7 +134,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.IsActive.Returns(true);
 
         await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOffline(Channel), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel), CancellationToken.None);
 
         _scheduler.Received(1).Stop();
         _messenger.Received(1).Send("Стрим закончился");
@@ -145,7 +146,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.IsActive.Returns(true);
 
         await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOffline(Channel, true), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, true), CancellationToken.None);
 
         _scheduler.DidNotReceive().Stop();
         _messenger.DidNotReceive().Send(Arg.Any<string>());
@@ -157,7 +158,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.IsActive.Returns(false);
 
         await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOnline(Channel, null, true), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null, true), CancellationToken.None);
 
         _scheduler.Received(1).Start(Channel);
         _messenger.DidNotReceive().Send(Arg.Any<string>());
@@ -181,7 +182,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.IsActive.Returns(false);
         _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
 
-        await _handler.HandleAsync(new StreamWentOnline(Channel, null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
         await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
 
         _messenger.Received(1).Send("Стрим начался");
@@ -198,7 +199,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.IsActive.Returns(false);
         _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
 
-        await _handler.HandleAsync(new StreamWentOnline(Channel, null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
 
         _streamStatus.CurrentStatus.Returns(StreamStatus.Unknown);
         await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
@@ -218,7 +219,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.IsActive.Returns(false);
         _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
 
-        await _handler.HandleAsync(new StreamWentOnline(Channel, null, true), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null, true), CancellationToken.None);
         await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
 
         _scheduler.Received(1).Start(Channel);
@@ -232,8 +233,8 @@ public sealed class StreamStatusBroadcastHandlerTests
         _scheduler.IsActive.Returns(false);
         _streamStatus.CurrentStatus.Returns(StreamStatus.Online);
 
-        await _handler.HandleAsync(new StreamWentOnline(Channel, null), CancellationToken.None);
-        await _handler.HandleAsync(new StreamWentOffline(Channel, isCatchUpOffline), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, isCatchUpOffline), CancellationToken.None);
         await _handler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
 
         _messenger.DidNotReceive().Send(Arg.Any<string>());

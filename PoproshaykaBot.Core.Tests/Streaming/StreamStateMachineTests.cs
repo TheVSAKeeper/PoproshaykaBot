@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.Core.Streaming;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Core.Tests.Streaming;
 
@@ -292,7 +294,7 @@ public sealed class StreamStateMachineTests
     {
         var machine = new StreamStateMachine();
 
-        var applied = machine.ApplyChannelUpdate(new("Новый", "ru", "999", "Программирование", []));
+        var applied = machine.ApplyChannelUpdate(new(StreamingPlatform.Twitch, "Новый", "ru", "999", "Программирование", []));
 
         using (Assert.EnterMultipleScope())
         {
@@ -307,7 +309,7 @@ public sealed class StreamStateMachineTests
         var machine = new StreamStateMachine();
         machine.ApplyOnlineSnapshot(SampleStream());
 
-        var applied = machine.ApplyChannelUpdate(new("Новый", "en", "999", "Программирование", []));
+        var applied = machine.ApplyChannelUpdate(new(StreamingPlatform.Twitch, "Новый", "en", "999", "Программирование", []));
 
         using (Assert.EnterMultipleScope())
         {
@@ -325,7 +327,7 @@ public sealed class StreamStateMachineTests
     public void StoredChannelUpdate_AppliedToFutureOnlineSnapshot()
     {
         var machine = new StreamStateMachine();
-        machine.ApplyChannelUpdate(new("Свежий", "ru", "999", "Программирование", []));
+        machine.ApplyChannelUpdate(new(StreamingPlatform.Twitch, "Свежий", "ru", "999", "Программирование", []));
 
         machine.ApplyOnlineSnapshot(SampleStream("Старый из Helix"));
 
@@ -338,7 +340,7 @@ public sealed class StreamStateMachineTests
     {
         var machine = new StreamStateMachine();
         machine.MarkOnline(null, default);
-        machine.ApplyChannelUpdate(new("Свежий", "ru", "999", "Программирование", []));
+        machine.ApplyChannelUpdate(new(StreamingPlatform.Twitch, "Свежий", "ru", "999", "Программирование", []));
 
         machine.UpdateStreamSnapshot(SampleStream("Старый из Helix"));
 
@@ -350,7 +352,7 @@ public sealed class StreamStateMachineTests
     {
         var machine = new StreamStateMachine();
         machine.ApplyOnlineSnapshot(SampleStream());
-        machine.ApplyChannelUpdate(new("Свежий", "ru", "999", "Программирование", []));
+        machine.ApplyChannelUpdate(new(StreamingPlatform.Twitch, "Свежий", "ru", "999", "Программирование", []));
 
         machine.ResetToUnknown();
 
@@ -368,7 +370,7 @@ public sealed class StreamStateMachineTests
     public void ForgetChannelUpdate_PreservesStatusButClearsOverlay()
     {
         var machine = new StreamStateMachine();
-        machine.ApplyChannelUpdate(new("Старый", "ru", "999", "Игра", []));
+        machine.ApplyChannelUpdate(new(StreamingPlatform.Twitch, "Старый", "ru", "999", "Игра", []));
 
         machine.ForgetChannelUpdate();
         machine.ApplyOnlineSnapshot(SampleStream("Из Helix"));

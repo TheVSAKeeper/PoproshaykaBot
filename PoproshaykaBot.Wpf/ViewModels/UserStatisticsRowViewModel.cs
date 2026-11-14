@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -80,6 +81,8 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
     public UserStatistics Source { get; }
     public UserRankStanding Standing { get; }
     public UserAvatarViewModel Avatar { get; init; } = UserAvatarViewModel.None;
+    public PlatformUserKey Key => Source.Key;
+    public StreamingPlatform Platform => Source.Platform;
     public string UserId => Source.UserId;
     public string Name => Source.Name;
     public ulong MessageCount => Source.MessageCount;

@@ -89,7 +89,14 @@ public static class LegacyDataScanner
                        ?? LegacyDataReader.ReadString(LegacyDataReader.Property(twitch, "botAccount"), "login")
                        ?? LegacyDataReader.ReadString(twitch, "botUsername");
 
-        var users = LegacyDataReader.TryRead(Path.Combine(fullPath, LegacyDataCatalog.UserStatisticsFileName), logger);
+        var userStatisticsCount = 0;
+        foreach (var relativePath in LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics))
+        {
+            var nativePath = relativePath.Replace('/', Path.DirectorySeparatorChar);
+            var users = LegacyDataReader.TryRead(Path.Combine(fullPath, nativePath), logger);
+            userStatisticsCount += LegacyDataReader.CountItems(users);
+        }
+
         var botStatistics = LegacyDataReader.TryRead(Path.Combine(fullPath, LegacyDataCatalog.BotStatisticsFileName), logger);
 
         return new()
@@ -100,7 +107,7 @@ public static class LegacyDataScanner
             HasSettingsDirectory = Directory.Exists(Path.Combine(fullPath, LegacyDataCatalog.SettingsFolderName)),
             Channel = LegacyDataReader.ReadString(twitch, "channel"),
             BotLogin = botLogin,
-            UserStatisticsCount = LegacyDataReader.CountItems(users),
+            UserStatisticsCount = userStatisticsCount,
             TotalMessagesProcessed = LegacyDataReader.ReadUInt64(botStatistics, "totalMessagesProcessed"),
             HasOAuthTokens = LegacyDataReader.HasTokens(accountsRoot) || LegacyDataReader.HasTokens(twitch),
             Files = files,

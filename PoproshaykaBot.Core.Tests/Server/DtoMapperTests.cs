@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Chat;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Server;
 using System.Text.Json;
 
@@ -17,6 +18,7 @@ public sealed class DtoMapperTests
     {
         var data = new ChatMessageData
         {
+            Platform = StreamingPlatform.Twitch,
             Timestamp = DateTime.UtcNow,
             DisplayName = "user",
             Message = "hi",
@@ -42,6 +44,7 @@ public sealed class DtoMapperTests
     {
         var data = new ChatMessageData
         {
+            Platform = StreamingPlatform.Twitch,
             Timestamp = new(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
             DisplayName = "alice",
             Message = "hello",
@@ -67,6 +70,7 @@ public sealed class DtoMapperTests
     {
         var data = new ChatMessageData
         {
+            Platform = StreamingPlatform.Twitch,
             Timestamp = DateTime.UtcNow,
             DisplayName = "alice",
             Message = "hi",

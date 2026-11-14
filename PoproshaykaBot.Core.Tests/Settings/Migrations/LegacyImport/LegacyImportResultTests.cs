@@ -7,9 +7,12 @@ namespace PoproshaykaBot.Core.Tests.Settings.Migrations.LegacyImport;
 public class LegacyImportResultTests
 {
     [TestCase(new[] { "users_statistics.json" }, true)]
+    [TestCase(new[] { "youtube/users_statistics.json" }, true)]
+    [TestCase(new[] { "youtube\\users_statistics.json" }, true)]
     [TestCase(new[] { "settings/settings.json", "users_statistics.json" }, true)]
     [TestCase(new[] { "bot_statistics.json" }, true)]
     [TestCase(new[] { "USERS_STATISTICS.JSON" }, true)]
+    [TestCase(new[] { "YOUTUBE/USERS_STATISTICS.JSON" }, true)]
     [TestCase(new[] { "settings/settings.json" }, false)]
     [TestCase(new[] { "stream_sessions.json" }, false)]
     [TestCase(new string[0], false)]
@@ -17,6 +20,19 @@ public class LegacyImportResultTests
     {
         Assert.That(Build(copied).CopiedStatistics, Is.EqualTo(expected),
             "По этому признаку гашение решает, возвращать ли право сохранять статистику, поэтому имена файлов берутся из каталога переноса");
+    }
+
+    [Test]
+    public void Область_внешней_записи_различает_пути_платформ_и_нормализует_слеши()
+    {
+        var result = Build(["youtube\\users_statistics.json"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ExternalWrite.Touches("youtube/users_statistics.json"), Is.True);
+            Assert.That(result.ExternalWrite.Touches("users_statistics.json"), Is.False);
+            Assert.That(result.ExternalWrite, Is.EqualTo(StatisticsExternalWrite.Files("youtube/users_statistics.json")));
+        }
     }
 
     [TestCase(new[] { "stream_sessions.json" }, true)]
@@ -32,8 +48,8 @@ public class LegacyImportResultTests
         {
             Assert.That(result.CopiedStreamHistory, Is.EqualTo(expected),
                 "По этому признаку гашение решает, возвращать ли стору истории право писать, поэтому имя файла берётся из каталога переноса");
-            Assert.That(result.ExternalWrite, Is.EqualTo(new StatisticsExternalWrite(result.CopiedStatistics, expected, result.CopiedPollHistory)),
-                "Область внешней записи получает все половины одним значением – собирать их на стороне хоста нечем");
+            Assert.That(result.ExternalWrite, Is.EqualTo(new StatisticsExternalWrite(copied)),
+                "Область внешней записи получает перенесённые относительные пути одним значением");
         }
     }
 
@@ -51,7 +67,7 @@ public class LegacyImportResultTests
         {
             Assert.That(result.CopiedPollHistory, Is.EqualTo(expected),
                 "Профили голосований (settings/polls.json) и их история – разные файлы, право записи отнимает только вторая");
-            Assert.That(result.ExternalWrite.PollHistory, Is.EqualTo(expected));
+            Assert.That(result.ExternalWrite.Touches("polls-history.json"), Is.EqualTo(expected));
         }
     }
 

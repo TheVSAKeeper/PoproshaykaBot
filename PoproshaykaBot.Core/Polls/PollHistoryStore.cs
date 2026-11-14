@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Persistence;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Twitch;
@@ -22,7 +23,7 @@ public sealed class PollHistoryStore(
     ITargetChannelProvider targetChannelProvider,
     ILogger<PollHistoryStore> logger,
     string? filePath = null)
-    : IHostedComponent
+    : IHostedComponent, IExternalWriteParticipant, IFlushableHistoryStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -167,6 +168,29 @@ public sealed class PollHistoryStore(
             logger.LogInformation("PollHistoryStore: файл {FilePath} никто не менял, история голосований снова сохраняется", _filePath);
 
             FlushUnsavedChanges();
+        }
+    }
+
+    IReadOnlyCollection<string> IExternalWriteParticipant.OwnedRelativePaths { get; } = [LegacyDataCatalog.PollsHistoryFileName];
+
+    ValueTask<bool> IExternalWriteParticipant.InvalidateAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Invalidate());
+    }
+
+    ValueTask IExternalWriteParticipant.RestoreAsync(bool wasLoaded)
+    {
+        Restore(wasLoaded);
+        return ValueTask.CompletedTask;
+    }
+
+    void IExternalWriteParticipant.LatchExternalRewrite()
+    {
+        lock (_sync)
+        {
+            _canPersist = false;
+            _rewrittenExternally = true;
         }
     }
 

@@ -1,4 +1,6 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -107,7 +109,7 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(currentNumber: 14);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _applier.DidNotReceiveWithAnyArgs().ApplyPatchAsync(default, default, default, default);
         Assert.That(profile.CurrentNumber, Is.EqualTo(14));
@@ -118,7 +120,7 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow.AddMinutes(-30));
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _applier.Received(1).ApplyPatchAsync("Серия #15", null, null, Arg.Any<CancellationToken>());
         Assert.That(profile.CurrentNumber, Is.EqualTo(15));
@@ -129,7 +131,7 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(currentNumber: 14);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null, true), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null, true), CancellationToken.None);
 
         await _applier.DidNotReceiveWithAnyArgs().ApplyPatchAsync(default, default, default, default);
         Assert.That(profile.CurrentNumber, Is.EqualTo(14));
@@ -140,7 +142,7 @@ public class StreamEpisodeNumbererTests
     {
         _broadcastProfiles.LastAppliedProfileId = null;
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _applier.DidNotReceiveWithAnyArgs().ApplyPatchAsync(default, default, default, default);
     }
@@ -160,7 +162,7 @@ public class StreamEpisodeNumbererTests
         _broadcastProfiles.Profiles.Add(profile);
         _profilesManager.Find(profile.Id).Returns(profile);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _applier.DidNotReceiveWithAnyArgs().ApplyPatchAsync(default, default, default, default);
         Assert.That(profile.CurrentNumber, Is.EqualTo(5));
@@ -171,7 +173,7 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow.AddMinutes(-5));
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _applier.DidNotReceiveWithAnyArgs().ApplyPatchAsync(default, default, default, default);
         Assert.That(profile.CurrentNumber, Is.EqualTo(14));
@@ -182,7 +184,7 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow - StreamEpisodeNumberer.RecentApplyWindow);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _applier.Received(1).ApplyPatchAsync("Серия #15", null, null, Arg.Any<CancellationToken>());
         Assert.That(profile.CurrentNumber, Is.EqualTo(15));
@@ -193,9 +195,9 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(currentNumber: 14);
 
-        await _handler.HandleAsync(new StreamWentOffline("chan"), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, "chan"), CancellationToken.None);
         _clock.UtcNow = _clock.UtcNow.AddMinutes(3);
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _applier.DidNotReceiveWithAnyArgs().ApplyPatchAsync(default, default, default, default);
         Assert.That(profile.CurrentNumber, Is.EqualTo(14));
@@ -206,9 +208,9 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow.AddMinutes(-30));
 
-        await _handler.HandleAsync(new StreamWentOffline("chan"), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, "chan"), CancellationToken.None);
         _clock.UtcNow = _clock.UtcNow.AddMinutes(20);
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         await _applier.Received(1).ApplyPatchAsync("Серия #15", null, null, Arg.Any<CancellationToken>());
         Assert.That(profile.CurrentNumber, Is.EqualTo(15));
@@ -223,7 +225,7 @@ public class StreamEpisodeNumbererTests
         var lastApplyAt = _clock.UtcNow.AddMinutes(-30);
         var profile = RegisterActiveNumberedProfile(14, lastApplyAt);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -238,7 +240,7 @@ public class StreamEpisodeNumbererTests
         var lastApplyAt = _clock.UtcNow.AddMinutes(-30);
         var profile = RegisterActiveNumberedProfile(14, lastApplyAt);
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -252,12 +254,12 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow.AddHours(-2));
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
         Assert.That(profile.CurrentNumber, Is.EqualTo(15));
 
-        await _handler.HandleAsync(new StreamWentOffline("chan"), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOffline(StreamingPlatform.Twitch, "chan"), CancellationToken.None);
         _clock.UtcNow = _clock.UtcNow.AddMinutes(12);
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         Assert.That(profile.CurrentNumber, Is.EqualTo(16));
     }
@@ -267,7 +269,7 @@ public class StreamEpisodeNumbererTests
     {
         var profile = RegisterActiveNumberedProfile(14, _clock.UtcNow.AddMinutes(-30));
 
-        await _handler.HandleAsync(new StreamWentOnline("chan", null), CancellationToken.None);
+        await _handler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
 
         _profilesManager.Received(1).AdvanceCurrentNumber(profile.Id, 14, 15, _clock.UtcNow);
     }

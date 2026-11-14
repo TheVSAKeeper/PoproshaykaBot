@@ -2,6 +2,7 @@
 using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Settings;
@@ -291,7 +292,7 @@ public class UserRatingColumnsTests
         var statistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         var eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
-        statistics.ReplaceAll(
+        statistics.SeedPlatform(StreamingPlatform.Twitch,
         [
             new() { UserId = "1", Name = "qwertyqwertyqwerty", MessageCount = 75_123, BonusPoints = 12_345 },
             new() { UserId = "2", Name = "каторжник", MessageCount = 10, PenaltyPoints = 500 },

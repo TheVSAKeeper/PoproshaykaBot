@@ -1,6 +1,7 @@
 ﻿using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Settings;
@@ -422,7 +423,7 @@ public class UserAvatarTests
         var statistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         var eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
-        statistics.ReplaceAll(Enumerable.Range(1, UserCount)
+        statistics.SeedPlatform(StreamingPlatform.Twitch, Enumerable.Range(1, UserCount)
             .Select(index => new UserStatistics { UserId = index.ToString(), Name = "зритель" + index, MessageCount = (ulong)index })
             .ToList());
 

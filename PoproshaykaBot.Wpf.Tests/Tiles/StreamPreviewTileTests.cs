@@ -1,6 +1,7 @@
 ﻿using KeepShell.Testing;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Streaming;
@@ -349,7 +350,7 @@ public class StreamPreviewTileTests
         Assert.That(server.Queries, Has.Count.EqualTo(3));
 
         stream.Status = StreamStatus.Offline;
-        bus.PublishAsync(new StreamWentOffline("channel")).GetAwaiter().GetResult();
+        bus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, "channel")).GetAwaiter().GetResult();
 
         Assert.Multiple(() =>
         {

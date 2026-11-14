@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using PoproshaykaBot.Core.Platforms;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -421,6 +422,7 @@ public sealed class ChatCommandProcessorTests
     {
         return new()
         {
+            Platform = StreamingPlatform.Twitch,
             Channel = "test-channel",
             MessageId = "msg-1",
             UserId = "u1",

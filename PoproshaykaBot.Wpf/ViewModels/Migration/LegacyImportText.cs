@@ -22,6 +22,7 @@ public static class LegacyImportText
         ["update.json"] = "Настройки обновлений",
         ["ui-preferences.toml"] = "Вид приложения",
         ["users_statistics.json"] = "Статистика зрителей",
+        ["youtube/users_statistics.json"] = "Статистика зрителей YouTube",
         ["bot_statistics.json"] = "Статистика бота",
         ["stream_sessions.json"] = "История стримов",
         ["unknown_commands.txt"] = "Список неизвестных команд",
@@ -227,6 +228,13 @@ public static class LegacyImportText
         if (string.IsNullOrWhiteSpace(relativeTargetPath))
         {
             return "Данные предыдущей версии";
+        }
+
+        var normalizedPath = relativeTargetPath.Replace('\\', '/');
+
+        if (FileTitles.TryGetValue(normalizedPath, out var pathTitle))
+        {
+            return pathTitle;
         }
 
         var name = Path.GetFileName(relativeTargetPath);

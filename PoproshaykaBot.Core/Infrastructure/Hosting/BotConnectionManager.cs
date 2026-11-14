@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch.Auth;
 
 namespace PoproshaykaBot.Core.Infrastructure.Hosting;
@@ -289,7 +290,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
             await _appHost.StartAsync(progressReporter, ct);
 
             _logger.LogDebug("Публикация BotJoinedChannel для канала {Channel}", target.Login);
-            await _eventBus.PublishAsync(new BotJoinedChannel(target.Login), ct);
+            await _eventBus.PublishAsync(new BotJoinedChannel(StreamingPlatform.Twitch, target.Login), ct);
 
             ReportProgress("Подключение установлено успешно");
             _logger.LogInformation("Процесс подключения бота успешно завершен (канал {Channel})", target.Login);

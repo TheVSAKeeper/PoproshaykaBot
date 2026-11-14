@@ -1,10 +1,13 @@
-﻿using System.Text.Json;
+﻿using PoproshaykaBot.Core.Platforms;
+using System.Text.Json;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Tests.Polls;
+using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Tests.Statistics;
 
@@ -43,9 +46,8 @@ public sealed class CommandUsageStatisticsTests
     [Test]
     public async Task Счётчики_команд_переживают_перезапуск()
     {
-        var fileStore = CreateFileStore();
         var repository = new CommandUsageRepository(_time);
-        var saver = CreateSaver(repository, fileStore);
+        var saver = CreateSaver(repository);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -55,7 +57,7 @@ public sealed class CommandUsageStatisticsTests
         await saver.StopAsync(new Progress<string>(), CancellationToken.None);
 
         var restored = new CommandUsageRepository(_time);
-        var restoredSaver = CreateSaver(restored, CreateFileStore());
+        var restoredSaver = CreateSaver(restored);
 
         await restoredSaver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -83,7 +85,7 @@ public sealed class CommandUsageStatisticsTests
         await File.WriteAllTextAsync(path, "{ это не json");
 
         var repository = new CommandUsageRepository(_time);
-        var saver = CreateSaver(repository, CreateFileStore());
+        var saver = CreateSaver(repository);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -110,7 +112,7 @@ public sealed class CommandUsageStatisticsTests
 
         repository.Track("ранг", "Алиса");
 
-        await bus.PublishAsync(new StreamWentOnline("test-channel", new StreamInfo
+        await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "test-channel", new StreamInfo
         {
             Id = "stream-1",
         }));
@@ -137,11 +139,11 @@ public sealed class CommandUsageStatisticsTests
             Id = "stream-1",
         };
 
-        await bus.PublishAsync(new StreamWentOnline("test-channel", stream));
+        await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "test-channel", stream));
 
         repository.Track("ранг", "Алиса");
 
-        await bus.PublishAsync(new StreamWentOnline("test-channel", stream, true));
+        await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "test-channel", stream, true));
 
         Assert.That(repository.GetSnapshot().Single().StreamCount, Is.EqualTo(1),
             "Догоняющее событие того же стрима не должно терять счёт этого стрима");
@@ -160,13 +162,12 @@ public sealed class CommandUsageStatisticsTests
         var repository = new CommandUsageRepository(_time);
         var bus = CreateBus(repository, out var handler);
 
-        await bus.PublishAsync(new StreamWentOnline("test-channel", new StreamInfo
+        await bus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "test-channel", new StreamInfo
         {
             Id = "stream-2",
         }));
 
-        var fileStore = CreateFileStore();
-        var saver = CreateSaver(repository, fileStore);
+        var saver = CreateSaver(repository);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -189,8 +190,7 @@ public sealed class CommandUsageStatisticsTests
         await File.WriteAllTextAsync(Path.Combine(_directory, UsageFileName), """{"streamId":"stream-1","commands":null}""");
 
         var repository = new CommandUsageRepository(_time);
-        var fileStore = CreateFileStore();
-        var saver = CreateSaver(repository, fileStore);
+        var saver = CreateSaver(repository);
 
         Assert.DoesNotThrowAsync(async () => await saver.StartAsync(new Progress<string>(), CancellationToken.None),
             "Валидный JSON без списка команд не имеет права срывать подключение бота.");
@@ -204,20 +204,13 @@ public sealed class CommandUsageStatisticsTests
     public async Task Отказ_записи_пользователей_не_теряет_счётчики_команд()
     {
         var repository = new CommandUsageRepository(_time);
-        var fileStore = CreateFileStore();
-        var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
-        var loader = new UserStatisticsLoader(users, fileStore, NullLogger<UserStatisticsLoader>.Instance);
-
-        var saver = new StatisticsAutoSaver(users,
-            new BotStatisticsRepository(),
-            repository,
-            loader,
-            fileStore,
-            NullLogger<StatisticsAutoSaver>.Instance);
+        var graph = new StatisticsTestGraph(_directory, commandUsageRepository: repository);
+        var users = graph.UserRepository;
+        var saver = graph.AutoSaver;
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
-        users.TrackMessage("u1", "alice");
+        users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "alice");
         repository.Track("ранг", "Алиса");
 
         Directory.CreateDirectory(Path.Combine(_directory, "users_statistics.json"));
@@ -261,7 +254,7 @@ public sealed class CommandUsageStatisticsTests
         await File.WriteAllTextAsync(path, JsonSerializer.Serialize(data, JsonStoreOptions.Default));
 
         var repository = new CommandUsageRepository(_time);
-        var saver = CreateSaver(repository, CreateFileStore());
+        var saver = CreateSaver(repository);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
         repository.Track("пресет", "Борис");
@@ -286,17 +279,8 @@ public sealed class CommandUsageStatisticsTests
         return bus;
     }
 
-    private StatisticsFileStore CreateFileStore()
+    private StatisticsAutoSaver CreateSaver(CommandUsageRepository repository)
     {
-        return new(NullLogger<StatisticsFileStore>.Instance, _directory);
-    }
-
-    private StatisticsAutoSaver CreateSaver(CommandUsageRepository repository, StatisticsFileStore fileStore)
-    {
-        var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
-        var bot = new BotStatisticsRepository();
-        var loader = new UserStatisticsLoader(users, fileStore, NullLogger<UserStatisticsLoader>.Instance);
-
-        return new(users, bot, repository, loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        return new StatisticsTestGraph(_directory, commandUsageRepository: repository).AutoSaver;
     }
 }

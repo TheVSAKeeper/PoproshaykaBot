@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using PoproshaykaBot.Core.Platforms;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
@@ -96,17 +97,16 @@ public sealed class StatisticsLoadOwnershipTests
     {
         await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, _, _, loader, saver) = CreateGraph();
 
         await loader.EnsureLoadedAsync();
-        users.TrackMessage("u1", "Alice");
+        users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "Alice");
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
         try
         {
-            Assert.That(users.GetById("u1")!.MessageCount, Is.EqualTo(101ul),
+            Assert.That(users.ForPlatform(StreamingPlatform.Twitch).GetById("u1")!.MessageCount, Is.EqualTo(101ul),
                 "Подключение бота не должно ни обнулять счётчики до файла, ни складывать их с файлом");
         }
         finally
@@ -124,15 +124,14 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(usersPath, UsersContent);
         await File.WriteAllTextAsync(botPath, BotContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, _, fileStore, loader, saver) = CreateGraph();
 
         await loader.EnsureLoadedAsync();
-        users.IncrementBonusPoints("u1", 10);
+        users.IncrementBonusPoints(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), 10);
 
         await saver.SaveNowAsync();
 
-        var savedUsers = await fileStore.LoadUsersAsync();
+        var savedUsers = await fileStore.LoadUsersAsync(StreamingPlatform.Twitch);
 
         using (Assert.EnterMultipleScope())
         {
@@ -153,14 +152,13 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_directory, BotFileName),
             string.Equals(brokenFileName, BotFileName, StringComparison.Ordinal) ? BrokenContent : BotContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, bot, _, loader, saver) = CreateGraph();
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
         try
         {
-            users.TrackMessage("u2", "Bob");
+            users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u2"), "Bob");
             bot.IncrementMessagesProcessed();
 
             await saver.SaveNowAsync();
@@ -171,7 +169,7 @@ public sealed class StatisticsLoadOwnershipTests
                     "Сорвавшееся чтение – не пустота: файл обязан остаться тем, чем был");
                 Assert.That(BackupsOf(brokenFileName), Is.Not.Empty,
                     "О повреждённом файле пользователь узнаёт по копии с суффиксом invalid рядом с ним");
-                Assert.That(loader.IsLoaded, Is.EqualTo(!string.Equals(brokenFileName, UsersFileName, StringComparison.Ordinal)),
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.EqualTo(!string.Equals(brokenFileName, UsersFileName, StringComparison.Ordinal)),
                     "Флаг «загружено» поднимает только удачное чтение");
             }
         }
@@ -184,22 +182,21 @@ public sealed class StatisticsLoadOwnershipTests
     [Test]
     public async Task Отсутствующий_файл_статистики_это_законная_пустота()
     {
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, _, fileStore, loader, saver) = CreateGraph();
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
         try
         {
-            users.TrackMessage("u3", "Carol");
+            users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u3"), "Carol");
 
             await saver.SaveNowAsync();
 
-            var savedUsers = await fileStore.LoadUsersAsync();
+            var savedUsers = await fileStore.LoadUsersAsync(StreamingPlatform.Twitch);
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(loader.IsLoaded, Is.True,
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.True,
                     "Свежий профиль без файла – это ноль записей, а не отказ чтения");
                 Assert.That(savedUsers.Value!.Single().Name, Is.EqualTo("Carol"),
                     "Накопленное в первом сеансе обязано дойти до диска");
@@ -221,8 +218,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
         await File.WriteAllTextAsync(botPath, BotContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (_, bot, _, _, saver) = CreateGraph();
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
         await saver.StopAsync(new Progress<string>(), CancellationToken.None);
@@ -261,19 +257,18 @@ public sealed class StatisticsLoadOwnershipTests
             Path.Combine(_source, importsStatistics ? UsersFileName : "chat-zoom.txt"),
             importsStatistics ? ImportedUsersContent : "1,25");
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, _, fileStore, loader, saver) = CreateGraph();
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
         try
         {
-            users.TrackMessage("u1", "Alice");
+            users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "Alice");
 
             var result = await saver.RunExternalWriteAsync(
                 () =>
                 {
-                    Assert.That(loader.IsLoaded, Is.False,
+                    Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.False,
                         "Гашение идёт до копирования – иначе автосохранение успевает лечь поверх принесённого");
 
                     return LegacyDataImporter.Import(_source, _directory, true, null);
@@ -283,19 +278,19 @@ public sealed class StatisticsLoadOwnershipTests
             Assert.That(result.CopiedFiles.Contains(UsersFileName), Is.EqualTo(importsStatistics),
                 "Перенос обязан либо принести файл статистики, либо не трогать его вовсе");
 
-            Assert.That(loader.IsLoaded, Is.EqualTo(!importsStatistics),
+            Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.EqualTo(!importsStatistics),
                 "Холостой прогон возвращает ровно погашенное, перенос статистики оставляет флаги опущенными");
 
             await saver.SaveNowAsync();
 
-            var savedUsers = await fileStore.LoadUsersAsync();
+            var savedUsers = await fileStore.LoadUsersAsync(StreamingPlatform.Twitch);
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(savedUsers.Value!.Single().MessageCount, Is.EqualTo(expectedMessageCount),
                     "Принесённое переносом нельзя терять, а холостой прогон нельзя наказывать потерей сеанса");
-                Assert.That(File.Exists(Path.Combine(_directory, BotFileName)), Is.EqualTo(!importsStatistics),
-                    "Половина бота гасится и возвращается вместе с половиной пользователей");
+                Assert.That(File.Exists(Path.Combine(_directory, BotFileName)), Is.True,
+                    "Перенос только пользователей не отнимает право записи у статистики бота");
             }
         }
         finally
@@ -310,8 +305,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
         await File.WriteAllTextAsync(Path.Combine(_source, UsersFileName), ImportedUsersContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, _, _, loader, saver) = CreateGraph();
 
         var entered = new ManualResetEventSlim(false);
         var release = new ManualResetEventSlim(false);
@@ -337,7 +331,7 @@ public sealed class StatisticsLoadOwnershipTests
             {
                 Assert.That(waited, Is.Not.SameAs(start),
                     "Подключение обязано ждать конца внешней записи, а не читать файл из-под неё");
-                Assert.That(loader.IsLoaded, Is.False,
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.False,
                     "Флаг не поднимается, пока внешняя запись не отпустила замок сохранения");
             }
 
@@ -348,9 +342,9 @@ public sealed class StatisticsLoadOwnershipTests
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(loader.IsLoaded, Is.True,
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.True,
                     "Дождавшееся подключение читает уже перенесённый файл, и флаг у него законный");
-                Assert.That(users.GetById("u1")!.MessageCount, Is.EqualTo(500ul),
+                Assert.That(users.ForPlatform(StreamingPlatform.Twitch).GetById("u1")!.MessageCount, Is.EqualTo(500ul),
                     "Подключение обязано прочитать то, что записала внешняя запись, а не доимпортный файл");
             }
         }
@@ -374,15 +368,14 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_directory, CommandUsageFileName), BrokenContent);
         await File.WriteAllTextAsync(Path.Combine(_source, "chat-zoom.txt"), "1,25");
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, bot, fileStore, loader, saver) = CreateGraph();
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
-        Assert.That(loader.IsLoaded, Is.True,
+        Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.True,
             "Повреждённый файл команд оставляет третий флаг опущенным, и решение об остановке держат только две погашаемые половины");
 
-        users.TrackMessage("u1", "Alice");
+        users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "Alice");
         bot.IncrementMessagesProcessed();
 
         var entered = new ManualResetEventSlim(false);
@@ -413,7 +406,7 @@ public sealed class StatisticsLoadOwnershipTests
             await write;
             await stop;
 
-            var savedUsers = await fileStore.LoadUsersAsync();
+            var savedUsers = await fileStore.LoadUsersAsync(StreamingPlatform.Twitch);
             var savedBot = await fileStore.LoadBotAsync();
 
             using (Assert.EnterMultipleScope())
@@ -444,9 +437,8 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
         await File.WriteAllTextAsync(botPath, BotContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
         var logger = new RecordingLogger<StatisticsAutoSaver>();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, logger);
+        var (users, bot, _, loader, saver) = CreateGraph(saverLogger: logger);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -458,7 +450,7 @@ public sealed class StatisticsLoadOwnershipTests
                 () => saver.RunExternalWriteAsync<object>(() => throw failure, _ => StatisticsExternalWrite.None),
                 "Отказ внешней записи не проглатывается – о нём узнаёт вызывающий");
 
-            users.TrackMessage("u1", "Alice");
+            users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "Alice");
             bot.IncrementMessagesProcessed();
 
             var save = saver.SaveNowAsync();
@@ -469,7 +461,7 @@ public sealed class StatisticsLoadOwnershipTests
             {
                 Assert.That(finished, Is.SameAs(save),
                     "Замок сохранения обязан освободиться и на броске – иначе сохранение висит до конца процесса");
-                Assert.That(loader.IsLoaded, Is.False,
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.False,
                     "Оборванная запись могла оставить файл перенесённым наполовину – писать поверх него нельзя");
                 Assert.That(botOnDisk, Is.EqualTo(BotContent),
                     "Обе половины остаются погашенными, пока процесс не перезапустили");
@@ -494,8 +486,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(Path.Combine(_directory, UsersFileName), UsersContent);
         await File.WriteAllTextAsync(Path.Combine(_source, UsersFileName), ImportedUsersContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, _, _, loader, saver) = CreateGraph();
 
         try
         {
@@ -512,7 +503,7 @@ public sealed class StatisticsLoadOwnershipTests
 
             await both;
 
-            Assert.That(loader.IsLoaded && users.GetById("u1")!.MessageCount != 500ul, Is.False,
+            Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch) && users.ForPlatform(StreamingPlatform.Twitch).GetById("u1")!.MessageCount != 500ul, Is.False,
                 "Поднятый флаг обязан означать, что в репозитории лежит содержимое текущего файла");
         }
         finally
@@ -532,8 +523,7 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(botPath, BotContent);
         await File.WriteAllTextAsync(Path.Combine(_source, UsersFileName), ImportedUsersContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, bot, _, loader, saver) = CreateGraph();
 
         await loader.EnsureLoadedAsync();
 
@@ -541,7 +531,7 @@ public sealed class StatisticsLoadOwnershipTests
             () => LegacyDataImporter.Import(_source, _directory, true, null),
             static imported => imported.ExternalWrite);
 
-        users.TrackMessage("u1", "Alice");
+        users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "Alice");
 
         try
         {
@@ -561,14 +551,14 @@ public sealed class StatisticsLoadOwnershipTests
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(users.GetById("u1")!.MessageCount, Is.EqualTo(101ul),
+                Assert.That(users.ForPlatform(StreamingPlatform.Twitch).GetById("u1")!.MessageCount, Is.EqualTo(101ul),
                     "Погашенная статистика не перечитывается подключением – иначе накопленное с момента переноса выбрасывается");
-                Assert.That(loader.IsLoaded, Is.False,
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.False,
                     "Перенесённое вступает в силу после перезапуска, а до него флаг остаётся опущенным");
                 Assert.That(await File.ReadAllTextAsync(usersPath), Is.EqualTo(ImportedUsersContent),
                     "Перенесённый файл нельзя переписывать доимпортным репозиторием");
-                Assert.That(await File.ReadAllTextAsync(botPath), Is.EqualTo(BotContent),
-                    "Статистика бота перечитывается на каждом подключении, но после внешней записи это право снято до перезапуска");
+                Assert.That(await File.ReadAllTextAsync(botPath), Is.Not.EqualTo(BotContent),
+                    "Перенос только пользователей не трогает и не гасит статистику бота");
             }
         }
         finally
@@ -585,15 +575,14 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(usersPath, BrokenContent);
         await File.WriteAllTextAsync(Path.Combine(_directory, BotFileName), BotContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
-        var saver = new StatisticsAutoSaver(users, bot, new(TimeProvider.System), loader, fileStore, NullLogger<StatisticsAutoSaver>.Instance);
+        var (users, _, _, loader, saver) = CreateGraph();
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
         await saver.StopAsync(new Progress<string>(), CancellationToken.None);
 
         await File.WriteAllTextAsync(usersPath, UsersContent);
 
-        users.TrackMessage("u9", "Zed");
+        users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u9"), "Zed");
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -603,11 +592,11 @@ public sealed class StatisticsLoadOwnershipTests
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(users.GetById("u9")!.MessageCount, Is.EqualTo(1ul),
+                Assert.That(users.ForPlatform(StreamingPlatform.Twitch).GetById("u9")!.MessageCount, Is.EqualTo(1ul),
                     "Повторная попытка чтения выбросила бы всё, что накопилось после отказа");
-                Assert.That(users.GetById("u1"), Is.Null,
+                Assert.That(users.ForPlatform(StreamingPlatform.Twitch).GetById("u1"), Is.Null,
                     "Отказ чтения не ретраится: файл в этом сеансе больше не читают, даже если он стал читаемым");
-                Assert.That(loader.IsLoaded, Is.False,
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.False,
                     "Флаг остаётся опущенным – сохранять поверх файла, который не удалось прочитать, нельзя");
                 Assert.That(await File.ReadAllTextAsync(usersPath), Is.EqualTo(UsersContent),
                     "Накопленное в сеансе не ложится поверх файла, содержимое которого приложению неизвестно");
@@ -632,17 +621,8 @@ public sealed class StatisticsLoadOwnershipTests
             Path.Combine(_source, importsHistory ? HistoryFileName : UsersFileName),
             importsHistory ? HistoryJson("принесённый-канал") : ImportedUsersContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
         var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
-
-        var saver = new StatisticsAutoSaver(
-            users,
-            bot,
-            new(TimeProvider.System),
-            loader,
-            fileStore,
-            NullLogger<StatisticsAutoSaver>.Instance,
-            history);
+        var (_, _, _, loader, saver) = CreateGraph(history);
 
         var ownSessionId = history.Load().Sessions.Single().Id;
 
@@ -678,7 +658,7 @@ public sealed class StatisticsLoadOwnershipTests
                 Assert.That(ChannelsOnDisk(historyPath),
                     Is.EqualTo(importsHistory ? new[] { "принесённый-канал" } : new[] { "свой-канал", "конец-стрима" }),
                     "Принесённую историю нельзя переписывать доимпортной памятью стора, а холостой прогон нельзя наказывать потерей сессии");
-                Assert.That(loader.IsLoaded, Is.EqualTo(importsHistory),
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.EqualTo(importsHistory),
                     "Половина статистики живёт своей судьбой: перенос одной истории её права не отнимает");
             }
         }
@@ -696,17 +676,8 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(historyPath, HistoryJson("свой-канал"));
         await File.WriteAllTextAsync(Path.Combine(_source, "chat-zoom.txt"), "1,25");
 
-        var (users, bot, fileStore, loader) = CreateGraph();
         var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
-
-        var saver = new StatisticsAutoSaver(
-            users,
-            bot,
-            new(TimeProvider.System),
-            loader,
-            fileStore,
-            NullLogger<StatisticsAutoSaver>.Instance,
-            history);
+        var (_, _, _, _, saver) = CreateGraph(history);
 
         try
         {
@@ -745,17 +716,8 @@ public sealed class StatisticsLoadOwnershipTests
 
         Directory.CreateDirectory(blockedTemporaryPath);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
         var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
-
-        var saver = new StatisticsAutoSaver(
-            users,
-            bot,
-            new(TimeProvider.System),
-            loader,
-            fileStore,
-            NullLogger<StatisticsAutoSaver>.Instance,
-            history);
+        var (_, _, _, _, saver) = CreateGraph(history);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -812,23 +774,14 @@ public sealed class StatisticsLoadOwnershipTests
 
         Directory.CreateDirectory(blockedTemporaryPath);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
         var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
-
-        var saver = new StatisticsAutoSaver(
-            users,
-            bot,
-            new(TimeProvider.System),
-            loader,
-            fileStore,
-            NullLogger<StatisticsAutoSaver>.Instance,
-            history);
+        var (_, _, _, loader, saver) = CreateGraph(history);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
         try
         {
-            Assert.That(loader.IsLoaded, Is.False, "Повреждённый файл пользователей права сохранять не даёт");
+            Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.False, "Повреждённый файл пользователей права сохранять не даёт");
 
             Assert.Throws<UnauthorizedAccessException>(() => history.Append(Session("конец-стрима")),
                 "Записывать было некуда, сессия осталась несохранённой в памяти");
@@ -861,17 +814,8 @@ public sealed class StatisticsLoadOwnershipTests
         await File.WriteAllTextAsync(historyPath, HistoryJson("свой-канал"));
         await File.WriteAllTextAsync(Path.Combine(_source, "chat-zoom.txt"), "1,25");
 
-        var (users, bot, fileStore, loader) = CreateGraph();
         var history = new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath);
-
-        var saver = new StatisticsAutoSaver(
-            users,
-            bot,
-            new(TimeProvider.System),
-            loader,
-            fileStore,
-            NullLogger<StatisticsAutoSaver>.Instance,
-            history);
+        var (_, _, _, loader, saver) = CreateGraph(history);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -894,7 +838,7 @@ public sealed class StatisticsLoadOwnershipTests
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(loader.IsLoaded, Is.True,
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.True,
                     "Возврат прав – уборка после удавшейся записи, и отменять её нечем");
                 Assert.That(history.IsLoaded, Is.True,
                     "Отменённый токен не должен оставлять нетронутую историю без права записи до перезапуска");
@@ -919,6 +863,7 @@ public sealed class StatisticsLoadOwnershipTests
         services.AddLogging();
         services.AddSingleton(TimeProvider.System);
         services.AddStatistics();
+        services.AddPolls();
         services.AddSingleton(new StreamSessionHistoryStore(NullLogger<StreamSessionHistoryStore>.Instance, historyPath));
         services.AddSingleton(CreatePollHistoryStore());
 
@@ -934,7 +879,7 @@ public sealed class StatisticsLoadOwnershipTests
 
         await provider.GetRequiredService<StatisticsAutoSaver>().RunExternalWriteAsync(
             () => 0,
-            static _ => new StatisticsExternalWrite(false, true, true));
+            static _ => StatisticsExternalWrite.Files(HistoryFileName, PollHistoryFileName));
 
         using (Assert.EnterMultipleScope())
         {
@@ -958,18 +903,8 @@ public sealed class StatisticsLoadOwnershipTests
             Path.Combine(_source, importsPollHistory ? PollHistoryFileName : UsersFileName),
             importsPollHistory ? PollHistoryJson("принесённый-опрос") : ImportedUsersContent);
 
-        var (users, bot, fileStore, loader) = CreateGraph();
         var pollHistory = CreatePollHistoryStore(pollHistoryPath);
-
-        var saver = new StatisticsAutoSaver(
-            users,
-            bot,
-            new(TimeProvider.System),
-            loader,
-            fileStore,
-            NullLogger<StatisticsAutoSaver>.Instance,
-            null,
-            pollHistory);
+        var (_, _, _, loader, saver) = CreateGraph(pollHistory);
 
         await saver.StartAsync(new Progress<string>(), CancellationToken.None);
 
@@ -1002,7 +937,7 @@ public sealed class StatisticsLoadOwnershipTests
                 Assert.That(PollIdsOnDisk(pollHistoryPath),
                     Is.EqualTo(importsPollHistory ? new[] { "принесённый-опрос" } : new[] { "свой-опрос", "конец-опроса" }),
                     "Принесённую историю голосований нельзя переписывать доимпортной памятью стора, а холостой прогон нельзя наказывать потерей записи");
-                Assert.That(loader.IsLoaded, Is.EqualTo(importsPollHistory),
+                Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.EqualTo(importsPollHistory),
                     "Половины живут своей судьбой: перенос одной истории голосований прав статистики не отнимает");
             }
         }
@@ -1070,13 +1005,17 @@ public sealed class StatisticsLoadOwnershipTests
             filePath ?? Path.Combine(_directory, PollHistoryFileName));
     }
 
-    private (UserStatisticsRepository Users, BotStatisticsRepository Bot, StatisticsFileStore FileStore, UserStatisticsLoader Loader) CreateGraph()
+    private (UserStatisticsRepository Users, IBotStatisticsRepository Bot, StatisticsFileStore FileStore, UserStatisticsLoader Loader, StatisticsAutoSaver Saver) CreateGraph(
+        params IExternalWriteParticipant[] extraParticipants)
     {
-        var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
-        var bot = new BotStatisticsRepository();
-        var fileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _directory);
-        var loader = new UserStatisticsLoader(users, fileStore, NullLogger<UserStatisticsLoader>.Instance);
+        return CreateGraph(saverLogger: null, extraParticipants);
+    }
 
-        return (users, bot, fileStore, loader);
+    private (UserStatisticsRepository Users, IBotStatisticsRepository Bot, StatisticsFileStore FileStore, UserStatisticsLoader Loader, StatisticsAutoSaver Saver) CreateGraph(
+        ILogger<StatisticsAutoSaver>? saverLogger,
+        params IExternalWriteParticipant[] extraParticipants)
+    {
+        var graph = new StatisticsTestGraph(_directory, saverLogger: saverLogger, extraParticipants: extraParticipants);
+        return (graph.UserRepository, graph.BotRepository, graph.FileStore, graph.UserLoader, graph.AutoSaver);
     }
 }

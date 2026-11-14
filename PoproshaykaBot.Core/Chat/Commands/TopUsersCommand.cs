@@ -45,7 +45,7 @@ public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRa
             }
         }
 
-        var topUsers = statistics.GetTop(count, mode);
+        var topUsers = statistics.ForPlatform(context.Platform).GetTop(count, mode);
 
         if (topUsers.Count == 0)
         {

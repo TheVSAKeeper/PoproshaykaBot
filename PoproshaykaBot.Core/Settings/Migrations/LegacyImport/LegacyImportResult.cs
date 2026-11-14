@@ -22,7 +22,7 @@ public sealed class LegacyImportResult
 
     public IReadOnlyList<string> MigratedSettingsFiles { get; init; } = [];
 
-    public bool CopiedStatistics => Copied(LegacyDataCatalog.UserStatisticsFileName)
+    public bool CopiedStatistics => CopiedAny(LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics))
         || Copied(LegacyDataCatalog.BotStatisticsFileName);
 
     public bool CopiedStreamHistory => Copied(LegacyDataCatalog.StreamSessionsFileName);
@@ -39,11 +39,26 @@ public sealed class LegacyImportResult
     public IReadOnlyList<string> RewrittenSettingsFiles =>
         [.. CopiedSettingsFiles.Union(MigratedSettingsFiles, StringComparer.OrdinalIgnoreCase)];
 
-    public StatisticsExternalWrite ExternalWrite => new(CopiedStatistics, CopiedStreamHistory, CopiedPollHistory);
+    public StatisticsExternalWrite ExternalWrite => new(CopiedFiles);
+
+    private bool CopiedAny(IEnumerable<string> relativePaths)
+    {
+        foreach (var path in relativePaths)
+        {
+            if (Copied(path))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private bool Copied(string fileName)
     {
-        return CopiedFiles.Any(file => string.Equals(file, fileName, StringComparison.OrdinalIgnoreCase));
+        var expected = LegacyDataCatalog.NormalizeRelativePath(fileName);
+        return CopiedFiles.Any(file =>
+            string.Equals(LegacyDataCatalog.NormalizeRelativePath(file), expected, StringComparison.OrdinalIgnoreCase));
     }
 
     private bool CopiedSettingsFile(string fileName)

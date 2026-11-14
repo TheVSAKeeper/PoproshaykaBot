@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
@@ -17,7 +18,7 @@ public sealed class UserPointsManagementService(
     private const string UnknownSource = "не указан";
 
     public async Task<bool> PunishUserAsync(
-        string userId,
+        PlatformUserKey userKey,
         string userName,
         ulong removedPoints,
         string? channel,
@@ -29,23 +30,23 @@ public sealed class UserPointsManagementService(
             return false;
         }
 
-        var updated = userStatistics.IncrementPenaltyPoints(userId, removedPoints);
+        var updated = userStatistics.IncrementPenaltyPoints(userKey, removedPoints);
 
         if (!updated)
         {
             return false;
         }
 
-        logger.LogInformation("Пользователю {UserName} ({UserId}) начислено {Delta} штрафных баллов, источник: {Source}",
-            userName, userId, removedPoints, source ?? UnknownSource);
+        logger.LogInformation("Пользователю {UserName} ({Platform} {UserId}) начислено {Delta} штрафных баллов, источник: {Source}",
+            userName, userKey.Platform, userKey.UserId, removedPoints, source ?? UnknownSource);
 
-        await eventBus.PublishAsync(new UserPunished(userId, userName, removedPoints, channel), cancellationToken);
+        await eventBus.PublishAsync(new UserPunished(userKey, userName, removedPoints, channel), cancellationToken);
 
         return true;
     }
 
     public async Task<bool> RewardUserAsync(
-        string userId,
+        PlatformUserKey userKey,
         string userName,
         ulong addedPoints,
         string? channel,
@@ -57,17 +58,17 @@ public sealed class UserPointsManagementService(
             return false;
         }
 
-        var updated = userStatistics.IncrementBonusPoints(userId, addedPoints);
+        var updated = userStatistics.IncrementBonusPoints(userKey, addedPoints);
 
         if (!updated)
         {
             return false;
         }
 
-        logger.LogInformation("Пользователю {UserName} ({UserId}) начислено {Delta} бонусных баллов, источник: {Source}",
-            userName, userId, addedPoints, source ?? UnknownSource);
+        logger.LogInformation("Пользователю {UserName} ({Platform} {UserId}) начислено {Delta} бонусных баллов, источник: {Source}",
+            userName, userKey.Platform, userKey.UserId, addedPoints, source ?? UnknownSource);
 
-        await eventBus.PublishAsync(new UserRewarded(userId, userName, addedPoints, channel), cancellationToken);
+        await eventBus.PublishAsync(new UserRewarded(userKey, userName, addedPoints, channel), cancellationToken);
 
         return true;
     }

@@ -16,13 +16,14 @@ public sealed class RankCommand(IUserStatisticsRepository statistics, UserRankSe
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
+        var platformUsers = statistics.ForPlatform(context.Platform);
         var targetUserId = context.UserId;
         var targetDisplayName = "Твой";
 
         if (context.Arguments.Count > 0)
         {
             var username = context.Arguments[0];
-            var otherUserStats = statistics.GetByName(username);
+            var otherUserStats = platformUsers.GetByName(username);
             if (otherUserStats != null)
             {
                 targetUserId = otherUserStats.UserId;
@@ -34,7 +35,7 @@ public sealed class RankCommand(IUserStatisticsRepository statistics, UserRankSe
             }
         }
 
-        var userStats = statistics.GetById(targetUserId);
+        var userStats = platformUsers.GetById(targetUserId);
         var points = userStats?.Points ?? 0;
         var messages = (long?)userStats?.MessageCount ?? 0;
         var rankDisplay = rankService.GetRankDisplay(points);

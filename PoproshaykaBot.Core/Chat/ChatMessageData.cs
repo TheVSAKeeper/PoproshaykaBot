@@ -1,9 +1,11 @@
-﻿using PoproshaykaBot.Core.Users;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat;
 
 public class ChatMessageData
 {
+    public required StreamingPlatform Platform { get; init; }
     public string MessageId { get; init; } = string.Empty;
     public DateTime Timestamp { get; init; }
     public string UserId { get; init; } = string.Empty;

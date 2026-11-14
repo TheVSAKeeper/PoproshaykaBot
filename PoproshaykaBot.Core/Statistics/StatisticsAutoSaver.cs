@@ -1,49 +1,47 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
-using PoproshaykaBot.Core.Polls;
 
 namespace PoproshaykaBot.Core.Statistics;
 
-public sealed class StatisticsAutoSaver(
-    IUserStatisticsRepository userRepository,
-    IBotStatisticsRepository botRepository,
-    CommandUsageRepository commandUsageRepository,
-    UserStatisticsLoader userLoader,
-    StatisticsFileStore fileStore,
-    ILogger<StatisticsAutoSaver> logger,
-    StreamSessionHistoryStore? historyStore = null,
-    PollHistoryStore? pollHistoryStore = null)
-    : IHostedComponent, IAsyncDisposable
+public sealed class StatisticsAutoSaver : IHostedComponent, IAsyncDisposable
 {
     private static readonly TimeSpan DefaultAutoSaveInterval = TimeSpan.FromMinutes(1);
 
-    private readonly TimeSpan _autoSaveInterval = DefaultAutoSaveInterval;
+    private readonly IReadOnlyList<IPeriodicStatisticsUnit> _units;
+    private readonly IReadOnlyList<IExternalWriteParticipant> _participants;
+    private readonly IReadOnlyList<IFlushableHistoryStore> _flushableStores;
+    private readonly ILogger<StatisticsAutoSaver> _logger;
+    private readonly TimeSpan _autoSaveInterval;
     private readonly SemaphoreSlim _saveSemaphore = new(1, 1);
 
     private PeriodicTimer? _periodicTimer;
     private CancellationTokenSource? _cts;
     private Task? _autoSaveTask;
     private bool _disposed;
-    private bool _botLoaded;
-    private StatisticsLoadState _commandUsageState = StatisticsLoadState.NotRead;
-    private bool _statisticsRewrittenExternally;
-    private bool _statisticsRewriteReported;
     private long _lastRunAtUtcTicks;
     private long _nextRunAtUtcTicks;
     private string? _lastError;
 
-    internal StatisticsAutoSaver(
-        IUserStatisticsRepository userRepository,
-        IBotStatisticsRepository botRepository,
-        CommandUsageRepository commandUsageRepository,
-        UserStatisticsLoader userLoader,
-        StatisticsFileStore fileStore,
-        ILogger<StatisticsAutoSaver> logger,
-        TimeSpan autoSaveInterval,
-        StreamSessionHistoryStore? historyStore = null,
-        PollHistoryStore? pollHistoryStore = null)
-        : this(userRepository, botRepository, commandUsageRepository, userLoader, fileStore, logger, historyStore, pollHistoryStore)
+    public StatisticsAutoSaver(
+        IEnumerable<IPeriodicStatisticsUnit> units,
+        IEnumerable<IExternalWriteParticipant> participants,
+        IEnumerable<IFlushableHistoryStore> flushableStores,
+        ILogger<StatisticsAutoSaver> logger)
+        : this(units, participants, flushableStores, logger, DefaultAutoSaveInterval)
     {
+    }
+
+    internal StatisticsAutoSaver(
+        IEnumerable<IPeriodicStatisticsUnit> units,
+        IEnumerable<IExternalWriteParticipant> participants,
+        IEnumerable<IFlushableHistoryStore> flushableStores,
+        ILogger<StatisticsAutoSaver> logger,
+        TimeSpan autoSaveInterval)
+    {
+        _units = [.. units];
+        _participants = [.. participants];
+        _flushableStores = [.. flushableStores];
+        _logger = logger;
         _autoSaveInterval = autoSaveInterval;
     }
 
@@ -63,34 +61,37 @@ public sealed class StatisticsAutoSaver(
     {
         if (_autoSaveTask != null)
         {
-            logger.LogWarning("Попытка повторного запуска автосохранения статистики проигнорирована");
+            _logger.LogWarning("Попытка повторного запуска автосохранения статистики проигнорирована");
             return;
         }
 
-        logger.LogDebug("Запуск автосохранения статистики...");
+        _logger.LogDebug("Запуск автосохранения статистики...");
 
         try
         {
             await LoadAsync(cancellationToken).ConfigureAwait(false);
-            botRepository.ResetStartTime();
+            foreach (var unit in _units)
+            {
+                unit.OnStarted();
+            }
 
             _cts = new();
             _periodicTimer = new(_autoSaveInterval);
             Interlocked.Exchange(ref _nextRunAtUtcTicks, (DateTimeOffset.UtcNow + _autoSaveInterval).UtcTicks);
             _autoSaveTask = RunAutoSaveLoopAsync(_cts.Token);
 
-            logger.LogInformation("Автосохранение статистики запущено (интервал: {Interval})", _autoSaveInterval);
+            _logger.LogInformation("Автосохранение статистики запущено (интервал: {Interval})", _autoSaveInterval);
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Критическая ошибка при запуске автосохранения статистики");
+            _logger.LogError(exception, "Критическая ошибка при запуске автосохранения статистики");
             throw new InvalidOperationException($"Ошибка запуска автосохранения статистики: {exception.Message}", exception);
         }
     }
 
     public async Task StopAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
-        logger.LogDebug("Инициирована остановка автосохранения статистики");
+        _logger.LogDebug("Инициирована остановка автосохранения статистики");
 
         if (_cts != null)
         {
@@ -105,7 +106,7 @@ public sealed class StatisticsAutoSaver(
             }
             catch (OperationCanceledException ex)
             {
-                logger.LogDebug(ex, "Задача автосохранения успешно отменена");
+                _logger.LogDebug(ex, "Задача автосохранения успешно отменена");
             }
         }
 
@@ -118,12 +119,12 @@ public sealed class StatisticsAutoSaver(
         {
             if (await StopUnderSaveLockAsync(cancellationToken).ConfigureAwait(false))
             {
-                logger.LogInformation("Автосохранение статистики корректно остановлено");
+                _logger.LogInformation("Автосохранение статистики корректно остановлено");
             }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            logger.LogError(exception, "Ошибка при финальном сохранении статистики");
+            _logger.LogError(exception, "Ошибка при финальном сохранении статистики");
             throw new InvalidOperationException($"Ошибка остановки автосохранения статистики: {exception.Message}", exception);
         }
     }
@@ -140,33 +141,55 @@ public sealed class StatisticsAutoSaver(
 
         try
         {
-            var invalidation = await InvalidateUnderSaveLockAsync(cancellationToken).ConfigureAwait(false);
+            var invalidations = new (IExternalWriteParticipant Participant, bool WasLoaded)[_participants.Count];
+            var invalidatedCount = 0;
+
+            try
+            {
+                for (; invalidatedCount < _participants.Count; invalidatedCount++)
+                {
+                    var participant = _participants[invalidatedCount];
+                    invalidations[invalidatedCount] = (
+                        participant,
+                        await participant.InvalidateAsync(cancellationToken).ConfigureAwait(false));
+                }
+            }
+            catch
+            {
+                for (var i = 0; i < invalidatedCount; i++)
+                {
+                    if (invalidations[i].WasLoaded)
+                    {
+                        await invalidations[i].Participant.RestoreAsync(true).ConfigureAwait(false);
+                    }
+                }
+
+                throw;
+            }
 
             try
             {
                 var result = write();
                 var rewrite = rewritten(result);
 
-                if (rewrite.Statistics)
+                foreach (var (participant, wasLoaded) in invalidations)
                 {
-                    _statisticsRewrittenExternally = true;
+                    if (wasLoaded && !rewrite.TouchesAny(participant.OwnedRelativePaths))
+                    {
+                        await participant.RestoreAsync(wasLoaded).ConfigureAwait(false);
+                    }
                 }
-
-                var restore = new StatisticsInvalidation(
-                    invalidation.Users && !rewrite.Statistics,
-                    invalidation.Bot && !rewrite.Statistics,
-                    invalidation.StreamHistory && !rewrite.StreamHistory,
-                    invalidation.PollHistory && !rewrite.PollHistory);
-
-                await RestoreUnderSaveLockAsync(restore).ConfigureAwait(false);
 
                 return result;
             }
             catch (Exception exception)
             {
-                _statisticsRewrittenExternally = true;
+                foreach (var participant in _participants)
+                {
+                    participant.LatchExternalRewrite();
+                }
 
-                logger.LogWarning(
+                _logger.LogWarning(
                     exception,
                     "Внешняя запись в файлы статистики оборвалась. Статистика, история стримов и история голосований этого сеанса до перезапуска сохраняться не будут: файлы могли остаться переписанными наполовину, и класть поверх них прочитанное до записи нельзя");
 
@@ -181,7 +204,7 @@ public sealed class StatisticsAutoSaver(
 
     public Task SaveNowAsync(CancellationToken cancellationToken = default)
     {
-        logger.LogDebug("Принудительный вызов сохранения статистики");
+        _logger.LogDebug("Принудительный вызов сохранения статистики");
         return SaveAsync(true, cancellationToken);
     }
 
@@ -192,7 +215,7 @@ public sealed class StatisticsAutoSaver(
             return;
         }
 
-        logger.LogDebug("Освобождение ресурсов StatisticsAutoSaver");
+        _logger.LogDebug("Освобождение ресурсов StatisticsAutoSaver");
 
         await StopAsync(new Progress<string>(), CancellationToken.None).ConfigureAwait(false);
         _cts?.Dispose();
@@ -200,83 +223,22 @@ public sealed class StatisticsAutoSaver(
         _disposed = true;
     }
 
-    private async Task<StatisticsInvalidation> InvalidateUnderSaveLockAsync(CancellationToken cancellationToken)
-    {
-        var users = await userLoader.InvalidateAsync(cancellationToken).ConfigureAwait(false);
-        var bot = _botLoaded;
-        _botLoaded = false;
-
-        if (bot)
-        {
-            logger.LogInformation(
-                "Статистика бота помечена непрочитанной: её файл меняют мимо приложения, счётчики этого сеанса сохраняться не будут");
-        }
-
-        var history = historyStore?.Invalidate() ?? false;
-        var pollHistory = pollHistoryStore?.Invalidate() ?? false;
-
-        return new(users, bot, history, pollHistory);
-    }
-
-    private async Task RestoreUnderSaveLockAsync(StatisticsInvalidation invalidation)
-    {
-        await userLoader.RestoreAsync(invalidation.Users).ConfigureAwait(false);
-
-        if (invalidation.Bot)
-        {
-            _botLoaded = true;
-
-            logger.LogInformation("Статистика бота снова считается прочитанной: её файл никто не менял");
-        }
-
-        historyStore?.Restore(invalidation.StreamHistory);
-        pollHistoryStore?.Restore(invalidation.PollHistory);
-    }
-
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
-        logger.LogDebug("Начало загрузки статистики");
+        _logger.LogDebug("Начало загрузки статистики");
 
         await _saveSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            await userLoader.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
-            await LoadCommandUsageAsync(cancellationToken).ConfigureAwait(false);
-
-            if (_statisticsRewrittenExternally)
+            foreach (var unit in _units)
             {
-                if (!_statisticsRewriteReported)
-                {
-                    _statisticsRewriteReported = true;
-
-                    logger.LogInformation(
-                        "Файлы статистики переписаны мимо приложения. До перезапуска статистика бота не перечитывается и не сохраняется, чтобы не затереть перенесённое");
-                }
-
-                return;
+                await unit.LoadForStartAsync(cancellationToken).ConfigureAwait(false);
             }
-
-            var result = await fileStore.LoadBotAsync(cancellationToken).ConfigureAwait(false);
-
-            if (result.Failed)
-            {
-                _botLoaded = false;
-
-                logger.LogError(
-                    "Файл статистики бота не прочитан. Счётчики бота этого сеанса сохраняться не будут, чтобы не затереть файл; рядом с ним оставлена копия с суффиксом invalid");
-
-                return;
-            }
-
-            botRepository.Replace(result.Value ?? BotStatistics.Create());
-            _botLoaded = true;
-
-            logger.LogInformation("Статистика бота загружена");
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Сбой при комплексной загрузке статистики");
+            _logger.LogError(exception, "Сбой при комплексной загрузке статистики");
             throw new InvalidOperationException($"Ошибка загрузки статистики: {exception.Message}", exception);
         }
         finally
@@ -285,34 +247,9 @@ public sealed class StatisticsAutoSaver(
         }
     }
 
-    private async Task LoadCommandUsageAsync(CancellationToken cancellationToken)
-    {
-        if (_commandUsageState != StatisticsLoadState.NotRead)
-        {
-            return;
-        }
-
-        var result = await fileStore.LoadCommandUsageAsync(cancellationToken).ConfigureAwait(false);
-
-        if (result.Failed)
-        {
-            _commandUsageState = StatisticsLoadState.Abandoned;
-
-            logger.LogError(
-                "Файл статистики команд не прочитан. Счётчики команд этого сеанса сохраняться не будут, чтобы не затереть файл; рядом с ним оставлена копия с суффиксом invalid");
-
-            return;
-        }
-
-        commandUsageRepository.Replace(result.Value ?? new CommandUsageData());
-        _commandUsageState = StatisticsLoadState.Loaded;
-
-        logger.LogInformation("Статистика команд загружена");
-    }
-
     private async Task RunAutoSaveLoopAsync(CancellationToken ct)
     {
-        logger.LogDebug("Цикл автосохранения запущен");
+        _logger.LogDebug("Цикл автосохранения запущен");
 
         try
         {
@@ -324,7 +261,7 @@ public sealed class StatisticsAutoSaver(
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
-                    logger.LogError(exception, "Сбой тика автосохранения статистики, цикл продолжает работу");
+                    _logger.LogError(exception, "Сбой тика автосохранения статистики, цикл продолжает работу");
                 }
 
                 Interlocked.Exchange(ref _nextRunAtUtcTicks, (DateTimeOffset.UtcNow + _autoSaveInterval).UtcTicks);
@@ -332,12 +269,12 @@ public sealed class StatisticsAutoSaver(
         }
         catch (OperationCanceledException ex)
         {
-            logger.LogDebug(ex, "Цикл автосохранения прерван (OperationCanceledException)");
+            _logger.LogDebug(ex, "Цикл автосохранения прерван (OperationCanceledException)");
         }
         catch (Exception exception)
         {
             Volatile.Write(ref _lastError, exception.Message);
-            logger.LogError(exception, "Непредвиденная ошибка в фоновом цикле автосохранения статистики");
+            _logger.LogError(exception, "Непредвиденная ошибка в фоновом цикле автосохранения статистики");
         }
         finally
         {
@@ -351,17 +288,14 @@ public sealed class StatisticsAutoSaver(
 
         try
         {
-            if (!_botLoaded && !userLoader.IsLoaded && _commandUsageState != StatisticsLoadState.Loaded)
+            if (!_units.Any(static unit => unit.IsLoaded))
             {
-                historyStore?.TryFlush();
-                pollHistoryStore?.TryFlush();
-
-                logger.LogDebug("Остановка автосохранения без финального сохранения: загрузка статистики не выполнялась");
-
+                FlushHistories();
+                _logger.LogDebug("Остановка автосохранения без финального сохранения: загрузка статистики не выполнялась");
                 return false;
             }
 
-            logger.LogDebug("Финальное сохранение статистики при остановке");
+            _logger.LogDebug("Финальное сохранение статистики при остановке");
 
             await SaveUnderSaveLockAsync(true, cancellationToken).ConfigureAwait(false);
 
@@ -391,88 +325,57 @@ public sealed class StatisticsAutoSaver(
     {
         try
         {
-            historyStore?.TryFlush();
-            pollHistoryStore?.TryFlush();
+            FlushHistories();
 
-            var saveUsers = (force || userRepository.HasChanges) && userLoader.IsLoaded;
-            var saveBot = (force || botRepository.HasChanges) && _botLoaded;
+            var prepared = new List<ISnapshotSaveWork>(_units.Count);
+            foreach (var unit in _units)
+            {
+                if (unit.PrepareSave(force) is { } work)
+                {
+                    prepared.Add(work);
+                }
+            }
 
-            var saveCommands = (force || commandUsageRepository.HasChanges)
-                               && _commandUsageState == StatisticsLoadState.Loaded;
-
-            if (!saveUsers && !saveBot && !saveCommands)
+            if (prepared.Count == 0)
             {
                 RecordRun(null);
                 return;
             }
 
-            List<UserStatistics>? userSnapshot = null;
-            BotStatistics? botSnapshot = null;
-            CommandUsageData? commandUsageSnapshot = null;
-
-            if (saveUsers)
-            {
-                userSnapshot = userRepository.CreateSnapshotAndMarkSaved();
-            }
-
-            if (saveBot)
-            {
-                botSnapshot = botRepository.CreateSnapshotAndMarkSaved();
-            }
-
-            if (saveCommands)
-            {
-                commandUsageSnapshot = commandUsageRepository.CreateSnapshotAndMarkSaved();
-            }
-
+            var committed = 0;
             try
             {
-                if (userSnapshot != null)
+                for (; committed < prepared.Count; committed++)
                 {
-                    await fileStore.SaveUsersAsync(userSnapshot, cancellationToken).ConfigureAwait(false);
-                    userSnapshot = null;
-                }
-
-                if (botSnapshot != null)
-                {
-                    await fileStore.SaveBotAsync(botSnapshot, cancellationToken).ConfigureAwait(false);
-                    botSnapshot = null;
-                }
-
-                if (commandUsageSnapshot != null)
-                {
-                    await fileStore.SaveCommandUsageAsync(commandUsageSnapshot, cancellationToken).ConfigureAwait(false);
-                    commandUsageSnapshot = null;
+                    await prepared[committed].CommitAsync(cancellationToken).ConfigureAwait(false);
                 }
             }
             catch
             {
-                if (userSnapshot != null)
+                for (var i = committed; i < prepared.Count; i++)
                 {
-                    userRepository.MarkChanged();
-                }
-
-                if (botSnapshot != null)
-                {
-                    botRepository.MarkChanged();
-                }
-
-                if (commandUsageSnapshot != null)
-                {
-                    commandUsageRepository.MarkChanged();
+                    prepared[i].Rollback();
                 }
 
                 throw;
             }
 
             RecordRun(null);
-            logger.LogDebug("Сохранение статистики успешно завершено");
+            _logger.LogDebug("Сохранение статистики успешно завершено");
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             RecordRun(exception.Message);
-            logger.LogError(exception, "Сбой при попытке сохранения статистики");
+            _logger.LogError(exception, "Сбой при попытке сохранения статистики");
             throw new InvalidOperationException($"Ошибка сохранения статистики: {exception.Message}", exception);
+        }
+    }
+
+    private void FlushHistories()
+    {
+        foreach (var store in _flushableStores)
+        {
+            store.TryFlush();
         }
     }
 

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Core.Statistics;
 
@@ -17,7 +18,7 @@ public sealed class CommandUsageStreamResetHandler : IEventHandler<StreamWentOnl
     {
         _repository = repository;
         _logger = logger;
-        _subscription = eventBus.Subscribe(this);
+        _subscription = eventBus.SubscribePlatform<StreamWentOnline>(StreamingPlatform.Twitch, this);
     }
 
     public Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)

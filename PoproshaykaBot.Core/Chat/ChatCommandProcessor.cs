@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
@@ -117,6 +118,7 @@ public sealed class ChatCommandProcessor
 
         var enrichedContext = new CommandContext
         {
+            Platform = context.Platform,
             Channel = context.Channel,
             MessageId = context.MessageId,
             UserId = context.UserId,
@@ -228,6 +230,7 @@ public enum DeliveryType
 
 public sealed class CommandContext
 {
+    public required StreamingPlatform Platform { get; init; }
     public string Channel { get; init; } = string.Empty;
     public string MessageId { get; init; } = string.Empty;
     public string UserId { get; init; } = string.Empty;

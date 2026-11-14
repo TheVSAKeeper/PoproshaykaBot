@@ -448,4 +448,22 @@ public sealed class LegacyDataImporterTests
             Assert.That(File.Exists(Path.Combine(_target, "obs-chat.tmp")), Is.False);
         }
     }
+
+    [Test]
+    public void Import_CopiesYouTubeUserStatisticsIntoNestedDirectory()
+    {
+        const string YouTubeUsers = """[{"platform":"YouTube","userId":"yt1","name":"Bob"}]""";
+        var relative = Path.Combine("youtube", "users_statistics.json");
+        LegacyDataFixture.Write(_source, relative, YouTubeUsers);
+
+        var result = LegacyDataImporter.Import(_source, _target, false, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Failures, Is.Empty);
+            Assert.That(result.CopiedStatistics, Is.True);
+            Assert.That(result.ExternalWrite.Touches("youtube/users_statistics.json"), Is.True);
+            Assert.That(File.ReadAllText(Path.Combine(_target, relative)), Is.EqualTo(YouTubeUsers));
+        }
+    }
 }
