@@ -262,6 +262,8 @@ public class SettingsWriteGateNoticeTests
 
         public StreamInfo? CurrentStream => null;
 
+        public StreamStatusSnapshot GetSnapshot() => new(StreamStatus.Unknown, null, null);
+
         public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
     }
 

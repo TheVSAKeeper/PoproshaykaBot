@@ -18,7 +18,7 @@ public sealed class StreamStatusBroadcastHandler :
     IDisposable
 {
     private readonly IBroadcastScheduler _scheduler;
-    private readonly IChatMessenger _messenger;
+    private readonly IBroadcastMessenger _messenger;
     private readonly IStreamStatus _streamStatus;
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly SettingsManager _settingsManager;
@@ -32,7 +32,7 @@ public sealed class StreamStatusBroadcastHandler :
 
     public StreamStatusBroadcastHandler(
         IBroadcastScheduler scheduler,
-        IChatMessenger messenger,
+        IBroadcastMessenger messenger,
         IStreamStatus streamStatus,
         ITargetChannelProvider targetChannelProvider,
         SettingsManager settingsManager,
@@ -133,7 +133,7 @@ public sealed class StreamStatusBroadcastHandler :
             && !string.IsNullOrEmpty(settings.AutoBroadcast.StreamStopMessage))
         {
             _logger.LogDebug("Отправка уведомления об окончании стрима в канал {Channel}", channel);
-            _messenger.Send(settings.AutoBroadcast.StreamStopMessage);
+            _messenger.SendToConnected(settings.AutoBroadcast.StreamStopMessage);
         }
 
         return Task.CompletedTask;
@@ -162,7 +162,7 @@ public sealed class StreamStatusBroadcastHandler :
             && !string.IsNullOrEmpty(settings.AutoBroadcast.StreamStartMessage))
         {
             _logger.LogDebug("Отправка уведомления о начале стрима в канал {Channel}", channel);
-            _messenger.Send(settings.AutoBroadcast.StreamStartMessage);
+            _messenger.SendToConnected(settings.AutoBroadcast.StreamStartMessage);
         }
 
         return Task.CompletedTask;

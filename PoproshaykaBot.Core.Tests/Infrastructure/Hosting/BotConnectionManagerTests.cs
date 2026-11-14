@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
@@ -104,17 +105,16 @@ public sealed class BotConnectionManagerTests
         var targetChannel = Substitute.For<ITargetChannelProvider>();
         targetChannel.Current.Returns(new TargetChannelState("channel", "channel", false, true));
 
-        var chatHandler = new TwitchChatHandler(null!,
+        var chatHandler = new ChatPipelineHandler(new ChatPlatformRegistry([]),
+            new PlatformChannelRegistry(),
             null!,
             null!,
             null!,
             new(null!),
             null!,
-            null!,
             new(TimeProvider.System),
-            null!,
             eventBus,
-            NullLogger<TwitchChatHandler>.Instance);
+            NullLogger<ChatPipelineHandler>.Instance);
 
         var manager = new BotConnectionManager(tokenService,
             targetChannel,

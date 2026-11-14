@@ -247,6 +247,8 @@ public sealed class BotAutomationStateTests
 
         public StreamInfo? CurrentStream { get; } = stream;
 
+        public StreamStatusSnapshot GetSnapshot() => new(CurrentStatus, CurrentStream, null);
+
         public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
     }
 

@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Polling;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Polls.Handlers;
@@ -14,7 +15,7 @@ public sealed class PollChatAnnouncementHandler :
     IEventSubscriber,
     IDisposable
 {
-    private readonly IChatMessenger _messenger;
+    private readonly IBroadcastMessenger _messenger;
     private readonly PollsStore _pollsStore;
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, DateTime> _lastProgressAnnouncement = new(StringComparer.Ordinal);
@@ -22,7 +23,7 @@ public sealed class PollChatAnnouncementHandler :
     private readonly List<IDisposable> _subscriptions;
 
     public PollChatAnnouncementHandler(
-        IChatMessenger messenger,
+        IBroadcastMessenger messenger,
         PollsStore pollsStore,
         IEventBus eventBus,
         TimeProvider timeProvider)
@@ -165,7 +166,7 @@ public sealed class PollChatAnnouncementHandler :
     {
         if (!string.IsNullOrWhiteSpace(message))
         {
-            _messenger.Send(message);
+            _messenger.Send(StreamingPlatform.Twitch, message);
         }
     }
 

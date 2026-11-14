@@ -27,7 +27,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<StreamStatusManager> _logger;
 
-    private readonly StreamStateMachine _state = new();
+    private readonly StreamStateMachine _state;
     private readonly StreamMetadataRetryLoop _metadataRetryLoop;
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
@@ -59,6 +59,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         _eventBus = eventBus;
         _timeProvider = timeProvider;
         _logger = logger;
+        _state = new(timeProvider);
         _metadataRetryLoop = new(FetchMetadataAttemptAsync, IsCurrentlyOnline, logger);
         _ledger = new(helix, logger);
         _retry = new(helix, eventSubClient, timeProvider, logger);
@@ -67,6 +68,8 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
     public StreamStatus CurrentStatus => _state.CurrentStatus;
 
     public StreamInfo? CurrentStream => _state.CurrentStream;
+
+    public StreamStatusSnapshot GetSnapshot() => _state.GetSnapshot();
 
     public string Name => "Отслеживание статуса стрима";
 

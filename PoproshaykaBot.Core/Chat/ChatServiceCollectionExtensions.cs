@@ -4,8 +4,10 @@ using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Core.Users.Avatars;
@@ -32,8 +34,13 @@ public static class ChatServiceCollectionExtensions
             services.AddUserAvatars();
         }
 
+        services.AddSingleton<PlatformChannelRegistry>();
+        services.AddSingleton<IChannelProvider>(sp => sp.GetRequiredService<PlatformChannelRegistry>());
+
         services.AddSingleton<TwitchChatMessenger>();
-        services.AddSingleton<IChatMessenger>(sp => sp.GetRequiredService<TwitchChatMessenger>());
+        services.AddSingleton<IChatPlatform, TwitchChatPlatform>();
+        services.AddSingleton<IChatPlatformRegistry, ChatPlatformRegistry>();
+        services.AddSingleton<IBroadcastMessenger, BroadcastMessenger>();
 
         services.AddSingleton<AudienceTracker>();
 
@@ -47,13 +54,17 @@ public static class ChatServiceCollectionExtensions
             var commandSettingsStore = sp.GetRequiredService<CommandSettingsStore>();
             var usageRepository = sp.GetRequiredService<CommandUsageRepository>();
             var logger = sp.GetRequiredService<ILogger<ChatCommandProcessor>>();
-            var processor = new ChatCommandProcessor(commands, commandSettingsStore, usageRepository, logger);
-            processor.Register(new HelpCommand(processor.GetEnabledCommands, processor.Prefix));
+            var platformRegistry = sp.GetRequiredService<IChatPlatformRegistry>();
+            var processor = new ChatCommandProcessor(commands,
+                commandSettingsStore,
+                usageRepository,
+                logger,
+                platformRegistry: platformRegistry);
+            processor.Register(new HelpCommand(processor.GetAvailableCommands, processor.Prefix));
             return processor;
         });
 
-        services.AddSingleton<TwitchChatHandler>();
-        services.AddSingleton<IChannelProvider>(sp => sp.GetRequiredService<TwitchChatHandler>());
+        services.AddSingleton<ChatPipelineHandler>();
 
         return services;
     }
@@ -69,6 +80,7 @@ public static class ChatServiceCollectionExtensions
         services.AddSingleton<IChatCommand, ActiveUsersCommand>();
         services.AddSingleton<IChatCommand, ByeCommand>();
         services.AddSingleton<IChatCommand, StreamInfoCommand>();
+        services.AddSingleton<IChatCommand, StreamsSummaryCommand>();
         services.AddSingleton<IChatCommand, TrumpCommand>();
         services.AddSingleton<IChatCommand, RanksCommand>();
         services.AddSingleton<IChatCommand, RankCommand>();

@@ -10,7 +10,7 @@ namespace PoproshaykaBot.Core.Chat;
 /// </summary>
 public sealed class ChatDecorationsProvider(
     [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
-    ITwitchHelixClient helix)
+    ITwitchHelixClient helix) : IChatDecorations
 {
     private readonly SemaphoreSlim _loadLock = new(1, 1);
 

@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.Core.Chat.Commands;
+﻿using PoproshaykaBot.Core.Platforms;
+
+namespace PoproshaykaBot.Core.Chat.Commands;
 
 /// <summary>
 /// Интерфейс команды чата.
@@ -25,6 +27,11 @@ public interface IChatCommand
     /// (<see cref="SpecialCommandsSettings.AllowedUsers"/>), пропуская остальных через <see cref="CanExecute"/>.
     /// </summary>
     bool IsRestrictedToAllowedUsers => false;
+
+    /// <summary>
+    /// Минимальный набор возможностей площадки, необходимый для команды.
+    /// </summary>
+    PlatformCapabilities RequiredCapabilities => PlatformCapabilities.None;
 
     /// <summary>
     /// Проверяет, можно ли выполнить команду в текущем контексте.

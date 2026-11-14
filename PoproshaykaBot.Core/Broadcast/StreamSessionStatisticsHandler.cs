@@ -29,7 +29,7 @@ public sealed class StreamSessionStatisticsHandler :
 
     internal static readonly TimeSpan StreamMatchTolerance = TimeSpan.FromMinutes(5);
 
-    private readonly IChatMessenger _messenger;
+    private readonly IBroadcastMessenger _messenger;
     private readonly IStreamStatus _streamStatus;
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly SettingsManager _settingsManager;
@@ -60,7 +60,7 @@ public sealed class StreamSessionStatisticsHandler :
     private bool _disposed;
 
     public StreamSessionStatisticsHandler(
-        IChatMessenger messenger,
+        IBroadcastMessenger messenger,
         IStreamStatus streamStatus,
         ITargetChannelProvider targetChannelProvider,
         SettingsManager settingsManager,
@@ -402,7 +402,7 @@ public sealed class StreamSessionStatisticsHandler :
             record.AverageViewers,
             record.Game);
 
-        _messenger.Send(message);
+        _messenger.SendToConnected(message);
     }
 
     public async ValueTask DisposeAsync()

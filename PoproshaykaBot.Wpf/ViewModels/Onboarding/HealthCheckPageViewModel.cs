@@ -15,7 +15,7 @@ namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
 public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBase, IDisposable
 {
-    private readonly IChatMessenger _chatMessenger;
+    private readonly IBroadcastMessenger _chatMessenger;
     private readonly ILogger<HealthCheckPageViewModel> _logger;
     private readonly IShellLauncher _shellLauncher;
     private readonly List<IDisposable> _subs = [];
@@ -44,7 +44,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
     private bool _chatTestError;
 
     public HealthCheckPageViewModel(
-        IChatMessenger chatMessenger,
+        IBroadcastMessenger chatMessenger,
         IEventBus eventBus,
         ILogger<HealthCheckPageViewModel> logger,
         IShellLauncher shellLauncher)
@@ -84,7 +84,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
         try
         {
-            var result = _chatMessenger.Send(message);
+            var result = _chatMessenger.Send(StreamingPlatform.Twitch, message);
 
             if (result is ChatEnqueueResult.Queued)
             {

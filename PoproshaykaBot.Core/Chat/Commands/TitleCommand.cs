@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
@@ -8,6 +9,7 @@ public sealed class TitleCommand(IChannelInformationApplier applier, ILogger<Tit
     public string Canonical => "title";
     public IReadOnlyCollection<string> Aliases => ["название"];
     public string Description => "обновить название трансляции";
+    public PlatformCapabilities RequiredCapabilities => PlatformCapabilities.ChannelMetadataEdit;
 
     public bool CanExecute(CommandContext context)
     {

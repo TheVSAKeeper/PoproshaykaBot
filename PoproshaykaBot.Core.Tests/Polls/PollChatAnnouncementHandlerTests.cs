@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Polling;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Polls.Handlers;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -16,7 +17,7 @@ public class PollChatAnnouncementHandlerTests
         _polls = new();
         _pollsStore = Substitute.For<PollsStore>(NullLogger<PollsStore>.Instance, null, null);
         _pollsStore.Load().Returns(_polls);
-        _messenger = Substitute.For<IChatMessenger>();
+        _messenger = Substitute.For<IBroadcastMessenger>();
         _eventBus = Substitute.For<IEventBus>();
         _clock = new() { UtcNow = new(2026, 4, 24, 10, 0, 0, TimeSpan.Zero) };
         _handler = new(_messenger, _pollsStore, _eventBus, _clock);
@@ -24,7 +25,7 @@ public class PollChatAnnouncementHandlerTests
 
     private PollsStore _pollsStore = null!;
     private PollsSettings _polls = null!;
-    private IChatMessenger _messenger = null!;
+    private IBroadcastMessenger _messenger = null!;
     private IEventBus _eventBus = null!;
     private PollChatAnnouncementHandler _handler = null!;
     private TestTimeProvider _clock = null!;
@@ -55,7 +56,7 @@ public class PollChatAnnouncementHandlerTests
 
         await _handler.HandleAsync(new PollStarted(Active()), CancellationToken.None);
 
-        _messenger.Received(1).Send("Старт: Вопрос?");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch,"Старт: Вопрос?");
     }
 
     [Test]
@@ -65,7 +66,7 @@ public class PollChatAnnouncementHandlerTests
 
         await _handler.HandleAsync(new PollStarted(Active()), CancellationToken.None);
 
-        _messenger.DidNotReceive().Send(Arg.Any<string>());
+        _messenger.DidNotReceive().Send(StreamingPlatform.Twitch,Arg.Any<string>());
     }
 
     [Test]
@@ -79,7 +80,7 @@ public class PollChatAnnouncementHandlerTests
 
         await _handler.HandleAsync(new PollFinalized(snapshot, winner, false), CancellationToken.None);
 
-        _messenger.Received(1).Send("Победил: A (5/8)");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch,"Победил: A (5/8)");
     }
 
     [Test]
@@ -92,7 +93,7 @@ public class PollChatAnnouncementHandlerTests
 
         await _handler.HandleAsync(new PollFinalized(snapshot, null, true), CancellationToken.None);
 
-        _messenger.Received(1).Send("Победил: ничья");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch,"Победил: ничья");
     }
 
     [Test]
@@ -109,7 +110,7 @@ public class PollChatAnnouncementHandlerTests
         _clock.UtcNow = _clock.UtcNow.AddSeconds(10);
         await _handler.HandleAsync(new PollProgressed(snapshot2), CancellationToken.None);
 
-        _messenger.Received(1).Send(Arg.Any<string>());
+        _messenger.Received(1).Send(StreamingPlatform.Twitch,Arg.Any<string>());
     }
 
     [Test]
@@ -126,7 +127,7 @@ public class PollChatAnnouncementHandlerTests
         _clock.UtcNow = _clock.UtcNow.AddSeconds(61);
         await _handler.HandleAsync(new PollProgressed(snapshot2), CancellationToken.None);
 
-        _messenger.Received(2).Send(Arg.Any<string>());
+        _messenger.Received(2).Send(StreamingPlatform.Twitch,Arg.Any<string>());
     }
 
     [Test]
@@ -137,7 +138,7 @@ public class PollChatAnnouncementHandlerTests
 
         await _handler.HandleAsync(new PollTerminated(Active()), CancellationToken.None);
 
-        _messenger.Received(1).Send("Досрочно: Вопрос?");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch,"Досрочно: Вопрос?");
     }
 
     [Test]
@@ -147,7 +148,7 @@ public class PollChatAnnouncementHandlerTests
 
         await _handler.HandleAsync(new PollArchived(Active()), CancellationToken.None);
 
-        _messenger.DidNotReceive().Send(Arg.Any<string>());
+        _messenger.DidNotReceive().Send(StreamingPlatform.Twitch,Arg.Any<string>());
     }
 
     [Test]
@@ -160,6 +161,6 @@ public class PollChatAnnouncementHandlerTests
 
         await _handler.HandleAsync(new PollStarted(snapshot), CancellationToken.None);
 
-        _messenger.Received(1).Send("Варианты: 1) A | 2) B | 3) C");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch,"Варианты: 1) A | 2) B | 3) C");
     }
 }

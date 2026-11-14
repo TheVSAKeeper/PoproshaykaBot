@@ -13,7 +13,7 @@ public sealed class ActiveUsersCommand(AudienceTracker audienceTracker) : IChatC
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var text = audienceTracker.BuildActiveUsersSummary();
+        var text = audienceTracker.ForPlatform(context.Platform).BuildActiveUsersSummary();
         return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Normal(text));
     }
 }

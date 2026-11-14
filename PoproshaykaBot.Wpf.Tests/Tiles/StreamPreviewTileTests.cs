@@ -522,6 +522,8 @@ public class StreamPreviewTileTests
 
         public StreamInfo? CurrentStream => info;
 
+        public StreamStatusSnapshot GetSnapshot() => new(Status, info, null);
+
         public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
     }
 

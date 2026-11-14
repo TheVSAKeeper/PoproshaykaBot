@@ -4,7 +4,9 @@ using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Tests.Server;
@@ -52,9 +54,22 @@ public class BroadcastSchedulerTests
         _time = new();
         _logger = new();
 
-        _scheduler = new(new(chatSender),
+        var messenger = new TwitchChatMessenger(chatSender,
+            new AccountsStore(null, Path.Combine(Path.GetTempPath(), "accounts-" + Guid.NewGuid().ToString("N") + ".json")),
+            NullLogger<TwitchChatMessenger>.Instance);
+        var channels = new PlatformChannelRegistry();
+        channels.SetChannel(StreamingPlatform.Twitch, "test-channel");
+        var twitchPlatform = new TwitchChatPlatform(Substitute.For<IStreamStatus>(),
+            messenger,
+            new ChatDecorationsProvider(Substitute.For<ITwitchHelixClient>()),
+            channels,
+            new AccountsStore(null, Path.Combine(Path.GetTempPath(), "accounts2-" + Guid.NewGuid().ToString("N") + ".json")));
+        var broadcastMessenger = new BroadcastMessenger(new ChatPlatformRegistry([twitchPlatform]),
+            NullLogger<BroadcastMessenger>.Instance);
+
+        _scheduler = new(broadcastMessenger,
+            new DefaultBroadcastPlatformTargetsProvider(),
             settingsManager,
-            Substitute.For<IStreamStatus>(),
             eventBus,
             _time,
             _logger);

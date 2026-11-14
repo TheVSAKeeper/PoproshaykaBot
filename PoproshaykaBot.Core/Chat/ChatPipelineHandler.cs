@@ -1,80 +1,83 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
-using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.Twitch.Chat;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat;
 
-public sealed class TwitchChatHandler :
-    IChannelProvider,
+public sealed class ChatPipelineHandler :
     IEventHandler<RawChatMessageReceived>,
     IEventHandler<BotJoinedChannel>,
     IEventSubscriber,
+    IChannelProvider,
     IDisposable
 {
-    private const string BotFallbackDisplayName = "Бот";
+    private const string BotFallbackDisplayName = "PoproshaykaBot";
     private const string LocalMessageIdPrefix = "local-";
 
+    private readonly IChatPlatformRegistry _platformRegistry;
+    private readonly PlatformChannelRegistry _channels;
     private readonly SettingsManager _settingsManager;
     private readonly ObsChatStore _obsChatStore;
     private readonly CommandSettingsStore _commandSettingsStore;
-    private readonly AccountsStore _accountsStore;
     private readonly AudienceTracker _audienceTracker;
-    private readonly ChatDecorationsProvider _chatDecorations;
     private readonly ChatCommandProcessor _commandProcessor;
     private readonly CommandResponseTracker _commandResponseTracker;
-    private readonly TwitchChatMessenger _messenger;
     private readonly IEventBus _eventBus;
-    private readonly ILogger<TwitchChatHandler> _logger;
+    private readonly ILogger<ChatPipelineHandler> _logger;
     private readonly List<IDisposable> _subscriptions;
-    private int _whisperScopeMissingReported;
 
-    public TwitchChatHandler(
+    public ChatPipelineHandler(
+        IChatPlatformRegistry platformRegistry,
+        PlatformChannelRegistry channels,
         SettingsManager settingsManager,
         ObsChatStore obsChatStore,
         CommandSettingsStore commandSettingsStore,
-        AccountsStore accountsStore,
         AudienceTracker audienceTracker,
-        ChatDecorationsProvider chatDecorationsProvider,
         ChatCommandProcessor commandProcessor,
         CommandResponseTracker commandResponseTracker,
-        TwitchChatMessenger messenger,
         IEventBus eventBus,
-        ILogger<TwitchChatHandler> logger)
+        ILogger<ChatPipelineHandler> logger)
     {
+        _platformRegistry = platformRegistry;
+        _channels = channels;
         _settingsManager = settingsManager;
         _obsChatStore = obsChatStore;
         _commandSettingsStore = commandSettingsStore;
-        _accountsStore = accountsStore;
         _audienceTracker = audienceTracker;
-        _chatDecorations = chatDecorationsProvider;
         _commandProcessor = commandProcessor;
         _commandResponseTracker = commandResponseTracker;
-        _messenger = messenger;
         _eventBus = eventBus;
         _logger = logger;
 
         _subscriptions =
         [
-            eventBus.SubscribePlatform<RawChatMessageReceived>(StreamingPlatform.Twitch, this),
-            eventBus.SubscribePlatform<BotJoinedChannel>(StreamingPlatform.Twitch, this),
+            eventBus.Subscribe<RawChatMessageReceived>(this),
+            eventBus.Subscribe<BotJoinedChannel>(this),
         ];
     }
 
-    public string? Channel { get; private set; }
+    public string? Channel => _channels.GetChannel(StreamingPlatform.Twitch);
 
     public void Reset()
     {
-        Channel = null;
+        _channels.ClearAll();
         _audienceTracker.ClearAll();
         _commandResponseTracker.Clear();
+    }
+
+    public void Reset(StreamingPlatform platform)
+    {
+        _channels.Clear(platform);
+        _audienceTracker.Clear(platform);
+        _commandResponseTracker.Clear(platform);
     }
 
     public void Dispose()
@@ -87,7 +90,7 @@ public sealed class TwitchChatHandler :
 
     public Task HandleAsync(BotJoinedChannel @event, CancellationToken cancellationToken)
     {
-        Channel = @event.Channel;
+        _channels.SetChannel(@event.Platform, @event.Channel);
         return Task.CompletedTask;
     }
 
@@ -95,12 +98,20 @@ public sealed class TwitchChatHandler :
     {
         var chatMessage = @event.Message;
 
-        Channel ??= chatMessage.Channel;
+        _channels.SetChannelIfUnset(chatMessage.Platform, chatMessage.Channel);
+
+        if (!_platformRegistry.TryGet(chatMessage.Platform, out var platform))
+        {
+            _logger.LogWarning("Сообщение чата для незарегистрированной площадки {Platform} проигнорировано", chatMessage.Platform);
+            return;
+        }
 
         var settings = _settingsManager.Current.Twitch;
+        var obsChat = _obsChatStore.Load();
+        var audience = _audienceTracker.ForPlatform(chatMessage.Platform);
 
         var isFirstSeen = !chatMessage.IsBot
-                          && _audienceTracker.OnUserMessage(chatMessage.UserId, chatMessage.DisplayName);
+                          && audience.OnUserMessage(chatMessage.UserId, chatMessage.DisplayName);
 
         var status = GetUserStatusFlags(chatMessage);
 
@@ -121,12 +132,14 @@ public sealed class TwitchChatHandler :
             IsFirstTime = isFirstSeen,
             Color = chatMessage.Color,
 
-            Emotes = _chatDecorations.ExtractEmotes(chatMessage, _obsChatStore.Load().EmoteSizePixels),
+            Emotes = platform.Decorations.ExtractEmotes(chatMessage, obsChat.EmoteSizePixels),
             Badges = badgesKvp,
-            BadgeUrls = _chatDecorations.ExtractBadgeUrls(chatMessage.Badges, _obsChatStore.Load().BadgeSizePixels),
+            BadgeUrls = platform.Decorations.ExtractBadgeUrls(chatMessage.Badges, obsChat.BadgeSizePixels),
         };
 
-        var commandResponse = chatMessage.IsBot ? _commandResponseTracker.TryConsume(chatMessage.Id) : null;
+        var commandResponse = chatMessage.IsBot
+            ? _commandResponseTracker.TryConsume(chatMessage.Platform, chatMessage.Id)
+            : null;
 
         _ = _eventBus.PublishAsync(new ChatMessageReceived(chatMessage.Platform,
             chatMessage.Channel,
@@ -169,7 +182,7 @@ public sealed class TwitchChatHandler :
 
         if (settings.Messages.WelcomeEnabled && isFirstSeen)
         {
-            var welcomeMessage = _audienceTracker.CreateWelcome(chatMessage.DisplayName);
+            var welcomeMessage = audience.CreateWelcome(chatMessage.DisplayName);
 
             if (!string.IsNullOrWhiteSpace(welcomeMessage))
             {
@@ -179,14 +192,15 @@ public sealed class TwitchChatHandler :
                 }
                 else
                 {
-                    _messenger.Reply(chatMessage.Id, welcomeMessage);
+                    platform.Messenger.Reply(chatMessage.Id, chatMessage.DisplayName, welcomeMessage);
                 }
             }
         }
 
         if (response != null)
         {
-            await DeliverCommandResponseAsync(response,
+            await DeliverCommandResponseAsync(platform,
+                response,
                 canonical,
                 target,
                 chatMessage,
@@ -198,6 +212,7 @@ public sealed class TwitchChatHandler :
     }
 
     private async Task DeliverCommandResponseAsync(
+        IChatPlatform platform,
         OutgoingMessage response,
         string canonical,
         CommandResponseTarget target,
@@ -205,73 +220,59 @@ public sealed class TwitchChatHandler :
         CommandContext context,
         CancellationToken cancellationToken)
     {
-        if (target == CommandResponseTarget.None)
+        var decision = CommandResponseRouting.Resolve(target, response, context.MessageId, platform.Capabilities);
+
+        if (decision.Action == CommandDeliveryAction.None)
         {
             _logger.LogDebug("Ответ команды {Canonical} не доставлен: цель ответа – молча", canonical);
             return;
         }
 
+        if (target.WhispersToCaller() && (platform.Capabilities & PlatformCapabilities.Whisper) == PlatformCapabilities.None)
+        {
+            _logger.LogDebug("Ответ команды {Canonical} перенаправлен на публичный отклик: площадка {Platform} не поддерживает личные сообщения",
+                canonical,
+                platform.Id);
+        }
+
         var mark = new CommandResponseMark(canonical, target);
 
-        if (target.WhispersToCaller())
+        switch (decision.Action)
         {
-            if (TwitchScopes.IsGranted(_accountsStore.LoadBot(), TwitchScopes.UserManageWhispers))
-            {
-                Volatile.Write(ref _whisperScopeMissingReported, 0);
-                _messenger.Whisper(context.UserId, context.MessageId, response.Text, mark);
-            }
-            else
-            {
-                if (Interlocked.Exchange(ref _whisperScopeMissingReported, 1) == 0)
-                {
-                    _logger.LogWarning("Ответ команды {Canonical} не отправлен шёпотом: у бота нет права {Scope} (необязательное, включается повторной авторизацией бота) – ответ уходит реплаем на сообщение вызвавшего, повторы этой строки пишутся в Debug",
-                        canonical,
-                        TwitchScopes.UserManageWhispers);
-                }
-                else
-                {
-                    _logger.LogDebug("Ответ команды {Canonical} уходит реплаем вместо шёпота: у бота нет права {Scope}",
-                        canonical,
-                        TwitchScopes.UserManageWhispers);
-                }
+            case CommandDeliveryAction.Whisper:
+                platform.Messenger.Whisper(context.UserId, context.MessageId, context.DisplayName, response.Text, mark);
+                break;
 
-                _messenger.Reply(context.MessageId, response.Text, mark);
-            }
+            case CommandDeliveryAction.ReplyThread:
+                platform.Messenger.Reply(decision.ReplyToMessageId ?? context.MessageId, context.DisplayName, response.Text, mark);
+                break;
 
-            return;
+            case CommandDeliveryAction.MentionSend:
+                platform.Messenger.Send(CommandResponseRouting.PrependCallerMention(context.DisplayName, response.Text), mark);
+                break;
+
+            case CommandDeliveryAction.Send:
+                platform.Messenger.Send(response.Text, mark);
+                break;
+
+            case CommandDeliveryAction.OverlayOnly:
+                await PublishOverlayOnlyResponseAsync(platform, response, source, mark, cancellationToken);
+                break;
         }
-
-        if (target.GoesToChat())
-        {
-            var replyToMessageId = target.RepliesToCaller()
-                ? context.MessageId
-                : response.Delivery == DeliveryType.Reply
-                    ? response.ReplyToMessageId ?? context.MessageId
-                    : null;
-
-            if (string.IsNullOrEmpty(replyToMessageId))
-            {
-                _messenger.Send(response.Text, mark);
-            }
-            else
-            {
-                _messenger.Reply(replyToMessageId, response.Text, mark);
-            }
-
-            return;
-        }
-
-        await PublishOverlayOnlyResponseAsync(response, source, mark, cancellationToken);
     }
 
     private Task PublishOverlayOnlyResponseAsync(
+        IChatPlatform platform,
         OutgoingMessage response,
         ChatMessage source,
         CommandResponseMark mark,
         CancellationToken cancellationToken)
     {
-        var botAccount = _accountsStore.LoadBot();
-        var displayName = string.IsNullOrWhiteSpace(botAccount.Login) ? BotFallbackDisplayName : botAccount.Login;
+        var botIdentity = platform.BotIdentity;
+        var userId = botIdentity?.UserId ?? string.Empty;
+        var displayName = string.IsNullOrWhiteSpace(botIdentity?.DisplayName)
+            ? BotFallbackDisplayName
+            : botIdentity.DisplayName;
         var messageId = $"{LocalMessageIdPrefix}{Guid.NewGuid():N}";
 
         var historyEntry = new ChatMessageData
@@ -279,7 +280,7 @@ public sealed class TwitchChatHandler :
             Platform = source.Platform,
             MessageId = messageId,
             Timestamp = DateTime.UtcNow,
-            UserId = botAccount.UserId,
+            UserId = userId,
             DisplayName = displayName,
             Message = response.Text,
             MessageType = ChatMessageType.BotResponse,
@@ -289,7 +290,7 @@ public sealed class TwitchChatHandler :
         return _eventBus.PublishAsync(new ChatMessageReceived(source.Platform,
             source.Channel,
             messageId,
-            botAccount.UserId,
+            userId,
             displayName,
             displayName,
             response.Text,

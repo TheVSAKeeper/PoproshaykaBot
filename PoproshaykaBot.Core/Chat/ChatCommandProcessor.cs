@@ -16,17 +16,20 @@ public sealed class ChatCommandProcessor
     private readonly CommandSettingsStore _commandSettingsStore;
     private readonly CommandUsageRepository _usageRepository;
     private readonly ILogger<ChatCommandProcessor> _logger;
+    private readonly IChatPlatformRegistry? _platformRegistry;
 
     public ChatCommandProcessor(
         IEnumerable<IChatCommand> commands,
         CommandSettingsStore commandSettingsStore,
         CommandUsageRepository usageRepository,
         ILogger<ChatCommandProcessor> logger,
-        string prefix = DefaultPrefix)
+        string prefix = DefaultPrefix,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         _commandSettingsStore = commandSettingsStore;
         _usageRepository = usageRepository;
         _logger = logger;
+        _platformRegistry = platformRegistry;
 
         Directory.CreateDirectory(AppPaths.BaseDirectory);
         _unknownCommandsFilePath = AppPaths.Combine("unknown_commands.txt");
@@ -70,6 +73,16 @@ public sealed class ChatCommandProcessor
             .ToList();
     }
 
+    public IReadOnlyCollection<IChatCommand> GetAvailableCommands(StreamingPlatform platform)
+    {
+        var settings = _commandSettingsStore.Load();
+
+        return GetAllCommands()
+            .Where(command => settings.IsEnabled(command.Canonical)
+                              && HasRequiredCapabilities(platform, command))
+            .ToList();
+    }
+
     public async Task<ChatCommandResult> TryProcessAsync(string messageText, CommandContext context, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(messageText))
@@ -108,6 +121,16 @@ public sealed class ChatCommandProcessor
             _logger.LogDebug("Команда {Canonical} выключена в настройках, сообщение от {Username} пропущено",
                 command.Canonical,
                 context.Username);
+
+            return ChatCommandResult.NotHandled;
+        }
+
+        if (!HasRequiredCapabilities(context.Platform, command))
+        {
+            _logger.LogDebug("Команда {Canonical} недоступна на площадке {Platform}: требуются возможности {Capabilities}",
+                command.Canonical,
+                context.Platform,
+                command.RequiredCapabilities);
 
             return ChatCommandResult.NotHandled;
         }
@@ -176,6 +199,17 @@ public sealed class ChatCommandProcessor
             _logger.LogError(ex, "Команда {Canonical} упала на сообщении от {Username}", command.Canonical, enrichedContext.Username);
             return ChatCommandResult.Failed(command.Canonical);
         }
+    }
+
+    private bool HasRequiredCapabilities(StreamingPlatform platform, IChatCommand command)
+    {
+        if (command.RequiredCapabilities == PlatformCapabilities.None || _platformRegistry is null)
+        {
+            return true;
+        }
+
+        var capabilities = _platformRegistry.Find(platform)?.Capabilities ?? PlatformCapabilities.None;
+        return (capabilities & command.RequiredCapabilities) == command.RequiredCapabilities;
     }
 
     private void RegisterToken(string token, IChatCommand command)

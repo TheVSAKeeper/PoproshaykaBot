@@ -217,7 +217,7 @@ public sealed class ChatCommandProcessorTests
     public async Task Помощь_перечисляет_только_включённые_команды()
     {
         var processor = CreateProcessor(new FakeCommand("ранг"), new FakeCommand("донат"));
-        processor.Register(new HelpCommand(processor.GetEnabledCommands, processor.Prefix));
+        processor.Register(new HelpCommand(processor.GetAvailableCommands, processor.Prefix));
 
         _settingsStore.Mutate(settings => settings.Commands["донат"] = new()
         {
@@ -247,7 +247,7 @@ public sealed class ChatCommandProcessorTests
             NullLogger<ChatCommandProcessor>.Instance,
             prefix);
 
-        processor.Register(new HelpCommand(processor.GetEnabledCommands, processor.Prefix));
+        processor.Register(new HelpCommand(processor.GetAvailableCommands, processor.Prefix));
 
         var list = await processor.TryProcessAsync($"{prefix}помощь", CreateContext(), CancellationToken.None);
         var about = await processor.TryProcessAsync(message, CreateContext(), CancellationToken.None);
@@ -363,7 +363,7 @@ public sealed class ChatCommandProcessorTests
 
         var logger = new RecordingLogger<ChatCommandProcessor>();
         var processor = new ChatCommandProcessor(commands, _settingsStore, _usage, logger);
-        processor.Register(new HelpCommand(processor.GetEnabledCommands, processor.Prefix));
+        processor.Register(new HelpCommand(processor.GetAvailableCommands, processor.Prefix));
 
         var tokens = processor.GetAllCommands()
             .SelectMany(command => command.Aliases.Prepend(command.Canonical))

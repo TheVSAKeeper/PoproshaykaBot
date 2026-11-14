@@ -1,8 +1,9 @@
-﻿using PoproshaykaBot.Core.Streaming;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class StreamInfoCommand(IStreamStatus streamStatusManager) : IChatCommand
+public sealed class StreamInfoCommand(IChatPlatformRegistry platformRegistry, TimeProvider timeProvider) : IChatCommand
 {
     public string Canonical => "стрим";
     public IReadOnlyCollection<string> Aliases => ["stream", "онлайн", "он"];
@@ -15,25 +16,48 @@ public sealed class StreamInfoCommand(IStreamStatus streamStatusManager) : IChat
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var info = streamStatusManager.CurrentStream;
-
-        if (info == null || info.IsBare)
+        if (!platformRegistry.TryGet(context.Platform, out var platform))
         {
-            var text = streamStatusManager.CurrentStatus == StreamStatus.Online
-                ? "Стрим онлайн, детали загружаются"
-                : "Сейчас стрим офлайн";
-
-            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply("Сейчас стрим офлайн", context.MessageId));
         }
 
-        var duration = DateTime.UtcNow - info.StartedAt;
+        var snapshot = platform.StreamStatus.GetSnapshot();
+
+        if (snapshot.Status != StreamStatus.Online)
+        {
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply("Сейчас стрим офлайн", context.MessageId));
+        }
+
+        var info = snapshot.Stream;
+
+        if (info == null || (info.IsBare && snapshot.ViewerSampledAtUtc == null))
+        {
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply("Стрим онлайн, детали загружаются", context.MessageId));
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var duration = now.UtcDateTime - info.StartedAt;
+
+        if (duration < TimeSpan.Zero)
+        {
+            duration = TimeSpan.Zero;
+        }
+
         var hours = (int)duration.TotalHours;
         var minutes = duration.Minutes;
 
         var title = string.IsNullOrWhiteSpace(info.Title) ? "Без названия" : info.Title;
         var game = string.IsNullOrWhiteSpace(info.GameName) ? "Без категории" : info.GameName;
 
-        var textFull = $"🔴 Стрим: {title} | {game} | 👥 {info.ViewerCount} | ⏱ {hours:0}ч {minutes:00}м";
+        var viewerState = snapshot.EvaluateViewerSample(now, StreamStatusSnapshot.DefaultViewerFreshnessWindow);
+        var viewers = viewerState switch
+        {
+            ViewerSampleState.Fresh => info.ViewerCount.ToString(),
+            ViewerSampleState.Stale => $"~{info.ViewerCount} (устарел)",
+            _ => "н/д",
+        };
+
+        var textFull = $"🔴 Стрим: {title} | {game} | 👥 {viewers} | ⏱ {hours:0}ч {minutes:00}м";
         return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(textFull, context.MessageId));
     }
 }

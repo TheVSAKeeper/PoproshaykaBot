@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
@@ -15,6 +16,7 @@ public sealed class GameCommand(
     public string Canonical => "game";
     public IReadOnlyCollection<string> Aliases => ["игра", "категория"];
     public string Description => "обновить категорию трансляции";
+    public PlatformCapabilities RequiredCapabilities => PlatformCapabilities.ChannelMetadataEdit;
 
     public bool CanExecute(CommandContext context)
     {

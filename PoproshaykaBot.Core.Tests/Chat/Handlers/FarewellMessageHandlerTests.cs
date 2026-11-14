@@ -1,10 +1,11 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Handlers;
-using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Tests.Fakes;
 using PoproshaykaBot.Core.Tests.Server;
 using PoproshaykaBot.Core.Twitch.Chat;
 
@@ -16,8 +17,8 @@ public sealed class FarewellMessageHandlerTests
     [SetUp]
     public void SetUp()
     {
-        _channelProvider = Substitute.For<IChannelProvider>();
-        _channelProvider.Channel.Returns("qp_illson");
+        _twitchPlatform = new(StreamingPlatform.Twitch, "Twitch", isConnected: true);
+        _platformRegistry = new([_twitchPlatform]);
 
         _settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
         _settings = new();
@@ -25,11 +26,11 @@ public sealed class FarewellMessageHandlerTests
 
         _audienceTracker = new(_settingsManager);
 
-        _messenger = Substitute.For<IChatMessenger>();
+        _messenger = Substitute.For<IBroadcastMessenger>();
         _eventBus = Substitute.For<IEventBus>();
         _eventBus.Subscribe(Arg.Any<IEventHandler<BotLifecyclePhaseChanged>>()).Returns(Substitute.For<IDisposable>());
 
-        _handler = new(_channelProvider,
+        _handler = new(_platformRegistry,
             _audienceTracker,
             _messenger,
             _settingsManager,
@@ -43,10 +44,11 @@ public sealed class FarewellMessageHandlerTests
         _handler.Dispose();
     }
 
-    private IChannelProvider _channelProvider = null!;
+    private FakeChatPlatform _twitchPlatform = null!;
+    private ChatPlatformRegistry _platformRegistry = null!;
     private SettingsManager _settingsManager = null!;
     private AudienceTracker _audienceTracker = null!;
-    private IChatMessenger _messenger = null!;
+    private IBroadcastMessenger _messenger = null!;
     private IEventBus _eventBus = null!;
     private AppSettings _settings = null!;
     private FarewellMessageHandler _handler = null!;
@@ -56,26 +58,26 @@ public sealed class FarewellMessageHandlerTests
     {
         _settings.Twitch.Messages.FarewellEnabled = true;
         _settings.Twitch.Messages.DisconnectionEnabled = true;
-        _audienceTracker.OnUserMessage("u1", "Alice");
+        _audienceTracker.ForPlatform(StreamingPlatform.Twitch).OnUserMessage("u1", "Alice");
 
         await _handler.HandleAsync(new(BotLifecyclePhase.Connected), CancellationToken.None);
         await _handler.HandleAsync(new(BotLifecyclePhase.Connecting), CancellationToken.None);
         await _handler.HandleAsync(new(BotLifecyclePhase.Disconnected), CancellationToken.None);
 
-        _messenger.DidNotReceive().Send(Arg.Any<string>());
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), Arg.Any<string>());
     }
 
     [Test]
     public async Task SkipsAllMessagesWhenChannelIsUnknown()
     {
-        _channelProvider.Channel.Returns((string?)null);
+        _twitchPlatform.IsConnected = false;
         _settings.Twitch.Messages.FarewellEnabled = true;
         _settings.Twitch.Messages.DisconnectionEnabled = true;
-        _audienceTracker.OnUserMessage("u1", "Alice");
+        _audienceTracker.ForPlatform(StreamingPlatform.Twitch).OnUserMessage("u1", "Alice");
 
         await _handler.HandleAsync(new(BotLifecyclePhase.Disconnecting), CancellationToken.None);
 
-        _messenger.DidNotReceive().Send(Arg.Any<string>());
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), Arg.Any<string>());
     }
 
     [Test]
@@ -85,12 +87,12 @@ public sealed class FarewellMessageHandlerTests
         _settings.Twitch.Messages.Farewell = "До свидания, {username}!";
         _settings.Twitch.Messages.DisconnectionEnabled = true;
         _settings.Twitch.Messages.Disconnection = "Пока-пока!";
-        _audienceTracker.OnUserMessage("u1", "Alice");
-        _audienceTracker.OnUserMessage("u2", "Bob");
+        _audienceTracker.ForPlatform(StreamingPlatform.Twitch).OnUserMessage("u1", "Alice");
+        _audienceTracker.ForPlatform(StreamingPlatform.Twitch).OnUserMessage("u2", "Bob");
 
         await _handler.HandleAsync(new(BotLifecyclePhase.Disconnecting), CancellationToken.None);
 
-        _messenger.Received(1).Send("До свидания, Alice, Bob! Пока-пока!");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch, "До свидания, Alice, Bob! Пока-пока!");
     }
 
     [Test]
@@ -99,11 +101,11 @@ public sealed class FarewellMessageHandlerTests
         _settings.Twitch.Messages.FarewellEnabled = false;
         _settings.Twitch.Messages.DisconnectionEnabled = true;
         _settings.Twitch.Messages.Disconnection = "Пока-пока!";
-        _audienceTracker.OnUserMessage("u1", "Alice");
+        _audienceTracker.ForPlatform(StreamingPlatform.Twitch).OnUserMessage("u1", "Alice");
 
         await _handler.HandleAsync(new(BotLifecyclePhase.Disconnecting), CancellationToken.None);
 
-        _messenger.Received(1).Send("Пока-пока!");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch, "Пока-пока!");
     }
 
     [Test]
@@ -116,7 +118,7 @@ public sealed class FarewellMessageHandlerTests
 
         await _handler.HandleAsync(new(BotLifecyclePhase.Disconnecting), CancellationToken.None);
 
-        _messenger.Received(1).Send("Пока-пока!");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch, "Пока-пока!");
     }
 
     [Test]
@@ -125,11 +127,11 @@ public sealed class FarewellMessageHandlerTests
         _settings.Twitch.Messages.FarewellEnabled = true;
         _settings.Twitch.Messages.Farewell = "Спасибо, {username}!";
         _settings.Twitch.Messages.DisconnectionEnabled = false;
-        _audienceTracker.OnUserMessage("u1", "Alice");
+        _audienceTracker.ForPlatform(StreamingPlatform.Twitch).OnUserMessage("u1", "Alice");
 
         await _handler.HandleAsync(new(BotLifecyclePhase.Disconnecting), CancellationToken.None);
 
-        _messenger.Received(1).Send("Спасибо, Alice!");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch, "Спасибо, Alice!");
     }
 
     [Test]
@@ -140,7 +142,7 @@ public sealed class FarewellMessageHandlerTests
 
         await _handler.HandleAsync(new(BotLifecyclePhase.Disconnecting), CancellationToken.None);
 
-        _messenger.DidNotReceive().Send(Arg.Any<string>());
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), Arg.Any<string>());
     }
 
     [TestCase(ChatEnqueueResult.Queued, LogLevel.Information, "поставлено в очередь")]
@@ -150,10 +152,10 @@ public sealed class FarewellMessageHandlerTests
     {
         _settings.Twitch.Messages.DisconnectionEnabled = true;
         _settings.Twitch.Messages.Disconnection = "Пока-пока!";
-        _messenger.Send(Arg.Any<string>()).Returns(outcome);
+        _messenger.Send(StreamingPlatform.Twitch, Arg.Any<string>()).Returns(outcome);
 
         var logger = new RecordingLogger<FarewellMessageHandler>();
-        using var handler = new FarewellMessageHandler(_channelProvider,
+        using var handler = new FarewellMessageHandler(_platformRegistry,
             _audienceTracker,
             _messenger,
             _settingsManager,

@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
-using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.Chat;
 
@@ -9,22 +9,22 @@ namespace PoproshaykaBot.Core.Chat.Handlers;
 
 public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChanged>, IEventSubscriber, IDisposable
 {
-    private readonly IChannelProvider _channelProvider;
+    private readonly IChatPlatformRegistry _platformRegistry;
     private readonly AudienceTracker _audienceTracker;
-    private readonly IChatMessenger _messenger;
+    private readonly IBroadcastMessenger _messenger;
     private readonly SettingsManager _settingsManager;
     private readonly ILogger<FarewellMessageHandler> _logger;
     private readonly IDisposable _subscription;
 
     public FarewellMessageHandler(
-        IChannelProvider channelProvider,
+        IChatPlatformRegistry platformRegistry,
         AudienceTracker audienceTracker,
-        IChatMessenger messenger,
+        IBroadcastMessenger messenger,
         SettingsManager settingsManager,
         IEventBus eventBus,
         ILogger<FarewellMessageHandler> logger)
     {
-        _channelProvider = channelProvider;
+        _platformRegistry = platformRegistry;
         _audienceTracker = audienceTracker;
         _messenger = messenger;
         _settingsManager = settingsManager;
@@ -39,68 +39,83 @@ public sealed class FarewellMessageHandler : IEventHandler<BotLifecyclePhaseChan
             return Task.CompletedTask;
         }
 
-        var channel = _channelProvider.Channel;
+        var connected = _platformRegistry.GetConnected();
 
-        if (string.IsNullOrWhiteSpace(channel))
+        if (connected.Count == 0)
         {
             _logger.LogDebug("Прощальные сообщения пропущены: бот не заходил в канал в этой сессии");
             return Task.CompletedTask;
         }
 
-        var messages = new List<string>();
-
         var messageSettings = _settingsManager.Current.Twitch.Messages;
-        var activeUsers = _audienceTracker.ActiveUserCount;
 
         if (!messageSettings.FarewellEnabled)
         {
             _logger.LogInformation("Коллективное прощание выключено настройкой Messages.FarewellEnabled");
         }
-        else if (activeUsers == 0)
-        {
-            _logger.LogInformation("Коллективное прощание пропущено: AudienceTracker пуст – ни одного нефильтрованного сообщения за сессию");
-        }
-        else
-        {
-            var collectiveFarewell = _audienceTracker.CreateCollectiveFarewell();
 
-            if (!string.IsNullOrWhiteSpace(collectiveFarewell))
+        foreach (var platform in connected)
+        {
+            var audience = _audienceTracker.ForPlatform(platform.Id);
+            var activeUsers = audience.ActiveUserCount;
+            var messages = new List<string>();
+
+            if (messageSettings.FarewellEnabled)
             {
-                messages.Add(collectiveFarewell);
-                _logger.LogInformation("Сформировано коллективное прощание для {Count} зрителей", activeUsers);
+                if (activeUsers == 0)
+                {
+                    _logger.LogInformation("Коллективное прощание для {Platform} пропущено: AudienceTracker пуст – ни одного нефильтрованного сообщения за сессию",
+                        platform.Id);
+                }
+                else
+                {
+                    var collectiveFarewell = audience.CreateCollectiveFarewell();
+
+                    if (!string.IsNullOrWhiteSpace(collectiveFarewell))
+                    {
+                        messages.Add(collectiveFarewell);
+                        _logger.LogInformation("Сформировано коллективное прощание для {Platform} для {Count} зрителей",
+                            platform.Id,
+                            activeUsers);
+                    }
+                }
             }
-        }
 
-        if (messageSettings.DisconnectionEnabled
-            && !string.IsNullOrWhiteSpace(messageSettings.Disconnection))
-        {
-            messages.Add(messageSettings.Disconnection);
-        }
-
-        if (messages.Count == 0)
-        {
-            _logger.LogDebug("На фазе Disconnecting не сформировано ни одного прощального сообщения");
-            return Task.CompletedTask;
-        }
-
-        var text = string.Join(" ", messages);
-
-        try
-        {
-            var result = _messenger.Send(text);
-
-            if (result is ChatEnqueueResult.Queued)
+            if (messageSettings.DisconnectionEnabled
+                && !string.IsNullOrWhiteSpace(messageSettings.Disconnection))
             {
-                _logger.LogInformation("Прощальное сообщение поставлено в очередь ChatSender ({Length} симв.)", text.Length);
+                messages.Add(messageSettings.Disconnection);
             }
-            else
+
+            if (messages.Count == 0)
             {
-                _logger.LogDebug("Прощальное сообщение не поставлено в очередь ChatSender: {Reason}", ChatEnqueueResults.DescribeRefusal(result));
+                _logger.LogDebug("На фазе Disconnecting не сформировано ни одного прощального сообщения для {Platform}", platform.Id);
+                continue;
             }
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Не удалось поставить прощальное сообщение в очередь ChatSender");
+
+            var text = string.Join(" ", messages);
+
+            try
+            {
+                var result = _messenger.Send(platform.Id, text);
+
+                if (result is ChatEnqueueResult.Queued)
+                {
+                    _logger.LogInformation("Прощальное сообщение для {Platform} поставлено в очередь ({Length} симв.)",
+                        platform.Id,
+                        text.Length);
+                }
+                else
+                {
+                    _logger.LogDebug("Прощальное сообщение для {Platform} не поставлено в очередь ChatSender: {Reason}",
+                        platform.Id,
+                        ChatEnqueueResults.DescribeRefusal(result));
+                }
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Не удалось поставить прощальное сообщение для {Platform} в очередь", platform.Id);
+            }
         }
 
         return Task.CompletedTask;

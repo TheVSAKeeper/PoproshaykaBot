@@ -13,7 +13,7 @@ public sealed class ByeCommand(AudienceTracker audienceTracker) : IChatCommand
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var farewell = audienceTracker.CreateFarewell(context.UserId, context.DisplayName);
+        var farewell = audienceTracker.ForPlatform(context.Platform).CreateFarewell(context.UserId, context.DisplayName);
 
         if (string.IsNullOrWhiteSpace(farewell))
         {

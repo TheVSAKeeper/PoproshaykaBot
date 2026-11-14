@@ -2,16 +2,16 @@
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Broadcast;
 
 public sealed class BroadcastScheduler(
-    TwitchChatMessenger messenger,
+    IBroadcastMessenger messenger,
+    IBroadcastPlatformTargetsProvider platformTargetsProvider,
     SettingsManager settingsManager,
-    IStreamStatus streamStatusManager,
     IEventBus eventBus,
     TimeProvider timeProvider,
     ILogger<BroadcastScheduler> logger)
@@ -202,36 +202,37 @@ public sealed class BroadcastScheduler(
                 number = _sentMessagesCount + 1;
             }
 
-            var message = GetMessage(number);
+            var targetPlatforms = platformTargetsProvider.GetTargetPlatforms();
+            var sendResult = messenger.Send(platform => GetMessage(number, platform), targetPlatforms);
 
-            if (string.IsNullOrWhiteSpace(message))
+            if (!sendResult.AnyQueued)
             {
-                if (manual)
+                var refusal = sendResult.FirstRefusalOr(ChatEnqueueResult.NotConnected);
+
+                if (refusal is ChatEnqueueResult.EmptyMessage)
                 {
-                    logger.LogWarning("Ручная отправка отменена: провайдер вернул пустое сообщение");
+                    if (manual)
+                    {
+                        logger.LogWarning("Ручная отправка отменена: провайдер вернул пустое сообщение");
+                    }
+                    else
+                    {
+                        logger.LogWarning("Запланированная отправка пропущена: провайдер вернул пустое сообщение");
+                    }
                 }
                 else
                 {
-                    logger.LogWarning("Запланированная отправка пропущена: провайдер вернул пустое сообщение");
+                    if (manual)
+                    {
+                        logger.LogDebug("Ручная отправка в канал {Channel} не состоялась: {Reason}", channel, ChatEnqueueResults.DescribeRefusal(refusal));
+                    }
+                    else
+                    {
+                        logger.LogDebug("Запланированное сообщение в канал {Channel} не отправлено: {Reason}", channel, ChatEnqueueResults.DescribeRefusal(refusal));
+                    }
                 }
 
-                return ChatEnqueueResult.EmptyMessage;
-            }
-
-            var result = messenger.Send(message);
-
-            if (result is not ChatEnqueueResult.Queued)
-            {
-                if (manual)
-                {
-                    logger.LogDebug("Ручная отправка в канал {Channel} не состоялась: {Reason}", channel, ChatEnqueueResults.DescribeRefusal(result));
-                }
-                else
-                {
-                    logger.LogDebug("Запланированное сообщение в канал {Channel} не отправлено: {Reason}", channel, ChatEnqueueResults.DescribeRefusal(result));
-                }
-
-                return result;
+                return refusal;
             }
 
             lock (_stateLock)
@@ -251,14 +252,14 @@ public sealed class BroadcastScheduler(
                 logger.LogInformation("Запланированное сообщение отправлено в канал {Channel}. Всего отправлено: {SentMessagesCount}", channel, number);
             }
 
-            return result;
+            return ChatEnqueueResult.Queued;
         }
     }
 
-    private string GetMessage(int counter)
+    private string GetMessage(int counter, IChatPlatform platform)
     {
         var template = settingsManager.Current.Twitch.AutoBroadcast.BroadcastMessageTemplate;
-        var info = streamStatusManager.CurrentStream;
+        var info = platform.StreamStatus.GetSnapshot().Stream;
 
         return MessageTemplate.For(template)
             .With("counter", counter.ToString())

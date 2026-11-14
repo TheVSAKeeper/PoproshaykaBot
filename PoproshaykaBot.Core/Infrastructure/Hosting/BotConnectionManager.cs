@@ -22,7 +22,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
     private static readonly TimeSpan ForcedStopTimeout = TimeSpan.FromSeconds(6);
     private readonly ITwitchOAuthService _tokenService;
     private readonly ITargetChannelProvider _targetChannelProvider;
-    private readonly TwitchChatHandler _twitchChatHandler;
+    private readonly ChatPipelineHandler _chatPipelineHandler;
     private readonly AppHost _appHost;
     private readonly IEventBus _eventBus;
     private readonly ILogger<BotConnectionManager> _logger;
@@ -40,14 +40,14 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
     public BotConnectionManager(
         ITwitchOAuthService tokenService,
         ITargetChannelProvider targetChannelProvider,
-        TwitchChatHandler twitchChatHandler,
+        ChatPipelineHandler chatPipelineHandler,
         AppHost appHost,
         IEventBus eventBus,
         ILogger<BotConnectionManager> logger)
     {
         _tokenService = tokenService;
         _targetChannelProvider = targetChannelProvider;
-        _twitchChatHandler = twitchChatHandler;
+        _chatPipelineHandler = chatPipelineHandler;
         _appHost = appHost;
         _eventBus = eventBus;
         _logger = logger;
@@ -149,7 +149,7 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
                 ReleaseOwnStop(stopCts);
             }
 
-            _twitchChatHandler.Reset();
+            _chatPipelineHandler.Reset();
             _targetChannelProvider.EndSession();
             PublishPhase(BotLifecyclePhase.Disconnected);
         }

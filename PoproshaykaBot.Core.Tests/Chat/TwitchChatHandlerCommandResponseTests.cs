@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Tests.Polls;
 using PoproshaykaBot.Core.Tests.Server;
@@ -82,7 +83,13 @@ public sealed class TwitchChatHandlerCommandResponseTests
             _tracker,
             NullLogger<ChatSender>.Instance);
 
-        _messenger = new(_sender);
+        _accountsStore = new(null, Path.Combine(_root, "accounts.json"));
+
+        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
+            account.StoredScopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional]);
+
+        _messengerLogger = new();
+        _messenger = new(_sender, _accountsStore, _messengerLogger);
         _commandSettingsStore = new(null, Path.Combine(_root, "commands.json"));
 
         _settings = new();
@@ -96,29 +103,30 @@ public sealed class TwitchChatHandlerCommandResponseTests
             Path.Combine(_root, "obs-chat.json"));
 
         _command = new();
-        _accountsStore = new(null, Path.Combine(_root, "accounts.json"));
-
-        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
-            account.StoredScopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional]);
-
-        _handlerLogger = new();
+        var channels = new PlatformChannelRegistry();
+        var twitchPlatform = new TwitchChatPlatform(Substitute.For<IStreamStatus>(),
+            _messenger,
+            new ChatDecorationsProvider(_helix),
+            channels,
+            _accountsStore);
+        var platformRegistry = new ChatPlatformRegistry([twitchPlatform]);
 
         var processor = new ChatCommandProcessor([_command],
             _commandSettingsStore,
             new(_time),
-            NullLogger<ChatCommandProcessor>.Instance);
+            NullLogger<ChatCommandProcessor>.Instance,
+            platformRegistry: platformRegistry);
 
-        _handler = new(settingsManager,
+        _handler = new(platformRegistry,
+            channels,
+            settingsManager,
             obsChatStore,
             _commandSettingsStore,
-            _accountsStore,
             new AudienceTracker(settingsManager),
-            new ChatDecorationsProvider(_helix),
             processor,
             _tracker,
-            _messenger,
             _bus,
-            _handlerLogger);
+            NullLogger<ChatPipelineHandler>.Instance);
     }
 
     [TearDown]
@@ -150,8 +158,8 @@ public sealed class TwitchChatHandlerCommandResponseTests
     private CommandSettingsStore _commandSettingsStore = null!;
     private FakeCommand _command = null!;
     private AccountsStore _accountsStore = null!;
-    private TwitchChatHandler _handler = null!;
-    private RecordingLogger<TwitchChatHandler> _handlerLogger = null!;
+    private ChatPipelineHandler _handler = null!;
+    private RecordingLogger<TwitchChatMessenger> _messengerLogger = null!;
 
     [Test]
     public async Task Цель_чат_отправляет_ответ_в_твич_и_синтетического_сообщения_не_публикует()
@@ -433,7 +441,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
 
         await _helix.DidNotReceiveWithAnyArgs().SendWhisperAsync(default!, default!, default!, default);
 
-        var fallbacks = _handlerLogger.Entries
+        var fallbacks = _messengerLogger.Entries
             .Where(entry => entry.Message.Contains(TwitchScopes.UserManageWhispers, StringComparison.Ordinal))
             .Select(entry => entry.Level)
             .ToArray();

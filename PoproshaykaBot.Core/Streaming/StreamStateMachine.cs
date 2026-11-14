@@ -24,12 +24,14 @@ internal enum OfflineProbeAction
 
 internal readonly record struct OfflineProbeOutcome(OfflineProbeAction Action, TimeSpan Elapsed, StreamStatus Previous);
 
-internal sealed class StreamStateMachine
+internal sealed class StreamStateMachine(TimeProvider? timeProvider = null)
 {
     private readonly Lock _lock = new();
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     private StreamStatus _status = StreamStatus.Unknown;
     private StreamInfo? _stream;
+    private DateTimeOffset? _viewerSampledAtUtc;
     private ChannelUpdated? _lastChannelUpdate;
     private DateTime? _firstOfflineFromApiUtc;
 
@@ -55,6 +57,14 @@ internal sealed class StreamStateMachine
         }
     }
 
+    public StreamStatusSnapshot GetSnapshot()
+    {
+        lock (_lock)
+        {
+            return new(_status, _stream, _viewerSampledAtUtc);
+        }
+    }
+
     public StatusTransition ApplyOnlineSnapshot(StreamInfo stream)
     {
         lock (_lock)
@@ -64,6 +74,7 @@ internal sealed class StreamStateMachine
             var previousStream = _stream;
             _status = StreamStatus.Online;
             _stream = ApplyOverlayLocked(stream);
+            _viewerSampledAtUtc = _timeProvider.GetUtcNow();
             return new(previous != StreamStatus.Online, previous, !StreamInfoMapper.SameSnapshot(previousStream, _stream));
         }
     }
@@ -85,6 +96,7 @@ internal sealed class StreamStateMachine
                     Id = streamId,
                     StartedAt = DateTime.SpecifyKind(startedAt, DateTimeKind.Utc),
                 });
+                _viewerSampledAtUtc = null;
             }
 
             return new(previous != StreamStatus.Online, previous, !StreamInfoMapper.SameSnapshot(previousStream, _stream));
@@ -99,6 +111,7 @@ internal sealed class StreamStateMachine
             var hadStream = _stream != null;
             _status = StreamStatus.Offline;
             _stream = null;
+            _viewerSampledAtUtc = null;
             _firstOfflineFromApiUtc = null;
             return new(previous != StreamStatus.Offline, previous, hadStream);
         }
@@ -112,6 +125,7 @@ internal sealed class StreamStateMachine
             {
                 _firstOfflineFromApiUtc = null;
                 _stream = null;
+                _viewerSampledAtUtc = null;
                 return new(OfflineProbeAction.NotOnline, TimeSpan.Zero, _status);
             }
 
@@ -123,6 +137,7 @@ internal sealed class StreamStateMachine
                 var previous = _status;
                 _status = StreamStatus.Offline;
                 _stream = null;
+                _viewerSampledAtUtc = null;
                 _firstOfflineFromApiUtc = null;
                 return new(OfflineProbeAction.ForcedOffline, elapsed, previous);
             }
@@ -152,6 +167,7 @@ internal sealed class StreamStateMachine
         lock (_lock)
         {
             _stream = ApplyOverlayLocked(stream);
+            _viewerSampledAtUtc = _timeProvider.GetUtcNow();
         }
     }
 
@@ -161,6 +177,7 @@ internal sealed class StreamStateMachine
         {
             _status = StreamStatus.Unknown;
             _stream = null;
+            _viewerSampledAtUtc = null;
             _firstOfflineFromApiUtc = null;
             _lastChannelUpdate = null;
         }

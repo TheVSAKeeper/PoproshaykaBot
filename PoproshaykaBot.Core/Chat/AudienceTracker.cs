@@ -1,9 +1,36 @@
-﻿using PoproshaykaBot.Core.Settings;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Chat;
 
 public sealed class AudienceTracker(SettingsManager settingsManager)
+{
+    private readonly ConcurrentDictionary<StreamingPlatform, PlatformAudienceTracker> _byPlatform = new();
+
+    public PlatformAudienceTracker ForPlatform(StreamingPlatform platform)
+    {
+        return _byPlatform.GetOrAdd(platform, _ => new PlatformAudienceTracker(settingsManager));
+    }
+
+    public void Clear(StreamingPlatform platform)
+    {
+        if (_byPlatform.TryGetValue(platform, out var tracker))
+        {
+            tracker.Clear();
+        }
+    }
+
+    public void ClearAll()
+    {
+        foreach (var tracker in _byPlatform.Values)
+        {
+            tracker.Clear();
+        }
+    }
+}
+
+public sealed class PlatformAudienceTracker(SettingsManager settingsManager)
 {
     private const string UsernamePlaceholder = "username";
 
@@ -105,7 +132,7 @@ public sealed class AudienceTracker(SettingsManager settingsManager)
         return template.Render();
     }
 
-    public void ClearAll()
+    public void Clear()
     {
         _userIdToDisplayName.Clear();
     }

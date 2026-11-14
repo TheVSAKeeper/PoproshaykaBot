@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
@@ -8,6 +9,7 @@ public sealed class ProfileCommand(BroadcastProfilesManager manager, ILogger<Pro
     public string Canonical => "пресет";
     public IReadOnlyCollection<string> Aliases => ["preset"];
     public string Description => "применить пресет – сохранённый профиль трансляции";
+    public PlatformCapabilities RequiredCapabilities => PlatformCapabilities.ChannelMetadataEdit;
 
     public bool CanExecute(CommandContext context)
     {

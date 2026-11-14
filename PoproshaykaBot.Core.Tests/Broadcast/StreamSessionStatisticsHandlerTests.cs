@@ -21,7 +21,7 @@ public sealed class StreamSessionStatisticsHandlerTests
     public void SetUp()
     {
         _captured = [];
-        _messenger = Substitute.For<IChatMessenger>();
+        _messenger = Substitute.For<IBroadcastMessenger>();
         _streamStatus = Substitute.For<IStreamStatus>();
 
         _settings = new()
@@ -83,7 +83,7 @@ public sealed class StreamSessionStatisticsHandlerTests
     private static readonly DateTime StreamStartUtc = new(2026, 5, 17, 10, 0, 0, DateTimeKind.Utc);
     private static readonly DateTimeOffset StreamStart = new(StreamStartUtc);
 
-    private IChatMessenger _messenger = null!;
+    private IBroadcastMessenger _messenger = null!;
     private IStreamStatus _streamStatus = null!;
     private FakeTargetChannelProvider _targetChannel = null!;
     private SettingsManager _settingsManager = null!;
@@ -195,7 +195,7 @@ public sealed class StreamSessionStatisticsHandlerTests
             Assert.That(record.Duration, Is.EqualTo(TimeSpan.FromHours(2)));
             Assert.That(record.Chatters.Select(c => c.DisplayName), Is.EqualTo(new[] { "Alice", "Carol", "Bob" }));
             Assert.That(record.Chatters.Select(c => c.MessageCount), Is.EqualTo(new long[] { 3, 2, 1 }));
-            _messenger.Received(1).Send(Arg.Any<string>());
+            _messenger.Received(1).SendToConnected(Arg.Any<string>());
         }
     }
 
@@ -222,7 +222,7 @@ public sealed class StreamSessionStatisticsHandlerTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_captured, Is.Empty);
-            _messenger.DidNotReceive().Send(Arg.Any<string>());
+            _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
         }
     }
 
@@ -241,7 +241,7 @@ public sealed class StreamSessionStatisticsHandlerTests
         {
             Assert.That(_captured, Has.Count.EqualTo(1));
             Assert.That(_captured[0].MessageCount, Is.EqualTo(1));
-            _messenger.DidNotReceive().Send(Arg.Any<string>());
+            _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
         }
     }
 
@@ -392,7 +392,7 @@ public sealed class StreamSessionStatisticsHandlerTests
             Assert.That(record.EndedAt, Is.EqualTo(StreamStart.AddHours(4)));
             Assert.That(record.Duration, Is.EqualTo(TimeSpan.FromHours(4)));
             Assert.That(_store.Load(), Is.Null);
-            _messenger.DidNotReceive().Send(Arg.Any<string>());
+            _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
         }
     }
 
@@ -404,7 +404,7 @@ public sealed class StreamSessionStatisticsHandlerTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_captured, Is.Empty);
-            _messenger.DidNotReceive().Send(Arg.Any<string>());
+            _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
         }
     }
 

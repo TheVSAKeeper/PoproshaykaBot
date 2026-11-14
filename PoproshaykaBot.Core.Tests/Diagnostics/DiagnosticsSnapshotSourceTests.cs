@@ -78,9 +78,9 @@ public sealed class DiagnosticsSnapshotSourceTests
             new(),
             new());
 
-        _broadcastScheduler = new(new(_chatSender),
+        _broadcastScheduler = new(Substitute.For<IBroadcastMessenger>(),
+            new DefaultBroadcastPlatformTargetsProvider(),
             settingsManager,
-            Substitute.For<IStreamStatus>(),
             bus,
             TimeProvider.System,
             NullLogger<BroadcastScheduler>.Instance);

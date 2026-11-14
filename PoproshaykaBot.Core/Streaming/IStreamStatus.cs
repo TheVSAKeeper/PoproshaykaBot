@@ -6,5 +6,7 @@ public interface IStreamStatus
 
     StreamInfo? CurrentStream { get; }
 
+    StreamStatusSnapshot GetSnapshot();
+
     Task RefreshLiveSnapshotAsync();
 }

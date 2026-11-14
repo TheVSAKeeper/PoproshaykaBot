@@ -11,20 +11,20 @@ public sealed class ModerationChatNotificationHandler :
     IEventSubscriber,
     IDisposable
 {
-    private readonly TwitchChatMessenger _messenger;
+    private readonly IBroadcastMessenger _messenger;
     private readonly SettingsManager _settingsManager;
     private readonly IDisposable _punishedSubscription;
     private readonly IDisposable _rewardedSubscription;
 
     public ModerationChatNotificationHandler(
-        TwitchChatMessenger messenger,
+        IBroadcastMessenger messenger,
         SettingsManager settingsManager,
         IEventBus eventBus)
     {
         _messenger = messenger;
         _settingsManager = settingsManager;
-        _punishedSubscription = eventBus.SubscribePlatform<UserPunished>(StreamingPlatform.Twitch, this);
-        _rewardedSubscription = eventBus.SubscribePlatform<UserRewarded>(StreamingPlatform.Twitch, this);
+        _punishedSubscription = eventBus.Subscribe<UserPunished>(this);
+        _rewardedSubscription = eventBus.Subscribe<UserRewarded>(this);
     }
 
     public Task HandleAsync(UserPunished @event, CancellationToken cancellationToken)
@@ -38,7 +38,7 @@ public sealed class ModerationChatNotificationHandler :
 
         var pointTerm = _settingsManager.Current.Ranks.PointTerm;
         var message = UserPointsManagementService.FormatMessage(messageSettings.PunishmentMessage, @event.UserName, @event.RemovedPoints, pointTerm);
-        _messenger.Send(message);
+        _messenger.Send(@event.Platform, message);
 
         return Task.CompletedTask;
     }
@@ -54,7 +54,7 @@ public sealed class ModerationChatNotificationHandler :
 
         var pointTerm = _settingsManager.Current.Ranks.PointTerm;
         var message = UserPointsManagementService.FormatMessage(messageSettings.RewardMessage, @event.UserName, @event.AddedPoints, pointTerm);
-        _messenger.Send(message);
+        _messenger.Send(@event.Platform, message);
 
         return Task.CompletedTask;
     }

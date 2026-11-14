@@ -1,11 +1,13 @@
-﻿namespace PoproshaykaBot.Core.Chat.Commands;
+﻿using PoproshaykaBot.Core.Platforms;
+
+namespace PoproshaykaBot.Core.Chat.Commands;
 
 public sealed class HelpCommand : IChatCommand
 {
-    private readonly Func<IReadOnlyCollection<IChatCommand>> _getAvailableCommands;
+    private readonly Func<StreamingPlatform, IReadOnlyCollection<IChatCommand>> _getAvailableCommands;
     private readonly string _prefix;
 
-    public HelpCommand(Func<IReadOnlyCollection<IChatCommand>> getAvailableCommands, string prefix)
+    public HelpCommand(Func<StreamingPlatform, IReadOnlyCollection<IChatCommand>> getAvailableCommands, string prefix)
     {
         ArgumentNullException.ThrowIfNull(getAvailableCommands);
 
@@ -24,7 +26,7 @@ public sealed class HelpCommand : IChatCommand
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var allCommands = _getAvailableCommands();
+        var allCommands = _getAvailableCommands(context.Platform);
 
         if (context.Arguments.Count > 0)
         {

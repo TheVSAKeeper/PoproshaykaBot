@@ -17,6 +17,7 @@ public static class BroadcastServiceCollectionExtensions
         services.AddSingleton<GameCategoryResolver>();
         services.AddSingleton<IGameCategoryResolver>(sp => sp.GetRequiredService<GameCategoryResolver>());
         services.AddSingleton<BroadcastProfilesManager>();
+        services.AddSingleton<IBroadcastPlatformTargetsProvider, DefaultBroadcastPlatformTargetsProvider>();
         services.AddSingleton<BroadcastScheduler>();
         services.AddSingleton<IBroadcastScheduler>(sp => sp.GetRequiredService<BroadcastScheduler>());
         return services;

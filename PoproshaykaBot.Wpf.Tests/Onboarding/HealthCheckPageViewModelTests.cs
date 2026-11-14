@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Wpf.ViewModels.Onboarding;
 
@@ -33,19 +34,21 @@ public sealed class HealthCheckPageViewModelTests
         });
     }
 
-    private sealed class FakeChatMessenger(ChatEnqueueResult outcome) : IChatMessenger
+    private sealed class FakeChatMessenger(ChatEnqueueResult outcome) : IBroadcastMessenger
     {
         public List<string> Sent { get; } = [];
 
-        public ChatEnqueueResult Send(string text)
+        public ChatEnqueueResult Send(StreamingPlatform platform, string text)
         {
             Sent.Add(text);
             return outcome;
         }
 
-        public void Reply(string replyToMessageId, string text)
-        {
-        }
+        public BroadcastSendResult Send(string text, IReadOnlySet<StreamingPlatform> platforms) => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
+
+        public BroadcastSendResult SendToConnected(string text) => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
+
+        public BroadcastSendResult Send(Func<IChatPlatform, string?> messageFactory, IReadOnlySet<StreamingPlatform>? platforms = null) => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
     }
 
     private sealed class FakeShellLauncher : IShellLauncher

@@ -10,6 +10,7 @@ public static class ChatEnqueueResults
             ChatEnqueueResult.QueueFull => "очередь отправки переполнена",
             ChatEnqueueResult.QueueClosed => "очередь отправки закрыта",
             ChatEnqueueResult.EmptyMessage => "пустое сообщение",
+            ChatEnqueueResult.NotConnected => "площадка не подключена",
             _ => "причина не названа",
         };
     }

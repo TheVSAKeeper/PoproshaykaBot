@@ -7,4 +7,5 @@ public enum ChatEnqueueResult
     ObserverMode = 2,
     QueueFull = 3,
     QueueClosed = 4,
+    NotConnected = 5,
 }
