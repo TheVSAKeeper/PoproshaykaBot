@@ -122,9 +122,10 @@ public sealed class BroadcastMessengerRoutingTests
             bus,
             NullLogger<FarewellMessageHandler>.Instance);
 
-        await statusHandler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Connected), CancellationToken.None);
+        await statusHandler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected), CancellationToken.None);
         await statusHandler.HandleAsync(new StreamWentOnline(StreamingPlatform.Twitch, "chan", null), CancellationToken.None);
-        await farewellHandler.HandleAsync(new BotLifecyclePhaseChanged(BotLifecyclePhase.Disconnecting), CancellationToken.None);
+        await farewellHandler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Disconnecting), CancellationToken.None);
+        await farewellHandler.HandleAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Disconnecting), CancellationToken.None);
 
         Assert.Multiple(() =>
         {

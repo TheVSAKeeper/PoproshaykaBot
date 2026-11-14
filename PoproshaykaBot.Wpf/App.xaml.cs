@@ -59,7 +59,7 @@ public partial class App : Application
     private KeepShellLogging? _logging;
     private KeepShellLoggingOptions? _loggingOptions;
     private AppLifetime? _appLifetime;
-    private StreamMonitoringHost? _streamMonitoringHost;
+    private readonly List<StreamMonitoringHost> _startedStreamMonitoringHosts = [];
     private MemoryWatchdog? _memoryWatchdog;
     private BindingErrorSink? _bindingErrors;
     private Mutex? _singleInstanceMutex;
@@ -69,7 +69,6 @@ public partial class App : Application
     private GalleryWorkspace? _galleryWorkspace;
     private GalleryArguments? _galleryArguments;
     private bool _appLifetimeStarted;
-    private bool _streamMonitoringStarted;
     private AppExitReason _exitReason = AppExitReason.None;
 
     internal static bool IsFatalShutdown => Volatile.Read(ref _fatalErrorHandled) == 1;
@@ -219,7 +218,6 @@ public partial class App : Application
             StatisticsBootstrap.LoadUserStatistics(_services);
 
             _appLifetime = _services.GetRequiredService<AppLifetime>();
-            _streamMonitoringHost = _services.GetRequiredService<StreamMonitoringHost>();
 
             if (IsHeadless)
             {
@@ -229,7 +227,7 @@ public partial class App : Application
             {
                 var settingsManager = _services.GetRequiredService<SettingsManager>();
                 _appLifetimeStarted = StartHttpServerIfNeeded(settingsManager, _appLifetime);
-                _streamMonitoringStarted = StartStreamMonitoring(_streamMonitoringHost);
+                _startedStreamMonitoringHosts.AddRange(StartStreamMonitoring(_services.GetServices<StreamMonitoringHost>()));
                 _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)),
                     Log.CloseAndFlush,
                     _services.GetRequiredService<MemoryUsageSink>());
@@ -521,9 +519,10 @@ public partial class App : Application
         using var shutdownTimeout = IsHeadless ? null : new CancellationTokenSource(ShutdownDeadlines.SoftDeadline);
         var shutdownToken = shutdownTimeout?.Token ?? CancellationToken.None;
 
-        if (_streamMonitoringStarted && _streamMonitoringHost is not null)
+        if (_startedStreamMonitoringHosts.Count > 0)
         {
-            StopStreamMonitoring(_streamMonitoringHost, shutdownToken);
+            StopStreamMonitoring(_startedStreamMonitoringHosts, shutdownToken);
+            _startedStreamMonitoringHosts.Clear();
         }
 
         if (_appLifetimeStarted && _appLifetime is not null)

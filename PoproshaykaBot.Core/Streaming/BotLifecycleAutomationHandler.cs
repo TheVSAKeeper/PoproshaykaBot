@@ -4,81 +4,97 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
-using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Streaming;
 
 public sealed class BotLifecycleAutomationHandler :
     IEventHandler<StreamWentOnline>,
     IEventHandler<StreamWentOffline>,
-    IEventHandler<BotLifecyclePhaseChanged>,
+    IEventHandler<PlatformConnectionChanged>,
     IEventSubscriber,
     IDisposable
 {
+    private sealed class PlatformState
+    {
+        public BotLifecyclePhase Phase { get; set; } = BotLifecyclePhase.Idle;
+
+        public bool IsStreamOnline { get; set; }
+    }
+
     private readonly IBotConnectionController _connectionManager;
-    private readonly SettingsManager _settingsManager;
+    private readonly IBotLifecycleAutomationSettingsProvider _settingsProvider;
     private readonly IEventBus _eventBus;
     private readonly ILogger<BotLifecycleAutomationHandler> _logger;
     private readonly IDisposable _onlineSubscription;
     private readonly IDisposable _offlineSubscription;
     private readonly IDisposable _phaseSubscription;
-
-    private BotLifecyclePhase _phase = BotLifecyclePhase.Idle;
-    private volatile bool _isStreamOnline;
+    private readonly Lock _stateLock = new();
+    private readonly Dictionary<StreamingPlatform, PlatformState> _states = [];
 
     public BotLifecycleAutomationHandler(
         IBotConnectionController connectionManager,
-        SettingsManager settingsManager,
+        IBotLifecycleAutomationSettingsProvider settingsProvider,
         IEventBus eventBus,
         ILogger<BotLifecycleAutomationHandler> logger)
     {
         _connectionManager = connectionManager;
-        _settingsManager = settingsManager;
+        _settingsProvider = settingsProvider;
         _eventBus = eventBus;
         _logger = logger;
 
-        _onlineSubscription = eventBus.SubscribePlatform<StreamWentOnline>(StreamingPlatform.Twitch, this);
-        _offlineSubscription = eventBus.SubscribePlatform<StreamWentOffline>(StreamingPlatform.Twitch, this);
-        _phaseSubscription = eventBus.Subscribe<BotLifecyclePhaseChanged>(this);
+        _onlineSubscription = eventBus.Subscribe<StreamWentOnline>(this);
+        _offlineSubscription = eventBus.Subscribe<StreamWentOffline>(this);
+        _phaseSubscription = eventBus.Subscribe<PlatformConnectionChanged>(this);
     }
 
-    public Task HandleAsync(BotLifecyclePhaseChanged @event, CancellationToken cancellationToken)
+    public Task HandleAsync(PlatformConnectionChanged @event, CancellationToken cancellationToken)
     {
-        _phase = @event.Phase;
+        lock (_stateLock)
+        {
+            GetOrCreateStateLocked(@event.Platform).Phase = @event.Phase;
+        }
+
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
     {
-        _isStreamOnline = true;
+        BotLifecyclePhase phase;
 
-        var settings = _settingsManager.Current.Twitch.BotLifecycleAutomation;
+        lock (_stateLock)
+        {
+            var state = GetOrCreateStateLocked(@event.Platform);
+            state.IsStreamOnline = true;
+            phase = state.Phase;
+        }
+
+        var settings = _settingsProvider.Get(@event.Platform);
 
         if (!settings.AutoConnectOnStreamOnline)
         {
             return Task.CompletedTask;
         }
 
-        if (!IsDisconnectedPhase(_phase))
+        if (!IsDisconnectedPhase(phase))
         {
-            _logger.LogDebug("Авто-подключение пропущено: текущая фаза {Phase}", _phase);
+            _logger.LogDebug("Авто-подключение {Platform} пропущено: текущая фаза {Phase}", @event.Platform, phase);
             return Task.CompletedTask;
         }
 
-        if (_connectionManager.IsBusy)
+        if (_connectionManager.IsPlatformBusy(@event.Platform))
         {
-            _logger.LogDebug("Авто-подключение пропущено: BotConnectionManager занят");
+            _logger.LogDebug("Авто-подключение {Platform} пропущено: BotConnectionManager занят", @event.Platform);
             return Task.CompletedTask;
         }
 
         try
         {
-            _logger.LogInformation("🔴 Стрим онлайн ({Channel}) – автоматически подключаю бота", @event.Channel);
-            _connectionManager.StartConnection();
+            _logger.LogInformation("🔴 Стрим онлайн ({Platform}, {Channel}) – автоматически подключаю бота", @event.Platform, @event.Channel);
+            _connectionManager.StartConnection(@event.Platform);
         }
         catch (InvalidOperationException exception)
         {
-            _logger.LogWarning(exception, "Не удалось запустить авто-подключение бота");
+            _logger.LogWarning(exception, "Не удалось запустить авто-подключение бота для {Platform}", @event.Platform);
         }
 
         return Task.CompletedTask;
@@ -86,9 +102,16 @@ public sealed class BotLifecycleAutomationHandler :
 
     public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
     {
-        _isStreamOnline = false;
+        BotLifecyclePhase phase;
 
-        var settings = _settingsManager.Current.Twitch.BotLifecycleAutomation;
+        lock (_stateLock)
+        {
+            var state = GetOrCreateStateLocked(@event.Platform);
+            state.IsStreamOnline = false;
+            phase = state.Phase;
+        }
+
+        var settings = _settingsProvider.Get(@event.Platform);
 
         if (!settings.AutoDisconnectOnStreamOffline)
         {
@@ -97,19 +120,22 @@ public sealed class BotLifecycleAutomationHandler :
 
         if (@event.IsCatchUp)
         {
-            _logger.LogDebug("Авто-отключение пропущено: офлайн-снимок при подключении бота (catch-up), а не настоящий переход стрима в офлайн");
+            _logger.LogDebug(
+                "Авто-отключение {Platform} пропущено: офлайн-снимок при подключении бота (catch-up), а не настоящий переход стрима в офлайн",
+                @event.Platform);
             return Task.CompletedTask;
         }
 
-        if (_phase != BotLifecyclePhase.Connected)
+        if (phase != BotLifecyclePhase.Connected)
         {
-            _logger.LogDebug("Авто-отключение пропущено: текущая фаза {Phase}", _phase);
+            _logger.LogDebug("Авто-отключение {Platform} пропущено: текущая фаза {Phase}", @event.Platform, phase);
             return Task.CompletedTask;
         }
 
-        _logger.LogInformation("⚫ Стрим офлайн ({Channel}) – автоматически отключаю бота", @event.Channel);
+        _logger.LogInformation("⚫ Стрим офлайн ({Platform}, {Channel}) – автоматически отключаю бота", @event.Platform, @event.Channel);
 
-        _eventBus.ContinueAfterPublish(StopBotAsync);
+        var platform = @event.Platform;
+        _eventBus.ContinueAfterPublish(() => StopBotAsync(platform));
 
         return Task.CompletedTask;
     }
@@ -121,21 +147,35 @@ public sealed class BotLifecycleAutomationHandler :
         _phaseSubscription.Dispose();
     }
 
-    private async Task StopBotAsync()
+    private PlatformState GetOrCreateStateLocked(StreamingPlatform platform)
     {
-        if (_isStreamOnline)
+        if (!_states.TryGetValue(platform, out var state))
         {
-            _logger.LogInformation("Авто-отключение отменено: стрим снова онлайн");
-            return;
+            state = new PlatformState();
+            _states[platform] = state;
+        }
+
+        return state;
+    }
+
+    private async Task StopBotAsync(StreamingPlatform platform)
+    {
+        lock (_stateLock)
+        {
+            if (_states.TryGetValue(platform, out var state) && state.IsStreamOnline)
+            {
+                _logger.LogInformation("Авто-отключение {Platform} отменено: стрим снова онлайн", platform);
+                return;
+            }
         }
 
         try
         {
-            await _connectionManager.StopAsync(BotStopMode.Graceful);
+            await _connectionManager.StopAsync(platform, BotStopMode.Graceful).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Ошибка авто-отключения бота");
+            _logger.LogError(exception, "Ошибка авто-отключения бота для {Platform}", platform);
         }
     }
 

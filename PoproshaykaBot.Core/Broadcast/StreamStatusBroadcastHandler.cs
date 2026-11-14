@@ -13,7 +13,7 @@ namespace PoproshaykaBot.Core.Broadcast;
 public sealed class StreamStatusBroadcastHandler :
     IEventHandler<StreamWentOnline>,
     IEventHandler<StreamWentOffline>,
-    IEventHandler<BotLifecyclePhaseChanged>,
+    IEventHandler<PlatformConnectionChanged>,
     IEventSubscriber,
     IDisposable
 {
@@ -48,15 +48,31 @@ public sealed class StreamStatusBroadcastHandler :
 
         _onlineSubscription = eventBus.SubscribePlatform<StreamWentOnline>(StreamingPlatform.Twitch, this);
         _offlineSubscription = eventBus.SubscribePlatform<StreamWentOffline>(StreamingPlatform.Twitch, this);
-        _phaseSubscription = eventBus.Subscribe<BotLifecyclePhaseChanged>(this);
+        _phaseSubscription = eventBus.SubscribePlatform<PlatformConnectionChanged>(StreamingPlatform.Twitch, this);
     }
 
-    public Task HandleAsync(BotLifecyclePhaseChanged @event, CancellationToken cancellationToken)
+    public Task HandleAsync(PlatformConnectionChanged @event, CancellationToken cancellationToken)
     {
+        if (@event.Platform != StreamingPlatform.Twitch)
+        {
+            return Task.CompletedTask;
+        }
+
         var wasConnected = _botConnected;
         _botConnected = @event.Phase == BotLifecyclePhase.Connected;
 
-        if (wasConnected || !_botConnected)
+        if (!_botConnected)
+        {
+            if (wasConnected && _scheduler.IsActive)
+            {
+                _logger.LogInformation("Остановка планировщика автоматической рассылки при отключении площадки {Platform}", @event.Platform);
+                _scheduler.Stop();
+            }
+
+            return Task.CompletedTask;
+        }
+
+        if (wasConnected)
         {
             return Task.CompletedTask;
         }

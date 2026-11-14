@@ -37,18 +37,18 @@ public sealed class BotLifecycleAutomationHandlerTests
 
         _connectionController = Substitute.For<IBotConnectionController>();
 
-        _connectionController.StopAsync(Arg.Any<BotStopMode>()).Returns(_ =>
+        _connectionController.StopAsync(Arg.Any<StreamingPlatform>(), Arg.Any<BotStopMode>()).Returns(_ =>
         {
             _order.Add("стоп бота");
             return Task.CompletedTask;
         });
 
-        _connectionController.When(x => x.StartConnection()).Do(_ => _order.Add("старт бота"));
+        _connectionController.When(x => x.StartConnection(Arg.Any<StreamingPlatform>())).Do(_ => _order.Add("старт бота"));
 
         _eventBus = new(NullLogger<InMemoryEventBus>.Instance);
 
         _handler = new(_connectionController,
-            _settingsManager,
+            new BotLifecycleAutomationSettingsProvider(_settingsManager),
             _eventBus,
             NullLogger<BotLifecycleAutomationHandler>.Instance);
 
@@ -101,7 +101,7 @@ public sealed class BotLifecycleAutomationHandlerTests
         Assert.That(_order, Is.EqualTo(new[] { "итоговая статистика поставлена в очередь", "стоп бота", "проба продолжения" }),
             "Авто-стоп обгонит итоговую статистику, если запускать его прямо в обработчике.");
 
-        await _connectionController.Received(1).StopAsync(BotStopMode.Graceful);
+        await _connectionController.Received(1).StopAsync(StreamingPlatform.Twitch, BotStopMode.Graceful);
     }
 
     [Test]
@@ -110,7 +110,7 @@ public sealed class BotLifecycleAutomationHandlerTests
         var stopStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseStop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        _connectionController.StopAsync(Arg.Any<BotStopMode>()).Returns(async _ =>
+        _connectionController.StopAsync(Arg.Any<StreamingPlatform>(), Arg.Any<BotStopMode>()).Returns(async _ =>
         {
             stopStarted.SetResult();
             await releaseStop.Task;
@@ -133,7 +133,7 @@ public sealed class BotLifecycleAutomationHandlerTests
     {
         await SetPhaseAsync(BotLifecyclePhase.Connected);
 
-        _connectionController.StopAsync(Arg.Any<BotStopMode>())
+        _connectionController.StopAsync(Arg.Any<StreamingPlatform>(), Arg.Any<BotStopMode>())
             .Returns(_ => Task.FromException(new InvalidOperationException("boom")));
 
         Assert.DoesNotThrowAsync(async () => await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel)));
@@ -154,8 +154,8 @@ public sealed class BotLifecycleAutomationHandlerTests
         await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel));
         await _continuationsDone.Task.WaitAsync(WaitTimeout);
 
-        await _connectionController.DidNotReceive().StopAsync(Arg.Any<BotStopMode>());
-        _connectionController.DidNotReceive().StartConnection();
+        await _connectionController.DidNotReceive().StopAsync(Arg.Any<StreamingPlatform>(), Arg.Any<BotStopMode>());
+        _connectionController.DidNotReceive().StartConnection(Arg.Any<StreamingPlatform>());
 
         Assert.That(_order, Is.EqualTo(new[]
         {
@@ -178,7 +178,7 @@ public sealed class BotLifecycleAutomationHandlerTests
         await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, isCatchUp));
         await _continuationsDone.Task.WaitAsync(WaitTimeout);
 
-        await _connectionController.DidNotReceive().StopAsync(Arg.Any<BotStopMode>());
+        await _connectionController.DidNotReceive().StopAsync(Arg.Any<StreamingPlatform>(), Arg.Any<BotStopMode>());
         Assert.That(_order, Is.EqualTo(new[] { "итоговая статистика поставлена в очередь", "проба продолжения" }));
     }
 
@@ -192,7 +192,7 @@ public sealed class BotLifecycleAutomationHandlerTests
 
         await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null));
 
-        _connectionController.Received(1).StartConnection();
+        _connectionController.Received(1).StartConnection(StreamingPlatform.Twitch);
     }
 
     [TestCase(false, BotLifecyclePhase.Idle, false, TestName = "Авто-подключение выключено настройкой")]
@@ -201,16 +201,16 @@ public sealed class BotLifecycleAutomationHandlerTests
     public async Task StreamWentOnline_DoesNotStartConnection(bool autoConnect, BotLifecyclePhase phase, bool isBusy)
     {
         _settings.Twitch.BotLifecycleAutomation.AutoConnectOnStreamOnline = autoConnect;
-        _connectionController.IsBusy.Returns(isBusy);
+        _connectionController.IsPlatformBusy(StreamingPlatform.Twitch).Returns(isBusy);
         await SetPhaseAsync(phase);
 
         await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, null));
 
-        _connectionController.DidNotReceive().StartConnection();
+        _connectionController.DidNotReceive().StartConnection(Arg.Any<StreamingPlatform>());
     }
 
     private Task SetPhaseAsync(BotLifecyclePhase phase)
     {
-        return _eventBus.PublishAsync(new BotLifecyclePhaseChanged(phase));
+        return _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, phase));
     }
 }

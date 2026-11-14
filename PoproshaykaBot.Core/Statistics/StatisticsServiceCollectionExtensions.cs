@@ -47,7 +47,9 @@ public static class StatisticsServiceCollectionExtensions
 
         services.AddSingleton(sp => new UserStatisticsLoader(sp.GetServices<PlatformUserStatisticsUnit>()));
         services.AddSingleton<StatisticsAutoSaver>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<StatisticsAutoSaver>());
+        services.AddKeyedSingleton<IHostedComponent>(
+            HostingKeys.Shared,
+            (sp, _) => sp.GetRequiredService<StatisticsAutoSaver>());
         return services;
     }
 }

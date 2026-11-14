@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Infrastructure.Hosting.Components;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
@@ -19,9 +20,16 @@ public static class ChatServiceCollectionExtensions
     public static IServiceCollection AddChatPipeline(this IServiceCollection services)
     {
         services.AddSingleton<ChatIngestionService>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChatIngestionService>());
+        services.AddKeyedSingleton<IHostedComponent>(
+            StreamingPlatform.Twitch,
+            (sp, _) => sp.GetRequiredService<ChatIngestionService>());
         services.AddSingleton<ChatSender>();
-        services.AddSingleton<IHostedComponent>(sp => sp.GetRequiredService<ChatSender>());
+        services.AddKeyedSingleton<IHostedComponent>(
+            StreamingPlatform.Twitch,
+            (sp, _) => sp.GetRequiredService<ChatSender>());
+        services.AddKeyedSingleton<IHostedComponent, ChatDecorationsHostedComponent>(StreamingPlatform.Twitch);
+        services.AddPlatformHost(StreamingPlatform.Twitch);
+        services.AddSingleton<IPlatformConnectionAdapter, TwitchPlatformConnectionAdapter>();
 
         services.AddSingleton<ChatHistoryManager>();
         services.AddSingleton<ChatDisplayStore>();

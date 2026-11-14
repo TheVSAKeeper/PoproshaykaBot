@@ -201,11 +201,24 @@ public sealed class BotAutomationStateTests
 
         public int StopCalls { get; private set; }
 
+        public bool IsPlatformBusy(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => IsBusy;
+
+        public BotLifecyclePhase GetPhase(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => CurrentPhase;
+
         public void StartConnection()
         {
         }
 
+        public void StartConnection(PoproshaykaBot.Core.Platforms.StreamingPlatform platform)
+        {
+        }
+
         public void CancelConnection()
+        {
+            CancelRequested = true;
+        }
+
+        public void CancelConnection(PoproshaykaBot.Core.Platforms.StreamingPlatform platform)
         {
             CancelRequested = true;
         }
@@ -220,12 +233,16 @@ public sealed class BotAutomationStateTests
             return Task.CompletedTask;
         }
 
+        public Task WaitForConnectionAsync(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => WaitForConnectionAsync();
+
         public Task StopAsync(BotStopMode mode = BotStopMode.Graceful)
         {
             StopCalls++;
             CurrentPhase = BotLifecyclePhase.Disconnected;
             return Task.CompletedTask;
         }
+
+        public Task StopAsync(PoproshaykaBot.Core.Platforms.StreamingPlatform platform, BotStopMode mode = BotStopMode.Graceful) => StopAsync(mode);
     }
 
     private sealed class FakeTargetChannelProvider(TargetChannelState current) : ITargetChannelProvider

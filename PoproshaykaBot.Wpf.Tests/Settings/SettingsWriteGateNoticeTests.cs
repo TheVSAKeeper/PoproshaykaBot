@@ -298,15 +298,29 @@ public class SettingsWriteGateNoticeTests
 
         public BotLifecyclePhase CurrentPhase => BotLifecyclePhase.Idle;
 
+        public bool IsPlatformBusy(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => false;
+
+        public BotLifecyclePhase GetPhase(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => BotLifecyclePhase.Idle;
+
         public void StartConnection() => StartCount++;
+
+        public void StartConnection(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => StartCount++;
 
         public void CancelConnection()
         {
         }
 
+        public void CancelConnection(PoproshaykaBot.Core.Platforms.StreamingPlatform platform)
+        {
+        }
+
         public Task WaitForConnectionAsync() => Task.CompletedTask;
 
+        public Task WaitForConnectionAsync(PoproshaykaBot.Core.Platforms.StreamingPlatform platform) => Task.CompletedTask;
+
         public Task StopAsync(BotStopMode mode = BotStopMode.Graceful) => Task.CompletedTask;
+
+        public Task StopAsync(PoproshaykaBot.Core.Platforms.StreamingPlatform platform, BotStopMode mode = BotStopMode.Graceful) => Task.CompletedTask;
     }
 
     private sealed class FakeDialogService(Action<IDialogViewModel> edit) : IDialogService

@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch.Helix;
 
 namespace PoproshaykaBot.Core.Twitch.Chat;
@@ -14,6 +15,7 @@ public sealed class BotUserIdProvider : IBotUserIdProvider, IDisposable
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     private UserInfo? _cachedUser;
+    private long _generation;
 
     public BotUserIdProvider(
         [FromKeyedServices(TwitchEndpoints.HelixBotClient)]
@@ -23,27 +25,30 @@ public sealed class BotUserIdProvider : IBotUserIdProvider, IDisposable
     {
         _helix = helix;
         _logger = logger;
-        _lifecycleSubscription = eventBus.Subscribe<BotLifecyclePhaseChanged>(OnLifecyclePhaseChanged);
+        _lifecycleSubscription = eventBus.SubscribePlatform<PlatformConnectionChanged>(StreamingPlatform.Twitch, OnPlatformConnectionChanged);
     }
 
     public async Task<string?> GetAsync(CancellationToken cancellationToken)
     {
-        var user = await GetUserAsync(cancellationToken);
+        var user = await GetUserAsync(cancellationToken).ConfigureAwait(false);
         return user?.Id;
     }
 
     public async Task<UserInfo?> GetUserAsync(CancellationToken cancellationToken)
     {
-        await _lock.WaitAsync(cancellationToken);
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            if (_cachedUser != null)
+            var cached = Volatile.Read(ref _cachedUser);
+
+            if (cached != null)
             {
-                return _cachedUser;
+                return cached;
             }
 
-            var user = await _helix.GetAuthenticatedUserAsync(cancellationToken);
+            var generation = Interlocked.Read(ref _generation);
+            var user = await _helix.GetAuthenticatedUserAsync(cancellationToken).ConfigureAwait(false);
 
             if (user == null)
             {
@@ -51,9 +56,13 @@ public sealed class BotUserIdProvider : IBotUserIdProvider, IDisposable
                 return null;
             }
 
-            _cachedUser = user;
+            if (Interlocked.Read(ref _generation) == generation)
+            {
+                Volatile.Write(ref _cachedUser, user);
+            }
+
             _logger.LogInformation("Bot user получен через токен: {UserId} ({Login})", user.Id, user.Login);
-            return _cachedUser;
+            return user;
         }
         finally
         {
@@ -67,11 +76,15 @@ public sealed class BotUserIdProvider : IBotUserIdProvider, IDisposable
         _lock.Dispose();
     }
 
-    private void OnLifecyclePhaseChanged(BotLifecyclePhaseChanged evt)
+    private void OnPlatformConnectionChanged(PlatformConnectionChanged evt)
     {
-        if (evt.Phase == BotLifecyclePhase.Disconnecting)
+        if (evt.Phase is BotLifecyclePhase.Disconnecting
+            or BotLifecyclePhase.Disconnected
+            or BotLifecyclePhase.Cancelled
+            or BotLifecyclePhase.Failed)
         {
-            _cachedUser = null;
+            Interlocked.Increment(ref _generation);
+            Volatile.Write(ref _cachedUser, null);
         }
     }
 }

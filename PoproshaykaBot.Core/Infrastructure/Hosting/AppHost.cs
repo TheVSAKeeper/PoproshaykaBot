@@ -24,6 +24,8 @@ public class AppHost
 
     public bool IsRunning => _started.Count > 0;
 
+    internal IReadOnlyList<IHostedComponent> Components => _components;
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         return StartAsync(NullProgress, cancellationToken);

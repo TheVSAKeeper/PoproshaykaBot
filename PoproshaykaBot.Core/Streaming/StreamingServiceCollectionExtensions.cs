@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -13,20 +14,31 @@ public static class StreamingServiceCollectionExtensions
 {
     public static IServiceCollection AddStreamMonitoring(this IServiceCollection services)
     {
-        services.AddSingleton<StreamMonitoringHost>();
+        services.AddPlatformStreamMonitoringHost(StreamingPlatform.Twitch);
 
         services.AddKeyedSingleton(TwitchEndpoints.EventSubBotSession, (sp, _) => CreateHost(sp, TwitchOAuthRole.Bot, TwitchEndpoints.EventSubBotSession));
         services.AddKeyedSingleton(TwitchEndpoints.EventSubBroadcasterSession, (sp, _) => CreateHost(sp, TwitchOAuthRole.Broadcaster, TwitchEndpoints.EventSubBroadcasterSession));
-        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredKeyedService<EventSubConnectionHost>(TwitchEndpoints.EventSubBotSession));
-        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredKeyedService<EventSubConnectionHost>(TwitchEndpoints.EventSubBroadcasterSession));
+        services.AddKeyedSingleton<IStreamHostedComponent>(
+            StreamingPlatform.Twitch,
+            (sp, _) => sp.GetRequiredKeyedService<EventSubConnectionHost>(TwitchEndpoints.EventSubBotSession));
+        services.AddKeyedSingleton<IStreamHostedComponent>(
+            StreamingPlatform.Twitch,
+            (sp, _) => sp.GetRequiredKeyedService<EventSubConnectionHost>(TwitchEndpoints.EventSubBroadcasterSession));
 
         services.AddSingleton<StreamStatusManager>();
         services.AddSingleton<IStreamStatus>(sp => sp.GetRequiredService<StreamStatusManager>());
-        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredService<StreamStatusManager>());
+        services.AddKeyedSingleton<IStreamHostedComponent>(
+            StreamingPlatform.Twitch,
+            (sp, _) => sp.GetRequiredService<StreamStatusManager>());
         services.AddSingleton<StreamStatusWatchdog>();
-        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredService<StreamStatusWatchdog>());
+        services.AddKeyedSingleton<IStreamHostedComponent>(
+            StreamingPlatform.Twitch,
+            (sp, _) => sp.GetRequiredService<StreamStatusWatchdog>());
         services.AddSingleton<ChannelUpdateSubscriber>();
-        services.AddSingleton<IStreamHostedComponent>(sp => sp.GetRequiredService<ChannelUpdateSubscriber>());
+        services.AddKeyedSingleton<IStreamHostedComponent>(
+            StreamingPlatform.Twitch,
+            (sp, _) => sp.GetRequiredService<ChannelUpdateSubscriber>());
+        services.AddSingleton<IBotLifecycleAutomationSettingsProvider, BotLifecycleAutomationSettingsProvider>();
         return services;
     }
 

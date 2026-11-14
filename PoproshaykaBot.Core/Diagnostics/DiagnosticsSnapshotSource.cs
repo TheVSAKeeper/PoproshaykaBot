@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
@@ -105,7 +106,7 @@ public sealed class DiagnosticsSnapshotSource(
 
     private ChatConnectionStatus CaptureChat()
     {
-        var phase = botConnection.CurrentPhase;
+        var phase = botConnection.GetPhase(StreamingPlatform.Twitch);
 
         var state = phase switch
         {

@@ -26,10 +26,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<InMemoryEventBus>();
         services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<InMemoryEventBus>());
         services.AddSingleton<UiEventDispatcher>();
-        services.AddSingleton<AppHost>();
+        services.AddSingleton(sp => new AppHost(
+            sp.GetKeyedServices<IHostedComponent>(HostingKeys.Shared),
+            sp.GetRequiredService<ILogger<AppHost>>()));
 
-        services.AddSingleton<IHostedComponent, ChatDecorationsHostedComponent>();
-        services.AddSingleton<IHostedComponent, BroadcastSchedulerHostedComponent>();
+        services.AddKeyedSingleton<IHostedComponent, BroadcastSchedulerHostedComponent>(HostingKeys.Shared);
 
         services.AddEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
 

@@ -9,6 +9,9 @@ namespace PoproshaykaBot.Core.Tests.Fakes;
 
 internal sealed class FakeChatPlatform : IChatPlatform
 {
+    private readonly PlatformChannelRegistry? _channels;
+    private bool _isConnected;
+
     public FakeChatPlatform(
         StreamingPlatform id,
         string displayName,
@@ -16,13 +19,15 @@ internal sealed class FakeChatPlatform : IChatPlatform
         bool isEnabled = true,
         bool isConnected = true,
         PlatformBotIdentity? botIdentity = null,
-        IChatDecorations? decorations = null)
+        IChatDecorations? decorations = null,
+        PlatformChannelRegistry? channels = null)
     {
         Id = id;
         DisplayName = displayName;
         Capabilities = capabilities;
         IsEnabled = isEnabled;
-        IsConnected = isConnected;
+        _isConnected = isConnected;
+        _channels = channels;
         BotIdentity = botIdentity;
         Decorations = decorations ?? NullChatDecorations.Instance;
     }
@@ -35,7 +40,13 @@ internal sealed class FakeChatPlatform : IChatPlatform
 
     public bool IsEnabled { get; set; }
 
-    public bool IsConnected { get; set; }
+    public bool IsConnected
+    {
+        get => _channels is not null
+            ? !string.IsNullOrWhiteSpace(_channels.GetChannel(Id))
+            : _isConnected;
+        set => _isConnected = value;
+    }
 
     public StreamStatusStub FakeStreamStatus { get; } = new();
 

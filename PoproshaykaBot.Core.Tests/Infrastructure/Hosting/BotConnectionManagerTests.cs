@@ -1,9 +1,10 @@
 ﻿using PoproshaykaBot.Core.Chat;
-using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Auth;
 
 namespace PoproshaykaBot.Core.Tests.Infrastructure.Hosting;
@@ -64,10 +65,17 @@ public sealed class BotConnectionManagerTests
         var targetChannel = Substitute.For<ITargetChannelProvider>();
         targetChannel.Current.Returns(new TargetChannelState("channel", "channel", false, true));
 
-        manager = new(tokenService,
+        var twitchHost = new PlatformHost(StreamingPlatform.Twitch, components, NullLogger<PlatformHost>.Instance);
+        var twitchAdapter = new TwitchPlatformConnectionAdapter(
+            tokenService,
             targetChannel,
-            null!,
-            new(components, NullLogger<AppHost>.Instance),
+            twitchHost,
+            NullLogger<TwitchPlatformConnectionAdapter>.Instance);
+
+        manager = new(
+            new([], NullLogger<AppHost>.Instance),
+            [twitchAdapter],
+            null,
             eventBus,
             NullLogger<BotConnectionManager>.Instance);
 
@@ -116,10 +124,17 @@ public sealed class BotConnectionManagerTests
             eventBus,
             NullLogger<ChatPipelineHandler>.Instance);
 
-        var manager = new BotConnectionManager(tokenService,
+        var twitchHost = new PlatformHost(StreamingPlatform.Twitch, [component], NullLogger<PlatformHost>.Instance);
+        var twitchAdapter = new TwitchPlatformConnectionAdapter(
+            tokenService,
             targetChannel,
+            twitchHost,
+            NullLogger<TwitchPlatformConnectionAdapter>.Instance);
+
+        var manager = new BotConnectionManager(
+            new([], NullLogger<AppHost>.Instance),
+            [twitchAdapter],
             chatHandler,
-            new([component], NullLogger<AppHost>.Instance),
             eventBus,
             NullLogger<BotConnectionManager>.Instance);
 

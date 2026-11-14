@@ -128,22 +128,42 @@ public partial class App
         StartupReport.LogConfiguration(loggerFactory.CreateLogger(nameof(StartupReport)), serviceProvider);
     }
 
-    private static bool StartStreamMonitoring(StreamMonitoringHost host)
+    private static List<StreamMonitoringHost> StartStreamMonitoring(IEnumerable<StreamMonitoringHost> hosts)
     {
-        try
+        var started = new List<StreamMonitoringHost>();
+
+        foreach (var host in hosts)
         {
-            host.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-            HostLog.Information("Стрим-мониторинг запущен независимо от подключения бота");
-            return true;
+            try
+            {
+                host.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+                started.Add(host);
+                HostLog.Information("Стрим-мониторинг площадки {Platform} запущен независимо от подключения бота", host.Platform);
+            }
+            catch (Exception ex)
+            {
+                HostLog.Error(ex, "Ошибка запуска стрим-мониторинга площадки {Platform}", host.Platform);
+
+                if (host.IsRunning)
+                {
+                    using var rollbackCts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+                    StopStreamMonitoringHost(host, rollbackCts.Token);
+                }
+            }
         }
-        catch (Exception ex)
+
+        return started;
+    }
+
+    private static void StopStreamMonitoring(IReadOnlyList<StreamMonitoringHost> hosts, CancellationToken cancellationToken)
+    {
+        for (var i = hosts.Count - 1; i >= 0; i--)
         {
-            HostLog.Error(ex, "Ошибка запуска стрим-мониторинга");
-            return false;
+            StopStreamMonitoringHost(hosts[i], cancellationToken);
         }
     }
 
-    private static void StopStreamMonitoring(StreamMonitoringHost host, CancellationToken cancellationToken)
+    private static void StopStreamMonitoringHost(StreamMonitoringHost host, CancellationToken cancellationToken)
     {
         try
         {
@@ -151,11 +171,11 @@ public partial class App
         }
         catch (OperationCanceledException exception)
         {
-            HostLog.Warning(exception, "Остановка стрим-мониторинга прервана по таймауту завершения");
+            HostLog.Warning(exception, "Остановка стрим-мониторинга площадки {Platform} прервана по таймауту завершения", host.Platform);
         }
         catch (Exception ex)
         {
-            HostLog.Error(ex, "Ошибка остановки стрим-мониторинга");
+            HostLog.Error(ex, "Ошибка остановки стрим-мониторинга площадки {Platform}", host.Platform);
         }
     }
 

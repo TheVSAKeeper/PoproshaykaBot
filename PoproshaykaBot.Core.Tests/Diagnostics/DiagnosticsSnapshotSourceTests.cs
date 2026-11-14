@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -45,7 +46,7 @@ public sealed class DiagnosticsSnapshotSourceTests
         _targetChannelProvider.Current.Returns(new TargetChannelState(string.Empty, string.Empty, false, false));
 
         var botConnection = Substitute.For<IBotConnectionController>();
-        botConnection.CurrentPhase.Returns(BotLifecyclePhase.Idle);
+        botConnection.GetPhase(StreamingPlatform.Twitch).Returns(BotLifecyclePhase.Idle);
 
         _chatSender = new(helix,
             broadcasterIdProvider,
