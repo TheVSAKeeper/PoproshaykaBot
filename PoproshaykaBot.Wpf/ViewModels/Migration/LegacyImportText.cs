@@ -148,6 +148,11 @@ public static class LegacyImportText
             frozen.Add("история голосований");
         }
 
+        if (result.CopiedYouTubeQuota)
+        {
+            frozen.Add("расход квоты YouTube");
+        }
+
         if (frozen.Count == 0)
         {
             return Restart;

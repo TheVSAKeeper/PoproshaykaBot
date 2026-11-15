@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -30,6 +31,11 @@ public sealed partial class StreamMonitoringViewModel : ObservableObject, IDispo
 
     private void Apply(StreamMonitoringStatusChanged statusEvent)
     {
+        if (statusEvent.Platform != StreamingPlatform.Twitch)
+        {
+            return;
+        }
+
         var indicator = statusEvent.Role switch
         {
             PlatformAuthRole.Broadcaster => Broadcaster,

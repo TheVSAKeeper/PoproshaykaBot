@@ -9,4 +9,7 @@ public sealed record DiagnosticsSnapshot(
     SseStatus? Sse,
     ChatQueueStatus? ChatQueue,
     IReadOnlyList<ScheduledJobStatus> Jobs,
-    EventBusStatistics? Bus);
+    EventBusStatistics? Bus,
+    YouTubeMonitoringStatus? YouTubeMonitoring = null,
+    YouTubeChatStatus? YouTubeChat = null,
+    YouTubeQuotaStatus? YouTubeQuota = null);

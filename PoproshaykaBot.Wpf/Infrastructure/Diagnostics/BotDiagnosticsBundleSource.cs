@@ -2,6 +2,8 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Diagnostics;
+using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.YouTube.Quota;
 using System.Text;
 
 namespace PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
@@ -110,6 +112,105 @@ public sealed class BotDiagnosticsBundleSource(
         else
         {
             builder.AppendLine("Веб-сервер: данных нет");
+        }
+
+        AppendYouTubeSection(builder, snapshot);
+    }
+
+    private static void AppendYouTubeSection(StringBuilder builder, DiagnosticsSnapshot snapshot)
+    {
+        if (snapshot.YouTubeMonitoring is { } ytMonitor)
+        {
+            var streamText = !ytMonitor.Enabled
+                ? "отключён"
+                : ytMonitor.StreamStatus switch
+                {
+                    StreamStatus.Online => "онлайн",
+                    StreamStatus.Offline => "офлайн",
+                    _ => "неизвестно",
+                };
+
+            var issueText = ytMonitor.Issue switch
+            {
+                YouTubeMonitorIssue.MissingBroadcasterAuth => "нужна авторизация ведущего",
+                YouTubeMonitorIssue.InvalidTargetChannel => "целевой канал не найден",
+                YouTubeMonitorIssue.MultipleActiveBroadcasts => $"несколько активных трансляций ({ytMonitor.ActiveCandidateCount})",
+                YouTubeMonitorIssue.QuotaExhausted => "квота исчерпана",
+                YouTubeMonitorIssue.TransientError => $"ошибка опроса (сбоев: {ytMonitor.ConsecutiveFailures})",
+                _ => "без замечаний",
+            };
+
+            builder.AppendLine(
+                $"Мониторинг YouTube: {streamText}, канал {ytMonitor.TargetChannelId ?? DiagnosticsFormat.Unset}, "
+                + $"видео {ytMonitor.ActiveVideoId ?? DiagnosticsFormat.Unset}, чат {ytMonitor.ActiveLiveChatId ?? DiagnosticsFormat.Unset}, "
+                + $"состояние: {issueText}, последний опрос {Moment(ytMonitor.LastPollAt)}");
+        }
+        else
+        {
+            builder.AppendLine("Мониторинг YouTube: данных нет");
+        }
+
+        if (snapshot.YouTubeChat is { } ytChat)
+        {
+            var transportText = ytChat.Transport switch
+            {
+                YouTubeChatTransport.GrpcStream => "gRPC",
+                YouTubeChatTransport.RestPolling => "REST",
+                _ => "нет",
+            };
+
+            var issueSuffix = ytChat.Issue switch
+            {
+                YouTubeChatIssue.MissingBotAuth => ", нужна авторизация бота",
+                YouTubeChatIssue.WaitingForActiveBroadcast => ", ожидание активной трансляции",
+                YouTubeChatIssue.QuotaExhausted => ", квота исчерпана",
+                YouTubeChatIssue.TransientError => ", ошибка чтения",
+                _ => string.Empty,
+            };
+
+            builder.AppendLine(
+                $"Чат YouTube: {DiagnosticsFormat.Describe(ytChat.State)} ({transportText}{issueSuffix}), "
+                + $"канал {ytChat.Channel ?? DiagnosticsFormat.Unset}, чат {ytChat.LiveChatId ?? DiagnosticsFormat.Unset}, "
+                + $"сообщений {DiagnosticsFormat.Number(ytChat.ReceivedMessages)}, разрывов курсора {ytChat.GapCount}, "
+                + $"последнее сообщение {Moment(ytChat.LastMessageAt)}");
+        }
+        else
+        {
+            builder.AppendLine("Чат YouTube: данных нет");
+        }
+
+        if (snapshot.YouTubeQuota is { } ytQuota)
+        {
+            var markers = new List<string>(3);
+
+            if (ytQuota.ExhaustedByServer)
+            {
+                markers.Add("исчерпана по ответу сервера");
+            }
+
+            if (ytQuota.Reliability == YouTubeQuotaReliability.CorruptFile)
+            {
+                markers.Add("файл quota.json повреждён");
+            }
+
+            if (!ytQuota.CanWriteFile)
+            {
+                markers.Add("запись заморожена до перезапуска");
+            }
+
+            var markerSuffix = markers.Count > 0 ? $", {string.Join(", ", markers)}" : string.Empty;
+
+            builder.AppendLine(
+                $"Квота YouTube ({ytQuota.ProjectKey ?? DiagnosticsFormat.Unset}): "
+                + $"{DiagnosticsFormat.Number(ytQuota.CommittedUnits)} из {DiagnosticsFormat.Number(ytQuota.DailyBudget)} "
+                + $"(в резерве {DiagnosticsFormat.Number(ytQuota.ReservedUnits)}, "
+                + $"бот {DiagnosticsFormat.Number(ytQuota.BotCommittedUnits)}, "
+                + $"ведущий {DiagnosticsFormat.Number(ytQuota.BroadcasterCommittedUnits)}, "
+                + $"сброс {Moment(ytQuota.NextResetAt)}{markerSuffix})");
+        }
+        else
+        {
+            builder.AppendLine("Квота YouTube: данных нет");
         }
     }
 

@@ -6,6 +6,9 @@
   <ItemGroup>
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="Cyotek.Windows.Forms.ColorPicker" Version="1.7.2" />
+    <PackageVersion Include="Google.Protobuf" Version="3.36.2" />
+    <PackageVersion Include="Grpc.Net.Client" Version="2.85.0" />
+    <PackageVersion Include="Grpc.Tools" Version="2.85.0" />
     <PackageVersion Include="KeepShell" Version="0.1.273" />
     <PackageVersion Include="KeepShell.Automation" Version="0.1.273" />
     <PackageVersion Include="KeepShell.Mcp" Version="0.1.273" />

@@ -13,6 +13,7 @@ using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.EventSub;
+using PoproshaykaBot.Core.YouTube.Quota;
 
 namespace PoproshaykaBot.Core.Diagnostics;
 
@@ -33,7 +34,10 @@ public sealed class DiagnosticsSnapshotSource(
     BroadcastScheduler broadcastScheduler,
     StatisticsAutoSaver statisticsAutoSaver,
     ILogger<DiagnosticsSnapshotSource> logger,
-    ActiveBroadcastStore? activeBroadcastStore = null)
+    ActiveBroadcastStore? activeBroadcastStore = null,
+    IYouTubeMonitorDiagnostics? youtubeMonitor = null,
+    IYouTubeChatDiagnostics? youtubeChat = null,
+    IYouTubeQuotaGovernor? youtubeQuota = null)
 {
     public DiagnosticsSnapshot Capture()
     {
@@ -61,7 +65,10 @@ public sealed class DiagnosticsSnapshotSource(
             Read(nameof(SseStatus), CaptureSse),
             Read(nameof(ChatQueueStatus), CaptureChatQueue),
             jobs,
-            Read(nameof(EventBusStatistics), eventBusMetrics.Snapshot));
+            Read(nameof(EventBusStatistics), eventBusMetrics.Snapshot),
+            youtubeMonitor is null ? null : Read(nameof(YouTubeMonitoringStatus), youtubeMonitor.CaptureDiagnostics),
+            youtubeChat is null ? null : Read(nameof(YouTubeChatStatus), youtubeChat.CaptureDiagnostics),
+            youtubeQuota is null ? null : Read(nameof(YouTubeQuotaStatus), youtubeQuota.CaptureDiagnostics));
     }
 
     private static ConnectionState ToConnectionState(StreamMonitoringStatus? status)
