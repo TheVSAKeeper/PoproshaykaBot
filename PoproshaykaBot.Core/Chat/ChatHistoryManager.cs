@@ -8,15 +8,15 @@ namespace PoproshaykaBot.Core.Chat;
 public sealed class ChatHistoryManager(SettingsManager settingsManager, IEventBus eventBus)
 {
     private readonly Lock _sync = new();
-    private readonly LinkedList<ChatMessageData> _chatHistory = [];
+    private readonly LinkedList<(ChatMessageData Message, string Channel)> _chatHistory = [];
 
-    public void AddMessage(ChatMessageData chatMessage)
+    public void AddMessage(ChatMessageData chatMessage, string channel = "")
     {
         lock (_sync)
         {
-            _chatHistory.AddLast(chatMessage);
+            _chatHistory.AddLast((chatMessage, channel));
 
-            var max = Math.Max(1, settingsManager.Current.Twitch.Infrastructure.ChatHistoryMaxItems);
+            var max = Math.Max(1, settingsManager.Current.ChatHistoryMaxItems);
 
             if (_chatHistory.Count > max)
             {
@@ -29,17 +29,22 @@ public sealed class ChatHistoryManager(SettingsManager settingsManager, IEventBu
     {
         lock (_sync)
         {
-            return _chatHistory.ToArray();
+            return _chatHistory.Select(static entry => entry.Message).ToArray();
         }
     }
 
     public void ClearHistory()
     {
+        (StreamingPlatform Platform, string Channel)[] chats;
         lock (_sync)
         {
+            chats = _chatHistory.Select(static entry => (entry.Message.Platform, entry.Channel)).Distinct().ToArray();
             _chatHistory.Clear();
         }
 
-        _ = eventBus.PublishAsync(new ChatHistoryCleared(StreamingPlatform.Twitch));
+        foreach (var (platform, channel) in chats)
+        {
+            _ = eventBus.PublishAsync(new ChatHistoryCleared(platform, channel));
+        }
     }
 }

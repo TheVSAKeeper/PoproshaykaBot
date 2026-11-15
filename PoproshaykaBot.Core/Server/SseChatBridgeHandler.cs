@@ -19,7 +19,7 @@ public sealed class SseChatBridgeHandler :
     {
         _sseService = sseService;
         _messageSubscription = eventBus.Subscribe<ChatMessageReceived>(this);
-        _clearSubscription = eventBus.SubscribePlatform<ChatHistoryCleared>(StreamingPlatform.Twitch, this);
+        _clearSubscription = eventBus.Subscribe<ChatHistoryCleared>(this);
     }
 
     public Task HandleAsync(ChatMessageReceived @event, CancellationToken cancellationToken)

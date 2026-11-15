@@ -74,6 +74,15 @@ public sealed class SseChatBridgeHandlerTests
         Assert.That(AddedMessages(), Is.EqualTo(1));
     }
 
+    [TestCase(StreamingPlatform.Twitch)]
+    [TestCase(StreamingPlatform.YouTube)]
+    public async Task Очистка_истории_каждой_площадки_передаётся_в_SSE(StreamingPlatform platform)
+    {
+        await _bus.PublishAsync(new ChatHistoryCleared(platform, "test-channel"));
+
+        Assert.That(_logger.Entries.Count(entry => entry.Message == "Инициация события очистки чата для всех SSE клиентов"), Is.EqualTo(1));
+    }
+
     private static ChatMessageReceived CreateEvent(CommandResponseMark? mark)
     {
         var historyEntry = new ChatMessageData

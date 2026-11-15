@@ -18,10 +18,15 @@ public sealed class StreamInfoCommand(IChatPlatformRegistry platformRegistry, Ti
     {
         if (!platformRegistry.TryGet(context.Platform, out var platform))
         {
-            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply("Сейчас стрим офлайн", context.MessageId));
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply("Статус стрима пока неизвестен", context.MessageId));
         }
 
         var snapshot = platform.StreamStatus.GetSnapshot();
+
+        if (snapshot.Status == StreamStatus.Unknown)
+        {
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply("Статус стрима пока неизвестен", context.MessageId));
+        }
 
         if (snapshot.Status != StreamStatus.Online)
         {

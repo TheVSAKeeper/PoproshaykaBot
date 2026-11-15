@@ -64,7 +64,9 @@ public sealed class ChatPipelineHandler :
         ];
     }
 
-    public string? Channel => _channels.GetChannel(StreamingPlatform.Twitch);
+    public string? GetChannel(StreamingPlatform platform) => _channels.GetChannel(platform);
+
+    string? IChannelProvider.Channel => GetChannel(StreamingPlatform.Twitch);
 
     public void Reset()
     {
@@ -106,7 +108,7 @@ public sealed class ChatPipelineHandler :
             return;
         }
 
-        var settings = _settingsManager.Current.Twitch;
+        var messages = _settingsManager.Current.ChatMessages;
         var obsChat = _obsChatStore.Load();
         var audience = _audienceTracker.ForPlatform(chatMessage.Platform);
 
@@ -180,7 +182,7 @@ public sealed class ChatPipelineHandler :
             ? _commandSettingsStore.Load().ResolveResponseTarget(canonical)
             : CommandResponseTarget.None;
 
-        if (settings.Messages.WelcomeEnabled && isFirstSeen)
+        if (messages.WelcomeEnabled && isFirstSeen)
         {
             var welcomeMessage = audience.CreateWelcome(chatMessage.DisplayName);
 

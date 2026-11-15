@@ -29,7 +29,7 @@ public sealed class ModerationChatNotificationHandler :
 
     public Task HandleAsync(UserPunished @event, CancellationToken cancellationToken)
     {
-        var messageSettings = _settingsManager.Current.Twitch.Messages;
+        var messageSettings = _settingsManager.Current.ChatMessages;
 
         if (!messageSettings.PunishmentEnabled || string.IsNullOrWhiteSpace(@event.Channel))
         {
@@ -45,7 +45,7 @@ public sealed class ModerationChatNotificationHandler :
 
     public Task HandleAsync(UserRewarded @event, CancellationToken cancellationToken)
     {
-        var messageSettings = _settingsManager.Current.Twitch.Messages;
+        var messageSettings = _settingsManager.Current.ChatMessages;
 
         if (!messageSettings.RewardEnabled || string.IsNullOrWhiteSpace(@event.Channel))
         {

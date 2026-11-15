@@ -14,6 +14,13 @@ using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Tests.Server;
 using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Core.Broadcast;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
+using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Twitch.Chat;
+using System.Reflection;
+using System.Reflection.Emit;
 
 namespace PoproshaykaBot.Core.Tests.Platforms;
 
@@ -27,6 +34,26 @@ public sealed class PlatformEventIsolationTests
         (typeof(StatisticsTrackingHandler), typeof(ChatMessageReceived)),
         (typeof(ChatHistoryLoggingHandler), typeof(ChatMessageReceived)),
         (typeof(SseChatBridgeHandler), typeof(ChatMessageReceived)),
+        (typeof(SseChatBridgeHandler), typeof(ChatHistoryCleared)),
+        (typeof(BotLifecycleAutomationHandler), typeof(StreamWentOnline)),
+        (typeof(BotLifecycleAutomationHandler), typeof(StreamWentOffline)),
+        (typeof(BotLifecycleAutomationHandler), typeof(PlatformConnectionChanged)),
+        (typeof(ChatPipelineHandler), typeof(RawChatMessageReceived)),
+        (typeof(ChatPipelineHandler), typeof(BotJoinedChannel)),
+        (typeof(ConnectionGreetingHandler), typeof(BotJoinedChannel)),
+        (typeof(FarewellMessageHandler), typeof(PlatformConnectionChanged)),
+        (typeof(ModerationChatNotificationHandler), typeof(UserPunished)),
+        (typeof(ModerationChatNotificationHandler), typeof(UserRewarded)),
+        (typeof(BroadcastAggregator), typeof(StreamWentOnline)),
+        (typeof(BroadcastAggregator), typeof(StreamWentOffline)),
+        (typeof(StreamSessionStatisticsHandler), typeof(StreamWentOffline)),
+        (typeof(StreamSessionStatisticsHandler), typeof(StreamMetadataResolved)),
+        (typeof(StreamSessionStatisticsHandler), typeof(ViewerSampleObserved)),
+        (typeof(StreamSessionStatisticsHandler), typeof(ChatMessageReceived)),
+        (typeof(StreamSessionStatisticsHandler), typeof(ChannelUpdated)),
+        (typeof(StreamSessionStatisticsHandler), typeof(ChatIngestionStarted)),
+        (typeof(StreamSessionStatisticsHandler), typeof(ChatIngestionStopped)),
+        (typeof(StreamStatusBroadcastHandler), typeof(PlatformConnectionChanged)),
     ];
 
     [Test]
@@ -71,10 +98,10 @@ public sealed class PlatformEventIsolationTests
             Assert.That(commandUsage.GetSnapshot().Single().StreamCount, Is.Zero);
 
             await bus.PublishAsync(new ChatHistoryCleared(StreamingPlatform.YouTube, "yt-channel"));
-            Assert.That(sseLogger.Entries.Count(entry => entry.Message.Contains(ClearChatLogLine, StringComparison.Ordinal)), Is.Zero);
+            Assert.That(sseLogger.Entries.Count(entry => entry.Message.Contains(ClearChatLogLine, StringComparison.Ordinal)), Is.EqualTo(1));
 
             await bus.PublishAsync(new ChatHistoryCleared(StreamingPlatform.Twitch, "tw-channel"));
-            Assert.That(sseLogger.Entries.Count(entry => entry.Message.Contains(ClearChatLogLine, StringComparison.Ordinal)), Is.EqualTo(1));
+            Assert.That(sseLogger.Entries.Count(entry => entry.Message.Contains(ClearChatLogLine, StringComparison.Ordinal)), Is.EqualTo(2));
 
             await bus.PublishAsync(new ChatMessageReceived(
                 StreamingPlatform.YouTube,
@@ -127,15 +154,56 @@ public sealed class PlatformEventIsolationTests
                 }
 
                 var isNeutral = ExplicitPlatformNeutralHandlers.Contains((type, eventType));
-                var hasCtorTakingBus = type.GetConstructors().Any(static c => c.GetParameters().Any(static p => p.ParameterType == typeof(IEventBus)));
+                var hasPlatformSubscription = type.GetConstructors().SelectMany(CalledMethods).OfType<MethodInfo>()
+                    .Any(method => method.DeclaringType == typeof(EventBusPlatformExtensions)
+                        && method.Name == nameof(EventBusPlatformExtensions.SubscribePlatform)
+                        && method.IsGenericMethod && method.GetGenericArguments()[0] == eventType);
 
-                if (!isNeutral && !hasCtorTakingBus)
+                if (!isNeutral && !hasPlatformSubscription)
                 {
                     unlisted.Add($"{type.Name}<{eventType.Name}>");
                 }
             }
         }
 
-        Assert.That(unlisted, Is.Empty);
+        Assert.That(unlisted, Is.Empty, string.Join(Environment.NewLine, unlisted));
+    }
+
+    private static IEnumerable<MethodBase> CalledMethods(ConstructorInfo constructor)
+    {
+        var codes = typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(static field => field.FieldType == typeof(OpCode))
+            .Select(static field => (OpCode)field.GetValue(null)!)
+            .ToDictionary(static code => unchecked((ushort)code.Value));
+        var il = constructor.GetMethodBody()?.GetILAsByteArray() ?? [];
+        var offset = 0;
+        while (offset < il.Length)
+        {
+            var value = (ushort)il[offset++];
+            if (value == 0xfe)
+            {
+                value = (ushort)(0xfe00 | il[offset++]);
+            }
+
+            var code = codes[value];
+            if (code.OperandType == OperandType.InlineMethod)
+            {
+                var method = constructor.Module.ResolveMethod(BitConverter.ToInt32(il, offset));
+                if (method is not null)
+                {
+                    yield return method;
+                }
+            }
+
+            offset += code.OperandType switch
+            {
+                OperandType.InlineNone => 0,
+                OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
+                OperandType.InlineVar => 2,
+                OperandType.InlineI8 or OperandType.InlineR => 8,
+                OperandType.InlineSwitch => 4 + BitConverter.ToInt32(il, offset) * 4,
+                _ => 4,
+            };
+        }
     }
 }

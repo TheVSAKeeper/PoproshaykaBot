@@ -1,4 +1,4 @@
-using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 
 namespace PoproshaykaBot.Core.Chat.Handlers;
@@ -16,7 +16,7 @@ public sealed class ChatHistoryLoggingHandler : IEventHandler<ChatMessageReceive
 
     public Task HandleAsync(ChatMessageReceived @event, CancellationToken cancellationToken)
     {
-        _manager.AddMessage(@event.HistoryEntry);
+        _manager.AddMessage(@event.HistoryEntry, @event.Channel);
         return Task.CompletedTask;
     }
 

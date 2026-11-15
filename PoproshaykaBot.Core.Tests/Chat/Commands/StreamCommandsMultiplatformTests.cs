@@ -108,6 +108,18 @@ public sealed class StreamCommandsMultiplatformTests
         });
     }
 
+    [TestCase(StreamingPlatform.Twitch, true)]
+    [TestCase(StreamingPlatform.YouTube, true)]
+    [TestCase(StreamingPlatform.YouTube, false)]
+    public async Task StreamInfoCommand_UnknownOrMissingPlatformDoesNotClaimOffline(StreamingPlatform platform, bool registered)
+    {
+        var adapter = new FakeChatPlatform(platform, "test");
+        adapter.FakeStreamStatus.SetUnknown();
+        var command = new StreamInfoCommand(new ChatPlatformRegistry(registered ? [adapter] : []), TimeProvider.System);
+        var reply = await command.ExecuteAsync(CreateContext(platform), CancellationToken.None);
+        Assert.That(reply!.Text, Is.EqualTo("Статус стрима пока неизвестен"));
+    }
+
     [Test]
     public async Task StreamsSummaryCommand_DistinguishesOfflineMissingStaleAndZeroViewers()
     {

@@ -23,12 +23,12 @@ public sealed class ConnectionGreetingHandler : IEventHandler<BotJoinedChannel>,
 
     public Task HandleAsync(BotJoinedChannel @event, CancellationToken cancellationToken)
     {
-        var settings = _settingsManager.Current.Twitch;
+        var messages = _settingsManager.Current.ChatMessages;
 
-        if (settings.Messages.ConnectionEnabled
-            && !string.IsNullOrWhiteSpace(settings.Messages.Connection))
+        if (messages.ConnectionEnabled
+            && !string.IsNullOrWhiteSpace(messages.Connection))
         {
-            _messenger.Send(@event.Platform, settings.Messages.Connection);
+            _messenger.Send(@event.Platform, messages.Connection);
         }
 
         return Task.CompletedTask;
