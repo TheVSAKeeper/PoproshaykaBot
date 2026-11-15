@@ -156,6 +156,172 @@ public class YouTubeStreamMonitorTests
     }
 
     [Test]
+    public async Task Explicit_Selection_Change_Switches_Active_Broadcast_And_Clearing_Returns_To_Multiple()
+    {
+        var broadcastEvents = new List<YouTubeActiveBroadcastChanged>();
+        var multipleEvents = new List<YouTubeMultipleBroadcastsDetected>();
+        var onlineEvents = new List<StreamWentOnline>();
+        var metadataEvents = new List<StreamMetadataResolved>();
+        using var bSub = _eventBus.Subscribe<YouTubeActiveBroadcastChanged>(broadcastEvents.Add);
+        using var mSub = _eventBus.Subscribe<YouTubeMultipleBroadcastsDetected>(multipleEvents.Add);
+        using var oSub = _eventBus.Subscribe<StreamWentOnline>(onlineEvents.Add);
+        using var mdSub = _eventBus.Subscribe<StreamMetadataResolved>(metadataEvents.Add);
+
+        var candidates = new[]
+        {
+            BuildBroadcast("vid-a", "chat-a", "Broadcast A"),
+            BuildBroadcast("vid-b", "chat-b", "Broadcast B"),
+        };
+
+        var discoveryCalls = 0;
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                discoveryCalls++;
+                return candidates;
+            });
+
+        _selectionStore.SelectBroadcast(ChannelId, "vid-a");
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-a"));
+            Assert.That(discoveryCalls, Is.EqualTo(1));
+        });
+
+        _selectionStore.SelectBroadcast(ChannelId, "vid-b");
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_monitor.CurrentStatus, Is.EqualTo(StreamStatus.Online));
+            Assert.That(_monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-b"));
+            Assert.That(_monitor.CurrentBroadcast?.LiveChatId, Is.EqualTo("chat-b"));
+            Assert.That(_monitor.CurrentStream?.Id, Is.EqualTo("vid-b"));
+            Assert.That(discoveryCalls, Is.EqualTo(2));
+            Assert.That(broadcastEvents[^1].ActiveBroadcast?.VideoId, Is.EqualTo("vid-b"));
+            Assert.That(onlineEvents.Select(static e => e.Stream?.Id), Is.EqualTo(["vid-a", "vid-b"]));
+            Assert.That(metadataEvents, Is.Empty);
+        });
+
+        _selectionStore.SelectBroadcast(ChannelId, null);
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_monitor.CurrentStatus, Is.EqualTo(StreamStatus.Unknown));
+            Assert.That(_monitor.CurrentBroadcast, Is.Null);
+            Assert.That(_monitor.CaptureDiagnostics().Issue, Is.EqualTo(YouTubeMonitorIssue.MultipleActiveBroadcasts));
+            Assert.That(discoveryCalls, Is.EqualTo(3));
+            Assert.That(broadcastEvents[^1].ActiveBroadcast, Is.Null);
+            Assert.That(multipleEvents, Has.Count.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task Pinning_Already_Active_Broadcast_Preserves_Viewer_Sample_And_Does_Not_Publish_Zero_Metadata()
+    {
+        var metadataEvents = new List<StreamMetadataResolved>();
+        var broadcastEvents = new List<YouTubeActiveBroadcastChanged>();
+        using var mdSub = _eventBus.Subscribe<StreamMetadataResolved>(metadataEvents.Add);
+        using var bSub = _eventBus.Subscribe<YouTubeActiveBroadcastChanged>(broadcastEvents.Add);
+
+        var broadcast = BuildBroadcast("vid-a", "chat-a", "Broadcast A");
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>()).Returns([broadcast]);
+        _broadcastClient.GetVideoLiveSampleAsync("vid-a", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-a", "Broadcast A", _clock.UtcNow, null, 250));
+
+        await _monitor.RefreshLiveSnapshotAsync();
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        var sampledAtBeforePin = _monitor.GetSnapshot().ViewerSampledAtUtc;
+        Assert.Multiple(() =>
+        {
+            Assert.That(_monitor.CurrentStream?.ViewerCount, Is.EqualTo(250));
+            Assert.That(sampledAtBeforePin, Is.EqualTo(_clock.UtcNow));
+        });
+
+        _selectionStore.SelectBroadcast(ChannelId, "vid-a");
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        var afterPin = _monitor.GetSnapshot();
+        Assert.Multiple(() =>
+        {
+            Assert.That(_monitor.CurrentStatus, Is.EqualTo(StreamStatus.Online));
+            Assert.That(_monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-a"));
+            Assert.That(_monitor.CurrentStream?.ViewerCount, Is.EqualTo(250));
+            Assert.That(afterPin.ViewerSampledAtUtc, Is.EqualTo(sampledAtBeforePin));
+            Assert.That(broadcastEvents, Has.Count.EqualTo(1));
+            Assert.That(metadataEvents, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task Wake_During_InFlight_Poll_Triggers_Immediate_Repoll_Without_Waiting_Full_Interval()
+    {
+        var candidates = new[]
+        {
+            BuildBroadcast("vid-a", "chat-a", "Broadcast A"),
+            BuildBroadcast("vid-b", "chat-b", "Broadcast B"),
+        };
+
+        var discoveryCalls = 0;
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Interlocked.Increment(ref discoveryCalls);
+                return (IReadOnlyList<YouTubeBroadcastSummary>)candidates;
+            });
+
+        _selectionStore.SelectBroadcast(ChannelId, "vid-a");
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        var sampleEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSample = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var switchedToSecond = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _broadcastClient.GetVideoLiveSampleAsync("vid-a", Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                sampleEntered.TrySetResult();
+                await releaseSample.Task.WaitAsync(call.Arg<CancellationToken>()).ConfigureAwait(false);
+                return (YouTubeVideoLiveSample?)new YouTubeVideoLiveSample("vid-a", "Broadcast A", _clock.UtcNow, null, 100);
+            });
+
+        using var bSub = _eventBus.Subscribe<YouTubeActiveBroadcastChanged>(e =>
+        {
+            if (e.ActiveBroadcast?.VideoId == "vid-b")
+            {
+                switchedToSecond.TrySetResult();
+            }
+        });
+
+        await _monitor.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+
+        try
+        {
+            await sampleEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            _selectionStore.SelectBroadcast(ChannelId, "vid-b");
+            releaseSample.TrySetResult();
+
+            await switchedToSecond.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(Volatile.Read(ref discoveryCalls), Is.GreaterThanOrEqualTo(2));
+                Assert.That(_monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-b"));
+                Assert.That(_monitor.CurrentStream?.Id, Is.EqualTo("vid-b"));
+            });
+        }
+        finally
+        {
+            releaseSample.TrySetResult();
+            await _monitor.StopAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        }
+    }
+
+    [Test]
     public async Task Hidden_Viewers_And_Viewer_Samples_And_Stream_End_Publish_Expected_Events()
     {
         var onlineEvents = new List<StreamWentOnline>();

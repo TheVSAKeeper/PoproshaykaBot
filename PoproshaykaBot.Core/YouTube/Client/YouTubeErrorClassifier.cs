@@ -58,9 +58,7 @@ internal static class YouTubeErrorClassifier
                 StatusCode.PermissionDenied => YouTubeApiErrorKind.Forbidden,
                 StatusCode.NotFound => YouTubeApiErrorKind.NotFound,
                 StatusCode.InvalidArgument or StatusCode.FailedPrecondition => YouTubeApiErrorKind.BadRequest,
-                StatusCode.ResourceExhausted => ContainsQuotaHint(exception)
-                    ? YouTubeApiErrorKind.QuotaExceeded
-                    : YouTubeApiErrorKind.RateLimitExceeded,
+                StatusCode.ResourceExhausted => YouTubeApiErrorKind.RateLimitExceeded,
                 StatusCode.Unavailable or StatusCode.Internal or StatusCode.DeadlineExceeded or StatusCode.Aborted =>
                     YouTubeApiErrorKind.Transient,
                 _ => YouTubeApiErrorKind.Unknown,
@@ -210,24 +208,6 @@ internal static class YouTubeErrorClassifier
         }
 
         return null;
-    }
-
-    private static bool ContainsQuotaHint(RpcException exception)
-    {
-        if (ContainsKeyword(exception.Status.Detail, "quota"))
-        {
-            return true;
-        }
-
-        foreach (var entry in exception.Trailers)
-        {
-            if (entry.IsBinary && ContainsKeyword(Encoding.UTF8.GetString(entry.ValueBytes), "quota"))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static bool HasHttpProtocolException(Exception exception)

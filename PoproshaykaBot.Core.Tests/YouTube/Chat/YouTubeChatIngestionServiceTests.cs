@@ -36,6 +36,9 @@ using PoproshaykaBot.Core.YouTube.Streaming;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading.Channels;
+using Grpc.Core;
+using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 
 namespace PoproshaykaBot.Core.Tests.YouTube.Chat;
 
@@ -643,15 +646,181 @@ public class YouTubeChatIngestionServiceTests
         Assert.That(platform.IsEnabled, Is.True);
     }
 
+    [Test]
+    public async Task Broadcast_Removal_And_Switch_Cancel_Open_Grpc_Stream_And_Block_Stale_Batches()
+    {
+        var received = new List<RawChatMessageReceived>();
+        var fromBReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stoppedSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = new List<ChatIngestionStopped>();
+        using var rSub = _eventBus.Subscribe<RawChatMessageReceived>(e =>
+        {
+            received.Add(e);
+
+            if (e.Message.Message == "from B")
+            {
+                fromBReceived.TrySetResult();
+            }
+        });
+        using var sSub = _eventBus.Subscribe<ChatIngestionStopped>(e =>
+        {
+            stopped.Add(e);
+            stoppedSignal.TrySetResult();
+        });
+
+        var source = new MutableBroadcastSource
+        {
+            CurrentBroadcast = new("vid-a", ChannelId, "YTBroadcaster", "chat-a", "Broadcast A", _clock.UtcNow),
+        };
+
+        var streamA = new ControlledStreamClient();
+        var streamB = new ControlledStreamClient();
+        var router = new RoutedStreamClient(chatId => chatId == "chat-a" ? streamA : streamB);
+        var pollingClient = new FakePollingClient((_, _) =>
+            Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null)));
+
+        using var ingestion = CreateIngestion(router, pollingClient, source);
+
+        await ingestion.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        await streamA.FirstBatchYielded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        source.CurrentBroadcast = null;
+        await _eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None);
+        await streamA.Closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await stoppedSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await streamA.Batches.Writer.WriteAsync(new([], "tok-ignored", TimeSpan.FromSeconds(5), null));
+        streamA.Batches.Writer.TryComplete();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(streamA.Closed.Task.IsCompletedSuccessfully, Is.True);
+            Assert.That(stopped, Has.Count.EqualTo(1));
+            Assert.That(ingestion.IsConnected, Is.False);
+            Assert.That(received, Is.Empty);
+        });
+
+        var broadcastB = new YouTubeBroadcastSummary("vid-b", ChannelId, "YTBroadcaster", "chat-b", "Broadcast B", _clock.UtcNow);
+        source.CurrentBroadcast = broadcastB;
+        await _eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(broadcastB), CancellationToken.None);
+
+        await streamB.FirstBatchYielded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await streamB.Batches.Writer.WriteAsync(new(
+            [TextItem("b-1", _clock.UtcNow.AddSeconds(1), "from B")],
+            "tok-b",
+            TimeSpan.FromSeconds(5),
+            null));
+
+        await fromBReceived.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.That(received.Select(static r => r.Message.Message), Is.EqualTo(new[] { "from B" }));
+
+        var staleBatchArrivedAfterSwitch = new YouTubeLiveChatBatch(
+            [TextItem("stale-from-b", _clock.UtcNow.AddSeconds(2), "stale after remove")],
+            "tok-b2",
+            TimeSpan.FromSeconds(5),
+            null);
+        source.CurrentBroadcast = null;
+        await _eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None);
+        await streamB.Closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        streamB.Batches.Writer.TryWrite(staleBatchArrivedAfterSwitch);
+        streamB.Batches.Writer.TryComplete();
+
+        await ingestion.StopAsync(new Progress<string>(_ => { }), CancellationToken.None);
+
+        Assert.That(received.Select(static r => r.Message.Message), Is.EqualTo(new[] { "from B" }));
+    }
+
+    [Test]
+    public async Task Stale_Grpc_And_Rest_Batches_Are_Not_Published_When_Broadcast_Cleared_Before_Processing()
+    {
+        var received = new List<RawChatMessageReceived>();
+        using var sub = _eventBus.Subscribe<RawChatMessageReceived>(received.Add);
+
+        var source = new MutableBroadcastSource
+        {
+            CurrentBroadcast = new("vid-1", ChannelId, "YTBroadcaster", "chat-1", "Live", _clock.UtcNow),
+        };
+
+        var grpcCall = 0;
+        var streamClient = new FakeStreamClient(_ =>
+        {
+            grpcCall++;
+
+            if (grpcCall == 1)
+            {
+                source.CurrentBroadcast = null;
+                return
+                [
+                    new YouTubeLiveChatBatch(
+                        [TextItem("stale-grpc", _clock.UtcNow.AddSeconds(1), "from-disabled-chat")],
+                        "tok-1",
+                        TimeSpan.FromSeconds(5),
+                        null),
+                ];
+            }
+
+            throw new YouTubeApiException(YouTubeApiErrorKind.TransportUnsupported, "no grpc");
+        });
+
+        var pollingClient = new FakePollingClient((_, _) =>
+        {
+            source.CurrentBroadcast = null;
+            return Task.FromResult(new YouTubeLiveChatBatch(
+                [TextItem("stale-rest", _clock.UtcNow.AddSeconds(2), "stale rest message")],
+                "tok-rest",
+                TimeSpan.FromSeconds(5),
+                null));
+        });
+
+        using var ingestion = CreateIngestion(streamClient, pollingClient, source);
+
+        await ingestion.RunSingleIterationAsync(CancellationToken.None);
+
+        source.CurrentBroadcast = new("vid-1", ChannelId, "YTBroadcaster", "chat-1", "Live", _clock.UtcNow);
+        await ingestion.RunSingleIterationAsync(CancellationToken.None);
+
+        source.CurrentBroadcast = new("vid-1", ChannelId, "YTBroadcaster", "chat-1", "Live", _clock.UtcNow);
+        await ingestion.RunSingleIterationAsync(CancellationToken.None);
+
+        Assert.That(received, Is.Empty);
+    }
+
+    [Test]
+    public async Task Documented_Grpc_ResourceExhausted_Throttle_Does_Not_Exhaust_Daily_Quota()
+    {
+        var streamClient = new FakeStreamClient(_ =>
+            throw YouTubeErrorClassifier.FromRpcException(
+                new RpcException(new Status(StatusCode.ResourceExhausted, "Resource has been exhausted (e.g. check quota)")),
+                "StreamList"));
+        var pollingClient = new FakePollingClient((_, _) =>
+            Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null)));
+
+        using var ingestion = CreateIngestion(streamClient, pollingClient);
+
+        var delay = await ingestion.RunSingleIterationAsync(CancellationToken.None);
+        var diag = ingestion.CaptureDiagnostics();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_quotaGovernor.CaptureDiagnostics().ExhaustedByServer, Is.False);
+            Assert.That(diag.State, Is.EqualTo(ConnectionState.Reconnecting));
+            Assert.That(diag.Issue, Is.EqualTo(YouTubeChatIssue.TransientError));
+            Assert.That(diag.Transport, Is.Not.EqualTo(YouTubeChatTransport.RestPolling));
+            Assert.That(delay, Is.EqualTo(TimeSpan.FromSeconds(5)));
+        });
+    }
+
     private YouTubeChatIngestionService CreateIngestion(
         IYouTubeLiveChatStreamClient streamClient,
-        IYouTubeLiveChatPollingClient pollingClient)
+        IYouTubeLiveChatPollingClient pollingClient,
+        IYouTubeActiveBroadcastSource? broadcastSource = null)
     {
         return new(
             streamClient,
             pollingClient,
             new YouTubeChatMessageMapper(),
-            _streamMonitor,
+            broadcastSource ?? _streamMonitor,
             _sessionContext,
             _authService,
             _accountsStore,
@@ -743,6 +912,55 @@ public class YouTubeChatIngestionServiceTests
 
         public void ResetRetryState(PlatformAuthRole role)
         {
+        }
+    }
+
+    private sealed class MutableBroadcastSource : IYouTubeActiveBroadcastSource
+    {
+        public YouTubeBroadcastSummary? CurrentBroadcast { get; set; }
+
+        public Task RefreshLiveSnapshotAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class RoutedStreamClient(Func<string, IYouTubeLiveChatStreamClient> resolve)
+        : IYouTubeLiveChatStreamClient
+    {
+        public IAsyncEnumerable<YouTubeLiveChatBatch> StreamBatchesAsync(
+            string liveChatId,
+            string? pageToken,
+            CancellationToken cancellationToken)
+        {
+            return resolve(liveChatId).StreamBatchesAsync(liveChatId, pageToken, cancellationToken);
+        }
+    }
+
+    private sealed class ControlledStreamClient : IYouTubeLiveChatStreamClient
+    {
+        public Channel<YouTubeLiveChatBatch> Batches { get; } = Channel.CreateUnbounded<YouTubeLiveChatBatch>();
+
+        public TaskCompletionSource FirstBatchYielded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Closed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async IAsyncEnumerable<YouTubeLiveChatBatch> StreamBatchesAsync(
+            string liveChatId,
+            string? pageToken,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            try
+            {
+                yield return new([], "init-tok", TimeSpan.FromSeconds(5), null);
+                FirstBatchYielded.TrySetResult();
+
+                await foreach (var batch in Batches.Reader.ReadAllAsync(cancellationToken))
+                {
+                    yield return batch;
+                }
+            }
+            finally
+            {
+                Closed.TrySetResult();
+            }
         }
     }
 }

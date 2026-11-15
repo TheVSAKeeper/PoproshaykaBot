@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Infrastructure.Persistence;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -173,6 +174,72 @@ public class YouTubeQuotaStoreTests
             sequence: 1);
 
         Assert.That(store.EnsureLoaded().Projects["proj"].CommittedUnits, Is.EqualTo(200));
+    }
+
+    [Test]
+    public async Task Concurrent_SaveSnapshot_Persists_Latest_Snapshot_And_TryFlush_Leaves_No_Stale_Disk_State()
+    {
+        using var firstWriteEntered = new ManualResetEventSlim();
+        using var releaseFirstWrite = new ManualResetEventSlim();
+        var writeCount = 0;
+
+        using var store = new YouTubeQuotaStore(
+            NullLogger<YouTubeQuotaStore>.Instance,
+            _quotaPath,
+            persistFile: (path, json) =>
+            {
+                if (Interlocked.Increment(ref writeCount) == 1)
+                {
+                    firstWriteEntered.Set();
+                    Assert.That(releaseFirstWrite.Wait(TimeSpan.FromSeconds(5)), Is.True);
+                }
+
+                AtomicFile.Save(path, json, NullLogger.Instance);
+            });
+
+        store.EnsureLoaded();
+
+        static YouTubeQuotaDocument CreateDoc(int units) => new()
+        {
+            Projects = new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["proj"] = new YouTubeQuotaProjectRecord
+                {
+                    PacificDate = "2026-11-15",
+                    CommittedUnits = units,
+                    BotCommittedUnits = units,
+                },
+            },
+        };
+
+        var firstSave = Task.Run(() => store.SaveSnapshot(CreateDoc(1), sequence: 1));
+        Assert.That(firstWriteEntered.Wait(TimeSpan.FromSeconds(5)), Is.True);
+
+        var secondSave = Task.Run(() => store.SaveSnapshot(CreateDoc(2), sequence: 2));
+
+        var sequenceField = typeof(YouTubeQuotaStore).GetField(
+            "_latestSnapshotSequence",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+
+        Assert.That(
+            SpinWait.SpinUntil(() => (long)sequenceField.GetValue(store)! == 2, TimeSpan.FromSeconds(5)),
+            Is.True);
+
+        releaseFirstWrite.Set();
+
+        var results = await Task.WhenAll(firstSave, secondSave);
+        var flushed = store.TryFlush();
+
+        using var reloadedStore = new YouTubeQuotaStore(NullLogger<YouTubeQuotaStore>.Instance, _quotaPath);
+        var reloaded = reloadedStore.EnsureLoaded();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results, Is.EqualTo(new[] { true, true }));
+            Assert.That(flushed, Is.True);
+            Assert.That(store.EnsureLoaded().Projects["proj"].CommittedUnits, Is.EqualTo(2));
+            Assert.That(reloaded.Projects["proj"].CommittedUnits, Is.EqualTo(2));
+        });
     }
 
     private YouTubeSettingsStore CreateSettingsStore()
