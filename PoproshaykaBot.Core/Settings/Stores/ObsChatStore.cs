@@ -18,9 +18,21 @@ public sealed class ObsChatStore
         var path = filePath ?? AppPaths.SettingsFile("obs-chat.json");
 
         _eventBus = eventBus;
-        _store = new(path, logger, describe: SettingsDescriber.Describe, gate: gate);
+        _store = new(path, logger, describe: Describe, gate: gate);
 
         logger?.LogDebug("ObsChatStore инициализирован из {FilePath}", path);
+    }
+
+    public static string Describe(ObsChatSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return $"сообщений на экране {settings.MaxMessages}, время {SettingsDescriber.OnOff(settings.ShowTimestamp)}, "
+            + $"аватары {SettingsDescriber.OnOff(settings.ShowUserAvatars)}, анимации {SettingsDescriber.OnOff(settings.EnableAnimations)}, "
+            + $"затухание {SettingsDescriber.OnOff(settings.EnableMessageFadeOut)} через {settings.MessageLifetimeSeconds} с, "
+            + $"кегль {settings.FontSize}, автопрокрутка {SettingsDescriber.OnOff(settings.AutoScrollEnabled)}, "
+            + $"картинки из сообщений {SettingsDescriber.OnOff(settings.ShowMessageImages)} (роли {settings.MessageImageRoles}, "
+            + $"хостов {settings.MessageImageAllowedHosts?.Count ?? 0}, высота {settings.MessageImageMaxHeightPixels} px)";
     }
 
     public ObsChatSettings Load()

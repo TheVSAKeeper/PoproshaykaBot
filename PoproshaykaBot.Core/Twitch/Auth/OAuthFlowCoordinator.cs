@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using System.Security.Cryptography;
@@ -14,10 +15,10 @@ public sealed class OAuthFlowCoordinator(
     ILogger<OAuthFlowCoordinator> logger)
     : IDisposable
 {
-    private readonly Dictionary<TwitchOAuthRole, SemaphoreSlim> _authSemaphores = new()
+    private readonly Dictionary<PlatformAuthRole, SemaphoreSlim> _authSemaphores = new()
     {
-        [TwitchOAuthRole.Bot] = new(1, 1),
-        [TwitchOAuthRole.Broadcaster] = new(1, 1),
+        [PlatformAuthRole.Bot] = new(1, 1),
+        [PlatformAuthRole.Broadcaster] = new(1, 1),
     };
 
     private readonly Dictionary<string, PendingAuth> _pendingAuths = new(StringComparer.Ordinal);
@@ -29,7 +30,7 @@ public sealed class OAuthFlowCoordinator(
         TimeSpan.FromMinutes(settingsManager.Current.Twitch.Infrastructure.OAuthAuthTimeoutMinutes);
 
     public async Task<string> StartOAuthFlowAsync(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
@@ -53,7 +54,7 @@ public sealed class OAuthFlowCoordinator(
     }
 
     public Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
@@ -120,7 +121,7 @@ public sealed class OAuthFlowCoordinator(
     }
 
     private async Task<OAuthFlowResult> StartOAuthFlowCoreAsync(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
@@ -129,6 +130,7 @@ public sealed class OAuthFlowCoordinator(
         bool checkBroadcasterChannel,
         CancellationToken ct)
     {
+        PlatformAuthRoles.EnsureActive(role);
         logger.LogDebug("Начало процесса OAuth авторизации для роли {Role} (ClientId: {ClientId})", role, clientId);
 
         if (string.IsNullOrWhiteSpace(clientId))
@@ -227,7 +229,7 @@ public sealed class OAuthFlowCoordinator(
     }
 
     private async Task<OAuthFlowResult> ExchangeCodeForTokenAsync(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string authorizationCode,
@@ -262,5 +264,5 @@ public sealed class OAuthFlowCoordinator(
             tokenResponse.ExpiresIn);
     }
 
-    private sealed record PendingAuth(TwitchOAuthRole Role, TaskCompletionSource<string> Tcs);
+    private sealed record PendingAuth(PlatformAuthRole Role, TaskCompletionSource<string> Tcs);
 }

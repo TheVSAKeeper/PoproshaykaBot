@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -12,7 +13,7 @@ public sealed class BotTwitchAuthHandler(
     ILogger<BotTwitchAuthHandler> logger)
     : TwitchAuthHandlerBase(oauthService, settingsManager, accountsStore, logger)
 {
-    protected override TwitchOAuthRole Role => TwitchOAuthRole.Bot;
+    protected override PlatformAuthRole Role => PlatformAuthRole.Bot;
 
     protected override string MissingTokenHint =>
         "Авторизуйте бота в настройках Twitch (вкладка «Бот»).";

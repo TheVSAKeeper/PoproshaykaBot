@@ -1,6 +1,8 @@
-﻿namespace PoproshaykaBot.Core.Twitch.Auth;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
 
-public sealed class TwitchAccountSettings
+namespace PoproshaykaBot.Core.Twitch.Auth;
+
+public sealed class TwitchAccountSettings : IRoleAccountSettings
 {
     public string AccessToken { get; set; } = string.Empty;
 

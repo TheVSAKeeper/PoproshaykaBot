@@ -1,9 +1,15 @@
-﻿using PoproshaykaBot.Core.Broadcast.Profiles;
+﻿using Microsoft.Extensions.DependencyInjection;
+using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Infrastructure.Diagnostics;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Debugging;
 using PoproshaykaBot.Core.Settings.Obs;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
@@ -42,19 +48,19 @@ public sealed class SettingsDescriberTests
             ["testchannel", "clientId есть", "clientSecret есть", "порт 9099", "лимит 111", "приветствие вкл", "прощание выкл", "каждые 42 мин", "автоподключение на онлайн вкл", "пользователей 2", "рангов 3"]);
 
         yield return new("TwitchAccountSettings",
-            SettingsDescriber.Describe(CreateAccount()),
+            AccountsStore.Describe(CreateAccount()),
             ["логин botlogin", "userId 4242", "access-токен есть", "refresh-токен есть", "скоупов 2"]);
 
         yield return new("ObsIntegrationSettings",
-            SettingsDescriber.Describe(CreateObsIntegrationSettings()),
+            ObsIntegrationStore.Describe(CreateObsIntegrationSettings()),
             ["интеграция вкл", "obs-host:4466", "пароль есть", "сцена MainScene", "источников дашборда 2"]);
 
         yield return new("ObsChatSettings",
-            SettingsDescriber.Describe(new ObsChatSettings { MaxMessages = 77, ShowTimestamp = false, MessageLifetimeSeconds = 88 }),
+            ObsChatStore.Describe(new ObsChatSettings { MaxMessages = 77, ShowTimestamp = false, MessageLifetimeSeconds = 88 }),
             ["сообщений на экране 77", "время выкл", "через 88 с"]);
 
         yield return new("UpdateSettings",
-            SettingsDescriber.Describe(new UpdateSettings
+            UpdateStore.Describe(new UpdateSettings
             {
                 AutoCheckEnabled = false,
                 CheckIntervalHours = 13,
@@ -65,15 +71,15 @@ public sealed class SettingsDescriberTests
             ["автопроверка выкл", "каждые 13 ч", "owner/fork", "9.9.9", "framework-dependent вкл"]);
 
         yield return new("DebugChannelSettings",
-            SettingsDescriber.Describe(new DebugChannelSettings { IsEnabled = true, Channel = "mrbeast", AllowSending = true }),
+            DebugChannelStore.Describe(new DebugChannelSettings { IsEnabled = true, Channel = "mrbeast", AllowSending = true }),
             ["отладочный канал вкл", "mrbeast", "отправка сообщений вкл"]);
 
         yield return new("BroadcastProfilesSettings",
-            SettingsDescriber.Describe(new BroadcastProfilesSettings { Profiles = [new(), new(), new()] }),
+            BroadcastProfilesStore.Describe(new BroadcastProfilesSettings { Profiles = [new(), new(), new()] }),
             ["профилей 3"]);
 
         yield return new("PollsSettings",
-            SettingsDescriber.Describe(new PollsSettings
+            PollsStore.Describe(new PollsSettings
             {
                 ChatTemplates = new() { StartEnabled = true, ProgressEnabled = false, ProgressAnnounceIntervalSeconds = 45 },
                 HistoryMaxItems = 33,
@@ -81,7 +87,7 @@ public sealed class SettingsDescriberTests
             ["объявление старта вкл", "прогресс выкл каждые 45 с", "история до 33"]);
 
         yield return new("YouTubeSettings",
-            SettingsDescriber.Describe(new YouTubeSettings
+            YouTubeSettingsStore.Describe(new YouTubeSettings
             {
                 Enabled = true,
                 ProjectId = "yt-proj-1",
@@ -92,7 +98,7 @@ public sealed class SettingsDescriberTests
             ["включено вкл", "projectId yt-proj-1", "clientId есть", "@mychannel", "бюджет квоты 8000"]);
 
         yield return new("YouTubeAccounts",
-            SettingsDescriber.DescribeYouTubeAccounts(
+            YouTubeAccountsStore.Describe(
                 "SECRET-1",
                 new()
                 {
@@ -161,5 +167,40 @@ public sealed class SettingsDescriberTests
         {
             return Name;
         }
+    }
+
+    [Test]
+    public void SnapshotContributors_AreRegisteredAcrossSettingsAndPlatforms()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(Substitute.For<IEventBus>());
+        services.AddSingleton(Substitute.For<ITargetChannelProvider>());
+        services.AddSettingsStores();
+        services.AddTwitchClients();
+        services.AddYouTubeClients();
+
+        using var provider = services.BuildServiceProvider();
+        var keys = provider.GetServices<ISettingsSnapshotContributor>()
+            .SelectMany(static contributor => contributor.CollectSnapshots())
+            .Select(static entry => entry.Key)
+            .ToArray();
+
+        Assert.That(keys, Is.EquivalentTo(new[]
+        {
+            nameof(AppSettings),
+            "ObsIntegrationSettings",
+            "ObsChatSettings",
+            "UpdateSettings",
+            "DebugChannelSettings",
+            "BroadcastProfilesSettings",
+            "BroadcastProfilePlatformsSettings",
+            "PollsSettings",
+            "CommandSettings",
+            "Account.Bot",
+            "Account.Broadcaster",
+            "YouTubeSettings",
+            "YouTubeAccounts",
+        }));
     }
 }

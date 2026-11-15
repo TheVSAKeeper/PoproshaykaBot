@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Runtime;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -107,13 +108,13 @@ public sealed class DiagnosticsSnapshotSourceTests
 
         var accountsStore = new AccountsStore(filePath: Path.Combine(_directory, "accounts.json"));
 
-        _eventSubBot = new(TwitchOAuthRole.Bot,
+        _eventSubBot = new(PlatformAuthRole.Bot,
             eventSubClient,
             accountsStore,
             bus,
             NullLogger<EventSubConnectionHost>.Instance);
 
-        _eventSubBroadcaster = new(TwitchOAuthRole.Broadcaster,
+        _eventSubBroadcaster = new(PlatformAuthRole.Broadcaster,
             Substitute.For<ITwitchEventSubClient>(),
             accountsStore,
             bus,
@@ -237,7 +238,7 @@ public sealed class DiagnosticsSnapshotSourceTests
         Assert.Multiple(() =>
         {
             Assert.That(snapshot.EventSub.Select(status => status.Role),
-                Is.EquivalentTo(new[] { TwitchOAuthRole.Bot, TwitchOAuthRole.Broadcaster }));
+                Is.EquivalentTo(new[] { PlatformAuthRole.Bot, PlatformAuthRole.Broadcaster }));
 
             Assert.That(snapshot.EventSub.All(status => status.State == ConnectionState.Unknown), Is.True);
             Assert.That(snapshot.EventSub.All(status => status.ReconnectAttempt == 0), Is.True);

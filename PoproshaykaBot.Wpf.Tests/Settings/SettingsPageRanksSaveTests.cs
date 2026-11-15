@@ -1,6 +1,7 @@
 ﻿using KeepShell.Mcp;
 using KeepShell.Services;
 using KeepShell.Services.Modal;
+using KeepShell.Services.Platform;
 using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Dashboard;
@@ -19,6 +20,7 @@ using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
+using PoproshaykaBot.Wpf.ViewModels.Settings.Contributors;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.IO;
 using System.Reflection;
@@ -62,7 +64,7 @@ public class SettingsPageRanksSaveTests
         using var harness = new Harness(_root);
         var before = await File.ReadAllTextAsync(harness.SettingsPath);
 
-        harness.Page.Ranks.Entries[0].Emoji = "";
+        harness.Ranks.Entries[0].Emoji = "";
         await harness.Page.SaveCommand.ExecuteAsync(null);
 
         Assert.Multiple(() =>
@@ -104,7 +106,7 @@ public class SettingsPageRanksSaveTests
             await harness.CloseSettingsGateAsync();
         }
 
-        harness.Page.Ranks.Entries[0].Name = "ИМПЕРАТОР";
+        harness.Ranks.Entries[0].Name = "ИМПЕРАТОР";
         await harness.Page.SaveCommand.ExecuteAsync(null);
 
         UserRank[] edited =
@@ -135,13 +137,13 @@ public class SettingsPageRanksSaveTests
             await harness.CloseYouTubeGateAsync();
         }
 
-        harness.Page.YouTube.Enabled = true;
-        harness.Page.YouTube.ProjectId = "yt-project-1";
-        harness.Page.YouTube.ClientId = "yt-client-1";
-        harness.Page.YouTube.ClientSecret = "yt-secret-1";
-        harness.Page.YouTube.Channel = "@ytchannel";
-        harness.Page.YouTube.DailyQuotaBudgetText = "12000";
-        harness.Page.YouTube.Bot.AccessTokenValue = "bot-at-1";
+        harness.YouTube.Enabled = true;
+        harness.YouTube.ProjectId = "yt-project-1";
+        harness.YouTube.ClientId = "yt-client-1";
+        harness.YouTube.ClientSecret = "yt-secret-1";
+        harness.YouTube.Channel = "@ytchannel";
+        harness.YouTube.DailyQuotaBudgetText = "12000";
+        harness.YouTube.Bot.AccessTokenValue = "bot-at-1";
 
         await harness.Page.SaveCommand.ExecuteAsync(null);
 
@@ -160,7 +162,7 @@ public class SettingsPageRanksSaveTests
     public async Task YouTube_некорректный_бюджет_квоты_останавливает_сохранение()
     {
         using var harness = new Harness(_root);
-        harness.Page.YouTube.DailyQuotaBudgetText = "abc";
+        harness.YouTube.DailyQuotaBudgetText = "abc";
 
         await harness.Page.SaveCommand.ExecuteAsync(null);
 
@@ -179,7 +181,7 @@ public class SettingsPageRanksSaveTests
         harness.UpdateStore.Save(new() { ApplyMode = UpdateApplyMode.SilentOnExit });
         harness.UpdateCoordinator.FailDiscard = true;
 
-        harness.Page.Ranks.Entries[0].Name = "ИМПЕРАТОР";
+        harness.Ranks.Entries[0].Name = "ИМПЕРАТОР";
 
         Assert.ThrowsAsync<InvalidOperationException>(() => harness.Page.SaveCommand.ExecuteAsync(null),
             "Сбой шага обновлений доходит до окна ошибки");
@@ -191,10 +193,36 @@ public class SettingsPageRanksSaveTests
         });
     }
 
+    [Test]
+    public async Task Закрытый_гейт_другой_секции_не_оставляет_ранги_несохранёнными()
+    {
+        using var harness = new Harness(_root);
+        await harness.CloseYouTubeGateAsync();
+
+        harness.Ranks.Entries[0].Name = "ИМПЕРАТОР";
+        await harness.Page.SaveCommand.ExecuteAsync(null);
+        await harness.Page.SaveCommand.ExecuteAsync(null);
+
+        Assert.That(harness.RanksChanged, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Смена_отладочного_канала_публикует_ChatDisplaySettingsChanged_с_новым_каналом()
+    {
+        using var harness = new Harness(_root);
+
+        harness.DebugChannel.IsEnabled = true;
+        harness.DebugChannel.Channel = "debug_target";
+        await harness.Page.SaveCommand.ExecuteAsync(null);
+
+        Assert.That(harness.ChatDisplayChannels, Is.EqualTo(new[] { "debug_target" }));
+    }
+
     private sealed class Harness : IDisposable
     {
         private readonly SettingsWriteGate _gate = new();
         private readonly IDisposable _subscription;
+        private readonly IDisposable _chatDisplaySubscription;
 
         public Harness(string root)
         {
@@ -204,6 +232,7 @@ public class SettingsPageRanksSaveTests
 
             var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
             _subscription = bus.Subscribe<RanksSettingsChanged>(_ => RanksChanged++);
+            _chatDisplaySubscription = bus.Subscribe<ChatDisplaySettingsChanged>(e => ChatDisplayChannels.Add(e.Channel));
 
             var accountsStore = new AccountsStore(null, Path.Combine(root, "accounts.json"), _gate);
             var obsChatStore = new ObsChatStore(bus, null, Path.Combine(root, "obs-chat.json"), _gate);
@@ -226,44 +255,67 @@ public class SettingsPageRanksSaveTests
             YouTubeSettingsPath = Path.Combine(root, "youtube.json");
             YouTubeSettingsStore = new YouTubeSettingsStore(null, YouTubeSettingsPath, _gate);
             YouTubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(root, "youtube-accounts.json"), _gate);
+            var targetChannelProvider = new StoreTargetChannelProvider(debugChannelStore);
+
+            var oauth = new OAuthSettingsViewModel(
+                DispatchProxy.Create<ITwitchOAuthService, InertProxy>(),
+                accountsStore,
+                Dialogs,
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                DispatchProxy.Create<IEmbeddedTwitchAuthDialog, InertProxy>(),
+                new ManualUiDispatcher(),
+                TimeProvider.System,
+                NullLoggerFactory.Instance);
+
+            var youTube = new YouTubeSettingsSectionViewModel(
+                DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+                DispatchProxy.Create<IShellLauncher, InertProxy>(),
+                Dialogs,
+                new ManualUiDispatcher(),
+                TimeProvider.System,
+                NullLoggerFactory.Instance);
+
+            var obsChat = new ObsChatSettingsSectionViewModel(obsChatStore, SettingsManager, Dialogs, null!);
+            var obsIntegration = new ObsIntegrationSectionViewModel(null!, SettingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, Dialogs, null!);
+            var polls = new PollsSettingsSectionViewModel(pollsStore, TimeProvider.System);
+            var update = new UpdateSettingsSectionViewModel(UpdateCoordinator, updateStore, bus, Dialogs, new ManualUiDispatcher(), DispatchProxy.Create<IMainWindowController, InertProxy>());
+            var debugChannel = new DebugChannelSectionViewModel(DebugChannelOverride.None, debugChannelStore, null!, TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
+            var mcp = new McpSettingsSectionViewModel(mcpPreferences, new(mcpPreferences, null!, null!, mcpOptions, new EmptyServiceProvider()), mcpOptions, Dialogs, null!);
+            var dashboardLayout = new DashboardLayoutSectionViewModel(Array.Empty<DashboardTileViewModel>(), uiSettings, layoutStore);
+            var ranks = new RanksSettingsSectionViewModel();
+
+            ISettingsSectionContributor[] contributors =
+            [
+                new BasicSettingsSectionContributor(new(), new(), new(), SettingsManager, targetChannelProvider),
+                new TwitchConnectionSettingsContributor(oauth, accountsStore, SettingsManager, NullLogger<TwitchConnectionSettingsContributor>.Instance),
+                new YouTubeConnectionSettingsContributor(youTube, YouTubeSettingsStore, YouTubeAccountsStore),
+                new ObsSettingsSectionContributor(obsIntegration, obsChat, new(kestrel, Dialogs, null!), obsIntegrationStore, obsChatStore, Dialogs),
+                new StreamSettingsSectionContributor(new(), new(), polls),
+                new RanksSettingsSectionContributor(ranks),
+                new DashboardSettingsSectionContributor(dashboardLayout, new DashboardLayoutCoordinator(layoutStore)),
+                new UpdateSettingsSectionContributor(update, updateStore),
+                new DebugChannelSettingsSectionContributor(debugChannel, debugChannelStore),
+                new McpSettingsSectionContributor(mcp),
+                new AppearanceSettingsSectionContributor(new AppearanceSettingsSectionViewModel(new(uiSettings), new(uiSettings))),
+                new MiscSettingsSectionContributor(new(SettingsManager, null!, Dialogs, null!, null!, null!)),
+            ];
 
             Page = new(
-                new(),
-                new(),
-                new(kestrel, Dialogs, null!),
-                new(),
-                new(DispatchProxy.Create<ITwitchOAuthService, InertProxy>(), accountsStore, Dialogs, null!, null!, null!, NullLoggerFactory.Instance),
-                new(DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(), null!, Dialogs, new ManualUiDispatcher(), NullLoggerFactory.Instance),
-                new(obsChatStore, SettingsManager, Dialogs, null!),
-                new(null!, SettingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, Dialogs, null!),
-                new(),
-                new(),
-                new(pollsStore, TimeProvider.System),
-                new(SettingsManager, null!, Dialogs, null!, null!, null!),
-                new(UpdateCoordinator, updateStore, bus, Dialogs, new ManualUiDispatcher(), DispatchProxy.Create<IMainWindowController, InertProxy>()),
-                new(DebugChannelOverride.None, debugChannelStore, null!, TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance),
-                new(mcpPreferences, new(mcpPreferences, null!, null!, mcpOptions, new EmptyServiceProvider()), mcpOptions, Dialogs, null!),
-                new(Array.Empty<DashboardTileViewModel>(), uiSettings, layoutStore),
-                new(),
-                null!,
-                null!,
+                contributors,
                 SettingsManager,
-                accountsStore,
-                YouTubeSettingsStore,
-                YouTubeAccountsStore,
-                obsChatStore,
-                obsIntegrationStore,
-                updateStore,
-                debugChannelStore,
                 _gate,
-                new FakeTargetChannelProvider(),
-                new DashboardLayoutCoordinator(layoutStore),
-                bus,
                 kestrel,
+                bus,
                 NullLogger<SettingsPageViewModel>.Instance,
                 Dialogs,
                 uiSettings);
         }
+
+        public RanksSettingsSectionViewModel Ranks => Page.GetSectionContent<RanksSettingsSectionViewModel>();
+
+        public YouTubeSettingsSectionViewModel YouTube => Page.GetSectionContent<YouTubeSettingsSectionViewModel>();
+
+        public DebugChannelSectionViewModel DebugChannel => Page.GetSectionContent<DebugChannelSectionViewModel>();
 
         public string SettingsPath { get; }
 
@@ -285,6 +337,8 @@ public class SettingsPageRanksSaveTests
 
         public int RanksChanged { get; private set; }
 
+        public List<string> ChatDisplayChannels { get; } = [];
+
         public Task CloseSettingsGateAsync()
         {
             return _gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { "settings.json" });
@@ -304,6 +358,7 @@ public class SettingsPageRanksSaveTests
         {
             Page.Dispose();
             _subscription.Dispose();
+            _chatDisplaySubscription.Dispose();
         }
     }
 
@@ -328,9 +383,12 @@ public class SettingsPageRanksSaveTests
         public void Error(string title, string message) => throw new InvalidOperationException(message);
     }
 
-    private sealed class FakeTargetChannelProvider : ITargetChannelProvider
+    private sealed class StoreTargetChannelProvider(DebugChannelStore debugChannelStore) : ITargetChannelProvider
     {
-        public TargetChannelState Current { get; } = new("poproshayka", "poproshayka", false, true);
+        public TargetChannelState Current =>
+            debugChannelStore.Load() is { IsEnabled: true, Channel: { Length: > 0 } channel }
+                ? new(channel, "poproshayka", true, true)
+                : new("poproshayka", "poproshayka", false, true);
 
         public void BeginSession()
         {

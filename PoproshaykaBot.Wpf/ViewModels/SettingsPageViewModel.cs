@@ -1,92 +1,34 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
-using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Infrastructure.Events;
-using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
-using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Settings.Obs;
-using PoproshaykaBot.Core.Debugging;
-using PoproshaykaBot.Core.Settings.Debugging;
 using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.Settings.Update;
-using PoproshaykaBot.Core.Twitch.Auth;
-using PoproshaykaBot.Core.YouTube;
-using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.ComponentModel;
-using PoproshaykaBot.Wpf.Bootstrap;
-using System.Text.Json;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeader, IUnsavedChangesPage, IDisposable
 {
-    private static readonly HashSet<string> NonDirtyProperties = new(StringComparer.Ordinal)
-    {
-        nameof(Settings.HttpServerSectionViewModel.IsRunning),
-        nameof(Settings.HttpServerSectionViewModel.ServerStatusText),
-        nameof(Settings.HttpServerSectionViewModel.ServerStatusSeverity),
-        nameof(Settings.HttpServerSectionViewModel.ObsUrl),
-        nameof(Settings.ObsIntegrationSectionViewModel.IsBusy),
-        nameof(Settings.ObsIntegrationSectionViewModel.StatusText),
-        nameof(Settings.ObsIntegrationSectionViewModel.StatusSeverity),
-        nameof(Settings.ObsIntegrationSectionViewModel.OverlayUrl),
-        nameof(Settings.UpdateSettingsSectionViewModel.DownloadProgress),
-        nameof(Settings.UpdateSettingsSectionViewModel.CurrentVersionText),
-        nameof(Settings.UpdateSettingsSectionViewModel.IsFrameworkDependentVisible),
-        nameof(Settings.UpdateSettingsSectionViewModel.RepositoryHintText),
-        nameof(Settings.UpdateSettingsSectionViewModel.RepositoryHintSeverity),
-        "HasErrors",
-    };
-
-    private const string ObsSectionKey = "obs";
-
-    private const string DebugSectionKey = "debug";
-
     private const string NotWrittenNotice = "Настройки применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните настройки ещё раз.";
 
-    private static readonly string[] DraftlessSectionKeys = ["appearance", "misc", "mcp"];
-
+    private readonly IReadOnlyList<ISettingsSectionContributor> _contributors;
+    private readonly Dictionary<string, ISettingsSectionContributor> _contributorsByKey;
     private readonly SettingsManager _settingsManager;
-    private readonly AccountsStore _accountsStore;
-    private readonly YouTubeSettingsStore _youtubeSettingsStore;
-    private readonly YouTubeAccountsStore _youtubeAccountsStore;
-    private readonly ObsChatStore _obsChatStore;
-    private readonly ObsIntegrationStore _obsIntegrationStore;
-    private readonly UpdateStore _updateStore;
-    private readonly DebugChannelStore _debugChannelStore;
     private readonly SettingsWriteGate _settingsWriteGate;
-    private readonly ITargetChannelProvider _targetChannelProvider;
-    private readonly DashboardLayoutCoordinator _dashboardLayoutCoordinator;
-    private readonly IEventBus _eventBus;
     private readonly KestrelHttpServer _kestrelHttpServer;
+    private readonly IEventBus _eventBus;
     private readonly ILogger<SettingsPageViewModel> _logger;
     private readonly IDialogService _dialogService;
-
-    private readonly ObservableObject[] _dirtyTrackedSections;
     private readonly ISettingsStore _uiSettings;
 
-    private AppSettings _settings = new();
-    private TwitchAccountSettings _botDraft = new();
-    private TwitchAccountSettings _broadcasterDraft = new();
-    private YouTubeSettings _youtubeSettingsDraft = new();
-    private string _youtubeClientSecretDraft = string.Empty;
-    private YouTubeAccountSettings _youtubeBotDraft = new();
-    private YouTubeAccountSettings _youtubeBroadcasterDraft = new();
-    private ObsChatSettings _obsChatDraft = new();
-    private string _obsChatBaselineJson = string.Empty;
-    private ObsIntegrationSettings _obsIntegrationDraft = new();
-    private UpdateSettings _updateDraft = new();
-    private DebugChannelSettings _debugChannelDraft = new();
-    private int _dashboardRevision;
-    private bool _dashboardEdited;
-    private bool _ranksEdited;
-    private bool _suppressDirty;
+    private readonly List<IDisposable> _dirtySubscriptions = [];
+    private SettingsSessionState _session = new() { Settings = new() };
     private string _rememberedSection = string.Empty;
+    private bool _suppressDirty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasChanges))]
@@ -95,84 +37,41 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private bool _dirty;
 
     public SettingsPageViewModel(
-        BasicSettingsSectionViewModel basic,
-        RateLimitingSettingsViewModel rateLimiting,
-        HttpServerSectionViewModel httpServer,
-        MessagesSettingsSectionViewModel messages,
-        OAuthSettingsViewModel oauth,
-        YouTubeSettingsSectionViewModel youTube,
-        ObsChatSettingsSectionViewModel obsChat,
-        ObsIntegrationSectionViewModel obsIntegration,
-        AutoBroadcastSettingsViewModel autoBroadcast,
-        BotLifecycleAutomationSectionViewModel botLifecycle,
-        PollsSettingsSectionViewModel polls,
-        MiscSettingsSectionViewModel misc,
-        UpdateSettingsSectionViewModel update,
-        DebugChannelSectionViewModel debugChannel,
-        McpSettingsSectionViewModel mcp,
-        DashboardLayoutSectionViewModel dashboardLayout,
-        RanksSettingsSectionViewModel ranks,
-        ShellPreferences shell,
-        ThemeViewModel theme,
+        IEnumerable<ISettingsSectionContributor> contributors,
         SettingsManager settingsManager,
-        AccountsStore accountsStore,
-        YouTubeSettingsStore youtubeSettingsStore,
-        YouTubeAccountsStore youtubeAccountsStore,
-        ObsChatStore obsChatStore,
-        ObsIntegrationStore obsIntegrationStore,
-        UpdateStore updateStore,
-        DebugChannelStore debugChannelStore,
         SettingsWriteGate settingsWriteGate,
-        ITargetChannelProvider targetChannelProvider,
-        DashboardLayoutCoordinator dashboardLayoutCoordinator,
-        IEventBus eventBus,
         KestrelHttpServer kestrelHttpServer,
+        IEventBus eventBus,
         ILogger<SettingsPageViewModel> logger,
         IDialogService dialogService,
         ISettingsStore uiSettings)
     {
-        Basic = basic;
-        RateLimiting = rateLimiting;
-        HttpServer = httpServer;
-        Messages = messages;
-        OAuth = oauth;
-        YouTube = youTube;
-        ObsChat = obsChat;
-        ObsIntegration = obsIntegration;
-        AutoBroadcast = autoBroadcast;
-        BotLifecycle = botLifecycle;
-        Polls = polls;
-        Misc = misc;
-        Update = update;
-        DebugChannel = debugChannel;
-        Mcp = mcp;
-        DashboardLayout = dashboardLayout;
-        Ranks = ranks;
-        Shell = shell;
-        Theme = theme;
+        ArgumentNullException.ThrowIfNull(contributors);
+        ArgumentNullException.ThrowIfNull(settingsManager);
+        ArgumentNullException.ThrowIfNull(settingsWriteGate);
+        ArgumentNullException.ThrowIfNull(kestrelHttpServer);
+        ArgumentNullException.ThrowIfNull(eventBus);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(dialogService);
+        ArgumentNullException.ThrowIfNull(uiSettings);
 
+        _contributors = [.. contributors.OrderBy(c => c.Order)];
+        _contributorsByKey = _contributors.ToDictionary(c => c.SectionKey, StringComparer.Ordinal);
         _settingsManager = settingsManager;
-        _accountsStore = accountsStore;
-        _youtubeSettingsStore = youtubeSettingsStore;
-        _youtubeAccountsStore = youtubeAccountsStore;
-        _obsChatStore = obsChatStore;
-        _obsIntegrationStore = obsIntegrationStore;
-        _updateStore = updateStore;
-        _debugChannelStore = debugChannelStore;
         _settingsWriteGate = settingsWriteGate;
-        _targetChannelProvider = targetChannelProvider;
-        _dashboardLayoutCoordinator = dashboardLayoutCoordinator;
-        _eventBus = eventBus;
         _kestrelHttpServer = kestrelHttpServer;
+        _eventBus = eventBus;
         _logger = logger;
         _dialogService = dialogService;
         _uiSettings = uiSettings;
 
-        _dirtyTrackedSections = [Basic, RateLimiting, AutoBroadcast, BotLifecycle, ObsChat, ObsIntegration, Update, DebugChannel];
+        Sections = new([.. _contributors.Select(c => c.CreateSection())]);
+        SectionPresentations = [.. _contributors.Select(c =>
+            new SettingsSectionPresentation(Sections[c.SectionKey]!, c.GetBlocks(), c.IsFullWidth))];
 
         _rememberedSection = uiSettings.GetStringValue(SettingsKeys.SettingsSection) ?? string.Empty;
         Sections.Restore(_rememberedSection);
-        Subscribe();
+        Sections.PropertyChanged += OnSectionsPropertyChanged;
 
         OnEnter();
     }
@@ -183,122 +82,33 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     public string? PageDescription => "Параметры бота, чата OBS, авторизации и обновлений.";
 
-    public SettingsSectionList Sections { get; } = CreateSections();
+    public SettingsSectionList Sections { get; }
 
-    public static SettingsSectionList CreateSections()
-    {
-        return new(
-            new SettingsSection(
-                "basic",
-                "Основные",
-                PackIconLucideKind.Settings2,
-                "канал twitch аккаунт отображения чата лимиты ограничения отправки задержка приветствие сообщения шаблоны текст",
-                [
-                    new SettingsSubsection("channel", "Канал и аккаунт"),
-                    new SettingsSubsection("limits", "Ограничения отправки"),
-                    new SettingsSubsection("messages", "Шаблоны сообщений"),
-                ]),
-            new SettingsSection(
-                "oauth",
-                "Авторизация",
-                PackIconLucideKind.KeyRound,
-                "oauth токен client id secret redirect uri scopes бот стример вещатель права доступа вход приложение аккаунт",
-                [
-                    new SettingsSubsection("app", "Приложение Twitch"),
-                    new SettingsSubsection("bot", "Аккаунт бота"),
-                    new SettingsSubsection("broadcaster", "Аккаунт стримера"),
-                ]),
-            new SettingsSection(
-                "youtube",
-                "YouTube",
-                PackIconLucideKind.Tv,
-                "youtube ютуб google проект project id client secret квота канал авторизация бот стример testing production",
-                [
-                    new SettingsSubsection("project", "Google-проект"),
-                    new SettingsSubsection("bot", "Аккаунт бота"),
-                    new SettingsSubsection("broadcaster", "Аккаунт стримера"),
-                ]),
-            new SettingsSection(
-                "obs",
-                "OBS",
-                PackIconLucideKind.MonitorPlay,
-                "websocket подключение хост пароль сцена браузер источник оверлей чат цвета шрифт анимация http сервер порт",
-                [
-                    new SettingsSubsection("connection", "Подключение к OBS"),
-                    new SettingsSubsection("overlay", "Оформление чат-оверлея"),
-                    new SettingsSubsection("server", "HTTP сервер оверлея"),
-                ]),
-            new SettingsSection(
-                "stream",
-                "Трансляция",
-                PackIconLucideKind.Radio,
-                "автоматический режим рассылка eventsub автозапуск бота остановка опросы голосование категория название",
-                [
-                    new SettingsSubsection("auto", "Автоматический режим"),
-                    new SettingsSubsection("lifecycle", "Автозапуск бота"),
-                    new SettingsSubsection("polls", "Опросы"),
-                ]),
-            new SettingsSection("ranks", "Ранги", PackIconLucideKind.Crown, "ранги ступени пороги баллы король ферзь ладья слон конь пешка значок лестница"),
-            new SettingsSection("dashboard", "Дашборд", PackIconLucideKind.LayoutDashboard, "раскладка плитки сетка колонки строки обзор палитра перетаскивание"),
-            new SettingsSection("update", "Обновления", PackIconLucideKind.Download, "github релизы версия репозиторий проверка загрузка установка портативная сборка"),
-            new SettingsSection("debug", "Отладка", PackIconLucideKind.Bug, "чужой канал наблюдение чтение чата тестирование только чтение отправка сообщений"),
-            new SettingsSection("mcp", "Агентная отладка", PackIconLucideKind.Bot, "mcp агент claude codex сервер токен порт инструменты"),
-            new SettingsSection("appearance", "Оформление", PackIconLucideKind.Palette, "тема масштаб шрифта размер текста заголовок страницы внешний вид"),
-            new SettingsSection("misc", "Прочее", PackIconLucideKind.Wrench, "данные приложения папка настроек логи профили трансляций импорт экспорт сброс"));
-    }
+    public IReadOnlyList<SettingsSectionPresentation> SectionPresentations { get; }
 
-    public BasicSettingsSectionViewModel Basic { get; }
-
-    public RateLimitingSettingsViewModel RateLimiting { get; }
-
-    public HttpServerSectionViewModel HttpServer { get; }
-
-    public MessagesSettingsSectionViewModel Messages { get; }
-
-    public OAuthSettingsViewModel OAuth { get; }
-
-    public YouTubeSettingsSectionViewModel YouTube { get; }
-
-    public ObsChatSettingsSectionViewModel ObsChat { get; }
-
-    public ObsIntegrationSectionViewModel ObsIntegration { get; }
-
-    public AutoBroadcastSettingsViewModel AutoBroadcast { get; }
-
-    public BotLifecycleAutomationSectionViewModel BotLifecycle { get; }
-
-    public PollsSettingsSectionViewModel Polls { get; }
-
-    public MiscSettingsSectionViewModel Misc { get; }
-
-    public UpdateSettingsSectionViewModel Update { get; }
-
-    public DebugChannelSectionViewModel DebugChannel { get; }
-
-    public McpSettingsSectionViewModel Mcp { get; }
-
-    public DashboardLayoutSectionViewModel DashboardLayout { get; }
-
-    public RanksSettingsSectionViewModel Ranks { get; }
-
-    public ShellPreferences Shell { get; }
-
-    public ThemeViewModel Theme { get; }
-
-    public bool HasChanges => Dirty || Polls.HasChanges;
+    public bool HasChanges => Dirty || _contributors.Any(c => c.HasExternalChanges);
 
     public bool HasDraft => HasChanges
         || Sections.Selected is not { } selected
-        || !DraftlessSectionKeys.Contains(selected.Key, StringComparer.Ordinal);
+        || !_contributorsByKey.TryGetValue(selected.Key, out var contributor)
+        || !contributor.IsDraftless;
 
     public bool HasUnsavedChanges => HasChanges;
 
     public string UnsavedChangesSubject => "На странице настроек есть несохранённые изменения.";
 
+    public T GetSectionContent<T>() where T : class
+    {
+        return SectionPresentations
+            .SelectMany(p => p.Blocks)
+            .Select(b => b.Content)
+            .OfType<T>()
+            .First();
+    }
+
     public async Task<bool> TrySaveUnsavedChangesAsync()
     {
         await SaveCommand.ExecuteAsync(null);
-
         return !HasChanges;
     }
 
@@ -313,41 +123,18 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
         try
         {
-            _settings = JsonStoreClone.DeepClone(_settingsManager.Current);
-            _botDraft = JsonStoreClone.DeepClone(_accountsStore.LoadBot());
-            _broadcasterDraft = JsonStoreClone.DeepClone(_accountsStore.LoadBroadcaster());
-            _youtubeSettingsDraft = JsonStoreClone.DeepClone(_youtubeSettingsStore.Load());
-            _youtubeClientSecretDraft = _youtubeAccountsStore.LoadClientSecret();
-            _youtubeBotDraft = JsonStoreClone.DeepClone(_youtubeAccountsStore.LoadBot());
-            _youtubeBroadcasterDraft = JsonStoreClone.DeepClone(_youtubeAccountsStore.LoadBroadcaster());
-            _obsChatDraft = JsonStoreClone.DeepClone(_obsChatStore.Load());
-            _obsChatBaselineJson = SerializeObsChat(_obsChatDraft);
-            _obsIntegrationDraft = JsonStoreClone.DeepClone(_obsIntegrationStore.Load());
-            _updateDraft = JsonStoreClone.DeepClone(_updateStore.Load());
-            _debugChannelDraft = JsonStoreClone.DeepClone(_debugChannelStore.Load());
+            _session = new()
+            {
+                Settings = JsonStoreClone.DeepClone(_settingsManager.Current),
+            };
 
-            Basic.LoadSettings(_settings.Twitch);
-            RateLimiting.LoadSettings(_settings.Twitch);
-            HttpServer.LoadSettings(_settings.Twitch);
-            Messages.LoadSettings(_settings.Twitch.Messages);
-            OAuth.Load(_settings, _botDraft, _broadcasterDraft);
-            YouTube.Load(_youtubeSettingsDraft, _youtubeClientSecretDraft, _youtubeBotDraft, _youtubeBroadcasterDraft);
-            ObsChat.LoadFrom(_obsChatDraft);
-            ObsIntegration.Load(_obsIntegrationDraft);
-            AutoBroadcast.LoadSettings(_settings.Twitch.AutoBroadcast);
-            BotLifecycle.LoadSettings(_settings.Twitch.BotLifecycleAutomation);
-            Update.LoadSettings(_updateDraft);
-            DebugChannel.LoadSettings(_debugChannelDraft);
-            var dashboardSnapshot = _dashboardLayoutCoordinator.Read();
+            DisposeDirtySubscriptions();
 
-            _dashboardRevision = dashboardSnapshot.Revision;
-            _dashboardEdited = false;
-            DashboardLayout.LoadSettings(dashboardSnapshot.Layout);
-            Ranks.Load(_settings.Ranks.Ranks);
-            _ranksEdited = false;
-            Polls.RevertCommand.Execute(null);
-
-            OAuth.RefreshChannel(Basic.GetChannel());
+            foreach (var contributor in _contributors)
+            {
+                contributor.Load(_session);
+                _dirtySubscriptions.Add(contributor.SubscribeDirty(_session, MarkDirty, NotifyChangesState));
+            }
         }
         finally
         {
@@ -360,43 +147,44 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     public void Dispose()
     {
-        foreach (var section in _dirtyTrackedSections)
-        {
-            section.PropertyChanged -= OnSectionPropertyChanged;
-        }
-
-        foreach (var entry in Messages.Entries)
-        {
-            entry.PropertyChanged -= OnSectionPropertyChanged;
-        }
-
-        OAuth.SettingChanged -= OnOAuthSettingChanged;
-        YouTube.SettingChanged -= OnOAuthSettingChanged;
-        Polls.PropertyChanged -= OnPollsPropertyChanged;
-        DashboardLayout.Edited -= OnDashboardLayoutEdited;
-        Ranks.Edited -= OnRanksEdited;
         Sections.PropertyChanged -= OnSectionsPropertyChanged;
+        DisposeDirtySubscriptions();
+
+        foreach (var contributor in _contributors)
+        {
+            (contributor as IDisposable)?.Dispose();
+        }
     }
 
-    private void Subscribe()
+    private void DisposeDirtySubscriptions()
     {
-        Sections.PropertyChanged += OnSectionsPropertyChanged;
-
-        foreach (var section in _dirtyTrackedSections)
+        foreach (var subscription in _dirtySubscriptions)
         {
-            section.PropertyChanged += OnSectionPropertyChanged;
+            subscription.Dispose();
         }
 
-        foreach (var entry in Messages.Entries)
-        {
-            entry.PropertyChanged += OnSectionPropertyChanged;
-        }
+        _dirtySubscriptions.Clear();
+    }
 
-        OAuth.SettingChanged += OnOAuthSettingChanged;
-        YouTube.SettingChanged += OnOAuthSettingChanged;
-        Polls.PropertyChanged += OnPollsPropertyChanged;
-        DashboardLayout.Edited += OnDashboardLayoutEdited;
-        Ranks.Edited += OnRanksEdited;
+    private void MarkDirty()
+    {
+        if (!_suppressDirty)
+        {
+            Dirty = true;
+        }
+    }
+
+    private void NotifyChangesState()
+    {
+        OnPropertyChanged(nameof(HasChanges));
+        OnPropertyChanged(nameof(HasDraft));
+        SaveCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ResetDirty()
+    {
+        Dirty = false;
+        NotifyChangesState();
     }
 
     private void OnSectionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -404,7 +192,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         if (string.Equals(e.PropertyName, nameof(SettingsSectionList.SelectedPath), StringComparison.Ordinal))
         {
             RememberSelection();
-
             return;
         }
 
@@ -428,119 +215,69 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     private void RunSelectedSectionEntryChecks()
     {
-        if (string.Equals(Sections.Selected?.Key, ObsSectionKey, StringComparison.Ordinal))
+        if (Sections.Selected is { } selected
+            && _contributorsByKey.TryGetValue(selected.Key, out var contributor))
         {
-            ObsIntegration.RunAutoConnectionCheck();
-        }
-
-        if (string.Equals(Sections.Selected?.Key, DebugSectionKey, StringComparison.Ordinal))
-        {
-            DebugChannel.Recent.OnShown();
+            contributor.OnSectionShown();
         }
     }
 
     [RelayCommand(CanExecute = nameof(HasChanges))]
     private async Task SaveAsync()
     {
-        if (_ranksEdited && Ranks.HasErrors)
+        foreach (var contributor in _contributors)
         {
-            _dialogService.Warning("Настройки", "В разделе «Ранги» есть ошибки, под полями написано, что не так. Исправьте их и сохраните ещё раз.");
-            return;
-        }
-
-        if (YouTube.HasQuotaBudgetError)
-        {
-            _dialogService.Warning("Настройки", "В разделе «YouTube» указан некорректный бюджет квоты. Исправьте его и сохраните ещё раз.");
-            return;
+            if (contributor.ValidateBeforeSave() is { } validationError)
+            {
+                _dialogService.Warning("Настройки", validationError);
+                return;
+            }
         }
 
         try
         {
-            if (_ranksEdited)
-            {
-                _settings.Ranks.Ranks = Ranks.BuildRanks();
-            }
-
-            Basic.SaveSettings(_settings.Twitch);
-            RateLimiting.SaveSettings(_settings.Twitch);
-            Messages.SaveSettings(_settings.Twitch.Messages);
-            OAuth.Save(_settings);
-            YouTube.SaveTo(_youtubeSettingsDraft, out _youtubeClientSecretDraft, _youtubeBotDraft, _youtubeBroadcasterDraft);
-            ObsChat.ApplyTo(_obsChatDraft);
-            ObsIntegration.SaveTo(_obsIntegrationDraft);
-            AutoBroadcast.SaveSettings(_settings.Twitch.AutoBroadcast);
-            BotLifecycle.SaveSettings(_settings.Twitch.BotLifecycleAutomation);
-            Update.SaveSettings(_updateDraft);
-            DebugChannel.SaveSettings(_debugChannelDraft);
-
-            var prevBotToken = _accountsStore.LoadBot().AccessToken;
-            var prevBroadcasterToken = _accountsStore.LoadBroadcaster().AccessToken;
-            var prevYouTubeBotToken = _youtubeAccountsStore.LoadBot().AccessToken;
-            var prevYouTubeBroadcasterToken = _youtubeAccountsStore.LoadBroadcaster().AccessToken;
             var prevPort = _settingsManager.Current.Twitch.HttpServerPort;
-            var prevTargetChannel = _targetChannelProvider.Current.Login;
-            var prevChatDisplayAccount = _settingsManager.Current.Twitch.ChatDisplayAccount;
 
-            ReconcileHttpServerPort();
-            var newPort = _settings.Twitch.HttpServerPort;
-
-            var written = _settingsManager.SaveSettings(_settings);
-
-            if (_ranksEdited)
+            foreach (var contributor in _contributors)
             {
-                _ranksEdited = !written;
-                await _eventBus.PublishAsync(new RanksSettingsChanged());
+                contributor.BeginSave(_session.Settings);
             }
 
-            written &= _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
-            written &= _youtubeSettingsStore.Save(_youtubeSettingsDraft);
-            written &= _youtubeAccountsStore.SaveAll(_youtubeClientSecretDraft, _youtubeBotDraft, _youtubeBroadcasterDraft);
-            SaveObsChatDraftWithConflictCheck();
-            _obsIntegrationStore.Save(_obsIntegrationDraft);
-            var storedUpdate = _updateStore.Load();
-            _updateDraft.SkippedVersion = storedUpdate.SkippedVersion;
-            _updateDraft.LastCheckUtc = storedUpdate.LastCheckUtc;
-            _updateStore.Save(_updateDraft);
-            await Update.OnSavedAsync(storedUpdate.ApplyMode);
-            _debugChannelStore.Save(_debugChannelDraft);
-            SaveDashboardLayout();
-
-            if (Polls.HasChanges)
-            {
-                written &= Polls.SaveChanges();
-            }
-
-            if (!string.Equals(prevBotToken, _botDraft.AccessToken, StringComparison.Ordinal))
-            {
-                await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
-            }
-
-            if (!string.Equals(prevBroadcasterToken, _broadcasterDraft.AccessToken, StringComparison.Ordinal))
-            {
-                await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
-            }
-
-            if (!string.Equals(prevYouTubeBotToken, _youtubeBotDraft.AccessToken, StringComparison.Ordinal))
-            {
-                await _eventBus.PublishAsync(new YouTubeAuthorizationRefreshed(YouTubeOAuthRole.Bot));
-            }
-
-            if (!string.Equals(prevYouTubeBroadcasterToken, _youtubeBroadcasterDraft.AccessToken, StringComparison.Ordinal))
-            {
-                await _eventBus.PublishAsync(new YouTubeAuthorizationRefreshed(YouTubeOAuthRole.Broadcaster));
-            }
-
-            var newTargetChannel = _targetChannelProvider.Current.Login;
-
-            if (!string.Equals(prevTargetChannel, newTargetChannel, StringComparison.OrdinalIgnoreCase)
-                || prevChatDisplayAccount != _settings.Twitch.ChatDisplayAccount)
-            {
-                await _eventBus.PublishAsync(new ChatDisplaySettingsChanged(newTargetChannel, _settings.Twitch.ChatDisplayAccount));
-            }
-
+            var newPort = _session.Settings.Twitch.HttpServerPort;
+            var appSettingsWritten = _settingsManager.SaveSettings(_session.Settings);
+            var written = appSettingsWritten;
             var portChanged = newPort != prevPort;
-            var restartFailed = false;
 
+            foreach (var contributor in _contributors)
+            {
+                var immediateEvents = await contributor.OnAppSettingsSavedAsync(appSettingsWritten);
+                foreach (var @event in immediateEvents)
+                {
+                    await @event.PublishAsync(_eventBus);
+                }
+            }
+
+            foreach (var contributor in _contributors)
+            {
+                var outcome = await contributor.SaveAsync(_session.Settings, appSettingsWritten);
+                written &= outcome.Written;
+                portChanged |= outcome.RequiresHttpServerRestart;
+
+                foreach (var @event in outcome.Events)
+                {
+                    await @event.PublishAsync(_eventBus);
+                }
+            }
+
+            foreach (var contributor in _contributors)
+            {
+                foreach (var @event in contributor.CollectPostSaveEvents(_session.Settings))
+                {
+                    await @event.PublishAsync(_eventBus);
+                }
+            }
+
+            var restartFailed = false;
             if (portChanged && _kestrelHttpServer.IsRunning)
             {
                 restartFailed = !await TryRestartHttpServerAsync(prevPort, newPort);
@@ -578,40 +315,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         OnEnter();
     }
 
-    private void SaveDashboardLayout()
-    {
-        if (!_dashboardEdited)
-        {
-            return;
-        }
-
-        var layout = DashboardLayout.BuildLayout();
-
-        _dashboardRevision = _dashboardLayoutCoordinator
-            .Commit(layout, _dashboardRevision, DashboardLayout.TreeEdited)
-            .Snapshot.Revision;
-        _dashboardEdited = false;
-    }
-
-    private void ReconcileHttpServerPort()
-    {
-        if (!RedirectUriPortResolver.TryResolve(_settings.Twitch.RedirectUri, out var derivedPort))
-        {
-            _logger.SettingsRedirectUriInvalid(_settings.Twitch.RedirectUri);
-
-            return;
-        }
-
-        if (_settings.Twitch.HttpServerPort == derivedPort)
-        {
-            return;
-        }
-
-        _logger.SettingsHttpPortUpdated(_settings.Twitch.HttpServerPort, derivedPort);
-
-        _settings.Twitch.HttpServerPort = derivedPort;
-    }
-
     private async Task<bool> TryRestartHttpServerAsync(int prevPort, int newPort)
     {
         try
@@ -630,110 +333,5 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
             return false;
         }
-    }
-
-    private void SaveObsChatDraftWithConflictCheck()
-    {
-        var current = _obsChatStore.Load();
-        var currentJson = SerializeObsChat(current);
-
-        if (!string.Equals(currentJson, _obsChatBaselineJson, StringComparison.Ordinal)
-            && !_dialogService.ConfirmWarning(
-                "Конфликт настроек чат-оверлея",
-                "Настройки чат-оверлея были изменены извне (например, через демо-страницу) уже после открытия этой страницы.\n\nПерезаписать их значениями отсюда?\n\n«Да» – применить значения из этой страницы.\n«Нет» – оставить внешние изменения, не трогая раздел «Оформление чат-оверлея»."))
-        {
-            _obsChatDraft = JsonStoreClone.DeepClone(current);
-
-            _suppressDirty = true;
-
-            try
-            {
-                ObsChat.LoadFrom(_obsChatDraft);
-            }
-            finally
-            {
-                _suppressDirty = false;
-            }
-
-            _obsChatBaselineJson = currentJson;
-            return;
-        }
-
-        _obsChatStore.Save(_obsChatDraft);
-        _obsChatBaselineJson = SerializeObsChat(_obsChatDraft);
-    }
-
-    private void ResetDirty()
-    {
-        Dirty = false;
-        OnPropertyChanged(nameof(HasChanges));
-        OnPropertyChanged(nameof(HasDraft));
-        SaveCommand.NotifyCanExecuteChanged();
-    }
-
-    private void OnSectionPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (_suppressDirty)
-        {
-            return;
-        }
-
-        if (e.PropertyName is { } name && NonDirtyProperties.Contains(name))
-        {
-            return;
-        }
-
-        if (ReferenceEquals(sender, ObsIntegration) && ObsIntegration.IsAutoPopulating)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(sender, Basic) && string.Equals(e.PropertyName, nameof(BasicSettingsSectionViewModel.Channel), StringComparison.Ordinal))
-        {
-            OAuth.RefreshChannel(Basic.GetChannel());
-        }
-
-        Dirty = true;
-    }
-
-    private void OnOAuthSettingChanged(object? sender, EventArgs e)
-    {
-        if (!_suppressDirty)
-        {
-            Dirty = true;
-        }
-    }
-
-    private void OnDashboardLayoutEdited(object? sender, EventArgs e)
-    {
-        if (!_suppressDirty)
-        {
-            _dashboardEdited = true;
-            Dirty = true;
-        }
-    }
-
-    private void OnRanksEdited(object? sender, EventArgs e)
-    {
-        if (!_suppressDirty)
-        {
-            _ranksEdited = true;
-            Dirty = true;
-        }
-    }
-
-    private void OnPollsPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (string.Equals(e.PropertyName, nameof(PollsSettingsSectionViewModel.HasChanges), StringComparison.Ordinal))
-        {
-            OnPropertyChanged(nameof(HasChanges));
-            OnPropertyChanged(nameof(HasDraft));
-            SaveCommand.NotifyCanExecuteChanged();
-        }
-    }
-
-    private static string SerializeObsChat(ObsChatSettings settings)
-    {
-        return JsonSerializer.Serialize(settings, JsonStoreOptions.Default);
     }
 }

@@ -1,11 +1,13 @@
-﻿namespace PoproshaykaBot.Core.Twitch.Auth;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
+
+namespace PoproshaykaBot.Core.Twitch.Auth;
 
 public interface ITwitchOAuthService
 {
-    event Action<TwitchOAuthRole, string>? StatusChanged;
+    event Action<PlatformAuthRole, string>? StatusChanged;
 
     Task<string> StartOAuthFlowAsync(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
@@ -15,7 +17,7 @@ public interface ITwitchOAuthService
         CancellationToken ct = default);
 
     Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
@@ -33,16 +35,16 @@ public interface ITwitchOAuthService
     Task<TokenValidationInfo?> ValidateAsync(string token, CancellationToken ct = default);
 
     Task<string> RefreshTokenAsync(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string refreshToken,
         CancellationToken ct = default);
 
-    Task<string?> GetAccessTokenAsync(TwitchOAuthRole role, CancellationToken ct = default);
+    Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default);
 
     void UpdateSettings(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string accessToken,
         string refreshToken,
         IEnumerable<string>? newScopes,
@@ -51,5 +53,5 @@ public interface ITwitchOAuthService
         int expiresInSeconds = 0,
         bool publishAuthorizationRefreshed = false);
 
-    void ClearTokens(TwitchOAuthRole role);
+    void ClearTokens(PlatformAuthRole role);
 }

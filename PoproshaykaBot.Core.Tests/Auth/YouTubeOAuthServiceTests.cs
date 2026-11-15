@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Tests.Polls;
@@ -63,14 +65,14 @@ public sealed class YouTubeOAuthServiceTests
             AuthTimeout = TimeSpan.FromSeconds(15),
             CredentialsRejectedCooldown = TimeSpan.FromMinutes(10),
             TokenRefreshMargin = TimeSpan.FromMinutes(5),
-            TimeProvider = _clock,
         };
 
         var statusReporter = new YouTubeOAuthStatusReporter(NullLogger<YouTubeOAuthStatusReporter>.Instance);
         var tokenClient = new YouTubeOAuthTokenClient(_httpFactory, _options, NullLogger<YouTubeOAuthTokenClient>.Instance);
-        var accountWriter = new YouTubeOAuthAccountWriter(_accountsStore, _eventBus, statusReporter, _options, NullLogger<YouTubeOAuthAccountWriter>.Instance);
-        _flow = new(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsStore, _options, NullLogger<YouTubeOAuthFlowCoordinator>.Instance);
-        _refresher = new(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsStore, _options, NullLogger<YouTubeOAuthTokenRefresher>.Instance);
+        var channelIdentityClient = new YouTubeChannelIdentityClient(_httpFactory, _options, NullLogger<YouTubeChannelIdentityClient>.Instance);
+        var accountWriter = new YouTubeOAuthAccountWriter(_accountsStore, _eventBus, statusReporter, _clock, NullLogger<YouTubeOAuthAccountWriter>.Instance);
+        _flow = new(tokenClient, channelIdentityClient, accountWriter, statusReporter, _accountsStore, _settingsStore, _options, NullLogger<YouTubeOAuthFlowCoordinator>.Instance);
+        _refresher = new(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsStore, _options, _eventBus, _clock, NullLogger<YouTubeOAuthTokenRefresher>.Instance);
         _service = new(_flow, _refresher, accountWriter, statusReporter);
     }
 
@@ -130,7 +132,7 @@ public sealed class YouTubeOAuthServiceTests
         Task? browserTask = null;
 
         var flowResult = await _service.StartOAuthFlowAsync(
-            YouTubeOAuthRole.Bot,
+            PlatformAuthRole.Bot,
             clientId: string.Empty,
             clientSecret: string.Empty,
             scopes: null,
@@ -185,7 +187,7 @@ public sealed class YouTubeOAuthServiceTests
         }
 
         await _eventBus.Received(1)
-            .PublishAsync(Arg.Is<YouTubeAuthorizationRefreshed>(e => e.Role == YouTubeOAuthRole.Bot), Arg.Any<CancellationToken>());
+            .PublishAsync(Arg.Is<PlatformAuthorizationRefreshed>(e => e.Role == PlatformAuthRole.Bot), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -211,7 +213,7 @@ public sealed class YouTubeOAuthServiceTests
         };
 
         var draft = await _service.StartOAuthFlowToDraftAsync(
-            YouTubeOAuthRole.Broadcaster,
+            PlatformAuthRole.Broadcaster,
             "override-client-id",
             "override-secret",
             null,
@@ -233,7 +235,7 @@ public sealed class YouTubeOAuthServiceTests
             Assert.That(_accountsStore.LoadBroadcaster().AccessToken, Is.Empty);
         }
 
-        await _eventBus.DidNotReceiveWithAnyArgs().PublishAsync(default(YouTubeAuthorizationRefreshed)!, default);
+        await _eventBus.DidNotReceiveWithAnyArgs().PublishAsync(default(PlatformAuthorizationRefreshed)!, default);
     }
 
     [Test]
@@ -244,7 +246,7 @@ public sealed class YouTubeOAuthServiceTests
 
         var exception = Assert.ThrowsAsync<YouTubeOAuthException>(() =>
             _service.StartOAuthFlowAsync(
-                YouTubeOAuthRole.Bot,
+                PlatformAuthRole.Bot,
                 string.Empty,
                 string.Empty,
                 null,
@@ -279,7 +281,7 @@ public sealed class YouTubeOAuthServiceTests
 
         var exception = Assert.ThrowsAsync<YouTubeOAuthException>(() =>
             _service.StartOAuthFlowAsync(
-                YouTubeOAuthRole.Bot,
+                PlatformAuthRole.Bot,
                 string.Empty,
                 string.Empty,
                 null,
@@ -309,7 +311,7 @@ public sealed class YouTubeOAuthServiceTests
     [Test]
     public async Task GetAccessTokenAsync_WhenExpired_PreservesExistingRefreshTokenIfOmitted()
     {
-        _accountsStore.Mutate(YouTubeOAuthRole.Broadcaster, account =>
+        _accountsStore.Mutate(PlatformAuthRole.Broadcaster, account =>
         {
             account.AccessToken = "old-access";
             account.RefreshToken = "keep-this-refresh";
@@ -325,7 +327,7 @@ public sealed class YouTubeOAuthServiceTests
             }
             """);
 
-        var token = await _service.GetAccessTokenAsync(YouTubeOAuthRole.Broadcaster);
+        var token = await _service.GetAccessTokenAsync(PlatformAuthRole.Broadcaster);
         var updated = _accountsStore.LoadBroadcaster();
 
         using (Assert.EnterMultipleScope())
@@ -337,13 +339,13 @@ public sealed class YouTubeOAuthServiceTests
         }
 
         await _eventBus.Received(1)
-            .PublishAsync(Arg.Is<YouTubeAuthorizationRefreshed>(e => e.Role == YouTubeOAuthRole.Broadcaster), Arg.Any<CancellationToken>());
+            .PublishAsync(Arg.Is<PlatformAuthorizationRefreshed>(e => e.Role == PlatformAuthRole.Broadcaster), Arg.Any<CancellationToken>());
     }
 
     [Test]
     public async Task GetAccessTokenAsync_WhenGoogleReturnsInvalidGrant_ClearsAccountTokensAndRespectsCooldown()
     {
-        _accountsStore.Mutate(YouTubeOAuthRole.Bot, account =>
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
         {
             account.AccessToken = "expired";
             account.RefreshToken = "revoked-refresh";
@@ -359,8 +361,8 @@ public sealed class YouTubeOAuthServiceTests
             }
             """);
 
-        var first = await _service.GetAccessTokenAsync(YouTubeOAuthRole.Bot);
-        var second = await _service.GetAccessTokenAsync(YouTubeOAuthRole.Bot);
+        var first = await _service.GetAccessTokenAsync(PlatformAuthRole.Bot);
+        var second = await _service.GetAccessTokenAsync(PlatformAuthRole.Bot);
         var account = _accountsStore.LoadBot();
 
         using (Assert.EnterMultipleScope())
@@ -377,7 +379,7 @@ public sealed class YouTubeOAuthServiceTests
     [Test]
     public async Task GetAccessTokenAsync_OnTransientError_EntersBackoffAndRecoversAfterDelay()
     {
-        _accountsStore.Mutate(YouTubeOAuthRole.Bot, account =>
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
         {
             account.AccessToken = "expired";
             account.RefreshToken = "valid-refresh";
@@ -393,11 +395,11 @@ public sealed class YouTubeOAuthServiceTests
                 : MakeJson(HttpStatusCode.OK, """{ "access_token": "recovered-access", "expires_in": 3600 }""");
         };
 
-        var failed = await _service.GetAccessTokenAsync(YouTubeOAuthRole.Bot);
-        var backedOff = await _service.GetAccessTokenAsync(YouTubeOAuthRole.Bot);
+        var failed = await _service.GetAccessTokenAsync(PlatformAuthRole.Bot);
+        var backedOff = await _service.GetAccessTokenAsync(PlatformAuthRole.Bot);
 
         _clock.UtcNow = _clock.UtcNow.AddSeconds(5);
-        var recovered = await _service.GetAccessTokenAsync(YouTubeOAuthRole.Bot);
+        var recovered = await _service.GetAccessTokenAsync(PlatformAuthRole.Bot);
 
         using (Assert.EnterMultipleScope())
         {
@@ -420,13 +422,13 @@ public sealed class YouTubeOAuthServiceTests
             LoopbackConnectionTimeout = TimeSpan.FromMilliseconds(150),
             CredentialsRejectedCooldown = _options.CredentialsRejectedCooldown,
             TokenRefreshMargin = _options.TokenRefreshMargin,
-            TimeProvider = _clock,
         };
 
         var statusReporter = new YouTubeOAuthStatusReporter(NullLogger<YouTubeOAuthStatusReporter>.Instance);
         var tokenClient = new YouTubeOAuthTokenClient(_httpFactory, fastTimeoutOptions, NullLogger<YouTubeOAuthTokenClient>.Instance);
-        var accountWriter = new YouTubeOAuthAccountWriter(_accountsStore, _eventBus, statusReporter, fastTimeoutOptions, NullLogger<YouTubeOAuthAccountWriter>.Instance);
-        using var coordinator = new YouTubeOAuthFlowCoordinator(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsStore, fastTimeoutOptions, NullLogger<YouTubeOAuthFlowCoordinator>.Instance);
+        var channelIdentityClient = new YouTubeChannelIdentityClient(_httpFactory, fastTimeoutOptions, NullLogger<YouTubeChannelIdentityClient>.Instance);
+        var accountWriter = new YouTubeOAuthAccountWriter(_accountsStore, _eventBus, statusReporter, _clock, NullLogger<YouTubeOAuthAccountWriter>.Instance);
+        using var coordinator = new YouTubeOAuthFlowCoordinator(tokenClient, channelIdentityClient, accountWriter, statusReporter, _accountsStore, _settingsStore, fastTimeoutOptions, NullLogger<YouTubeOAuthFlowCoordinator>.Instance);
 
         _handler.Responder = (request, _) => request.RequestUri!.AbsoluteUri.StartsWith(fastTimeoutOptions.TokenEndpoint, StringComparison.Ordinal)
             ? MakeJson(HttpStatusCode.OK, """{ "access_token": "acc-idle", "refresh_token": "ref-idle", "expires_in": 3600, "scope": "https://www.googleapis.com/auth/youtube.force-ssl" }""")
@@ -436,7 +438,7 @@ public sealed class YouTubeOAuthServiceTests
         using var urlReady = new SemaphoreSlim(0, 1);
 
         var flowTask = coordinator.StartOAuthFlowAsync(
-            YouTubeOAuthRole.Bot,
+            PlatformAuthRole.Bot,
             "yt-client-id.apps.googleusercontent.com",
             "yt-client-secret",
             null,
@@ -487,6 +489,173 @@ public sealed class YouTubeOAuthServiceTests
         var resolved = provider.GetRequiredService<IYouTubeOAuthService>();
 
         Assert.That(resolved, Is.TypeOf<YouTubeOAuthService>());
+    }
+
+    [Test]
+    public async Task GetAccessTokenAsync_WhenCredentialsRejectedAndClientSecretUpdated_ResetsCooldownImmediately()
+    {
+        _accountsStore.SaveClientSecret("wrong-secret");
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
+        {
+            account.AccessToken = string.Empty;
+            account.RefreshToken = "yt-refresh";
+            account.StoredScopes = [..YouTubeScopes.BotRequired];
+        });
+
+        _handler.Responder = (_, _) => MakeJson(HttpStatusCode.Unauthorized, """{"error":"invalid_client","error_description":"Unauthorized"}""");
+        var first = await _service.GetAccessTokenAsync(PlatformAuthRole.Bot);
+
+        _accountsStore.SaveClientSecret("good-secret");
+        _handler.Responder = (_, _) => MakeJson(HttpStatusCode.OK, """{"access_token":"recovered-access","expires_in":3600}""");
+        var recovered = await _service.GetAccessTokenAsync(PlatformAuthRole.Bot);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first, Is.Null);
+            Assert.That(recovered, Is.EqualTo("recovered-access"));
+            Assert.That(_handler.Requests, Has.Count.EqualTo(2));
+        }
+    }
+
+    [Test]
+    public async Task GetAccessTokenAsync_WhenCredentialsRejectedAndAuthorizationRefreshedEventPublished_ResetsCooldown()
+    {
+        var realBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var statusReporter = new YouTubeOAuthStatusReporter(NullLogger<YouTubeOAuthStatusReporter>.Instance);
+        var tokenClient = new YouTubeOAuthTokenClient(_httpFactory, _options, NullLogger<YouTubeOAuthTokenClient>.Instance);
+        var channelIdentityClient = new YouTubeChannelIdentityClient(_httpFactory, _options, NullLogger<YouTubeChannelIdentityClient>.Instance);
+        var accountWriter = new YouTubeOAuthAccountWriter(_accountsStore, realBus, statusReporter, _clock, NullLogger<YouTubeOAuthAccountWriter>.Instance);
+        using var coordinator = new YouTubeOAuthFlowCoordinator(tokenClient, channelIdentityClient, accountWriter, statusReporter, _accountsStore, _settingsStore, _options, NullLogger<YouTubeOAuthFlowCoordinator>.Instance);
+        using var refresher = new YouTubeOAuthTokenRefresher(tokenClient, accountWriter, statusReporter, _accountsStore, _settingsStore, _options, realBus, _clock, NullLogger<YouTubeOAuthTokenRefresher>.Instance);
+        using var service = new YouTubeOAuthService(coordinator, refresher, accountWriter, statusReporter);
+
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
+        {
+            account.AccessToken = string.Empty;
+            account.RefreshToken = "yt-refresh";
+            account.StoredScopes = [..YouTubeScopes.BotRequired];
+        });
+
+        _handler.Responder = (_, _) => MakeJson(HttpStatusCode.Unauthorized, """{"error":"invalid_client"}""");
+        Assert.That(await service.GetAccessTokenAsync(PlatformAuthRole.Bot), Is.Null);
+
+        await realBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot));
+
+        _handler.Responder = (_, _) => MakeJson(HttpStatusCode.OK, """{"access_token":"after-event","expires_in":3600}""");
+        var recovered = await service.GetAccessTokenAsync(PlatformAuthRole.Bot);
+
+        Assert.That(recovered, Is.EqualTo("after-event"));
+    }
+
+    [Test]
+    public async Task GetAccessTokenAsync_WhenCredentialsRejected_StatusReporterDoesNotLeakRawErrorDescription()
+    {
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
+        {
+            account.AccessToken = "expired";
+            account.RefreshToken = "refresh-token";
+            account.AccessTokenExpiresAt = _clock.UtcNow.AddMinutes(-5);
+            account.StoredScopes = [..YouTubeScopes.BotRequired];
+        });
+
+        string? reportedStatus = null;
+        _service.StatusChanged += (_, message) => reportedStatus = message;
+
+        _handler.Responder = (_, _) => MakeJson(
+            HttpStatusCode.Unauthorized,
+            """{"error":"invalid_client","error_description":"RAW_GOOGLE_SECRET_DETAILS"}""");
+
+        var token = await _service.GetAccessTokenAsync(PlatformAuthRole.Bot);
+
+        Assert.That(token, Is.Null);
+        Assert.That(reportedStatus, Is.Not.Null);
+        Assert.That(reportedStatus, Does.Not.Contain("RAW_GOOGLE_SECRET_DETAILS"));
+        Assert.That(reportedStatus, Does.Contain("неверный Client ID или Client Secret Google-проекта"));
+    }
+
+    [Test]
+    public async Task GetAccessTokenAsync_WhenStoredScopesMissingRequiredScope_RefusesAndClearsAccessToken()
+    {
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
+        {
+            account.AccessToken = "present-but-under-scoped";
+            account.RefreshToken = string.Empty;
+            account.AccessTokenExpiresAt = _clock.UtcNow.AddHours(1);
+            account.StoredScopes = [YouTubeScopes.ReadOnly];
+        });
+
+        var token = await _service.GetAccessTokenAsync(PlatformAuthRole.Bot);
+        var stored = _accountsStore.Load(PlatformAuthRole.Bot);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(token, Is.Null);
+            Assert.That(stored.AccessToken, Is.Empty);
+            Assert.That(stored.AccessTokenExpiresAt, Is.Null);
+            Assert.That(stored.StoredScopes, Is.Empty);
+            Assert.That(_service.HasUsableAccessToken(PlatformAuthRole.Bot), Is.False);
+        }
+    }
+
+    [TestCase("accessNotConfigured", true)]
+    [TestCase("quotaExceeded", false)]
+    [TestCase("youtubeSignupRequired", true)]
+    public void GetOwnChannelAsync_OnGoogleErrorReason_ThrowsTypedExceptionWithExpectedPermanentFlag(string reason, bool expectedPermanent)
+    {
+        var client = new YouTubeChannelIdentityClient(_httpFactory, _options, NullLogger<YouTubeChannelIdentityClient>.Instance);
+        _handler.Responder = (_, _) => MakeJson(HttpStatusCode.Forbidden,
+            $$$"""{"error":{"code":403,"errors":[{"reason":"{{{reason}}}"}]}}""");
+
+        var ex = Assert.ThrowsAsync<YouTubeOAuthException>(async () => await client.GetOwnChannelAsync("access-token"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.ErrorCode, Is.EqualTo(reason));
+            Assert.That(ex.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+            Assert.That(ex.IsPermanentRejection, Is.EqualTo(expectedPermanent));
+        }
+    }
+
+    [Test]
+    public async Task StartOAuthFlowToDraftAsync_WhenConcurrentFlowInProgressForSameRole_NotifiesBusyAndWaits()
+    {
+        using var firstUrlReady = new ManualResetEventSlim();
+        using var secondUrlReady = new ManualResetEventSlim();
+        using var busyReported = new ManualResetEventSlim();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        _service.StatusChanged += (role, message) =>
+        {
+            if (role == PlatformAuthRole.Bot && message.Contains("уже идёт авторизация", StringComparison.Ordinal))
+            {
+                busyReported.Set();
+            }
+        };
+
+        var first = _flow.StartOAuthFlowToDraftAsync(
+            PlatformAuthRole.Bot,
+            "yt-client-id",
+            "yt-client-secret",
+            null,
+            _ => firstUrlReady.Set(),
+            cts.Token);
+
+        Assert.That(firstUrlReady.Wait(TimeSpan.FromSeconds(3)), Is.True);
+
+        var second = _flow.StartOAuthFlowToDraftAsync(
+            PlatformAuthRole.Bot,
+            "yt-client-id",
+            "yt-client-secret",
+            null,
+            _ => secondUrlReady.Set(),
+            cts.Token);
+
+        Assert.That(busyReported.Wait(TimeSpan.FromSeconds(3)), Is.True);
+        Assert.That(secondUrlReady.IsSet, Is.False);
+
+        await cts.CancelAsync();
+        Assert.CatchAsync<OperationCanceledException>(async () => await first);
+        Assert.CatchAsync<OperationCanceledException>(async () => await second);
     }
 
     private static HttpResponseMessage MakeJson(HttpStatusCode status, string body)

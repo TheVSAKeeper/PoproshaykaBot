@@ -16,7 +16,7 @@ public class BroadcastProfilePlatformsStore
         SettingsWriteGate? gate = null)
     {
         var path = filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.BroadcastProfilePlatformsFileName);
-        _store = new(path, logger, describe: SettingsDescriber.Describe, gate: gate);
+        _store = new(path, logger, describe: Describe, gate: gate);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {
@@ -25,6 +25,13 @@ public class BroadcastProfilePlatformsStore
                 path,
                 _store.Load().Profiles.Count);
         }
+    }
+
+    public static string Describe(BroadcastProfilePlatformsSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return $"записей={settings.Profiles.Count}";
     }
 
     public virtual BroadcastProfilePlatformsSettings Load()

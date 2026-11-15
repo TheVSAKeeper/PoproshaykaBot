@@ -14,9 +14,17 @@ public sealed class DebugChannelStore
     public DebugChannelStore(ILogger<DebugChannelStore>? logger = null, string? filePath = null)
     {
         var path = filePath ?? AppPaths.SettingsFile("debug-channel.json");
-        _store = new(path, logger, describe: SettingsDescriber.Describe);
+        _store = new(path, logger, describe: Describe);
 
         logger?.LogDebug("DebugChannelStore инициализирован из {FilePath}", path);
+    }
+
+    public static string Describe(DebugChannelSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return $"отладочный канал {SettingsDescriber.OnOff(settings.IsEnabled)}, канал {SettingsDescriber.Value(settings.Channel)}, "
+            + $"отправка сообщений {SettingsDescriber.OnOff(settings.AllowSending)}, недавних каналов {settings.RecentChannels?.Count ?? 0}";
     }
 
     public DebugChannelSettings Load()

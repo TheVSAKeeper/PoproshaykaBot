@@ -3,7 +3,7 @@
 public sealed record YouTubeOAuthFlowResult(
     string AccessToken,
     string RefreshToken,
-    string[] Scopes,
+    IReadOnlyList<string> Scopes,
     string ChannelId,
     string ChannelTitle,
     int ExpiresInSeconds)

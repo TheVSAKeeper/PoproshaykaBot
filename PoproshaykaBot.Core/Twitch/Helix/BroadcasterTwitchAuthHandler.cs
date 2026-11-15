@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -12,7 +13,7 @@ public sealed class BroadcasterTwitchAuthHandler(
     ILogger<BroadcasterTwitchAuthHandler> logger)
     : TwitchAuthHandlerBase(oauthService, settingsManager, accountsStore, logger)
 {
-    protected override TwitchOAuthRole Role => TwitchOAuthRole.Broadcaster;
+    protected override PlatformAuthRole Role => PlatformAuthRole.Broadcaster;
 
     protected override string MissingTokenHint =>
         "Авторизуйте стримера в настройках Twitch (вкладка «Стример»).";

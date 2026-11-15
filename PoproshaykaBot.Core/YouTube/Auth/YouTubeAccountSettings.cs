@@ -1,6 +1,8 @@
-﻿namespace PoproshaykaBot.Core.YouTube.Auth;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
 
-public sealed class YouTubeAccountSettings
+namespace PoproshaykaBot.Core.YouTube.Auth;
+
+public sealed class YouTubeAccountSettings : IRoleAccountSettings
 {
     public string AccessToken { get; set; } = string.Empty;
 

@@ -2,6 +2,7 @@
 using KeepShell.Services;
 using KeepShell.Services.Modal;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
 using System.Globalization;
@@ -37,28 +38,25 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
         IShellLauncher shellLauncher,
         IDialogService dialogService,
         IUiDispatcher uiDispatcher,
+        TimeProvider timeProvider,
         ILoggerFactory loggerFactory)
     {
-        var accountLogger = loggerFactory.CreateLogger<YouTubeAccountViewModel>();
+        var accountLogger = loggerFactory.CreateLogger<PlatformOAuthAccountViewModel>();
 
         Bot = new(
-            YouTubeOAuthRole.Bot,
-            oauthService,
-            () => ClientId,
-            () => ClientSecret,
-            shellLauncher,
+            new YouTubeAccountAuthAdapter(PlatformAuthRole.Bot, oauthService, () => ClientId, () => ClientSecret),
             dialogService,
+            shellLauncher,
             uiDispatcher,
+            timeProvider,
             accountLogger);
 
         Broadcaster = new(
-            YouTubeOAuthRole.Broadcaster,
-            oauthService,
-            () => ClientId,
-            () => ClientSecret,
-            shellLauncher,
+            new YouTubeAccountAuthAdapter(PlatformAuthRole.Broadcaster, oauthService, () => ClientId, () => ClientSecret),
             dialogService,
+            shellLauncher,
             uiDispatcher,
+            timeProvider,
             accountLogger);
 
         Bot.SettingChanged += OnAccountSettingChanged;
@@ -67,9 +65,9 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
 
     public event EventHandler? SettingChanged;
 
-    public YouTubeAccountViewModel Bot { get; }
+    public PlatformOAuthAccountViewModel Bot { get; }
 
-    public YouTubeAccountViewModel Broadcaster { get; }
+    public PlatformOAuthAccountViewModel Broadcaster { get; }
 
     public bool HasQuotaBudgetError => !TryParsePositiveQuotaBudget(DailyQuotaBudgetText, out _);
 

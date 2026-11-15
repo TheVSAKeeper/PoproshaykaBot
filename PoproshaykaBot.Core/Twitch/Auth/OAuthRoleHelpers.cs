@@ -1,26 +1,17 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 
 namespace PoproshaykaBot.Core.Twitch.Auth;
 
 internal static class OAuthRoleHelpers
 {
-    public static string DescribeRole(TwitchOAuthRole role)
+    public static string GetExpectedLogin(TwitchSettings twitch, PlatformAuthRole role)
     {
         return role switch
         {
-            TwitchOAuthRole.Bot => "бот",
-            TwitchOAuthRole.Broadcaster => "стример",
-            _ => role.ToString(),
-        };
-    }
-
-    public static string GetExpectedLogin(TwitchSettings twitch, TwitchOAuthRole role)
-    {
-        return role switch
-        {
-            TwitchOAuthRole.Bot => string.Empty,
-            TwitchOAuthRole.Broadcaster => twitch.Channel ?? string.Empty,
+            PlatformAuthRole.Bot => string.Empty,
+            PlatformAuthRole.Broadcaster => twitch.Channel ?? string.Empty,
             _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
         };
     }
@@ -36,13 +27,13 @@ internal static class OAuthRoleHelpers
     }
 
     public static void VerifyLoginMatchesRole(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         TokenValidationInfo validation,
         SettingsManager settingsManager,
         ILogger logger,
         bool checkBroadcasterChannel = true)
     {
-        if (!checkBroadcasterChannel && role == TwitchOAuthRole.Broadcaster)
+        if (!checkBroadcasterChannel && role == PlatformAuthRole.Broadcaster)
         {
             return;
         }
@@ -60,7 +51,7 @@ internal static class OAuthRoleHelpers
             return;
         }
 
-        var description = DescribeRole(role);
+        var description = PlatformAuthRoles.Describe(role);
         var message = $"Авторизация для роли {description} получила токен пользователя '{validation.Login}', но в настройках указан канал '{expected}'. Авторизуйтесь под нужной учёткой или исправьте настройку канала. Токен не сохранён.";
 
         logger.LogError("Логин в полученном токене ({Login}) не совпадает с ожидаемым ({Expected}) для роли {Role}",

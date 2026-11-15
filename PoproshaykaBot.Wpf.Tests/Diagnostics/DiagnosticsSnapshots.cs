@@ -1,5 +1,5 @@
 ﻿using PoproshaykaBot.Core.Diagnostics;
-using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Platforms.Auth;
 
 namespace PoproshaykaBot.Wpf.Tests.Diagnostics;
 
@@ -18,7 +18,7 @@ public static class DiagnosticsSnapshots
     {
         return new(CapturedAt,
             Memory(512L * 1024 * 1024, 256L * 1024 * 1024),
-            [new(TwitchOAuthRole.Bot, ConnectionState.Connected, CapturedAt.AddMinutes(-3), 0, 5)],
+            [new(PlatformAuthRole.Bot, ConnectionState.Connected, CapturedAt.AddMinutes(-3), 0, 5)],
             new(ConnectionState.Connected, "bobito217", CapturedAt.AddHours(-1), CapturedAt.AddMinutes(-2)),
             new(ConnectionState.Connected, CapturedAt.AddSeconds(-10)),
             new(true, 2, 0),

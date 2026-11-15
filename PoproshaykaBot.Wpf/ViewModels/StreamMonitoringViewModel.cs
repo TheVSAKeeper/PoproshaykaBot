@@ -1,8 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
@@ -32,7 +32,7 @@ public sealed partial class StreamMonitoringViewModel : ObservableObject, IDispo
     {
         var indicator = statusEvent.Role switch
         {
-            TwitchOAuthRole.Broadcaster => Broadcaster,
+            PlatformAuthRole.Broadcaster => Broadcaster,
             _ => Bot,
         };
 

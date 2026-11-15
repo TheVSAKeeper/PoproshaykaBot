@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -34,12 +35,26 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
         IShellLauncher shellLauncher,
         IEmbeddedTwitchAuthDialog embeddedAuth,
         IUiDispatcher uiDispatcher,
+        TimeProvider timeProvider,
         ILoggerFactory loggerFactory)
     {
-        var logger = loggerFactory.CreateLogger<OAuthAccountViewModel>();
+        var logger = loggerFactory.CreateLogger<PlatformOAuthAccountViewModel>();
 
-        Bot = new(TwitchOAuthRole.Bot, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth, uiDispatcher, logger);
-        Broadcaster = new(TwitchOAuthRole.Broadcaster, oauthService, accountsStore, GetCredentials, dialogService, shellLauncher, embeddedAuth, uiDispatcher, logger);
+        Bot = new(
+            new TwitchAccountAuthAdapter(PlatformAuthRole.Bot, oauthService, accountsStore, GetCredentials, embeddedAuth),
+            dialogService,
+            shellLauncher,
+            uiDispatcher,
+            timeProvider,
+            logger);
+
+        Broadcaster = new(
+            new TwitchAccountAuthAdapter(PlatformAuthRole.Broadcaster, oauthService, accountsStore, GetCredentials, embeddedAuth),
+            dialogService,
+            shellLauncher,
+            uiDispatcher,
+            timeProvider,
+            logger);
 
         Bot.SettingChanged += OnChildSettingChanged;
         Broadcaster.SettingChanged += OnChildSettingChanged;
@@ -51,9 +66,9 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
 
     public string Title => "Авторизация";
 
-    public OAuthAccountViewModel Bot { get; }
+    public PlatformOAuthAccountViewModel Bot { get; }
 
-    public OAuthAccountViewModel Broadcaster { get; }
+    public PlatformOAuthAccountViewModel Broadcaster { get; }
 
     public string ChannelHintText => string.IsNullOrWhiteSpace(Channel)
         ? "Канал не задан – заполните его в разделе «Основные», блок «Канал и аккаунт», иначе авторизация стримера не пройдёт."
@@ -74,14 +89,18 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
         Broadcaster.Load(broadcasterDraft);
     }
 
-    public void Save(AppSettings settings)
+    public void SaveTo(AppSettings settings, TwitchAccountSettings botTarget, TwitchAccountSettings broadcasterTarget)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(botTarget);
+        ArgumentNullException.ThrowIfNull(broadcasterTarget);
+
         settings.Twitch.ClientId = ClientId.Trim();
         settings.Twitch.ClientSecret = ClientSecret.Trim();
         settings.Twitch.RedirectUri = RedirectUri.Trim();
 
-        Bot.Save();
-        Broadcaster.Save();
+        Bot.SaveTo(botTarget);
+        Broadcaster.SaveTo(broadcasterTarget);
     }
 
     public void RefreshChannel(string? channel)

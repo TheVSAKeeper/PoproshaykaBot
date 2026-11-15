@@ -1,27 +1,13 @@
 ﻿using KeepShell.Diagnostics;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Diagnostics;
-using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.Twitch.Auth;
-using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Core.Infrastructure.Diagnostics;
 using System.Text;
 
 namespace PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 
 public sealed class BotDiagnosticsBundleSource(
-    SettingsManager settings,
-    AccountsStore accounts,
-    YouTubeSettingsStore youtubeSettings,
-    YouTubeAccountsStore youtubeAccounts,
-    ObsIntegrationStore obsIntegration,
-    ObsChatStore obsChat,
-    UpdateStore update,
-    DebugChannelStore debugChannel,
-    BroadcastProfilesStore broadcastProfiles,
-    BroadcastProfilePlatformsStore broadcastProfilePlatforms,
-    CommandSettingsStore commands,
-    PollsStore polls,
+    IEnumerable<ISettingsSnapshotContributor> snapshotContributors,
     DiagnosticsSnapshotSource snapshots,
     ILogger<BotDiagnosticsBundleSource> logger) : IDiagnosticsBundleSource
 {
@@ -70,23 +56,13 @@ public sealed class BotDiagnosticsBundleSource(
     {
         var builder = new StringBuilder();
 
-        Append(builder, nameof(AppSettings), SettingsDescriber.Describe(settings.Current));
-        Append(builder, "Account.Bot", SettingsDescriber.Describe(accounts.Load(TwitchOAuthRole.Bot)));
-        Append(builder, "Account.Broadcaster", SettingsDescriber.Describe(accounts.Load(TwitchOAuthRole.Broadcaster)));
-        Append(builder, "YouTubeSettings", SettingsDescriber.Describe(youtubeSettings.Load()));
-        Append(builder, "YouTubeAccounts",
-            SettingsDescriber.DescribeYouTubeAccounts(
-                youtubeAccounts.LoadClientSecret(),
-                youtubeAccounts.Load(YouTubeOAuthRole.Bot),
-                youtubeAccounts.Load(YouTubeOAuthRole.Broadcaster)));
-        Append(builder, "ObsIntegrationSettings", SettingsDescriber.Describe(obsIntegration.Load()));
-        Append(builder, "ObsChatSettings", SettingsDescriber.Describe(obsChat.Load()));
-        Append(builder, "UpdateSettings", SettingsDescriber.Describe(update.Load()));
-        Append(builder, "DebugChannelSettings", SettingsDescriber.Describe(debugChannel.Load()));
-        Append(builder, "BroadcastProfilesSettings", SettingsDescriber.Describe(broadcastProfiles.Load()));
-        Append(builder, "BroadcastProfilePlatformsSettings", SettingsDescriber.Describe(broadcastProfilePlatforms.Load()));
-        Append(builder, "CommandSettings", SettingsDescriber.Describe(commands.Load()));
-        Append(builder, "PollsSettings", SettingsDescriber.Describe(polls.Load()));
+        foreach (var contributor in snapshotContributors)
+        {
+            foreach (var entry in contributor.CollectSnapshots())
+            {
+                Append(builder, entry.Key, entry.Description);
+            }
+        }
 
         return builder.ToString();
     }

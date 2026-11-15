@@ -1,7 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Twitch.Auth;
 using System.ComponentModel.DataAnnotations;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -16,14 +16,14 @@ public sealed partial class BasicSettingsSectionViewModel : ObservableValidator,
     private string _channel = string.Empty;
 
     [ObservableProperty]
-    private TwitchOAuthRole _chatDisplayAccount;
+    private PlatformAuthRole _chatDisplayAccount;
 
     public BasicSettingsSectionViewModel()
     {
         ChatAccountOptions =
         [
-            new(TwitchOAuthRole.Bot, "бота"),
-            new(TwitchOAuthRole.Broadcaster, "стримера"),
+            new(PlatformAuthRole.Bot, "бота"),
+            new(PlatformAuthRole.Broadcaster, "стримера"),
         ];
     }
 
@@ -59,4 +59,4 @@ public sealed partial class BasicSettingsSectionViewModel : ObservableValidator,
     }
 }
 
-public readonly record struct ChatAccountOption(TwitchOAuthRole Role, string Display);
+public readonly record struct ChatAccountOption(PlatformAuthRole Role, string Display);

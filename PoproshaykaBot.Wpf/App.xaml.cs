@@ -498,6 +498,20 @@ public partial class App : Application
         services.AddTransient<RanksSettingsSectionViewModel>();
         services.AddTransient<DebugChannelSectionViewModel>();
         services.AddSingleton<McpSettingsSectionViewModel>();
+        services.AddTransient<AppearanceSettingsSectionViewModel>();
+
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.BasicSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.TwitchConnectionSettingsContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.YouTubeConnectionSettingsContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.ObsSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.StreamSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.RanksSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.DashboardSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.UpdateSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.DebugChannelSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.McpSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.AppearanceSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.MiscSettingsSectionContributor>();
 
         services.AddSingleton<SettingsPageViewModel>();
 

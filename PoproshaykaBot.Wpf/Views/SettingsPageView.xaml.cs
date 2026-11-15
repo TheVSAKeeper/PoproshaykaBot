@@ -1,9 +1,9 @@
-﻿using KeepShell.ViewModels;
-using PoproshaykaBot.Wpf.ViewModels;
+﻿using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.Views.Settings;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -23,6 +23,8 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        DataContextChanged += OnDataContextChanged;
+        SectionsHost.ItemContainerGenerator.StatusChanged += OnItemContainersStatusChanged;
     }
 
     private static void Collect(DependencyObject root, List<(string Key, FrameworkElement Element)> blocks)
@@ -42,6 +44,36 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        AttachSections();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        DetachSections();
+        _blocks.Clear();
+    }
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        DetachSections();
+        _blocks.Clear();
+
+        if (IsLoaded)
+        {
+            AttachSections();
+        }
+    }
+
+    private void OnItemContainersStatusChanged(object? sender, EventArgs e)
+    {
+        if (SectionsHost.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
+        {
+            _blocks.Clear();
+        }
+    }
+
+    private void AttachSections()
+    {
         if (_sections is not null || DataContext is not SettingsPageViewModel viewModel)
         {
             return;
@@ -51,12 +83,13 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
         _sections.ChildActivated += OnChildActivated;
         _sections.PropertyChanged += OnSectionsPropertyChanged;
 
-        var restored = _sections.SelectedChild;
-
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => ScrollToBlock(restored));
+        if (_sections.SelectedChild is { } restored)
+        {
+            _ = Dispatcher.BeginInvoke(() => ScrollToBlock(restored), DispatcherPriority.Loaded);
+        }
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    private void DetachSections()
     {
         if (_sections is null)
         {
@@ -66,13 +99,13 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
         _sections.ChildActivated -= OnChildActivated;
         _sections.PropertyChanged -= OnSectionsPropertyChanged;
         _sections = null;
-        _blocks.Clear();
     }
 
     private void OnSectionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(SettingsSectionList.Selected), StringComparison.Ordinal))
         {
+            _blocks.Clear();
             SectionScroll.ScrollToVerticalOffset(0);
         }
     }
@@ -82,21 +115,21 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
         ScrollToBlock(child);
     }
 
-    private void ScrollToBlock(SettingsSubsection? child)
+    private void ScrollToBlock(SettingsSubsection child)
     {
-        if (child is null || _sections?.Selected is not { } section)
+        if (_sections?.Selected is not { } section)
         {
             return;
         }
 
         SectionScroll.UpdateLayout();
 
-        if (FindBlock($"{section.Key}/{child.Key}") is not { } block)
+        if (FindBlock($"{section.Key}/{child.Key}") is not { } element)
         {
             return;
         }
 
-        var top = block.TransformToAncestor(SectionScroll).Transform(default).Y + SectionScroll.VerticalOffset;
+        var top = element.TransformToAncestor(SectionScroll).Transform(default).Y + SectionScroll.VerticalOffset;
 
         SectionScroll.ScrollToVerticalOffset(Math.Max(0, top - BlockTopPadding));
     }

@@ -18,9 +18,24 @@ public sealed class ObsIntegrationStore
         var path = filePath ?? AppPaths.SettingsFile("obs-integration.json");
 
         _eventBus = eventBus;
-        _store = new(path, logger, describe: SettingsDescriber.Describe, gate: gate);
+        _store = new(path, logger, describe: Describe, gate: gate);
 
         logger?.LogDebug("ObsIntegrationStore инициализирован из {FilePath}", path);
+    }
+
+    public static string Describe(ObsIntegrationSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return $"интеграция {SettingsDescriber.OnOff(settings.Enabled)}, автоподключение {SettingsDescriber.OnOff(settings.AutoConnect)}, "
+            + $"{SettingsDescriber.Value(settings.Host)}:{settings.Port}, пароль {SettingsDescriber.Present(settings.Password)}, "
+            + $"сцена {SettingsDescriber.Value(settings.SceneName)}, источник {SettingsDescriber.Value(settings.SourceName)} {settings.Width}x{settings.Height}, "
+            + $"автосоздание источника {SettingsDescriber.OnOff(settings.AutoProvisionBrowserSource)}, "
+            + $"сцена по профилю {SettingsDescriber.OnOff(settings.ApplySceneOnProfile)}, профиль по сцене {SettingsDescriber.OnOff(settings.ApplyProfileOnScene)}, "
+            + $"источников дашборда {settings.DashboardSourceNames.Count}, микрофон {SettingsDescriber.Present(settings.DashboardMicrophoneName)}, "
+            + $"задержка индикатора {settings.DashboardVolumeMeterDelayMs} мс, "
+            + $"источников чата для обновления {settings.ChatRefreshSources.Count}, "
+            + $"обновление на старте стрима {SettingsDescriber.OnOff(settings.RefreshChatSourcesOnStreamStart)}";
     }
 
     public ObsIntegrationSettings Load()

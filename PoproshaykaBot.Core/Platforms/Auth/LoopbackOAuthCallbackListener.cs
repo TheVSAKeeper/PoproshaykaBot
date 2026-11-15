@@ -5,15 +5,15 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
-namespace PoproshaykaBot.Core.YouTube.Auth;
+namespace PoproshaykaBot.Core.Platforms.Auth;
 
-internal sealed record YouTubeLoopbackCallback(
+public sealed record LoopbackOAuthCallback(
     string? Code,
     string? State,
     string? Error,
     string? ErrorDescription);
 
-internal sealed class YouTubeLoopbackListener : IDisposable
+public sealed class LoopbackOAuthCallbackListener : IDisposable
 {
     private const int MaxHeaderLines = 128;
 
@@ -28,7 +28,7 @@ internal sealed class YouTubeLoopbackListener : IDisposable
     private readonly TimeSpan _connectionTimeout;
     private bool _disposed;
 
-    public YouTubeLoopbackListener(TimeSpan? connectionTimeout = null)
+    public LoopbackOAuthCallbackListener(TimeSpan? connectionTimeout = null)
     {
         _connectionTimeout = connectionTimeout ?? TimeSpan.FromSeconds(10);
         _listener = new(IPAddress.Loopback, 0);
@@ -38,7 +38,7 @@ internal sealed class YouTubeLoopbackListener : IDisposable
 
     public string RedirectUri => $"http://127.0.0.1:{_port}/";
 
-    public async Task<YouTubeLoopbackCallback> WaitForCallbackAsync(string expectedState, CancellationToken ct)
+    public async Task<LoopbackOAuthCallback> WaitForCallbackAsync(string expectedState, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(expectedState);
 

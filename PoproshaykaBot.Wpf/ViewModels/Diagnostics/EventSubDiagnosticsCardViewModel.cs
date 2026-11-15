@@ -1,6 +1,6 @@
 ﻿using KeepShell.Diagnostics;
 using PoproshaykaBot.Core.Diagnostics;
-using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Diagnostics;
@@ -70,11 +70,11 @@ public sealed class EventSubDiagnosticsCardViewModel(DiagnosticsSnapshotPublishe
             : $"попытка {session.ReconnectAttempt}";
     }
 
-    private static string Describe(TwitchOAuthRole role)
+    private static string Describe(PlatformAuthRole role)
     {
         return role switch
         {
-            TwitchOAuthRole.Broadcaster => "канала",
+            PlatformAuthRole.Broadcaster => "канала",
             _ => "бота",
         };
     }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -14,7 +15,7 @@ public abstract class TwitchAuthHandlerBase(
 {
     public static readonly HttpRequestOptionsKey<bool> KeepTokenOnUnauthorized = new("poproshayka.keep-token-on-401");
 
-    protected abstract TwitchOAuthRole Role { get; }
+    protected abstract PlatformAuthRole Role { get; }
 
     protected abstract string MissingTokenHint { get; }
 

@@ -2,16 +2,6 @@
 
 internal static class YouTubeOAuthRoleHelpers
 {
-    public static string DescribeRole(YouTubeOAuthRole role)
-    {
-        return role switch
-        {
-            YouTubeOAuthRole.Bot => "бот",
-            YouTubeOAuthRole.Broadcaster => "стример",
-            _ => role.ToString(),
-        };
-    }
-
     public static void ClearAccountInPlace(YouTubeAccountSettings account)
     {
         ArgumentNullException.ThrowIfNull(account);

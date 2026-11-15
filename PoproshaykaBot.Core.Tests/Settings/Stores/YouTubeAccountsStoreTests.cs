@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Settings.Stores;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.YouTube.Auth;
 using System.Text.Json.Nodes;
 
@@ -87,7 +88,7 @@ public sealed class YouTubeAccountsStoreTests
     public void TryClearAccessToken_WithMatchingToken_ClearsOnlyAccessTokenAndExpiry()
     {
         var store = Store();
-        store.Mutate(YouTubeOAuthRole.Bot, account =>
+        store.Mutate(PlatformAuthRole.Bot, account =>
         {
             account.AccessToken = "yt-a1";
             account.RefreshToken = "yt-r1";
@@ -95,7 +96,7 @@ public sealed class YouTubeAccountsStoreTests
             account.AccessTokenExpiresAt = DateTimeOffset.UnixEpoch.AddYears(50);
         });
 
-        var cleared = store.TryClearAccessToken(YouTubeOAuthRole.Bot, "yt-a1");
+        var cleared = store.TryClearAccessToken(PlatformAuthRole.Bot, "yt-a1");
         var bot = Store().LoadBot();
 
         using (Assert.EnterMultipleScope())

@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -68,7 +69,7 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
 
     public ILogger Logger => _logger;
 
-    public string UserDataFolder => WebView2UserDataFolders.Resolve(_request?.Role ?? TwitchOAuthRole.Bot);
+    public string UserDataFolder => WebView2UserDataFolders.Resolve(_request?.Role ?? PlatformAuthRole.Bot);
 
     public void Configure(EmbeddedTwitchAuthRequest request)
     {
@@ -76,7 +77,7 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
 
         _request = request;
 
-        Title = request.Role == TwitchOAuthRole.Broadcaster
+        Title = request.Role == PlatformAuthRole.Broadcaster
             ? "Авторизация стримера в Twitch"
             : "Авторизация бота в Twitch";
     }
@@ -252,7 +253,7 @@ public sealed partial class EmbeddedTwitchAuthDialogViewModel : ObservableObject
         StatusSeverity = severity;
     }
 
-    private void OnOAuthStatusChanged(TwitchOAuthRole role, string message)
+    private void OnOAuthStatusChanged(PlatformAuthRole role, string message)
     {
         if (_request is null || role != _request.Role)
         {

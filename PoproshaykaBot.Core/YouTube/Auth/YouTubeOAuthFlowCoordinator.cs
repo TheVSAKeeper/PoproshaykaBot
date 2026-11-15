@@ -1,13 +1,12 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
-using System.Buffers.Text;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace PoproshaykaBot.Core.YouTube.Auth;
 
 public sealed class YouTubeOAuthFlowCoordinator(
     YouTubeOAuthTokenClient tokenClient,
+    IYouTubeChannelIdentityClient channelIdentityClient,
     YouTubeOAuthAccountWriter accountWriter,
     YouTubeOAuthStatusReporter statusReporter,
     YouTubeAccountsStore accountsStore,
@@ -19,7 +18,7 @@ public sealed class YouTubeOAuthFlowCoordinator(
     private readonly SemaphoreSlim _broadcasterFlowLock = new(1, 1);
 
     public async Task<YouTubeOAuthFlowResult> StartOAuthFlowAsync(
-        YouTubeOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
@@ -32,7 +31,7 @@ public sealed class YouTubeOAuthFlowCoordinator(
     }
 
     public Task<YouTubeOAuthFlowResult> StartOAuthFlowToDraftAsync(
-        YouTubeOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
@@ -49,13 +48,14 @@ public sealed class YouTubeOAuthFlowCoordinator(
     }
 
     private async Task<YouTubeOAuthFlowResult> StartOAuthFlowCoreAsync(
-        YouTubeOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
         Action<string> onAuthUrlReady,
         CancellationToken ct)
     {
+        PlatformAuthRoles.EnsureActive(role);
         ArgumentNullException.ThrowIfNull(onAuthUrlReady);
 
         var resolvedClientId = string.IsNullOrWhiteSpace(clientId)
@@ -72,22 +72,27 @@ public sealed class YouTubeOAuthFlowCoordinator(
             : clientSecret;
 
         var flowLock = GetLockForRole(role);
-        await flowLock.WaitAsync(ct);
+        if (!await flowLock.WaitAsync(TimeSpan.Zero, ct))
+        {
+            logger.LogInformation("Авторизация YouTube роли {Role} уже выполняется, новый запрос ждёт её завершения", role);
+            statusReporter.Report(role, "Для этой роли уже идёт авторизация, ожидание её завершения...");
+            await flowLock.WaitAsync(ct);
+        }
 
         try
         {
             var effectiveScopes = ResolveScopes(role, scopes);
-            var (codeVerifier, codeChallenge) = CreatePkcePair();
-            var state = CreateRandomBase64Url(24);
+            var pkce = PkceCodeChallenge.Create();
+            var state = PkceCodeChallenge.CreateRandomToken(24);
 
-            using var listener = new YouTubeLoopbackListener(options.LoopbackConnectionTimeout);
+            using var listener = new LoopbackOAuthCallbackListener(options.LoopbackConnectionTimeout);
             var authUrl = BuildAuthorizationUrl(
                 options.AuthorizationEndpoint,
                 resolvedClientId,
                 listener.RedirectUri,
                 effectiveScopes,
                 state,
-                codeChallenge);
+                pkce.Challenge);
 
             statusReporter.Report(role, "Ожидание подтверждения входа в системном браузере...");
             logger.LogInformation(
@@ -101,7 +106,7 @@ public sealed class YouTubeOAuthFlowCoordinator(
             var waitTask = listener.WaitForCallbackAsync(state, timeoutCts.Token);
             onAuthUrlReady(authUrl);
 
-            YouTubeLoopbackCallback callback;
+            LoopbackOAuthCallback callback;
             try
             {
                 callback = await waitTask;
@@ -124,12 +129,19 @@ public sealed class YouTubeOAuthFlowCoordinator(
                 resolvedClientId,
                 resolvedClientSecret,
                 callback.Code!,
-                codeVerifier,
+                pkce.Verifier,
                 listener.RedirectUri,
                 ct);
 
-            var channel = await tokenClient.GetOwnChannelAsync(tokenResponse.AccessToken, ct);
-            var grantedScopes = tokenResponse.Scopes.Length > 0 ? tokenResponse.Scopes : effectiveScopes;
+            var channel = await channelIdentityClient.GetOwnChannelAsync(tokenResponse.AccessToken, ct);
+            IReadOnlyList<string> grantedScopes = tokenResponse.Scopes.Count > 0 ? tokenResponse.Scopes : effectiveScopes;
+
+            if (tokenResponse.Scopes.Count > 0 && !YouTubeScopes.ContainsRequiredScopes(role, grantedScopes))
+            {
+                throw new YouTubeOAuthException(
+                    "Не выданы обязательные права YouTube. Разрешите доступ к каналу на экране входа Google.",
+                    "missing_required_scopes");
+            }
 
             if (string.IsNullOrWhiteSpace(tokenResponse.RefreshToken))
             {
@@ -153,17 +165,17 @@ public sealed class YouTubeOAuthFlowCoordinator(
         }
     }
 
-    private SemaphoreSlim GetLockForRole(YouTubeOAuthRole role)
+    private SemaphoreSlim GetLockForRole(PlatformAuthRole role)
     {
         return role switch
         {
-            YouTubeOAuthRole.Bot => _botFlowLock,
-            YouTubeOAuthRole.Broadcaster => _broadcasterFlowLock,
+            PlatformAuthRole.Bot => _botFlowLock,
+            PlatformAuthRole.Broadcaster => _broadcasterFlowLock,
             _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
         };
     }
 
-    private string[] ResolveScopes(YouTubeOAuthRole role, string[]? scopes)
+    private string[] ResolveScopes(PlatformAuthRole role, string[]? scopes)
     {
         if (scopes is { Length: > 0 })
         {
@@ -200,20 +212,6 @@ public sealed class YouTubeOAuthFlowCoordinator(
 
         var separator = endpoint.Contains('?', StringComparison.Ordinal) ? '&' : '?';
         return $"{endpoint}{separator}{query}";
-    }
-
-    private static (string Verifier, string Challenge) CreatePkcePair()
-    {
-        var verifier = CreateRandomBase64Url(32);
-        var hash = SHA256.HashData(Encoding.ASCII.GetBytes(verifier));
-        var challenge = Base64Url.EncodeToString(hash);
-        return (verifier, challenge);
-    }
-
-    private static string CreateRandomBase64Url(int byteLength)
-    {
-        var bytes = RandomNumberGenerator.GetBytes(byteLength);
-        return Base64Url.EncodeToString(bytes);
     }
 
     private static string FormatBrowserError(string error, string? description)

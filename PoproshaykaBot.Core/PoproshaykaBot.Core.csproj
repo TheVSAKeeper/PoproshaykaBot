@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="PoproshaykaBot.Core.Tests" />
+    <InternalsVisibleTo Include="PoproshaykaBot.Wpf.Tests" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 

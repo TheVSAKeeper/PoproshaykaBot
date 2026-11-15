@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch.Auth;
 
 namespace PoproshaykaBot.Core.Twitch;
@@ -25,7 +26,7 @@ internal sealed class TwitchPlatformConnectionAdapter(
         progress.Report("Получение токена доступа...");
         logger.LogDebug("Запрос токена доступа Twitch");
 
-        var accessToken = await tokenService.GetAccessTokenAsync(TwitchOAuthRole.Bot, cancellationToken).ConfigureAwait(false);
+        var accessToken = await tokenService.GetAccessTokenAsync(PlatformAuthRole.Bot, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(accessToken))

@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -27,7 +28,7 @@ public sealed class OAuthFlowCoordinatorTests
         httpFactory.CreateClient(Arg.Any<string>()).Returns(_ => new HttpClient());
 
         var tokenClient = new OAuthTokenClient(httpFactory, NullLogger<OAuthTokenClient>.Instance);
-        var accountWriter = new OAuthAccountWriter(_accountsStore, Substitute.For<IEventBus>(), _statusReporter, NullLogger<OAuthAccountWriter>.Instance);
+        var accountWriter = new OAuthAccountWriter(_accountsStore, Substitute.For<IEventBus>(), _statusReporter, TimeProvider.System, NullLogger<OAuthAccountWriter>.Instance);
 
         _coordinator = new(tokenClient, accountWriter, _statusReporter, _accountsStore, _settingsManager, NullLogger<OAuthFlowCoordinator>.Instance);
     }
@@ -88,7 +89,7 @@ public sealed class OAuthFlowCoordinatorTests
         var bot = StartFlowAsync(botUrlReady, cts.Token);
         Assert.That(botUrlReady.Wait(TimeSpan.FromSeconds(5)), Is.True);
 
-        var broadcaster = StartFlowAsync(broadcasterUrlReady, cts.Token, TwitchOAuthRole.Broadcaster);
+        var broadcaster = StartFlowAsync(broadcasterUrlReady, cts.Token, PlatformAuthRole.Broadcaster);
         Assert.That(broadcasterUrlReady.Wait(TimeSpan.FromSeconds(5)), Is.True, "роль стримера ждала семафор бота");
 
         await cts.CancelAsync();
@@ -107,7 +108,7 @@ public sealed class OAuthFlowCoordinatorTests
         }
     }
 
-    private Task StartFlowAsync(ManualResetEventSlim urlReady, CancellationToken ct, TwitchOAuthRole role = TwitchOAuthRole.Bot)
+    private Task StartFlowAsync(ManualResetEventSlim urlReady, CancellationToken ct, PlatformAuthRole role = PlatformAuthRole.Bot)
     {
         return _coordinator.StartOAuthFlowToDraftAsync(role,
             "test-client-id",

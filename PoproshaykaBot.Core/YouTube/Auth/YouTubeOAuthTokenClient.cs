@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -10,11 +9,7 @@ public sealed record YouTubeTokenResponse(
     string AccessToken,
     string? RefreshToken,
     int ExpiresInSeconds,
-    string[] Scopes);
-
-public sealed record YouTubeChannelIdentity(
-    string ChannelId,
-    string ChannelTitle);
+    IReadOnlyList<string> Scopes);
 
 public sealed class YouTubeOAuthTokenClient(
     IHttpClientFactory httpClientFactory,
@@ -67,41 +62,6 @@ public sealed class YouTubeOAuthTokenClient(
         return await PostTokenRequestAsync(payload, "обновление access-токена", ct);
     }
 
-    public async Task<YouTubeChannelIdentity> GetOwnChannelAsync(string accessToken, CancellationToken ct = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
-
-        using var client = httpClientFactory.CreateClient(YouTubeOAuthOptions.HttpClientName);
-        var separator = options.ChannelsEndpoint.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-        var requestUri = $"{options.ChannelsEndpoint}{separator}part=snippet&mine=true";
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        using var response = await client.SendAsync(request, ct);
-        var content = await response.Content.ReadAsStringAsync(ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var isRejected = response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
-            throw new YouTubeOAuthException(
-                $"YouTube Data API вернул {(int)response.StatusCode} при чтении канала.",
-                errorCode: null,
-                statusCode: response.StatusCode,
-                isPermanentRejection: isRejected);
-        }
-
-        var dto = JsonSerializer.Deserialize<YouTubeChannelsResponseDto>(content);
-        var channel = dto?.Items?.FirstOrDefault();
-
-        if (channel is null || string.IsNullOrWhiteSpace(channel.Id))
-        {
-            throw new YouTubeOAuthException("У выбранного Google-аккаунта не найден канал YouTube.");
-        }
-
-        return new(channel.Id, channel.Snippet?.Title ?? channel.Id);
-    }
-
     private async Task<YouTubeTokenResponse> PostTokenRequestAsync(
         IReadOnlyCollection<KeyValuePair<string, string>> formFields,
         string operation,
@@ -140,7 +100,7 @@ public sealed class YouTubeOAuthTokenClient(
         }
 
         var scopes = string.IsNullOrWhiteSpace(token.Scope)
-            ? []
+            ? Array.Empty<string>()
             : token.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         return new(token.AccessToken, token.RefreshToken, token.ExpiresIn, scopes);
@@ -216,26 +176,5 @@ public sealed class YouTubeOAuthTokenClient(
 
         [JsonPropertyName("error_description")]
         public string? ErrorDescription { get; set; }
-    }
-
-    private sealed class YouTubeChannelsResponseDto
-    {
-        [JsonPropertyName("items")]
-        public List<YouTubeChannelItemDto>? Items { get; set; }
-    }
-
-    private sealed class YouTubeChannelItemDto
-    {
-        [JsonPropertyName("id")]
-        public string? Id { get; set; }
-
-        [JsonPropertyName("snippet")]
-        public YouTubeChannelSnippetDto? Snippet { get; set; }
-    }
-
-    private sealed class YouTubeChannelSnippetDto
-    {
-        [JsonPropertyName("title")]
-        public string? Title { get; set; }
     }
 }

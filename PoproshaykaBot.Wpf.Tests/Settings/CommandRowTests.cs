@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
@@ -308,7 +309,7 @@ public class CommandRowTests
     [TestCase(true, false)]
     public void Шёпот_без_права_у_бота_страница_просит_переавторизовать_бота(bool granted, bool expectsNotice)
     {
-        new AccountsStore(null, Path.Combine(_root, "accounts.json")).Mutate(TwitchOAuthRole.Bot, account =>
+        new AccountsStore(null, Path.Combine(_root, "accounts.json")).Mutate(PlatformAuthRole.Bot, account =>
             account.StoredScopes = granted
                 ? [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional]
                 : [..TwitchScopes.BotRequired]);
