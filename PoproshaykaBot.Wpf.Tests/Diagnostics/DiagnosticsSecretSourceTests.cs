@@ -17,6 +17,10 @@ public class DiagnosticsSecretSourceTests
     private const string BotAccessToken = "bot-access-0123456789";
     private const string BotRefreshToken = "bot-refresh-0123456789";
     private const string BroadcasterAccessToken = "broadcaster-access-0123456789";
+    private const string YouTubeClientSecret = "yt-client-secret-0123456789";
+    private const string YouTubeBotAccessToken = "yt-bot-access-0123456789";
+    private const string YouTubeBotRefreshToken = "yt-bot-refresh-0123456789";
+    private const string YouTubeBroadcasterAccessToken = "yt-caster-access-0123456789";
     private const string ObsPassword = "obs-password-0123456789";
 
     private string _directory = string.Empty;
@@ -47,7 +51,7 @@ public class DiagnosticsSecretSourceTests
             + Environment.NewLine
             + $"\"ClientSecret\": \"{ClientSecret}\", \"Password\": \"{ObsPassword}\", \"RefreshToken\": \"{BotRefreshToken}\""
             + Environment.NewLine
-            + $"broadcaster={BroadcasterAccessToken}");
+            + $"broadcaster={BroadcasterAccessToken}, yt={YouTubeClientSecret} {YouTubeBotAccessToken} {YouTubeBotRefreshToken} {YouTubeBroadcasterAccessToken}");
 
         using (Assert.EnterMultipleScope())
         {
@@ -55,6 +59,10 @@ public class DiagnosticsSecretSourceTests
             Assert.That(text, Does.Not.Contain(BotAccessToken), "Токен без имени поля ловится только по значению – ради этого источник их и отдаёт");
             Assert.That(text, Does.Not.Contain(BotRefreshToken));
             Assert.That(text, Does.Not.Contain(BroadcasterAccessToken));
+            Assert.That(text, Does.Not.Contain(YouTubeClientSecret));
+            Assert.That(text, Does.Not.Contain(YouTubeBotAccessToken));
+            Assert.That(text, Does.Not.Contain(YouTubeBotRefreshToken));
+            Assert.That(text, Does.Not.Contain(YouTubeBroadcasterAccessToken));
             Assert.That(text, Does.Not.Contain(ObsPassword));
             Assert.That(text, Does.Contain("уехал в строку журнала"), "Вымарывание не должно съедать соседний текст");
         }
@@ -64,7 +72,12 @@ public class DiagnosticsSecretSourceTests
     public void Отказ_одного_источника_не_уносит_прочитанные_секреты()
     {
         var settings = new ThrowingSettingsManager(Path.Combine(_directory, "settings.json"));
-        var source = new BotDiagnosticsSecretSource(settings, CreateAccounts(), CreateObs(), NullLogger<BotDiagnosticsSecretSource>.Instance);
+        var source = new BotDiagnosticsSecretSource(
+            settings,
+            CreateAccounts(),
+            CreateYouTubeAccounts(),
+            CreateObs(),
+            NullLogger<BotDiagnosticsSecretSource>.Instance);
 
         var rules = source.Collect();
 
@@ -73,6 +86,8 @@ public class DiagnosticsSecretSourceTests
             Assert.That(rules.Complete, Is.False, "Пакет не вправе обещать вымарывание, которого не было");
             Assert.That(rules.Values, Does.Contain(BotAccessToken), "Токен прочитался – его вымарывают, даже если соседний источник отказал");
             Assert.That(rules.Values, Does.Contain(BroadcasterAccessToken));
+            Assert.That(rules.Values, Does.Contain(YouTubeClientSecret));
+            Assert.That(rules.Values, Does.Contain(YouTubeBotAccessToken));
             Assert.That(rules.Values, Does.Contain(ObsPassword));
             Assert.That(rules.Values, Does.Not.Contain(ClientSecret));
         }
@@ -84,7 +99,7 @@ public class DiagnosticsSecretSourceTests
 
         settings.Mutate(current => current.Twitch.ClientSecret = ClientSecret);
 
-        return new(settings, CreateAccounts(), CreateObs(), NullLogger<BotDiagnosticsSecretSource>.Instance);
+        return new(settings, CreateAccounts(), CreateYouTubeAccounts(), CreateObs(), NullLogger<BotDiagnosticsSecretSource>.Instance);
     }
 
     private AccountsStore CreateAccounts()
@@ -102,6 +117,28 @@ public class DiagnosticsSecretSourceTests
             {
                 Login = "broadcaster",
                 AccessToken = BroadcasterAccessToken,
+                RefreshToken = string.Empty,
+            });
+
+        return accounts;
+    }
+
+    private YouTubeAccountsStore CreateYouTubeAccounts()
+    {
+        var accounts = new YouTubeAccountsStore(filePath: Path.Combine(_directory, "youtube-accounts.json"));
+
+        accounts.SaveAll(
+            YouTubeClientSecret,
+            new()
+            {
+                ChannelId = "UCbot",
+                AccessToken = YouTubeBotAccessToken,
+                RefreshToken = YouTubeBotRefreshToken,
+            },
+            new()
+            {
+                ChannelId = "UCcaster",
+                AccessToken = YouTubeBroadcasterAccessToken,
                 RefreshToken = string.Empty,
             });
 

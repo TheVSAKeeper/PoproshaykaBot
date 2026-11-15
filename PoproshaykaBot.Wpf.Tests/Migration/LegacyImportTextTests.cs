@@ -73,6 +73,10 @@ public class LegacyImportTextTests
                 Does.StartWith("Статистика зрителей –"));
             Assert.That(LegacyImportText.DescribeFailure(new("youtube\\users_statistics.json", "io")),
                 Does.StartWith("Статистика зрителей YouTube –"));
+            Assert.That(LegacyImportText.DescribeFailure(new("youtube.json", "io")),
+                Does.StartWith("Настройки YouTube –"));
+            Assert.That(LegacyImportText.DescribeFailure(new("youtube-accounts.json", "io")),
+                Does.StartWith("Данные входа в YouTube –"));
         }
     }
 

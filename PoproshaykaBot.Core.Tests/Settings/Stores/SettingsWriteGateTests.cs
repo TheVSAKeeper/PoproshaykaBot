@@ -35,6 +35,8 @@ public sealed class SettingsWriteGateTests
         typeof(PollsStore),
         typeof(RecentCategoriesStore),
         typeof(UpdateStore),
+        typeof(YouTubeSettingsStore),
+        typeof(YouTubeAccountsStore),
     ];
 
     private DirectoryInfo _directory = null!;
@@ -99,6 +101,18 @@ public sealed class SettingsWriteGateTests
         {
             var store = new UpdateStore(null, path, gate);
             return () => store.Save(new());
+        });
+
+        yield return Owner("youtube.json", (path, gate) =>
+        {
+            var store = new YouTubeSettingsStore(null, path, gate);
+            return () => store.Save(new());
+        });
+
+        yield return Owner("youtube-accounts.json", (path, gate) =>
+        {
+            var store = new YouTubeAccountsStore(null, path, gate);
+            return () => store.SaveAll("secret", new(), new());
         });
     }
 

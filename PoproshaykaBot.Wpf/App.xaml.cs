@@ -23,6 +23,7 @@ using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.GameArt;
 using PoproshaykaBot.Core.Users.Avatars;
 using PoproshaykaBot.Core.Update;
+using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
@@ -383,6 +384,7 @@ public partial class App : Application
             .AddSettingsStores()
             .AddDebugChannel(DebugChannel)
             .AddTwitchClients()
+            .AddYouTubeClients()
             .AddGameBoxArt(cacheOnly: IsGallery)
             .AddUserAvatars(cacheOnly: IsGallery)
             .AddChatPipeline()
@@ -484,6 +486,7 @@ public partial class App : Application
         services.AddTransient<MessagesSettingsSectionViewModel>();
         services.AddTransient<HttpServerSectionViewModel>();
         services.AddTransient<OAuthSettingsViewModel>();
+        services.AddTransient<YouTubeSettingsSectionViewModel>();
         services.AddSingleton<ObsChatSettingsSectionViewModel>();
         services.AddSingleton<ObsIntegrationSectionViewModel>();
         services.AddTransient<AutoBroadcastSettingsViewModel>();

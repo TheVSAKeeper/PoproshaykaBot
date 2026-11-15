@@ -193,6 +193,44 @@
                             </HeaderedContentControl>
                         </StackPanel>
 
+                        <StackPanel Visibility="{Binding Sections[youtube].IsSelected, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding Sections[youtube].Title}"
+                                       Style="{StaticResource Setting.SectionTitle}" />
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Google-проект"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="youtube/project">
+                                <StackPanel>
+                                    <TextBlock Text="Ваш собственный проект Google Cloud и реквизиты Desktop-клиента."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding YouTube}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Аккаунт бота"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="youtube/bot">
+                                <StackPanel>
+                                    <TextBlock Text="Google-аккаунт с каналом YouTube, от имени которого бот читает и пишет в чат трансляции."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding YouTube.Bot}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                    Header="Аккаунт стримера"
+                                                    Margin="{StaticResource Setting.BlockGap}"
+                                                    settings:SettingsBlock.Key="youtube/broadcaster">
+                                <StackPanel>
+                                    <TextBlock Text="Google-аккаунт владельца канала: используется для чтения информации об активной трансляции."
+                                               Style="{StaticResource Setting.BlockHint}" />
+                                    <ContentControl Content="{Binding YouTube.Broadcaster}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
+
                         <HeaderedContentControl Style="{StaticResource Form.Panel}"
                                                 Header="{Binding Sections[ranks].Title}"
                                                 Visibility="{Binding Sections[ranks].IsSelected, Converter={StaticResource BoolToVisibility}}">

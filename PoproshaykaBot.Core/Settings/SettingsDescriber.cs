@@ -5,6 +5,8 @@ using PoproshaykaBot.Core.Settings.Debugging;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.YouTube;
+using PoproshaykaBot.Core.YouTube.Auth;
 
 namespace PoproshaykaBot.Core.Settings;
 
@@ -137,6 +139,36 @@ public static class SettingsDescriber
             + $"завершение {OnOff(templates.EndEnabled)}, прерывание {OnOff(templates.TerminatedEnabled)}, "
             + $"архив {OnOff(templates.ArchivedEnabled)}, стоп-дата автозапуска {killSwitch}, "
             + $"история до {settings.HistoryMaxItems}";
+    }
+
+    public static string Describe(YouTubeSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return $"включено {OnOff(settings.Enabled)}, projectId {Value(settings.ProjectId)}, "
+            + $"clientId {Present(settings.ClientId)}, канал {Value(settings.Channel)}, "
+            + $"бюджет квоты {settings.DailyQuotaBudget}";
+    }
+
+    public static string Describe(YouTubeAccountSettings account)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        var expiresAt = account.AccessTokenExpiresAt is { } expiry
+            ? expiry.UtcDateTime.ToString("u")
+            : Unset;
+
+        return $"канал {Value(account.ChannelTitle)}, channelId {Value(account.ChannelId)}, "
+            + $"access-токен {Present(account.AccessToken)}, refresh-токен {Present(account.RefreshToken)}, "
+            + $"действует до {expiresAt}, скоупов {account.Scopes.Length} (сохранено {account.StoredScopes.Length})";
+    }
+
+    public static string DescribeYouTubeAccounts(string? clientSecret, YouTubeAccountSettings bot, YouTubeAccountSettings broadcaster)
+    {
+        ArgumentNullException.ThrowIfNull(bot);
+        ArgumentNullException.ThrowIfNull(broadcaster);
+
+        return $"clientSecret {Present(clientSecret)}; бот – {Describe(bot)}; вещатель – {Describe(broadcaster)}";
     }
 
     private static string OnOff(bool value)

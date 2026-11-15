@@ -36,6 +36,8 @@ internal static class LegacyDataCatalog
     public const string YouTubeQuotaFileName = "youtube/quota.json";
     public const string PollsHistoryFileName = "polls-history.json";
     public const string UiPreferencesFileName = "ui-preferences.toml";
+    public const string YouTubeSettingsFileName = "youtube.json";
+    public const string YouTubeAccountsFileName = "youtube-accounts.json";
 
     private static readonly LegacyDataEntry[] Entries =
     [
@@ -63,6 +65,8 @@ internal static class LegacyDataCatalog
         new("recent-categories.json", $"{SettingsFolderName}/recent-categories.json", LegacyDataCategory.Settings, true),
         new("update.json", $"{SettingsFolderName}/update.json", LegacyDataCategory.Settings, true),
         new(UiPreferencesFileName, $"{SettingsFolderName}/{UiPreferencesFileName}", LegacyDataCategory.UiPreferences, true),
+        new(YouTubeSettingsFileName, $"{SettingsFolderName}/{YouTubeSettingsFileName}", LegacyDataCategory.Settings, true),
+        new(YouTubeAccountsFileName, $"{SettingsFolderName}/{YouTubeAccountsFileName}", LegacyDataCategory.Settings, true),
     ];
 
     public static readonly string[] SettingsFiles =
@@ -132,7 +136,8 @@ internal static class LegacyDataCatalog
     public static bool CarriesTokens(string fileName)
     {
         return string.Equals(fileName, AccountsFileName, StringComparison.OrdinalIgnoreCase)
-               || string.Equals(fileName, SettingsFileName, StringComparison.OrdinalIgnoreCase);
+               || string.Equals(fileName, SettingsFileName, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(fileName, YouTubeAccountsFileName, StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool HasFlatSettingsFiles(string sourceDirectory)

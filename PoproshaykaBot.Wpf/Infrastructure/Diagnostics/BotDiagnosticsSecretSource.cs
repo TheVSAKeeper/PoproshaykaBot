@@ -3,15 +3,19 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.YouTube.Auth;
 
 namespace PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 
 public sealed class BotDiagnosticsSecretSource(
     SettingsManager settings,
     AccountsStore accounts,
+    YouTubeAccountsStore youtubeAccounts,
     ObsIntegrationStore obsIntegration,
     ILogger<BotDiagnosticsSecretSource> logger) : IDiagnosticsSecretSource
 {
+    private static readonly YouTubeOAuthRole[] ActiveYouTubeRoles = [YouTubeOAuthRole.Bot, YouTubeOAuthRole.Broadcaster];
+
     private static readonly string[] BotKeyNames =
         ["clientsecret", "client_secret", "accesstoken", "access_token", "refreshtoken", "refresh_token", "password"];
 
@@ -19,6 +23,8 @@ public sealed class BotDiagnosticsSecretSource(
     {
         var values = new List<string>();
         var complete = Read(values, () => [settings.Current.Twitch.ClientSecret], "настройки Twitch");
+
+        complete &= Read(values, () => [youtubeAccounts.LoadClientSecret()], "настройки YouTube");
 
         complete &= Read(values, () => [obsIntegration.Load().Password], "настройки OBS");
 
@@ -30,6 +36,16 @@ public sealed class BotDiagnosticsSecretSource(
 
                 return [account.AccessToken, account.RefreshToken];
             }, $"токены роли {role}");
+        }
+
+        foreach (var role in ActiveYouTubeRoles)
+        {
+            complete &= Read(values, () =>
+            {
+                var account = youtubeAccounts.Load(role);
+
+                return [account.AccessToken, account.RefreshToken];
+            }, $"токены YouTube роли {role}");
         }
 
         return new(BotKeyNames, [.. values.Where(static value => !string.IsNullOrWhiteSpace(value))])

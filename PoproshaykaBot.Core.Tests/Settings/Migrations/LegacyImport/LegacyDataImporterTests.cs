@@ -466,4 +466,33 @@ public sealed class LegacyDataImporterTests
             Assert.That(File.ReadAllText(Path.Combine(_target, relative)), Is.EqualTo(YouTubeUsers));
         }
     }
+
+    [Test]
+    public void Import_CopiesYouTubeSettingsAndAccounts_AndRedactsOverwriteBackup()
+    {
+        const string YouTubeSettingsJson = """{"enabled":true,"projectId":"p1"}""";
+        const string ExistingYouTubeAccountsJson = """{"clientSecret":"old-sec","botAccount":{"accessToken":"old-at","refreshToken":"old-rt"}}""";
+        const string ImportedYouTubeAccountsJson = """{"clientSecret":"new-sec","botAccount":{"refreshToken":"new-rt"}}""";
+
+        LegacyDataFixture.Write(_target, Path.Combine("settings", "youtube.json"), "{}");
+        LegacyDataFixture.Write(_target, Path.Combine("settings", "youtube-accounts.json"), ExistingYouTubeAccountsJson);
+        LegacyDataFixture.Write(_source, Path.Combine("settings", "youtube.json"), YouTubeSettingsJson);
+        LegacyDataFixture.Write(_source, Path.Combine("settings", "youtube-accounts.json"), ImportedYouTubeAccountsJson);
+
+        var result = LegacyDataImporter.Import(_source, _target, overwrite: true, null);
+        var backups = Directory.GetFiles(Path.Combine(_target, "settings"), "youtube-accounts.pre-import-*.json");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Failures, Is.Empty);
+            Assert.That(result.RequiresReauthorization, Is.False);
+            Assert.That(result.ExternalWrite.Touches("settings/youtube.json"), Is.True);
+            Assert.That(result.ExternalWrite.Touches("settings/youtube-accounts.json"), Is.True);
+            Assert.That(File.ReadAllText(Path.Combine(_target, "settings", "youtube.json")), Is.EqualTo(YouTubeSettingsJson));
+            Assert.That(File.ReadAllText(Path.Combine(_target, "settings", "youtube-accounts.json")), Is.EqualTo(ImportedYouTubeAccountsJson));
+            Assert.That(File.Exists(Path.Combine(_target, "settings", "youtube-accounts.json.bak")), Is.False);
+            Assert.That(backups, Has.Length.EqualTo(1));
+            Assert.That(File.ReadAllText(backups[0]), Does.Not.Contain("old-sec").And.Not.Contain("old-at").And.Not.Contain("old-rt"));
+        }
+    }
 }

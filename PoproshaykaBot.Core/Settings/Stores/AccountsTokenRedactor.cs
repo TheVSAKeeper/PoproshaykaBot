@@ -8,6 +8,7 @@ internal static class AccountsTokenRedactor
     {
         "accessToken",
         "refreshToken",
+        "clientSecret",
     };
 
     public static string Redact(string raw)

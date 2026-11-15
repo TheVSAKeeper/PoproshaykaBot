@@ -12,6 +12,8 @@ public static class LegacyImportText
     {
         ["settings.json"] = "Основные настройки",
         ["accounts.json"] = "Данные входа в Twitch",
+        ["youtube.json"] = "Настройки YouTube",
+        ["youtube-accounts.json"] = "Данные входа в YouTube",
         ["broadcast-profiles.json"] = "Профили трансляции",
         ["broadcast-profile-platforms.json"] = "Площадки профилей рассылки",
         ["dashboard-layout.json"] = "Раскладка обзора",

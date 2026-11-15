@@ -28,6 +28,18 @@ public sealed class SettingsWriteFactTests
         yield return Case("accounts.json", "AccountsStore.SaveAll", (path, gate) =>
             new AccountsStore(null, path, gate).SaveAll(new() { Login = "bot" }, new() { Login = "streamer" }));
 
+        yield return Case("youtube.json", "YouTubeSettingsStore.Save", (path, gate) =>
+            new YouTubeSettingsStore(null, path, gate).Save(new() { Enabled = true }));
+
+        yield return Case("youtube.json", "YouTubeSettingsStore.Mutate", (path, gate) =>
+            new YouTubeSettingsStore(null, path, gate).Mutate(settings => settings.Enabled = true));
+
+        yield return Case("youtube-accounts.json", "YouTubeAccountsStore.SaveAll", (path, gate) =>
+            new YouTubeAccountsStore(null, path, gate).SaveAll("sec", new() { ChannelId = "bot" }, new() { ChannelId = "caster" }));
+
+        yield return Case("youtube-accounts.json", "YouTubeAccountsStore.SaveClientSecret", (path, gate) =>
+            new YouTubeAccountsStore(null, path, gate).SaveClientSecret("sec"));
+
         yield return Case("broadcast-profiles.json", "BroadcastProfilesStore.Save", (path, gate) =>
             new BroadcastProfilesStore(null, path, gate).Save(new()));
 

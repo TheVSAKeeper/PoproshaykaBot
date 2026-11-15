@@ -12,6 +12,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -123,6 +124,54 @@ public class SettingsPageRanksSaveTests
         });
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task YouTube_настройки_сохраняются_и_уважают_гейт_записи(bool gateClosed)
+    {
+        using var harness = new Harness(_root);
+
+        if (gateClosed)
+        {
+            await harness.CloseYouTubeGateAsync();
+        }
+
+        harness.Page.YouTube.Enabled = true;
+        harness.Page.YouTube.ProjectId = "yt-project-1";
+        harness.Page.YouTube.ClientId = "yt-client-1";
+        harness.Page.YouTube.ClientSecret = "yt-secret-1";
+        harness.Page.YouTube.Channel = "@ytchannel";
+        harness.Page.YouTube.DailyQuotaBudgetText = "12000";
+        harness.Page.YouTube.Bot.AccessTokenValue = "bot-at-1";
+
+        await harness.Page.SaveCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(harness.YouTubeSettingsStore.Load().Enabled, Is.True);
+            Assert.That(harness.YouTubeSettingsStore.Load().ProjectId, Is.EqualTo("yt-project-1"));
+            Assert.That(harness.YouTubeAccountsStore.LoadClientSecret(), Is.EqualTo("yt-secret-1"));
+            Assert.That(File.Exists(harness.YouTubeSettingsPath), Is.EqualTo(!gateClosed));
+            Assert.That(harness.Dialogs.Infos, Has.Count.EqualTo(1));
+            Assert.That(harness.Dialogs.Infos[0], gateClosed ? Does.Contain("не записаны") : Does.Contain("успешно сохранены"));
+        });
+    }
+
+    [Test]
+    public async Task YouTube_некорректный_бюджет_квоты_останавливает_сохранение()
+    {
+        using var harness = new Harness(_root);
+        harness.Page.YouTube.DailyQuotaBudgetText = "abc";
+
+        await harness.Page.SaveCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(File.Exists(harness.YouTubeSettingsPath), Is.False);
+            Assert.That(harness.Dialogs.Warnings, Has.Count.EqualTo(1));
+            Assert.That(harness.Dialogs.Infos, Is.Empty);
+        });
+    }
+
     [Test]
     public async Task Сбой_после_записи_настроек_не_оставляет_лестницу_на_прежних_рангах()
     {
@@ -174,6 +223,9 @@ public class SettingsPageRanksSaveTests
 
             var mcpPreferences = new McpPreferences(uiSettings, mcpOptions);
             var kestrel = new KestrelHttpServer(null!, SettingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
+            YouTubeSettingsPath = Path.Combine(root, "youtube.json");
+            YouTubeSettingsStore = new YouTubeSettingsStore(null, YouTubeSettingsPath, _gate);
+            YouTubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(root, "youtube-accounts.json"), _gate);
 
             Page = new(
                 new(),
@@ -181,6 +233,7 @@ public class SettingsPageRanksSaveTests
                 new(kestrel, Dialogs, null!),
                 new(),
                 new(DispatchProxy.Create<ITwitchOAuthService, InertProxy>(), accountsStore, Dialogs, null!, null!, null!, NullLoggerFactory.Instance),
+                new(DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(), null!, Dialogs, new ManualUiDispatcher(), NullLoggerFactory.Instance),
                 new(obsChatStore, SettingsManager, Dialogs, null!),
                 new(null!, SettingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, Dialogs, null!),
                 new(),
@@ -196,6 +249,8 @@ public class SettingsPageRanksSaveTests
                 null!,
                 SettingsManager,
                 accountsStore,
+                YouTubeSettingsStore,
+                YouTubeAccountsStore,
                 obsChatStore,
                 obsIntegrationStore,
                 updateStore,
@@ -220,6 +275,12 @@ public class SettingsPageRanksSaveTests
 
         public UpdateStore UpdateStore { get; }
 
+        public string YouTubeSettingsPath { get; }
+
+        public YouTubeSettingsStore YouTubeSettingsStore { get; }
+
+        public YouTubeAccountsStore YouTubeAccountsStore { get; }
+
         public SettingsPageViewModel Page { get; }
 
         public int RanksChanged { get; private set; }
@@ -227,6 +288,11 @@ public class SettingsPageRanksSaveTests
         public Task CloseSettingsGateAsync()
         {
             return _gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { "settings.json" });
+        }
+
+        public Task CloseYouTubeGateAsync()
+        {
+            return _gate.RunExternalWriteAsync(() => Task.FromResult(0), _ => new[] { "youtube.json", "youtube-accounts.json" });
         }
 
         public IReadOnlyList<UserRank> ReadRanksFromDisk()

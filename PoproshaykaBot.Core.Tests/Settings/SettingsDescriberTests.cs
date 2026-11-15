@@ -5,6 +5,8 @@ using PoproshaykaBot.Core.Settings.Debugging;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.YouTube;
+using PoproshaykaBot.Core.YouTube.Auth;
 
 namespace PoproshaykaBot.Core.Tests.Settings;
 
@@ -77,6 +79,33 @@ public sealed class SettingsDescriberTests
                 HistoryMaxItems = 33,
             }),
             ["объявление старта вкл", "прогресс выкл каждые 45 с", "история до 33"]);
+
+        yield return new("YouTubeSettings",
+            SettingsDescriber.Describe(new YouTubeSettings
+            {
+                Enabled = true,
+                ProjectId = "yt-proj-1",
+                ClientId = "yt-client-id",
+                Channel = "@mychannel",
+                DailyQuotaBudget = 8000,
+            }),
+            ["включено вкл", "projectId yt-proj-1", "clientId есть", "@mychannel", "бюджет квоты 8000"]);
+
+        yield return new("YouTubeAccounts",
+            SettingsDescriber.DescribeYouTubeAccounts(
+                "SECRET-1",
+                new()
+                {
+                    ChannelTitle = "BotChan",
+                    ChannelId = "UC111",
+                    AccessToken = "SECRET-2",
+                    RefreshToken = "SECRET-3",
+                    Scopes = [YouTubeScopes.ForceSsl],
+                    StoredScopes = [YouTubeScopes.ForceSsl],
+                    AccessTokenExpiresAt = new DateTimeOffset(2026, 9, 7, 10, 0, 0, TimeSpan.Zero),
+                },
+                new() { ChannelTitle = "BroadcasterChan", ChannelId = "UC222" }),
+            ["clientSecret есть", "BotChan", "UC111", "access-токен есть", "refresh-токен есть", "BroadcasterChan", "UC222"]);
     }
 
     private static AppSettings CreateAppSettings()

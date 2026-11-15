@@ -12,6 +12,8 @@ public static class SettingsServiceCollectionExtensions
         services.AddSingleton<SettingsWriteGate>();
         services.AddSingleton<SettingsManager>();
         services.AddSingleton<AccountsStore>();
+        services.AddSingleton<YouTubeSettingsStore>();
+        services.AddSingleton<YouTubeAccountsStore>();
         services.AddSingleton<CommandSettingsStore>();
         services.AddSingleton<BroadcastProfilesStore>();
         services.AddSingleton<BroadcastProfilePlatformsStore>();

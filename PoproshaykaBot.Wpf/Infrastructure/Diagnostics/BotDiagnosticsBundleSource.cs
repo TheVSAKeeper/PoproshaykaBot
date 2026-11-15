@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.YouTube.Auth;
 using System.Text;
 
 namespace PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
@@ -11,6 +12,8 @@ namespace PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 public sealed class BotDiagnosticsBundleSource(
     SettingsManager settings,
     AccountsStore accounts,
+    YouTubeSettingsStore youtubeSettings,
+    YouTubeAccountsStore youtubeAccounts,
     ObsIntegrationStore obsIntegration,
     ObsChatStore obsChat,
     UpdateStore update,
@@ -70,6 +73,12 @@ public sealed class BotDiagnosticsBundleSource(
         Append(builder, nameof(AppSettings), SettingsDescriber.Describe(settings.Current));
         Append(builder, "Account.Bot", SettingsDescriber.Describe(accounts.Load(TwitchOAuthRole.Bot)));
         Append(builder, "Account.Broadcaster", SettingsDescriber.Describe(accounts.Load(TwitchOAuthRole.Broadcaster)));
+        Append(builder, "YouTubeSettings", SettingsDescriber.Describe(youtubeSettings.Load()));
+        Append(builder, "YouTubeAccounts",
+            SettingsDescriber.DescribeYouTubeAccounts(
+                youtubeAccounts.LoadClientSecret(),
+                youtubeAccounts.Load(YouTubeOAuthRole.Bot),
+                youtubeAccounts.Load(YouTubeOAuthRole.Broadcaster)));
         Append(builder, "ObsIntegrationSettings", SettingsDescriber.Describe(obsIntegration.Load()));
         Append(builder, "ObsChatSettings", SettingsDescriber.Describe(obsChat.Load()));
         Append(builder, "UpdateSettings", SettingsDescriber.Describe(update.Load()));

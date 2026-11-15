@@ -14,6 +14,8 @@ using PoproshaykaBot.Core.Settings.Debugging;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.YouTube;
+using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.ComponentModel;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -51,6 +53,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     private readonly SettingsManager _settingsManager;
     private readonly AccountsStore _accountsStore;
+    private readonly YouTubeSettingsStore _youtubeSettingsStore;
+    private readonly YouTubeAccountsStore _youtubeAccountsStore;
     private readonly ObsChatStore _obsChatStore;
     private readonly ObsIntegrationStore _obsIntegrationStore;
     private readonly UpdateStore _updateStore;
@@ -69,6 +73,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private AppSettings _settings = new();
     private TwitchAccountSettings _botDraft = new();
     private TwitchAccountSettings _broadcasterDraft = new();
+    private YouTubeSettings _youtubeSettingsDraft = new();
+    private string _youtubeClientSecretDraft = string.Empty;
+    private YouTubeAccountSettings _youtubeBotDraft = new();
+    private YouTubeAccountSettings _youtubeBroadcasterDraft = new();
     private ObsChatSettings _obsChatDraft = new();
     private string _obsChatBaselineJson = string.Empty;
     private ObsIntegrationSettings _obsIntegrationDraft = new();
@@ -92,6 +100,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         HttpServerSectionViewModel httpServer,
         MessagesSettingsSectionViewModel messages,
         OAuthSettingsViewModel oauth,
+        YouTubeSettingsSectionViewModel youTube,
         ObsChatSettingsSectionViewModel obsChat,
         ObsIntegrationSectionViewModel obsIntegration,
         AutoBroadcastSettingsViewModel autoBroadcast,
@@ -107,6 +116,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         ThemeViewModel theme,
         SettingsManager settingsManager,
         AccountsStore accountsStore,
+        YouTubeSettingsStore youtubeSettingsStore,
+        YouTubeAccountsStore youtubeAccountsStore,
         ObsChatStore obsChatStore,
         ObsIntegrationStore obsIntegrationStore,
         UpdateStore updateStore,
@@ -125,6 +136,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         HttpServer = httpServer;
         Messages = messages;
         OAuth = oauth;
+        YouTube = youTube;
         ObsChat = obsChat;
         ObsIntegration = obsIntegration;
         AutoBroadcast = autoBroadcast;
@@ -141,6 +153,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
         _settingsManager = settingsManager;
         _accountsStore = accountsStore;
+        _youtubeSettingsStore = youtubeSettingsStore;
+        _youtubeAccountsStore = youtubeAccountsStore;
         _obsChatStore = obsChatStore;
         _obsIntegrationStore = obsIntegrationStore;
         _updateStore = updateStore;
@@ -195,6 +209,16 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
                     new SettingsSubsection("broadcaster", "Аккаунт стримера"),
                 ]),
             new SettingsSection(
+                "youtube",
+                "YouTube",
+                PackIconLucideKind.Tv,
+                "youtube ютуб google проект project id client secret квота канал авторизация бот стример testing production",
+                [
+                    new SettingsSubsection("project", "Google-проект"),
+                    new SettingsSubsection("bot", "Аккаунт бота"),
+                    new SettingsSubsection("broadcaster", "Аккаунт стримера"),
+                ]),
+            new SettingsSection(
                 "obs",
                 "OBS",
                 PackIconLucideKind.MonitorPlay,
@@ -232,6 +256,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     public MessagesSettingsSectionViewModel Messages { get; }
 
     public OAuthSettingsViewModel OAuth { get; }
+
+    public YouTubeSettingsSectionViewModel YouTube { get; }
 
     public ObsChatSettingsSectionViewModel ObsChat { get; }
 
@@ -290,6 +316,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             _settings = JsonStoreClone.DeepClone(_settingsManager.Current);
             _botDraft = JsonStoreClone.DeepClone(_accountsStore.LoadBot());
             _broadcasterDraft = JsonStoreClone.DeepClone(_accountsStore.LoadBroadcaster());
+            _youtubeSettingsDraft = JsonStoreClone.DeepClone(_youtubeSettingsStore.Load());
+            _youtubeClientSecretDraft = _youtubeAccountsStore.LoadClientSecret();
+            _youtubeBotDraft = JsonStoreClone.DeepClone(_youtubeAccountsStore.LoadBot());
+            _youtubeBroadcasterDraft = JsonStoreClone.DeepClone(_youtubeAccountsStore.LoadBroadcaster());
             _obsChatDraft = JsonStoreClone.DeepClone(_obsChatStore.Load());
             _obsChatBaselineJson = SerializeObsChat(_obsChatDraft);
             _obsIntegrationDraft = JsonStoreClone.DeepClone(_obsIntegrationStore.Load());
@@ -301,6 +331,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             HttpServer.LoadSettings(_settings.Twitch);
             Messages.LoadSettings(_settings.Twitch.Messages);
             OAuth.Load(_settings, _botDraft, _broadcasterDraft);
+            YouTube.Load(_youtubeSettingsDraft, _youtubeClientSecretDraft, _youtubeBotDraft, _youtubeBroadcasterDraft);
             ObsChat.LoadFrom(_obsChatDraft);
             ObsIntegration.Load(_obsIntegrationDraft);
             AutoBroadcast.LoadSettings(_settings.Twitch.AutoBroadcast);
@@ -340,6 +371,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
 
         OAuth.SettingChanged -= OnOAuthSettingChanged;
+        YouTube.SettingChanged -= OnOAuthSettingChanged;
         Polls.PropertyChanged -= OnPollsPropertyChanged;
         DashboardLayout.Edited -= OnDashboardLayoutEdited;
         Ranks.Edited -= OnRanksEdited;
@@ -361,6 +393,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         }
 
         OAuth.SettingChanged += OnOAuthSettingChanged;
+        YouTube.SettingChanged += OnOAuthSettingChanged;
         Polls.PropertyChanged += OnPollsPropertyChanged;
         DashboardLayout.Edited += OnDashboardLayoutEdited;
         Ranks.Edited += OnRanksEdited;
@@ -415,6 +448,12 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             return;
         }
 
+        if (YouTube.HasQuotaBudgetError)
+        {
+            _dialogService.Warning("Настройки", "В разделе «YouTube» указан некорректный бюджет квоты. Исправьте его и сохраните ещё раз.");
+            return;
+        }
+
         try
         {
             if (_ranksEdited)
@@ -426,6 +465,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             RateLimiting.SaveSettings(_settings.Twitch);
             Messages.SaveSettings(_settings.Twitch.Messages);
             OAuth.Save(_settings);
+            YouTube.SaveTo(_youtubeSettingsDraft, out _youtubeClientSecretDraft, _youtubeBotDraft, _youtubeBroadcasterDraft);
             ObsChat.ApplyTo(_obsChatDraft);
             ObsIntegration.SaveTo(_obsIntegrationDraft);
             AutoBroadcast.SaveSettings(_settings.Twitch.AutoBroadcast);
@@ -435,6 +475,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
             var prevBotToken = _accountsStore.LoadBot().AccessToken;
             var prevBroadcasterToken = _accountsStore.LoadBroadcaster().AccessToken;
+            var prevYouTubeBotToken = _youtubeAccountsStore.LoadBot().AccessToken;
+            var prevYouTubeBroadcasterToken = _youtubeAccountsStore.LoadBroadcaster().AccessToken;
             var prevPort = _settingsManager.Current.Twitch.HttpServerPort;
             var prevTargetChannel = _targetChannelProvider.Current.Login;
             var prevChatDisplayAccount = _settingsManager.Current.Twitch.ChatDisplayAccount;
@@ -451,6 +493,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             }
 
             written &= _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
+            written &= _youtubeSettingsStore.Save(_youtubeSettingsDraft);
+            written &= _youtubeAccountsStore.SaveAll(_youtubeClientSecretDraft, _youtubeBotDraft, _youtubeBroadcasterDraft);
             SaveObsChatDraftWithConflictCheck();
             _obsIntegrationStore.Save(_obsIntegrationDraft);
             var storedUpdate = _updateStore.Load();
@@ -474,6 +518,16 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
             if (!string.Equals(prevBroadcasterToken, _broadcasterDraft.AccessToken, StringComparison.Ordinal))
             {
                 await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
+            }
+
+            if (!string.Equals(prevYouTubeBotToken, _youtubeBotDraft.AccessToken, StringComparison.Ordinal))
+            {
+                await _eventBus.PublishAsync(new YouTubeAuthorizationRefreshed(YouTubeOAuthRole.Bot));
+            }
+
+            if (!string.Equals(prevYouTubeBroadcasterToken, _youtubeBroadcasterDraft.AccessToken, StringComparison.Ordinal))
+            {
+                await _eventBus.PublishAsync(new YouTubeAuthorizationRefreshed(YouTubeOAuthRole.Broadcaster));
             }
 
             var newTargetChannel = _targetChannelProvider.Current.Login;

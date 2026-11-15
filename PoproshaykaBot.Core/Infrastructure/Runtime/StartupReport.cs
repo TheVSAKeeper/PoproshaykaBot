@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.GameArt;
 using PoproshaykaBot.Core.Update;
+using PoproshaykaBot.Core.YouTube.Auth;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -59,6 +60,20 @@ public static class StartupReport
         {
             LogSnapshot(logger, "Account.Bot", SettingsDescriber.Describe(accountsStore.Load(TwitchOAuthRole.Bot)));
             LogSnapshot(logger, "Account.Broadcaster", SettingsDescriber.Describe(accountsStore.Load(TwitchOAuthRole.Broadcaster)));
+        }
+
+        if (services.GetService<YouTubeSettingsStore>() is { } youtubeSettingsStore)
+        {
+            LogSnapshot(logger, "YouTubeSettings", SettingsDescriber.Describe(youtubeSettingsStore.Load()));
+        }
+
+        if (services.GetService<YouTubeAccountsStore>() is { } youtubeAccountsStore)
+        {
+            LogSnapshot(logger, "YouTubeAccounts",
+                SettingsDescriber.DescribeYouTubeAccounts(
+                    youtubeAccountsStore.LoadClientSecret(),
+                    youtubeAccountsStore.Load(YouTubeOAuthRole.Bot),
+                    youtubeAccountsStore.Load(YouTubeOAuthRole.Broadcaster)));
         }
 
         if (services.GetService<ObsIntegrationStore>() is { } obsIntegrationStore)
