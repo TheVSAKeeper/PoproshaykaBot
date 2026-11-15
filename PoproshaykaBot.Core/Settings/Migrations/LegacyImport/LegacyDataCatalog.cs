@@ -19,7 +19,8 @@ internal sealed record LegacyDataEntry(
     string FileName,
     string RelativeTargetPath,
     LegacyDataCategory Category,
-    bool AllowFlatFallback = false);
+    bool AllowFlatFallback = false,
+    bool CarriesTokens = false);
 
 internal static class LegacyDataCatalog
 {
@@ -54,8 +55,8 @@ internal static class LegacyDataCatalog
         new("unknown_commands.txt", "unknown_commands.txt", LegacyDataCategory.ChatRuntime),
         new("chat-blockers.txt", "chat-blockers.txt", LegacyDataCategory.ChatRuntime),
         new("chat-zoom.txt", "chat-zoom.txt", LegacyDataCategory.ChatRuntime),
-        new(SettingsFileName, $"{SettingsFolderName}/{SettingsFileName}", LegacyDataCategory.Settings, true),
-        new(AccountsFileName, $"{SettingsFolderName}/{AccountsFileName}", LegacyDataCategory.Settings, true),
+        new(SettingsFileName, $"{SettingsFolderName}/{SettingsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
+        new(AccountsFileName, $"{SettingsFolderName}/{AccountsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
         new("broadcast-profiles.json", $"{SettingsFolderName}/broadcast-profiles.json", LegacyDataCategory.Settings, true),
         new(BroadcastProfilePlatformsFileName, $"{SettingsFolderName}/{BroadcastProfilePlatformsFileName}", LegacyDataCategory.Settings, true),
         new("dashboard-layout.json", $"{SettingsFolderName}/dashboard-layout.json", LegacyDataCategory.Settings, true),
@@ -66,8 +67,10 @@ internal static class LegacyDataCatalog
         new("update.json", $"{SettingsFolderName}/update.json", LegacyDataCategory.Settings, true),
         new(UiPreferencesFileName, $"{SettingsFolderName}/{UiPreferencesFileName}", LegacyDataCategory.UiPreferences, true),
         new(YouTubeSettingsFileName, $"{SettingsFolderName}/{YouTubeSettingsFileName}", LegacyDataCategory.Settings, true),
-        new(YouTubeAccountsFileName, $"{SettingsFolderName}/{YouTubeAccountsFileName}", LegacyDataCategory.Settings, true),
+        new(YouTubeAccountsFileName, $"{SettingsFolderName}/{YouTubeAccountsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
     ];
+
+    public static IReadOnlyList<LegacyDataEntry> AllEntries => Entries;
 
     public static readonly string[] SettingsFiles =
     [
@@ -135,9 +138,9 @@ internal static class LegacyDataCatalog
 
     public static bool CarriesTokens(string fileName)
     {
-        return string.Equals(fileName, AccountsFileName, StringComparison.OrdinalIgnoreCase)
-               || string.Equals(fileName, SettingsFileName, StringComparison.OrdinalIgnoreCase)
-               || string.Equals(fileName, YouTubeAccountsFileName, StringComparison.OrdinalIgnoreCase);
+        return Entries.Any(entry =>
+            entry.CarriesTokens
+            && string.Equals(entry.FileName, fileName, StringComparison.OrdinalIgnoreCase));
     }
 
     public static bool HasFlatSettingsFiles(string sourceDirectory)

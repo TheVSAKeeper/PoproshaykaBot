@@ -1,5 +1,6 @@
 ﻿using KeepShell.Services.Platform;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
@@ -12,7 +13,7 @@ public class EmbeddedTwitchAuthDialogTests
     private const string LeakedSecret = "abcdef0123456789";
 
     private static readonly EmbeddedTwitchAuthRequest Request = new(
-        TwitchOAuthRole.Bot,
+        PlatformAuthRole.Bot,
         "client-id",
         "client-secret",
         ["chat:read"],
@@ -121,8 +122,8 @@ public class EmbeddedTwitchAuthDialogTests
 
         var flow = viewModel.RunFlowAsync();
 
-        oauth.RaiseStatus(TwitchOAuthRole.Broadcaster, "статус чужой роли");
-        oauth.RaiseStatus(TwitchOAuthRole.Bot, "Ожидание авторизации пользователя");
+        oauth.RaiseStatus(PlatformAuthRole.Broadcaster, "статус чужой роли");
+        oauth.RaiseStatus(PlatformAuthRole.Bot, "Ожидание авторизации пользователя");
 
         Assert.That(viewModel.StatusMessage, Is.EqualTo("Ожидание авторизации пользователя"));
 
@@ -173,7 +174,7 @@ public class EmbeddedTwitchAuthDialogTests
 
     private sealed class FakeOAuthService : ITwitchOAuthService
     {
-        public event Action<TwitchOAuthRole, string>? StatusChanged;
+        public event Action<PlatformAuthRole, string>? StatusChanged;
 
         public bool IsStarted { get; private set; }
 
@@ -184,13 +185,13 @@ public class EmbeddedTwitchAuthDialogTests
 
         public bool HasStatusSubscribers => StatusChanged is not null;
 
-        public void RaiseStatus(TwitchOAuthRole role, string message)
+        public void RaiseStatus(PlatformAuthRole role, string message)
         {
             StatusChanged?.Invoke(role, message);
         }
 
         public Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
-            TwitchOAuthRole role,
+            PlatformAuthRole role,
             string clientId,
             string clientSecret,
             string[]? scopes,
@@ -207,7 +208,7 @@ public class EmbeddedTwitchAuthDialogTests
         }
 
         public Task<string> StartOAuthFlowAsync(
-            TwitchOAuthRole role,
+            PlatformAuthRole role,
             string clientId,
             string clientSecret,
             string[]? scopes,
@@ -240,7 +241,7 @@ public class EmbeddedTwitchAuthDialogTests
         }
 
         public Task<string> RefreshTokenAsync(
-            TwitchOAuthRole role,
+            PlatformAuthRole role,
             string clientId,
             string clientSecret,
             string refreshToken,
@@ -249,13 +250,13 @@ public class EmbeddedTwitchAuthDialogTests
             throw new NotSupportedException();
         }
 
-        public Task<string?> GetAccessTokenAsync(TwitchOAuthRole role, CancellationToken ct = default)
+        public Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default)
         {
             throw new NotSupportedException();
         }
 
         public void UpdateSettings(
-            TwitchOAuthRole role,
+            PlatformAuthRole role,
             string accessToken,
             string refreshToken,
             IEnumerable<string>? newScopes,
@@ -267,7 +268,7 @@ public class EmbeddedTwitchAuthDialogTests
             throw new NotSupportedException();
         }
 
-        public void ClearTokens(TwitchOAuthRole role)
+        public void ClearTokens(PlatformAuthRole role)
         {
             throw new NotSupportedException();
         }

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
-using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Twitch.Auth;
@@ -9,10 +10,11 @@ public sealed class OAuthAccountWriter(
     AccountsStore accountsStore,
     IEventBus eventBus,
     OAuthStatusReporter statusReporter,
+    TimeProvider timeProvider,
     ILogger<OAuthAccountWriter> logger)
 {
     public void UpdateSettings(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string accessToken,
         string refreshToken,
         IEnumerable<string>? newScopes,
@@ -22,6 +24,7 @@ public sealed class OAuthAccountWriter(
         bool publishAuthorizationRefreshed = false)
     {
         var scopesSnapshot = newScopes?.ToArray();
+        var now = timeProvider.GetUtcNow();
 
         accountsStore.Mutate(role, account =>
         {
@@ -36,7 +39,7 @@ public sealed class OAuthAccountWriter(
             }
 
             account.AccessTokenExpiresAt = expiresInSeconds > 0
-                ? DateTimeOffset.UtcNow.AddSeconds(expiresInSeconds)
+                ? now.AddSeconds(expiresInSeconds)
                 : null;
         });
 
@@ -48,11 +51,16 @@ public sealed class OAuthAccountWriter(
 
         if (publishAuthorizationRefreshed)
         {
-            _ = eventBus.PublishAsync(new TwitchAuthorizationRefreshed(role));
+            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, role));
         }
     }
 
-    public void ClearTokens(TwitchOAuthRole role)
+    public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken)
+    {
+        return accountsStore.TryClearAccessToken(role, expectedToken);
+    }
+
+    public void ClearTokens(PlatformAuthRole role)
     {
         accountsStore.Mutate(role, OAuthRoleHelpers.ClearAccountInPlace);
 

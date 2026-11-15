@@ -1,11 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Infrastructure.Diagnostics;
 using PoproshaykaBot.Core.Twitch.GameArt;
 using PoproshaykaBot.Core.Update;
-using PoproshaykaBot.Core.YouTube.Auth;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -51,69 +48,12 @@ public static class StartupReport
                 updateEnvironment.ArchitectureMoniker);
         }
 
-        if (services.GetService<SettingsManager>() is { } settingsManager)
+        foreach (var contributor in services.GetServices<ISettingsSnapshotContributor>())
         {
-            LogSnapshot(logger, nameof(AppSettings), SettingsDescriber.Describe(settingsManager.Current));
-        }
-
-        if (services.GetService<AccountsStore>() is { } accountsStore)
-        {
-            LogSnapshot(logger, "Account.Bot", SettingsDescriber.Describe(accountsStore.Load(TwitchOAuthRole.Bot)));
-            LogSnapshot(logger, "Account.Broadcaster", SettingsDescriber.Describe(accountsStore.Load(TwitchOAuthRole.Broadcaster)));
-        }
-
-        if (services.GetService<YouTubeSettingsStore>() is { } youtubeSettingsStore)
-        {
-            LogSnapshot(logger, "YouTubeSettings", SettingsDescriber.Describe(youtubeSettingsStore.Load()));
-        }
-
-        if (services.GetService<YouTubeAccountsStore>() is { } youtubeAccountsStore)
-        {
-            LogSnapshot(logger, "YouTubeAccounts",
-                SettingsDescriber.DescribeYouTubeAccounts(
-                    youtubeAccountsStore.LoadClientSecret(),
-                    youtubeAccountsStore.Load(YouTubeOAuthRole.Bot),
-                    youtubeAccountsStore.Load(YouTubeOAuthRole.Broadcaster)));
-        }
-
-        if (services.GetService<ObsIntegrationStore>() is { } obsIntegrationStore)
-        {
-            LogSnapshot(logger, "ObsIntegrationSettings", SettingsDescriber.Describe(obsIntegrationStore.Load()));
-        }
-
-        if (services.GetService<ObsChatStore>() is { } obsChatStore)
-        {
-            LogSnapshot(logger, "ObsChatSettings", SettingsDescriber.Describe(obsChatStore.Load()));
-        }
-
-        if (services.GetService<UpdateStore>() is { } updateStore)
-        {
-            LogSnapshot(logger, "UpdateSettings", SettingsDescriber.Describe(updateStore.Load()));
-        }
-
-        if (services.GetService<DebugChannelStore>() is { } debugChannelStore)
-        {
-            LogSnapshot(logger, "DebugChannelSettings", SettingsDescriber.Describe(debugChannelStore.Load()));
-        }
-
-        if (services.GetService<BroadcastProfilesStore>() is { } broadcastProfilesStore)
-        {
-            LogSnapshot(logger, "BroadcastProfilesSettings", SettingsDescriber.Describe(broadcastProfilesStore.Load()));
-        }
-
-        if (services.GetService<BroadcastProfilePlatformsStore>() is { } broadcastProfilePlatformsStore)
-        {
-            LogSnapshot(logger, "BroadcastProfilePlatformsSettings", SettingsDescriber.Describe(broadcastProfilePlatformsStore.Load()));
-        }
-
-        if (services.GetService<PollsStore>() is { } pollsStore)
-        {
-            LogSnapshot(logger, "PollsSettings", SettingsDescriber.Describe(pollsStore.Load()));
-        }
-
-        if (services.GetService<CommandSettingsStore>() is { } commandSettingsStore)
-        {
-            LogSnapshot(logger, "CommandSettings", SettingsDescriber.Describe(commandSettingsStore.Load()));
+            foreach (var entry in contributor.CollectSnapshots())
+            {
+                LogSnapshot(logger, entry.Key, entry.Description);
+            }
         }
 
         if (services.GetService<IGameBoxArtCache>() is { } boxArtCache)

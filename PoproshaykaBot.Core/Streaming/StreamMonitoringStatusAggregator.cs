@@ -1,10 +1,10 @@
-﻿using PoproshaykaBot.Core.Twitch.Auth;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
 
 namespace PoproshaykaBot.Core.Streaming;
 
 public static class StreamMonitoringStatusAggregator
 {
-    public static (StreamMonitoringStatus Status, TwitchOAuthRole Role)? SelectWorst(
+    public static (StreamMonitoringStatus Status, PlatformAuthRole Role)? SelectWorst(
         StreamMonitoringStatus? bot,
         StreamMonitoringStatus? broadcaster)
     {
@@ -15,17 +15,17 @@ public static class StreamMonitoringStatusAggregator
 
         if (bot is null)
         {
-            return (broadcaster!.Value, TwitchOAuthRole.Broadcaster);
+            return (broadcaster!.Value, PlatformAuthRole.Broadcaster);
         }
 
         if (broadcaster is null)
         {
-            return (bot.Value, TwitchOAuthRole.Bot);
+            return (bot.Value, PlatformAuthRole.Bot);
         }
 
         return Severity(bot.Value) >= Severity(broadcaster.Value)
-            ? (bot.Value, TwitchOAuthRole.Bot)
-            : (broadcaster.Value, TwitchOAuthRole.Broadcaster);
+            ? (bot.Value, PlatformAuthRole.Bot)
+            : (broadcaster.Value, PlatformAuthRole.Broadcaster);
     }
 
     private static int Severity(StreamMonitoringStatus status)

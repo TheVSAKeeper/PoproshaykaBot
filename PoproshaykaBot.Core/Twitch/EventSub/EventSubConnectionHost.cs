@@ -1,25 +1,25 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
-using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Reconnection;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Core.Twitch.Auth;
 
 namespace PoproshaykaBot.Core.Twitch.EventSub;
 
 public sealed class EventSubConnectionHost :
     IStreamHostedComponent,
-    IEventHandler<TwitchAuthorizationRefreshed>,
+    IEventHandler<PlatformAuthorizationRefreshed>,
     IAsyncDisposable
 {
     private const int MaxReconnectAttempts = 5;
 
     private static readonly IProgress<string> NullProgress = new Progress<string>(_ => { });
 
-    private readonly TwitchOAuthRole _role;
+    private readonly PlatformAuthRole _role;
     private readonly ITwitchEventSubClient _eventSubClient;
     private readonly AccountsStore _accountsStore;
     private readonly IEventBus _eventBus;
@@ -36,7 +36,7 @@ public sealed class EventSubConnectionHost :
     private long _lastMessageAtUtcTicks;
 
     public EventSubConnectionHost(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         ITwitchEventSubClient eventSubClient,
         AccountsStore accountsStore,
         IEventBus eventBus,
@@ -54,7 +54,7 @@ public sealed class EventSubConnectionHost :
         _authSubscription = _eventBus.Subscribe(this);
     }
 
-    public TwitchOAuthRole Role => _role;
+    public PlatformAuthRole Role => _role;
 
     public StreamMonitoringStatus? CurrentStatus
     {
@@ -80,17 +80,17 @@ public sealed class EventSubConnectionHost :
 
     public int ReconnectLimit => _reconnectionPolicy.MaxAttempts;
 
-    public string Name => _role == TwitchOAuthRole.Bot
+    public string Name => _role == PlatformAuthRole.Bot
         ? "EventSub WebSocket (бот)"
         : "EventSub WebSocket (broadcaster)";
 
-    public int StartOrder => _role == TwitchOAuthRole.Bot ? 275 : 276;
+    public int StartOrder => _role == PlatformAuthRole.Bot ? 275 : 276;
 
     public async Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (!HasAccessToken())
         {
-            _logger.LogInformation("EventSub WebSocket ({Role}): запуск отложен – нет access-токена для роли. Ждём TwitchAuthorizationRefreshed.", _role);
+            _logger.LogInformation("EventSub WebSocket ({Role}): запуск отложен – нет access-токена для роли. Ждём PlatformAuthorizationRefreshed.", _role);
             return;
         }
 
@@ -121,7 +121,6 @@ public sealed class EventSubConnectionHost :
         try
         {
             await _eventSubClient.StopAsync(cancellationToken);
-            _logger.LogInformation("EventSub WebSocket ({Role}) остановлен", _role);
         }
         catch (Exception ex)
         {
@@ -129,17 +128,18 @@ public sealed class EventSubConnectionHost :
         }
     }
 
-    public async Task HandleAsync(TwitchAuthorizationRefreshed @event, CancellationToken cancellationToken)
+    public async Task HandleAsync(PlatformAuthorizationRefreshed @event, CancellationToken cancellationToken)
     {
-        if (@event.Role != _role)
+        if (@event.Platform != StreamingPlatform.Twitch || @event.Role != _role)
         {
-            _logger.LogDebug("TwitchAuthorizationRefreshed для роли {Role} игнорируется EventSubConnectionHost ({HostRole})", @event.Role, _role);
+            _logger.LogDebug("PlatformAuthorizationRefreshed ({Platform}, {Role}) игнорируется EventSubConnectionHost ({HostRole})",
+                @event.Platform, @event.Role, _role);
             return;
         }
 
         if (_disposed)
         {
-            _logger.LogDebug("TwitchAuthorizationRefreshed получен после dispose – игнорируется ({Role})", _role);
+            _logger.LogDebug("PlatformAuthorizationRefreshed получен после dispose – игнорируется ({Role})", _role);
             return;
         }
 
@@ -147,6 +147,21 @@ public sealed class EventSubConnectionHost :
         lock (_lockObj)
         {
             isRunning = _runCts is { IsCancellationRequested: false };
+        }
+
+        if (!HasAccessToken())
+        {
+            if (isRunning)
+            {
+                _logger.LogInformation("Остановка EventSub WebSocket ({Role}) – access-токен отсутствует", _role);
+                await StopAsync(NullProgress, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                _logger.LogDebug("PlatformAuthorizationRefreshed ({Role}): запуск EventSub WebSocket отложен – нет access-токена", _role);
+            }
+
+            return;
         }
 
         if (isRunning)

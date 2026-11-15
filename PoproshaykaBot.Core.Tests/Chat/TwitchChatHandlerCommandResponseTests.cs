@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
@@ -85,7 +86,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
 
         _accountsStore = new(null, Path.Combine(_root, "accounts.json"));
 
-        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
             account.StoredScopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional]);
 
         _messengerLogger = new();
@@ -395,7 +396,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
     [Test]
     public async Task Бот_без_права_на_шёпот_отвечает_реплаем_не_спрашивая_Twitch()
     {
-        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
             account.StoredScopes = [TwitchScopes.UserReadChat, TwitchScopes.UserWriteChat, TwitchScopes.UserBot]);
 
         SetTarget(CommandSettings.WhisperToCaller);
@@ -425,7 +426,7 @@ public sealed class TwitchChatHandlerCommandResponseTests
     [Test]
     public async Task Право_вписанное_но_не_выданное_шёпота_не_даёт_а_отказ_предупреждает_один_раз()
     {
-        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
         {
             account.Scopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional];
             account.StoredScopes = [];

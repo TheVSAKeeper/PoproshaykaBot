@@ -80,6 +80,22 @@ public class LegacyImportTextTests
         }
     }
 
+    [Test]
+    public void Every_LegacyDataCatalog_Entry_Has_Explicit_Title_In_LegacyImportText()
+    {
+        Assert.That(LegacyDataCatalog.AllEntries, Is.Not.Empty);
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var entry in LegacyDataCatalog.AllEntries)
+            {
+                var line = LegacyImportText.DescribeFailure(new(entry.RelativeTargetPath, "io"));
+                Assert.That(line, Does.Not.StartWith("Данные предыдущей версии"),
+                    $"Запись {entry.RelativeTargetPath} отсутствует в LegacyImportText.FileTitles");
+            }
+        }
+    }
+
     private static LegacyImportResult Build(
         IReadOnlyList<string>? copied = null,
         bool inPlace = false,

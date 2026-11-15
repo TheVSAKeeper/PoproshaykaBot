@@ -1,51 +1,24 @@
 ﻿using KeepShell.Diagnostics;
 using Microsoft.Extensions.Logging;
-using PoproshaykaBot.Core.Settings;
-using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.Twitch.Auth;
-using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Core.Infrastructure.Diagnostics;
 
 namespace PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 
 public sealed class BotDiagnosticsSecretSource(
-    SettingsManager settings,
-    AccountsStore accounts,
-    YouTubeAccountsStore youtubeAccounts,
-    ObsIntegrationStore obsIntegration,
+    IEnumerable<ISecretValueProvider> secretProviders,
     ILogger<BotDiagnosticsSecretSource> logger) : IDiagnosticsSecretSource
 {
-    private static readonly YouTubeOAuthRole[] ActiveYouTubeRoles = [YouTubeOAuthRole.Bot, YouTubeOAuthRole.Broadcaster];
-
     private static readonly string[] BotKeyNames =
         ["clientsecret", "client_secret", "accesstoken", "access_token", "refreshtoken", "refresh_token", "password"];
 
     public DiagnosticsSecretRules Collect()
     {
         var values = new List<string>();
-        var complete = Read(values, () => [settings.Current.Twitch.ClientSecret], "настройки Twitch");
+        var complete = true;
 
-        complete &= Read(values, () => [youtubeAccounts.LoadClientSecret()], "настройки YouTube");
-
-        complete &= Read(values, () => [obsIntegration.Load().Password], "настройки OBS");
-
-        foreach (var role in Enum.GetValues<TwitchOAuthRole>())
+        foreach (var provider in secretProviders)
         {
-            complete &= Read(values, () =>
-            {
-                var account = accounts.Load(role);
-
-                return [account.AccessToken, account.RefreshToken];
-            }, $"токены роли {role}");
-        }
-
-        foreach (var role in ActiveYouTubeRoles)
-        {
-            complete &= Read(values, () =>
-            {
-                var account = youtubeAccounts.Load(role);
-
-                return [account.AccessToken, account.RefreshToken];
-            }, $"токены YouTube роли {role}");
+            complete &= Read(values, provider.ReadSecrets, provider.SourceName);
         }
 
         return new(BotKeyNames, [.. values.Where(static value => !string.IsNullOrWhiteSpace(value))])

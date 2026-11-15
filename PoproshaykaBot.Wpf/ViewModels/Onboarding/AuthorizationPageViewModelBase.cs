@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
@@ -16,7 +17,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     private static readonly string[] BotDefaultScopes = [..TwitchScopes.BotRequired, ..TwitchScopes.BotOptional];
     private static readonly string[] BroadcasterDefaultScopes = [..TwitchScopes.BroadcasterRequired];
 
-    private readonly TwitchOAuthRole _role;
+    private readonly PlatformAuthRole _role;
     private readonly ITwitchOAuthService _oauthService;
     private readonly SettingsManager _settingsManager;
     private readonly ILogger _logger;
@@ -54,7 +55,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
     private bool _isAuthInProgress;
 
     protected AuthorizationPageViewModelBase(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         ITwitchOAuthService oauthService,
         SettingsManager settingsManager,
         ILogger logger,
@@ -73,11 +74,11 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         _uiDispatcher = uiDispatcher;
     }
 
-    public override string PageTitle => _role == TwitchOAuthRole.Broadcaster
+    public override string PageTitle => _role == PlatformAuthRole.Broadcaster
         ? "Авторизация стримера"
         : "Авторизация бота";
 
-    public string IntroText => _role == TwitchOAuthRole.Broadcaster
+    public string IntroText => _role == PlatformAuthRole.Broadcaster
         ? "Авторизуйте аккаунт стримера. Этот токен нужен для управления опросами и информацией трансляции."
         : "Авторизуйте аккаунт бота. От его имени бот будет писать в чат и слушать сообщения.";
 
@@ -198,7 +199,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             settings.ClientSecret,
             GetDefaultScopes(),
             string.IsNullOrWhiteSpace(settings.RedirectUri) ? null : settings.RedirectUri,
-            _role != TwitchOAuthRole.Broadcaster || !_context.AutoDetectChannel);
+            _role != PlatformAuthRole.Broadcaster || !_context.AutoDetectChannel);
 
         IsAuthInProgress = true;
         ResultText = string.Empty;
@@ -295,7 +296,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         {
             var scopes = GetDefaultScopes();
             var redirectUri = string.IsNullOrWhiteSpace(settings.RedirectUri) ? null : settings.RedirectUri;
-            var checkBroadcasterChannel = _role != TwitchOAuthRole.Broadcaster || !_context.AutoDetectChannel;
+            var checkBroadcasterChannel = _role != PlatformAuthRole.Broadcaster || !_context.AutoDetectChannel;
 
             var result = await _oauthService.StartOAuthFlowToDraftAsync(
                 _role,
@@ -360,7 +361,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         var account = GetAccount();
         result.ApplyTo(account, DateTimeOffset.UtcNow);
 
-        if (_role != TwitchOAuthRole.Broadcaster
+        if (_role != PlatformAuthRole.Broadcaster
             || !_context.AutoDetectChannel
             || string.IsNullOrWhiteSpace(result.Login))
         {
@@ -427,7 +428,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         RefreshFromContext();
     }
 
-    private void OnOAuthStatusChanged(TwitchOAuthRole role, string message)
+    private void OnOAuthStatusChanged(PlatformAuthRole role, string message)
     {
         if (role != _role)
         {
@@ -472,14 +473,14 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
             throw new InvalidOperationException("OnEnter must be called before accessing context");
         }
 
-        return _role == TwitchOAuthRole.Broadcaster
+        return _role == PlatformAuthRole.Broadcaster
             ? _context.BroadcasterAccount
             : _context.BotAccount;
     }
 
     private string[] GetDefaultScopes()
     {
-        return _role == TwitchOAuthRole.Broadcaster ? BroadcasterDefaultScopes : BotDefaultScopes;
+        return _role == PlatformAuthRole.Broadcaster ? BroadcasterDefaultScopes : BotDefaultScopes;
     }
 
     private void OpenInBrowser(string authUrl)

@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Settings.Stores;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using System.Text.Json.Nodes;
@@ -45,7 +46,7 @@ public sealed class AccountsStoreTests
     public void TryClearAccessToken_WithTheTokenThatGotThe401_ClearsItAndKeepsTheRestOfTheAccount()
     {
         var store = Store();
-        store.Mutate(TwitchOAuthRole.Bot, account =>
+        store.Mutate(PlatformAuthRole.Bot, account =>
         {
             account.AccessToken = "v1";
             account.RefreshToken = "r1";
@@ -53,7 +54,7 @@ public sealed class AccountsStoreTests
             account.AccessTokenExpiresAt = DateTimeOffset.UnixEpoch.AddYears(50);
         });
 
-        var cleared = store.TryClearAccessToken(TwitchOAuthRole.Bot, "v1");
+        var cleared = store.TryClearAccessToken(PlatformAuthRole.Bot, "v1");
         var account = store.LoadBot();
 
         using (Assert.EnterMultipleScope())
@@ -71,15 +72,15 @@ public sealed class AccountsStoreTests
     public void TryClearAccessToken_WithATokenTheRefreshAlreadyReplaced_LeavesTheFreshOneAlone()
     {
         var store = Store();
-        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "v1");
+        store.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = "v1");
 
-        store.Mutate(TwitchOAuthRole.Bot, account =>
+        store.Mutate(PlatformAuthRole.Bot, account =>
         {
             account.AccessToken = "v2";
             account.AccessTokenExpiresAt = DateTimeOffset.UnixEpoch.AddYears(50);
         });
 
-        var cleared = store.TryClearAccessToken(TwitchOAuthRole.Bot, "v1");
+        var cleared = store.TryClearAccessToken(PlatformAuthRole.Bot, "v1");
         var account = store.LoadBot();
 
         using (Assert.EnterMultipleScope())
@@ -91,9 +92,9 @@ public sealed class AccountsStoreTests
         }
     }
 
-    [TestCase(TwitchOAuthRole.Bot, TwitchOAuthRole.Broadcaster)]
-    [TestCase(TwitchOAuthRole.Broadcaster, TwitchOAuthRole.Bot)]
-    public void TryClearAccessToken_ForOneRole_LeavesTheOtherRoleUntouched(TwitchOAuthRole cleared, TwitchOAuthRole untouched)
+    [TestCase(PlatformAuthRole.Bot, PlatformAuthRole.Broadcaster)]
+    [TestCase(PlatformAuthRole.Broadcaster, PlatformAuthRole.Bot)]
+    public void TryClearAccessToken_ForOneRole_LeavesTheOtherRoleUntouched(PlatformAuthRole cleared, PlatformAuthRole untouched)
     {
         var store = Store();
         store.Mutate(cleared, account => account.AccessToken = "token-" + cleared);
@@ -114,7 +115,7 @@ public sealed class AccountsStoreTests
     public void TryClearAccessToken_CalledByEveryRacingRequestAtOnce_SucceedsExactlyOnce()
     {
         var store = Store();
-        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "v1");
+        store.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = "v1");
 
         var winners = 0;
 
@@ -127,7 +128,7 @@ public sealed class AccountsStoreTests
                 linedUp.Signal();
                 start.Wait();
 
-                if (store.TryClearAccessToken(TwitchOAuthRole.Bot, "v1"))
+                if (store.TryClearAccessToken(PlatformAuthRole.Bot, "v1"))
                 {
                     Interlocked.Increment(ref winners);
                 }
@@ -158,13 +159,13 @@ public sealed class AccountsStoreTests
     public void TryClearAccessToken_WithATokenTheRefreshAlreadyReplaced_WritesNothingAtAll()
     {
         var store = Store();
-        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "v2");
+        store.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = "v2");
 
         Directory.CreateDirectory(_filePath + ".old");
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(store.TryClearAccessToken(TwitchOAuthRole.Bot, "v1"), Is.False);
+            Assert.That(store.TryClearAccessToken(PlatformAuthRole.Bot, "v1"), Is.False);
 
             Assert.That(store.LoadBot().AccessToken, Is.EqualTo("v2"),
                 "Пропущенная очистка не должна ходить на диск: запись заблокирована, и любое обращение к ней здесь упало бы. 401 по устаревшему токену прилетает пачками.");
@@ -175,13 +176,13 @@ public sealed class AccountsStoreTests
     public void Mutate_WhenTheWriteFails_KeepsTheCacheOnTheVersionThatReachedDisk()
     {
         var store = Store();
-        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "v1");
+        store.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = "v1");
 
         Directory.CreateDirectory(_filePath + ".old");
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(() => store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "v2"),
+            Assert.That(() => store.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = "v2"),
                 Throws.InstanceOf<IOException>());
 
             Assert.That(store.LoadBot().AccessToken, Is.EqualTo("v1"),
@@ -232,8 +233,8 @@ public sealed class AccountsStoreTests
     public void Запись_аккаунтов_не_оставляет_рядом_откатную_копию_с_прежними_токенами()
     {
         var store = Store();
-        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "old-secret-access");
-        store.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = "new-secret-access");
+        store.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = "old-secret-access");
+        store.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = "new-secret-access");
 
         var leaks = _directory.GetFiles()
             .Where(file => file.FullName != _filePath && File.ReadAllText(file.FullName).Contains("secret-access"))

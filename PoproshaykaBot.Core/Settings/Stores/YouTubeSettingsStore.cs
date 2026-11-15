@@ -5,7 +5,7 @@ using PoproshaykaBot.Core.YouTube;
 
 namespace PoproshaykaBot.Core.Settings.Stores;
 
-public class YouTubeSettingsStore
+public sealed class YouTubeSettingsStore
 {
     private readonly JsonStore<YouTubeSettings> _store;
 
@@ -15,30 +15,39 @@ public class YouTubeSettingsStore
         SettingsWriteGate? gate = null)
     {
         var path = filePath ?? AppPaths.SettingsFile(LegacyDataCatalog.YouTubeSettingsFileName);
-        _store = new(path, logger, describe: SettingsDescriber.Describe, gate: gate);
+        _store = new(path, logger, describe: Describe, gate: gate);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {
             logger.LogDebug(
                 "YouTubeSettingsStore инициализирован из {FilePath}: {Description}",
                 path,
-                SettingsDescriber.Describe(_store.Load()));
+                Describe(_store.Load()));
         }
     }
 
-    public virtual YouTubeSettings Load()
+    public static string Describe(YouTubeSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return $"включено {SettingsDescriber.OnOff(settings.Enabled)}, projectId {SettingsDescriber.Value(settings.ProjectId)}, "
+            + $"clientId {SettingsDescriber.Present(settings.ClientId)}, канал {SettingsDescriber.Value(settings.Channel)}, "
+            + $"бюджет квоты {settings.DailyQuotaBudget}";
+    }
+
+    public YouTubeSettings Load()
     {
         return _store.Load();
     }
 
-    public virtual bool Save(YouTubeSettings value)
+    public bool Save(YouTubeSettings value)
     {
         ArgumentNullException.ThrowIfNull(value);
 
         return _store.Save(value);
     }
 
-    public virtual bool Mutate(Action<YouTubeSettings> mutator)
+    public bool Mutate(Action<YouTubeSettings> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 

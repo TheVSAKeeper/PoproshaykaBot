@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -15,7 +16,7 @@ public sealed class BotAuthorizationPageViewModel : AuthorizationPageViewModelBa
         IClipboardService clipboard,
         IEmbeddedTwitchAuthDialog embeddedAuth,
         IUiDispatcher uiDispatcher)
-        : base(TwitchOAuthRole.Bot, oauthService, settingsManager, logger, shellLauncher, clipboard, embeddedAuth, uiDispatcher)
+        : base(PlatformAuthRole.Bot, oauthService, settingsManager, logger, shellLauncher, clipboard, embeddedAuth, uiDispatcher)
     {
     }
 }

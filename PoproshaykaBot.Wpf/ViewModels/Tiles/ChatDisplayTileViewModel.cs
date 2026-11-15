@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -31,7 +32,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     private readonly ToolbarItemViewModel _resetZoomAction;
     private readonly ToolbarItemViewModel _resetSessionAction;
 
-    private TwitchOAuthRole _chatDisplayAccount;
+    private PlatformAuthRole _chatDisplayAccount;
 
     [ObservableProperty]
     private double _zoomFactor;
@@ -163,9 +164,9 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
             : new Uri($"https://www.twitch.tv/popout/{Uri.EscapeDataString(trimmed)}/chat?popout=");
     }
 
-    private static string ResolveAccountLabel(TwitchOAuthRole role)
+    private static string ResolveAccountLabel(PlatformAuthRole role)
     {
-        return role == TwitchOAuthRole.Broadcaster ? "стримера" : "бота";
+        return role == PlatformAuthRole.Broadcaster ? "стримера" : "бота";
     }
 
     private void OnChatDisplaySettingsChanged(ChatDisplaySettingsChanged @event)

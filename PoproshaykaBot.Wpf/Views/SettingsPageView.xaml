@@ -1,7 +1,9 @@
 ﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.SettingsPageView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
+             xmlns:settingsVm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
              xmlns:settings="clr-namespace:PoproshaykaBot.Wpf.Views.Settings"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -16,6 +18,82 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Views/Settings/SettingsResources.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <DataTemplate x:Key="MultiBlockSectionTemplate"
+                          DataType="{x:Type settingsVm:SettingsSectionPresentation}">
+                <Grid Visibility="{Binding Section.IsSelected, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"
+                                          MaxWidth="{StaticResource Setting.ContentWidth}" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{Binding Section.Title}"
+                                   Style="{StaticResource Setting.SectionTitle}" />
+
+                        <ItemsControl ItemsSource="{Binding Blocks}"
+                                      Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type settingsVm:SettingsSectionBlockDescriptor}">
+                                    <HeaderedContentControl Style="{StaticResource Form.Panel}"
+                                                            Header="{Binding Title}"
+                                                            Margin="{StaticResource Setting.BlockGap}"
+                                                            settings:SettingsBlock.Key="{Binding Key}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Hint}"
+                                                       Style="{StaticResource Setting.BlockHint}"
+                                                       Visibility="{Binding Hint, Converter={StaticResource NullToVisibility}}" />
+                                            <ContentControl Content="{Binding Content}"
+                                                            Focusable="False" />
+                                        </StackPanel>
+                                    </HeaderedContentControl>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Grid>
+            </DataTemplate>
+
+            <DataTemplate x:Key="SingleBlockSectionTemplate"
+                          DataType="{x:Type settingsVm:SettingsSectionPresentation}">
+                <Grid Visibility="{Binding Section.IsSelected, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*">
+                            <ColumnDefinition.Style>
+                                <Style TargetType="ColumnDefinition">
+                                    <Setter Property="MaxWidth"
+                                            Value="{StaticResource Setting.ContentWidth}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFullWidth}"
+                                                     Value="True">
+                                            <Setter Property="MaxWidth"
+                                                    Value="{x:Static sys:Double.PositiveInfinity}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ColumnDefinition.Style>
+                        </ColumnDefinition>
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <HeaderedContentControl Grid.Column="0"
+                                            Style="{StaticResource Form.Panel}"
+                                            Header="{Binding Section.Title}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Blocks[0].Hint}"
+                                       Style="{StaticResource Setting.BlockHint}"
+                                       Visibility="{Binding Blocks[0].Hint, Converter={StaticResource NullToVisibility}}" />
+                            <ContentControl Content="{Binding Blocks[0].Content}"
+                                            Focusable="False" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+                </Grid>
+            </DataTemplate>
+
+            <settings:SettingsSectionTemplateSelector x:Key="SectionTemplateSelector"
+                                                      MultiBlockTemplate="{StaticResource MultiBlockSectionTemplate}"
+                                                      SingleBlockTemplate="{StaticResource SingleBlockSectionTemplate}" />
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -71,251 +149,17 @@
                           Margin="16,0,0,0"
                           Padding="0,0,12,0"
                           ScrollChanged="SectionScroll_OnScrollChanged">
-                <Grid RequestBringIntoView="SuppressAutoScroll">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"
-                                              MaxWidth="{StaticResource Setting.ContentWidth}" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Visibility="{Binding Sections[basic].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="{Binding Sections[basic].Title}"
-                                       Style="{StaticResource Setting.SectionTitle}" />
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Канал и аккаунт"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="basic/channel">
-                                <StackPanel>
-                                    <TextBlock Text="Канал Twitch и аккаунт, от имени которого бот показывает чат."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding Basic}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Ограничения отправки"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="basic/limits">
-                                <StackPanel>
-                                    <TextBlock Text="Паузы и лимиты, за которыми Twitch перестаёт считать бота спамом."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding RateLimiting}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Шаблоны сообщений"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="basic/messages">
-                                <StackPanel>
-                                    <TextBlock Text="Тексты, которыми бот здоровается, прощается и отвечает."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding Messages}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-                        </StackPanel>
-
-                        <StackPanel Visibility="{Binding Sections[oauth].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="{Binding Sections[oauth].Title}"
-                                       Style="{StaticResource Setting.SectionTitle}" />
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Приложение Twitch"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="oauth/app">
-                                <StackPanel>
-                                    <TextBlock Text="Ключи приложения из консоли разработчика Twitch – через них входят и бот, и стример."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding OAuth}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Аккаунт бота"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="oauth/bot">
-                                <StackPanel>
-                                    <TextBlock Text="Аккаунт, от имени которого бот пишет в чат и читает его."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding OAuth.Bot}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Аккаунт стримера"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="oauth/broadcaster">
-                                <StackPanel>
-                                    <TextBlock Text="Аккаунт канала: через него приложение меняет название и категорию стрима и запускает опросы."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding OAuth.Broadcaster}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-                        </StackPanel>
-
-                        <StackPanel Visibility="{Binding Sections[stream].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="{Binding Sections[stream].Title}"
-                                       Style="{StaticResource Setting.SectionTitle}" />
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Автоматический режим"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="stream/auto">
-                                <StackPanel>
-                                    <TextBlock Text="Что бот делает сам, когда стрим начинается и заканчивается."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding AutoBroadcast}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Автозапуск бота"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="stream/lifecycle">
-                                <StackPanel>
-                                    <TextBlock Text="Когда бот подключается к чату и когда отключается без вашего участия."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding BotLifecycle}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Опросы"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="stream/polls">
-                                <StackPanel>
-                                    <TextBlock Text="Заготовки голосований и правила их запуска в чате."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding Polls}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-                        </StackPanel>
-
-                        <StackPanel Visibility="{Binding Sections[youtube].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="{Binding Sections[youtube].Title}"
-                                       Style="{StaticResource Setting.SectionTitle}" />
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Google-проект"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="youtube/project">
-                                <StackPanel>
-                                    <TextBlock Text="Ваш собственный проект Google Cloud и реквизиты Desktop-клиента."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding YouTube}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Аккаунт бота"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="youtube/bot">
-                                <StackPanel>
-                                    <TextBlock Text="Google-аккаунт с каналом YouTube, от имени которого бот читает и пишет в чат трансляции."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding YouTube.Bot}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Аккаунт стримера"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="youtube/broadcaster">
-                                <StackPanel>
-                                    <TextBlock Text="Google-аккаунт владельца канала: используется для чтения информации об активной трансляции."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding YouTube.Broadcaster}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-                        </StackPanel>
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[ranks].Title}"
-                                                Visibility="{Binding Sections[ranks].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <StackPanel>
-                                <TextBlock Text="Ступени, которые бот присваивает зрителям по баллам: сообщение в чате – один балл, плюс бонусы, минус штрафы."
-                                           Style="{StaticResource Setting.BlockHint}" />
-                                <ContentControl Content="{Binding Ranks}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[update].Title}"
-                                                Visibility="{Binding Sections[update].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <ContentControl Content="{Binding Update}" />
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[debug].Title}"
-                                                Visibility="{Binding Sections[debug].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <ContentControl Content="{Binding DebugChannel}" />
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[mcp].Title}"
-                                                Visibility="{Binding Sections[mcp].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <ContentControl Content="{Binding Mcp}" />
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[appearance].Title}"
-                                                Visibility="{Binding Sections[appearance].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <settings:AppearanceSettingsView />
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                Header="{Binding Sections[misc].Title}"
-                                                Visibility="{Binding Sections[misc].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <ContentControl Content="{Binding Misc}" />
-                        </HeaderedContentControl>
-
-                        <StackPanel Visibility="{Binding Sections[obs].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="{Binding Sections[obs].Title}"
-                                       Style="{StaticResource Setting.SectionTitle}" />
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Подключение к OBS"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="obs/connection">
-                                <StackPanel>
-                                    <TextBlock Text="Адрес и пароль WebSocket, через который приложение управляет OBS."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding ObsIntegration}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="Оформление чат-оверлея"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="obs/overlay">
-                                <StackPanel>
-                                    <TextBlock Text="Как чат выглядит в браузерном источнике на трансляции."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding ObsChat}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-
-                            <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                    Header="HTTP сервер оверлея"
-                                                    Margin="{StaticResource Setting.BlockGap}"
-                                                    settings:SettingsBlock.Key="obs/server">
-                                <StackPanel>
-                                    <TextBlock Text="Порт и адреса страниц, которые открывает браузерный источник."
-                                               Style="{StaticResource Setting.BlockHint}" />
-                                    <ContentControl Content="{Binding HttpServer}" />
-                                </StackPanel>
-                            </HeaderedContentControl>
-                        </StackPanel>
-                    </Grid>
-
-                    <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                            Header="{Binding Sections[dashboard].Title}"
-                                            Visibility="{Binding Sections[dashboard].IsSelected, Converter={StaticResource BoolToVisibility}}">
-                        <ContentControl Content="{Binding DashboardLayout}" />
-                    </HeaderedContentControl>
-                </Grid>
+                <ItemsControl x:Name="SectionsHost"
+                              ItemsSource="{Binding SectionPresentations}"
+                              ItemTemplateSelector="{StaticResource SectionTemplateSelector}"
+                              Focusable="False"
+                              RequestBringIntoView="SuppressAutoScroll">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <Grid />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
             </ScrollViewer>
         </Grid>
     </DockPanel>

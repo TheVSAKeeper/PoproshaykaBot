@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
@@ -299,7 +300,7 @@ public sealed class JsonStoreFormatContractTests
         var path = Path.Combine(_directory.FullName, "accounts.json");
         var store = new AccountsStore(NullLogger<AccountsStore>.Instance, path);
 
-        store.Mutate(TwitchOAuthRole.Bot, account =>
+        store.Mutate(PlatformAuthRole.Bot, account =>
         {
             account.AccessToken = "bot-access";
             account.RefreshToken = "bot-refresh";

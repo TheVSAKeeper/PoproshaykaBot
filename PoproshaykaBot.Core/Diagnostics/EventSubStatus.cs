@@ -1,9 +1,9 @@
-﻿using PoproshaykaBot.Core.Twitch.Auth;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
 
 namespace PoproshaykaBot.Core.Diagnostics;
 
 public sealed record EventSubStatus(
-    TwitchOAuthRole Role,
+    PlatformAuthRole Role,
     ConnectionState State,
     DateTimeOffset? LastMessageAt,
     int ReconnectAttempt,

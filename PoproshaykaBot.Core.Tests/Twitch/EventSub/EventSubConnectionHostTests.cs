@@ -1,6 +1,8 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -22,9 +24,9 @@ public sealed class EventSubConnectionHostTests
 
         _accountsFilePath = Path.Combine(Path.GetTempPath(), $"accounts-{Guid.NewGuid():N}.json");
         _accountsStore = new(NullLogger<AccountsStore>.Instance, _accountsFilePath);
-        SeedAccessToken(TwitchOAuthRole.Bot, "bot-token");
+        SeedAccessToken(PlatformAuthRole.Bot, "bot-token");
 
-        _host = new(TwitchOAuthRole.Bot, _eventSubClient, _accountsStore, _eventBus, NullLogger<EventSubConnectionHost>.Instance);
+        _host = new(PlatformAuthRole.Bot, _eventSubClient, _accountsStore, _eventBus, NullLogger<EventSubConnectionHost>.Instance);
     }
 
     [TearDown]
@@ -49,7 +51,7 @@ public sealed class EventSubConnectionHostTests
     private string _accountsFilePath = null!;
     private EventSubConnectionHost _host = null!;
 
-    private void SeedAccessToken(TwitchOAuthRole role, string token)
+    private void SeedAccessToken(PlatformAuthRole role, string token)
     {
         _accountsStore.Mutate(role, account =>
         {
@@ -57,12 +59,12 @@ public sealed class EventSubConnectionHostTests
             account.AccessTokenExpiresAt = DateTimeOffset.UtcNow.AddHours(1);
             if (account.Scopes.Length == 0)
             {
-                account.Scopes = [..role == TwitchOAuthRole.Bot ? TwitchScopes.BotRequired : TwitchScopes.BroadcasterRequired];
+                account.Scopes = [..role == PlatformAuthRole.Bot ? TwitchScopes.BotRequired : TwitchScopes.BroadcasterRequired];
             }
         });
     }
 
-    private void ClearAccessToken(TwitchOAuthRole role)
+    private void ClearAccessToken(PlatformAuthRole role)
     {
         _accountsStore.Mutate(role, account =>
         {
@@ -77,7 +79,7 @@ public sealed class EventSubConnectionHostTests
         await _host.StartAsync(NullProgress, CancellationToken.None);
         _eventSubClient.ClearReceivedCalls();
 
-        await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot));
 
         await _eventSubClient.Received(1).StopAsync(Arg.Any<CancellationToken>());
         await _eventSubClient.Received(1).StartAsync(Arg.Any<CancellationToken>());
@@ -89,7 +91,7 @@ public sealed class EventSubConnectionHostTests
         await _host.StartAsync(NullProgress, CancellationToken.None);
         _eventSubClient.ClearReceivedCalls();
 
-        await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster));
 
         await _eventSubClient.DidNotReceive().StopAsync(Arg.Any<CancellationToken>());
         await _eventSubClient.DidNotReceive().StartAsync(Arg.Any<CancellationToken>());
@@ -100,9 +102,21 @@ public sealed class EventSubConnectionHostTests
     {
         _eventSubClient.ClearReceivedCalls();
 
-        await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot));
 
         await _eventSubClient.Received(1).StartAsync(Arg.Any<CancellationToken>());
+        await _eventSubClient.DidNotReceive().StopAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task TwitchAuthorizationRefreshed_WhenNoAccessToken_DoesNotStartWebSocket()
+    {
+        ClearAccessToken(PlatformAuthRole.Bot);
+        _eventSubClient.ClearReceivedCalls();
+
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot));
+
+        await _eventSubClient.DidNotReceive().StartAsync(Arg.Any<CancellationToken>());
         await _eventSubClient.DidNotReceive().StopAsync(Arg.Any<CancellationToken>());
     }
 
@@ -152,7 +166,7 @@ public sealed class EventSubConnectionHostTests
     [Test]
     public async Task StartAsync_WithoutAccessToken_DoesNotConnect()
     {
-        ClearAccessToken(TwitchOAuthRole.Bot);
+        ClearAccessToken(PlatformAuthRole.Bot);
         _eventSubClient.ClearReceivedCalls();
         _statusEvents.Clear();
 
@@ -165,10 +179,10 @@ public sealed class EventSubConnectionHostTests
     [Test]
     public async Task BroadcasterRoleHost_StartAsync_PublishesConnectingStatus_AfterFix()
     {
-        SeedAccessToken(TwitchOAuthRole.Broadcaster, "broadcaster-token");
+        SeedAccessToken(PlatformAuthRole.Broadcaster, "broadcaster-token");
 
         var broadcasterClient = Substitute.For<ITwitchEventSubClient>();
-        await using var broadcasterHost = new EventSubConnectionHost(TwitchOAuthRole.Broadcaster,
+        await using var broadcasterHost = new EventSubConnectionHost(PlatformAuthRole.Broadcaster,
             broadcasterClient,
             _accountsStore,
             _eventBus,
@@ -185,10 +199,10 @@ public sealed class EventSubConnectionHostTests
     [Test]
     public async Task BroadcasterRoleHost_StartAsync_PublishesStatusWithBroadcasterRole()
     {
-        SeedAccessToken(TwitchOAuthRole.Broadcaster, "broadcaster-token");
+        SeedAccessToken(PlatformAuthRole.Broadcaster, "broadcaster-token");
 
         var broadcasterClient = Substitute.For<ITwitchEventSubClient>();
-        await using var broadcasterHost = new EventSubConnectionHost(TwitchOAuthRole.Broadcaster,
+        await using var broadcasterHost = new EventSubConnectionHost(PlatformAuthRole.Broadcaster,
             broadcasterClient,
             _accountsStore,
             _eventBus,
@@ -199,7 +213,7 @@ public sealed class EventSubConnectionHostTests
         await broadcasterHost.StartAsync(NullProgress, CancellationToken.None);
 
         Assert.That(_statusEvents, Is.Not.Empty);
-        Assert.That(_statusEvents, Has.All.With.Property(nameof(StreamMonitoringStatusChanged.Role)).EqualTo(TwitchOAuthRole.Broadcaster));
+        Assert.That(_statusEvents, Has.All.With.Property(nameof(StreamMonitoringStatusChanged.Role)).EqualTo(PlatformAuthRole.Broadcaster));
     }
 
     [Test]
@@ -209,16 +223,16 @@ public sealed class EventSubConnectionHostTests
 
         await _host.StartAsync(NullProgress, CancellationToken.None);
 
-        Assert.That(_statusEvents, Has.All.With.Property(nameof(StreamMonitoringStatusChanged.Role)).EqualTo(TwitchOAuthRole.Bot));
+        Assert.That(_statusEvents, Has.All.With.Property(nameof(StreamMonitoringStatusChanged.Role)).EqualTo(PlatformAuthRole.Bot));
     }
 
     [Test]
     public async Task BroadcasterRoleHost_Disconnect_PublishesReconnectingStatus_AfterFix()
     {
-        SeedAccessToken(TwitchOAuthRole.Broadcaster, "broadcaster-token");
+        SeedAccessToken(PlatformAuthRole.Broadcaster, "broadcaster-token");
 
         var broadcasterClient = Substitute.For<ITwitchEventSubClient>();
-        await using var broadcasterHost = new EventSubConnectionHost(TwitchOAuthRole.Broadcaster,
+        await using var broadcasterHost = new EventSubConnectionHost(PlatformAuthRole.Broadcaster,
             broadcasterClient,
             _accountsStore,
             _eventBus,

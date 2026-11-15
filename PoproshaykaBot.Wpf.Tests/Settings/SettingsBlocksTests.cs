@@ -1,7 +1,30 @@
-﻿using KeepShell.Testing;
+﻿using KeepShell.Services;
+using KeepShell.Services.Modal;
+using KeepShell.Services.Platform;
+using KeepShell.Testing;
+using KeepShell.ViewModels;
+using MahApps.Metro.IconPacks;
+using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Dashboard;
+using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Server;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Settings.Update;
+using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Update;
+using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
+using PoproshaykaBot.Wpf.ViewModels.Settings;
+using PoproshaykaBot.Wpf.ViewModels.Settings.Contributors;
+using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views;
 using PoproshaykaBot.Wpf.Views.Settings;
+using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
 
@@ -23,28 +46,86 @@ public class SettingsBlocksTests
         "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/RatingStyles.xaml",
     ];
 
+    private string _root = null!;
+
     [OneTimeSetUp]
     public void EnsureApplication()
     {
         TestResources.Ensure(Dictionaries);
     }
 
+    [SetUp]
+    public void SetUp()
+    {
+        _root = Path.Combine(Path.GetTempPath(), "poproshayka-settings-blocks-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_root);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        try
+        {
+            if (Directory.Exists(_root))
+            {
+                Directory.Delete(_root, true);
+            }
+        }
+        catch (IOException)
+        {
+        }
+    }
+
     [Test]
     public void Каждому_подпункту_рейла_отвечает_якорь_блока_в_разметке()
     {
-        var expected = SettingsPageViewModel.CreateSections().Items
+        using var pageVm = CreateFullPageViewModel();
+        var expected = pageVm.Sections.Items
             .SelectMany(section => section.Children.Select(child => $"{section.Key}/{child.Key}"))
             .ToArray();
 
-        var view = new SettingsPageView();
-        view.Measure(new(1100, 720));
-        view.Arrange(new(new Point(), new Size(1100, 720)));
+        var view = new SettingsPageView
+        {
+            DataContext = pageVm,
+        };
 
         var anchors = new List<string>();
-        Collect(view, anchors);
+        foreach (var section in pageVm.Sections.Items)
+        {
+            pageVm.Sections.Selected = section;
+            Render(view);
+            CollectVisible(view, anchors);
+        }
 
-        Assert.That(anchors, Is.EquivalentTo(expected),
-            "Ключи блоков разметки разошлись с подпунктами рейла: прокрутка к блоку и подсветка подпункта молча перестают работать.");
+        Assert.Multiple(() =>
+        {
+            Assert.That(anchors, Is.EquivalentTo(expected),
+                "Ключи блоков разметки разошлись с подпунктами рейла: прокрутка к блоку и подсветка подпункта молча перестают работать.");
+            Assert.That(pageVm.SectionPresentations.Single(p => p.Section.Key == "dashboard").IsFullWidth, Is.True);
+        });
+    }
+
+    [Test]
+    public void Смена_DataContext_сбрасывает_кеш_блоков_и_подхватывает_новую_секцию()
+    {
+        using var firstVm = CreateSingleContributorPageViewModel("alpha", "one", "Первый");
+        using var secondVm = CreateSingleContributorPageViewModel("beta", "two", "Второй");
+
+        var view = new SettingsPageView
+        {
+            DataContext = firstVm,
+        };
+        Render(view);
+
+        var blocksMethod = typeof(SettingsPageView).GetMethod("Blocks", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var initialBlocks = (IReadOnlyList<(string Key, FrameworkElement Element)>)blocksMethod.Invoke(view, null)!;
+        Assert.That(initialBlocks.Select(block => block.Key), Is.EquivalentTo(["alpha/one"]));
+
+        view.DataContext = secondVm;
+        Render(view);
+
+        var updatedBlocks = (IReadOnlyList<(string Key, FrameworkElement Element)>)blocksMethod.Invoke(view, null)!;
+        Assert.That(updatedBlocks.Select(block => block.Key), Is.EquivalentTo(["beta/two"]));
     }
 
     [TestCase(0, false, "channel", TestName = "Спай_в_начале_карточки_берёт_первый_блок")]
@@ -67,8 +148,114 @@ public class SettingsBlocksTests
             "Короткий последний блок иначе остался бы неподсвеченным: до его верхнего края прокрутка не доходит.");
     }
 
-    private static void Collect(DependencyObject root, List<string> anchors)
+    private static void Render(SettingsPageView view)
     {
+        view.Measure(new(1100, 720));
+        view.Arrange(new(new Point(), new Size(1100, 720)));
+        view.UpdateLayout();
+    }
+
+    private SettingsPageViewModel CreateSingleContributorPageViewModel(string sectionKey, string childKey, string title)
+    {
+        var gate = new SettingsWriteGate();
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, $"settings-{sectionKey}.json"), gate);
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var kestrel = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
+        var contributor = new StubMultiBlockContributor(sectionKey, childKey, title);
+
+        return new(
+            [contributor],
+            settingsManager,
+            gate,
+            kestrel,
+            bus,
+            NullLogger<SettingsPageViewModel>.Instance,
+            DispatchProxy.Create<IDialogService, InertProxy>(),
+            new MemorySettings());
+    }
+
+    private SettingsPageViewModel CreateFullPageViewModel()
+    {
+        var gate = new SettingsWriteGate();
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"), gate);
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        var uiSettings = new MemorySettings();
+        var dialogs = DispatchProxy.Create<IDialogService, InertProxy>();
+        var kestrel = new KestrelHttpServer(null!, settingsManager, [], NullLogger<KestrelHttpServer>.Instance, NullLoggerFactory.Instance);
+
+        var accountsStore = new AccountsStore(null, Path.Combine(_root, "accounts.json"), gate);
+        var youtubeSettingsStore = new YouTubeSettingsStore(null, Path.Combine(_root, "youtube.json"), gate);
+        var youtubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(_root, "youtube-accounts.json"), gate);
+        var obsChatStore = new ObsChatStore(bus, null, Path.Combine(_root, "obs-chat.json"), gate);
+        var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(_root, "obs-integration.json"), gate);
+        var updateStore = new UpdateStore(null, Path.Combine(_root, "update.json"), gate);
+        var debugChannelStore = new DebugChannelStore(null, Path.Combine(_root, "debug-channel.json"));
+        var pollsStore = new PollsStore(null, Path.Combine(_root, "polls.json"), gate);
+        var layoutStore = new DashboardLayoutStore(null, Path.Combine(_root, "dashboard-layout.json"), gate);
+
+        var mcpOptions = new KeepShell.Mcp.McpServerOptions { ServerName = "test", AppName = "test", AppVersion = "1.0", ShotsDirectory = Path.Combine(_root, "shots") };
+        var mcpPreferences = new KeepShell.Mcp.McpPreferences(uiSettings, mcpOptions);
+
+        var oauth = new OAuthSettingsViewModel(
+            DispatchProxy.Create<ITwitchOAuthService, InertProxy>(),
+            accountsStore,
+            dialogs,
+            DispatchProxy.Create<IShellLauncher, InertProxy>(),
+            DispatchProxy.Create<IEmbeddedTwitchAuthDialog, InertProxy>(),
+            new ManualUiDispatcher(),
+            TimeProvider.System,
+            NullLoggerFactory.Instance);
+
+        var youTube = new YouTubeSettingsSectionViewModel(
+            DispatchProxy.Create<IYouTubeOAuthService, InertProxy>(),
+            DispatchProxy.Create<IShellLauncher, InertProxy>(),
+            dialogs,
+            new ManualUiDispatcher(),
+            TimeProvider.System,
+            NullLoggerFactory.Instance);
+
+        var obsChat = new ObsChatSettingsSectionViewModel(obsChatStore, settingsManager, dialogs, null!);
+        var obsIntegration = new ObsIntegrationSectionViewModel(null!, settingsManager, NullLogger<ObsIntegrationSectionViewModel>.Instance, dialogs, null!);
+        var polls = new PollsSettingsSectionViewModel(pollsStore, TimeProvider.System);
+        var update = new UpdateSettingsSectionViewModel(new FakeUpdateCoordinator(), updateStore, bus, dialogs, new ManualUiDispatcher(), DispatchProxy.Create<IMainWindowController, InertProxy>());
+        var debugChannel = new DebugChannelSectionViewModel(DebugChannelOverride.None, debugChannelStore, null!, TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
+        var mcp = new McpSettingsSectionViewModel(mcpPreferences, new(mcpPreferences, null!, null!, mcpOptions, new EmptyServiceProvider()), mcpOptions, dialogs, null!);
+        var dashboardLayout = new DashboardLayoutSectionViewModel(Array.Empty<DashboardTileViewModel>(), uiSettings, layoutStore);
+
+        ISettingsSectionContributor[] contributors =
+        [
+            new BasicSettingsSectionContributor(new(), new(), new(), settingsManager, new FakeTargetChannelProvider()),
+            new TwitchConnectionSettingsContributor(oauth, accountsStore, settingsManager, NullLogger<TwitchConnectionSettingsContributor>.Instance),
+            new YouTubeConnectionSettingsContributor(youTube, youtubeSettingsStore, youtubeAccountsStore),
+            new ObsSettingsSectionContributor(obsIntegration, obsChat, new(kestrel, dialogs, null!), obsIntegrationStore, obsChatStore, dialogs),
+            new StreamSettingsSectionContributor(new(), new(), polls),
+            new RanksSettingsSectionContributor(new()),
+            new DashboardSettingsSectionContributor(dashboardLayout, new DashboardLayoutCoordinator(layoutStore)),
+            new UpdateSettingsSectionContributor(update, updateStore),
+            new DebugChannelSettingsSectionContributor(debugChannel, debugChannelStore),
+            new McpSettingsSectionContributor(mcp),
+            new AppearanceSettingsSectionContributor(new AppearanceSettingsSectionViewModel(new(uiSettings), new(uiSettings))),
+            new MiscSettingsSectionContributor(new(settingsManager, null!, dialogs, null!, null!, null!)),
+        ];
+
+        return new(
+            contributors,
+            settingsManager,
+            gate,
+            kestrel,
+            bus,
+            NullLogger<SettingsPageViewModel>.Instance,
+            dialogs,
+            uiSettings);
+    }
+
+    private static void CollectVisible(DependencyObject root, List<string> anchors)
+    {
+        if (root is UIElement { Visibility: not Visibility.Visible })
+        {
+            return;
+        }
+
         if (root is FrameworkElement element && SettingsBlock.GetKey(element) is { Length: > 0 } key)
         {
             anchors.Add(key);
@@ -78,7 +265,96 @@ public class SettingsBlocksTests
 
         for (var index = 0; index < count; index++)
         {
-            Collect(VisualTreeHelper.GetChild(root, index), anchors);
+            CollectVisible(VisualTreeHelper.GetChild(root, index), anchors);
+        }
+    }
+
+    public class InertProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            return targetMethod is not null
+                && targetMethod.ReturnType != typeof(void)
+                && targetMethod.ReturnType.IsValueType
+                ? Activator.CreateInstance(targetMethod.ReturnType)
+                : null;
+        }
+    }
+
+    private sealed class FakeUpdateCoordinator : IUpdateCoordinator
+    {
+        public UpdateKind Kind => UpdateKind.Unsupported;
+
+        public bool IsUpdatable => false;
+
+        public string DefaultRepositorySlug => "owner/repo";
+
+        public Version CurrentVersion { get; } = new(1, 0);
+
+        public UpdateCandidate? LatestCandidate => null;
+
+        public bool HasPreparedUpdate => false;
+
+        public string? PreparedVersion => null;
+
+        public Task<UpdateCandidate?> CheckNowAsync(CancellationToken cancellationToken) => Task.FromResult<UpdateCandidate?>(null);
+
+        public Task PrepareAsync(UpdateCandidate candidate, IProgress<int>? progress, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<bool> TryPrepareSilentlyAsync(UpdateCandidate candidate, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<bool> DiscardPreparedUpdateAsync(CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public void SkipVersion(string version)
+        {
+        }
+    }
+
+    private sealed class EmptyServiceProvider : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => null;
+    }
+
+    private sealed class FakeTargetChannelProvider : ITargetChannelProvider
+    {
+        public TargetChannelState Current { get; } = new("poproshayka", "poproshayka", false, true);
+
+        public void BeginSession()
+        {
+        }
+
+        public void EndSession()
+        {
+        }
+    }
+
+    private sealed class StubMultiBlockContributor(string sectionKey, string childKey, string title) : ISettingsSectionContributor
+    {
+        public int Order => 0;
+
+        public string SectionKey => sectionKey;
+
+        public SettingsSection CreateSection()
+        {
+            return new(sectionKey, title, PackIconLucideKind.Settings, string.Empty, [new SettingsSubsection(childKey, title)]);
+        }
+
+        public IReadOnlyList<SettingsSectionBlockDescriptor> GetBlocks()
+        {
+            return [new($"{sectionKey}/{childKey}", title, null, new())];
+        }
+
+        public void Load(SettingsSessionState session) { }
+
+        public IDisposable SubscribeDirty(SettingsSessionState session, Action markDirty, Action notifyChangesState) => new DummyDisposable();
+
+        public void BeginSave(AppSettings targetSettings) { }
+
+        public Task<SettingsSectionSaveOutcome> SaveAsync(AppSettings targetSettings, bool appSettingsWritten) => Task.FromResult(SettingsSectionSaveOutcome.Clean);
+
+        private sealed class DummyDisposable : IDisposable
+        {
+            public void Dispose() { }
         }
     }
 }

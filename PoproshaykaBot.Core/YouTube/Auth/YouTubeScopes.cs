@@ -1,4 +1,6 @@
-﻿namespace PoproshaykaBot.Core.YouTube.Auth;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
+
+namespace PoproshaykaBot.Core.YouTube.Auth;
 
 public static class YouTubeScopes
 {
@@ -15,12 +17,12 @@ public static class YouTubeScopes
         ReadOnly,
     ];
 
-    public static IReadOnlyList<string> RequiredFor(YouTubeOAuthRole role)
+    public static IReadOnlyList<string> RequiredFor(PlatformAuthRole role)
     {
         return role switch
         {
-            YouTubeOAuthRole.Bot => BotRequired,
-            YouTubeOAuthRole.Broadcaster => BroadcasterRequired,
+            PlatformAuthRole.Bot => BotRequired,
+            PlatformAuthRole.Broadcaster => BroadcasterRequired,
             _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
         };
     }
@@ -30,6 +32,14 @@ public static class YouTubeScopes
         ArgumentNullException.ThrowIfNull(account);
 
         return account.StoredScopes.Contains(scope, StringComparer.Ordinal);
+    }
+
+    public static bool ContainsRequiredScopes(PlatformAuthRole role, IEnumerable<string> grantedScopes)
+    {
+        ArgumentNullException.ThrowIfNull(grantedScopes);
+
+        var grantedSet = new HashSet<string>(grantedScopes, StringComparer.Ordinal);
+        return RequiredFor(role).All(grantedSet.Contains);
     }
 
     public static bool SetEquals(IEnumerable<string> left, IEnumerable<string> right)

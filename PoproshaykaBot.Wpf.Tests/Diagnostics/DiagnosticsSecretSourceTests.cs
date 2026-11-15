@@ -1,12 +1,19 @@
 ﻿using KeepShell.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Infrastructure.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Obs;
 using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch;
+using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Wpf.Infrastructure.Diagnostics;
 using System.IO;
+using System.Reflection;
 
 namespace PoproshaykaBot.Wpf.Tests.Diagnostics;
 
@@ -73,10 +80,7 @@ public class DiagnosticsSecretSourceTests
     {
         var settings = new ThrowingSettingsManager(Path.Combine(_directory, "settings.json"));
         var source = new BotDiagnosticsSecretSource(
-            settings,
-            CreateAccounts(),
-            CreateYouTubeAccounts(),
-            CreateObs(),
+            CreateProviders(settings, CreateAccounts(), CreateYouTubeAccounts(), CreateObs()),
             NullLogger<BotDiagnosticsSecretSource>.Instance);
 
         var rules = source.Collect();
@@ -93,13 +97,84 @@ public class DiagnosticsSecretSourceTests
         }
     }
 
+    [Test]
+    public void LegacyDataCatalog_CarriesTokens_Entries_Match_Di_SecretProviders()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IEventBus>(new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
+        services.AddSingleton(DispatchProxy.Create<ITargetChannelProvider, InertProxy>());
+        services.AddSettingsStores();
+        services.AddTwitchClients();
+        services.AddYouTubeClients();
+
+        using var provider = services.BuildServiceProvider();
+        var providerSources = provider.GetServices<ISecretValueProvider>()
+            .Select(static item => item.SourceName)
+            .ToArray();
+
+        var tokenFiles = LegacyDataCatalog.AllEntries
+            .Where(static entry => entry.CarriesTokens)
+            .Select(static entry => entry.FileName)
+            .ToArray();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tokenFiles, Is.EquivalentTo(new[]
+            {
+                LegacyDataCatalog.SettingsFileName,
+                LegacyDataCatalog.AccountsFileName,
+                LegacyDataCatalog.YouTubeAccountsFileName,
+            }));
+
+            Assert.That(providerSources, Has.Some.EqualTo("настройки Twitch"));
+            Assert.That(providerSources, Has.Some.EqualTo("настройки YouTube"));
+            Assert.That(providerSources, Has.Some.EqualTo("настройки OBS"));
+            Assert.That(providerSources, Has.Some.StartsWith("токены роли"));
+            Assert.That(providerSources, Has.Some.StartsWith("токены YouTube роли"));
+        }
+    }
+
     private BotDiagnosticsSecretSource Create()
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));
 
         settings.Mutate(current => current.Twitch.ClientSecret = ClientSecret);
 
-        return new(settings, CreateAccounts(), CreateYouTubeAccounts(), CreateObs(), NullLogger<BotDiagnosticsSecretSource>.Instance);
+        return new(
+            CreateProviders(settings, CreateAccounts(), CreateYouTubeAccounts(), CreateObs()),
+            NullLogger<BotDiagnosticsSecretSource>.Instance);
+    }
+
+    private static IReadOnlyList<ISecretValueProvider> CreateProviders(
+        SettingsManager settings,
+        AccountsStore accounts,
+        YouTubeAccountsStore youtubeAccounts,
+        ObsIntegrationStore obs)
+    {
+        var providers = new List<ISecretValueProvider>
+        {
+            new DelegateSecretValueProvider("настройки Twitch", () => [settings.Current.Twitch.ClientSecret]),
+            new DelegateSecretValueProvider("настройки YouTube", () => [youtubeAccounts.LoadClientSecret()]),
+            new DelegateSecretValueProvider("настройки OBS", () => [obs.Load().Password]),
+        };
+
+        foreach (var role in PlatformAuthRoles.Active)
+        {
+            providers.Add(new DelegateSecretValueProvider($"токены роли {role}", () =>
+            {
+                var account = accounts.Load(role);
+                return [account.AccessToken, account.RefreshToken];
+            }));
+
+            providers.Add(new DelegateSecretValueProvider($"токены YouTube роли {role}", () =>
+            {
+                var account = youtubeAccounts.Load(role);
+                return [account.AccessToken, account.RefreshToken];
+            }));
+        }
+
+        return providers;
     }
 
     private AccountsStore CreateAccounts()
@@ -159,5 +234,10 @@ public class DiagnosticsSecretSourceTests
         : SettingsManager(NullLogger<SettingsManager>.Instance, filePath)
     {
         public override AppSettings Current => throw new InvalidOperationException("настройки прочитать не удалось");
+    }
+
+    private class InertProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
     }
 }

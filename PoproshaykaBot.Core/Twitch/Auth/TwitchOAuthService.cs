@@ -1,4 +1,7 @@
-﻿namespace PoproshaykaBot.Core.Twitch.Auth;
+﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
+
+namespace PoproshaykaBot.Core.Twitch.Auth;
 
 public sealed class TwitchOAuthService(
     OAuthFlowCoordinator flow,
@@ -6,18 +9,20 @@ public sealed class TwitchOAuthService(
     OAuthTokenClient tokenClient,
     OAuthAccountWriter accountWriter,
     OAuthStatusReporter statusReporter)
-    : ITwitchOAuthService, IDisposable
+    : ITwitchOAuthService, IPlatformAuthService, IDisposable
 {
     private bool _isDisposed;
 
-    public event Action<TwitchOAuthRole, string>? StatusChanged
+    public StreamingPlatform Platform => StreamingPlatform.Twitch;
+
+    public event Action<PlatformAuthRole, string>? StatusChanged
     {
         add => statusReporter.StatusChanged += value;
         remove => statusReporter.StatusChanged -= value;
     }
 
-    public Task<string> StartOAuthFlowAsync(
-        TwitchOAuthRole role,
+    public async Task<string> StartOAuthFlowAsync(
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
@@ -26,11 +31,13 @@ public sealed class TwitchOAuthService(
         bool checkBroadcasterChannel = true,
         CancellationToken ct = default)
     {
-        return flow.StartOAuthFlowAsync(role, clientId, clientSecret, scopes, redirectUri, onAuthUrlReady, checkBroadcasterChannel, ct);
+        var token = await flow.StartOAuthFlowAsync(role, clientId, clientSecret, scopes, redirectUri, onAuthUrlReady, checkBroadcasterChannel, ct);
+        refresher.ResetRetryState(role);
+        return token;
     }
 
     public Task<OAuthFlowResult> StartOAuthFlowToDraftAsync(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string[]? scopes,
@@ -63,7 +70,7 @@ public sealed class TwitchOAuthService(
     }
 
     public Task<string> RefreshTokenAsync(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string refreshToken,
@@ -72,13 +79,36 @@ public sealed class TwitchOAuthService(
         return refresher.RefreshTokenAsync(role, clientId, clientSecret, refreshToken, ct);
     }
 
-    public Task<string?> GetAccessTokenAsync(TwitchOAuthRole role, CancellationToken ct = default)
+    public async Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default)
     {
-        return refresher.GetAccessTokenAsync(role, ct);
+        return await refresher.GetAccessTokenAsync(role, forceRefresh: false, ct);
+    }
+
+    ValueTask<string?> IPlatformAuthService.GetAccessTokenAsync(
+        PlatformAuthRole role,
+        bool forceRefresh,
+        CancellationToken ct)
+    {
+        return refresher.GetAccessTokenAsync(role, forceRefresh, ct);
+    }
+
+    public bool HasUsableAccessToken(PlatformAuthRole role)
+    {
+        return refresher.HasUsableAccessToken(role);
+    }
+
+    public bool TryClearAccessToken(PlatformAuthRole role, string failedAccessToken)
+    {
+        return accountWriter.TryClearAccessToken(role, failedAccessToken);
+    }
+
+    public void ResetRetryState(PlatformAuthRole role)
+    {
+        refresher.ResetRetryState(role);
     }
 
     public void UpdateSettings(
-        TwitchOAuthRole role,
+        PlatformAuthRole role,
         string accessToken,
         string refreshToken,
         IEnumerable<string>? newScopes,
@@ -90,8 +120,9 @@ public sealed class TwitchOAuthService(
         accountWriter.UpdateSettings(role, accessToken, refreshToken, newScopes, login, userId, expiresInSeconds, publishAuthorizationRefreshed);
     }
 
-    public void ClearTokens(TwitchOAuthRole role)
+    public void ClearTokens(PlatformAuthRole role)
     {
+        refresher.ResetRetryState(role);
         accountWriter.ClearTokens(role);
     }
 
@@ -103,7 +134,6 @@ public sealed class TwitchOAuthService(
         }
 
         statusReporter.ClearSubscribers();
-
         _isDisposed = true;
     }
 }

@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Auth;
 
@@ -60,7 +61,7 @@ public sealed class BotConnectionManagerTests
         };
 
         var tokenService = Substitute.For<ITwitchOAuthService>();
-        tokenService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>()).Returns("token");
+        tokenService.GetAccessTokenAsync(PlatformAuthRole.Bot, Arg.Any<CancellationToken>()).Returns("token");
 
         var targetChannel = Substitute.For<ITargetChannelProvider>();
         targetChannel.Current.Returns(new TargetChannelState("channel", "channel", false, true));
@@ -108,7 +109,7 @@ public sealed class BotConnectionManagerTests
 
         var eventBus = Substitute.For<IEventBus>();
         var tokenService = Substitute.For<ITwitchOAuthService>();
-        tokenService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>()).Returns("token");
+        tokenService.GetAccessTokenAsync(PlatformAuthRole.Bot, Arg.Any<CancellationToken>()).Returns("token");
 
         var targetChannel = Substitute.For<ITargetChannelProvider>();
         targetChannel.Current.Returns(new TargetChannelState("channel", "channel", false, true));

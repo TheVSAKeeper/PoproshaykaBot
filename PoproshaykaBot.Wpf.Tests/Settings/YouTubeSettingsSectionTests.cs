@@ -3,6 +3,7 @@ using KeepShell.Services.Modal;
 using KeepShell.Services.Platform;
 using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
@@ -184,13 +185,14 @@ public sealed class YouTubeSettingsSectionTests
         }
     }
 
-    private YouTubeSettingsSectionViewModel CreateSection()
+    private YouTubeSettingsSectionViewModel CreateSection(TimeProvider? timeProvider = null)
     {
         return new(
             _oauthService,
             _shellLauncher,
             _dialogs,
             _dispatcher,
+            timeProvider ?? TimeProvider.System,
             NullLoggerFactory.Instance);
     }
 
@@ -211,7 +213,7 @@ public sealed class YouTubeSettingsSectionTests
 
     private sealed class FakeYouTubeOAuthService : IYouTubeOAuthService
     {
-        public event Action<YouTubeOAuthRole, string>? StatusChanged
+        public event Action<PlatformAuthRole, string>? StatusChanged
         {
             add { }
             remove { }
@@ -219,10 +221,10 @@ public sealed class YouTubeSettingsSectionTests
 
         public int DraftFlowCalls { get; private set; }
 
-        public Func<YouTubeOAuthRole, string, string, Action<string>, Task<YouTubeOAuthFlowResult>>? OnDraftFlow { get; set; }
+        public Func<PlatformAuthRole, string, string, Action<string>, Task<YouTubeOAuthFlowResult>>? OnDraftFlow { get; set; }
 
         public Task<YouTubeOAuthFlowResult> StartOAuthFlowAsync(
-            YouTubeOAuthRole role,
+            PlatformAuthRole role,
             string clientId,
             string clientSecret,
             string[]? scopes,
@@ -233,7 +235,7 @@ public sealed class YouTubeSettingsSectionTests
         }
 
         public Task<YouTubeOAuthFlowResult> StartOAuthFlowToDraftAsync(
-            YouTubeOAuthRole role,
+            PlatformAuthRole role,
             string clientId,
             string clientSecret,
             string[]? scopes,
@@ -246,15 +248,15 @@ public sealed class YouTubeSettingsSectionTests
                 : Task.FromException<YouTubeOAuthFlowResult>(new InvalidOperationException("No flow handler configured"));
         }
 
-        public Task<string> RefreshTokenAsync(YouTubeOAuthRole role, string clientId, string clientSecret, string refreshToken, CancellationToken ct = default)
+        public Task<string> RefreshTokenAsync(PlatformAuthRole role, string clientId, string clientSecret, string refreshToken, CancellationToken ct = default)
             => Task.FromResult(string.Empty);
 
-        public Task<string?> GetAccessTokenAsync(YouTubeOAuthRole role, CancellationToken ct = default)
+        public Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
 
-        public bool TryClearAccessToken(YouTubeOAuthRole role, string expectedToken) => false;
+        public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken) => false;
 
-        public void ClearAccount(YouTubeOAuthRole role, bool publishAuthorizationRefreshed = false)
+        public void ClearAccount(PlatformAuthRole role, bool publishAuthorizationRefreshed = false)
         {
         }
     }

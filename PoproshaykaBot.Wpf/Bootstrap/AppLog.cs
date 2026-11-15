@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
-using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 namespace PoproshaykaBot.Wpf.Bootstrap;
@@ -49,7 +49,7 @@ internal static partial class AppLog
     public static partial void RestartCancelled(this ILogger logger);
 
     [LoggerMessage(EventId = 1100, Level = LogLevel.Error, Message = "OAuth-поток мастера упал для роли {Role}")]
-    public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
+    public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, PlatformAuthRole role);
 
     [LoggerMessage(EventId = 1103, Level = LogLevel.Error, Message = "Не удалось сохранить настройки и токены перед подключением бота")]
     public static partial void BotConnectionSaveSettingsFailed(this ILogger logger, Exception? exception);
@@ -133,7 +133,7 @@ internal static partial class AppLog
     public static partial void OnboardingWizardShowFailed(this ILogger logger, Exception? exception);
 
     [LoggerMessage(EventId = 1127, Level = LogLevel.Error, Message = "Встроенная авторизация упала для роли {Role}")]
-    public static partial void EmbeddedAuthFlowFailed(this ILogger logger, Exception? exception, TwitchOAuthRole role);
+    public static partial void EmbeddedAuthFlowFailed(this ILogger logger, Exception? exception, PlatformAuthRole role);
 
     [LoggerMessage(EventId = 1128, Level = LogLevel.Error, Message = "Не удалось поднять встроенный браузер авторизации")]
     public static partial void EmbeddedAuthWebViewFailed(this ILogger logger, Exception? exception);
@@ -142,16 +142,37 @@ internal static partial class AppLog
     public static partial void EmbeddedAuthRuntimeMissing(this ILogger logger, Exception? exception);
 
     [LoggerMessage(EventId = 1130, Level = LogLevel.Warning, Message = "Встроенная авторизация подавлена в headless-режиме для роли {Role}")]
-    public static partial void EmbeddedAuthSuppressedHeadless(this ILogger logger, TwitchOAuthRole role);
+    public static partial void EmbeddedAuthSuppressedHeadless(this ILogger logger, PlatformAuthRole role);
 
     [LoggerMessage(EventId = 1131, Level = LogLevel.Information, Message = "Пользователь начал авторизацию роли {Role} во внешнем браузере ({Surface})")]
-    public static partial void OAuthBrowserFlowStarted(this ILogger logger, TwitchOAuthRole role, OAuthAuthorizationSurface surface);
+    public static partial void OAuthBrowserFlowStarted(this ILogger logger, PlatformAuthRole role, OAuthAuthorizationSurface surface);
 
     [LoggerMessage(EventId = 1132, Level = LogLevel.Information, Message = "Пользователь начал встроенную авторизацию роли {Role} ({Surface})")]
-    public static partial void OAuthEmbeddedFlowStarted(this ILogger logger, TwitchOAuthRole role, OAuthAuthorizationSurface surface);
+    public static partial void OAuthEmbeddedFlowStarted(this ILogger logger, PlatformAuthRole role, OAuthAuthorizationSurface surface);
 
     [LoggerMessage(EventId = 1137, Level = LogLevel.Debug, Message = "Ошибка в уже отменённом или заменённом OAuth-потоке роли {Role}")]
-    public static partial void OAuthAbandonedFlowFailed(this ILogger logger, Exception exception, TwitchOAuthRole role);
+    public static partial void OAuthAbandonedFlowFailed(this ILogger logger, Exception exception, PlatformAuthRole role);
+
+    [LoggerMessage(EventId = 1138, Level = LogLevel.Information, Message = "Пользователь начал авторизацию {Platform} роли {Role} во внешнем браузере ({Surface})")]
+    public static partial void PlatformOAuthBrowserFlowStarted(this ILogger logger, string platform, PlatformAuthRole role, OAuthAuthorizationSurface surface);
+
+    [LoggerMessage(EventId = 1139, Level = LogLevel.Information, Message = "Авторизация {Platform} для роли {Role} отменена")]
+    public static partial void PlatformOAuthFlowCancelled(this ILogger logger, string platform, PlatformAuthRole role);
+
+    [LoggerMessage(EventId = 1140, Level = LogLevel.Error, Message = "OAuth-поток {Platform} упал для роли {Role}")]
+    public static partial void PlatformOAuthFlowFailed(this ILogger logger, Exception? exception, string platform, PlatformAuthRole role);
+
+    [LoggerMessage(EventId = 1141, Level = LogLevel.Information, Message = "Пользователь очистил токены {Platform} для роли {Role}")]
+    public static partial void PlatformOAuthTokensCleared(this ILogger logger, string platform, PlatformAuthRole role);
+
+    [LoggerMessage(EventId = 1142, Level = LogLevel.Error, Message = "Не удалось обновить токен {Platform} для роли {Role}")]
+    public static partial void PlatformOAuthRefreshFailed(this ILogger logger, Exception? exception, string platform, PlatformAuthRole role);
+
+    [LoggerMessage(EventId = 1143, Level = LogLevel.Warning, Message = "Не удалось проверить токен {Platform} для роли {Role}")]
+    public static partial void PlatformOAuthValidationFailed(this ILogger logger, Exception? exception, string platform, PlatformAuthRole role);
+
+    [LoggerMessage(EventId = 1144, Level = LogLevel.Warning, Message = "Не удалось открыть системный браузер для OAuth {Platform} роли {Role}")]
+    public static partial void PlatformOAuthBrowserOpenFailed(this ILogger logger, string platform, PlatformAuthRole role);
 
     [LoggerMessage(EventId = 1200, Level = LogLevel.Error, Message = "Ошибка сохранения настроек")]
     public static partial void SettingsSaveFailed(this ILogger logger, Exception? exception);

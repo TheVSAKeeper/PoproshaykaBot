@@ -1,4 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using PoproshaykaBot.Core.Infrastructure.Diagnostics;
+using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -10,6 +13,7 @@ public static class TwitchServiceCollectionExtensions
 {
     public static IServiceCollection AddTwitchClients(this IServiceCollection services)
     {
+        services.AddPlatformAuthRegistry();
         services.AddTransient<BotTwitchAuthHandler>();
         services.AddTransient<BroadcasterTwitchAuthHandler>();
 
@@ -41,11 +45,33 @@ public static class TwitchServiceCollectionExtensions
         services.AddSingleton<OAuthAccountWriter>();
         services.AddSingleton<OAuthFlowCoordinator>();
         services.AddSingleton<OAuthTokenRefresher>();
-        services.AddSingleton<ITwitchOAuthService, TwitchOAuthService>();
+        services.AddSingleton<TwitchOAuthService>();
+        services.AddSingleton<ITwitchOAuthService>(static provider => provider.GetRequiredService<TwitchOAuthService>());
+        services.AddSingleton<IPlatformAuthService>(static provider => provider.GetRequiredService<TwitchOAuthService>());
         services.AddSingleton<IClientCredentialsValidator, ClientCredentialsValidator>();
 
         services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
         services.AddSingleton<IOnboardingChannelValidator, OnboardingChannelValidator>();
+
+        services.AddSingleton<ISettingsSnapshotContributor>(static provider => new DelegateSettingsSnapshotContributor(() =>
+        {
+            var accounts = provider.GetRequiredService<AccountsStore>();
+            return
+            [
+                new("Account.Bot", AccountsStore.Describe(accounts.Load(PlatformAuthRole.Bot))),
+                new("Account.Broadcaster", AccountsStore.Describe(accounts.Load(PlatformAuthRole.Broadcaster))),
+            ];
+        }));
+
+        foreach (var role in PlatformAuthRoles.Active)
+        {
+            services.AddSingleton<ISecretValueProvider>(provider =>
+                new DelegateSecretValueProvider($"токены роли {role}", () =>
+                {
+                    var account = provider.GetRequiredService<AccountsStore>().Load(role);
+                    return [account.AccessToken, account.RefreshToken];
+                }));
+        }
 
         return services;
     }

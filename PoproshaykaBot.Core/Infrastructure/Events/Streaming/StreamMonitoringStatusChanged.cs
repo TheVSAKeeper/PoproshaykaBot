@@ -1,6 +1,6 @@
-﻿using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Core.Twitch.Auth;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 
-public sealed record StreamMonitoringStatusChanged(TwitchOAuthRole Role, StreamMonitoringStatus Status, string? Detail = null) : EventBase;
+public sealed record StreamMonitoringStatusChanged(PlatformAuthRole Role, StreamMonitoringStatus Status, string? Detail = null) : EventBase;

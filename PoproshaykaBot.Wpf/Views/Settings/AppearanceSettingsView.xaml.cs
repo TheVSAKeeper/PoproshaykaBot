@@ -1,8 +1,9 @@
-﻿using System.Windows.Controls;
+﻿using PoproshaykaBot.Wpf.ViewModels.Settings;
+using System.Windows.Controls;
 
 namespace PoproshaykaBot.Wpf.Views.Settings;
 
-public partial class AppearanceSettingsView : UserControl
+public partial class AppearanceSettingsView : UserControl, IView<AppearanceSettingsSectionViewModel>
 {
     public AppearanceSettingsView()
     {

@@ -1,132 +1,159 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.YouTube.Auth;
 
-public sealed class YouTubeOAuthTokenRefresher(
-    YouTubeOAuthTokenClient tokenClient,
-    YouTubeOAuthAccountWriter accountWriter,
-    YouTubeOAuthStatusReporter statusReporter,
-    YouTubeAccountsStore accountsStore,
-    YouTubeSettingsStore settingsStore,
-    YouTubeOAuthOptions options,
-    ILogger<YouTubeOAuthTokenRefresher> logger) : IDisposable
+public sealed class YouTubeOAuthTokenRefresher : IDisposable
 {
-    private static readonly TimeSpan BaseRetryDelay = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
+    private readonly OAuthRoleTokenRefresher<YouTubeAccountSettings> _inner;
 
-    private readonly SemaphoreSlim _botRefreshLock = new(1, 1);
-    private readonly SemaphoreSlim _broadcasterRefreshLock = new(1, 1);
-    private readonly Lock _stateSync = new();
-    private readonly Dictionary<YouTubeOAuthRole, RetryState> _retryStates = new();
-
-    public async Task<string?> GetAccessTokenAsync(YouTubeOAuthRole role, CancellationToken ct = default)
+    public YouTubeOAuthTokenRefresher(
+        YouTubeOAuthTokenClient tokenClient,
+        YouTubeOAuthAccountWriter accountWriter,
+        YouTubeOAuthStatusReporter statusReporter,
+        YouTubeAccountsStore accountsStore,
+        YouTubeSettingsStore settingsStore,
+        YouTubeOAuthOptions options,
+        IEventBus eventBus,
+        TimeProvider timeProvider,
+        ILogger<YouTubeOAuthTokenRefresher> logger)
     {
-        var account = accountsStore.Load(role);
-        if (HasUsableAccessToken(account))
-        {
-            return account.AccessToken;
-        }
+        ArgumentNullException.ThrowIfNull(tokenClient);
+        ArgumentNullException.ThrowIfNull(accountWriter);
+        ArgumentNullException.ThrowIfNull(statusReporter);
+        ArgumentNullException.ThrowIfNull(accountsStore);
+        ArgumentNullException.ThrowIfNull(settingsStore);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(eventBus);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(logger);
 
-        if (string.IsNullOrWhiteSpace(account.RefreshToken))
-        {
-            return null;
-        }
+        var strategy = new YouTubeRefreshStrategy(
+            tokenClient,
+            accountWriter,
+            statusReporter,
+            accountsStore,
+            settingsStore,
+            options,
+            eventBus,
+            logger);
 
-        var refreshLock = GetLockForRole(role);
-        await refreshLock.WaitAsync(ct);
-
-        try
-        {
-            account = accountsStore.Load(role);
-            if (HasUsableAccessToken(account))
-            {
-                return account.AccessToken;
-            }
-
-            if (string.IsNullOrWhiteSpace(account.RefreshToken) || IsInBackoffOrCooldown(role))
-            {
-                return null;
-            }
-
-            var clientId = settingsStore.Load().ClientId;
-            var clientSecret = accountsStore.LoadClientSecret();
-
-            if (string.IsNullOrWhiteSpace(clientId))
-            {
-                return null;
-            }
-
-            try
-            {
-                return await ExecuteRefreshAsync(role, clientId, clientSecret, account.RefreshToken, ct);
-            }
-            catch (YouTubeOAuthException exception) when (exception.IsPermanentRejection)
-            {
-                return null;
-            }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or YouTubeOAuthException)
-            {
-                if (ct.IsCancellationRequested)
-                {
-                    throw;
-                }
-
-                logger.LogWarning(exception, "Временный сбой обновления YouTube access-токена роли {Role}", role);
-                return null;
-            }
-        }
-        finally
-        {
-            refreshLock.Release();
-        }
+        _inner = new(accountsStore.Load, strategy, eventBus, timeProvider);
     }
 
-    public async Task<string> RefreshTokenAsync(
-        YouTubeOAuthRole role,
+    public bool HasUsableAccessToken(PlatformAuthRole role)
+    {
+        return _inner.HasUsableAccessToken(role);
+    }
+
+    public ValueTask<string?> GetAccessTokenAsync(
+        PlatformAuthRole role,
+        bool forceRefresh = false,
+        CancellationToken ct = default)
+    {
+        return _inner.GetAccessTokenAsync(role, forceRefresh, ct);
+    }
+
+    public Task<string> RefreshTokenAsync(
+        PlatformAuthRole role,
         string clientId,
         string clientSecret,
         string refreshToken,
         CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
-
-        var refreshLock = GetLockForRole(role);
-        await refreshLock.WaitAsync(ct);
-
-        try
-        {
-            return await ExecuteRefreshAsync(role, clientId, clientSecret, refreshToken, ct);
-        }
-        finally
-        {
-            refreshLock.Release();
-        }
+        return _inner.RefreshTokenAsync(role, clientId, clientSecret, refreshToken, ct);
     }
 
-    public void ResetRetryState(YouTubeOAuthRole role)
+    public void ResetRetryState(PlatformAuthRole role)
     {
-        lock (_stateSync)
-        {
-            _retryStates.Remove(role);
-        }
+        _inner.ResetRetryState(role);
     }
 
     public void Dispose()
     {
-        _botRefreshLock.Dispose();
-        _broadcasterRefreshLock.Dispose();
+        _inner.Dispose();
     }
 
-    private async Task<string> ExecuteRefreshAsync(
-        YouTubeOAuthRole role,
-        string clientId,
-        string clientSecret,
-        string refreshToken,
-        CancellationToken ct)
+    private sealed class YouTubeRefreshStrategy(
+        YouTubeOAuthTokenClient tokenClient,
+        YouTubeOAuthAccountWriter accountWriter,
+        YouTubeOAuthStatusReporter statusReporter,
+        YouTubeAccountsStore accountsStore,
+        YouTubeSettingsStore settingsStore,
+        YouTubeOAuthOptions options,
+        IEventBus eventBus,
+        ILogger<YouTubeOAuthTokenRefresher> logger)
+        : IOAuthTokenRefreshStrategy<YouTubeAccountSettings>
     {
-        try
+        private static readonly TimeSpan BaseRetryDelay = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
+
+        public StreamingPlatform Platform => StreamingPlatform.YouTube;
+
+        public TimeSpan TokenRefreshMargin => options.TokenRefreshMargin;
+
+        public TimeSpan BaseTransientRetryDelay => BaseRetryDelay;
+
+        public TimeSpan MaxTransientRetryDelay => MaxRetryDelay;
+
+        public TimeSpan CredentialsRejectedCooldown => options.CredentialsRejectedCooldown;
+
+        public bool AreStoredScopesValid(PlatformAuthRole role, YouTubeAccountSettings account)
+        {
+            return YouTubeScopes.SetEquals(account.StoredScopes, account.Scopes)
+                && YouTubeScopes.RequiredFor(role).All(required => YouTubeScopes.IsGranted(account, required));
+        }
+
+        public async Task HandleScopeMismatchAsync(PlatformAuthRole role, YouTubeAccountSettings accountSnapshot, CancellationToken ct)
+        {
+            logger.LogWarning(
+                "Scope set YouTube роли {Role} изменился или не содержит обязательных прав – требуется повторная авторизация. Выдано: [{Old}]. Ожидается: [{New}]",
+                role,
+                string.Join(" ", accountSnapshot.StoredScopes),
+                string.Join(" ", accountSnapshot.Scopes));
+
+            var message = $"Требуется повторная авторизация YouTube ({PlatformAuthRoles.Describe(role)}): изменился набор прав.";
+            statusReporter.Report(role, message);
+
+            try
+            {
+                await eventBus.PublishAsync(new BotConnectionStatusUpdated(message), ct);
+            }
+            catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
+            {
+                logger.LogDebug(ex, "Публикация BotConnectionStatusUpdated (YouTube scope mismatch, роль {Role}) отменена", role);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Не удалось опубликовать BotConnectionStatusUpdated при YouTube scope mismatch (роль {Role})", role);
+            }
+
+            accountWriter.ClearAccount(role, publishAuthorizationRefreshed: true);
+        }
+
+        public bool TryReadBackgroundCredentials(out string clientId, out string clientSecret)
+        {
+            clientId = settingsStore.Load().ClientId;
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                clientSecret = string.Empty;
+                return false;
+            }
+
+            clientSecret = accountsStore.LoadClientSecret();
+            return true;
+        }
+
+        public async Task<string> RefreshAndSaveAsync(
+            PlatformAuthRole role,
+            string clientId,
+            string clientSecret,
+            string refreshToken,
+            CancellationToken ct)
         {
             var token = await tokenClient.RefreshAsync(clientId, clientSecret, refreshToken, ct);
 
@@ -137,91 +164,53 @@ public sealed class YouTubeOAuthTokenRefresher(
                 token.Scopes,
                 token.ExpiresInSeconds);
 
-            ResetRetryState(role);
             return token.AccessToken;
         }
-        catch (YouTubeOAuthException exception) when (exception.IsPermanentRejection)
-        {
-            RecordRejectionCooldown(role);
 
-            if (string.Equals(exception.ErrorCode, "invalid_grant", StringComparison.OrdinalIgnoreCase))
+        public OAuthRefreshFailureKind ClassifyFailure(Exception exception)
+        {
+            return exception switch
             {
-                logger.LogWarning(
-                    exception,
-                    "Google отозвал refresh-токен YouTube роли {Role} (invalid_grant) – сохранённая авторизация очищается.",
-                    role);
-
-                accountWriter.ClearAccount(role, publishAuthorizationRefreshed: true);
-            }
-            else
-            {
-                statusReporter.Report(role, exception.Message);
-            }
-
-            throw;
-        }
-        catch (Exception) when (!ct.IsCancellationRequested)
-        {
-            RecordTransientFailure(role);
-            throw;
-        }
-    }
-
-    private bool HasUsableAccessToken(YouTubeAccountSettings account)
-    {
-        if (string.IsNullOrWhiteSpace(account.AccessToken))
-        {
-            return false;
+                YouTubeOAuthException { IsPermanentRejection: true, ErrorCode: var errorCode }
+                    when string.Equals(errorCode, "invalid_grant", StringComparison.OrdinalIgnoreCase)
+                    => OAuthRefreshFailureKind.RefreshTokenRejected,
+                YouTubeOAuthException { IsPermanentRejection: true }
+                    => OAuthRefreshFailureKind.CredentialsRejected,
+                _ => OAuthRefreshFailureKind.Transient,
+            };
         }
 
-        if (account.AccessTokenExpiresAt is not { } expiresAt)
+        public Task OnRefreshTokenRejectedAsync(PlatformAuthRole role, Exception exception, CancellationToken ct)
         {
-            return true;
+            logger.LogWarning(
+                exception,
+                "Google отозвал refresh-токен YouTube роли {Role} (invalid_grant) – сохранённая авторизация очищается.",
+                role);
+
+            accountWriter.ClearAccount(role, publishAuthorizationRefreshed: true);
+            return Task.CompletedTask;
         }
 
-        return expiresAt - options.TokenRefreshMargin > options.TimeProvider.GetUtcNow();
-    }
-
-    private bool IsInBackoffOrCooldown(YouTubeOAuthRole role)
-    {
-        var now = options.TimeProvider.GetUtcNow();
-        lock (_stateSync)
+        public void OnCredentialsRejected(PlatformAuthRole role, Exception exception, DateTimeOffset pausedUntil)
         {
-            return _retryStates.TryGetValue(role, out var state) && state.BlockedUntilUtc > now;
+            logger.LogError(
+                exception,
+                "Google отклонил учётные данные приложения при обновлении YouTube токена роли {Role} – повтор приостановлен до {PausedUntil:HH:mm:ss} UTC",
+                role,
+                pausedUntil);
+
+            statusReporter.Report(
+                role,
+                $"Требуется повторная авторизация YouTube ({PlatformAuthRoles.Describe(role)}): {YouTubeOAuthErrorFormatter.DescribeSafe(exception)}.");
+        }
+
+        public void OnTransientFailure(PlatformAuthRole role, Exception exception, DateTimeOffset nextAttemptAt)
+        {
+            logger.LogWarning(
+                exception,
+                "Временный сбой обновления YouTube access-токена роли {Role}, следующая попытка не раньше {NextAttempt:HH:mm:ss} UTC",
+                role,
+                nextAttemptAt);
         }
     }
-
-    private void RecordTransientFailure(YouTubeOAuthRole role)
-    {
-        var now = options.TimeProvider.GetUtcNow();
-        lock (_stateSync)
-        {
-            var failures = _retryStates.TryGetValue(role, out var state) ? state.Failures + 1 : 1;
-            var shift = Math.Min(failures - 1, 10);
-            var delaySeconds = Math.Min(BaseRetryDelay.TotalSeconds * (1 << shift), MaxRetryDelay.TotalSeconds);
-            _retryStates[role] = new(failures, now.AddSeconds(delaySeconds));
-        }
-    }
-
-    private void RecordRejectionCooldown(YouTubeOAuthRole role)
-    {
-        var now = options.TimeProvider.GetUtcNow();
-        lock (_stateSync)
-        {
-            var failures = _retryStates.TryGetValue(role, out var state) ? state.Failures + 1 : 1;
-            _retryStates[role] = new(failures, now.Add(options.CredentialsRejectedCooldown));
-        }
-    }
-
-    private SemaphoreSlim GetLockForRole(YouTubeOAuthRole role)
-    {
-        return role switch
-        {
-            YouTubeOAuthRole.Bot => _botRefreshLock,
-            YouTubeOAuthRole.Broadcaster => _broadcasterRefreshLock,
-            _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
-        };
-    }
-
-    private readonly record struct RetryState(int Failures, DateTimeOffset BlockedUntilUtc);
 }

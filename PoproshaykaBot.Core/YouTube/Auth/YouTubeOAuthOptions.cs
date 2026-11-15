@@ -17,6 +17,4 @@ public sealed class YouTubeOAuthOptions
     public TimeSpan CredentialsRejectedCooldown { get; init; } = TimeSpan.FromMinutes(10);
 
     public TimeSpan TokenRefreshMargin { get; init; } = TimeSpan.FromMinutes(5);
-
-    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 }

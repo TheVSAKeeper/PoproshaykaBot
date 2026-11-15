@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -48,7 +50,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
     private bool _autoConnect = true;
 
     [ObservableProperty]
-    private TwitchOAuthRole _chatDisplayAccount = TwitchOAuthRole.Bot;
+    private PlatformAuthRole _chatDisplayAccount = PlatformAuthRole.Bot;
 
     public CompletionPageViewModel(
         SettingsManager settingsManager,
@@ -138,8 +140,8 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             return false;
         }
 
-        await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot), CancellationToken.None);
-        await _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster), CancellationToken.None);
 
         if (!settingsWritten || !accountsWritten)
         {
@@ -174,7 +176,7 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         _validationCts = null;
     }
 
-    partial void OnChatDisplayAccountChanged(TwitchOAuthRole value)
+    partial void OnChatDisplayAccountChanged(PlatformAuthRole value)
     {
         if (_context is not null)
         {

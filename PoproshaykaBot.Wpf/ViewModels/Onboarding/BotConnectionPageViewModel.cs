@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -98,8 +99,8 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
             return;
         }
 
-        _ = _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Bot));
-        _ = _eventBus.PublishAsync(new TwitchAuthorizationRefreshed(TwitchOAuthRole.Broadcaster));
+        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, Core.Platforms.Auth.PlatformAuthRole.Bot));
+        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, Core.Platforms.Auth.PlatformAuthRole.Broadcaster));
 
         ApplyPhase(Phase);
 

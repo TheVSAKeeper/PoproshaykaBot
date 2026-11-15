@@ -11,7 +11,7 @@ public class BroadcastProfilesStore
     public BroadcastProfilesStore(ILogger<BroadcastProfilesStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
     {
         var path = filePath ?? AppPaths.SettingsFile("broadcast-profiles.json");
-        _store = new(path, logger, describe: SettingsDescriber.Describe, gate: gate);
+        _store = new(path, logger, describe: Describe, gate: gate);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {
@@ -19,6 +19,15 @@ public class BroadcastProfilesStore
                 path,
                 _store.Load().Profiles.Count);
         }
+    }
+
+    public static string Describe(BroadcastProfilesSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var lastApplied = settings.LastAppliedProfileId is { } id ? id.ToString() : SettingsDescriber.Unset;
+
+        return $"профилей {settings.Profiles.Count}, последний применённый {lastApplied}";
     }
 
     public virtual BroadcastProfilesSettings Load()

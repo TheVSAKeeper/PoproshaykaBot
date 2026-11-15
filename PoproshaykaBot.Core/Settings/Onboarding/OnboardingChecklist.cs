@@ -1,5 +1,5 @@
-﻿using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Core.Twitch.Auth;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Settings.Onboarding;
 
@@ -24,12 +24,12 @@ public sealed class OnboardingChecklist(SettingsManager settingsManager, Account
             missing.Add("канал");
         }
 
-        if (string.IsNullOrWhiteSpace(accountsStore.Load(TwitchOAuthRole.Bot).AccessToken))
+        if (string.IsNullOrWhiteSpace(accountsStore.Load(PlatformAuthRole.Bot).AccessToken))
         {
             missing.Add("авторизация бота");
         }
 
-        if (string.IsNullOrWhiteSpace(accountsStore.Load(TwitchOAuthRole.Broadcaster).AccessToken))
+        if (string.IsNullOrWhiteSpace(accountsStore.Load(PlatformAuthRole.Broadcaster).AccessToken))
         {
             missing.Add("авторизация стримера");
         }

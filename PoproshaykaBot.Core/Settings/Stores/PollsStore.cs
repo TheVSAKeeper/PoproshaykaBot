@@ -11,7 +11,7 @@ public class PollsStore
     public PollsStore(ILogger<PollsStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
     {
         var path = filePath ?? AppPaths.SettingsFile("polls.json");
-        _store = new(path, logger, describe: SettingsDescriber.Describe, gate: gate);
+        _store = new(path, logger, describe: Describe, gate: gate);
 
         if (logger?.IsEnabled(LogLevel.Debug) == true)
         {
@@ -19,6 +19,19 @@ public class PollsStore
                 path,
                 _store.Load().Profiles.Count);
         }
+    }
+
+    public static string Describe(PollsSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var templates = settings.ChatTemplates;
+
+        return $"профилей опросов {settings.Profiles.Count}, объявление старта {SettingsDescriber.OnOff(templates.StartEnabled)}, "
+            + $"прогресс {SettingsDescriber.OnOff(templates.ProgressEnabled)} каждые {templates.ProgressAnnounceIntervalSeconds} с, "
+            + $"завершение {SettingsDescriber.OnOff(templates.EndEnabled)}, прерывание {SettingsDescriber.OnOff(templates.TerminatedEnabled)}, "
+            + $"архив {SettingsDescriber.OnOff(templates.ArchivedEnabled)}, стоп-дата автозапуска {SettingsDescriber.Moment(settings.AutoTriggerKillSwitchDateUtc)}, "
+            + $"история до {settings.HistoryMaxItems}";
     }
 
     public virtual PollsSettings Load()

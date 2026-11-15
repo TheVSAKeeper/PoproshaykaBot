@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Settings;
+﻿using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -15,7 +16,7 @@ public sealed class TwitchAuthHandlerTests
         _tempDir = Path.Combine(Path.GetTempPath(), "poproshayka-auth-handler-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDir);
         _accountsStore = new(filePath: Path.Combine(_tempDir, "accounts.json"));
-        _accountsStore.Mutate(TwitchOAuthRole.Bot, account =>
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account =>
         {
             account.Login = "thebot";
             account.UserId = "42";
@@ -69,7 +70,7 @@ public sealed class TwitchAuthHandlerTests
     [Test]
     public async Task SendAsync_AddsBearerAndClientIdHeaders_WhenTokenAvailable()
     {
-        _oauthService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>())
+        _oauthService.GetAccessTokenAsync(PlatformAuthRole.Bot, Arg.Any<CancellationToken>())
             .Returns("valid-token");
 
         var (client, stub) = BuildPipeline();
@@ -90,7 +91,7 @@ public sealed class TwitchAuthHandlerTests
     [Test]
     public void SendAsync_ThrowsWhenOAuthServiceReturnsNullToken()
     {
-        _oauthService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>())
+        _oauthService.GetAccessTokenAsync(PlatformAuthRole.Bot, Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         var (client, _) = BuildPipeline();
@@ -101,7 +102,7 @@ public sealed class TwitchAuthHandlerTests
     [Test]
     public void SendAsync_ThrowsWhenOAuthServiceReturnsBlankToken()
     {
-        _oauthService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>())
+        _oauthService.GetAccessTokenAsync(PlatformAuthRole.Bot, Arg.Any<CancellationToken>())
             .Returns("   ");
 
         var (client, _) = BuildPipeline();
@@ -113,8 +114,8 @@ public sealed class TwitchAuthHandlerTests
     public async Task SendAsync_On401_ClearsStoredAccessToken_WhenStillCurrent()
     {
         const string Token = "stored-token";
-        _accountsStore.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = Token);
-        _oauthService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>())
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = Token);
+        _oauthService.GetAccessTokenAsync(PlatformAuthRole.Bot, Arg.Any<CancellationToken>())
             .Returns(Token);
 
         var (client, stub) = BuildPipeline();
@@ -138,9 +139,9 @@ public sealed class TwitchAuthHandlerTests
         const string OldToken = "old-token";
         const string NewToken = "new-token";
 
-        _accountsStore.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = NewToken);
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = NewToken);
 
-        _oauthService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>())
+        _oauthService.GetAccessTokenAsync(PlatformAuthRole.Bot, Arg.Any<CancellationToken>())
             .Returns(OldToken);
 
         var (client, stub) = BuildPipeline();
@@ -156,8 +157,8 @@ public sealed class TwitchAuthHandlerTests
     public void Отказ_шёпота_по_401_не_стирает_токен_бота()
     {
         const string Token = "stored-token";
-        _accountsStore.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = Token);
-        _oauthService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>())
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = Token);
+        _oauthService.GetAccessTokenAsync(PlatformAuthRole.Bot, Arg.Any<CancellationToken>())
             .Returns(Token);
 
         var (client, stub) = BuildPipeline();
@@ -188,8 +189,8 @@ public sealed class TwitchAuthHandlerTests
     public async Task SendAsync_On200_DoesNotTouchAccountsStore()
     {
         const string Token = "valid-token";
-        _accountsStore.Mutate(TwitchOAuthRole.Bot, account => account.AccessToken = Token);
-        _oauthService.GetAccessTokenAsync(TwitchOAuthRole.Bot, Arg.Any<CancellationToken>())
+        _accountsStore.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = Token);
+        _oauthService.GetAccessTokenAsync(PlatformAuthRole.Bot, Arg.Any<CancellationToken>())
             .Returns(Token);
 
         var (client, stub) = BuildPipeline();
@@ -204,8 +205,8 @@ public sealed class TwitchAuthHandlerTests
     [Test]
     public async Task SendAsync_BroadcasterHandler_RoutesThroughBroadcasterRole()
     {
-        _accountsStore.Mutate(TwitchOAuthRole.Broadcaster, account => account.Login = "thecaster");
-        _oauthService.GetAccessTokenAsync(TwitchOAuthRole.Broadcaster, Arg.Any<CancellationToken>())
+        _accountsStore.Mutate(PlatformAuthRole.Broadcaster, account => account.Login = "thecaster");
+        _oauthService.GetAccessTokenAsync(PlatformAuthRole.Broadcaster, Arg.Any<CancellationToken>())
             .Returns("broadcaster-token");
 
         var stub = new StubHttpMessageHandler
@@ -223,7 +224,7 @@ public sealed class TwitchAuthHandlerTests
 
         await client.GetAsync("helix/channels");
 
-        await _oauthService.Received().GetAccessTokenAsync(TwitchOAuthRole.Broadcaster, Arg.Any<CancellationToken>());
+        await _oauthService.Received().GetAccessTokenAsync(PlatformAuthRole.Broadcaster, Arg.Any<CancellationToken>());
         Assert.That(stub.Requests[0].Headers.Authorization?.Parameter, Is.EqualTo("broadcaster-token"));
     }
 }

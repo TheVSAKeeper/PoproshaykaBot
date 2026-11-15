@@ -1,7 +1,7 @@
 ﻿using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Core.Twitch.Auth;
 
 namespace PoproshaykaBot.Core.Settings;
 
@@ -21,7 +21,7 @@ public sealed class TwitchSettings
 
     public int HttpServerPort { get; set; } = 8080;
 
-    public TwitchOAuthRole ChatDisplayAccount { get; set; } = TwitchOAuthRole.Bot;
+    public PlatformAuthRole ChatDisplayAccount { get; set; } = PlatformAuthRole.Bot;
 
     public MessageSettings Messages { get; set; } = new();
 

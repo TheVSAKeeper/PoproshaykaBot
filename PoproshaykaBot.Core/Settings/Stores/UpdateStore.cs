@@ -11,9 +11,19 @@ public sealed class UpdateStore
     public UpdateStore(ILogger<UpdateStore>? logger = null, string? filePath = null, SettingsWriteGate? gate = null)
     {
         var path = filePath ?? AppPaths.SettingsFile("update.json");
-        _store = new(path, logger, describe: SettingsDescriber.Describe, gate: gate);
+        _store = new(path, logger, describe: Describe, gate: gate);
 
         logger?.LogDebug("UpdateStore инициализирован из {FilePath}", path);
+    }
+
+    public static string Describe(UpdateSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return $"автопроверка {SettingsDescriber.OnOff(settings.AutoCheckEnabled)} каждые {settings.CheckIntervalHours} ч, "
+            + $"режим {settings.ApplyMode}, обновление framework-dependent {SettingsDescriber.OnOff(settings.AllowFrameworkDependentUpdate)}, "
+            + $"репозиторий {SettingsDescriber.Value(settings.RepositoryOverride)}, пропущенная версия {SettingsDescriber.Value(settings.SkippedVersion)}, "
+            + $"последняя проверка {SettingsDescriber.Moment(settings.LastCheckUtc)}";
     }
 
     public UpdateSettings Load()

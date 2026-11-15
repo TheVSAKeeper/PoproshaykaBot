@@ -3,9 +3,9 @@ using System.Windows.Controls;
 
 namespace PoproshaykaBot.Wpf.Views.Settings;
 
-public partial class OAuthAccountView : UserControl, IView<OAuthAccountViewModel>
+public partial class PlatformOAuthAccountView : UserControl, IView<PlatformOAuthAccountViewModel>
 {
-    public OAuthAccountView()
+    public PlatformOAuthAccountView()
     {
         InitializeComponent();
     }
