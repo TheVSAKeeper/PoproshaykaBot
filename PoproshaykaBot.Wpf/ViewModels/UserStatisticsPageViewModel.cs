@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
@@ -219,22 +220,27 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public bool TrySelect(string? userId)
     {
-        if (userId is not { Length: > 0 })
+        return TrySelect(new PlatformUserKey(StreamingPlatform.Twitch, userId ?? string.Empty));
+    }
+
+    public bool TrySelect(PlatformUserKey key)
+    {
+        if (key.UserId is not { Length: > 0 })
         {
             return false;
         }
 
-        if (_allRows.All(row => !string.Equals(row.UserId, userId, StringComparison.Ordinal)))
+        if (_allRows.All(row => row.Key != key))
         {
             return false;
         }
 
-        if (_rows.All(row => !string.Equals(row.UserId, userId, StringComparison.Ordinal)))
+        if (_rows.All(row => row.Key != key))
         {
             FilterText = string.Empty;
         }
 
-        SelectedRow = _rows.FirstOrDefault(row => string.Equals(row.UserId, userId, StringComparison.Ordinal));
+        SelectedRow = _rows.FirstOrDefault(row => row.Key == key);
 
         return SelectedRow is not null;
     }
@@ -259,7 +265,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     private void RebuildView()
     {
-        var selectedId = SelectedRow?.UserId;
+        var selectedKey = SelectedRow?.Key;
         var trimmed = FilterText.Trim();
         var hasFilter = trimmed.Length > 0;
         var visible = new List<UserStatisticsRowViewModel>(_allRows.Count);
@@ -278,8 +284,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
         _rows.SyncTo(UserStatisticsRanking.Arrange(visible, SortKey, SortDescending).ToList());
 
-        SelectedRow = selectedId is not null
-            ? _rows.FirstOrDefault(row => row.UserId == selectedId)
+        SelectedRow = selectedKey is not null
+            ? _rows.FirstOrDefault(row => row.Key == selectedKey)
             : null;
 
         IsFilterActive = hasFilter;
@@ -527,7 +533,12 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         {
             var rank = _userRankService.GetRank(user.Points);
             var standing = UserRankStanding.Create(user.Points, _userRankService.GetRankDisplay(user.Points), rank, ranks);
-            _allRows.Add(new UserStatisticsRowViewModel(user, standing, pointTerm) { Avatar = _avatars.For(user.UserId, user.Name) });
+            _allRows.Add(new UserStatisticsRowViewModel(user, standing, pointTerm)
+            {
+                Avatar = user.Platform == StreamingPlatform.Twitch
+                    ? _avatars.For(user.UserId, user.Name)
+                    : new UserAvatarViewModel(string.Empty, user.Name),
+            });
 
             totalMessages += (long)user.MessageCount;
             totalPoints += user.Points;
@@ -543,7 +554,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         HasTotalBonus = totalBonus > 0;
         HasTotalPenalty = totalPenalty > 0;
 
-        _avatars.Track(_allRows.Select(row => row.UserId));
+        _avatars.Track(_allRows.Where(static row => row.Platform == StreamingPlatform.Twitch).Select(static row => row.UserId));
         UserStatisticsRanking.AssignPlaces(_allRows);
         RebuildView();
     }

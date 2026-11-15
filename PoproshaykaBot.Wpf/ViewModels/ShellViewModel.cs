@@ -208,9 +208,9 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Selected = _statisticsSection;
     }
 
-    private void OnUserRequested(object? sender, string userId)
+    private void OnUserRequested(object? sender, PoproshaykaBot.Core.Platforms.PlatformUserKey key)
     {
-        if (!_statisticsPage.TrySelect(userId))
+        if (!_statisticsPage.TrySelect(key))
         {
             SetStatus("Этого пользователя нет в статистике", StatusSeverity.Info);
             return;

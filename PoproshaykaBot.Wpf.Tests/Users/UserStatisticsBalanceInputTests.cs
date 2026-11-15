@@ -243,7 +243,20 @@ public class UserStatisticsBalanceInputTests
         }
     }
 
-    private UserStatisticsPageViewModel CreatePage(MemorySettings? settings = null)
+    [Test]
+    public void Выбор_по_ключу_сохраняет_площадку_при_одинаковом_ID_и_перестройке()
+    {
+        using var page = CreatePage(includeYouTube: true);
+        var key = new PlatformUserKey(StreamingPlatform.YouTube, "1");
+        Assert.That(page.TrySelect(key), Is.True);
+        page.FilterText = "1";
+        Assert.That(page.SelectedRow!.Key, Is.EqualTo(key));
+        Assert.That(page.SelectedRow.Name, Is.EqualTo("YouTube Viewer"));
+        Assert.That(page.TrySelect("1"), Is.True);
+        Assert.That(page.SelectedRow!.Platform, Is.EqualTo(StreamingPlatform.Twitch));
+    }
+
+    private UserStatisticsPageViewModel CreatePage(MemorySettings? settings = null, bool includeYouTube = false)
     {
         var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));
         var statistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
@@ -254,6 +267,11 @@ public class UserStatisticsBalanceInputTests
             new() { UserId = "1", Name = "koshied", MessageCount = 1_234, BonusPoints = 600 },
             new() { UserId = "2", Name = "новичок", MessageCount = 3 },
         ]);
+
+        if (includeYouTube)
+        {
+            statistics.SeedPlatform(StreamingPlatform.YouTube, [new() { UserId = "1", Name = "YouTube Viewer", MessageCount = 10 }]);
+        }
 
         return new(
             statistics,

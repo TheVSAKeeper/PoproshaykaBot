@@ -246,7 +246,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         Refresh();
     }
 
-    public event EventHandler<string>? UserRequested;
+    public event EventHandler<PlatformUserKey>? UserRequested;
 
     public string PageTitle => "История стримов";
     public string? PageDescription => "Сессии стримов, их сегменты и чаттеры";
@@ -775,7 +775,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     {
         if (chatter is { CanOpen: true })
         {
-            UserRequested?.Invoke(this, chatter.UserId);
+            UserRequested?.Invoke(this, chatter.Key);
         }
     }
 
@@ -1137,14 +1137,12 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         var leader = ordered.Count > 0 ? ordered[0].MessageCount : 0;
         var chatters = new List<StreamSessionChatterRowViewModel>(ordered.Count);
-        var twitchUsers = _userStatistics.ForPlatform(StreamingPlatform.Twitch);
 
         for (var index = 0; index < ordered.Count; index++)
         {
             var entry = ordered[index];
-            var known = entry.Key.Platform == StreamingPlatform.Twitch
-                        && entry.Key.UserId is { Length: > 0 } userId
-                        && twitchUsers.GetById(userId) is not null;
+            var known = entry.Key.UserId is { Length: > 0 } userId
+                        && _userStatistics.ForPlatform(entry.Key.Platform).GetById(userId) is not null;
 
             chatters.Add(new(entry, index + 1, leader, known));
         }
@@ -1599,6 +1597,7 @@ public sealed class StreamRecordCardViewModel
 
 public sealed class StreamSessionChatterRowViewModel
 {
+    public PlatformUserKey Key { get; }
     public string UserId { get; }
     public string DisplayName { get; }
     public long MessageCount { get; }
@@ -1616,6 +1615,7 @@ public sealed class StreamSessionChatterRowViewModel
         long leaderMessageCount,
         bool canOpen)
     {
+        Key = chatter.Key;
         UserId = chatter.Key.UserId;
         DisplayName = chatter.DisplayName;
         MessageCount = chatter.MessageCount;

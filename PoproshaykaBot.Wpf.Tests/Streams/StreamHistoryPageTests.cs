@@ -379,7 +379,7 @@ public class StreamHistoryPageTests
     public void Клик_по_известному_чаттеру_просит_открыть_пользователя()
     {
         var page = Create(new MemorySettings(), Session(0, "Just Chatting", chatterId: "42"));
-        var requested = new List<string>();
+        var requested = new List<PlatformUserKey>();
 
         page.UserRequested += (_, userId) => requested.Add(userId);
         page.TrySelectAt(0);
@@ -388,7 +388,7 @@ public class StreamHistoryPageTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(page.Chatters[0].CanOpen, Is.True);
-            Assert.That(requested, Is.EqualTo(new[] { "42" }));
+            Assert.That(requested, Is.EqualTo(new[] { new PlatformUserKey(StreamingPlatform.Twitch, "42") }));
         }
     }
 
@@ -396,7 +396,7 @@ public class StreamHistoryPageTests
     public void Чаттера_которого_нет_в_статистике_страница_не_открывает()
     {
         var page = Create(new MemorySettings(), Session(0, "Just Chatting", chatterId: "777"));
-        var requested = new List<string>();
+        var requested = new List<PlatformUserKey>();
 
         page.UserRequested += (_, userId) => requested.Add(userId);
         page.TrySelectAt(0);
@@ -408,6 +408,19 @@ public class StreamHistoryPageTests
             Assert.That(page.Chatters[0].Hint, Does.Contain("нет"));
             Assert.That(requested, Is.Empty);
         }
+    }
+
+    [Test]
+    public void Клик_по_чаттеру_YouTube_передаёт_ключ_с_площадкой()
+    {
+        var session = Session(0, "Игра");
+        session.Platforms[0].Platform = StreamingPlatform.YouTube;
+        var page = Create(new MemorySettings(), session);
+        PlatformUserKey? requested = null;
+        page.UserRequested += (_, key) => requested = key;
+        page.TrySelectAt(0);
+        page.OpenChatterCommand.Execute(page.Chatters[0]);
+        Assert.That(requested, Is.EqualTo(new PlatformUserKey(StreamingPlatform.YouTube, "42")));
     }
 
     [Test]
@@ -807,6 +820,7 @@ public class StreamHistoryPageTests
 
         var users = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         users.SeedPlatform(StreamingPlatform.Twitch, [new() { UserId = "42", Name = "qp_illson" }]);
+        users.SeedPlatform(StreamingPlatform.YouTube, [new() { UserId = "42", Name = "YouTube Viewer" }]);
 
         var boxArt = new GameBoxArtProvider(new FakeBoxArtCache(), NullLogger<GameBoxArtProvider>.Instance);
 
