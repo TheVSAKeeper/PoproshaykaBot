@@ -151,6 +151,11 @@ public sealed class StreamSessionStatisticsHandler :
                     }
 
                     var collector = RestorePlatformCollector(platformDraft);
+                    if (platformDraft.Platform != @event.FirstPlatform && collector.EndedAt is null)
+                    {
+                        ClosePlatformCollector(collector, collector.UpdatedAt);
+                    }
+
                     _platforms[platformDraft.Platform] = collector;
 
                     if (platformDraft.Platform == @event.FirstPlatform)
@@ -264,7 +269,7 @@ public sealed class StreamSessionStatisticsHandler :
                 return Task.CompletedTask;
             }
 
-            ClosePlatformCollector(collector, @event.LeftAt);
+            ClosePlatformCollector(collector, @event.IsCatchUp ? collector.UpdatedAt : @event.LeftAt);
             updated = true;
         }
 
@@ -286,11 +291,11 @@ public sealed class StreamSessionStatisticsHandler :
             return;
         }
 
-        var completedDraft = TakeCompletedDraft(@event.BroadcastId, @event.EndedAt);
+        var completedDraft = TakeCompletedDraft(@event.BroadcastId, @event.EndedAt, @event.IsCatchUp);
 
         if (completedDraft is null)
         {
-            var orphanRecord = _draftCoordinator.TryFinalizeOrphanDraft(@event.LastPlatform, @event.EndedAt);
+            var orphanRecord = _draftCoordinator.TryFinalizeOrphanDraft(@event.LastPlatform, @event.IsCatchUp ? null : @event.EndedAt);
             if (orphanRecord is not null)
             {
                 await _eventBus.PublishAsync(new StreamSessionCompleted(orphanRecord), cancellationToken).ConfigureAwait(false);
@@ -315,7 +320,10 @@ public sealed class StreamSessionStatisticsHandler :
             record.PeakViewers,
             record.AverageViewers);
 
-        SendEndStatsMessage(record, @event.LastChannel);
+        if (!@event.IsCatchUp)
+        {
+            SendEndStatsMessage(record, @event.LastChannel);
+        }
     }
 
     public async Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
@@ -337,7 +345,7 @@ public sealed class StreamSessionStatisticsHandler :
             return;
         }
 
-        var orphanRecord = _draftCoordinator.TryFinalizeOrphanDraft(@event.Platform, _timeProvider.GetUtcNow());
+        var orphanRecord = _draftCoordinator.TryFinalizeOrphanDraft(@event.Platform);
         if (orphanRecord is not null)
         {
             await _eventBus.PublishAsync(new StreamSessionCompleted(orphanRecord), cancellationToken).ConfigureAwait(false);
@@ -360,6 +368,7 @@ public sealed class StreamSessionStatisticsHandler :
         {
             if (_activeBroadcastId is null
                 || !_platforms.TryGetValue(@event.Platform, out var collector)
+                || collector.EndedAt is not null
                 || IsForeignStream(collector, @event.Stream.Id))
             {
                 return Task.CompletedTask;
@@ -418,6 +427,10 @@ public sealed class StreamSessionStatisticsHandler :
             collector.InitialSeedPending = false;
             collector.LastViewerCount = @event.ViewerCount;
             collector.LastViewerSampleAt = @event.SampledAtUtc;
+            if (@event.SampledAtUtc > collector.UpdatedAt)
+            {
+                collector.UpdatedAt = @event.SampledAtUtc;
+            }
 
             if (!isDuplicateSeed && @event.ViewerCount >= 0)
             {
@@ -446,6 +459,7 @@ public sealed class StreamSessionStatisticsHandler :
             }
 
             collector.Segments[^1].MessageCount++;
+            collector.UpdatedAt = _timeProvider.GetUtcNow();
 
             if (!string.IsNullOrEmpty(@event.UserId))
             {
@@ -586,6 +600,7 @@ public sealed class StreamSessionStatisticsHandler :
             StreamId = streamId,
             StartedAt = startedAt,
             TrackedKnown = true,
+            UpdatedAt = now,
         };
 
         collector.Segments.Add(new SegmentTally
@@ -632,13 +647,14 @@ public sealed class StreamSessionStatisticsHandler :
         collector.Channel = channel;
         collector.StreamId = streamId ?? collector.StreamId;
         collector.EndedAt = null;
+        collector.UpdatedAt = now;
 
         var lastSegment = collector.Segments[^1];
-        if (lastSegment.EndedAt is not null)
+        if (lastSegment.EndedAt is { } previousEnd)
         {
             collector.Segments.Add(new SegmentTally
             {
-                StartedAt = startedAt,
+                StartedAt = startedAt < previousEnd ? previousEnd : startedAt,
                 Title = title ?? lastSegment.Title,
                 Game = game ?? lastSegment.Game,
                 PeakViewers = initialViewers,
@@ -677,6 +693,7 @@ public sealed class StreamSessionStatisticsHandler :
             Channel = draft.Channel,
             StreamId = draft.StreamId,
             StartedAt = draft.StartedAt,
+            UpdatedAt = draft.UpdatedAt,
             EndedAt = draft.EndedAt,
             LastViewerCount = draft.LastViewerCount,
             LastViewerSampleAt = draft.LastViewerSampleAt,
@@ -751,7 +768,7 @@ public sealed class StreamSessionStatisticsHandler :
         CloseOpenTracked(collector, effectiveEnd);
     }
 
-    private ActiveBroadcast? TakeCompletedDraft(Guid broadcastId, DateTimeOffset endedAt)
+    private ActiveBroadcast? TakeCompletedDraft(Guid broadcastId, DateTimeOffset endedAt, bool isCatchUp)
     {
         lock (_stateLock)
         {
@@ -764,8 +781,14 @@ public sealed class StreamSessionStatisticsHandler :
             {
                 if (collector.EndedAt is null)
                 {
-                    ClosePlatformCollector(collector, endedAt);
+                    ClosePlatformCollector(collector, isCatchUp ? collector.UpdatedAt : endedAt);
                 }
+            }
+
+            if (isCatchUp)
+            {
+                endedAt = _platforms.Values.Max(static collector => collector.EndedAt!.Value);
+                _viewerSeries.RemoveAll(sample => sample.At > endedAt);
             }
 
             if (_viewerSeries.Count == 0 && _platforms.Count > 1)
@@ -804,7 +827,6 @@ public sealed class StreamSessionStatisticsHandler :
             return null;
         }
 
-        var now = endedAt ?? _timeProvider.GetUtcNow();
         var platformDrafts = new List<ActiveBroadcastPlatform>(_platforms.Count);
 
         foreach (var collector in _platforms.Values)
@@ -831,7 +853,7 @@ public sealed class StreamSessionStatisticsHandler :
                 Channel = collector.Channel,
                 StreamId = collector.StreamId,
                 StartedAt = collector.StartedAt,
-                UpdatedAt = collector.EndedAt ?? now,
+                UpdatedAt = collector.EndedAt ?? collector.UpdatedAt,
                 EndedAt = collector.EndedAt,
                 Title = lastSegment.Title,
                 Game = lastSegment.Game,
@@ -866,7 +888,7 @@ public sealed class StreamSessionStatisticsHandler :
         {
             BroadcastId = _activeBroadcastId.Value,
             StartedAt = _broadcastStartedAt.Value,
-            UpdatedAt = now,
+            UpdatedAt = endedAt ?? platformDrafts.Max(static platform => platform.UpdatedAt),
             EndedAt = endedAt,
             NextSampleTickUtc = _nextSampleTickUtc,
             ViewerSeries = [.. _viewerSeries],
@@ -881,28 +903,25 @@ public sealed class StreamSessionStatisticsHandler :
             return;
         }
 
-        ActiveBroadcast? snapshot;
-
         lock (_stateLock)
         {
-            snapshot = CreateDraftSnapshotLocked();
-        }
+            var snapshot = CreateDraftSnapshotLocked();
+            if (snapshot is null)
+            {
+                return;
+            }
 
-        if (snapshot is null)
-        {
-            return;
-        }
-
-        try
-        {
-            _activeBroadcastStore.TrySave(snapshot);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(
-                exception,
-                "Не удалось сохранить чекпойнт активного эфира {BroadcastId}",
-                snapshot.BroadcastId);
+            try
+            {
+                _activeBroadcastStore.TrySave(snapshot);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "Не удалось сохранить чекпойнт активного эфира {BroadcastId}",
+                    snapshot.BroadcastId);
+            }
         }
     }
 
@@ -1053,6 +1072,11 @@ public sealed class StreamSessionStatisticsHandler :
 
     private void ApplyMetadata(PlatformCollector collector, string? title, string? game, DateTimeOffset now)
     {
+        if (now > collector.UpdatedAt)
+        {
+            collector.UpdatedAt = now;
+        }
+
         var current = collector.Segments[^1];
 
         var nextGame = string.IsNullOrEmpty(game) ? current.Game : game;
@@ -1223,6 +1247,7 @@ public sealed class StreamSessionStatisticsHandler :
         public string Channel { get; set; } = string.Empty;
         public string? StreamId { get; set; }
         public DateTimeOffset StartedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
         public DateTimeOffset? EndedAt { get; set; }
         public int? LastViewerCount { get; set; }
         public DateTimeOffset? LastViewerSampleAt { get; set; }

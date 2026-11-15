@@ -7,6 +7,9 @@ public sealed class BroadcastRecord
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<Guid>? MergedBroadcastIds { get; set; }
+
     public DateTimeOffset StartedAt { get; set; }
 
     public DateTimeOffset EndedAt { get; set; }

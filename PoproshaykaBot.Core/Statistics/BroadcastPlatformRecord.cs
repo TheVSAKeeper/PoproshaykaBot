@@ -13,6 +13,9 @@ public sealed class BroadcastPlatformRecord
 
     public DateTimeOffset StartedAt { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<DateTimeOffset>? MergedStartedAts { get; set; }
+
     public DateTimeOffset EndedAt { get; set; }
 
     public string? Title { get; set; }

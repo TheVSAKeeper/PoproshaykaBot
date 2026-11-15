@@ -21,6 +21,7 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
     private readonly Lock _syncLock = new();
 
     private ActiveBroadcast? _currentDraft;
+    private string? _lastSaveError;
     private bool _canWrite;
     private bool _suspendedCanWrite;
     private bool _invalidatedByExternalWrite;
@@ -61,6 +62,8 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
     }
 
     public FileReadState ReadState { get; }
+
+    public string? LastSaveError => Volatile.Read(ref _lastSaveError);
 
     public bool CanWrite
     {
@@ -147,43 +150,40 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
     {
         ArgumentNullException.ThrowIfNull(draft);
 
-        ActiveBroadcast? blockingCompletedDraft = null;
-
         lock (_syncLock)
         {
             if (!_canWrite)
             {
+                _lastSaveError = "Запись черновика эфира заблокирована до перезапуска.";
                 return false;
+            }
+
+            if (_historyStore.IsBroadcastPersistedOnDisk(draft.BroadcastId))
+            {
+                return true;
+            }
+
+            if (_currentDraft is { } current && current.BroadcastId == draft.BroadcastId
+                && ((current.EndedAt is not null && draft.EndedAt is null)
+                    || ((current.EndedAt is null) == (draft.EndedAt is null)
+                        && current.UpdatedAt > draft.UpdatedAt)))
+            {
+                return true;
             }
 
             if (_currentDraft is { EndedAt: not null } existing
                 && existing.BroadcastId != draft.BroadcastId)
             {
-                blockingCompletedDraft = existing;
-            }
-        }
-
-        if (blockingCompletedDraft is not null
-            && !_historyStore.IsBroadcastPersistedOnDisk(blockingCompletedDraft.BroadcastId))
-        {
-            _historyStore.TryFlush();
-
-            if (!_historyStore.IsBroadcastPersistedOnDisk(blockingCompletedDraft.BroadcastId))
-            {
-                _logger?.LogWarning(
-                    "ActiveBroadcastStore: отказ перезаписи черновика {FilePath} – завершённый эфир {PendingId} ещё не записан в историю",
-                    _filePath,
-                    blockingCompletedDraft.BroadcastId);
-
-                return false;
-            }
-        }
-
-        lock (_syncLock)
-        {
-            if (!_canWrite)
-            {
-                return false;
+                _historyStore.TryFlush();
+                if (!_historyStore.IsBroadcastPersistedOnDisk(existing.BroadcastId))
+                {
+                    _lastSaveError = "Черновик нового эфира не сохраняется: предыдущий эфир ещё не записан в историю.";
+                    _logger?.LogWarning(
+                        "ActiveBroadcastStore: отказ перезаписи черновика {FilePath} – завершённый эфир {PendingId} ещё не записан в историю",
+                        _filePath,
+                        existing.BroadcastId);
+                    return false;
+                }
             }
 
             try
@@ -192,13 +192,23 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
                 var json = JsonSerializer.Serialize(snapshot, JsonStoreOptions.Default);
                 AtomicFile.Save(_filePath, json, _logger);
                 _currentDraft = snapshot;
+                _lastSaveError = null;
                 return true;
             }
             catch (Exception exception)
             {
+                _lastSaveError = exception.Message;
                 _logger?.LogWarning(exception, "ActiveBroadcastStore: не удалось сохранить черновик {FilePath}", _filePath);
                 return false;
             }
+        }
+    }
+
+    public bool TryDelete(Guid expectedBroadcastId)
+    {
+        lock (_syncLock)
+        {
+            return (_currentDraft is null || _currentDraft.BroadcastId == expectedBroadcastId) && TryDelete();
         }
     }
 
@@ -219,6 +229,7 @@ public class ActiveBroadcastStore : IExternalWriteParticipant
                 }
 
                 _currentDraft = null;
+                _lastSaveError = null;
                 return true;
             }
             catch (Exception exception)

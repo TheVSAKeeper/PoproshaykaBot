@@ -145,7 +145,7 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
                     _projectionPath);
             }
 
-            return hadAny || _suspendedCanWriteSource || _suspendedCanWriteProjection;
+            return hadAny;
         }
     }
 
@@ -225,7 +225,9 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
                 {
                     if (platform.Platform == StreamingPlatform.Twitch
                         && string.Equals(platform.Channel, channel, StringComparison.OrdinalIgnoreCase)
-                        && platform.StartedAt == startedAt)
+                        && (platform.StartedAt == startedAt
+                            || platform.MergedStartedAts?.Contains(startedAt) == true
+                            || platform.Segments.Exists(segment => segment.StartedAt == startedAt)))
                     {
                         return true;
                     }
@@ -242,7 +244,8 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
 
         lock (_syncLock)
         {
-            var existingIndex = _state.Broadcasts.FindIndex(item => item.Id == record.Id);
+            var existingIndex = _state.Broadcasts.FindIndex(item => item.Id == record.Id
+                || item.MergedBroadcastIds?.Contains(record.Id) == true);
 
             if (existingIndex >= 0)
             {
@@ -396,7 +399,7 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
             item.EnsureSegments();
         }
 
-        _persistedSourceIds = [.. sourceDoc.Broadcasts.Select(static b => b.Id)];
+        _persistedSourceIds = [.. sourceDoc.Broadcasts.SelectMany(static b => (b.MergedBroadcastIds ?? []).Prepend(b.Id))];
         _canWriteSource = true;
 
         if (projectionRead.State == FileReadState.Missing)
@@ -414,7 +417,7 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
             _canWriteProjection = projectionRead.BackupSucceeded;
             _state = sourceDoc;
             MergeLoadedSourceLocked(createPremergeBackup: true);
-            _projectionDirty = _canWriteProjection;
+            _projectionDirty = sourceDoc.ProjectionOutOfDate || _canWriteProjection;
             TryFlushLocked();
             return;
         }
@@ -468,9 +471,9 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
 
     private void ReconcileLoadedSourceWithProjection(StreamSessionHistory projection)
     {
+        var acceptKnownProjectionChanges = !_state.ProjectionOutOfDate;
         var rawSessions = projection.Sessions ?? [];
         var projHiddenByMatchedId = new Dictionary<Guid, bool>();
-        var projBroadcastIds = new HashSet<Guid>();
         var originalHiddenById = new Dictionary<Guid, bool>();
         var sourceChanged = false;
 
@@ -492,7 +495,11 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
 
             if (matched is not null)
             {
-                projBroadcastIds.Add(matched.Id);
+                if (!acceptKnownProjectionChanges || matched.MergedBroadcastIds?.Contains(session.Id) == true)
+                {
+                    continue;
+                }
+
                 projHiddenByMatchedId[matched.Id] = session.IsHidden;
 
                 var twitchIndex = matched.Platforms.FindIndex(static p => p.Platform == StreamingPlatform.Twitch);
@@ -502,6 +509,7 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
                 {
                     var updatedTwitch = BroadcastPlatformRecord.FromTwitchSession(session);
                     updatedTwitch.StreamId ??= existingTwitch.StreamId;
+                    updatedTwitch.MergedStartedAts = existingTwitch.MergedStartedAts;
                     matched.Platforms[twitchIndex] = updatedTwitch;
                     RecalculateBoundsAndViews(matched);
                     sourceChanged = true;
@@ -513,17 +521,8 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
             var imported = BroadcastRecord.FromTwitchSession(session);
             imported.IsHidden = false;
             working.Add(imported);
-            projBroadcastIds.Add(imported.Id);
             projHiddenByMatchedId[imported.Id] = session.IsHidden;
             sourceChanged = true;
-        }
-
-        foreach (var record in working)
-        {
-            if (projBroadcastIds.Contains(record.Id))
-            {
-                record.IsHidden = false;
-            }
         }
 
         var mergeResult = BroadcastHistoryMerge.Merge(working);
@@ -537,7 +536,8 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
 
         foreach (var record in working)
         {
-            if (projHiddenByMatchedId.TryGetValue(record.Id, out var isHidden))
+            if (projHiddenByMatchedId.TryGetValue(record.Id, out var isHidden)
+                && (!originalHiddenById.TryGetValue(record.Id, out var wasHidden) || !wasHidden))
             {
                 record.IsHidden = isHidden;
             }
@@ -560,7 +560,7 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
         }
 
         var expectedProjection = BuildProjectionLocked();
-        _projectionDirty = !AreSessionsEqual(rawSessions, expectedProjection.Sessions);
+        _projectionDirty = _state.ProjectionOutOfDate || !AreSessionsEqual(rawSessions, expectedProjection.Sessions);
 
         TryFlushLocked();
     }
@@ -625,9 +625,10 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
     {
         try
         {
+            _state.ProjectionOutOfDate = _projectionDirty;
             var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
             AtomicFile.Save(_broadcastsPath, json, _logger);
-            _persistedSourceIds = [.. _state.Broadcasts.Select(static b => b.Id)];
+            _persistedSourceIds = [.. _state.Broadcasts.SelectMany(static b => (b.MergedBroadcastIds ?? []).Prepend(b.Id))];
             _sourceDirty = false;
             return true;
         }
@@ -647,7 +648,7 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
         {
             var expected = BuildProjectionLocked();
 
-            if (File.Exists(_projectionPath) && AreSessionsEqual(_lastPersistedProjection, expected.Sessions))
+            if (!_state.ProjectionOutOfDate && File.Exists(_projectionPath) && AreSessionsEqual(_lastPersistedProjection, expected.Sessions))
             {
                 _projectionDirty = false;
                 return true;
@@ -657,6 +658,12 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
             AtomicFile.Save(_projectionPath, json, _logger);
             _lastPersistedProjection = expected.Sessions;
             _projectionDirty = false;
+            if (_state.ProjectionOutOfDate)
+            {
+                _sourceDirty = true;
+                return TrySaveSourceLocked();
+            }
+
             return true;
         }
         catch (Exception exception)
@@ -727,7 +734,7 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
     {
         foreach (var broadcast in broadcasts)
         {
-            if (broadcast.Id == session.Id
+            if ((broadcast.Id == session.Id || broadcast.MergedBroadcastIds?.Contains(session.Id) == true)
                 && broadcast.Platforms.Exists(static p => p.Platform == StreamingPlatform.Twitch))
             {
                 return broadcast;
@@ -751,6 +758,11 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
 
     private static bool HasProjectionAdvanced(BroadcastPlatformRecord current, StreamSessionRecord session)
     {
+        if (session.EndedAt < current.EndedAt || session.MessageCount < current.MessageCount)
+        {
+            return false;
+        }
+
         return session.EndedAt != current.EndedAt
                || session.MessageCount != current.MessageCount
                || session.PeakViewers != current.PeakViewers

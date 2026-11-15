@@ -57,6 +57,12 @@ public sealed class BroadcastHistoryMergeTests
 
     private static IEnumerable<TestCaseData> JoinCases()
     {
+        yield return new TestCaseData(TimeSpan.FromHours(2), TimeSpan.FromMinutes(122), false)
+            .SetName("Допуск начал не прибавляется ко времени конца");
+        yield return new TestCaseData(TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(5), true)
+            .SetName("Граница допуска начал включена");
+        yield return new TestCaseData(TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(5) + TimeSpan.FromTicks(1), false)
+            .SetName("За границей допуска начал склейки нет");
         yield return new TestCaseData(TimeSpan.FromMinutes(6), TimeSpan.FromMinutes(-4), true)
             .SetName("Пересекающиеся интервалы склеиваются");
 
@@ -131,6 +137,35 @@ public sealed class BroadcastHistoryMergeTests
 
         Assert.That(result.MergedPairs, Is.EqualTo(0));
         Assert.That(result.Broadcasts, Has.Count.EqualTo(2));
+    }
+
+    [TestCase(10, 10)]
+    [TestCase(30, 30)]
+    public void Merge_ContainedOrPartiallyOverlappingSegmentPreservesCountersAndTimeline(int offsetMinutes, int durationMinutes)
+    {
+        var first = Record(Start, TimeSpan.FromMinutes(40), messageCount: 10, averageViewers: 10, game: "A");
+        var second = Record(Start.AddMinutes(offsetMinutes), TimeSpan.FromMinutes(durationMinutes), messageCount: 20, averageViewers: 30, game: "B");
+        var merged = BroadcastHistoryMerge.Merge([first, second]).Broadcasts.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(merged.MessageCount, Is.EqualTo(30));
+            Assert.That(merged.Segments.Sum(segment => segment.MessageCount), Is.EqualTo(30));
+            Assert.That(merged.Segments.Sum(segment => segment.Duration.Ticks), Is.EqualTo(merged.Duration.Ticks));
+            Assert.That(merged.AverageViewers, Is.EqualTo((int)Math.Round((40d * 10 + durationMinutes * 30) / (40 + durationMinutes))));
+        }
+    }
+
+    [Test]
+    public void Merge_ThreeOverlappingFragmentsPreserveAllIdsAndCounters()
+    {
+        var first = Record(Start, TimeSpan.FromMinutes(40), messageCount: 10);
+        var second = Record(Start.AddMinutes(30), TimeSpan.FromMinutes(40), messageCount: 20);
+        var third = Record(Start.AddMinutes(60), TimeSpan.FromMinutes(40), messageCount: 30);
+        var merged = BroadcastHistoryMerge.Merge([first, second, third]).Broadcasts.Single();
+        Assert.That(merged.Duration, Is.EqualTo(TimeSpan.FromMinutes(100)));
+        Assert.That(merged.MessageCount, Is.EqualTo(60));
+        Assert.That(merged.MergedBroadcastIds, Is.EquivalentTo(new[] { second.Id, third.Id }));
+        Assert.That(merged.Segments.Sum(segment => segment.Duration.Ticks), Is.EqualTo(merged.Duration.Ticks));
     }
 
     [Test]

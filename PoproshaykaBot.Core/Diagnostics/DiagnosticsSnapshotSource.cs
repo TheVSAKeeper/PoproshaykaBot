@@ -32,7 +32,8 @@ public sealed class DiagnosticsSnapshotSource(
     SseClientRegistry sseClients,
     BroadcastScheduler broadcastScheduler,
     StatisticsAutoSaver statisticsAutoSaver,
-    ILogger<DiagnosticsSnapshotSource> logger)
+    ILogger<DiagnosticsSnapshotSource> logger,
+    ActiveBroadcastStore? activeBroadcastStore = null)
 {
     public DiagnosticsSnapshot Capture()
     {
@@ -180,6 +181,6 @@ public sealed class DiagnosticsSnapshotSource(
             statisticsAutoSaver.Interval,
             statisticsAutoSaver.NextRunAt,
             statisticsAutoSaver.LastRunAt,
-            statisticsAutoSaver.LastError);
+            activeBroadcastStore?.LastSaveError ?? statisticsAutoSaver.LastError);
     }
 }

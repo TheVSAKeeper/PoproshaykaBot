@@ -33,7 +33,7 @@ public sealed class BroadcastDraftCoordinator(
 
             if (historyStore.TryAppend(record) || historyStore.IsBroadcastPersistedOnDisk(record.Id))
             {
-                activeBroadcastStore.TryDelete();
+                activeBroadcastStore.TryDelete(record.Id);
                 logger.LogInformation(
                     "BroadcastDraftCoordinator: завершённый черновик эфира {BroadcastId} донесён в историю и очищен",
                     record.Id);
@@ -92,11 +92,17 @@ public sealed class BroadcastDraftCoordinator(
             platform.EndedAt ??= endedAt;
         }
 
+        var finalDraftSaved = false;
         if (targetChannelProvider.Current.RecordsUserData)
         {
             try
             {
-                activeBroadcastStore.TrySave(completedDraft);
+                finalDraftSaved = activeBroadcastStore.TrySave(completedDraft);
+                if (!finalDraftSaved)
+                {
+                    logger.LogError("BroadcastDraftCoordinator: завершённый черновик {BroadcastId} не сохранён, пытаюсь записать эфир непосредственно в историю",
+                        completedDraft.BroadcastId);
+                }
             }
             catch (Exception exception)
             {
@@ -119,7 +125,12 @@ public sealed class BroadcastDraftCoordinator(
 
             if (persisted || historyStore.IsBroadcastPersistedOnDisk(record.Id))
             {
-                activeBroadcastStore.TryDelete();
+                activeBroadcastStore.TryDelete(record.Id);
+            }
+            else if (!finalDraftSaved)
+            {
+                logger.LogCritical("BroadcastDraftCoordinator: эфир {BroadcastId} остался только в памяти, запись черновика и истории не удалась",
+                    record.Id);
             }
         }
         catch (Exception exception)
@@ -132,7 +143,7 @@ public sealed class BroadcastDraftCoordinator(
         return record;
     }
 
-    public BroadcastRecord? TryFinalizeOrphanDraft(StreamingPlatform platform, DateTimeOffset endedAt)
+    public BroadcastRecord? TryFinalizeOrphanDraft(StreamingPlatform platform, DateTimeOffset? endedAt = null)
     {
         if (!targetChannelProvider.Current.RecordsUserData)
         {
@@ -175,7 +186,7 @@ public sealed class BroadcastDraftCoordinator(
             }
         }
 
-        var effectiveEnd = endedAt >= matching.UpdatedAt ? endedAt : matching.UpdatedAt;
+        var effectiveEnd = endedAt is { } confirmedEnd && confirmedEnd > lastAlive ? confirmedEnd : lastAlive;
         matching.EndedAt ??= effectiveEnd;
         draft.UpdatedAt = effectiveEnd > draft.UpdatedAt ? effectiveEnd : draft.UpdatedAt;
 

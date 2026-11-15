@@ -139,18 +139,19 @@ public sealed class StreamStatusBroadcastHandlerTests
         _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
     }
 
-    [Test]
-    public async Task BroadcastEnded_AfterBotConnected_StopsSchedulerAndSendsMessage()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task BroadcastEnded_AfterBotConnected_StopsSchedulerAndNotifiesOnlyLiveTransition(bool isCatchUp)
     {
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
         _livePlatforms.Add(StreamingPlatform.Twitch);
         await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
         _livePlatforms.Clear();
 
-        await _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, DateTimeOffset.UtcNow));
+        await _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, DateTimeOffset.UtcNow, IsCatchUp: isCatchUp));
 
         _scheduler.Received(1).Stop();
-        _messenger.Received(1).SendToConnected("Стрим закончился");
+        _messenger.Received(isCatchUp ? 0 : 1).SendToConnected("Стрим закончился");
     }
 
     [Test]
@@ -234,7 +235,7 @@ public sealed class StreamStatusBroadcastHandlerTests
     }
 
     [Test]
-    public async Task BroadcastStarted_ConnectedPlatformOutsideTargets_DoesNotStartSchedulerOrNotify()
+    public async Task BroadcastStarted_ConnectedPlatformOutsideTargets_NotifiesWithoutStartingScheduler()
     {
         _targetPlatforms = [StreamingPlatform.YouTube];
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
@@ -243,7 +244,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
 
         _scheduler.DidNotReceive().Start(Arg.Any<string>());
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
+        _messenger.Received(1).SendToConnected("Стрим начался");
 
         _livePlatforms.Add(StreamingPlatform.YouTube);
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));

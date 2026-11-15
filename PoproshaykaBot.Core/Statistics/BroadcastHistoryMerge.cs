@@ -123,7 +123,7 @@ public static class BroadcastHistoryMerge
 
     private static bool Joins(DateTimeOffset groupStart, DateTimeOffset groupEnd, DateTimeOffset startedAt)
     {
-        return startedAt <= groupEnd + StartTolerance || (startedAt - groupStart).Duration() <= StartTolerance;
+        return startedAt <= groupEnd || (startedAt - groupStart).Duration() <= StartTolerance;
     }
 
     private static HashSet<(StreamingPlatform Platform, string Channel)> GetPlatformKeys(BroadcastRecord record)
@@ -156,6 +156,8 @@ public static class BroadcastHistoryMerge
         var result = new BroadcastRecord
         {
             Id = primary.Id,
+            MergedBroadcastIds = group.SelectMany(static record => (record.MergedBroadcastIds ?? []).Prepend(record.Id))
+                .Where(id => id != primary.Id).Distinct().ToList(),
             StartedAt = startedAt,
             EndedAt = endedAt,
             IsHidden = false,
@@ -222,6 +224,8 @@ public static class BroadcastHistoryMerge
             Channel = first.Channel,
             StreamId = streamId,
             StartedAt = startedAt,
+            MergedStartedAts = group.SelectMany(static record => (record.MergedStartedAts ?? []).Prepend(record.StartedAt))
+                .Where(start => start != startedAt).Distinct().ToList(),
             EndedAt = endedAt,
             Title = LongestNonEmpty(group, static r => r.Title),
             Game = LongestNonEmpty(group, static r => r.Game),
@@ -453,6 +457,7 @@ public static class BroadcastHistoryMerge
             Channel = source.Channel,
             StreamId = source.StreamId,
             StartedAt = source.StartedAt,
+            MergedStartedAts = source.MergedStartedAts is null ? null : [.. source.MergedStartedAts],
             EndedAt = source.EndedAt,
             Title = source.Title,
             Game = source.Game,

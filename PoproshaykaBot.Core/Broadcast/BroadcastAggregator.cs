@@ -23,6 +23,7 @@ public sealed class BroadcastAggregator :
     private readonly IDisposable _onlineSubscription;
     private readonly IDisposable _offlineSubscription;
     private readonly Lock _syncLock = new();
+    private readonly SemaphoreSlim _transitionSemaphore = new(1, 1);
 
     private readonly Dictionary<StreamingPlatform, LivePlatformEntry> _livePlatforms = [];
     private readonly Dictionary<StreamingPlatform, PendingOfflineEntry> _pendingOffline = [];
@@ -116,86 +117,133 @@ public sealed class BroadcastAggregator :
 
     public async Task HandleAsync(StreamWentOnline @event, CancellationToken cancellationToken)
     {
-        var now = _timeProvider.GetUtcNow();
-        var startedAt = ResolveStartedAt(@event.Stream, now);
-        var channel = string.IsNullOrEmpty(@event.Channel)
-            ? _targetChannelProvider.Current.Login
-            : @event.Channel;
-
-        BroadcastStarted? startedEvent = null;
-        BroadcastPlatformJoined? joinedEvent = null;
-
-        lock (_syncLock)
+        await _transitionSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            if (_disposed)
+            var now = _timeProvider.GetUtcNow();
+            var startedAt = ResolveStartedAt(@event.Stream, now);
+            var channel = string.IsNullOrEmpty(@event.Channel)
+                ? _targetChannelProvider.Current.Login
+                : @event.Channel;
+
+            BroadcastEnded? replacedBroadcast = null;
+            BroadcastPlatformLeft? replacedPlatform = null;
+            lock (_syncLock)
             {
-                return;
+                if (_disposed)
+                {
+                    return;
+                }
+
+                if (_currentBroadcastId is { } previousBroadcastId
+                    && _livePlatforms.TryGetValue(@event.Platform, out var previous)
+                    && (!string.Equals(previous.Channel, channel, StringComparison.OrdinalIgnoreCase)
+                        || (previous.Stream?.Id is { Length: > 0 } previousStreamId
+                            && @event.Stream?.Id is { Length: > 0 } nextStreamId
+                            && !string.Equals(previousStreamId, nextStreamId, StringComparison.Ordinal))))
+                {
+                    var closedAt = startedAt < now ? startedAt : now;
+                    if (closedAt < previous.StartedAt)
+                    {
+                        closedAt = previous.StartedAt;
+                    }
+
+                    _livePlatforms.Remove(@event.Platform);
+                    if (_livePlatforms.Count == 0)
+                    {
+                        _currentBroadcastId = null;
+                        replacedBroadcast = new(previousBroadcastId, @event.Platform, previous.Channel, closedAt, @event.IsCatchUp);
+                    }
+                    else
+                    {
+                        replacedPlatform = new(previousBroadcastId, @event.Platform, previous.Channel, closedAt, @event.IsCatchUp);
+                    }
+                }
             }
 
-            _pendingOffline.Remove(@event.Platform);
-            _pendingStops.Remove(@event.Platform);
-
-            if (_livePlatforms.ContainsKey(@event.Platform))
+            if (replacedBroadcast is not null)
             {
+                await _eventBus.PublishAsync(replacedBroadcast, cancellationToken).ConfigureAwait(false);
+            }
+            else if (replacedPlatform is not null)
+            {
+                await _eventBus.PublishAsync(replacedPlatform, cancellationToken).ConfigureAwait(false);
+            }
+
+            BroadcastStarted? startedEvent = null;
+            BroadcastPlatformJoined? joinedEvent = null;
+
+            lock (_syncLock)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _pendingOffline.Remove(@event.Platform);
+                _pendingStops.Remove(@event.Platform);
+
+                if (_livePlatforms.ContainsKey(@event.Platform))
+                {
+                    _livePlatforms[@event.Platform] = new LivePlatformEntry(channel, @event.Stream, startedAt);
+                    return;
+                }
+
                 _livePlatforms[@event.Platform] = new LivePlatformEntry(channel, @event.Stream, startedAt);
-                return;
+
+                if (_currentBroadcastId is null)
+                {
+                    var broadcastId = _draftCoordinator.ResolveBroadcastIdOnStart(@event.Platform, channel, @event.Stream, startedAt);
+                    _currentBroadcastId = broadcastId;
+                    startedEvent = new BroadcastStarted(
+                        broadcastId,
+                        @event.Platform,
+                        channel,
+                        @event.Stream,
+                        startedAt,
+                        @event.IsCatchUp);
+                }
+                else
+                {
+                    joinedEvent = new BroadcastPlatformJoined(
+                        _currentBroadcastId.Value,
+                        @event.Platform,
+                        channel,
+                        @event.Stream,
+                        now,
+                        @event.IsCatchUp);
+                }
             }
 
-            _livePlatforms[@event.Platform] = new LivePlatformEntry(channel, @event.Stream, startedAt);
+            if (startedEvent is not null)
+            {
+                _logger.LogInformation(
+                    "BroadcastAggregator: начат эфир {BroadcastId} (площадка {Platform}, канал {Channel})",
+                    startedEvent.BroadcastId,
+                    startedEvent.FirstPlatform,
+                    startedEvent.Channel);
 
-            if (_currentBroadcastId is null)
-            {
-                var broadcastId = _draftCoordinator.ResolveBroadcastIdOnStart(@event.Platform, channel, @event.Stream, startedAt);
-                _currentBroadcastId = broadcastId;
-                startedEvent = new BroadcastStarted(
-                    broadcastId,
-                    @event.Platform,
-                    channel,
-                    @event.Stream,
-                    startedAt,
-                    @event.IsCatchUp);
+                await _eventBus.PublishAsync(startedEvent, cancellationToken).ConfigureAwait(false);
             }
-            else
+            else if (joinedEvent is not null)
             {
-                joinedEvent = new BroadcastPlatformJoined(
-                    _currentBroadcastId.Value,
-                    @event.Platform,
-                    channel,
-                    @event.Stream,
-                    now,
-                    @event.IsCatchUp);
+                _logger.LogInformation(
+                    "BroadcastAggregator: к эфиру {BroadcastId} подключилась площадка {Platform} ({Channel})",
+                    joinedEvent.BroadcastId,
+                    joinedEvent.Platform,
+                    joinedEvent.Channel);
+
+                await _eventBus.PublishAsync(joinedEvent, cancellationToken).ConfigureAwait(false);
             }
         }
-
-        if (startedEvent is not null)
+        finally
         {
-            _logger.LogInformation(
-                "BroadcastAggregator: начат эфир {BroadcastId} (площадка {Platform}, канал {Channel})",
-                startedEvent.BroadcastId,
-                startedEvent.FirstPlatform,
-                startedEvent.Channel);
-
-            await _eventBus.PublishAsync(startedEvent, cancellationToken).ConfigureAwait(false);
-        }
-        else if (joinedEvent is not null)
-        {
-            _logger.LogInformation(
-                "BroadcastAggregator: к эфиру {BroadcastId} подключилась площадка {Platform} ({Channel})",
-                joinedEvent.BroadcastId,
-                joinedEvent.Platform,
-                joinedEvent.Channel);
-
-            await _eventBus.PublishAsync(joinedEvent, cancellationToken).ConfigureAwait(false);
+            _transitionSemaphore.Release();
         }
     }
 
     public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
     {
-        if (@event.IsCatchUp)
-        {
-            return Task.CompletedTask;
-        }
-
         var now = _timeProvider.GetUtcNow();
         var channel = string.IsNullOrEmpty(@event.Channel)
             ? _targetChannelProvider.Current.Login
@@ -212,7 +260,12 @@ public sealed class BroadcastAggregator :
 
             if (_livePlatforms.ContainsKey(@event.Platform))
             {
-                _pendingOffline[@event.Platform] = new PendingOfflineEntry(channel, now);
+                _pendingOffline[@event.Platform] = new PendingOfflineEntry(channel, now, @event.IsCatchUp);
+            }
+
+            if (@event.IsCatchUp)
+            {
+                _pendingStops.Remove(@event.Platform);
             }
 
             scheduleContinuation = !_offlineContinuationScheduled;
@@ -253,70 +306,78 @@ public sealed class BroadcastAggregator :
         BroadcastEnded? endedEvent = null;
         List<(StreamingPlatform Platform, Func<CancellationToken, Task> StopAction)> stopsToRun = [];
 
-        lock (_syncLock)
+        await _transitionSemaphore.WaitAsync().ConfigureAwait(false);
+        try
         {
-            _offlineContinuationScheduled = false;
-
-            if (_disposed)
+            lock (_syncLock)
             {
-                return;
+                _offlineContinuationScheduled = false;
+
+                if (_disposed)
+                {
+                    return;
+                }
+
+                foreach (var (platform, pending) in _pendingOffline.ToArray())
+                {
+                    _pendingOffline.Remove(platform);
+
+                    if (!_livePlatforms.Remove(platform))
+                    {
+                        continue;
+                    }
+
+                    if (_currentBroadcastId is not { } broadcastId)
+                    {
+                        continue;
+                    }
+
+                    if (_livePlatforms.Count == 0)
+                    {
+                        _currentBroadcastId = null;
+                        endedEvent = new BroadcastEnded(broadcastId, platform, pending.Channel, pending.OfflineAt, pending.IsCatchUp);
+                    }
+                    else
+                    {
+                        leftEvents.Add(new BroadcastPlatformLeft(broadcastId, platform, pending.Channel, pending.OfflineAt, pending.IsCatchUp));
+                    }
+                }
+
+                foreach (var (platform, stopAction) in _pendingStops.ToArray())
+                {
+                    _pendingStops.Remove(platform);
+
+                    if (!_livePlatforms.ContainsKey(platform))
+                    {
+                        stopsToRun.Add((platform, stopAction));
+                    }
+                }
             }
 
-            foreach (var (platform, pending) in _pendingOffline.ToArray())
+            foreach (var left in leftEvents)
             {
-                _pendingOffline.Remove(platform);
+                _logger.LogInformation(
+                    "BroadcastAggregator: площадка {Platform} вышла из эфира {BroadcastId}",
+                    left.Platform,
+                    left.BroadcastId);
 
-                if (!_livePlatforms.Remove(platform))
-                {
-                    continue;
-                }
-
-                if (_currentBroadcastId is not { } broadcastId)
-                {
-                    continue;
-                }
-
-                if (_livePlatforms.Count == 0)
-                {
-                    _currentBroadcastId = null;
-                    endedEvent = new BroadcastEnded(broadcastId, platform, pending.Channel, pending.OfflineAt);
-                }
-                else
-                {
-                    leftEvents.Add(new BroadcastPlatformLeft(broadcastId, platform, pending.Channel, pending.OfflineAt));
-                }
+                await _eventBus.PublishAsync(left, CancellationToken.None).ConfigureAwait(false);
             }
 
-            foreach (var (platform, stopAction) in _pendingStops.ToArray())
+            if (endedEvent is not null)
             {
-                _pendingStops.Remove(platform);
+                _logger.LogInformation(
+                    "BroadcastAggregator: завершён эфир {BroadcastId} (последняя площадка {Platform}, канал {Channel})",
+                    endedEvent.BroadcastId,
+                    endedEvent.LastPlatform,
+                    endedEvent.LastChannel);
 
-                if (!_livePlatforms.ContainsKey(platform))
-                {
-                    stopsToRun.Add((platform, stopAction));
-                }
+                await _eventBus.PublishAsync(endedEvent, CancellationToken.None).ConfigureAwait(false);
             }
         }
-
-        foreach (var left in leftEvents)
+        finally
         {
-            _logger.LogInformation(
-                "BroadcastAggregator: площадка {Platform} вышла из эфира {BroadcastId}",
-                left.Platform,
-                left.BroadcastId);
-
-            await _eventBus.PublishAsync(left, CancellationToken.None).ConfigureAwait(false);
-        }
-
-        if (endedEvent is not null)
-        {
-            _logger.LogInformation(
-                "BroadcastAggregator: завершён эфир {BroadcastId} (последняя площадка {Platform}, канал {Channel})",
-                endedEvent.BroadcastId,
-                endedEvent.LastPlatform,
-                endedEvent.LastChannel);
-
-            await _eventBus.PublishAsync(endedEvent, CancellationToken.None).ConfigureAwait(false);
+            _transitionSemaphore.Release();
         }
 
         foreach (var (platform, stopAction) in stopsToRun)
@@ -347,5 +408,5 @@ public sealed class BroadcastAggregator :
 
     private sealed record LivePlatformEntry(string Channel, StreamInfo? Stream, DateTimeOffset StartedAt);
 
-    private sealed record PendingOfflineEntry(string Channel, DateTimeOffset OfflineAt);
+    private sealed record PendingOfflineEntry(string Channel, DateTimeOffset OfflineAt, bool IsCatchUp);
 }

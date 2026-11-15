@@ -23,13 +23,15 @@ public sealed record BroadcastPlatformLeft(
     Guid BroadcastId,
     StreamingPlatform Platform,
     string Channel,
-    DateTimeOffset LeftAt) : EventBase;
+    DateTimeOffset LeftAt,
+    bool IsCatchUp = false) : EventBase;
 
 public sealed record BroadcastEnded(
     Guid BroadcastId,
     StreamingPlatform LastPlatform,
     string LastChannel,
-    DateTimeOffset EndedAt) : EventBase;
+    DateTimeOffset EndedAt,
+    bool IsCatchUp = false) : EventBase;
 
 public sealed record ViewerSampleObserved(
     StreamingPlatform Platform,

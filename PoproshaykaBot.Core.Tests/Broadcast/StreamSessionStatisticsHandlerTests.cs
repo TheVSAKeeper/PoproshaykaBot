@@ -250,7 +250,9 @@ public sealed class StreamSessionStatisticsHandlerTests
     }
 
     [Test]
-    public async Task MultiPlatformBroadcast_AggregatesChattersSeparatelyAndProjectsOnlyTwitch()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task MultiPlatformBroadcast_AggregatesChattersSeparatelyAndProjectsOnlyTwitch(bool catchUp)
     {
         await _eventBus.PublishAsync(Online(viewers: 15), CancellationToken.None);
         await _eventBus.PublishAsync(OnlineYouTube(viewers: 25), CancellationToken.None);
@@ -260,7 +262,7 @@ public sealed class StreamSessionStatisticsHandlerTests
         await _eventBus.PublishAsync(Chat(StreamingPlatform.YouTube, YouTubeChannel, "shared", "YouTubeUser"), CancellationToken.None);
 
         _timeProvider.Advance(TimeSpan.FromMinutes(30));
-        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel), CancellationToken.None);
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, IsCatchUp: catchUp), CancellationToken.None);
         await WaitUntilAsync(() => !_aggregator.IsPlatformLive(StreamingPlatform.Twitch));
 
         Assert.That(_captured, Is.Empty);
@@ -303,6 +305,168 @@ public sealed class StreamSessionStatisticsHandlerTests
             Assert.That(_historyStore.Load().Broadcasts, Has.Count.EqualTo(1));
             Assert.That(_historyStore.LoadSessionsProjection().Sessions, Is.Empty);
         }
+    }
+
+    [TestCase(false, false)]
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    [TestCase(true, true)]
+    public async Task CatchUpAfterMonitorGap_ClosesPreviousStreamAtLastObservation(bool otherPlatformLive, bool rollover)
+    {
+        await _eventBus.PublishAsync(Online(streamId: "old-stream"));
+        if (otherPlatformLive)
+        {
+            await _eventBus.PublishAsync(OnlineYouTube());
+        }
+
+        await _eventBus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.Twitch, _timeProvider.GetUtcNow()));
+        _timeProvider.Advance(TimeSpan.FromMinutes(30));
+        var lastObservedAt = _timeProvider.GetUtcNow();
+        await _eventBus.PublishAsync(new ViewerSampleObserved(StreamingPlatform.Twitch, Channel, 10, lastObservedAt, "old-stream"));
+        await _eventBus.PublishAsync(new ChatIngestionStopped(StreamingPlatform.Twitch, lastObservedAt));
+        _timeProvider.Advance(TimeSpan.FromMinutes(90));
+
+        var completed = new TaskCompletionSource<BroadcastRecord>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var left = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var completedSubscription = _eventBus.Subscribe<StreamSessionCompleted>(e => completed.TrySetResult(e.Broadcast));
+        using var leftSubscription = _eventBus.Subscribe<BroadcastPlatformLeft>(_ => left.TrySetResult());
+        if (rollover)
+        {
+            await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, new()
+            {
+                Id = "next-stream", StartedAt = _timeProvider.GetUtcNow().UtcDateTime,
+            }, IsCatchUp: true));
+        }
+        else
+        {
+            await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, IsCatchUp: true));
+        }
+
+        if (otherPlatformLive)
+        {
+            await left.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (rollover)
+            {
+                await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel));
+            }
+
+            await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, YouTubeChannel));
+        }
+
+        var record = await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var twitch = record.Platforms.Single(platform => platform.Platform == StreamingPlatform.Twitch);
+        Assert.That(twitch.Segments.First().EndedAt, Is.EqualTo(lastObservedAt));
+        Assert.That(twitch.TrackedIntervals!.First().EndedAt, Is.EqualTo(lastObservedAt));
+        if (!otherPlatformLive)
+        {
+            Assert.That(record.EndedAt, Is.EqualTo(lastObservedAt));
+            Assert.That(record.ViewerSeries?.Any(sample => sample.At > record.EndedAt) ?? false, Is.False);
+        }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Restart_SecondaryPlatformRequiresItsOwnOnlineConfirmation(bool secondaryReturns)
+    {
+        var savedAt = StreamStart.AddMinutes(30);
+        var draft = new ActiveBroadcast
+        {
+            BroadcastId = Guid.NewGuid(), StartedAt = StreamStart, UpdatedAt = savedAt,
+            Platforms = [.. new[] { StreamingPlatform.Twitch, StreamingPlatform.YouTube }.Select(platform => new ActiveBroadcastPlatform
+            {
+                Platform = platform, Channel = platform == StreamingPlatform.Twitch ? Channel : YouTubeChannel,
+                StreamId = platform == StreamingPlatform.Twitch ? "saved-twitch" : "saved-youtube",
+                StartedAt = StreamStart, UpdatedAt = savedAt,
+                Segments = [new() { StartedAt = StreamStart, MessageCount = 9 }],
+                TrackedIntervals = [new() { StartedAt = StreamStart }],
+            })],
+        };
+        Assert.That(_store.TrySave(draft), Is.True);
+        _timeProvider.Advance(TimeSpan.FromHours(2));
+        await _eventBus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.Twitch, _timeProvider.GetUtcNow()));
+        await _eventBus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.YouTube, _timeProvider.GetUtcNow()));
+        await _eventBus.PublishAsync(Online(streamId: "saved-twitch", isCatchUp: true));
+        if (secondaryReturns)
+        {
+            await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.YouTube, YouTubeChannel,
+                new() { Id = "saved-youtube", StartedAt = StreamStartUtc }, IsCatchUp: true));
+            await _eventBus.PublishAsync(Chat(StreamingPlatform.YouTube, YouTubeChannel, "u1", "Bob"));
+        }
+        else
+        {
+            await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, YouTubeChannel, IsCatchUp: true));
+        }
+
+        _timeProvider.Advance(TimeSpan.FromMinutes(30));
+        var completed = new TaskCompletionSource<BroadcastRecord>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = _eventBus.Subscribe<StreamSessionCompleted>(e => completed.TrySetResult(e.Broadcast));
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel));
+        if (secondaryReturns)
+        {
+            await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, YouTubeChannel));
+        }
+
+        var youtube = (await completed.Task.WaitAsync(TimeSpan.FromSeconds(5))).Platforms.Single(platform => platform.Platform == StreamingPlatform.YouTube);
+        Assert.That(youtube.EndedAt, Is.EqualTo(secondaryReturns ? _timeProvider.GetUtcNow() : savedAt));
+        Assert.That(youtube.TrackedDuration, Is.EqualTo(TimeSpan.FromMinutes(secondaryReturns ? 60 : 30)));
+        Assert.That(youtube.MessageCount, Is.EqualTo(secondaryReturns ? 10 : 9));
+        Assert.That(youtube.Segments.Zip(youtube.Segments.Skip(1)).All(pair => pair.First.EndedAt <= pair.Second.StartedAt), Is.True);
+    }
+
+    [Test]
+    public async Task CatchUpClosedPlatform_LateMetadataCannotReopenItsSegments()
+    {
+        await _eventBus.PublishAsync(Online(streamId: "twitch-stream"));
+        await _eventBus.PublishAsync(OnlineYouTube());
+        _timeProvider.Advance(TimeSpan.FromMinutes(30));
+        var left = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var leftSubscription = _eventBus.Subscribe<BroadcastPlatformLeft>(_ => left.TrySetResult());
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, IsCatchUp: true));
+        await left.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var closed = _store.Load()!.Platforms.Single(platform => platform.Platform == StreamingPlatform.Twitch);
+        _timeProvider.Advance(TimeSpan.FromMinutes(90));
+        await _eventBus.PublishAsync(new StreamMetadataResolved(StreamingPlatform.Twitch, Channel,
+            new() { Id = "twitch-stream", StartedAt = StreamStartUtc, Title = "Позднее название", GameName = "Поздняя игра" }));
+
+        var completed = new TaskCompletionSource<BroadcastRecord>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = _eventBus.Subscribe<StreamSessionCompleted>(e => completed.TrySetResult(e.Broadcast));
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, YouTubeChannel));
+        var twitch = (await completed.Task.WaitAsync(TimeSpan.FromSeconds(5))).Platforms.Single(platform => platform.Platform == StreamingPlatform.Twitch);
+        Assert.That(twitch.Segments, Has.Count.EqualTo(closed.Segments.Count));
+        Assert.That(twitch.Segments.Single().EndedAt, Is.EqualTo(closed.EndedAt));
+        Assert.That(twitch.Segments.Single().Title, Is.EqualTo(closed.Segments.Single().Title));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task ReconnectWithNewStreamId_ClosesPreviousPlatformBeforeStartingNext(bool otherPlatformLive)
+    {
+        await _eventBus.PublishAsync(Online(streamId: "old-stream"));
+        await _eventBus.PublishAsync(TwitchChat("u1", "Alice"));
+        if (otherPlatformLive)
+        {
+            await _eventBus.PublishAsync(OnlineYouTube());
+        }
+
+        var previousId = _aggregator.CurrentBroadcastId;
+        _timeProvider.Advance(TimeSpan.FromHours(1));
+        await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, Channel, new()
+        {
+            Id = "next-stream", StartedAt = _timeProvider.GetUtcNow().UtcDateTime,
+        }, IsCatchUp: true));
+        Assert.That(_aggregator.CurrentBroadcastId == previousId, Is.EqualTo(otherPlatformLive));
+        await _eventBus.PublishAsync(TwitchChat("u1", "Alice"));
+        _timeProvider.Advance(TimeSpan.FromMinutes(30));
+        await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel));
+        if (otherPlatformLive)
+        {
+            await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, YouTubeChannel));
+        }
+
+        await WaitUntilAsync(() => _captured.Count == (otherPlatformLive ? 1 : 2));
+        Assert.That(_captured.Sum(record => record.MessageCount), Is.EqualTo(2));
+        Assert.That(_captured.SelectMany(record => record.Platforms).Where(platform => platform.Platform == StreamingPlatform.Twitch)
+            .Sum(platform => platform.MessageCount), Is.EqualTo(2));
     }
 
     [Test]
@@ -386,15 +550,14 @@ public sealed class StreamSessionStatisticsHandlerTests
     }
 
     [Test]
-    public async Task StreamWentOffline_WithIsCatchUpTrue_AndLiveSession_DoesNothing()
+    public async Task StreamWentOffline_WithIsCatchUpTrue_FinalizesLiveSession()
     {
         await _eventBus.PublishAsync(Online(), CancellationToken.None);
         await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, Channel, IsCatchUp: true), CancellationToken.None);
-        await Task.Delay(50);
+        await WaitUntilAsync(() => _captured.Count == 1);
 
-        Assert.That(_captured, Is.Empty);
-        Assert.That(_aggregator.IsAnyLive, Is.True);
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
+        Assert.That(_captured, Has.Count.EqualTo(1));
+        Assert.That(_aggregator.IsAnyLive, Is.False);
     }
 
     [Test]
@@ -669,7 +832,7 @@ public sealed class StreamSessionStatisticsHandlerTests
         await WaitUntilAsync(() => _captured.Count == 1);
 
         var orphan = _captured.Single();
-        Assert.That(orphan.Duration, Is.EqualTo(TimeSpan.FromHours(2)));
+        Assert.That(orphan.Duration, Is.EqualTo(TimeSpan.FromMinutes(30)));
         Assert.That(orphan.Platforms.Single().TrackedDuration, Is.EqualTo(TimeSpan.FromMinutes(25)));
     }
 

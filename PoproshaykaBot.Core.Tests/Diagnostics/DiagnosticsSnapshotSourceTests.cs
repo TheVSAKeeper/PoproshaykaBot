@@ -119,6 +119,8 @@ public sealed class DiagnosticsSnapshotSourceTests
             bus,
             NullLogger<EventSubConnectionHost>.Instance);
 
+        var history = new BroadcastHistoryStore(null, Path.Combine(_directory, "broadcasts.json"), Path.Combine(_directory, "stream_sessions.json"));
+        _activeBroadcastStore = new(history, null, Path.Combine(_directory, "active_broadcast.json"), Path.Combine(_directory, "active_session.json"));
         _source = new(_memoryUsageSink,
             _metrics,
             _eventSubBot,
@@ -132,7 +134,8 @@ public sealed class DiagnosticsSnapshotSourceTests
             new(),
             _broadcastScheduler,
             _statisticsAutoSaver,
-            NullLogger<DiagnosticsSnapshotSource>.Instance);
+            NullLogger<DiagnosticsSnapshotSource>.Instance,
+            _activeBroadcastStore);
     }
 
     [TearDown]
@@ -161,6 +164,24 @@ public sealed class DiagnosticsSnapshotSourceTests
     private EventSubConnectionHost _eventSubBot = null!;
     private EventSubConnectionHost _eventSubBroadcaster = null!;
     private DiagnosticsSnapshotSource _source = null!;
+    private ActiveBroadcastStore _activeBroadcastStore = null!;
+
+    [Test]
+    public void Отказ_сохранения_нового_черновика_виден_в_диагностике()
+    {
+        var now = DateTimeOffset.UtcNow;
+        Assert.That(_activeBroadcastStore.TrySave(new()
+        {
+            BroadcastId = Guid.NewGuid(), StartedAt = now, UpdatedAt = now, EndedAt = now,
+        }), Is.True);
+        Assert.That(_activeBroadcastStore.TrySave(new()
+        {
+            BroadcastId = Guid.NewGuid(), StartedAt = now, UpdatedAt = now,
+        }), Is.False);
+
+        var status = _source.Capture().Jobs.Single(job => job.Job == ScheduledJob.StatisticsAutoSave);
+        Assert.That(status.LastError, Does.Contain("предыдущий эфир"));
+    }
 
     [Test]
     public void Снимок_при_выключенных_подсистемах_собирается_без_исключения()

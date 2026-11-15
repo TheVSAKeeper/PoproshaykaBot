@@ -189,17 +189,50 @@ public sealed class BroadcastAggregatorTests
     }
 
     [Test]
-    public async Task CatchUpOffline_DoesNotCloseLiveBroadcast()
+    public async Task CatchUpOffline_ClosesLiveBroadcastAndAllowsNextStream()
     {
-        var endedCount = 0;
-        using var subEnded = _eventBus.Subscribe<BroadcastEnded>(_ => endedCount++);
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subEnded = _eventBus.Subscribe<BroadcastEnded>(_ => ended.SetResult());
 
         await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "twitch-chan", null));
+        var oldId = _aggregator.CurrentBroadcastId;
         await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, "twitch-chan", IsCatchUp: true));
-        await Task.Delay(50);
+        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.That(_aggregator.IsAnyLive, Is.True);
-        Assert.That(endedCount, Is.EqualTo(0));
+        Assert.That(_aggregator.IsAnyLive, Is.False);
+        await _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "twitch-chan", new() { Id = "next" }));
+        Assert.That(_aggregator.CurrentBroadcastId, Is.Not.EqualTo(oldId));
+    }
+
+    [Test]
+    public async Task ConcurrentPlatforms_JoinedPublicationWaitsForStartedHandlers()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var order = new List<string>();
+        using var startSub = _eventBus.Subscribe<BroadcastStarted>(async (_, _) =>
+        {
+            entered.SetResult();
+            await release.Task;
+            order.Add("started");
+        });
+        using var joinedSub = _eventBus.Subscribe<BroadcastPlatformJoined>(_ => order.Add("joined"));
+        var first = _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, "tw", null));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task second;
+        try
+        {
+            second = _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.YouTube, "yt", null));
+            Assert.That(order, Is.Empty);
+            Assert.That(second.IsCompleted, Is.False);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.That(order, Is.EqualTo(new[] { "started", "joined" }));
     }
 
     [Test]

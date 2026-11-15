@@ -116,7 +116,7 @@ public sealed class StreamStatusBroadcastHandler :
             StartSchedulerIfEnabled(channelToStart);
         }
 
-        if (sendDeferredStart && targets.Contains(@event.Platform))
+        if (sendDeferredStart)
         {
             SendStartNotificationToPlatform(@event.Platform);
         }
@@ -137,13 +137,11 @@ public sealed class StreamStatusBroadcastHandler :
         {
             _platformChannels[@event.FirstPlatform] = @event.Channel;
 
-            connectedTargets = _connectedPlatforms
-                .Where(targets.Contains)
-                .ToHashSet();
+            connectedTargets = _connectedPlatforms.ToHashSet();
 
             if (!@event.IsCatchUp)
             {
-                foreach (var target in targets)
+                foreach (var target in Enum.GetValues<StreamingPlatform>())
                 {
                     if (!_connectedPlatforms.Contains(target))
                     {
@@ -152,7 +150,7 @@ public sealed class StreamStatusBroadcastHandler :
                 }
             }
 
-            if (connectedTargets.Count > 0 && !_scheduler.IsActive)
+            if (_connectedPlatforms.Overlaps(targets) && !_scheduler.IsActive)
             {
                 channelToStart = ResolveSchedulerChannelLocked();
                 shouldStartScheduler = !string.IsNullOrWhiteSpace(channelToStart);
@@ -200,7 +198,6 @@ public sealed class StreamStatusBroadcastHandler :
     {
         _logger.LogInformation("Обработка окончания эфира {BroadcastId} для канала {Channel}", @event.BroadcastId, @event.LastChannel);
 
-        var targets = _targetsProvider.GetTargetPlatforms();
         IReadOnlySet<StreamingPlatform> connectedTargets;
 
         lock (_stateLock)
@@ -208,9 +205,7 @@ public sealed class StreamStatusBroadcastHandler :
             _pendingStartNotifications.Clear();
             _platformChannels.Clear();
 
-            connectedTargets = _connectedPlatforms
-                .Where(targets.Contains)
-                .ToHashSet();
+            connectedTargets = _connectedPlatforms.ToHashSet();
         }
 
         var settings = _settingsManager.Current.Twitch.AutoBroadcast;
@@ -223,6 +218,7 @@ public sealed class StreamStatusBroadcastHandler :
         }
 
         if (connectedTargets.Count > 0
+            && !@event.IsCatchUp
             && settings.StreamStatusNotificationsEnabled
             && !string.IsNullOrEmpty(settings.StreamStopMessage))
         {

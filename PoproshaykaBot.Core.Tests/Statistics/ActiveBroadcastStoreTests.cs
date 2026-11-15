@@ -10,7 +10,7 @@ using System.Text.Json;
 namespace PoproshaykaBot.Core.Tests.Statistics;
 
 [TestFixture]
-public sealed class ActiveBroadcastStoreTests
+public sealed partial class ActiveBroadcastStoreTests
 {
     private string _directory = null!;
     private string _broadcastsPath = null!;

@@ -32,5 +32,5 @@ public interface IBroadcastDraftCoordinator
 
     BroadcastRecord FinalizeCompletedDraft(ActiveBroadcast completedDraft);
 
-    BroadcastRecord? TryFinalizeOrphanDraft(StreamingPlatform platform, DateTimeOffset endedAt);
+    BroadcastRecord? TryFinalizeOrphanDraft(StreamingPlatform platform, DateTimeOffset? endedAt = null);
 }

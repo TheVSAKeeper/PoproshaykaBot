@@ -178,6 +178,9 @@ public sealed class YouTubeStatisticsOwnershipTests
                 () => 0,
                 _ => StatisticsExternalWrite.Files(touchedRelativePath));
 
+            await graph.AutoSaver.RunExternalWriteAsync(() => 0, _ => StatisticsExternalWrite.None);
+            await graph.AutoSaver.RunExternalWriteAsync(() => 0, _ => StatisticsExternalWrite.None);
+
             graph.UserRepository.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "Alice");
             graph.UserRepository.TrackMessage(new PlatformUserKey(StreamingPlatform.YouTube, "yt1"), "BobYT");
             graph.BotRepository.IncrementMessagesProcessed();

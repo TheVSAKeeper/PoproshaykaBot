@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace PoproshaykaBot.Core.Tests.Statistics;
 
 [TestFixture]
-public sealed class BroadcastHistoryStoreTests
+public sealed partial class BroadcastHistoryStoreTests
 {
     private string _directory = null!;
     private string _broadcastsPath = null!;
