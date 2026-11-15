@@ -53,11 +53,13 @@ internal sealed class YouTubeStreamMonitor(
     private bool _publishedOnline;
     private bool _initialStatusResolved;
     private YouTubeBroadcastSummary? _activeBroadcast;
+    private string? _activeSelectionVideoId;
     private IReadOnlyList<YouTubeBroadcastSummary> _activeCandidates = [];
     private string? _lastLoggedMultiSetKey;
     private DateTimeOffset? _lastPollAt;
     private int _consecutiveFailures;
     private bool _wakeSubscriptionsAttached;
+    private bool _wakePending;
     private bool _disposed;
 
     public string Name => "Мониторинг эфиров YouTube";
@@ -91,6 +93,7 @@ internal sealed class YouTubeStreamMonitor(
             }
 
             _runCts = new();
+            _wakePending = false;
             _authSubscription ??= eventBus.Subscribe<PlatformAuthorizationRefreshed>(OnAuthorizationRefreshed);
             if (!_wakeSubscriptionsAttached)
             {
@@ -247,6 +250,11 @@ internal sealed class YouTubeStreamMonitor(
 
                 try
                 {
+                    lock (_sync)
+                    {
+                        _wakePending = false;
+                    }
+
                     nextDelay = await PollOnceAsync(ct).ConfigureAwait(false);
                 }
                 finally
@@ -310,14 +318,20 @@ internal sealed class YouTubeStreamMonitor(
             }
 
             YouTubeBroadcastSummary? active;
+            string? activeSelectionVideoId;
 
             lock (_sync)
             {
                 _targetChannelId = targetChannelId;
                 active = _activeBroadcast;
+                activeSelectionVideoId = _activeSelectionVideoId;
             }
 
-            if (active is null || !string.Equals(active.ChannelId, targetChannelId, StringComparison.Ordinal))
+            var selectedVideoId = NormalizeSelectedVideoId(selectionStore.GetSelectedVideoId(targetChannelId));
+
+            if (active is null
+                || !string.Equals(active.ChannelId, targetChannelId, StringComparison.Ordinal)
+                || !string.Equals(activeSelectionVideoId, selectedVideoId, StringComparison.Ordinal))
             {
                 return await PollBroadcastDiscoveryAsync(targetChannelId, ct).ConfigureAwait(false);
             }
@@ -365,7 +379,8 @@ internal sealed class YouTubeStreamMonitor(
             return OfflinePollInterval;
         }
 
-        var selected = SelectBroadcast(targetChannelId, previousActive, matches);
+        var selectedVideoId = NormalizeSelectedVideoId(selectionStore.GetSelectedVideoId(targetChannelId));
+        var selected = SelectBroadcast(selectedVideoId, matches);
 
         if (selected is null)
         {
@@ -373,7 +388,7 @@ internal sealed class YouTubeStreamMonitor(
             return OfflinePollInterval;
         }
 
-        await ActivateBroadcastAsync(targetChannelId, selected, matches, previousActive).ConfigureAwait(false);
+        await ActivateBroadcastAsync(targetChannelId, selected, matches, previousActive, selectedVideoId).ConfigureAwait(false);
         return OnlinePollInterval;
     }
 
@@ -398,6 +413,7 @@ internal sealed class YouTubeStreamMonitor(
             lock (_sync)
             {
                 _activeBroadcast = null;
+                _activeSelectionVideoId = null;
                 _activeCandidates = [];
                 _issue = YouTubeMonitorIssue.None;
                 _lastLoggedMultiSetKey = null;
@@ -443,27 +459,14 @@ internal sealed class YouTubeStreamMonitor(
         return OnlinePollInterval;
     }
 
-    private YouTubeBroadcastSummary? SelectBroadcast(
-        string targetChannelId,
-        YouTubeBroadcastSummary? previousActive,
+    private static YouTubeBroadcastSummary? SelectBroadcast(
+        string? selectedVideoId,
         YouTubeBroadcastSummary[] matches)
     {
         if (matches.Length == 1)
         {
             return matches[0];
         }
-
-        if (previousActive is not null)
-        {
-            var pinned = matches.FirstOrDefault(m => string.Equals(m.VideoId, previousActive.VideoId, StringComparison.Ordinal));
-
-            if (pinned is not null)
-            {
-                return pinned;
-            }
-        }
-
-        var selectedVideoId = selectionStore.GetSelectedVideoId(targetChannelId);
 
         if (!string.IsNullOrWhiteSpace(selectedVideoId))
         {
@@ -473,24 +476,55 @@ internal sealed class YouTubeStreamMonitor(
         return null;
     }
 
+    private static string? NormalizeSelectedVideoId(string? videoId)
+    {
+        return string.IsNullOrWhiteSpace(videoId) ? null : videoId.Trim();
+    }
+
     private async Task ActivateBroadcastAsync(
         string targetChannelId,
         YouTubeBroadcastSummary selected,
         YouTubeBroadcastSummary[] matches,
-        YouTubeBroadcastSummary? previousActive)
+        YouTubeBroadcastSummary? previousActive,
+        string? selectedVideoId)
     {
+        var switchedBroadcast = previousActive is not null
+            && (!string.Equals(previousActive.VideoId, selected.VideoId, StringComparison.Ordinal)
+                || !string.Equals(previousActive.ChannelId, targetChannelId, StringComparison.Ordinal)
+                || !string.Equals(previousActive.LiveChatId, selected.LiveChatId, StringComparison.Ordinal));
+
+        if (!switchedBroadcast && previousActive is not null && _stateMachine.CurrentStatus == StreamStatus.Online)
+        {
+            lock (_sync)
+            {
+                _activeBroadcast = selected;
+                _activeSelectionVideoId = selectedVideoId;
+                _activeCandidates = matches;
+                _issue = YouTubeMonitorIssue.None;
+                _lastLoggedMultiSetKey = null;
+            }
+
+            return;
+        }
+
+        if (switchedBroadcast)
+        {
+            _stateMachine.ResetToUnknown();
+        }
+
         var streamInfo = BuildStreamInfo(selected, targetChannelId, selected.Title, selected.StartedAtUtc.UtcDateTime, 0);
         var transition = _stateMachine.ApplyOnlineWithoutViewerSample(streamInfo);
 
         lock (_sync)
         {
             _activeBroadcast = selected;
+            _activeSelectionVideoId = selectedVideoId;
             _activeCandidates = matches;
             _issue = YouTubeMonitorIssue.None;
             _lastLoggedMultiSetKey = null;
         }
 
-        if (previousActive?.VideoId != selected.VideoId)
+        if (previousActive is null || switchedBroadcast)
         {
             await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(selected), CancellationToken.None).ConfigureAwait(false);
         }
@@ -505,6 +539,7 @@ internal sealed class YouTubeStreamMonitor(
         lock (_sync)
         {
             _activeBroadcast = null;
+            _activeSelectionVideoId = null;
             _activeCandidates = [];
             _issue = YouTubeMonitorIssue.None;
             _lastLoggedMultiSetKey = null;
@@ -531,6 +566,7 @@ internal sealed class YouTubeStreamMonitor(
         lock (_sync)
         {
             _activeBroadcast = null;
+            _activeSelectionVideoId = null;
             _activeCandidates = matches;
             _issue = YouTubeMonitorIssue.MultipleActiveBroadcasts;
 
@@ -574,6 +610,7 @@ internal sealed class YouTubeStreamMonitor(
             _issue = YouTubeMonitorIssue.None;
             previousActive = _activeBroadcast;
             _activeBroadcast = null;
+            _activeSelectionVideoId = null;
             _activeCandidates = [];
             _lastLoggedMultiSetKey = null;
             _consecutiveFailures = 0;
@@ -612,6 +649,7 @@ internal sealed class YouTubeStreamMonitor(
             _issue = YouTubeMonitorIssue.MissingBroadcasterAuth;
             previousActive = _activeBroadcast;
             _activeBroadcast = null;
+            _activeSelectionVideoId = null;
             _activeCandidates = [];
             _lastLoggedMultiSetKey = null;
         }
@@ -633,6 +671,7 @@ internal sealed class YouTubeStreamMonitor(
             _issue = YouTubeMonitorIssue.InvalidTargetChannel;
             previousActive = _activeBroadcast;
             _activeBroadcast = null;
+            _activeSelectionVideoId = null;
             _activeCandidates = [];
             _lastLoggedMultiSetKey = null;
         }
@@ -661,6 +700,7 @@ internal sealed class YouTubeStreamMonitor(
             _issue = YouTubeMonitorIssue.QuotaExhausted;
             previousActive = _activeBroadcast;
             _activeBroadcast = null;
+            _activeSelectionVideoId = null;
             _activeCandidates = [];
             _lastLoggedMultiSetKey = null;
         }
@@ -769,6 +809,12 @@ internal sealed class YouTubeStreamMonitor(
 
         lock (_sync)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _wakePending = true;
             waitCts = _waitCts;
         }
 
@@ -796,6 +842,12 @@ internal sealed class YouTubeStreamMonitor(
             {
                 if (_disposed || ct.IsCancellationRequested)
                 {
+                    return;
+                }
+
+                if (_wakePending)
+                {
+                    _wakePending = false;
                     return;
                 }
 

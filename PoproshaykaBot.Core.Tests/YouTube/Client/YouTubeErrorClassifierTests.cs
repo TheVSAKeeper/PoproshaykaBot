@@ -38,14 +38,18 @@ public class YouTubeErrorClassifierTests
     public void Classifies_Grpc_ResourceExhausted_Quota_Vs_RateLimit()
     {
         var quotaRpc = new RpcException(new Status(StatusCode.ResourceExhausted, "Quota exceeded (quotaExceeded)"));
+        var dailyLimitRpc = new RpcException(new Status(StatusCode.ResourceExhausted, "dailyLimitExceeded"));
         var rateRpc = new RpcException(new Status(StatusCode.ResourceExhausted, "rateLimitExceeded"));
+        var documentedThrottleRpc = new RpcException(new Status(StatusCode.ResourceExhausted, "Resource has been exhausted (e.g. check quota)"));
         var unimplRpc = new RpcException(new Status(StatusCode.Unimplemented, "StreamList disabled"));
         var unauthRpc = new RpcException(new Status(StatusCode.Unauthenticated, "Bad token"));
 
         Assert.Multiple(() =>
         {
             Assert.That(YouTubeErrorClassifier.FromRpcException(quotaRpc, "StreamList").Kind, Is.EqualTo(YouTubeApiErrorKind.QuotaExceeded));
+            Assert.That(YouTubeErrorClassifier.FromRpcException(dailyLimitRpc, "StreamList").Kind, Is.EqualTo(YouTubeApiErrorKind.QuotaExceeded));
             Assert.That(YouTubeErrorClassifier.FromRpcException(rateRpc, "StreamList").Kind, Is.EqualTo(YouTubeApiErrorKind.RateLimitExceeded));
+            Assert.That(YouTubeErrorClassifier.FromRpcException(documentedThrottleRpc, "StreamList").Kind, Is.EqualTo(YouTubeApiErrorKind.RateLimitExceeded));
             Assert.That(YouTubeErrorClassifier.FromRpcException(unimplRpc, "StreamList").Kind, Is.EqualTo(YouTubeApiErrorKind.TransportUnsupported));
             Assert.That(YouTubeErrorClassifier.FromRpcException(unauthRpc, "StreamList").Kind, Is.EqualTo(YouTubeApiErrorKind.Unauthorized));
         });

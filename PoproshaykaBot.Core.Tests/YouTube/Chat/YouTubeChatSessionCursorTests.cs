@@ -44,14 +44,15 @@ public class YouTubeChatSessionCursorTests
         {
             Assert.That(onlyOld.LiveItems, Is.Empty);
             Assert.That(onlyOld.HistoricalItems.Select(static i => i.Id), Is.EqualTo(new[] { "old-1", "old-2" }));
-            Assert.That(cursor.InitialBatchProcessed, Is.True);
+            Assert.That(cursor.HasTransitionedToLive, Is.False);
             Assert.That(cursor.PageToken, Is.EqualTo("cursor-1"));
         });
 
-        var second = cursor.ProcessBatch(new(
+        var secondHistory = cursor.ProcessBatch(new(
             [
                 Item("old-2", BaseTime.AddSeconds(-1)),
-                Item("skewed-live", BaseTime.AddSeconds(-3)),
+                Item("history-second", BaseTime.AddMinutes(-9)),
+                Item("old-3", BaseTime.AddSeconds(-3)),
             ],
             "cursor-2",
             TimeSpan.FromSeconds(5),
@@ -59,9 +60,73 @@ public class YouTubeChatSessionCursorTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(second.LiveItems.Select(static i => i.Id), Is.EqualTo(new[] { "skewed-live" }));
-            Assert.That(second.HistoricalItems, Is.Empty);
+            Assert.That(secondHistory.LiveItems, Is.Empty);
+            Assert.That(secondHistory.HistoricalItems.Select(static i => i.Id), Is.EqualTo(new[] { "history-second", "old-3" }));
+            Assert.That(cursor.HasTransitionedToLive, Is.False);
             Assert.That(cursor.PageToken, Is.EqualTo("cursor-2"));
+        });
+
+        var firstLive = cursor.ProcessBatch(new(
+            [
+                Item("fresh-1", BaseTime.AddSeconds(1)),
+            ],
+            "cursor-3",
+            TimeSpan.FromSeconds(5),
+            null));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(firstLive.LiveItems.Select(static i => i.Id), Is.EqualTo(new[] { "fresh-1" }));
+            Assert.That(firstLive.HistoricalItems, Is.Empty);
+            Assert.That(cursor.HasTransitionedToLive, Is.True);
+            Assert.That(cursor.PageToken, Is.EqualTo("cursor-3"));
+        });
+
+        var skewedAfterLive = cursor.ProcessBatch(new(
+            [
+                Item("skewed-live", BaseTime.AddSeconds(-3)),
+            ],
+            "cursor-4",
+            TimeSpan.FromSeconds(5),
+            null));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(skewedAfterLive.LiveItems.Select(static i => i.Id), Is.EqualTo(new[] { "skewed-live" }));
+            Assert.That(skewedAfterLive.HistoricalItems, Is.Empty);
+            Assert.That(cursor.PageToken, Is.EqualTo("cursor-4"));
+        });
+    }
+
+    [Test]
+    public void MultiBatch_History_After_Empty_Or_Reset_Remains_Filtered_Until_Live_Message()
+    {
+        var cursor = new YouTubeChatSessionCursor("chat-1", BaseTime);
+
+        var emptyInitial = cursor.ProcessBatch(new([], "cursor-0", TimeSpan.FromSeconds(5), null));
+        var oldAfterEmpty = cursor.ProcessBatch(new([Item("old-1", BaseTime.AddMinutes(-5))], "cursor-1", TimeSpan.FromSeconds(5), null));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(emptyInitial.LiveItems, Is.Empty);
+            Assert.That(oldAfterEmpty.LiveItems, Is.Empty);
+            Assert.That(oldAfterEmpty.HistoricalItems.Select(static i => i.Id), Is.EqualTo(new[] { "old-1" }));
+            Assert.That(cursor.HasTransitionedToLive, Is.False);
+        });
+
+        cursor.ResetAfterInvalidToken(BaseTime.AddSeconds(10));
+
+        var resetHistory1 = cursor.ProcessBatch(new([Item("gap-old-1", BaseTime.AddSeconds(2))], "r-1", TimeSpan.FromSeconds(5), null));
+        var resetHistory2 = cursor.ProcessBatch(new([Item("gap-old-2", BaseTime.AddSeconds(8))], "r-2", TimeSpan.FromSeconds(5), null));
+        var resetLive = cursor.ProcessBatch(new([Item("post-reset", BaseTime.AddSeconds(12))], "r-3", TimeSpan.FromSeconds(5), null));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(resetHistory1.LiveItems, Is.Empty);
+            Assert.That(resetHistory2.LiveItems, Is.Empty);
+            Assert.That(resetHistory2.HistoricalItems.Select(static i => i.Id), Is.EqualTo(new[] { "gap-old-2" }));
+            Assert.That(resetLive.LiveItems.Select(static i => i.Id), Is.EqualTo(new[] { "post-reset" }));
+            Assert.That(cursor.HasTransitionedToLive, Is.True);
         });
     }
 

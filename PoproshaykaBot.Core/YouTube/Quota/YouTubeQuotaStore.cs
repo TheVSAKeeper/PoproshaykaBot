@@ -12,7 +12,8 @@ namespace PoproshaykaBot.Core.YouTube.Quota;
 
 internal sealed class YouTubeQuotaStore(
     ILogger<YouTubeQuotaStore> logger,
-    string? filePath = null)
+    string? filePath = null,
+    Action<string, string>? persistFile = null)
     : IExternalWriteParticipant, IFlushableHistoryStore, IDisposable
 {
     private readonly string _filePath = filePath ?? Path.Combine(AppPaths.BaseDirectory, LegacyDataCatalog.YouTubeQuotaFileName);
@@ -23,6 +24,7 @@ internal sealed class YouTubeQuotaStore(
     private YouTubeQuotaReliability _reliability = YouTubeQuotaReliability.Reliable;
     private YouTubeQuotaDocument _latestDocument = YouTubeQuotaDocument.CreateEmpty();
     private long _latestSnapshotSequence;
+    private long _snapshotVersion;
     private bool _canPersist;
     private bool _rewrittenExternally;
     private bool _hasUnsavedChanges;
@@ -103,6 +105,7 @@ internal sealed class YouTubeQuotaStore(
             }
 
             _latestDocument = snapshot.Clone();
+            _snapshotVersion++;
             _hasUnsavedChanges = true;
 
             if (!_canPersist)
@@ -255,43 +258,59 @@ internal sealed class YouTubeQuotaStore(
 
         try
         {
-            YouTubeQuotaDocument snapshot;
-
-            lock (_sync)
+            while (true)
             {
-                if (!_canPersist)
-                {
-                    return !_hasUnsavedChanges;
-                }
-
-                if (!_hasUnsavedChanges)
-                {
-                    return true;
-                }
-
-                snapshot = _latestDocument.Clone();
-            }
-
-            var json = JsonSerializer.Serialize(snapshot, YouTubeQuotaDocument.SerializerOptions);
-
-            try
-            {
-                AtomicFile.Save(_filePath, json, logger);
+                YouTubeQuotaDocument snapshot;
+                long snapshotVersion;
 
                 lock (_sync)
                 {
-                    if (_canPersist)
+                    if (!_canPersist)
                     {
-                        _hasUnsavedChanges = false;
+                        return !_hasUnsavedChanges;
                     }
+
+                    if (!_hasUnsavedChanges)
+                    {
+                        return true;
+                    }
+
+                    snapshot = _latestDocument.Clone();
+                    snapshotVersion = _snapshotVersion;
                 }
 
-                return true;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                logger.LogWarning(ex, "YouTubeQuotaStore: не удалось сохранить {FilePath}", _filePath);
-                return false;
+                var json = JsonSerializer.Serialize(snapshot, YouTubeQuotaDocument.SerializerOptions);
+
+                try
+                {
+                    if (persistFile is not null)
+                    {
+                        persistFile(_filePath, json);
+                    }
+                    else
+                    {
+                        AtomicFile.Save(_filePath, json, logger);
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    logger.LogWarning(ex, "YouTubeQuotaStore: не удалось сохранить {FilePath}", _filePath);
+                    return false;
+                }
+
+                lock (_sync)
+                {
+                    if (!_canPersist)
+                    {
+                        return !_hasUnsavedChanges;
+                    }
+
+                    if (_snapshotVersion == snapshotVersion)
+                    {
+                        _hasUnsavedChanges = false;
+                        return true;
+                    }
+                }
             }
         }
         finally

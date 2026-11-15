@@ -17,7 +17,7 @@ internal sealed class YouTubeChatSessionCursor(
 
     public DateTimeOffset BoundaryUtc { get; private set; } = boundaryUtc.ToUniversalTime();
 
-    public bool InitialBatchProcessed { get; private set; }
+    public bool HasTransitionedToLive { get; private set; }
 
     public string? PageToken { get; private set; }
 
@@ -37,7 +37,7 @@ internal sealed class YouTubeChatSessionCursor(
             _seenIds.TryAdd(item.Id);
         }
 
-        CompleteBatch(batch.NextPageToken);
+        CompleteBatch(batch.NextPageToken, result.LiveItems.Count > 0);
         return result;
     }
 
@@ -46,7 +46,7 @@ internal sealed class YouTubeChatSessionCursor(
         ArgumentNullException.ThrowIfNull(batch);
 
         var live = new List<YouTubeLiveChatItem>(batch.Items.Count);
-        var historical = InitialBatchProcessed ? null : new List<YouTubeLiveChatItem>();
+        var historical = HasTransitionedToLive ? null : new List<YouTubeLiveChatItem>();
         var batchSeen = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var item in batch.Items)
@@ -58,7 +58,7 @@ internal sealed class YouTubeChatSessionCursor(
                 continue;
             }
 
-            if (!InitialBatchProcessed)
+            if (!HasTransitionedToLive)
             {
                 if (item.PublishedAtUtc.HasValue && item.PublishedAtUtc.Value.ToUniversalTime() >= BoundaryUtc)
                 {
@@ -83,23 +83,23 @@ internal sealed class YouTubeChatSessionCursor(
         _seenIds.TryAdd(messageId);
     }
 
-    public void CompleteBatch(string? nextPageToken)
+    public void CompleteBatch(string? nextPageToken, bool sawLiveItems)
     {
         if (!string.IsNullOrEmpty(nextPageToken))
         {
             PageToken = nextPageToken;
         }
 
-        if (!InitialBatchProcessed)
+        if (sawLiveItems)
         {
-            InitialBatchProcessed = true;
+            HasTransitionedToLive = true;
         }
     }
 
     public void ResetAfterInvalidToken(DateTimeOffset newBoundaryUtc)
     {
         PageToken = null;
-        InitialBatchProcessed = false;
+        HasTransitionedToLive = false;
         BoundaryUtc = newBoundaryUtc.ToUniversalTime();
     }
 }
