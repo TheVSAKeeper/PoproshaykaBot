@@ -20,6 +20,9 @@ using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.GameArt;
 using PoproshaykaBot.Core.Update;
 using PoproshaykaBot.Core.Users.Avatars;
+using PoproshaykaBot.Core.YouTube;
+using PoproshaykaBot.Core.YouTube.Chat;
+using PoproshaykaBot.Core.YouTube.Streaming;
 
 namespace PoproshaykaBot.Core.Tests.Infrastructure.Hosting;
 
@@ -101,5 +104,70 @@ public sealed class HostCompositionTests
         Assert.That(adapters[0].Host, Is.SameAs(twitchHost));
 
         _ = provider.GetRequiredService<IBotConnectionController>();
+    }
+
+    [Test]
+    public async Task CoreContainer_WithYouTubeClients_SegregatesYouTubeAndTwitchHosts()
+    {
+        var services = new ServiceCollection();
+        services
+            .AddCoreInfrastructure(new UiLogSink(), disposeSerilog: false)
+            .AddStatistics()
+            .AddSettingsStores()
+            .AddDebugChannel(DebugChannelOverride.None)
+            .AddTwitchClients()
+            .AddYouTubeClients()
+            .AddGameBoxArt(cacheOnly: true)
+            .AddUserAvatars(cacheOnly: true)
+            .AddChatPipeline()
+            .AddStreamMonitoring()
+            .AddBroadcasting()
+            .AddPolls()
+            .AddHttpServer()
+            .AddObsIntegration()
+            .AddSelfUpdate()
+            .AddDiagnostics();
+
+        services.AddSingleton<BotConnectionManager>();
+        services.AddSingleton<IBotConnectionController>(sp => sp.GetRequiredService<BotConnectionManager>());
+
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
+
+        var twitchPlatformHost = provider.GetRequiredKeyedService<PlatformHost>(StreamingPlatform.Twitch);
+        var youtubePlatformHost = provider.GetRequiredKeyedService<PlatformHost>(StreamingPlatform.YouTube);
+        var twitchMonitoringHost = provider.GetRequiredKeyedService<StreamMonitoringHost>(StreamingPlatform.Twitch);
+        var youtubeMonitoringHost = provider.GetRequiredKeyedService<StreamMonitoringHost>(StreamingPlatform.YouTube);
+
+        var adapters = provider.GetServices<IPlatformConnectionAdapter>().ToList();
+        var platforms = provider.GetServices<IChatPlatform>().ToList();
+        var registry = provider.GetRequiredService<IChatPlatformRegistry>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(twitchPlatformHost, Is.Not.SameAs(youtubePlatformHost));
+            Assert.That(twitchMonitoringHost, Is.Not.SameAs(youtubeMonitoringHost));
+            Assert.That(youtubePlatformHost.Components.Select(c => c.GetType()), Is.EquivalentTo(new[]
+            {
+                typeof(YouTubeChatIngestionService),
+            }));
+            Assert.That(youtubeMonitoringHost.Components.Select(c => c.GetType()), Is.EquivalentTo(new[]
+            {
+                typeof(YouTubeStreamMonitor),
+            }));
+            Assert.That(
+                provider.GetRequiredKeyedService<IStreamStatus>(StreamingPlatform.YouTube),
+                Is.InstanceOf<YouTubeStreamMonitor>());
+            Assert.That(
+                provider.GetRequiredKeyedService<IStreamStatus>(StreamingPlatform.Twitch),
+                Is.InstanceOf<StreamStatusManager>());
+            Assert.That(adapters.OfType<TwitchPlatformConnectionAdapter>().Count(), Is.EqualTo(1));
+            Assert.That(adapters.OfType<YouTubePlatformConnectionAdapter>().Count(), Is.EqualTo(1));
+            Assert.That(platforms.OfType<YouTubeChatPlatform>().Count(), Is.EqualTo(1));
+            Assert.That(registry.GetRequired(StreamingPlatform.YouTube), Is.InstanceOf<YouTubeChatPlatform>());
+        });
     }
 }

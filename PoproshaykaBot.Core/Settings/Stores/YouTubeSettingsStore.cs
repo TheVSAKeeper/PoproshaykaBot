@@ -35,6 +35,8 @@ public sealed class YouTubeSettingsStore
             + $"бюджет квоты {settings.DailyQuotaBudget}";
     }
 
+    public event Action? Changed;
+
     public YouTubeSettings Load()
     {
         return _store.Load();
@@ -44,13 +46,27 @@ public sealed class YouTubeSettingsStore
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        return _store.Save(value);
+        var saved = _store.Save(value);
+
+        if (saved)
+        {
+            Changed?.Invoke();
+        }
+
+        return saved;
     }
 
     public bool Mutate(Action<YouTubeSettings> mutator)
     {
         ArgumentNullException.ThrowIfNull(mutator);
 
-        return _store.Mutate(mutator);
+        var mutated = _store.Mutate(mutator);
+
+        if (mutated)
+        {
+            Changed?.Invoke();
+        }
+
+        return mutated;
     }
 }

@@ -19,6 +19,7 @@ using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
+using PoproshaykaBot.Core.YouTube.Quota;
 
 namespace PoproshaykaBot.Core.Tests.Diagnostics;
 
@@ -122,22 +123,34 @@ public sealed class DiagnosticsSnapshotSourceTests
 
         var history = new BroadcastHistoryStore(null, Path.Combine(_directory, "broadcasts.json"), Path.Combine(_directory, "stream_sessions.json"));
         _activeBroadcastStore = new(history, null, Path.Combine(_directory, "active_broadcast.json"), Path.Combine(_directory, "active_session.json"));
-        _source = new(_memoryUsageSink,
+        _botConnection = botConnection;
+        _chatIngestion = chatIngestion;
+        _obs = obs;
+        _source = CreateSource();
+    }
+
+    private DiagnosticsSnapshotSource CreateSource(
+        IYouTubeMonitorDiagnostics? youtubeMonitor = null,
+        IYouTubeChatDiagnostics? youtubeChat = null,
+        IYouTubeQuotaGovernor? youtubeQuota = null) =>
+        new(_memoryUsageSink,
             _metrics,
             _eventSubBot,
             _eventSubBroadcaster,
-            botConnection,
+            _botConnection,
             _targetChannelProvider,
-            chatIngestion,
+            _chatIngestion,
             _chatSender,
-            obs,
+            _obs,
             _sse,
             new(),
             _broadcastScheduler,
             _statisticsAutoSaver,
             NullLogger<DiagnosticsSnapshotSource>.Instance,
-            _activeBroadcastStore);
-    }
+            _activeBroadcastStore,
+            youtubeMonitor,
+            youtubeChat,
+            youtubeQuota);
 
     [TearDown]
     public async Task TearDown()
@@ -164,6 +177,9 @@ public sealed class DiagnosticsSnapshotSourceTests
     private StatisticsAutoSaver _statisticsAutoSaver = null!;
     private EventSubConnectionHost _eventSubBot = null!;
     private EventSubConnectionHost _eventSubBroadcaster = null!;
+    private IBotConnectionController _botConnection = null!;
+    private ChatIngestionService _chatIngestion = null!;
+    private ObsIntegrationService _obs = null!;
     private DiagnosticsSnapshotSource _source = null!;
     private ActiveBroadcastStore _activeBroadcastStore = null!;
 
@@ -288,6 +304,83 @@ public sealed class DiagnosticsSnapshotSourceTests
             Assert.That(memory.Children.All(child => !string.IsNullOrWhiteSpace(child.Name)), Is.True);
             Assert.That(memory.Children.All(child => child.Count > 0), Is.True);
             Assert.That(memory.ChildCount, Is.EqualTo(memory.Children.Sum(child => child.Count)));
+        });
+    }
+
+    [Test]
+    public void Захватывает_снимок_YouTube_мониторинга_чата_и_квоты()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var monitorStatus = new YouTubeMonitoringStatus(
+            Enabled: true,
+            StreamStatus.Online,
+            YouTubeMonitorIssue.MultipleActiveBroadcasts,
+            "UCtarget",
+            "vid-1",
+            "chat-1",
+            2,
+            now,
+            1);
+        var chatStatus = new YouTubeChatStatus(
+            ConnectionState.Connected,
+            YouTubeChatTransport.GrpcStream,
+            YouTubeChatIssue.None,
+            "@creator",
+            "chat-1",
+            now.AddMinutes(-5),
+            now.AddSeconds(-2),
+            now.AddSeconds(-1),
+            42,
+            1,
+            0);
+        var quotaStatus = new YouTubeQuotaStatus(
+            "proj-1",
+            new DateOnly(2026, 11, 15),
+            now.AddHours(4),
+            10_000,
+            125,
+            10,
+            25,
+            100,
+            7_500,
+            ExhaustedByServer: false,
+            YouTubeQuotaReliability.Reliable,
+            CanWriteFile: true);
+
+        var monitor = Substitute.For<IYouTubeMonitorDiagnostics>();
+        monitor.CaptureDiagnostics().Returns(monitorStatus);
+        var chat = Substitute.For<IYouTubeChatDiagnostics>();
+        chat.CaptureDiagnostics().Returns(chatStatus);
+        var quota = Substitute.For<IYouTubeQuotaGovernor>();
+        quota.CaptureDiagnostics().Returns(quotaStatus);
+
+        var snapshot = CreateSource(monitor, chat, quota).Capture();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(snapshot.YouTubeMonitoring, Is.EqualTo(monitorStatus));
+            Assert.That(snapshot.YouTubeChat, Is.EqualTo(chatStatus));
+            Assert.That(snapshot.YouTubeQuota, Is.EqualTo(quotaStatus));
+        });
+    }
+
+    [Test]
+    public void Изолирует_ошибки_источников_диагностики_YouTube_как_null()
+    {
+        var monitor = Substitute.For<IYouTubeMonitorDiagnostics>();
+        monitor.CaptureDiagnostics().Returns(_ => throw new InvalidOperationException("monitor boom"));
+        var chat = Substitute.For<IYouTubeChatDiagnostics>();
+        chat.CaptureDiagnostics().Returns(_ => throw new InvalidOperationException("chat boom"));
+        var quota = Substitute.For<IYouTubeQuotaGovernor>();
+        quota.CaptureDiagnostics().Returns(_ => throw new InvalidOperationException("quota boom"));
+
+        var snapshot = CreateSource(monitor, chat, quota).Capture();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(snapshot.YouTubeMonitoring, Is.Null);
+            Assert.That(snapshot.YouTubeChat, Is.Null);
+            Assert.That(snapshot.YouTubeQuota, Is.Null);
         });
     }
 }

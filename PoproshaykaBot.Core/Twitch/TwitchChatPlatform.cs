@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -7,7 +8,7 @@ using PoproshaykaBot.Core.Streaming;
 namespace PoproshaykaBot.Core.Twitch;
 
 public sealed class TwitchChatPlatform(
-    IStreamStatus streamStatus,
+    [FromKeyedServices(StreamingPlatform.Twitch)] IStreamStatus streamStatus,
     TwitchChatMessenger messenger,
     ChatDecorationsProvider decorations,
     PlatformChannelRegistry channels,

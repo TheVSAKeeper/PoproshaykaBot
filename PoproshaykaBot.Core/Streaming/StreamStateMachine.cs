@@ -79,6 +79,20 @@ internal sealed class StreamStateMachine(TimeProvider? timeProvider = null)
         }
     }
 
+    public StatusTransition ApplyOnlineWithoutViewerSample(StreamInfo stream)
+    {
+        lock (_lock)
+        {
+            _firstOfflineFromApiUtc = null;
+            var previous = _status;
+            var previousStream = _stream;
+            _status = StreamStatus.Online;
+            _stream = ApplyOverlayLocked(stream);
+            _viewerSampledAtUtc = null;
+            return new(previous != StreamStatus.Online, previous, !StreamInfoMapper.SameSnapshot(previousStream, _stream));
+        }
+    }
+
     public StatusTransition MarkOnline(string? streamId, DateTime startedAt)
     {
         lock (_lock)

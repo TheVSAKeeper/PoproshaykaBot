@@ -27,6 +27,9 @@ public static class StreamingServiceCollectionExtensions
 
         services.AddSingleton<StreamStatusManager>();
         services.AddSingleton<IStreamStatus>(sp => sp.GetRequiredService<StreamStatusManager>());
+        services.AddKeyedSingleton<IStreamStatus>(
+            StreamingPlatform.Twitch,
+            (sp, _) => sp.GetRequiredService<StreamStatusManager>());
         services.AddKeyedSingleton<IStreamHostedComponent>(
             StreamingPlatform.Twitch,
             (sp, _) => sp.GetRequiredService<StreamStatusManager>());

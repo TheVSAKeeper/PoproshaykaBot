@@ -48,6 +48,7 @@ public class LegacyImportTextTests
     [TestCase(new[] { "polls-history.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска история голосований не сохраняется – чтобы не затереть перенесённое.")]
     [TestCase(new[] { "users_statistics.json", "stream_sessions.json", "polls-history.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска статистика, история стримов и история голосований не сохраняются – чтобы не затереть перенесённое.")]
     [TestCase(new[] { "settings/polls.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска настройки не сохраняются – чтобы не затереть перенесённое.")]
+    [TestCase(new[] { "youtube/quota.json" }, "Перенесённые данные вступят в силу после перезапуска приложения. До перезапуска расход квоты YouTube не сохраняется – чтобы не затереть перенесённое.")]
     [TestCase(new[] { "settings/ui-preferences.toml" }, "Перенесённые данные вступят в силу после перезапуска приложения.")]
     public void The_restart_line_promises_a_restart_and_warns_about_every_file_whose_writing_stopped(string[] copied, string expected)
     {
