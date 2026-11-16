@@ -507,6 +507,22 @@ internal sealed class YouTubeStreamMonitor(
             return;
         }
 
+        var hadActiveBroadcast = previousActive is not null;
+
+        lock (_sync)
+        {
+            _activeBroadcast = null;
+            _activeSelectionVideoId = selectedVideoId;
+            _activeCandidates = matches;
+            _issue = YouTubeMonitorIssue.None;
+            _lastLoggedMultiSetKey = null;
+        }
+
+        if (hadActiveBroadcast)
+        {
+            await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None).ConfigureAwait(false);
+        }
+
         if (switchedBroadcast)
         {
             _stateMachine.ResetToUnknown();
@@ -515,21 +531,19 @@ internal sealed class YouTubeStreamMonitor(
         var streamInfo = BuildStreamInfo(selected, targetChannelId, selected.Title, selected.StartedAtUtc.UtcDateTime, 0);
         var transition = _stateMachine.ApplyOnlineWithoutViewerSample(streamInfo);
 
+        await PublishOnlineOrMetadataAsync(transition, targetChannelId).ConfigureAwait(false);
+
         lock (_sync)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             _activeBroadcast = selected;
-            _activeSelectionVideoId = selectedVideoId;
-            _activeCandidates = matches;
-            _issue = YouTubeMonitorIssue.None;
-            _lastLoggedMultiSetKey = null;
         }
 
-        if (previousActive is null || switchedBroadcast)
-        {
-            await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(selected), CancellationToken.None).ConfigureAwait(false);
-        }
-
-        await PublishOnlineOrMetadataAsync(transition, targetChannelId).ConfigureAwait(false);
+        await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(selected), CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task HandleNoActiveBroadcastsAsync(string targetChannelId, YouTubeBroadcastSummary? previousActive)

@@ -576,6 +576,38 @@ public class YouTubeStreamMonitorTests
         });
     }
 
+    [Test]
+    public async Task Direct_Switch_And_Initial_Online_Publish_StreamWentOnline_Before_Broadcast_Becomes_Readable()
+    {
+        var trace = new List<string>();
+        using var oSub = _eventBus.Subscribe<StreamWentOnline>(e =>
+            trace.Add($"ONLINE:{e.Stream?.Id};current={_monitor.CurrentBroadcast?.VideoId ?? "null"}"));
+        using var bSub = _eventBus.Subscribe<YouTubeActiveBroadcastChanged>(e =>
+            trace.Add($"BROADCAST:{e.ActiveBroadcast?.VideoId ?? "null"};current={_monitor.CurrentBroadcast?.VideoId ?? "null"}"));
+
+        var candidates = new[]
+        {
+            BuildBroadcast("vid-a", "chat-a", "Broadcast A"),
+            BuildBroadcast("vid-b", "chat-b", "Broadcast B"),
+        };
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>()).Returns(candidates);
+
+        _selectionStore.SelectBroadcast(ChannelId, "vid-a");
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        _selectionStore.SelectBroadcast(ChannelId, "vid-b");
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        Assert.That(trace, Is.EqualTo(new[]
+        {
+            "ONLINE:vid-a;current=null",
+            "BROADCAST:vid-a;current=vid-a",
+            "BROADCAST:null;current=null",
+            "ONLINE:vid-b;current=null",
+            "BROADCAST:vid-b;current=vid-b",
+        }));
+    }
+
     private YouTubeBroadcastSummary BuildBroadcast(string videoId, string liveChatId, string title)
     {
         return new(videoId, ChannelId, "MainChannel", liveChatId, title, _clock.UtcNow);
