@@ -98,7 +98,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
 
         _scheduler.DidNotReceive().Start(Arg.Any<string>());
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
+        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>(), Arg.Any<ChatSendCategory>());
     }
 
     [Test]
@@ -110,7 +110,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
 
         _scheduler.Received(1).Start(Channel);
-        _messenger.Received(1).SendToConnected("Стрим начался");
+        _messenger.Received(1).SendToConnected("Стрим начался", ChatSendCategory.EventNotification);
     }
 
     [Test]
@@ -136,7 +136,7 @@ public sealed class StreamStatusBroadcastHandlerTests
     {
         await _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, DateTimeOffset.UtcNow));
 
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
+        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>(), Arg.Any<ChatSendCategory>());
     }
 
     [TestCase(false)]
@@ -151,7 +151,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         await _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, DateTimeOffset.UtcNow, IsCatchUp: isCatchUp));
 
         _scheduler.Received(1).Stop();
-        _messenger.Received(isCatchUp ? 0 : 1).SendToConnected("Стрим закончился");
+        _messenger.Received(isCatchUp ? 0 : 1).SendToConnected("Стрим закончился", ChatSendCategory.EventNotification);
     }
 
     [Test]
@@ -163,7 +163,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow, IsCatchUp: true));
 
         _scheduler.Received(1).Start(Channel);
-        _messenger.DidNotReceive().SendToConnected("Стрим начался");
+        _messenger.DidNotReceive().SendToConnected("Стрим начался", Arg.Any<ChatSendCategory>());
     }
 
     [Test]
@@ -173,26 +173,26 @@ public sealed class StreamStatusBroadcastHandlerTests
 
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
 
-        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
-        _messenger.DidNotReceive().SendToConnected("Стрим начался");
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался", Arg.Any<ChatSendCategory>());
+        _messenger.DidNotReceive().SendToConnected("Стрим начался", Arg.Any<ChatSendCategory>());
     }
 
     [Test]
     public async Task BroadcastStarted_BotDisconnected_SendsStartMessageOnceOnTargetConnect()
     {
         await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
-        _messenger.DidNotReceive().SendToConnected("Стрим начался");
-        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+        _messenger.DidNotReceive().SendToConnected("Стрим начался", Arg.Any<ChatSendCategory>());
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался", Arg.Any<ChatSendCategory>());
 
         _livePlatforms.Add(StreamingPlatform.Twitch);
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
 
-        _messenger.Received(1).Send(StreamingPlatform.Twitch, "Стрим начался");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch, "Стрим начался", ChatSendCategory.EventNotification);
 
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Disconnected));
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
 
-        _messenger.Received(1).Send(StreamingPlatform.Twitch, "Стрим начался");
+        _messenger.Received(1).Send(StreamingPlatform.Twitch, "Стрим начался", ChatSendCategory.EventNotification);
     }
 
     [Test]
@@ -202,13 +202,13 @@ public sealed class StreamStatusBroadcastHandlerTests
 
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
 
-        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался", Arg.Any<ChatSendCategory>());
 
         _livePlatforms.Add(StreamingPlatform.Twitch);
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Disconnected));
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
 
-        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался", Arg.Any<ChatSendCategory>());
     }
 
     [Test]
@@ -219,7 +219,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _livePlatforms.Add(StreamingPlatform.Twitch);
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
 
-        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался", Arg.Any<ChatSendCategory>());
     }
 
     [Test]
@@ -231,7 +231,7 @@ public sealed class StreamStatusBroadcastHandlerTests
         _livePlatforms.Add(StreamingPlatform.Twitch);
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
 
-        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался");
+        _messenger.DidNotReceive().Send(Arg.Any<StreamingPlatform>(), "Стрим начался", Arg.Any<ChatSendCategory>());
     }
 
     [Test]
@@ -244,13 +244,13 @@ public sealed class StreamStatusBroadcastHandlerTests
         await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow));
 
         _scheduler.DidNotReceive().Start(Arg.Any<string>());
-        _messenger.Received(1).SendToConnected("Стрим начался");
+        _messenger.Received(1).SendToConnected("Стрим начался", ChatSendCategory.EventNotification);
 
         _livePlatforms.Add(StreamingPlatform.YouTube);
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
 
         _scheduler.Received(1).Start(Channel);
-        _messenger.Received(1).Send(StreamingPlatform.YouTube, "Стрим начался");
+        _messenger.Received(1).Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
     }
 
     [Test]

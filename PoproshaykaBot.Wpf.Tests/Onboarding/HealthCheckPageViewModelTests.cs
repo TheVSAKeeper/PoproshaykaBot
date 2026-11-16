@@ -38,17 +38,17 @@ public sealed class HealthCheckPageViewModelTests
     {
         public List<string> Sent { get; } = [];
 
-        public ChatEnqueueResult Send(StreamingPlatform platform, string text)
+        public ChatEnqueueResult Send(StreamingPlatform platform, string text, ChatSendCategory category = ChatSendCategory.None)
         {
             Sent.Add(text);
             return outcome;
         }
 
-        public BroadcastSendResult Send(string text, IReadOnlySet<StreamingPlatform> platforms) => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
+        public BroadcastSendResult Send(string text, IReadOnlySet<StreamingPlatform> platforms, ChatSendCategory category = ChatSendCategory.None) => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
 
-        public BroadcastSendResult SendToConnected(string text) => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
+        public BroadcastSendResult SendToConnected(string text, ChatSendCategory category = ChatSendCategory.None) => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
 
-        public BroadcastSendResult Send(Func<IChatPlatform, string?> messageFactory, IReadOnlySet<StreamingPlatform>? platforms = null) => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
+        public BroadcastSendResult Send(Func<IChatPlatform, string?> messageFactory, IReadOnlySet<StreamingPlatform>? platforms = null, ChatSendCategory category = ChatSendCategory.None) => new(new Dictionary<StreamingPlatform, ChatEnqueueResult>());
     }
 
     private sealed class FakeShellLauncher : IShellLauncher

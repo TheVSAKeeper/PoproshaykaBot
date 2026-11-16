@@ -223,7 +223,7 @@ public sealed class StreamStatusBroadcastHandler :
             && !string.IsNullOrEmpty(settings.StreamStopMessage))
         {
             _logger.LogDebug("Отправка уведомления об окончании эфира на подключённые площадки");
-            _messenger.SendToConnected(settings.StreamStopMessage);
+            _messenger.SendToConnected(settings.StreamStopMessage, ChatSendCategory.EventNotification);
         }
 
         return Task.CompletedTask;
@@ -277,7 +277,7 @@ public sealed class StreamStatusBroadcastHandler :
             && !string.IsNullOrEmpty(settings.StreamStartMessage))
         {
             _logger.LogDebug("Отправка уведомления о начале стрима в канал {Channel}", channel);
-            _messenger.SendToConnected(settings.StreamStartMessage);
+            _messenger.SendToConnected(settings.StreamStartMessage, ChatSendCategory.EventNotification);
         }
     }
 
@@ -289,7 +289,7 @@ public sealed class StreamStatusBroadcastHandler :
             && !string.IsNullOrEmpty(settings.StreamStartMessage))
         {
             _logger.LogDebug("Отправка отложенного уведомления о начале стрима на площадку {Platform}", platform);
-            _messenger.Send(platform, settings.StreamStartMessage);
+            _messenger.Send(platform, settings.StreamStartMessage, ChatSendCategory.EventNotification);
         }
     }
 }

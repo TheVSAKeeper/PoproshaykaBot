@@ -11,6 +11,7 @@ public static class ChatEnqueueResults
             ChatEnqueueResult.QueueClosed => "очередь отправки закрыта",
             ChatEnqueueResult.EmptyMessage => "пустое сообщение",
             ChatEnqueueResult.NotConnected => "площадка не подключена",
+            ChatEnqueueResult.QuotaBudgetReached => "лимит квоты площадки исчерпан",
             _ => "причина не названа",
         };
     }

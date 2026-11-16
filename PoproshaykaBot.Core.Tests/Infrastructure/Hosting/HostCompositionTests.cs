@@ -152,6 +152,7 @@ public sealed class HostCompositionTests
             Assert.That(twitchMonitoringHost, Is.Not.SameAs(youtubeMonitoringHost));
             Assert.That(youtubePlatformHost.Components.Select(c => c.GetType()), Is.EquivalentTo(new[]
             {
+                typeof(YouTubeMessenger),
                 typeof(YouTubeChatIngestionService),
             }));
             Assert.That(youtubeMonitoringHost.Components.Select(c => c.GetType()), Is.EquivalentTo(new[]

@@ -18,6 +18,27 @@ internal sealed class YouTubeQuotaGovernor(
     private bool _hydratedFromStore;
     private long _snapshotSequence;
 
+    public bool CanAfford(YouTubeQuotaPriority priority, int cost)
+    {
+        if (cost <= 0 || priority == YouTubeQuotaPriority.None)
+        {
+            return false;
+        }
+
+        EnsureHydrated();
+
+        var settings = settingsStore.Load();
+        var projectKey = YouTubeQuotaPolicy.NormalizeProjectKey(settings);
+        var dailyBudget = YouTubeQuotaPolicy.NormalizeBudget(settings.DailyQuotaBudget);
+        var window = PacificQuotaClock.GetWindow(timeProvider.GetUtcNow());
+
+        lock (_sync)
+        {
+            var bucket = GetOrRolloverBucketLocked(projectKey, dailyBudget, window.PacificDate, out _);
+            return CanReserveLocked(bucket, dailyBudget, priority, cost);
+        }
+    }
+
     public bool TryReserve(
         PlatformAuthRole role,
         YouTubeQuotaPriority priority,
@@ -40,9 +61,8 @@ internal sealed class YouTubeQuotaGovernor(
         lock (_sync)
         {
             var bucket = GetOrRolloverBucketLocked(projectKey, dailyBudget, window.PacificDate, out _);
-            var ceiling = YouTubeQuotaPolicy.GetCeiling(dailyBudget, priority, store.Reliability);
 
-            if (bucket.ExhaustedByServer || bucket.CommittedUnits + bucket.ReservedUnits + cost > ceiling)
+            if (!CanReserveLocked(bucket, dailyBudget, priority, cost))
             {
                 lease = YouTubeQuotaLease.Empty;
                 return false;
@@ -52,6 +72,16 @@ internal sealed class YouTubeQuotaGovernor(
             lease = new(this, projectKey, window.PacificDate, role, cost);
             return true;
         }
+    }
+
+    private bool CanReserveLocked(
+        BucketState bucket,
+        int dailyBudget,
+        YouTubeQuotaPriority priority,
+        int cost)
+    {
+        var ceiling = YouTubeQuotaPolicy.GetCeiling(dailyBudget, priority, store.Reliability);
+        return !bucket.ExhaustedByServer && bucket.CommittedUnits + bucket.ReservedUnits + cost <= ceiling;
     }
 
     public void MarkExhaustedFromServer(PlatformAuthRole role)

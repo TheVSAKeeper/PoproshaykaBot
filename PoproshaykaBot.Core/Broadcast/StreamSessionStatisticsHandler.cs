@@ -1203,7 +1203,7 @@ public sealed class StreamSessionStatisticsHandler :
             record.PeakViewers,
             record.AverageViewers);
 
-        _messenger.SendToConnected(message);
+        _messenger.SendToConnected(message, ChatSendCategory.EventNotification);
     }
 
     private static void OpenTracked(PlatformCollector collector, DateTimeOffset at)

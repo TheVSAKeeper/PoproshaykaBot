@@ -111,5 +111,17 @@ public class YouTubeChatMessageMapperTests
         public bool Contains(string messageId) => _ids.Contains(messageId);
 
         public void TrackSent(string messageId) => _ids.Add(messageId);
+
+        public YouTubeInFlightSendScope BeginInFlightSend(string liveChatId) => new();
+
+        public long CaptureInFlightWatermark(string liveChatId) => 0;
+
+        public Task WaitUntilCompletedOrMatchedAsync(
+            string liveChatId,
+            long watermarkSeq,
+            string candidateMessageId,
+            TimeSpan timeout,
+            TimeProvider timeProvider,
+            CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

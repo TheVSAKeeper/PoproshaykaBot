@@ -95,7 +95,7 @@ public sealed class FarewellMessageHandler : IEventHandler<PlatformConnectionCha
 
         try
         {
-            var result = _messenger.Send(platform.Id, text);
+            var result = _messenger.Send(platform.Id, text, ChatSendCategory.Greeting);
 
             if (result is ChatEnqueueResult.Queued)
             {

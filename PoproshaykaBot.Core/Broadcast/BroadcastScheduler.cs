@@ -203,7 +203,10 @@ public sealed class BroadcastScheduler(
             }
 
             var targetPlatforms = platformTargetsProvider.GetTargetPlatforms();
-            var sendResult = messenger.Send(platform => GetMessage(number, platform), targetPlatforms);
+            var sendResult = messenger.Send(
+                platform => GetMessage(number, platform),
+                targetPlatforms,
+                ChatSendCategory.ScheduledBroadcast);
 
             if (!sendResult.AnyQueued)
             {

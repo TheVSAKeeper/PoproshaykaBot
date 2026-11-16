@@ -6,14 +6,15 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
-using PoproshaykaBot.Core.YouTube.Chat;
+using PoproshaykaBot.Core.YouTube.Streaming;
 
 namespace PoproshaykaBot.Core.YouTube;
 
 public sealed class YouTubeChatPlatform : IChatPlatform
 {
     private readonly IStreamStatus _streamStatus;
-    private readonly YouTubeChatIngestionService _ingestionService;
+    private readonly YouTubeSessionContext _sessionContext;
+    private readonly IYouTubeActiveBroadcastSource _activeBroadcastSource;
     private readonly IPlatformMessenger _messenger;
     private readonly YouTubeSettingsStore _settingsStore;
     private readonly YouTubeAccountsStore _accountsStore;
@@ -22,7 +23,8 @@ public sealed class YouTubeChatPlatform : IChatPlatform
 
     internal YouTubeChatPlatform(
         [FromKeyedServices(StreamingPlatform.YouTube)] IStreamStatus streamStatus,
-        YouTubeChatIngestionService ingestionService,
+        YouTubeSessionContext sessionContext,
+        IYouTubeActiveBroadcastSource activeBroadcastSource,
         [FromKeyedServices(StreamingPlatform.YouTube)] IPlatformMessenger messenger,
         YouTubeSettingsStore settingsStore,
         YouTubeAccountsStore accountsStore,
@@ -30,7 +32,8 @@ public sealed class YouTubeChatPlatform : IChatPlatform
         ILogger<YouTubeChatPlatform>? logger = null)
     {
         _streamStatus = streamStatus;
-        _ingestionService = ingestionService;
+        _sessionContext = sessionContext;
+        _activeBroadcastSource = activeBroadcastSource;
         _messenger = messenger;
         _settingsStore = settingsStore;
         _accountsStore = accountsStore;
@@ -46,7 +49,9 @@ public sealed class YouTubeChatPlatform : IChatPlatform
 
     public bool IsEnabled => _settingsStore.Load().Enabled && !_targetChannelProvider.Current.IsDebugSession;
 
-    public bool IsConnected => _ingestionService.IsConnected;
+    public bool IsConnected =>
+        _sessionContext.Current is not null
+        && !string.IsNullOrWhiteSpace(_activeBroadcastSource.CurrentBroadcast?.LiveChatId);
 
     public IStreamStatus StreamStatus => _streamStatus;
 

@@ -314,7 +314,7 @@ public class YouTubeChatIngestionServiceTests
     }
 
     [Test]
-    public async Task Pipeline_Integration_Processes_YouTube_Message_And_ReadOnlyMessenger_Returns_ObserverMode()
+    public async Task Pipeline_Integration_Processes_YouTube_Message_And_Messenger_Returns_NotConnected_Without_Broadcast()
     {
         var services = new ServiceCollection();
         services
@@ -376,7 +376,8 @@ public class YouTubeChatIngestionServiceTests
         {
             Assert.That(pipeline, Is.Not.Null);
             Assert.That(statsHandler, Is.Not.Null);
-            Assert.That(enqueueResult, Is.EqualTo(ChatEnqueueResult.ObserverMode));
+            Assert.That(ytPlatform.Messenger, Is.InstanceOf<YouTubeMessenger>());
+            Assert.That(enqueueResult, Is.EqualTo(ChatEnqueueResult.NotConnected));
             Assert.That(stats, Is.Not.Null);
             Assert.That(stats!.MessageCount, Is.EqualTo(1));
             Assert.That(users.GetPartition(StreamingPlatform.Twitch).GetById("UCviewer77"), Is.Null);
@@ -621,29 +622,30 @@ public class YouTubeChatIngestionServiceTests
     }
 
     [Test]
-    public void YouTubeChatPlatform_IsEnabled_Is_False_In_DebugSession()
+    public async Task YouTubeChatPlatform_IsEnabled_And_IsConnected_Reflect_Debug_Session_And_Broadcast()
     {
-        var streamClient = new FakeStreamClient(_ => []);
-        var pollingClient = new FakePollingClient((_, _) =>
-            Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null)));
-        using var ingestion = CreateIngestion(streamClient, pollingClient);
-
         var targetProvider = Substitute.For<ITargetChannelProvider>();
         targetProvider.Current.Returns(new TargetChannelState(ChannelId, ChannelId, IsDebugSession: true, IsSendingAllowed: false));
 
         var messenger = Substitute.For<IPlatformMessenger>();
         var platform = new YouTubeChatPlatform(
             _streamMonitor,
-            ingestion,
+            _sessionContext,
+            _streamMonitor,
             messenger,
             _settingsStore,
             _accountsStore,
             targetProvider);
 
         Assert.That(platform.IsEnabled, Is.False);
+        Assert.That(platform.IsConnected, Is.True);
 
         targetProvider.Current.Returns(new TargetChannelState(ChannelId, ChannelId, IsDebugSession: false, IsSendingAllowed: true));
         Assert.That(platform.IsEnabled, Is.True);
+
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>()).Returns([]);
+        await _streamMonitor.RefreshLiveSnapshotAsync();
+        Assert.That(platform.IsConnected, Is.False);
     }
 
     [Test]

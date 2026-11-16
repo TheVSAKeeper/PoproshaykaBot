@@ -24,13 +24,22 @@ public readonly record struct BroadcastSendResult(
 
 public interface IBroadcastMessenger
 {
-    ChatEnqueueResult Send(StreamingPlatform platform, string text);
+    ChatEnqueueResult Send(
+        StreamingPlatform platform,
+        string text,
+        ChatSendCategory category = ChatSendCategory.None);
 
-    BroadcastSendResult Send(string text, IReadOnlySet<StreamingPlatform> platforms);
+    BroadcastSendResult Send(
+        string text,
+        IReadOnlySet<StreamingPlatform> platforms,
+        ChatSendCategory category = ChatSendCategory.None);
 
-    BroadcastSendResult SendToConnected(string text);
+    BroadcastSendResult SendToConnected(
+        string text,
+        ChatSendCategory category = ChatSendCategory.None);
 
     BroadcastSendResult Send(
         Func<IChatPlatform, string?> messageFactory,
-        IReadOnlySet<StreamingPlatform>? platforms = null);
+        IReadOnlySet<StreamingPlatform>? platforms = null,
+        ChatSendCategory category = ChatSendCategory.None);
 }
