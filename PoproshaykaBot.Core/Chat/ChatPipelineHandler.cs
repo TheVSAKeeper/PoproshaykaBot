@@ -194,7 +194,7 @@ public sealed class ChatPipelineHandler :
                 }
                 else
                 {
-                    platform.Messenger.Reply(chatMessage.Id, chatMessage.DisplayName, welcomeMessage);
+                    platform.Messenger.Reply(chatMessage.Id, chatMessage.DisplayName, welcomeMessage, category: ChatSendCategory.Greeting);
                 }
             }
         }
@@ -242,19 +242,19 @@ public sealed class ChatPipelineHandler :
         switch (decision.Action)
         {
             case CommandDeliveryAction.Whisper:
-                platform.Messenger.Whisper(context.UserId, context.MessageId, context.DisplayName, response.Text, mark);
+                platform.Messenger.Whisper(context.UserId, context.MessageId, context.DisplayName, response.Text, mark, ChatSendCategory.CommandReply);
                 break;
 
             case CommandDeliveryAction.ReplyThread:
-                platform.Messenger.Reply(decision.ReplyToMessageId ?? context.MessageId, context.DisplayName, response.Text, mark);
+                platform.Messenger.Reply(decision.ReplyToMessageId ?? context.MessageId, context.DisplayName, response.Text, mark, ChatSendCategory.CommandReply);
                 break;
 
             case CommandDeliveryAction.MentionSend:
-                platform.Messenger.Send(CommandResponseRouting.PrependCallerMention(context.DisplayName, response.Text), mark);
+                platform.Messenger.Send(CommandResponseRouting.PrependCallerMention(context.DisplayName, response.Text), mark, ChatSendCategory.CommandReply);
                 break;
 
             case CommandDeliveryAction.Send:
-                platform.Messenger.Send(response.Text, mark);
+                platform.Messenger.Send(response.Text, mark, ChatSendCategory.CommandReply);
                 break;
 
             case CommandDeliveryAction.OverlayOnly:

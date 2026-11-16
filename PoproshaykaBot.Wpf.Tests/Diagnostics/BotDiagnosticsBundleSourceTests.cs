@@ -146,6 +146,8 @@ public class BotDiagnosticsBundleSourceTests
 
     private sealed class StubYouTubeQuotaGovernor : IYouTubeQuotaGovernor
     {
+        public bool CanAfford(YouTubeQuotaPriority priority, int cost) => false;
+
         public bool TryReserve(
             PlatformAuthRole role,
             YouTubeQuotaPriority priority,

@@ -166,7 +166,7 @@ public sealed class PollChatAnnouncementHandler :
     {
         if (!string.IsNullOrWhiteSpace(message))
         {
-            _messenger.Send(StreamingPlatform.Twitch, message);
+            _messenger.Send(StreamingPlatform.Twitch, message, ChatSendCategory.EventNotification);
         }
     }
 

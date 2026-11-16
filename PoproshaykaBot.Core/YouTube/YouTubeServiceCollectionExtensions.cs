@@ -81,15 +81,21 @@ public static class YouTubeServiceCollectionExtensions
             static provider => provider.GetRequiredService<YouTubeStreamMonitor>());
         services.AddPlatformStreamMonitoringHost(StreamingPlatform.YouTube);
 
-        services.TryAddSingleton<IYouTubeSentMessageTracker>(NullYouTubeSentMessageTracker.Instance);
+        services.AddSingleton<YouTubeSentMessageTracker>();
+        services.TryAddSingleton<IYouTubeSentMessageTracker>(
+            static provider => provider.GetRequiredService<YouTubeSentMessageTracker>());
         services.AddSingleton<YouTubeChatMessageMapper>();
         services.AddSingleton<IYouTubeLiveChatStreamClient, YouTubeGrpcLiveChatStreamClient>();
         services.AddSingleton<IYouTubeLiveChatPollingClient, YouTubeRestLiveChatPollingClient>();
+        services.AddSingleton<IYouTubeLiveChatSendClient, YouTubeRestLiveChatSendClient>();
         services.AddSingleton<YouTubeSessionContext>();
-        services.AddSingleton<YouTubeReadOnlyMessenger>();
+        services.AddSingleton<YouTubeMessenger>();
         services.AddKeyedSingleton<IPlatformMessenger>(
             StreamingPlatform.YouTube,
-            static (provider, _) => provider.GetRequiredService<YouTubeReadOnlyMessenger>());
+            static (provider, _) => provider.GetRequiredService<YouTubeMessenger>());
+        services.AddKeyedSingleton<IHostedComponent>(
+            StreamingPlatform.YouTube,
+            static (provider, _) => provider.GetRequiredService<YouTubeMessenger>());
         services.AddSingleton<YouTubeChatIngestionService>();
         services.AddKeyedSingleton<IHostedComponent>(
             StreamingPlatform.YouTube,
@@ -101,7 +107,8 @@ public static class YouTubeServiceCollectionExtensions
 
         services.AddSingleton<YouTubeChatPlatform>(static provider => new(
             provider.GetRequiredKeyedService<IStreamStatus>(StreamingPlatform.YouTube),
-            provider.GetRequiredService<YouTubeChatIngestionService>(),
+            provider.GetRequiredService<YouTubeSessionContext>(),
+            provider.GetRequiredService<IYouTubeActiveBroadcastSource>(),
             provider.GetRequiredKeyedService<IPlatformMessenger>(StreamingPlatform.YouTube),
             provider.GetRequiredService<YouTubeSettingsStore>(),
             provider.GetRequiredService<YouTubeAccountsStore>(),

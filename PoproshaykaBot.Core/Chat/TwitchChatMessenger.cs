@@ -12,12 +12,20 @@ public sealed class TwitchChatMessenger(
 {
     private int _whisperScopeMissingReported;
 
-    public ChatEnqueueResult Send(string text, CommandResponseMark? commandResponse = null)
+    public ChatEnqueueResult Send(
+        string text,
+        CommandResponseMark? commandResponse = null,
+        ChatSendCategory category = ChatSendCategory.None)
     {
         return chatSender.Enqueue(text, null, commandResponse);
     }
 
-    public void Reply(string replyToMessageId, string callerDisplayName, string text, CommandResponseMark? commandResponse = null)
+    public void Reply(
+        string replyToMessageId,
+        string callerDisplayName,
+        string text,
+        CommandResponseMark? commandResponse = null,
+        ChatSendCategory category = ChatSendCategory.None)
     {
         _ = chatSender.EnqueueAsync(text, replyToMessageId, commandResponse, CancellationToken.None);
     }
@@ -27,7 +35,8 @@ public sealed class TwitchChatMessenger(
         string fallbackReplyToMessageId,
         string callerDisplayName,
         string text,
-        CommandResponseMark? commandResponse = null)
+        CommandResponseMark? commandResponse = null,
+        ChatSendCategory category = ChatSendCategory.None)
     {
         if (TwitchScopes.IsGranted(accountsStore.LoadBot(), TwitchScopes.UserManageWhispers))
         {

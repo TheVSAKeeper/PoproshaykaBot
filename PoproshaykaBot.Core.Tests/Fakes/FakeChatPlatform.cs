@@ -99,23 +99,39 @@ internal sealed class FakeChatPlatform : IChatPlatform
 
         public List<(string Text, CommandResponseMark? Mark)> Sent { get; } = [];
 
+        public List<ChatSendCategory> SentCategories { get; } = [];
+
         public List<(string ReplyToMessageId, string CallerDisplayName, string Text, CommandResponseMark? Mark)> Replies { get; } = [];
+
+        public List<ChatSendCategory> ReplyCategories { get; } = [];
 
         public List<(string ToUserId, string FallbackReplyToMessageId, string CallerDisplayName, string Text, CommandResponseMark? Mark)> Whispers { get; } = [];
 
-        public ChatEnqueueResult Send(string text, CommandResponseMark? commandResponse = null)
+        public List<ChatSendCategory> WhisperCategories { get; } = [];
+
+        public ChatEnqueueResult Send(
+            string text,
+            CommandResponseMark? commandResponse = null,
+            ChatSendCategory category = ChatSendCategory.None)
         {
             if (EnqueueResult == ChatEnqueueResult.Queued)
             {
                 Sent.Add((text, commandResponse));
+                SentCategories.Add(category);
             }
 
             return EnqueueResult;
         }
 
-        public void Reply(string replyToMessageId, string callerDisplayName, string text, CommandResponseMark? commandResponse = null)
+        public void Reply(
+            string replyToMessageId,
+            string callerDisplayName,
+            string text,
+            CommandResponseMark? commandResponse = null,
+            ChatSendCategory category = ChatSendCategory.None)
         {
             Replies.Add((replyToMessageId, callerDisplayName, text, commandResponse));
+            ReplyCategories.Add(category);
         }
 
         public void Whisper(
@@ -123,9 +139,11 @@ internal sealed class FakeChatPlatform : IChatPlatform
             string fallbackReplyToMessageId,
             string callerDisplayName,
             string text,
-            CommandResponseMark? commandResponse = null)
+            CommandResponseMark? commandResponse = null,
+            ChatSendCategory category = ChatSendCategory.None)
         {
             Whispers.Add((toUserId, fallbackReplyToMessageId, callerDisplayName, text, commandResponse));
+            WhisperCategories.Add(category);
         }
     }
 }

@@ -8,7 +8,10 @@ public sealed class BroadcastMessenger(
     IChatPlatformRegistry platformRegistry,
     ILogger<BroadcastMessenger> logger) : IBroadcastMessenger
 {
-    public ChatEnqueueResult Send(StreamingPlatform platform, string text)
+    public ChatEnqueueResult Send(
+        StreamingPlatform platform,
+        string text,
+        ChatSendCategory category = ChatSendCategory.None)
     {
         if (!platformRegistry.TryGet(platform, out var adapter) || !adapter.IsConnected)
         {
@@ -21,23 +24,29 @@ public sealed class BroadcastMessenger(
             return ChatEnqueueResult.EmptyMessage;
         }
 
-        return adapter.Messenger.Send(text);
+        return adapter.Messenger.Send(text, category: category);
     }
 
-    public BroadcastSendResult Send(string text, IReadOnlySet<StreamingPlatform> platforms)
+    public BroadcastSendResult Send(
+        string text,
+        IReadOnlySet<StreamingPlatform> platforms,
+        ChatSendCategory category = ChatSendCategory.None)
     {
         ArgumentNullException.ThrowIfNull(platforms);
-        return Send(_ => text, platforms);
+        return Send(_ => text, platforms, category);
     }
 
-    public BroadcastSendResult SendToConnected(string text)
+    public BroadcastSendResult SendToConnected(
+        string text,
+        ChatSendCategory category = ChatSendCategory.None)
     {
-        return Send(_ => text, platforms: null);
+        return Send(_ => text, platforms: null, category);
     }
 
     public BroadcastSendResult Send(
         Func<IChatPlatform, string?> messageFactory,
-        IReadOnlySet<StreamingPlatform>? platforms = null)
+        IReadOnlySet<StreamingPlatform>? platforms = null,
+        ChatSendCategory category = ChatSendCategory.None)
     {
         ArgumentNullException.ThrowIfNull(messageFactory);
 
@@ -76,7 +85,7 @@ public sealed class BroadcastMessenger(
                 continue;
             }
 
-            results[adapter.Id] = adapter.Messenger.Send(text);
+            results[adapter.Id] = adapter.Messenger.Send(text, category: category);
         }
 
         return new(results);

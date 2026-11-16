@@ -5,6 +5,8 @@ namespace PoproshaykaBot.Core.YouTube.Quota;
 
 public interface IYouTubeQuotaGovernor
 {
+    bool CanAfford(YouTubeQuotaPriority priority, int cost);
+
     bool TryReserve(
         PlatformAuthRole role,
         YouTubeQuotaPriority priority,

@@ -245,7 +245,7 @@ public sealed class StreamSessionStatisticsHandlerTests
             Assert.That(_store.Load(), Is.Null);
             Assert.That(_historyStore.Load().Broadcasts, Has.Count.EqualTo(1));
             Assert.That(_historyStore.LoadSessionsProjection().Sessions, Has.Count.EqualTo(1));
-            _messenger.Received(1).SendToConnected(Arg.Any<string>());
+            _messenger.Received(1).SendToConnected(Arg.Any<string>(), ChatSendCategory.EventNotification);
         }
     }
 
@@ -545,7 +545,7 @@ public sealed class StreamSessionStatisticsHandlerTests
             Assert.That(File.Exists(_broadcastsPath), Is.False);
             Assert.That(File.Exists(_sessionsPath), Is.False);
             Assert.That(await File.ReadAllTextAsync(_activePath), Is.EqualTo(beforeDraft));
-            _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
+            _messenger.DidNotReceive().SendToConnected(Arg.Any<string>(), Arg.Any<ChatSendCategory>());
         }
     }
 
@@ -572,7 +572,7 @@ public sealed class StreamSessionStatisticsHandlerTests
 
         Assert.That(_captured, Has.Count.EqualTo(1));
         Assert.That(_historyStore.Load().Broadcasts, Has.Count.EqualTo(1));
-        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>());
+        _messenger.DidNotReceive().SendToConnected(Arg.Any<string>(), Arg.Any<ChatSendCategory>());
     }
 
     [Test]

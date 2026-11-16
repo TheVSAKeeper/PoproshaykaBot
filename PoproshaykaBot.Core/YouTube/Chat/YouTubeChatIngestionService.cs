@@ -27,9 +27,12 @@ internal sealed class YouTubeChatIngestionService(
     IEventBus eventBus,
     TimeProvider timeProvider,
     ILogger<YouTubeChatIngestionService> logger,
-    YouTubeSettingsStore? settingsStore = null)
+    YouTubeSettingsStore? settingsStore = null,
+    IYouTubeSentMessageTracker? sentMessageTracker = null)
     : IHostedComponent, IYouTubeChatDiagnostics, IDisposable
 {
+    private const int MaxHeldEchoCandidates = 32;
+    private static readonly TimeSpan MaxEchoHoldDuration = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan WaitingBroadcastInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MinimumStreamReconnectFloor = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RapidCloseThreshold = TimeSpan.FromSeconds(3);
@@ -50,12 +53,19 @@ internal sealed class YouTubeChatIngestionService(
         TimeSpan.FromSeconds(60),
     ];
 
+    private readonly IYouTubeSentMessageTracker _sentMessageTracker =
+        sentMessageTracker ?? NullYouTubeSentMessageTracker.Instance;
     private readonly Lock _sync = new();
+    private readonly Lock _holdSync = new();
+    private readonly Queue<HeldEchoCandidate> _heldCandidates = new();
 
     private CancellationTokenSource? _runCts;
     private CancellationTokenSource? _waitCts;
     private CancellationTokenSource? _activeStreamCts;
+    private CancellationTokenSource? _holdDrainCts;
+    private CancellationToken _holdParentCt;
     private Task? _loopTask;
+    private Task? _holdDrainTask;
     private IDisposable? _broadcastSub;
     private IDisposable? _authSub;
     private bool _settingsSubscribed;
@@ -178,6 +188,7 @@ internal sealed class YouTubeChatIngestionService(
         }
 
         runCts?.Dispose();
+        await ClearAndAwaitHoldDrainAsync().ConfigureAwait(false);
         await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), CancellationToken.None).ConfigureAwait(false);
     }
 
@@ -272,6 +283,28 @@ internal sealed class YouTubeChatIngestionService(
             {
             }
         }
+
+        CancellationTokenSource? holdDrainCts;
+
+        lock (_holdSync)
+        {
+            _heldCandidates.Clear();
+            holdDrainCts = _holdDrainCts;
+            _holdDrainCts = null;
+        }
+
+        if (holdDrainCts is not null)
+        {
+            try
+            {
+                holdDrainCts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            holdDrainCts.Dispose();
+        }
     }
 
     internal async Task<TimeSpan> RunSingleIterationAsync(CancellationToken ct)
@@ -350,6 +383,7 @@ internal sealed class YouTubeChatIngestionService(
 
         if (switchedChat)
         {
+            await ClearAndAwaitHoldDrainAsync().ConfigureAwait(false);
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
         }
 
@@ -655,6 +689,7 @@ internal sealed class YouTubeChatIngestionService(
         {
             if (!IsBroadcastCurrent(cursor.LiveChatId))
             {
+                DropHeldCandidatesForChat(cursor.LiveChatId);
                 return new(sawChatEnded, AbortedByBroadcastChange: true);
             }
 
@@ -665,27 +700,41 @@ internal sealed class YouTubeChatIngestionService(
                 continue;
             }
 
-            var mapped = mapper.Map(item, channelLabel, botChannelId, broadcasterChannelId);
+            var messageTimestampUtc = item.PublishedAtUtc ?? nowUtc;
 
-            if (mapped.Kind == YouTubeChatMapKind.ChatMessage && mapped.Message is not null)
+            if (TryHoldSharedAccountCandidate(
+                    cursor.LiveChatId,
+                    item,
+                    channelLabel,
+                    botChannelId,
+                    broadcasterChannelId,
+                    messageTimestampUtc,
+                    nowUtc,
+                    ct,
+                    out var overflowCandidate))
             {
-                var timestamp = item.PublishedAtUtc ?? nowUtc;
-
-                await eventBus.PublishAsync(new RawChatMessageReceived(mapped.Message, timestamp), ct).ConfigureAwait(false);
-
-                lock (_sync)
+                if (overflowCandidate is not null && IsBroadcastCurrent(overflowCandidate.LiveChatId))
                 {
-                    _lastMessageAt = timestamp;
-                    _receivedMessages++;
+                    await PublishItemAsync(
+                        overflowCandidate.Item,
+                        overflowCandidate.ChannelLabel,
+                        overflowCandidate.BotChannelId,
+                        overflowCandidate.BroadcasterChannelId,
+                        overflowCandidate.MessageTimestampUtc,
+                        ct).ConfigureAwait(false);
                 }
+
+                cursor.MarkSeen(item.Id);
+                continue;
             }
-            else if (mapped.Kind == YouTubeChatMapKind.IgnoredMonetizationOrMembership)
-            {
-                logger.LogDebug(
-                    "YouTube чат: событие {EventType} ({Summary}) пропущено (не поддерживается обработчиком чата)",
-                    mapped.DiagnosticEventType,
-                    mapped.DiagnosticSummary ?? "-");
-            }
+
+            await PublishItemAsync(
+                item,
+                channelLabel,
+                botChannelId,
+                broadcasterChannelId,
+                messageTimestampUtc,
+                ct).ConfigureAwait(false);
 
             cursor.MarkSeen(item.Id);
         }
@@ -910,6 +959,7 @@ internal sealed class YouTubeChatIngestionService(
 
     private async Task ResetInactiveStateAsync(CancellationToken ct)
     {
+        await ClearAndAwaitHoldDrainAsync().ConfigureAwait(false);
         await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
 
         lock (_sync)
@@ -998,6 +1048,273 @@ internal sealed class YouTubeChatIngestionService(
             waitCts.Dispose();
         }
     }
+
+    private bool TryHoldSharedAccountCandidate(
+        string liveChatId,
+        YouTubeLiveChatItem item,
+        string channelLabel,
+        string? botChannelId,
+        string? broadcasterChannelId,
+        DateTimeOffset messageTimestampUtc,
+        DateTimeOffset nowUtc,
+        CancellationToken ct,
+        out HeldEchoCandidate? overflowCandidate)
+    {
+        overflowCandidate = null;
+
+        if (item.Kind != YouTubeLiveChatItemKind.TextMessage
+            || string.IsNullOrWhiteSpace(botChannelId)
+            || !string.Equals(item.Author.ChannelId, botChannelId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var isSharedAccount = string.Equals(botChannelId, broadcasterChannelId, StringComparison.Ordinal)
+            || item.Author.IsChatOwner;
+
+        if (!isSharedAccount || _sentMessageTracker.Contains(item.Id))
+        {
+            return false;
+        }
+
+        var watermarkSeq = _sentMessageTracker.CaptureInFlightWatermark(liveChatId);
+
+        lock (_holdSync)
+        {
+            var hasPendingForChat = HasHeldCandidatesForChatLocked(liveChatId);
+
+            if (watermarkSeq == 0 && !hasPendingForChat)
+            {
+                return false;
+            }
+
+            if (_heldCandidates.Count >= MaxHeldEchoCandidates)
+            {
+                overflowCandidate = _heldCandidates.Dequeue();
+            }
+
+            _heldCandidates.Enqueue(new(
+                liveChatId,
+                item,
+                channelLabel,
+                botChannelId,
+                broadcasterChannelId,
+                watermarkSeq,
+                messageTimestampUtc,
+                nowUtc + MaxEchoHoldDuration));
+
+            EnsureHoldDrainRunningLocked(ct);
+            return true;
+        }
+    }
+
+    private bool HasHeldCandidatesForChatLocked(string liveChatId)
+    {
+        foreach (var candidate in _heldCandidates)
+        {
+            if (string.Equals(candidate.LiveChatId, liveChatId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void EnsureHoldDrainRunningLocked(CancellationToken parentCt)
+    {
+        if (_holdDrainTask is not null && !_holdDrainTask.IsCompleted)
+        {
+            return;
+        }
+
+        _holdParentCt = parentCt;
+        _holdDrainCts?.Dispose();
+        var drainCts = CancellationTokenSource.CreateLinkedTokenSource(parentCt);
+        _holdDrainCts = drainCts;
+        _holdDrainTask = Task.Run(() => DrainHeldCandidatesAsync(drainCts), CancellationToken.None);
+    }
+
+    private async Task DrainHeldCandidatesAsync(CancellationTokenSource drainCts)
+    {
+        var holdCt = drainCts.Token;
+
+        try
+        {
+            while (!holdCt.IsCancellationRequested)
+            {
+                HeldEchoCandidate? head;
+
+                lock (_holdSync)
+                {
+                    if (!_heldCandidates.TryPeek(out head))
+                    {
+                        return;
+                    }
+                }
+
+                if (!IsBroadcastCurrent(head.LiveChatId))
+                {
+                    DropHeldCandidatesForChat(head.LiveChatId);
+                    continue;
+                }
+
+                if (head.WatermarkSeq > 0 && !_sentMessageTracker.Contains(head.Item.Id))
+                {
+                    var remaining = head.ExpiresAtUtc - timeProvider.GetUtcNow();
+
+                    if (remaining > TimeSpan.Zero)
+                    {
+                        await _sentMessageTracker.WaitUntilCompletedOrMatchedAsync(
+                            head.LiveChatId,
+                            head.WatermarkSeq,
+                            head.Item.Id,
+                            remaining,
+                            timeProvider,
+                            holdCt).ConfigureAwait(false);
+                    }
+                }
+
+                HeldEchoCandidate? released = null;
+
+                lock (_holdSync)
+                {
+                    if (_heldCandidates.TryPeek(out var currentHead) && ReferenceEquals(currentHead, head))
+                    {
+                        released = _heldCandidates.Dequeue();
+                    }
+                }
+
+                if (released is not null && !holdCt.IsCancellationRequested && IsBroadcastCurrent(released.LiveChatId))
+                {
+                    await PublishItemAsync(
+                        released.Item,
+                        released.ChannelLabel,
+                        released.BotChannelId,
+                        released.BroadcasterChannelId,
+                        released.MessageTimestampUtc,
+                        holdCt).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (holdCt.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "YouTubeChatIngestionService: ошибка в буфере согласования эха");
+        }
+        finally
+        {
+            lock (_holdSync)
+            {
+                if (ReferenceEquals(_holdDrainCts, drainCts))
+                {
+                    _holdDrainTask = null;
+
+                    if (_heldCandidates.Count > 0 && !_holdParentCt.IsCancellationRequested && !_disposed)
+                    {
+                        EnsureHoldDrainRunningLocked(_holdParentCt);
+                    }
+                }
+            }
+        }
+    }
+
+    private async Task ClearAndAwaitHoldDrainAsync()
+    {
+        CancellationTokenSource? holdDrainCts;
+        Task? holdDrainTask;
+
+        lock (_holdSync)
+        {
+            _heldCandidates.Clear();
+            holdDrainCts = _holdDrainCts;
+            _holdDrainCts = null;
+            holdDrainTask = _holdDrainTask;
+            _holdDrainTask = null;
+        }
+
+        if (holdDrainCts is not null)
+        {
+            await holdDrainCts.CancelAsync().ConfigureAwait(false);
+        }
+
+        if (holdDrainTask is not null)
+        {
+            try
+            {
+                await holdDrainTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        holdDrainCts?.Dispose();
+    }
+
+    private void DropHeldCandidatesForChat(string liveChatId)
+    {
+        lock (_holdSync)
+        {
+            if (_heldCandidates.Count == 0)
+            {
+                return;
+            }
+
+            var retained = _heldCandidates.Count;
+
+            for (var i = 0; i < retained; i++)
+            {
+                var candidate = _heldCandidates.Dequeue();
+
+                if (!string.Equals(candidate.LiveChatId, liveChatId, StringComparison.Ordinal))
+                {
+                    _heldCandidates.Enqueue(candidate);
+                }
+            }
+        }
+    }
+
+    private async Task PublishItemAsync(
+        YouTubeLiveChatItem item,
+        string channelLabel,
+        string? botChannelId,
+        string? broadcasterChannelId,
+        DateTimeOffset timestamp,
+        CancellationToken ct)
+    {
+        var mapped = mapper.Map(item, channelLabel, botChannelId, broadcasterChannelId);
+
+        if (mapped.Kind == YouTubeChatMapKind.ChatMessage && mapped.Message is not null)
+        {
+            await eventBus.PublishAsync(new RawChatMessageReceived(mapped.Message, timestamp), ct).ConfigureAwait(false);
+
+            lock (_sync)
+            {
+                _lastMessageAt = timestamp;
+                _receivedMessages++;
+            }
+        }
+        else if (mapped.Kind == YouTubeChatMapKind.IgnoredMonetizationOrMembership)
+        {
+            logger.LogDebug(
+                "YouTube чат: событие {EventType} ({Summary}) пропущено (не поддерживается обработчиком чата)",
+                mapped.DiagnosticEventType,
+                mapped.DiagnosticSummary ?? "-");
+        }
+    }
+
+    private sealed record HeldEchoCandidate(
+        string LiveChatId,
+        YouTubeLiveChatItem Item,
+        string ChannelLabel,
+        string? BotChannelId,
+        string? BroadcasterChannelId,
+        long WatermarkSeq,
+        DateTimeOffset MessageTimestampUtc,
+        DateTimeOffset ExpiresAtUtc);
 
     private readonly record struct BatchProcessOutcome(bool SawChatEnded, bool AbortedByBroadcastChange);
 }

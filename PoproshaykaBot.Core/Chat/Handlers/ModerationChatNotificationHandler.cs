@@ -38,7 +38,7 @@ public sealed class ModerationChatNotificationHandler :
 
         var pointTerm = _settingsManager.Current.Ranks.PointTerm;
         var message = UserPointsManagementService.FormatMessage(messageSettings.PunishmentMessage, @event.UserName, @event.RemovedPoints, pointTerm);
-        _messenger.Send(@event.Platform, message);
+        _messenger.Send(@event.Platform, message, ChatSendCategory.EventNotification);
 
         return Task.CompletedTask;
     }
@@ -54,7 +54,7 @@ public sealed class ModerationChatNotificationHandler :
 
         var pointTerm = _settingsManager.Current.Ranks.PointTerm;
         var message = UserPointsManagementService.FormatMessage(messageSettings.RewardMessage, @event.UserName, @event.AddedPoints, pointTerm);
-        _messenger.Send(@event.Platform, message);
+        _messenger.Send(@event.Platform, message, ChatSendCategory.EventNotification);
 
         return Task.CompletedTask;
     }

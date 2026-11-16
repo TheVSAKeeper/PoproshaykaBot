@@ -28,7 +28,7 @@ public sealed class ConnectionGreetingHandler : IEventHandler<BotJoinedChannel>,
         if (messages.ConnectionEnabled
             && !string.IsNullOrWhiteSpace(messages.Connection))
         {
-            _messenger.Send(@event.Platform, messages.Connection);
+            _messenger.Send(@event.Platform, messages.Connection, ChatSendCategory.Greeting);
         }
 
         return Task.CompletedTask;

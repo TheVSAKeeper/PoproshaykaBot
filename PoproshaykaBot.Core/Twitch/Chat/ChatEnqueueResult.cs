@@ -8,4 +8,5 @@ public enum ChatEnqueueResult
     QueueFull = 3,
     QueueClosed = 4,
     NotConnected = 5,
+    QuotaBudgetReached = 6,
 }
