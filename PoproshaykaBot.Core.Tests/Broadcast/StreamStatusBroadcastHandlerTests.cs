@@ -2,11 +2,13 @@
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Tests.Debugging;
+using PoproshaykaBot.Core.Twitch.Chat;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -267,5 +269,337 @@ public sealed class StreamStatusBroadcastHandlerTests
 
         await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Disconnected));
         _scheduler.Received(1).Stop();
+    }
+
+    [Test]
+    public async Task BroadcastStarted_ConnectedPlatformNotWritableYet_RetriesWhenChatBecomesAvailable()
+    {
+        _messenger.SendToConnected("Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(new BroadcastSendResult(new Dictionary<StreamingPlatform, ChatEnqueueResult>()));
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(ChatEnqueueResult.Queued);
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, null, DateTimeOffset.UtcNow));
+
+        _messenger.DidNotReceive().Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
+
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+
+        _messenger.Received(1).Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
+    }
+
+    [Test]
+    public async Task PlatformConnectionChanged_NotConnectedForChat_RetriesWhenChatBecomesAvailable()
+    {
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(ChatEnqueueResult.NotConnected, ChatEnqueueResult.Queued);
+
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, null, DateTimeOffset.UtcNow));
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+
+        _messenger.Received(2).Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
+    }
+
+    [Test]
+    public async Task BroadcastEnded_ClearsPendingNotWritableStartNotification()
+    {
+        _messenger.SendToConnected("Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(new BroadcastSendResult(new Dictionary<StreamingPlatform, ChatEnqueueResult>()));
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, null, DateTimeOffset.UtcNow));
+        _livePlatforms.Clear();
+        await _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, DateTimeOffset.UtcNow));
+
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+
+        _messenger.DidNotReceive().Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
+    }
+
+    [Test]
+    public async Task PlatformConnectionChanged_AvailabilityArrivesDuringNotConnectedSend_RetriesWithoutExtraEvent()
+    {
+        using var releaseSend = new ManualResetEventSlim();
+        var sendEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref attempts) == 1)
+                {
+                    sendEntered.TrySetResult();
+                    Assert.That(releaseSend.Wait(TimeSpan.FromSeconds(5)), Is.True);
+                    return ChatEnqueueResult.NotConnected;
+                }
+
+                return ChatEnqueueResult.Queued;
+            });
+
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, null, DateTimeOffset.UtcNow));
+
+        await RunConcurrentDuringBlockedSendAsync(
+            () => _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected)),
+            () => _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true)),
+            sendEntered,
+            releaseSend);
+
+        Assert.That(attempts, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task BroadcastStarted_AvailabilityArrivesDuringInitialNotConnectedSend_RetriesWithoutExtraEvent()
+    {
+        using var releaseSend = new ManualResetEventSlim();
+        var sendEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var deferredAttempts = 0;
+
+        _messenger.SendToConnected("Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(_ =>
+            {
+                sendEntered.TrySetResult();
+                Assert.That(releaseSend.Wait(TimeSpan.FromSeconds(5)), Is.True);
+                return new BroadcastSendResult(new Dictionary<StreamingPlatform, ChatEnqueueResult>
+                {
+                    [StreamingPlatform.YouTube] = ChatEnqueueResult.NotConnected,
+                });
+            });
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(_ =>
+            {
+                Interlocked.Increment(ref deferredAttempts);
+                return ChatEnqueueResult.Queued;
+            });
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+
+        await RunConcurrentDuringBlockedSendAsync(
+            () => _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, null, DateTimeOffset.UtcNow)),
+            () => _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true)),
+            sendEntered,
+            releaseSend);
+
+        _messenger.Received(1).SendToConnected("Стрим начался", ChatSendCategory.EventNotification);
+        Assert.That(deferredAttempts, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task PlatformConnectionChanged_AvailabilityArrivesDuringQueuedSend_DoesNotDuplicate()
+    {
+        using var releaseSend = new ManualResetEventSlim();
+        var sendEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref attempts) == 1)
+                {
+                    sendEntered.TrySetResult();
+                    Assert.That(releaseSend.Wait(TimeSpan.FromSeconds(5)), Is.True);
+                }
+
+                return ChatEnqueueResult.Queued;
+            });
+
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, null, DateTimeOffset.UtcNow));
+
+        await RunConcurrentDuringBlockedSendAsync(
+            () => _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected)),
+            () => _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true)),
+            sendEntered,
+            releaseSend);
+
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+        Assert.That(attempts, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task PlatformConnectionChanged_RetryAlsoReturnsNotConnected_StopsAndArmsSingleFutureRetry()
+    {
+        using var releaseSend = new ManualResetEventSlim();
+        var sendEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(_ =>
+            {
+                var attempt = Interlocked.Increment(ref attempts);
+                if (attempt == 1)
+                {
+                    sendEntered.TrySetResult();
+                    Assert.That(releaseSend.Wait(TimeSpan.FromSeconds(5)), Is.True);
+                    return ChatEnqueueResult.NotConnected;
+                }
+
+                return attempt == 2 ? ChatEnqueueResult.NotConnected : ChatEnqueueResult.Queued;
+            });
+
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, null, DateTimeOffset.UtcNow));
+
+        await RunConcurrentDuringBlockedSendAsync(
+            () => _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected)),
+            () => _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true)),
+            sendEntered,
+            releaseSend);
+
+        Assert.That(attempts, Is.EqualTo(2));
+
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+        Assert.That(attempts, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task PlatformConnectionChanged_BroadcastEndedDuringInFlightSend_DoesNotRetryOrReArm()
+    {
+        using var releaseSend = new ManualResetEventSlim();
+        var sendEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(_ =>
+            {
+                Interlocked.Increment(ref attempts);
+                sendEntered.TrySetResult();
+                Assert.That(releaseSend.Wait(TimeSpan.FromSeconds(5)), Is.True);
+                return ChatEnqueueResult.NotConnected;
+            });
+
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, null, DateTimeOffset.UtcNow));
+
+        await RunConcurrentDuringBlockedSendAsync(
+            () => _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected)),
+            () =>
+            {
+                _livePlatforms.Clear();
+                return _eventBus.PublishAsync(new BroadcastEnded(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, DateTimeOffset.UtcNow));
+            },
+            sendEntered,
+            releaseSend);
+
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+        Assert.That(attempts, Is.EqualTo(1));
+    }
+
+    [TestCase(ChatEnqueueResult.ObserverMode)]
+    [TestCase(ChatEnqueueResult.QuotaBudgetReached)]
+    public async Task PlatformConnectionChanged_PermanentRefusalWithAvailability_DoesNotRetryOrReArm(ChatEnqueueResult refusal)
+    {
+        using var releaseSend = new ManualResetEventSlim();
+        var sendEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref attempts) == 1)
+                {
+                    sendEntered.TrySetResult();
+                    Assert.That(releaseSend.Wait(TimeSpan.FromSeconds(5)), Is.True);
+                }
+
+                return refusal;
+            });
+
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+        await _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.YouTube, Channel, null, DateTimeOffset.UtcNow));
+
+        await RunConcurrentDuringBlockedSendAsync(
+            () => _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected)),
+            () => _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true)),
+            sendEntered,
+            releaseSend);
+
+        await _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true));
+        Assert.That(attempts, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task BroadcastStarted_MultiPlatformPartialFailureWithAvailability_RetriesOnlyFailedPlatform()
+    {
+        using var releaseSend = new ManualResetEventSlim();
+        var sendEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _messenger.SendToConnected("Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(_ =>
+            {
+                sendEntered.TrySetResult();
+                Assert.That(releaseSend.Wait(TimeSpan.FromSeconds(5)), Is.True);
+                return new BroadcastSendResult(new Dictionary<StreamingPlatform, ChatEnqueueResult>
+                {
+                    [StreamingPlatform.Twitch] = ChatEnqueueResult.Queued,
+                    [StreamingPlatform.YouTube] = ChatEnqueueResult.NotConnected,
+                });
+            });
+        _messenger.Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification)
+            .Returns(ChatEnqueueResult.Queued);
+
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.Twitch, BotLifecyclePhase.Connected));
+        await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+        _livePlatforms.Add(StreamingPlatform.Twitch);
+        _livePlatforms.Add(StreamingPlatform.YouTube);
+
+        await RunConcurrentDuringBlockedSendAsync(
+            () => _eventBus.PublishAsync(new BroadcastStarted(Guid.NewGuid(), StreamingPlatform.Twitch, Channel, null, DateTimeOffset.UtcNow)),
+            () => _eventBus.PublishAsync(new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true)),
+            sendEntered,
+            releaseSend);
+
+        _messenger.Received(1).Send(StreamingPlatform.YouTube, "Стрим начался", ChatSendCategory.EventNotification);
+        _messenger.DidNotReceive().Send(StreamingPlatform.Twitch, Arg.Any<string>(), Arg.Any<ChatSendCategory>());
+    }
+
+    private static async Task RunConcurrentDuringBlockedSendAsync(
+        Func<Task> blockedPublish,
+        Func<Task> concurrentPublish,
+        TaskCompletionSource sendEntered,
+        ManualResetEventSlim releaseSend)
+    {
+        var concurrentDispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var blockedTask = Task.Run(blockedPublish);
+        Task? concurrentTask = null;
+
+        try
+        {
+            await sendEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            concurrentTask = Task.Run(() =>
+            {
+                concurrentDispatched.TrySetResult();
+                return concurrentPublish();
+            });
+
+            await concurrentDispatched.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            try
+            {
+                await concurrentTask.WaitAsync(TimeSpan.FromMilliseconds(50));
+            }
+            catch (TimeoutException)
+            {
+            }
+        }
+        finally
+        {
+            releaseSend.Set();
+        }
+
+        if (concurrentTask is not null)
+        {
+            await Task.WhenAll(blockedTask, concurrentTask);
+        }
+        else
+        {
+            await blockedTask;
+        }
     }
 }

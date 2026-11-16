@@ -10,6 +10,7 @@ using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Di;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Statistics;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
@@ -1244,6 +1245,155 @@ public class YouTubeChatIngestionServiceTests
             Assert.That(gaps, Is.Empty);
             Assert.That(ingestion.CaptureDiagnostics().GapCount, Is.EqualTo(0));
         });
+    }
+
+    [Test]
+    public async Task Direct_Broadcast_Switch_With_Connected_YouTube_Bot_Delivers_Start_Notification_Without_Leaking_Stop_To_Next_Chat()
+    {
+        var selectionStore = new InMemoryYouTubeBroadcastSelectionStore();
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            selectionStore,
+            _authService,
+            _settingsStore,
+            _quotaGovernor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance);
+
+        var broadcastA = new YouTubeBroadcastSummary("vid-a", ChannelId, "YTBroadcaster", "chat-a", "Broadcast A", _clock.UtcNow);
+        var broadcastB = new YouTubeBroadcastSummary("vid-b", ChannelId, "YTBroadcaster", "chat-b", "Broadcast B", _clock.UtcNow);
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>()).Returns([broadcastA, broadcastB]);
+
+        var sentMessages = new List<(string LiveChatId, string Text)>();
+        var firstStartSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondStartSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sendClient = Substitute.For<IYouTubeLiveChatSendClient>();
+        sendClient.InsertMessageAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<YouTubeQuotaPriority>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var chatId = callInfo.ArgAt<string>(0);
+                var text = callInfo.ArgAt<string>(1);
+                lock (sentMessages)
+                {
+                    sentMessages.Add((chatId, text));
+                }
+
+                if (chatId == "chat-a" && text == "Старт")
+                {
+                    firstStartSent.TrySetResult();
+                }
+                else if (chatId == "chat-b" && text == "Старт")
+                {
+                    secondStartSent.TrySetResult();
+                }
+
+                return Task.FromResult(new YouTubeInsertMessageResult($"sent-{Guid.NewGuid():N}", _clock.UtcNow));
+            });
+
+        var targetChannel = new FakeTargetChannelProvider(ChannelId);
+        using var youtubeMessenger = new YouTubeMessenger(
+            sendClient,
+            monitor,
+            targetChannel,
+            _quotaGovernor,
+            new YouTubeSentMessageTracker(),
+            new CommandResponseTracker(_clock),
+            _clock,
+            NullLogger<YouTubeMessenger>.Instance);
+        await youtubeMessenger.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        try
+        {
+            var youtubePlatform = new YouTubeChatPlatform(
+                monitor,
+                _sessionContext,
+                monitor,
+                youtubeMessenger,
+                _settingsStore,
+                _accountsStore,
+                targetChannel);
+            var registry = new ChatPlatformRegistry([youtubePlatform]);
+            var broadcastMessenger = new BroadcastMessenger(registry, NullLogger<BroadcastMessenger>.Instance);
+
+            var settings = new AppSettings();
+            settings.Twitch.AutoBroadcast.AutoBroadcastEnabled = false;
+            settings.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled = true;
+            settings.Twitch.AutoBroadcast.StreamStartMessage = "Старт";
+            settings.Twitch.AutoBroadcast.StreamStopMessage = "Стоп";
+            var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+            settingsManager.Current.Returns(settings);
+
+            var historyStore = new BroadcastHistoryStore(
+                NullLogger<BroadcastHistoryStore>.Instance,
+                Path.Combine(_directory, $"broadcasts-{Guid.NewGuid():N}.json"),
+                Path.Combine(_directory, $"sessions-{Guid.NewGuid():N}.json"));
+            var activeStore = new ActiveBroadcastStore(
+                historyStore,
+                NullLogger<ActiveBroadcastStore>.Instance,
+                Path.Combine(_directory, $"active-{Guid.NewGuid():N}.json"),
+                Path.Combine(_directory, $"legacy-active-{Guid.NewGuid():N}.json"));
+            var draftCoordinator = new BroadcastDraftCoordinator(
+                historyStore,
+                activeStore,
+                targetChannel,
+                _clock,
+                NullLogger<BroadcastDraftCoordinator>.Instance);
+            using var aggregator = new BroadcastAggregator(
+                _eventBus,
+                draftCoordinator,
+                targetChannel,
+                _clock,
+                NullLogger<BroadcastAggregator>.Instance);
+
+            var targetsProvider = Substitute.For<IBroadcastPlatformTargetsProvider>();
+            targetsProvider.GetTargetPlatforms().Returns(new HashSet<StreamingPlatform> { StreamingPlatform.YouTube });
+            using var statusHandler = new StreamStatusBroadcastHandler(
+                Substitute.For<IBroadcastScheduler>(),
+                broadcastMessenger,
+                aggregator,
+                targetsProvider,
+                targetChannel,
+                settingsManager,
+                _eventBus,
+                NullLogger<StreamStatusBroadcastHandler>.Instance);
+
+            await _eventBus.PublishAsync(new PlatformConnectionChanged(StreamingPlatform.YouTube, BotLifecyclePhase.Connected));
+
+            selectionStore.SelectBroadcast(ChannelId, "vid-a");
+            await monitor.RefreshLiveSnapshotAsync();
+            await firstStartSent.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            selectionStore.SelectBroadcast(ChannelId, "vid-b");
+            await monitor.RefreshLiveSnapshotAsync();
+            await secondStartSent.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            await youtubeMessenger.StopAsync(new Progress<string>(), CancellationToken.None);
+
+            List<(string LiveChatId, string Text)> snapshot;
+            lock (sentMessages)
+            {
+                snapshot = [.. sentMessages];
+            }
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(snapshot, Does.Contain(("chat-a", "Старт")));
+                Assert.That(snapshot, Does.Contain(("chat-b", "Старт")));
+                Assert.That(snapshot, Does.Not.Contain(("chat-b", "Стоп")));
+            });
+        }
+        finally
+        {
+            await youtubeMessenger.StopAsync(new Progress<string>(), CancellationToken.None);
+            youtubeMessenger.Dispose();
+        }
     }
 
     private PipelineHarness CreatePipelineHarness(

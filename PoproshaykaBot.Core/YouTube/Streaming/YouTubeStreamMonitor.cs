@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
@@ -544,6 +545,13 @@ internal sealed class YouTubeStreamMonitor(
         }
 
         await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(selected), CancellationToken.None).ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(selected.LiveChatId))
+        {
+            await eventBus.PublishAsync(
+                new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true),
+                CancellationToken.None).ConfigureAwait(false);
+        }
     }
 
     private async Task HandleNoActiveBroadcastsAsync(string targetChannelId, YouTubeBroadcastSummary? previousActive)

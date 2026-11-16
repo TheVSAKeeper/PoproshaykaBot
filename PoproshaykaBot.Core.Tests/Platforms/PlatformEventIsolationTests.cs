@@ -54,6 +54,7 @@ public sealed class PlatformEventIsolationTests
         (typeof(StreamSessionStatisticsHandler), typeof(ChatIngestionStarted)),
         (typeof(StreamSessionStatisticsHandler), typeof(ChatIngestionStopped)),
         (typeof(StreamStatusBroadcastHandler), typeof(PlatformConnectionChanged)),
+        (typeof(StreamStatusBroadcastHandler), typeof(PlatformChatAvailabilityChanged)),
     ];
 
     [Test]
