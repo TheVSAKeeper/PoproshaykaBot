@@ -22,7 +22,7 @@ public sealed class DashboardSettingsSectionContributor : ISettingsSectionContri
         _coordinator = coordinator;
     }
 
-    public int Order => 6;
+    public int Order => 7;
 
     public string SectionKey => "dashboard";
 

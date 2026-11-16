@@ -16,7 +16,7 @@ public sealed class RanksSettingsSectionContributor : ISettingsSectionContributo
         _ranks = ranks;
     }
 
-    public int Order => 5;
+    public int Order => 6;
 
     public string SectionKey => "ranks";
 

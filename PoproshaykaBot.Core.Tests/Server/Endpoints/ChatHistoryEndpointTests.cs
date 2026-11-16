@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Platforms;
 using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Server.Endpoints;
 using PoproshaykaBot.Core.Settings;
@@ -48,7 +49,7 @@ public sealed class ChatHistoryEndpointTests
     private ChatHistoryManager _historyManager = null!;
     private ObsChatStore _obsChatStore = null!;
 
-    private Task<EndpointTestServer> CreateServerAsync()
+    private Task<EndpointTestServer> CreateServerAsync(ChatSettingsStore? chatSettingsStore = null)
     {
         return EndpointTestServer.CreateAsync(services =>
             {
@@ -56,8 +57,10 @@ public sealed class ChatHistoryEndpointTests
                 services.AddSingleton(_historyManager);
                 services.AddSingleton(_obsChatStore);
             },
-            sp => new ChatHistoryEndpoint(sp.GetRequiredService<ChatHistoryManager>(),
-                sp.GetRequiredService<ObsChatStore>()));
+            sp => new ChatHistoryEndpoint(
+                sp.GetRequiredService<ChatHistoryManager>(),
+                sp.GetRequiredService<ObsChatStore>(),
+                chatSettingsStore));
     }
 
     private static ChatMessageData NewMessage(string id, DateTime timestamp, string text = "msg")
@@ -145,6 +148,141 @@ public sealed class ChatHistoryEndpointTests
 
             var only = doc[0];
             Assert.That(only.GetProperty("message").GetString(), Is.EqualTo("fresh"));
+        }
+    }
+
+    [Test]
+    public async Task GetHistory_FiltersImportedHistoryWhenObsHistoryDisabled_AndKeepsWhenEnabled()
+    {
+        var chatSettingsStore = new ChatSettingsStore(null, null, Path.Combine(_tempDir, "chat.json"));
+        _obsChatStore.Save(new()
+        {
+            MaxMessages = 100,
+            EnableMessageFadeOut = true,
+            MessageLifetimeSeconds = 30,
+        });
+
+        var now = DateTime.UtcNow;
+        var scope = Core.Chat.History.ChatHistoryScope.ForTwitch("1", "chan");
+
+        _historyManager.ImportHistory(scope,
+        [
+            new()
+            {
+                Platform = StreamingPlatform.Twitch,
+                Channel = "chan",
+                ChannelId = "1",
+                MessageId = "hist-old",
+                Timestamp = now.AddMinutes(-10),
+                UserId = "u1",
+                DisplayName = "user",
+                Message = "imported",
+            },
+            new()
+            {
+                Platform = StreamingPlatform.Twitch,
+                Channel = "chan",
+                ChannelId = "1",
+                MessageId = "cmd-chat-only",
+                Timestamp = now.AddMinutes(-9),
+                UserId = "bot",
+                DisplayName = "bot",
+                Message = "chat-only",
+                IsBot = true,
+                CommandResponse = new("ранг", CommandSettings.CallerOnly),
+            },
+        ]);
+
+        _historyManager.AddMessage(new()
+        {
+            Platform = StreamingPlatform.Twitch,
+            Channel = "chan",
+            ChannelId = "1",
+            MessageId = "live-fresh",
+            Timestamp = now.AddSeconds(-5),
+            UserId = "u2",
+            DisplayName = "user2",
+            Message = "live",
+        });
+
+        using var server = await CreateServerAsync(chatSettingsStore);
+        using var client = server.CreateClient();
+
+        var disabledJson = await client.GetStringAsync("/api/history");
+        var disabledDoc = JsonDocument.Parse(disabledJson).RootElement;
+
+        chatSettingsStore.Save(new() { ShowHistoryInObs = true });
+
+        var enabledJson = await client.GetStringAsync("/api/history");
+        var enabledDoc = JsonDocument.Parse(enabledJson).RootElement;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(disabledDoc.GetArrayLength(), Is.EqualTo(1));
+            Assert.That(disabledDoc[0].GetProperty("messageId").GetString(), Is.EqualTo("live-fresh"));
+            Assert.That(disabledDoc[0].GetProperty("isHistory").GetBoolean(), Is.False);
+
+            Assert.That(enabledDoc.GetArrayLength(), Is.EqualTo(2));
+            Assert.That(enabledDoc[0].GetProperty("messageId").GetString(), Is.EqualTo("hist-old"));
+            Assert.That(enabledDoc[0].GetProperty("isHistory").GetBoolean(), Is.True);
+            Assert.That(enabledDoc[1].GetProperty("messageId").GetString(), Is.EqualTo("live-fresh"));
+        }
+    }
+
+    [Test]
+    public async Task GetHistory_IsolatesActiveScopePerPlatform()
+    {
+        var chatSettingsStore = new ChatSettingsStore(null, null, Path.Combine(_tempDir, "chat-scope.json"));
+        chatSettingsStore.Save(new() { ShowHistoryInObs = true });
+
+        var now = DateTime.UtcNow;
+        var oldLive = Core.Chat.History.ChatHistoryScope.ForYouTube("UC-1", "live-1", "Chan");
+        var currentLive = Core.Chat.History.ChatHistoryScope.ForYouTube("UC-1", "live-2", "Chan");
+
+        _historyManager.ImportHistory(oldLive,
+        [
+            new()
+            {
+                Platform = StreamingPlatform.YouTube,
+                Channel = "Chan",
+                ChannelId = "UC-1",
+                ChatSessionId = "live-1",
+                MessageId = "old-stream-msg",
+                Timestamp = now.AddMinutes(-10),
+                UserId = "u1",
+                DisplayName = "user1",
+                Message = "from live 1",
+            },
+        ]);
+
+        _historyManager.ImportHistory(currentLive,
+        [
+            new()
+            {
+                Platform = StreamingPlatform.YouTube,
+                Channel = "Chan",
+                ChannelId = "UC-1",
+                ChatSessionId = "live-2",
+                MessageId = "current-stream-msg",
+                Timestamp = now.AddMinutes(-2),
+                UserId = "u2",
+                DisplayName = "user2",
+                Message = "from live 2",
+            },
+        ]);
+
+        using var server = await CreateServerAsync(chatSettingsStore);
+        using var client = server.CreateClient();
+
+        var json = await client.GetStringAsync("/api/history");
+        var doc = JsonDocument.Parse(json).RootElement;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(doc.GetArrayLength(), Is.EqualTo(1));
+            Assert.That(doc[0].GetProperty("messageId").GetString(), Is.EqualTo("current-stream-msg"));
+            Assert.That(doc[0].GetProperty("channelId").GetString(), Is.EqualTo("UC-1"));
+            Assert.That(doc[0].GetProperty("chatSessionId").GetString(), Is.EqualTo("live-2"));
         }
     }
 }

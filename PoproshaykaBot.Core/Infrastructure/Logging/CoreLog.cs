@@ -39,4 +39,34 @@ internal static partial class CoreLog
         Level = LogLevel.Information,
         Message = "YouTube чат {LiveChatId} завершён в InnerTube, обновляем статус трансляции")]
     public static partial void YouTubeInnerTubeChatEnded(this ILogger logger, string liveChatId);
+
+    [LoggerMessage(
+        EventId = 2106,
+        Level = LogLevel.Warning,
+        Message = "Повреждённый файл кэша чата {FileName} сохранён в копию invalid и заморожен на текущий сеанс")]
+    public static partial void ChatHistoryCacheCorrupt(this ILogger logger, string fileName);
+
+    [LoggerMessage(
+        EventId = 2107,
+        Level = LogLevel.Warning,
+        Message = "Не удалось записать файл кэша чата {FileName} – повторная попытка в фоне")]
+    public static partial void ChatHistoryCacheWriteFailed(this ILogger logger, Exception exception, string fileName);
+
+    [LoggerMessage(
+        EventId = 2108,
+        Level = LogLevel.Warning,
+        Message = "Не удалось удалить файл кэша чата или служебную копию {FileName}")]
+    public static partial void ChatHistoryCacheDeleteFailed(this ILogger logger, Exception exception, string fileName);
+
+    [LoggerMessage(
+        EventId = 2109,
+        Level = LogLevel.Warning,
+        Message = "Внешняя запись в кэш истории чата оборвалась – запись кэша до перезапуска отключена")]
+    public static partial void ChatHistoryCacheExternalWriteAbandoned(this ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 2110,
+        Level = LogLevel.Information,
+        Message = "Кэш истории чата восстановлен: областей {ScopeCount}, сообщений {MessageCount}")]
+    public static partial void ChatHistoryCacheRestored(this ILogger logger, int scopeCount, int messageCount);
 }

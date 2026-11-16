@@ -113,35 +113,23 @@ public sealed class ChatPipelineHandler :
         var audience = _audienceTracker.ForPlatform(chatMessage.Platform);
 
         var isFirstSeen = !chatMessage.IsBot
+                          && !@event.IsReplacement
                           && audience.OnUserMessage(chatMessage.UserId, chatMessage.DisplayName);
-
-        var status = GetUserStatusFlags(chatMessage);
-
-        var badgesKvp = chatMessage.Badges
-            .Select(b => new KeyValuePair<string, string>(b.SetId, b.BadgeId))
-            .ToList();
-
-        var historyEntry = new ChatMessageData
-        {
-            Platform = chatMessage.Platform,
-            MessageId = chatMessage.Id,
-            Timestamp = @event.Timestamp.UtcDateTime,
-            UserId = chatMessage.UserId,
-            DisplayName = chatMessage.DisplayName,
-            Message = chatMessage.Message,
-            MessageType = chatMessage.IsBot ? ChatMessageType.BotResponse : ChatMessageType.UserMessage,
-            Status = status,
-            IsFirstTime = isFirstSeen,
-            Color = chatMessage.Color,
-
-            Emotes = platform.Decorations.ExtractEmotes(chatMessage, obsChat.EmoteSizePixels),
-            Badges = badgesKvp,
-            BadgeUrls = platform.Decorations.ExtractBadgeUrls(chatMessage.Badges, obsChat.BadgeSizePixels),
-        };
 
         var commandResponse = chatMessage.IsBot
             ? _commandResponseTracker.TryConsume(chatMessage.Platform, chatMessage.Id)
             : null;
+
+        var historyEntry = ChatMessageDataFactory.Create(
+            chatMessage,
+            platform,
+            obsChat,
+            @event.Timestamp.UtcDateTime,
+            isFirstSeen,
+            isHistorical: false,
+            commandResponse);
+
+        var status = historyEntry.Status;
 
         _ = _eventBus.PublishAsync(new ChatMessageReceived(chatMessage.Platform,
             chatMessage.Channel,
@@ -154,11 +142,16 @@ public sealed class ChatPipelineHandler :
             isFirstSeen,
             historyEntry,
             chatMessage.IsBot,
-            commandResponse), cancellationToken);
+            commandResponse,
+            @event.IsReplacement), cancellationToken);
 
-        if (chatMessage.IsBot)
+        if (chatMessage.IsBot || @event.IsReplacement)
         {
-            _logger.LogDebug("[Бот, эхо] {DisplayName}: {Message}", chatMessage.DisplayName, chatMessage.Message);
+            if (chatMessage.IsBot)
+            {
+                _logger.LogDebug("[Бот, эхо] {DisplayName}: {Message}", chatMessage.DisplayName, chatMessage.Message);
+            }
+
             return;
         }
 
@@ -280,6 +273,9 @@ public sealed class ChatPipelineHandler :
         var historyEntry = new ChatMessageData
         {
             Platform = source.Platform,
+            Channel = source.Channel,
+            ChannelId = source.ChannelId,
+            ChatSessionId = source.ChatSessionId,
             MessageId = messageId,
             Timestamp = DateTime.UtcNow,
             UserId = userId,
@@ -287,6 +283,9 @@ public sealed class ChatPipelineHandler :
             Message = response.Text,
             MessageType = ChatMessageType.BotResponse,
             Status = UserStatus.None,
+            IsHistorical = false,
+            IsBot = true,
+            CommandResponse = mark,
         };
 
         return _eventBus.PublishAsync(new ChatMessageReceived(source.Platform,
@@ -301,32 +300,5 @@ public sealed class ChatPipelineHandler :
             historyEntry,
             true,
             mark), cancellationToken);
-    }
-
-    private static UserStatus GetUserStatusFlags(ChatMessage chatMessage)
-    {
-        var status = UserStatus.None;
-
-        if (chatMessage.IsBroadcaster)
-        {
-            status |= UserStatus.Broadcaster;
-        }
-
-        if (chatMessage.IsModerator)
-        {
-            status |= UserStatus.Moderator;
-        }
-
-        if (chatMessage.IsVip)
-        {
-            status |= UserStatus.Vip;
-        }
-
-        if (chatMessage.IsSubscriber)
-        {
-            status |= UserStatus.Subscriber;
-        }
-
-        return status;
     }
 }

@@ -204,17 +204,50 @@ public sealed class SseService : IAsyncDisposable
         }
     }
 
-    public void ClearChat()
+    public void ClearChat(DateTimeOffset? clearedAtUtc = null)
     {
         _logger.LogInformation("Инициация события очистки чата для всех SSE клиентов");
 
         try
         {
-            Enqueue(new("clear", "{}"));
+            var json = clearedAtUtc is { } cutoff
+                ? JsonSerializer.Serialize(new { clearedAtUtc = cutoff }, ServerJsonOptions.Default)
+                : "{}";
+            Enqueue(new("clear", json));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка постановки в очередь события очистки чата");
+        }
+    }
+
+    public void DeleteChatMessages(
+        IReadOnlyList<string> messageIds,
+        string? userId = null,
+        string? platform = null,
+        DateTimeOffset? cutoffUtc = null,
+        string? channelId = null,
+        string? sessionScopeId = null,
+        bool allowReplacement = false)
+    {
+        try
+        {
+            var payload = new
+            {
+                messageIds = messageIds ?? [],
+                userId,
+                platform,
+                cutoffUtc,
+                channelId,
+                sessionScopeId,
+                allowReplacement,
+            };
+            var json = JsonSerializer.Serialize(payload, ServerJsonOptions.Default);
+            Enqueue(new("delete", json));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка постановки в очередь события удаления сообщений чата");
         }
     }
 

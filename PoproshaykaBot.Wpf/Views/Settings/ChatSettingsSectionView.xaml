@@ -1,0 +1,54 @@
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.ChatSettingsSectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
+             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:ChatSettingsSectionViewModel}"
+             d:DesignWidth="680">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Views/Settings/SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <TextBlock Text="Показ прошлых сообщений"
+                   Style="{StaticResource Setting.GroupHeading}"
+                   Margin="0,0,0,10" />
+
+        <CheckBox Content="История в окне бота"
+                  IsChecked="{Binding ShowHistoryInApp, Mode=TwoWay}"
+                  Style="{StaticResource CheckBox.Default}" />
+        <TextBlock Style="{StaticResource Form.CheckHint}"
+                   Text="Показывать сохранённые и недавние прошлые сообщения при запуске и подключении. Появится во встроенной плитке мультиплатформенного чата."
+                   Margin="24,2,0,10" />
+
+        <CheckBox Content="История в OBS"
+                  IsChecked="{Binding ShowHistoryInObs, Mode=TwoWay}"
+                  Style="{StaticResource CheckBox.Default}" />
+        <TextBlock Style="{StaticResource Form.CheckHint}"
+                   Text="Передавать прошлые сообщения в браузерный чат-оверлей при запуске и обновлении источника."
+                   Margin="24,2,0,14" />
+
+        <TextBlock Text="Хранение кэша"
+                   Style="{StaticResource Setting.GroupHeading}" />
+
+        <keepshell:NumericSettingField Label="Сообщений в кэше на канал"
+                                       Value="{Binding HistoryMaxItems, Mode=TwoWay}"
+                                       IncreaseCommand="{Binding IncreaseHistoryMaxItemsCommand}"
+                                       DecreaseCommand="{Binding DecreaseHistoryMaxItemsCommand}"
+                                       IncreaseAutomationName="Увеличить лимит сообщений в кэше"
+                                       DecreaseAutomationName="Уменьшить лимит сообщений в кэше"
+                                       Margin="0,0,0,6" />
+        <TextBlock Style="{StaticResource Form.Hint}"
+                   Text="Кэш хранится по площадкам и каналам не дольше 30 дней с общим пределом 32 МиБ."
+                   TextWrapping="Wrap" />
+    </StackPanel>
+
+</UserControl>

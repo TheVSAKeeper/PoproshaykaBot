@@ -47,6 +47,15 @@ public sealed class SettingsDescriberTests
             SettingsDescriber.Describe(CreateAppSettings()),
             ["testchannel", "clientId есть", "clientSecret есть", "порт 9099", "лимит 111", "приветствие вкл", "прощание выкл", "каждые 42 мин", "автоподключение на онлайн вкл", "пользователей 2", "рангов 3"]);
 
+        yield return new("ChatSettings",
+            ChatSettingsStore.Describe(new()
+            {
+                ShowHistoryInApp = true,
+                ShowHistoryInObs = false,
+                HistoryMaxItems = 250,
+            }),
+            ["история в окне бота вкл", "история в OBS выкл", "лимит кэша 250"]);
+
         yield return new("TwitchAccountSettings",
             AccountsStore.Describe(CreateAccount()),
             ["логин botlogin", "userId 4242", "access-токен есть", "refresh-токен есть", "скоупов 2"]);
@@ -189,6 +198,7 @@ public sealed class SettingsDescriberTests
         Assert.That(keys, Is.EquivalentTo(new[]
         {
             nameof(AppSettings),
+            "ChatSettings",
             "ObsIntegrationSettings",
             "ObsChatSettings",
             "UpdateSettings",

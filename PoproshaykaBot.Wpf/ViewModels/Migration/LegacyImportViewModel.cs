@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat.History;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
@@ -19,6 +20,8 @@ public sealed partial class LegacyImportViewModel : ObservableObject
     private readonly StatisticsAutoSaver? _statisticsAutoSaver;
     private readonly SettingsWriteGate? _settingsWriteGate;
     private readonly UiSettingsWriteGuard? _uiSettingsGuard;
+    private readonly ChatHistoryCacheStore? _chatHistoryCache;
+    private readonly Func<string, bool, ILogger?, LegacyImportResult> _import;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
@@ -57,7 +60,9 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         ILogger logger,
         StatisticsAutoSaver? statisticsAutoSaver = null,
         SettingsWriteGate? settingsWriteGate = null,
-        UiSettingsWriteGuard? uiSettingsGuard = null)
+        UiSettingsWriteGuard? uiSettingsGuard = null,
+        ChatHistoryCacheStore? chatHistoryCache = null,
+        Func<string, bool, ILogger?, LegacyImportResult>? import = null)
     {
         _filePicker = filePicker;
         _logger = logger;
@@ -65,6 +70,8 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         _statisticsAutoSaver = statisticsAutoSaver;
         _settingsWriteGate = settingsWriteGate;
         _uiSettingsGuard = uiSettingsGuard;
+        _chatHistoryCache = chatHistoryCache;
+        _import = import ?? LegacyDataImporter.Import;
         CanOverwriteExisting = hasOwnData;
         CanDismiss = !isSettingsEntry;
 
@@ -120,7 +127,7 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         // и история стримов копируются достаточно долго, чтобы застывшее окно бросалось в глаза
         LegacyImportResult Import()
         {
-            return LegacyDataImporter.Import(path, overwrite, _logger);
+            return _import(path, overwrite, _logger);
         }
 
         Task<LegacyImportResult> WithStatisticsScopeAsync()
@@ -130,6 +137,13 @@ public sealed partial class LegacyImportViewModel : ObservableObject
                 : _statisticsAutoSaver.RunExternalWriteAsync(Import, static imported => imported.ExternalWrite);
         }
 
+        Task<LegacyImportResult> WithCacheScopeAsync()
+        {
+            return _chatHistoryCache is null
+                ? WithStatisticsScopeAsync()
+                : _chatHistoryCache.RunExternalWriteAsync(WithStatisticsScopeAsync, static imported => imported.CopiedChatHistory);
+        }
+
         LegacyImportResult result;
         var uiPreferencesKept = false;
         _uiSettingsGuard?.Suspend();
@@ -137,9 +151,9 @@ public sealed partial class LegacyImportViewModel : ObservableObject
         try
         {
             result = _settingsWriteGate is null
-                ? await WithStatisticsScopeAsync().ConfigureAwait(true)
+                ? await WithCacheScopeAsync().ConfigureAwait(true)
                 : await _settingsWriteGate
-                    .RunExternalWriteAsync(WithStatisticsScopeAsync, static imported => imported.RewrittenSettingsFiles)
+                    .RunExternalWriteAsync(WithCacheScopeAsync, static imported => imported.RewrittenSettingsFiles)
                     .ConfigureAwait(true);
 
             uiPreferencesKept = !result.CopiedUiPreferences;

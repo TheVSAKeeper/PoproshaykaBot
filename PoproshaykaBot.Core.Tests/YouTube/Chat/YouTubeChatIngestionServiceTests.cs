@@ -627,6 +627,55 @@ public class YouTubeChatIngestionServiceTests
     }
 
     [Test]
+    public async Task FirstBatchHistoricalItems_PublishRawChatHistoryReceived_WithBatchModeration()
+    {
+        var historyEvents = new List<RawChatHistoryReceived>();
+        var liveEvents = new List<RawChatMessageReceived>();
+        using var hSub = _eventBus.Subscribe<RawChatHistoryReceived>(historyEvents.Add);
+        using var lSub = _eventBus.Subscribe<RawChatMessageReceived>(liveEvents.Add);
+
+        var deleteItem = new YouTubeLiveChatItem(
+            "del-evt-1",
+            YouTubeLiveChatItemKind.Tombstone,
+            _clock.UtcNow.AddSeconds(-5),
+            string.Empty,
+            string.Empty,
+            new("UCmod", "Mod", false, true, false, false),
+            "messageDeletedEvent",
+            Moderation: new(YouTubeModerationActionKind.MessageDeleted, TargetMessageId: "hist-deleted"));
+
+        var streamClient = new FakeStreamClient(_ =>
+        [
+            new YouTubeLiveChatBatch(
+                [
+                    TextItem("hist-kept", _clock.UtcNow.AddMinutes(-2), "past kept"),
+                    TextItem("hist-deleted", _clock.UtcNow.AddMinutes(-1), "past deleted"),
+                    deleteItem,
+                    TextItem("live-1", _clock.UtcNow.AddSeconds(1), "fresh live"),
+                ],
+                "tok-1",
+                TimeSpan.FromSeconds(5),
+                null),
+        ]);
+        var pollingClient = new FakePollingClient((_, _) =>
+            Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null)));
+
+        using var ingestion = CreateIngestion(streamClient, pollingClient);
+
+        await ingestion.RunSingleIterationAsync(CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(historyEvents, Has.Count.EqualTo(1));
+            Assert.That(historyEvents[0].Scope.SessionScopeId, Is.Not.Null.And.Not.Empty);
+            Assert.That(historyEvents[0].Messages.Select(static m => m.Message.Id), Is.EqualTo(new[] { "hist-kept", "hist-deleted" }));
+            Assert.That(historyEvents[0].Moderations, Has.Count.EqualTo(1));
+            Assert.That(historyEvents[0].Moderations![0].TargetMessageId, Is.EqualTo("hist-deleted"));
+            Assert.That(liveEvents.Select(static l => l.Message.Id), Is.EqualTo(new[] { "live-1" }));
+        }
+    }
+
+    [Test]
     public async Task YouTubeChatPlatform_IsEnabled_And_IsConnected_Reflect_Debug_Session_And_Broadcast()
     {
         var targetProvider = Substitute.For<ITargetChannelProvider>();

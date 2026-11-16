@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat.History;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -14,6 +15,7 @@ public sealed class LegacyImportDialog(
     StatisticsAutoSaver statisticsAutoSaver,
     SettingsWriteGate settingsWriteGate,
     UiSettingsWriteGuard uiSettingsGuard,
+    ChatHistoryCacheStore chatHistoryCache,
     ILogger<LegacyImportDialog> logger) : ILegacyImportDialog
 {
     public LegacyImportResult? Show()
@@ -37,7 +39,8 @@ public sealed class LegacyImportDialog(
             logger,
             statisticsAutoSaver,
             settingsWriteGate,
-            uiSettingsGuard);
+            uiSettingsGuard,
+            chatHistoryCache);
 
         var window = new LegacyImportWindow(viewModel)
         {

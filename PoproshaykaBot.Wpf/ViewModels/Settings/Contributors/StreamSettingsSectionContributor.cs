@@ -24,7 +24,7 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
         _polls = polls;
     }
 
-    public int Order => 4;
+    public int Order => 5;
 
     public string SectionKey => "stream";
 

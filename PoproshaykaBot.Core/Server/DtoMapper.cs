@@ -14,6 +14,10 @@ public static class DtoMapper
         {
             messageId = chatMessage.MessageId,
             userId = chatMessage.UserId,
+            platform = chatMessage.Platform.ToString(),
+            channelId = chatMessage.ChannelId,
+            chatSessionId = chatMessage.ChatSessionId ?? string.Empty,
+            isHistory = chatMessage.IsHistorical,
             username = chatMessage.DisplayName,
             displayName = chatMessage.DisplayName,
             message = chatMessage.Message,

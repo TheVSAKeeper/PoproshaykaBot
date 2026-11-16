@@ -21,6 +21,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1004, Level = LogLevel.Information, Message = "История сообщений чата очищена")]
     public static partial void ChatHistoryCleared(this ILogger logger);
 
+    [LoggerMessage(EventId = 1014, Level = LogLevel.Warning, Message = "История сообщений чата очищена в памяти, но часть файлов кэша на диске не удалось обновить или удалить")]
+    public static partial void ChatHistoryClearIncomplete(this ILogger logger);
+
     [LoggerMessage(EventId = 1005, Level = LogLevel.Information, Message = "Пользователь запросил подключение бота")]
     public static partial void BotConnectRequested(this ILogger logger);
 

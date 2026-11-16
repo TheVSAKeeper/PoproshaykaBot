@@ -58,7 +58,7 @@ public sealed class ObsSettingsSectionContributor : ISettingsSectionContributor
         _dialogService = dialogService;
     }
 
-    public int Order => 3;
+    public int Order => 4;
 
     public string SectionKey => "obs";
 

@@ -14,6 +14,7 @@ public static class EventSubChatMessageMapper
         }
 
         var channel = GetString(evt, "broadcaster_user_login");
+        var channelId = GetString(evt, "broadcaster_user_id");
         var messageId = GetString(evt, "message_id");
         var userId = GetString(evt, "chatter_user_id");
         var username = GetString(evt, "chatter_user_login");
@@ -46,7 +47,8 @@ public static class EventSubChatMessageMapper
             isVip,
             isSubscriber,
             isBot,
-            color);
+            color,
+            channelId);
     }
 
     private static string NormalizeColor(string raw)

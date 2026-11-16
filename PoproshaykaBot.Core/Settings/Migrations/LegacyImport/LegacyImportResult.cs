@@ -37,6 +37,10 @@ public sealed class LegacyImportResult
 
     public bool CopiedPollHistory => Copied(LegacyDataCatalog.PollsHistoryFileName);
 
+    public bool CopiedChatHistory => CopiedInDirectory(LegacyDataCatalog.ChatHistoryFolderName);
+
+    public static bool IsChatHistoryPath(string relativePath) => LegacyDataCatalog.IsChatHistoryPath(relativePath);
+
     public IReadOnlyList<string> CopiedSettingsFiles =>
         [.. LegacyDataCatalog.StoreOwnedSettingsFiles.Where(CopiedSettingsFile)];
 
@@ -72,5 +76,12 @@ public sealed class LegacyImportResult
     private bool CopiedSettingsFile(string fileName)
     {
         return CopiedFiles.Any(file => string.Equals(Path.GetFileName(file), fileName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool CopiedInDirectory(string directoryName)
+    {
+        var prefix = LegacyDataCatalog.NormalizeRelativePath(directoryName) + "/";
+        return CopiedFiles.Any(file =>
+            LegacyDataCatalog.NormalizeRelativePath(file).StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 }

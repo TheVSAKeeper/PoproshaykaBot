@@ -234,8 +234,14 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             return;
         }
 
-        _chatHistory.ClearHistory();
+        var clearResult = _chatHistory.ClearHistory();
         _logger.ChatHistoryCleared();
+
+        if (!clearResult.IsComplete)
+        {
+            _logger.ChatHistoryClearIncomplete();
+            SetStatus("История чата очищена не полностью: часть файлов кэша на диске не удалось обновить", StatusSeverity.Warning);
+        }
     }
 
     public NavigationItem? FindSectionByKey(string? key)

@@ -487,6 +487,7 @@ public partial class App : Application
         services.AddTransient<HttpServerSectionViewModel>();
         services.AddTransient<OAuthSettingsViewModel>();
         services.AddTransient<YouTubeSettingsSectionViewModel>();
+        services.AddTransient<ChatSettingsSectionViewModel>();
         services.AddSingleton<ObsChatSettingsSectionViewModel>();
         services.AddSingleton<ObsIntegrationSectionViewModel>();
         services.AddTransient<AutoBroadcastSettingsViewModel>();
@@ -503,6 +504,7 @@ public partial class App : Application
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.BasicSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.TwitchConnectionSettingsContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.YouTubeConnectionSettingsContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.ChatSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.ObsSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.StreamSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.RanksSettingsSectionContributor>();
