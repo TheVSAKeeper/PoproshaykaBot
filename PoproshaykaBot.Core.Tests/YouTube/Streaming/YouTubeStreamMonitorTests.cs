@@ -608,6 +608,47 @@ public class YouTubeStreamMonitorTests
         }));
     }
 
+    [Test]
+    public async Task Refresh_PopulatesThumbnailAndPublishesMonitoringStatusChanges()
+    {
+        var statuses = new List<StreamMonitoringStatusChanged>();
+        using var sub = _eventBus.Subscribe<StreamMonitoringStatusChanged>(e => statuses.Add(e));
+
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>())
+            .Returns([BuildBroadcast("vid-thumb", "chat-1", "Thumbnail Live")]);
+
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        _settingsStore.Save(new YouTubeSettings
+        {
+            Enabled = false,
+            ProjectId = "proj",
+            ClientId = "yt-client",
+            Channel = ChannelId,
+        });
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(statuses.Select(s => (s.Platform, s.Role, s.Status)), Is.EqualTo(new[]
+            {
+                (StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Connected),
+                (StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster, StreamMonitoringStatus.Disconnected),
+            }));
+        });
+
+        _settingsStore.Save(new YouTubeSettings
+        {
+            Enabled = true,
+            ProjectId = "proj",
+            ClientId = "yt-client",
+            Channel = ChannelId,
+        });
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        Assert.That(_monitor.CurrentStream?.ThumbnailUrl, Is.EqualTo("https://i.ytimg.com/vi/vid-thumb/hqdefault.jpg"));
+    }
+
     private YouTubeBroadcastSummary BuildBroadcast(string videoId, string liveChatId, string title)
     {
         return new(videoId, ChannelId, "MainChannel", liveChatId, title, _clock.UtcNow);

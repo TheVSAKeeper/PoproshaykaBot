@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Core.YouTube.Quota;
 using System.Globalization;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -33,13 +34,17 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
     [NotifyPropertyChangedFor(nameof(QuotaBudgetError))]
     private string _dailyQuotaBudgetText = YouTubeSettings.DefaultDailyQuotaBudget.ToString(CultureInfo.InvariantCulture);
 
+    [ObservableProperty]
+    private bool _showQuotaDiagnostics = true;
+
     public YouTubeSettingsSectionViewModel(
         IYouTubeOAuthService oauthService,
         IShellLauncher shellLauncher,
         IDialogService dialogService,
         IUiDispatcher uiDispatcher,
         TimeProvider timeProvider,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IYouTubeQuotaGovernor? quotaGovernor = null)
     {
         var accountLogger = loggerFactory.CreateLogger<PlatformOAuthAccountViewModel>();
 
@@ -59,6 +64,8 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
             timeProvider,
             accountLogger);
 
+        QuotaStatus = new(quotaGovernor, uiDispatcher, timeProvider);
+
         Bot.SettingChanged += OnAccountSettingChanged;
         Broadcaster.SettingChanged += OnAccountSettingChanged;
     }
@@ -68,6 +75,8 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
     public PlatformOAuthAccountViewModel Bot { get; }
 
     public PlatformOAuthAccountViewModel Broadcaster { get; }
+
+    public YouTubeQuotaStatusViewModel QuotaStatus { get; }
 
     public bool HasQuotaBudgetError => !TryParsePositiveQuotaBudget(DailyQuotaBudgetText, out _);
 
@@ -100,11 +109,17 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
 
             Bot.Load(bot);
             Broadcaster.Load(broadcaster);
+            QuotaStatus.Refresh();
         }
         finally
         {
             _suppressUpdates = false;
         }
+    }
+
+    public void SetQuotaAutoRefresh(bool active)
+    {
+        QuotaStatus.SetAutoRefresh(active && ShowQuotaDiagnostics);
     }
 
     public void SaveTo(
@@ -136,6 +151,7 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
         Broadcaster.SettingChanged -= OnAccountSettingChanged;
         Bot.Dispose();
         Broadcaster.Dispose();
+        QuotaStatus.Dispose();
     }
 
     partial void OnEnabledChanged(bool value) => RaiseIfNotSuppressed();

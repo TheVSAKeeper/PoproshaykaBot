@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Input;
@@ -160,6 +161,16 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private string? _gameFilter;
 
     [ObservableProperty]
+    private PlatformFilterOption _selectedPlatformFilter = PlatformFilterOption.All;
+
+    [ObservableProperty]
+    private bool _hasDetailPlatformBreakdown;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDetailChatterSumNote))]
+    private string _detailChatterSumNote = string.Empty;
+
+    [ObservableProperty]
     private string? _notice;
 
     [ObservableProperty]
@@ -258,6 +269,10 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public RangeObservableCollection<StreamTrendBarViewModel> Trend { get; } = [];
     public RangeObservableCollection<StreamSessionSegmentRowViewModel> Segments { get; } = [];
     public ObservableCollection<StreamSessionChatterRowViewModel> Chatters { get; } = [];
+
+    public ObservableCollection<StreamSessionPlatformBreakdownViewModel> DetailPlatformBreakdown { get; } = [];
+
+    public IReadOnlyList<PlatformFilterOption> PlatformOptions => PlatformFilterOption.AllOptions;
     public RangeObservableCollection<StreamCategoryRowViewModel> TopCategories { get; } = [];
     public RangeObservableCollection<StreamRecordCardViewModel> Records { get; } = [];
     public ObservableCollection<StreamTrendOptionViewModel> MetricOptions { get; } = [];
@@ -312,6 +327,8 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     public bool HasSessions => _allSessions.Count > 0 && !IsEverythingHidden;
     public bool IsEverythingHidden => _allSessions.Count > 0 && !ShowHidden && HiddenCount == _allSessions.Count;
+    public bool IsFilteredEmpty => HasSessions && _sessions.Count == 0;
+    public bool HasDetailChatterSumNote => DetailChatterSumNote.Length > 0;
 
     public string EmptyHeading => IsEverythingHidden
         ? "Все стримы убраны из статистики"
@@ -771,6 +788,18 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     }
 
     [RelayCommand]
+    private void ClearAllFilters()
+    {
+        GameFilter = null;
+        SelectedPlatformFilter = PlatformFilterOption.All;
+    }
+
+    partial void OnSelectedPlatformFilterChanged(PlatformFilterOption value)
+    {
+        RebuildView();
+    }
+
+    [RelayCommand]
     private void OpenChatter(StreamSessionChatterRowViewModel? chatter)
     {
         if (chatter is { CanOpen: true })
@@ -932,6 +961,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     {
         var selectedId = SelectedRow?.Source.Id;
         var sessions = new List<StreamSessionRowViewModel>(_allSessions.Count);
+        var platformFilter = SelectedPlatformFilter?.Platform;
 
         _visibleSessions.Clear();
 
@@ -939,6 +969,11 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         foreach (var row in _allSessions)
         {
+            if (platformFilter is { } platform && !row.Platforms.Contains(platform))
+            {
+                continue;
+            }
+
             if (HasGameFilter && !Matches(row, GameFilter!))
             {
                 continue;
@@ -976,6 +1011,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         OnPropertyChanged(nameof(HasSessions));
         OnPropertyChanged(nameof(IsEverythingHidden));
+        OnPropertyChanged(nameof(IsFilteredEmpty));
         OnPropertyChanged(nameof(EmptyHeading));
         OnPropertyChanged(nameof(EmptyDescription));
 
@@ -1170,6 +1206,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
             DetailChattersDeltaTone = TrendTone.None;
             DetailPeakViewersDeltaTone = TrendTone.None;
             DetailAverageViewersDeltaTone = TrendTone.None;
+            DetailPlatformBreakdown.Clear();
+            HasDetailPlatformBreakdown = false;
+            DetailChatterSumNote = string.Empty;
             return;
         }
 
@@ -1181,6 +1220,16 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         DetailCategoriesHint = DescribeCategories(row.Source);
         DetailPeriodText = FormatPeriod(row.StartedAt, row.Source.EndedAt);
         DetailTrackingText = DescribeTracking(row.Source);
+
+        var platforms = row.Source.Platforms;
+        var showBreakdown = platforms.Count > 1 || (platforms.Count == 1 && platforms[0].Platform != StreamingPlatform.Twitch);
+        DetailPlatformBreakdown.SyncTo(showBreakdown
+            ? platforms.Select(static p => new StreamSessionPlatformBreakdownViewModel(p)).ToList()
+            : []);
+        HasDetailPlatformBreakdown = showBreakdown;
+        DetailChatterSumNote = platforms.Count > 1
+            ? "Сумма уникальных авторов по площадкам (зритель, писавший на обеих площадках, учтён на каждой)"
+            : string.Empty;
 
         (DetailMessagesDelta, DetailMessagesDeltaTone) = DescribeDelta(row.MessageCount, _averageMessages, _visibleSessions.Count, withValue: true);
         (DetailChattersDelta, DetailChattersDeltaTone) = DescribeDelta(row.ChatterCount, _averageChatters, _visibleSessions.Count, withValue: true);
@@ -1340,6 +1389,8 @@ public sealed partial class StreamSessionRowViewModel : ObservableObject
     public string PeakViewersFormatted { get; }
     public string AverageViewersFormatted { get; }
 
+    public IReadOnlyList<StreamingPlatform> Platforms { get; }
+
     public IReadOnlyList<StreamSessionStripeViewModel> Stripes { get; }
 
     public string CardMetaText { get; }
@@ -1357,6 +1408,7 @@ public sealed partial class StreamSessionRowViewModel : ObservableObject
         ChatterCountFormatted = StreamHistoryPageViewModel.FormatNumber(source.ChatterCount);
         PeakViewersFormatted = StreamHistoryPageViewModel.FormatNumber(source.PeakViewers);
         AverageViewersFormatted = StreamHistoryPageViewModel.FormatNumber(source.AverageViewers);
+        Platforms = [.. source.Platforms.Select(static p => p.Platform).Distinct()];
         Stripes = BuildStripes(source);
 
         CardMetaText = string.Create(UiCulture.Russian, $"{StartedAtFormatted} · {DurationFormatted}");
@@ -1633,4 +1685,31 @@ public sealed class StreamSessionChatterRowViewModel
             ? string.Create(UiCulture.Russian, $"{Summary}. Открыть в разделе «Пользователи»")
             : string.Create(UiCulture.Russian, $"{Summary}. В статистике пользователей этой записи нет");
     }
+}
+
+public sealed class StreamSessionPlatformBreakdownViewModel
+{
+    public StreamSessionPlatformBreakdownViewModel(BroadcastPlatformRecord source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        Platform = source.Platform;
+        DisplayName = PlatformVisuals.GetDisplayName(source.Platform);
+        Channel = source.Channel;
+        HasTitle = source.Title is { Length: > 0 };
+        Title = HasTitle ? source.Title! : "Без названия";
+        var duration = source.EndedAt > source.StartedAt ? source.EndedAt - source.StartedAt : TimeSpan.Zero;
+        DurationFormatted = StreamHistoryPageViewModel.FormatDuration(duration);
+        MessageCountFormatted = StreamHistoryPageViewModel.FormatNumber(source.MessageCount);
+        ChatterCountFormatted = StreamHistoryPageViewModel.FormatNumber(source.ChatterCount);
+    }
+
+    public StreamingPlatform Platform { get; }
+    public string DisplayName { get; }
+    public string Channel { get; }
+    public bool HasTitle { get; }
+    public string Title { get; }
+    public string DurationFormatted { get; }
+    public string MessageCountFormatted { get; }
+    public string ChatterCountFormatted { get; }
 }

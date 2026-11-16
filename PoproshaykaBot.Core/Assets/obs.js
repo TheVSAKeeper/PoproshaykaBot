@@ -4,6 +4,7 @@
     const chatContainer = document.getElementById('chat');
     let maxMessages = 50;
     let showTimestamp = true;
+    let showPlatformBadge = false;
     let enableAnimations = true;
 
     const urlParams = new URLSearchParams(globalThis.location.search);
@@ -87,8 +88,28 @@
         }
     }
 
-    function resolveAvatar(userId) {
-        if (!userId) return Promise.resolve(null);
+    function isTwitchPlatform(platform) {
+        return !platform || platform === 'Twitch';
+    }
+
+    function renderPlatformBadge(platform) {
+        if (!platform) return '';
+        const normalized = String(platform).toLowerCase();
+        if (normalized === 'twitch') {
+            return '<span class="platform-badge platform-badge--twitch" title="Twitch" aria-label="Twitch">'
+                + '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.3 3H20v11.7l-4.7 4.7h-3.9l-2.5 2.6H6.5v-2.6H3V6.2L4.3 3zm1.7 2v11.6h3.5v2.3l2.3-2.3h4.2l2.3-2.3V5H6zm8.8 3.2h1.9v5.2h-1.9V8.2zm-4.9 0h1.9v5.2H9.9V8.2z"/></svg>'
+                + '</span>';
+        }
+        if (normalized === 'youtube') {
+            return '<span class="platform-badge platform-badge--youtube" title="YouTube" aria-label="YouTube">'
+                + '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.6 7.2a2.7 2.7 0 0 0-1.9-1.9C18 4.8 12 4.8 12 4.8s-6 0-7.7.5a2.7 2.7 0 0 0-1.9 1.9C2 8.9 2 12 2 12s0 3.1.4 4.8a2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.7.5 7.7.5s6 0 7.7-.5a2.7 2.7 0 0 0 1.9-1.9c.4-1.7.4-4.8.4-4.8s0-3.1-.4-4.8zM10 15.1V8.9L15.4 12 10 15.1z"/></svg>'
+                + '</span>';
+        }
+        return `<span class="platform-badge platform-badge--other">${escapeHtml(platform)}</span>`;
+    }
+
+    function resolveAvatar(userId, platform) {
+        if (!userId || !isTwitchPlatform(platform)) return Promise.resolve(null);
 
         if (avatarMemoryCache.has(userId)) {
             return avatarMemoryCache.get(userId);
@@ -122,11 +143,12 @@
         return promise;
     }
 
-    function attachAvatar(messageDiv, userId) {
+    function attachAvatar(messageDiv, userId, platform) {
+        if (!isTwitchPlatform(platform)) return;
         const placeholder = messageDiv.querySelector('.avatar[data-user-id="' + escapeAttr(userId) + '"]');
         if (!placeholder) return;
 
-        resolveAvatar(userId).then(url => {
+        resolveAvatar(userId, platform).then(url => {
             if (!url) {
                 placeholder.classList.add('avatar-missing');
                 return;
@@ -136,8 +158,8 @@
         });
     }
 
-    function renderAvatarPlaceholder(userId) {
-        if (!showUserAvatars || !userId) return '';
+    function renderAvatarPlaceholder(userId, platform) {
+        if (!showUserAvatars || !userId || !isTwitchPlatform(platform)) return '';
         const safeId = escapeAttr(userId);
         return `<img class="avatar" data-user-id="${safeId}" alt="" src="" loading="lazy">`;
     }
@@ -526,6 +548,7 @@
             [enableMessageShadows, 'no-shadows'],
             [isHighlightMentions, 'no-mentions'],
             [showTimestamp, 'no-timestamp'],
+            [showPlatformBadge, 'no-platform-badge'],
             [showUserAvatars, 'no-avatars'],
             [showMessageImages, 'no-message-images'],
         ];
@@ -586,10 +609,12 @@
         const isSystemMessage = message.messageType !== 'UserMessage';
 
         const timestampHtml = `<time class="timestamp" datetime="${escapeAttr(timestampIso)}">${escapeHtml(timestampLabel)}</time>`;
+        const platformBadgeHtml = renderPlatformBadge(message.platform);
 
         if (isSystemMessage) {
             messageDiv.innerHTML = `
             ${timestampHtml}
+            ${platformBadgeHtml}
             <span class="system-message">${escapeHtml(message.message)}</span>
         `;
         } else {
@@ -597,7 +622,7 @@
             const messageText = String(message.message ?? '');
             const image = pickMessageImage(message.images, message.imageLinks, messageText);
             const messageWithEmotes = renderMessageWithEmotes(messageText, message.emotes || [], image);
-            const avatarHtml = renderAvatarPlaceholder(message.userId);
+            const avatarHtml = renderAvatarPlaceholder(message.userId, message.platform);
 
             const usernameClasses = ['username', ...userTypeClasses].join(' ');
             const usernameColor = sanitizeUsernameColor(message.color);
@@ -607,6 +632,7 @@
             const headerHtml = `
             <div class="message-header">
                 ${timestampHtml}
+                ${platformBadgeHtml}
                 ${badgesHtml}
                 ${usernameHtml}
             </div>`;
@@ -628,7 +654,7 @@
             ${contentHtml}
         `;
 
-                attachAvatar(messageDiv, message.userId);
+                attachAvatar(messageDiv, message.userId, message.platform);
             } else {
                 messageDiv.innerHTML = contentHtml;
             }
@@ -966,6 +992,7 @@
             ['enableMessageShadows', '.message', 'no-shadows', v => enableMessageShadows = v, () => enableMessageShadows],
             ['enableSpecialEffects', '.message', 'no-special-effects', v => enableSpecialEffects = v, () => enableSpecialEffects],
             ['showTimestamp', '#chat .message', 'no-timestamp', v => showTimestamp = v, () => showTimestamp],
+            ['showPlatformBadge', '.message', 'no-platform-badge', v => showPlatformBadge = v, () => showPlatformBadge],
             ['showUserAvatars', '.message', 'no-avatars', v => showUserAvatars = v, () => showUserAvatars],
             ['showMessageImages', '.message', 'no-message-images', v => showMessageImages = v, () => showMessageImages],
         ];

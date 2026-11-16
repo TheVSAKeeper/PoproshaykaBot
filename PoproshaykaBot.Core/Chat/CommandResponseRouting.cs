@@ -56,6 +56,21 @@ public static class CommandResponseRouting
         return new(CommandDeliveryAction.OverlayOnly);
     }
 
+    public static bool WillDeliverToChat(CommandResponseTarget target, PlatformCapabilities capabilities)
+    {
+        if (target == CommandResponseTarget.None)
+        {
+            return false;
+        }
+
+        if (target.WhispersToCaller())
+        {
+            return (capabilities & PlatformCapabilities.Whisper) == PlatformCapabilities.None;
+        }
+
+        return target.GoesToChat();
+    }
+
     public static string PrependCallerMention(string callerDisplayName, string text)
     {
         var normalized = (callerDisplayName ?? string.Empty).Trim().TrimStart('@');

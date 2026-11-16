@@ -1,0 +1,213 @@
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Tiles.MultiplatformChatTileView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
+             xmlns:chat="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles.Chat"
+             xmlns:platformControls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
+             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
+             xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:MultiplatformChatTileViewModel}"
+             d:DesignWidth="380"
+             d:DesignHeight="420">
+
+    <UserControl.Resources>
+        <DataTemplate DataType="{x:Type chat:ChatFeedMessageItemViewModel}">
+            <Grid Margin="0,2,4,2">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Opacity" Value="1" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsHistorical}" Value="True">
+                                <Setter Property="Opacity" Value="0.72" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <TextBlock TextWrapping="Wrap"
+                           Foreground="{DynamicResource Fg.Primary}"
+                           LineHeight="19">
+                    <Run Text="{Binding TimestampText, Mode=OneWay}"
+                         Foreground="{DynamicResource Fg.Muted}"
+                         FontFamily="{DynamicResource Font.Mono}"
+                         FontSize="{DynamicResource Font.Size.XS}" />
+                    <Run Text=" " />
+                    <InlineUIContainer BaselineAlignment="Center">
+                        <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
+                                                           Width="12"
+                                                           Height="12"
+                                                           Margin="0,0,4,0"
+                                                           ToolTip="{Binding PlatformDisplayName, Mode=OneWay}" />
+                    </InlineUIContainer>
+                    <InlineUIContainer BaselineAlignment="Center">
+                        <Border Background="{DynamicResource Bg.SurfaceAlt}"
+                                BorderBrush="{DynamicResource Border.Subtle}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="4,0"
+                                Margin="0,0,4,0"
+                                Visibility="{Binding HasRoleBadge, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding RoleBadgeText, Mode=OneWay}"
+                                       Foreground="{DynamicResource Fg.Secondary}"
+                                       FontSize="{DynamicResource Font.Size.XS}" />
+                        </Border>
+                    </InlineUIContainer>
+                    <InlineUIContainer BaselineAlignment="Center">
+                        <Border Background="{DynamicResource Bg.SurfaceAlt}"
+                                CornerRadius="4"
+                                Padding="4,0"
+                                Margin="0,0,4,0"
+                                Visibility="{Binding IsHistorical, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="История"
+                                       Foreground="{DynamicResource Fg.Muted}"
+                                       FontSize="{DynamicResource Font.Size.XS}" />
+                        </Border>
+                    </InlineUIContainer>
+                    <InlineUIContainer BaselineAlignment="Center">
+                        <Button Style="{StaticResource Button.Ghost}"
+                                Padding="0"
+                                MinHeight="0"
+                                Margin="0,0,4,0"
+                                Cursor="Hand"
+                                VerticalAlignment="Center"
+                                IsEnabled="{Binding HasUserLink, Mode=OneWay}"
+                                Command="{Binding OpenUserCommand}">
+                            <TextBlock Text="{Binding DisplayName, Mode=OneWay}"
+                                       FontWeight="SemiBold">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{Binding AuthorBrush, Mode=OneWay}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding AuthorBrush}" Value="{x:Null}">
+                                                <Setter Property="Foreground" Value="{DynamicResource Fg.Primary}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Button>
+                    </InlineUIContainer>
+                    <Run Text="{Binding MessageText, Mode=OneWay}" />
+                </TextBlock>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type chat:ChatFeedHistoryBoundaryItemViewModel}">
+            <Grid Margin="0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0"
+                        Height="1"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource Border.Subtle}" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Label, Mode=OneWay}"
+                           Margin="8,0"
+                           FontSize="{DynamicResource Font.Size.XS}"
+                           Foreground="{DynamicResource Fg.Muted}" />
+                <Border Grid.Column="2"
+                        Height="1"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource Border.Subtle}" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type chat:ChatFeedGapItemViewModel}">
+            <Border Background="{DynamicResource Bg.SurfaceAlt}"
+                    BorderBrush="{DynamicResource Border.Subtle}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="8,5"
+                    Margin="0,4">
+                <StackPanel Orientation="Horizontal">
+                    <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
+                                                       Width="12"
+                                                       Height="12"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"
+                                                       ToolTip="{Binding PlatformDisplayName, Mode=OneWay}" />
+                    <TextBlock Text="{Binding TimestampText, Mode=OneWay}"
+                               Foreground="{DynamicResource Fg.Muted}"
+                               FontFamily="{DynamicResource Font.Mono}"
+                               FontSize="{DynamicResource Font.Size.XS}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0" />
+                    <TextBlock Text="{Binding Text, Mode=OneWay}"
+                               Foreground="{DynamicResource State.WarningText}"
+                               FontSize="{DynamicResource Font.Size.XS}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <DockPanel LastChildFill="True">
+        <DockPanel DockPanel.Dock="Top"
+                   Margin="0,0,0,6">
+            <ComboBox DockPanel.Dock="Right"
+                      ItemsSource="{Binding PlatformOptions}"
+                      SelectedItem="{Binding SelectedPlatformFilter, Mode=TwoWay}"
+                      DisplayMemberPath="Label"
+                      MinWidth="112"
+                      AutomationProperties.Name="Фильтр площадки чата" />
+            <TextBlock Text="Лента сообщений"
+                       Style="{StaticResource TextBlock.Subtle}"
+                       VerticalAlignment="Center" />
+        </DockPanel>
+
+        <Grid>
+            <ListBox x:Name="FeedListBox"
+                     ItemsSource="{Binding Items}"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     Padding="0"
+                     HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.CanContentScroll="True"
+                     VirtualizingStackPanel.IsVirtualizing="True"
+                     VirtualizingStackPanel.VirtualizationMode="Recycling"
+                     ScrollViewer.ScrollChanged="OnFeedScrollChanged">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="Focusable" Value="False" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <ContentPresenter />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
+
+            <controls:EmptyState Icon="MessagesSquare"
+                                 Heading="Пока пусто"
+                                 Description="Сообщения подключённых площадок появятся здесь в реальном времени."
+                                 DescriptionMaxWidth="280"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}" />
+
+            <Button Style="{StaticResource Button.Primary}"
+                    Content="{Binding UnreadButtonText, Mode=OneWay}"
+                    Command="{Binding ScrollToBottomCommand}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,0,6"
+                    Padding="12,4"
+                    Visibility="{Binding HasUnread, Converter={StaticResource BoolToVisibility}}" />
+        </Grid>
+    </DockPanel>
+</UserControl>

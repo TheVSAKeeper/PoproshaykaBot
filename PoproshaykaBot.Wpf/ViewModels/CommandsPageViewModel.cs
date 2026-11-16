@@ -22,34 +22,12 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private const string NotWrittenNotice = "Параметры применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните параметры ещё раз.";
 
-    private static readonly CommandContext ViewerProbe = new()
-    {
-        Platform = StreamingPlatform.Twitch,
-        Username = "viewer",
-        DisplayName = "viewer",
-    };
-
-    private static readonly CommandContext ModeratorProbe = new()
-    {
-        Platform = StreamingPlatform.Twitch,
-        Username = "moderator",
-        DisplayName = "moderator",
-        IsModerator = true,
-    };
-
-    private static readonly CommandContext BroadcasterProbe = new()
-    {
-        Platform = StreamingPlatform.Twitch,
-        Username = "broadcaster",
-        DisplayName = "broadcaster",
-        IsBroadcaster = true,
-    };
-
     private readonly CommandSettingsStore _settingsStore;
     private readonly SettingsManager _settingsManager;
     private readonly CommandUsageRepository _usageRepository;
     private readonly IUnsavedChangesPrompt _unsavedChangesPrompt;
     private readonly AccountsStore _accountsStore;
+    private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly ILogger<CommandsPageViewModel> _logger;
     private readonly List<CommandRowViewModel> _allRows = [];
     private readonly ObservableCollection<CommandRowViewModel> _rows = [];
@@ -59,6 +37,11 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     private bool _restoringRow;
     private bool _rebuildingView;
     private CommandRowViewModel? _parametersRow;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTwitchProbe))]
+    [NotifyPropertyChangedFor(nameof(IsYouTubeProbe))]
+    private StreamingPlatform _probePlatform = StreamingPlatform.Twitch;
 
     [ObservableProperty]
     private CommandRowViewModel? _selectedRow;
@@ -102,7 +85,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         CommandUsageRepository usageRepository,
         IUnsavedChangesPrompt unsavedChangesPrompt,
         AccountsStore accountsStore,
-        ILogger<CommandsPageViewModel> logger)
+        ILogger<CommandsPageViewModel> logger,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(processor);
 
@@ -111,13 +95,15 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         _settingsManager = settingsManager;
         _usageRepository = usageRepository;
         _unsavedChangesPrompt = unsavedChangesPrompt;
+        _platformRegistry = platformRegistry;
         _logger = logger;
 
         var byName = StringComparer.Create(UiCulture.Russian, ignoreCase: true);
+        var capabilities = CapabilitiesFor(ProbePlatform);
 
         foreach (var command in processor.GetAllCommands().OrderBy(command => command.Canonical, byName))
         {
-            var row = new CommandRowViewModel(command, processor.Prefix, ProbeCodeLevel(command));
+            var row = new CommandRowViewModel(command, processor.Prefix, ProbeCodeLevel(command, ProbePlatform, capabilities));
             row.EnabledChanged += OnRowEnabledChanged;
             row.TargetChanged += OnRowTargetChanged;
             row.AccessChanged += OnRowAccessChanged;
@@ -127,6 +113,30 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         }
 
         Reload();
+    }
+
+    public bool IsTwitchProbe
+    {
+        get => ProbePlatform == StreamingPlatform.Twitch;
+        set
+        {
+            if (value)
+            {
+                ProbePlatform = StreamingPlatform.Twitch;
+            }
+        }
+    }
+
+    public bool IsYouTubeProbe
+    {
+        get => ProbePlatform == StreamingPlatform.YouTube;
+        set
+        {
+            if (value)
+            {
+                ProbePlatform = StreamingPlatform.YouTube;
+            }
+        }
     }
 
     public string PageTitle => "Команды";
@@ -220,19 +230,75 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         return true;
     }
 
-    private static CommandAccessLevel? ProbeCodeLevel(IChatCommand command)
+    private static CommandContext CreateProbe(StreamingPlatform platform, bool isModerator = false, bool isBroadcaster = false)
     {
-        if (command.CanExecute(ViewerProbe))
+        return new()
+        {
+            Platform = platform,
+            Username = isBroadcaster ? "broadcaster" : isModerator ? "moderator" : "viewer",
+            DisplayName = isBroadcaster ? "broadcaster" : isModerator ? "moderator" : "viewer",
+            IsModerator = isModerator,
+            IsBroadcaster = isBroadcaster,
+        };
+    }
+
+    private PlatformCapabilities CapabilitiesFor(StreamingPlatform platform)
+    {
+        if (_platformRegistry?.Find(platform) is { } found)
+        {
+            return found.Capabilities;
+        }
+
+        return platform switch
+        {
+            StreamingPlatform.Twitch => PlatformCapabilities.Reply
+                | PlatformCapabilities.Whisper
+                | PlatformCapabilities.NativePolls
+                | PlatformCapabilities.ChannelMetadataEdit
+                | PlatformCapabilities.EmotePositions,
+            StreamingPlatform.YouTube => PlatformCapabilities.ServerChatHistory,
+            _ => PlatformCapabilities.None,
+        };
+    }
+
+    private static CommandAccessLevel? ProbeCodeLevel(
+        IChatCommand command,
+        StreamingPlatform platform,
+        PlatformCapabilities capabilities)
+    {
+        if ((capabilities & command.RequiredCapabilities) != command.RequiredCapabilities)
+        {
+            return null;
+        }
+
+        if (command.CanExecute(CreateProbe(platform)))
         {
             return CommandAccessLevel.Everyone;
         }
 
-        if (command.CanExecute(ModeratorProbe))
+        if (command.CanExecute(CreateProbe(platform, isModerator: true)))
         {
             return CommandAccessLevel.Moderators;
         }
 
-        return command.CanExecute(BroadcasterProbe) ? CommandAccessLevel.Broadcaster : null;
+        return command.CanExecute(CreateProbe(platform, isBroadcaster: true))
+            ? CommandAccessLevel.Broadcaster
+            : null;
+    }
+
+    partial void OnProbePlatformChanged(StreamingPlatform value)
+    {
+        var capabilities = CapabilitiesFor(value);
+
+        foreach (var row in _allRows)
+        {
+            if (_commands.TryGetValue(row.Canonical, out var command))
+            {
+                row.UpdateCodeAvailability(ProbeCodeLevel(command, value, capabilities), value);
+            }
+        }
+
+        RefreshWhisperNotice();
     }
 
     private static CommandOverride GetOrAddOverride(CommandSettings settings, string canonical)
@@ -518,6 +584,12 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
     private void RefreshWhisperNotice()
     {
+        if (ProbePlatform != StreamingPlatform.Twitch)
+        {
+            WhisperNotice = null;
+            return;
+        }
+
         var whispers = _allRows.Any(row => row.EffectiveTarget.WhispersToCaller());
 
         WhisperNotice = whispers && !TwitchScopes.IsGranted(_accountsStore.LoadBot(), TwitchScopes.UserManageWhispers)

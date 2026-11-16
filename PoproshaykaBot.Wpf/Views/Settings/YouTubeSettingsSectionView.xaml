@@ -71,6 +71,82 @@
         <Border BorderBrush="{DynamicResource Border.Subtle}"
                 BorderThickness="0,1,0,0"
                 Padding="0,12,0,0"
+                Margin="0,4,0,12"
+                Visibility="{Binding ShowQuotaDiagnostics, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel>
+                <DockPanel Margin="0,0,0,8">
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource Button.Secondary}"
+                            Content="Обновить"
+                            Command="{Binding QuotaStatus.RefreshCommand, Mode=OneWay}"
+                            VerticalAlignment="Center" />
+
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Ellipse Width="8"
+                                 Height="8"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,8,0"
+                                 keepshell:SeverityBrushBehavior.Fill="{Binding QuotaStatus.StatusSeverity}" />
+                        <TextBlock Text="Расход квоты YouTube API"
+                                   Foreground="{DynamicResource Fg.Primary}"
+                                   FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </DockPanel>
+
+                <StackPanel Visibility="{Binding QuotaStatus.HasData, Converter={StaticResource BoolToVisibility}}">
+                    <DockPanel Margin="0,0,0,6">
+                        <TextBlock DockPanel.Dock="Right"
+                                   Text="{Binding QuotaStatus.BreakdownText}"
+                                   Foreground="{DynamicResource Fg.Muted}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   Margin="12,0,0,0"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding QuotaStatus.UsageText}"
+                                   Foreground="{DynamicResource Fg.Primary}"
+                                   FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
+
+                    <ProgressBar Height="6"
+                                 Minimum="0"
+                                 Maximum="100"
+                                 Value="{Binding QuotaStatus.FillPercent, Mode=OneWay}"
+                                 keepshell:SeverityBrushBehavior.Foreground="{Binding QuotaStatus.StatusSeverity}"
+                                 Margin="0,0,0,6" />
+
+                    <TextBlock Text="{Binding QuotaStatus.NextResetText}"
+                               Foreground="{DynamicResource Fg.Muted}"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,2" />
+
+                    <TextBlock Text="{Binding QuotaStatus.ReliabilityText}"
+                               Foreground="{DynamicResource Fg.Muted}"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock Text="{Binding QuotaStatus.WarningText}"
+                               FontSize="{DynamicResource Font.Size.S}"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,0"
+                               keepshell:SeverityBrushBehavior.Foreground="{Binding QuotaStatus.StatusSeverity}"
+                               Visibility="{Binding QuotaStatus.HasWarning, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding QuotaStatus.UsageText}"
+                           Foreground="{DynamicResource Fg.Muted}"
+                           FontSize="{DynamicResource Font.Size.S}"
+                           Visibility="{Binding QuotaStatus.HasData, Converter={StaticResource InverseBoolToVisibility}}" />
+            </StackPanel>
+        </Border>
+
+        <Border BorderBrush="{DynamicResource Border.Subtle}"
+                BorderThickness="0,1,0,0"
+                Padding="0,12,0,0"
                 Margin="0,4,0,0">
             <StackPanel>
                 <TextBlock Text="Памятка по проекту Google Cloud"

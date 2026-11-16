@@ -22,4 +22,8 @@ public interface IChatPlatform
     IChatDecorations Decorations => NullChatDecorations.Instance;
 
     PlatformBotIdentity? BotIdentity => null;
+
+    string? ConfiguredChannel => null;
+
+    string? BuildStreamUrl(StreamInfo? stream = null) => null;
 }

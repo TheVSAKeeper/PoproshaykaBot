@@ -104,6 +104,24 @@ public sealed class ObsChatThreePointSyncTests
         }
     }
 
+    [Test]
+    public void ShowPlatformBadge_DefaultsToFalse_AndObsJsGuardsAvatarFetchByPlatform()
+    {
+        var defaults = new ObsChatSettings();
+        var css = ObsChatCssSettings.FromObsChatSettings(defaults);
+        var jsSource = File.ReadAllText(LocateOverlayJs());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(defaults.ShowPlatformBadge, Is.False);
+            Assert.That(css.ShowPlatformBadge, Is.False);
+            Assert.That(jsSource, Does.Contain("no-platform-badge"));
+            Assert.That(jsSource, Does.Contain("isTwitchPlatform"));
+            Assert.That(jsSource, Does.Contain("!isTwitchPlatform(platform)"));
+            Assert.That(jsSource, Does.Contain("renderPlatformBadge"));
+        });
+    }
+
     private static IEnumerable<PropertyInfo> GetMutableSourceProperties()
     {
         return typeof(ObsChatSettings)

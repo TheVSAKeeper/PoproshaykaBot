@@ -522,6 +522,35 @@ body::-webkit-scrollbar {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
+.platform-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    height: 1em;
+    margin-right: 4px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.platform-badge svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.platform-badge--twitch {
+    color: #9146ff;
+}
+
+.platform-badge--youtube {
+    color: #ff0000;
+}
+
+.message.no-platform-badge .platform-badge {
+    display: none;
+}
+
 .avatar {
     width: var(--avatar-size);
     height: var(--avatar-size);

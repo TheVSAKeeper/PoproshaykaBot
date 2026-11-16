@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Tests.Polls;
 
@@ -376,5 +377,69 @@ public class BroadcastProfilesManagerTests
             Assert.That(stored.CurrentNumber, Is.EqualTo(5));
             Assert.That(stored.LastApplyAt, Is.Null);
         }
+    }
+
+    [Test]
+    public async Task Upsert_WithPlatforms_PersistsPlatformsBeforePublishingChanged()
+    {
+        var platformsStore = new BroadcastProfilePlatformsStore(
+            filePath: Path.Combine(_tempDir, "broadcast-profile-platforms.json"));
+        var manager = new BroadcastProfilesManager(
+            _store,
+            _applier,
+            _eventBus,
+            _clock,
+            NullLogger<BroadcastProfilesManager>.Instance,
+            platformsStore);
+
+        IReadOnlySet<StreamingPlatform>? observedAtEvent = null;
+        var profile = new BroadcastProfile { Name = "Multi" };
+
+        _eventBus
+            .When(bus => bus.PublishAsync(Arg.Any<BroadcastProfilesChanged>(), Arg.Any<CancellationToken>()))
+            .Do(_ => observedAtEvent = manager.GetPlatforms(profile.Id));
+
+        var written = manager.Upsert(profile, [StreamingPlatform.Twitch, StreamingPlatform.YouTube]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(written, Is.True);
+            Assert.That(observedAtEvent, Is.EquivalentTo([StreamingPlatform.Twitch, StreamingPlatform.YouTube]));
+            Assert.That(manager.GetPlatforms(profile.Id), Is.EquivalentTo([StreamingPlatform.Twitch, StreamingPlatform.YouTube]));
+        }
+    }
+
+    [Test]
+    public async Task Upsert_RollsBackProfile_WhenPlatformsStoreWriteIsBlocked()
+    {
+        var gate = new SettingsWriteGate();
+        var platformsPath = Path.Combine(_tempDir, "broadcast-profile-platforms.json");
+        await gate.RunExternalWriteAsync(
+            () =>
+            {
+                File.WriteAllText(platformsPath, "{}");
+                return Task.FromResult(0);
+            },
+            static _ => ["broadcast-profile-platforms.json"]);
+
+        var platformsStore = new BroadcastProfilePlatformsStore(null, platformsPath, gate);
+        var manager = new BroadcastProfilesManager(
+            _store,
+            _applier,
+            _eventBus,
+            _clock,
+            NullLogger<BroadcastProfilesManager>.Instance,
+            platformsStore);
+
+        var profile = new BroadcastProfile { Name = "MultiFail" };
+        var written = manager.Upsert(profile, [StreamingPlatform.Twitch, StreamingPlatform.YouTube]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(written, Is.False);
+            Assert.That(_store.Load().Profiles, Is.Empty);
+        }
+
+        await _eventBus.DidNotReceive().PublishAsync(Arg.Any<BroadcastProfilesChanged>(), Arg.Any<CancellationToken>());
     }
 }

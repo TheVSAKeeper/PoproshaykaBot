@@ -4,6 +4,7 @@
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
+             xmlns:controls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -13,7 +14,7 @@
     <UserControl.Resources>
         <DataTemplate x:Key="MonitoringIndicator" DataType="{x:Type vm:StreamMonitoringIndicatorViewModel}">
             <StackPanel Orientation="Horizontal"
-                        Margin="14,0,0,0"
+                        Margin="10,0,0,0"
                         ToolTip="{Binding Tooltip}"
                         Visibility="{Binding IsReported, Converter={StaticResource BoolToVisibility}}">
                 <Ellipse Width="8"
@@ -21,9 +22,26 @@
                          VerticalAlignment="Center"
                          keepshell:SeverityBrushBehavior.Fill="{Binding Severity}" />
                 <TextBlock Text="{Binding Text}"
-                           Margin="8,0,0,0"
+                           Margin="6,0,0,0"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource Fg.Secondary}" />
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="MonitoringGroup" DataType="{x:Type vm:PlatformMonitoringGroupViewModel}">
+            <StackPanel Orientation="Horizontal"
+                        Margin="12,0,0,0"
+                        Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}">
+                <controls:PlatformIconView Platform="{Binding Platform}"
+                                           Width="12"
+                                           Height="12"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,2,0"
+                                           ToolTip="{Binding DisplayName}"
+                                           Visibility="{Binding DataContext.StreamMonitoring.ShowPlatformIcons, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                <ContentPresenter Content="{Binding Bot}"
+                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
+                <ContentPresenter Content="{Binding Broadcaster}"
+                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
             </StackPanel>
         </DataTemplate>
     </UserControl.Resources>
@@ -78,12 +96,16 @@
                         Margin="14,1,0,1"
                         Background="{DynamicResource Border.Subtle}" />
 
-                <ContentPresenter DockPanel.Dock="Right"
-                                  Content="{Binding Broadcaster}"
-                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
-                <ContentPresenter DockPanel.Dock="Right"
-                                  Content="{Binding Bot}"
-                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
+                <ItemsControl DockPanel.Dock="Right"
+                              ItemsSource="{Binding Groups}"
+                              ItemTemplate="{StaticResource MonitoringGroup}"
+                              Focusable="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
 
                 <TextBlock Text="Мониторинг стрима"
                            Margin="14,0,0,0"

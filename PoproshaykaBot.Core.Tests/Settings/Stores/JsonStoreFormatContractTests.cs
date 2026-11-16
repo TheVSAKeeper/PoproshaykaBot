@@ -219,6 +219,7 @@ public sealed class JsonStoreFormatContractTests
               "enableAnimations": true,
               "maxMessages": 50,
               "showTimestamp": true,
+              "showPlatformBadge": false,
               "emoteSizePixels": 28,
               "badgeSizePixels": 18,
               "showUserAvatars": false,

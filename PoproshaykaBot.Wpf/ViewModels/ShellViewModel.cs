@@ -6,20 +6,28 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Helix;
+using PoproshaykaBot.Core.YouTube.Client;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.ComponentModel;
+using System.Net.Http;
 using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 {
-    private readonly BotConnectionManager _connectionManager;
+    private readonly IBotConnectionController _connectionManager;
+    private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly ShellPreferences _preferences;
     private readonly IDialogService _dialogService;
     private readonly List<IDisposable> _subscriptions = [];
+    private readonly Dictionary<StreamingPlatform, PlatformConnectionItemViewModel> _platformConnectionsById = [];
     private readonly NavigationItem _settingsSection;
     private readonly SettingsPageViewModel _settingsPage;
     private readonly ChatHistoryManager _chatHistory;
@@ -35,11 +43,15 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly IMainWindowController _mainWindow;
     private NavigationItem? _current;
     private bool _returningToPage;
+    private string? _lastPartialFailureKey;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConnectButtonText))]
     [NotifyCanExecuteChangedFor(nameof(ToggleConnectCommand))]
     private BotLifecyclePhase _phase;
+
+    [ObservableProperty]
+    private bool _showPlatformMenu;
 
     public ShellViewModel(
         ModalHostViewModel modal,
@@ -52,7 +64,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         DiagnosticsViewModel diagnosticsPage,
         ThemeViewModel theme,
         ShellPreferences preferences,
-        BotConnectionManager connectionManager,
+        IBotConnectionController connectionManager,
         IEventBus eventBus,
         ILogger<ShellViewModel> logger,
         IDialogService dialogService,
@@ -64,12 +76,14 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         ISettingsStore uiSettings,
         IUiDispatcher uiDispatcher,
         IUnsavedChangesPrompt unsavedChangesPrompt,
-        IMainWindowController mainWindow)
+        IMainWindowController mainWindow,
+        IChatPlatformRegistry? platformRegistry = null)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
         _mainWindow = mainWindow;
         _connectionManager = connectionManager;
+        _platformRegistry = platformRegistry;
         _logger = logger;
         _preferences = preferences;
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
@@ -81,6 +95,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         StreamMonitoring = streamMonitoring;
 
         Overview = overview;
+        Overview.UserRequested += OnUserRequested;
 
         _settingsPage = settingsPage;
         _settingsPage.SettingsSaved += OnSettingsSaved;
@@ -119,10 +134,14 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         Selected = FindSectionByKey(_preferences.LastPage) ?? Sections[0];
 
+        InitializePlatformConnections();
+
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnLifecyclePhaseChanged));
+        _subscriptions.Add(eventBus.SubscribeOnUi<PlatformConnectionChanged>(OnPlatformConnectionChanged));
         _subscriptions.Add(eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(statusEvent => SetStatus(statusEvent.Message, StatusSeverity.Info)));
 
         ApplyPhase(_connectionManager.CurrentPhase);
+        RefreshPartialFailureStatus();
     }
 
     public ThemeViewModel Theme { get; }
@@ -136,6 +155,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public StreamMonitoringViewModel StreamMonitoring { get; }
 
     public DashboardViewModel Overview { get; }
+
+    public IReadOnlyList<PlatformConnectionItemViewModel> PlatformConnections { get; private set; } = [];
 
     public string BuildLabel => AppBuildBadge.Current.Value;
 
@@ -172,7 +193,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
         try
         {
-            await _connectionManager.ShutdownAsync(BotStopMode.Forced);
+            await _connectionManager.StopAsync(BotStopMode.Forced);
         }
         catch (Exception exception)
         {
@@ -187,6 +208,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _uiSettings.WriteFailed -= OnUiSettingsWriteFailed;
         _settingsPage.SettingsSaved -= OnSettingsSaved;
         _streamHistoryPage.UserRequested -= OnUserRequested;
+        Overview.UserRequested -= OnUserRequested;
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
 
         foreach (var subscription in _subscriptions)
@@ -451,6 +473,53 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private async Task TogglePlatformAsync(StreamingPlatform platform)
+    {
+        if (!_platformConnectionsById.TryGetValue(platform, out var item))
+        {
+            return;
+        }
+
+        switch (item.Phase)
+        {
+            case BotLifecyclePhase.Connecting:
+                _connectionManager.CancelConnection(platform);
+                break;
+
+            case BotLifecyclePhase.Connected:
+                _logger.PlatformDisconnectRequested(item.DisplayName);
+
+                try
+                {
+                    await _connectionManager.StopAsync(platform);
+                }
+                catch (Exception exception)
+                {
+                    _logger.PlatformDisconnectFailed(exception, item.DisplayName);
+                }
+
+                break;
+
+            case BotLifecyclePhase.Disconnecting:
+                break;
+
+            default:
+                _logger.PlatformConnectRequested(item.DisplayName);
+
+                try
+                {
+                    _connectionManager.StartConnection(platform);
+                }
+                catch (InvalidOperationException exception)
+                {
+                    _logger.PlatformStartConnectionFailed(exception, item.DisplayName);
+                }
+
+                break;
+        }
+    }
+
+    [RelayCommand]
     private void Restart()
     {
         _logger.RestartRequested();
@@ -519,18 +588,173 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     {
         OnboardingBanner.Refresh();
         DebugBanner.Refresh();
+        RefreshPlatformStates();
+        RefreshPartialFailureStatus();
     }
 
     private void OnLifecyclePhaseChanged(BotLifecyclePhaseChanged phaseEvent)
     {
         ApplyPhase(phaseEvent.Phase);
+        RefreshPartialFailureStatus();
 
         if (phaseEvent.Phase == BotLifecyclePhase.Failed)
         {
             _logger.BotConnectFailed(phaseEvent.Exception);
 
-            _dialogService.Error("Ошибка", $"Ошибка подключения бота: {phaseEvent.Exception?.Message}");
+            _dialogService.Error("Ошибка", $"Ошибка подключения бота: {FormatConnectionError(phaseEvent.Exception)}");
         }
+    }
+
+    private void OnPlatformConnectionChanged(PlatformConnectionChanged platformEvent)
+    {
+        if (!_platformConnectionsById.TryGetValue(platformEvent.Platform, out var item))
+        {
+            return;
+        }
+
+        item.IsEnabled = IsPlatformEnabled(platformEvent.Platform);
+        item.Phase = platformEvent.Phase;
+        item.LastErrorMessage = platformEvent.Phase == BotLifecyclePhase.Failed
+            ? FormatConnectionError(platformEvent.Exception)
+            : null;
+
+        RefreshPlatformMenuVisibility();
+        RefreshPartialFailureStatus();
+    }
+
+    private void InitializePlatformConnections()
+    {
+        var items = new List<PlatformConnectionItemViewModel>();
+
+        foreach (var platform in PlatformVisuals.OrderedPlatforms)
+        {
+            if (_platformRegistry is not null && _platformRegistry.Find(platform) is null)
+            {
+                continue;
+            }
+
+            var item = new PlatformConnectionItemViewModel(platform)
+            {
+                IsEnabled = IsPlatformEnabled(platform),
+                Phase = _connectionManager.GetPhase(platform),
+            };
+            items.Add(item);
+            _platformConnectionsById[platform] = item;
+        }
+
+        PlatformConnections = items;
+        RefreshPlatformMenuVisibility();
+    }
+
+    private void RefreshPlatformStates()
+    {
+        foreach (var item in PlatformConnections)
+        {
+            item.IsEnabled = IsPlatformEnabled(item.Platform);
+            item.Phase = _connectionManager.GetPhase(item.Platform);
+        }
+
+        RefreshPlatformMenuVisibility();
+    }
+
+    private bool IsPlatformEnabled(StreamingPlatform platform)
+    {
+        if (_platformRegistry?.Find(platform) is { } registered)
+        {
+            return registered.IsEnabled;
+        }
+
+        return platform == StreamingPlatform.Twitch;
+    }
+
+    private void RefreshPlatformMenuVisibility()
+    {
+        ShowPlatformMenu = PlatformConnections.Count(static item =>
+            item.IsEnabled || item.Phase is not BotLifecyclePhase.Idle and not BotLifecyclePhase.Disconnected) > 1;
+    }
+
+    private void RefreshPartialFailureStatus()
+    {
+        if (Phase != BotLifecyclePhase.Connected)
+        {
+            _lastPartialFailureKey = null;
+            return;
+        }
+
+        var connectedNames = new List<string>();
+        var failedParts = new List<string>();
+        var failedNames = new List<string>();
+
+        foreach (var item in PlatformConnections)
+        {
+            if (item.Phase == BotLifecyclePhase.Connected)
+            {
+                connectedNames.Add(item.DisplayName);
+            }
+            else if (item.IsEnabled && item.Phase == BotLifecyclePhase.Failed)
+            {
+                failedNames.Add(item.DisplayName);
+                var reason = string.IsNullOrWhiteSpace(item.LastErrorMessage)
+                    ? "подробности в журнале"
+                    : item.LastErrorMessage;
+                failedParts.Add($"{item.DisplayName}: {reason}");
+            }
+        }
+
+        if (failedParts.Count == 0 || connectedNames.Count == 0)
+        {
+            if (_lastPartialFailureKey is not null)
+            {
+                _lastPartialFailureKey = null;
+                ApplyPhase(Phase);
+            }
+
+            return;
+        }
+
+        var connectedLabel = string.Join(", ", connectedNames);
+        var failedLabel = string.Join(", ", failedNames);
+        var status = $"Подключено частично ({connectedLabel}); сбой {string.Join("; ", failedParts)}";
+        SetStatus(status, StatusSeverity.Warning);
+
+        if (!string.Equals(_lastPartialFailureKey, status, StringComparison.Ordinal))
+        {
+            _lastPartialFailureKey = status;
+            _logger.BotPartialConnectionFailure(connectedLabel, failedLabel);
+        }
+    }
+
+    private static string FormatConnectionError(Exception? exception)
+    {
+        if (exception is AggregateException aggregate)
+        {
+            exception = aggregate.Flatten().InnerExceptions.FirstOrDefault() ?? exception;
+        }
+
+        return exception switch
+        {
+            null => "подробности в журнале",
+            OperationCanceledException => "операция отменена",
+            TimeoutException => "превышено время ожидания",
+            UnauthorizedAccessException => "ошибка авторизации",
+            HttpRequestException httpEx => httpEx.StatusCode is { } code
+                ? $"сетевая ошибка HTTP {(int)code}"
+                : "ошибка сети",
+            YouTubeApiException ytEx => ytEx.Kind switch
+            {
+                YouTubeApiErrorKind.Unauthorized => "требуется повторная авторизация YouTube",
+                YouTubeApiErrorKind.Forbidden => "недостаточно прав YouTube",
+                YouTubeApiErrorKind.QuotaExceeded or YouTubeApiErrorKind.LocalQuotaBudgetReached => "превышена суточная квота YouTube API",
+                YouTubeApiErrorKind.RateLimitExceeded => "слишком много запросов к YouTube, попробуйте позже",
+                YouTubeApiErrorKind.LiveChatEnded => "чат трансляции YouTube завершён",
+                YouTubeApiErrorKind.NotFound => "канал или трансляция YouTube не найдены",
+                YouTubeApiErrorKind.TransportUnsupported => "выбранный транспорт чата YouTube недоступен",
+                YouTubeApiErrorKind.Transient => "временный сбой подключения к YouTube",
+                _ => "ошибка YouTube API, подробности в журнале",
+            },
+            HelixRequestException or TwitchAuthorizationMissingException => HelixErrorMessages.SafeMessage(exception),
+            _ => "подробности в журнале",
+        };
     }
 
     private void ApplyPhase(BotLifecyclePhase phase)
@@ -555,4 +779,56 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         StatusText = text;
         StatusSeverity = severity;
     }
+}
+
+public sealed partial class PlatformConnectionItemViewModel : ObservableObject
+{
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActionLabel), nameof(StatusLabel), nameof(CanToggle), nameof(MenuHeader), nameof(Tooltip))]
+    private BotLifecyclePhase _phase;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanToggle), nameof(MenuHeader))]
+    private bool _isEnabled;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Tooltip))]
+    private string? _lastErrorMessage;
+
+    public PlatformConnectionItemViewModel(StreamingPlatform platform)
+    {
+        Platform = platform;
+        DisplayName = PlatformVisuals.GetDisplayName(platform);
+    }
+
+    public StreamingPlatform Platform { get; }
+
+    public string DisplayName { get; }
+
+    public string ActionLabel => Phase switch
+    {
+        BotLifecyclePhase.Connecting => "Отменить",
+        BotLifecyclePhase.Connected => "Отключить",
+        BotLifecyclePhase.Disconnecting => "Отключение...",
+        _ => "Подключить",
+    };
+
+    public string StatusLabel => Phase switch
+    {
+        BotLifecyclePhase.Connecting => "подключение",
+        BotLifecyclePhase.Connected => "подключён",
+        BotLifecyclePhase.Disconnecting => "отключение",
+        BotLifecyclePhase.Cancelled => "отменено",
+        BotLifecyclePhase.Failed => "ошибка",
+        _ => "отключён",
+    };
+
+    public bool CanToggle => Phase != BotLifecyclePhase.Disconnecting
+        && (IsEnabled || Phase is BotLifecyclePhase.Connected or BotLifecyclePhase.Connecting);
+
+    public string MenuHeader => $"{DisplayName} ({StatusLabel}) – {ActionLabel}";
+
+    public string Tooltip => string.IsNullOrWhiteSpace(LastErrorMessage)
+        ? $"{DisplayName}: {StatusLabel}"
+        : $"{DisplayName}: {StatusLabel} – {LastErrorMessage}";
 }

@@ -75,4 +75,65 @@ public sealed class YouTubeChatPlatform : IChatPlatform
             return new(bot.ChannelId, displayName);
         }
     }
+
+    public string? ConfiguredChannel
+    {
+        get
+        {
+            var channel = _settingsStore.Load().Channel;
+            if (!string.IsNullOrWhiteSpace(channel))
+            {
+                return channel.Trim();
+            }
+
+            var activeChannelId = _activeBroadcastSource.CurrentBroadcast?.ChannelId;
+            if (!string.IsNullOrWhiteSpace(activeChannelId))
+            {
+                return activeChannelId.Trim();
+            }
+
+            var broadcasterChannelId = _accountsStore.Load(PlatformAuthRole.Broadcaster).ChannelId;
+            return string.IsNullOrWhiteSpace(broadcasterChannelId) ? null : broadcasterChannelId.Trim();
+        }
+    }
+
+    public string? BuildStreamUrl(StreamInfo? stream = null)
+    {
+        if (!string.IsNullOrWhiteSpace(stream?.Id))
+        {
+            return $"https://www.youtube.com/watch?v={Uri.EscapeDataString(stream.Id.Trim())}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(stream?.UserId))
+        {
+            return $"https://www.youtube.com/channel/{Uri.EscapeDataString(stream.UserId.Trim())}";
+        }
+
+        var configured = ConfiguredChannel;
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            return null;
+        }
+
+        if (Uri.TryCreate(configured, UriKind.Absolute, out var absolute)
+            && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
+        {
+            return absolute.ToString();
+        }
+
+        if (configured.StartsWith('@'))
+        {
+            var handle = configured[1..].Trim();
+            return string.IsNullOrWhiteSpace(handle)
+                ? null
+                : $"https://www.youtube.com/@{Uri.EscapeDataString(handle)}";
+        }
+
+        if (configured.StartsWith("UC", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"https://www.youtube.com/channel/{Uri.EscapeDataString(configured)}";
+        }
+
+        return $"https://www.youtube.com/{Uri.EscapeDataString(configured)}";
+    }
 }

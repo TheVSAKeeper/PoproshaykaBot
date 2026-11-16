@@ -21,10 +21,15 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
     private const string AccountsNotWrittenDetails = "Вход в Twitch применён и работает до перезапуска. В файл он не записан: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
 
+    private const string YouTubeAccountsNotWrittenDetails = "Вход в YouTube применён и работает до перезапуска. В файл он не записан: туда только что перенесены данные предыдущей версии. Закройте приложение, запустите его заново и пройдите настройку ещё раз.";
+
     private readonly IBotConnectionController _botConnectionManager;
     private readonly IEventBus _eventBus;
     private readonly SettingsManager _settingsManager;
     private readonly AccountsStore _accountsStore;
+    private readonly YouTubeSettingsStore? _youtubeSettingsStore;
+    private readonly YouTubeAccountsStore? _youtubeAccountsStore;
+    private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly ILogger<BotConnectionPageViewModel> _logger;
     private readonly List<IDisposable> _subs = [];
 
@@ -50,12 +55,18 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         IEventBus eventBus,
         SettingsManager settingsManager,
         AccountsStore accountsStore,
-        ILogger<BotConnectionPageViewModel> logger)
+        ILogger<BotConnectionPageViewModel> logger,
+        YouTubeSettingsStore? youtubeSettingsStore = null,
+        YouTubeAccountsStore? youtubeAccountsStore = null,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         _botConnectionManager = botConnectionManager;
         _eventBus = eventBus;
         _settingsManager = settingsManager;
         _accountsStore = accountsStore;
+        _youtubeSettingsStore = youtubeSettingsStore;
+        _youtubeAccountsStore = youtubeAccountsStore;
+        _platformRegistry = platformRegistry;
         _logger = logger;
 
         _subs.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnPhaseChanged));
@@ -90,6 +101,28 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
                 ShowRetry = false;
                 return;
             }
+
+            if (_youtubeSettingsStore is not null && !_youtubeSettingsStore.Save(context.YouTubeSettings))
+            {
+                _logger.BotConnectionSettingsNotWritten();
+                ApplyPhase(BotLifecyclePhase.Failed, SettingsNotWrittenDetails);
+                StatusText = "Настройки YouTube не записаны в файл";
+                ShowRetry = false;
+                return;
+            }
+
+            if (_youtubeAccountsStore is not null
+                && !_youtubeAccountsStore.SaveAll(
+                    context.YouTubeClientSecret,
+                    context.YouTubeBotAccount,
+                    context.YouTubeBroadcasterAccount))
+            {
+                _logger.BotConnectionAccountsNotWritten();
+                ApplyPhase(BotLifecyclePhase.Failed, YouTubeAccountsNotWrittenDetails);
+                StatusText = "Вход в YouTube не записан в файл";
+                ShowRetry = false;
+                return;
+            }
         }
         catch (Exception exception)
         {
@@ -101,8 +134,16 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
 
         _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, Core.Platforms.Auth.PlatformAuthRole.Bot));
         _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, Core.Platforms.Auth.PlatformAuthRole.Broadcaster));
+        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, Core.Platforms.Auth.PlatformAuthRole.Bot));
+        _ = _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, Core.Platforms.Auth.PlatformAuthRole.Broadcaster));
 
         ApplyPhase(Phase);
+
+        if (_platformRegistry is not null)
+        {
+            StartMissingEnabledPlatforms();
+            return;
+        }
 
         if (_botConnectionManager.IsBusy || Phase == BotLifecyclePhase.Connected)
         {
@@ -110,6 +151,36 @@ public sealed partial class BotConnectionPageViewModel : OnboardingPageViewModel
         }
 
         TryStartConnection();
+    }
+
+    private void StartMissingEnabledPlatforms()
+    {
+        if (_platformRegistry is null)
+        {
+            return;
+        }
+
+        foreach (var platform in _platformRegistry.All)
+        {
+            if (!platform.IsEnabled || _botConnectionManager.IsPlatformBusy(platform.Id))
+            {
+                continue;
+            }
+
+            if (_botConnectionManager.GetPhase(platform.Id) == BotLifecyclePhase.Connected)
+            {
+                continue;
+            }
+
+            try
+            {
+                _botConnectionManager.StartConnection(platform.Id);
+            }
+            catch (InvalidOperationException exception)
+            {
+                _logger.BotConnectionStartRejected(exception);
+            }
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanRetry))]

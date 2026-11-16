@@ -109,9 +109,9 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     {
         var profile = new BroadcastProfile { Name = $"Новый профиль {DateTime.Now:HH:mm:ss}" };
 
-        if (await EditInDialogAsync(profile))
+        if (await EditInDialogAsync(profile, new HashSet<StreamingPlatform> { StreamingPlatform.Twitch }) is { } selectedPlatforms)
         {
-            Persist(profile);
+            Persist(profile, selectedPlatforms);
         }
     }
 
@@ -192,7 +192,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
 
         try
         {
-            ReportWrite(_manager.Upsert(saved));
+            ReportWrite(_manager.Upsert(saved, dialog.GetSelectedPlatforms()));
         }
         catch (InvalidOperationException ex)
         {
@@ -208,9 +208,9 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     {
         var copy = CloneProfile(item.Profile);
 
-        if (await EditInDialogAsync(copy))
+        if (await EditInDialogAsync(copy, _manager.GetPlatforms(item.Profile.Id)) is { } selectedPlatforms)
         {
-            Persist(copy);
+            Persist(copy, selectedPlatforms);
         }
     }
 
@@ -226,7 +226,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
             GameName = source.GameName,
             BroadcasterLanguage = source.BroadcasterLanguage,
             Tags = source.Tags.ToList(),
-        });
+        }, _manager.GetPlatforms(source.Id));
     }
 
     private void DeleteProfile(BroadcastProfileItemViewModel item)
@@ -245,26 +245,28 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         ReportWrite(_manager.Remove(profile.Id));
     }
 
-    private async Task<bool> EditInDialogAsync(BroadcastProfile profile)
+    private async Task<IReadOnlyCollection<StreamingPlatform>?> EditInDialogAsync(
+        BroadcastProfile profile,
+        IReadOnlySet<StreamingPlatform> platforms)
     {
         using var scope = _scopeFactory.CreateScope();
         var dialog = scope.ServiceProvider.GetRequiredService<BroadcastProfileEditDialogViewModel>();
-        dialog.LoadFrom(profile);
+        dialog.LoadFrom(profile, platforms);
 
         if (!await _dialogService.ShowAsync(dialog))
         {
-            return false;
+            return null;
         }
 
         dialog.WriteTo(profile);
-        return true;
+        return dialog.GetSelectedPlatforms();
     }
 
-    private void Persist(BroadcastProfile profile)
+    private void Persist(BroadcastProfile profile, IReadOnlyCollection<StreamingPlatform> platforms)
     {
         try
         {
-            ReportWrite(_manager.Upsert(profile));
+            ReportWrite(_manager.Upsert(profile, platforms));
         }
         catch (InvalidOperationException ex)
         {
@@ -315,7 +317,8 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
                     AdjustNumberAsync,
                     EditProfileAsync,
                     DuplicateProfile,
-                    DeleteProfile);
+                    DeleteProfile,
+                    _manager.GetPlatforms(p.Id));
             }));
 
         if (_applyingProfileId.HasValue)

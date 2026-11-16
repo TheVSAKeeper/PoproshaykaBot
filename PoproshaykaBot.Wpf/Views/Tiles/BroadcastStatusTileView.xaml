@@ -19,6 +19,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid.Resources>
@@ -70,18 +71,27 @@
         <TextBlock Grid.Row="2"
                    Grid.Column="0"
                    Style="{StaticResource Label}"
-                   Text="Отправлено" />
+                   Text="Площадки" />
         <TextBlock Grid.Row="2"
                    Grid.Column="1"
                    Style="{StaticResource Value}"
-                   Text="{Binding SentCount}" />
+                   Text="{Binding PlatformsText, Mode=OneWay}" />
 
         <TextBlock Grid.Row="3"
                    Grid.Column="0"
                    Style="{StaticResource Label}"
+                   Text="Отправлено" />
+        <TextBlock Grid.Row="3"
+                   Grid.Column="1"
+                   Style="{StaticResource Value}"
+                   Text="{Binding SentCount}" />
+
+        <TextBlock Grid.Row="4"
+                   Grid.Column="0"
+                   Style="{StaticResource Label}"
                    Text="Следующая"
                    Margin="0,0,10,0" />
-        <TextBlock Grid.Row="3"
+        <TextBlock Grid.Row="4"
                    Grid.Column="1"
                    Style="{StaticResource Value}"
                    Text="{Binding NextBroadcastText}"

@@ -11,6 +11,7 @@
                 <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Infrastructure/Converters/AppConverters.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/TableStyles.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/RatingStyles.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/PlatformIcons.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
