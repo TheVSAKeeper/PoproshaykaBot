@@ -3,12 +3,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Chat.Handlers;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Di;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events.Statistics;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Logging;
 using PoproshaykaBot.Core.Obs;
@@ -20,6 +22,8 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Tests.Debugging;
+using PoproshaykaBot.Core.Tests.Fakes;
 using PoproshaykaBot.Core.Tests.Polls;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
@@ -813,6 +817,553 @@ public class YouTubeChatIngestionServiceTests
         });
     }
 
+    [Test]
+    public async Task Direct_Broadcast_Switch_With_Session_Transition_Delay_Keeps_Chat_Statistics_Isolated_Per_Broadcast()
+    {
+        var selectionStore = new InMemoryYouTubeBroadcastSelectionStore();
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            selectionStore,
+            _authService,
+            _settingsStore,
+            _quotaGovernor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance);
+
+        var broadcastA = new YouTubeBroadcastSummary("vid-a", ChannelId, "YTBroadcaster", "chat-a", "Broadcast A", _clock.UtcNow);
+        var broadcastB = new YouTubeBroadcastSummary("vid-b", ChannelId, "YTBroadcaster", "chat-b", "Broadcast B", _clock.UtcNow);
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>()).Returns([broadcastA, broadcastB]);
+
+        var streamA = new ControlledStreamClient();
+        var streamB = new ControlledStreamClient();
+        var router = new RoutedStreamClient(chatId => chatId == "chat-a" ? streamA : streamB);
+        var pollingClient = new FakePollingClient((_, _) =>
+            Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null)));
+
+        using var ingestion = CreateIngestion(router, pollingClient, monitor);
+        await using var pipelineHarness = CreatePipelineHarness(ingestion, monitor);
+
+        var transitionGateEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseTransitionGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var startedB = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var onlineGateSub = _eventBus.Subscribe<StreamWentOnline>(async (e, _) =>
+        {
+            if (e.Stream?.Id == "vid-b")
+            {
+                transitionGateEntered.TrySetResult();
+                await releaseTransitionGate.Task.ConfigureAwait(false);
+            }
+        });
+        using var startedSub = _eventBus.Subscribe<BroadcastStarted>(e =>
+        {
+            if (e.Stream?.Id == "vid-b")
+            {
+                startedB.TrySetResult();
+            }
+        });
+
+        selectionStore.SelectBroadcast(ChannelId, "vid-a");
+        await monitor.RefreshLiveSnapshotAsync();
+        await ingestion.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+
+        try
+        {
+            await streamA.FirstBatchYielded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            await streamA.Batches.Writer.WriteAsync(new(
+                [
+                    TextItem("a-1", _clock.UtcNow.AddSeconds(1), "hello A1"),
+                    TextItem("a-2", _clock.UtcNow.AddSeconds(2), "hello A2"),
+                ],
+                "tok-a1",
+                TimeSpan.FromSeconds(5),
+                null));
+            await WaitUntilAsync(() => ingestion.CaptureDiagnostics().ReceivedMessages == 2);
+
+            selectionStore.SelectBroadcast(ChannelId, "vid-b");
+            var switchTask = monitor.RefreshLiveSnapshotAsync();
+
+            await transitionGateEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await streamA.Closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(streamB.FirstBatchYielded.Task.IsCompleted, Is.False);
+                Assert.That(monitor.CurrentBroadcast, Is.Null);
+                Assert.That(pipelineHarness.Aggregator.CurrentBroadcastId, Is.Not.Null);
+            });
+
+            releaseTransitionGate.TrySetResult();
+            await switchTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await startedB.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await streamB.FirstBatchYielded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            _clock.UtcNow = _clock.UtcNow.AddSeconds(10);
+            await streamB.Batches.Writer.WriteAsync(new(
+                [
+                    TextItem("b-1", _clock.UtcNow.AddSeconds(1), "hello B1"),
+                    TextItem("b-2", _clock.UtcNow.AddSeconds(2), "hello B2"),
+                    TextItem("b-3", _clock.UtcNow.AddSeconds(3), "hello B3"),
+                ],
+                "tok-b1",
+                TimeSpan.FromSeconds(5),
+                null));
+            await WaitUntilAsync(() => ingestion.CaptureDiagnostics().ReceivedMessages == 5);
+
+            _broadcastClient.GetVideoLiveSampleAsync("vid-b", Arg.Any<CancellationToken>())
+                .Returns(new YouTubeVideoLiveSample("vid-b", "Broadcast B", _clock.UtcNow, _clock.UtcNow.AddSeconds(5), 0));
+            _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>())
+                .Returns(Array.Empty<YouTubeBroadcastSummary>());
+            await monitor.RefreshLiveSnapshotAsync();
+
+            await WaitUntilAsync(() => pipelineHarness.CompletedSessions.Count == 2);
+
+            var sessionA = pipelineHarness.CompletedSessions[0];
+            var sessionB = pipelineHarness.CompletedSessions[1];
+            Assert.Multiple(() =>
+            {
+                Assert.That(sessionA.Platforms.Single().StreamId, Is.EqualTo("vid-a"));
+                Assert.That(sessionA.MessageCount, Is.EqualTo(2));
+                Assert.That(sessionB.Platforms.Single().StreamId, Is.EqualTo("vid-b"));
+                Assert.That(sessionB.MessageCount, Is.EqualTo(3));
+            });
+        }
+        finally
+        {
+            releaseTransitionGate.TrySetResult();
+            streamA.Batches.Writer.TryComplete();
+            streamB.Batches.Writer.TryComplete();
+            await ingestion.StopAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        }
+    }
+
+    [Test]
+    public async Task Direct_Broadcast_Switch_Drains_InFlight_Batch_And_IngestionStop_Before_Next_Session_Starts()
+    {
+        var selectionStore = new InMemoryYouTubeBroadcastSelectionStore();
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            selectionStore,
+            _authService,
+            _settingsStore,
+            _quotaGovernor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance);
+
+        var broadcastA = new YouTubeBroadcastSummary("vid-a", ChannelId, "YTBroadcaster", "chat-a", "Broadcast A", _clock.UtcNow);
+        var broadcastB = new YouTubeBroadcastSummary("vid-b", ChannelId, "YTBroadcaster", "chat-b", "Broadcast B", _clock.UtcNow);
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>()).Returns([broadcastA, broadcastB]);
+
+        var streamA = new ControlledStreamClient();
+        var streamB = new ControlledStreamClient();
+        var router = new RoutedStreamClient(chatId => chatId == "chat-a" ? streamA : streamB);
+        var pollingClient = new FakePollingClient((_, _) =>
+            Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null)));
+
+        using var ingestion = CreateIngestion(router, pollingClient, monitor);
+        await using var pipelineHarness = CreatePipelineHarness(ingestion, monitor);
+
+        var inFlightEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInFlight = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lifecycleTrace = new List<string>();
+
+        using var rawGateSub = _eventBus.Subscribe<RawChatMessageReceived>(async (e, _) =>
+        {
+            lifecycleTrace.Add($"RAW:{e.Message.Message}");
+
+            if (e.Message.Message == "a-inflight-1")
+            {
+                inFlightEntered.TrySetResult();
+                await releaseInFlight.Task.ConfigureAwait(false);
+            }
+        });
+        using var stoppedSub = _eventBus.Subscribe<ChatIngestionStopped>(_ => lifecycleTrace.Add("INGESTION_STOPPED"));
+        using var startedSub = _eventBus.Subscribe<BroadcastStarted>(e => lifecycleTrace.Add($"BROADCAST_STARTED:{e.Stream?.Id}"));
+
+        selectionStore.SelectBroadcast(ChannelId, "vid-a");
+        await monitor.RefreshLiveSnapshotAsync();
+        await ingestion.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+
+        try
+        {
+            await streamA.FirstBatchYielded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            await streamA.Batches.Writer.WriteAsync(new(
+                [
+                    TextItem("a-1", _clock.UtcNow.AddSeconds(1), "a-inflight-1"),
+                    TextItem("a-2", _clock.UtcNow.AddSeconds(2), "a-inflight-2"),
+                ],
+                "tok-a1",
+                TimeSpan.FromSeconds(5),
+                null));
+
+            await inFlightEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            selectionStore.SelectBroadcast(ChannelId, "vid-b");
+            var switchTask = monitor.RefreshLiveSnapshotAsync();
+
+            await Task.Delay(50);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(switchTask.IsCompleted, Is.False);
+                Assert.That(lifecycleTrace, Does.Not.Contain("BROADCAST_STARTED:vid-b"));
+            });
+
+            releaseInFlight.TrySetResult();
+            await switchTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await streamB.FirstBatchYielded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            _clock.UtcNow = _clock.UtcNow.AddSeconds(10);
+            await streamB.Batches.Writer.WriteAsync(new(
+                [TextItem("b-1", _clock.UtcNow.AddSeconds(1), "b-only-1")],
+                "tok-b1",
+                TimeSpan.FromSeconds(5),
+                null));
+            await WaitUntilAsync(() => lifecycleTrace.Contains("RAW:b-only-1"));
+
+            _broadcastClient.GetVideoLiveSampleAsync("vid-b", Arg.Any<CancellationToken>())
+                .Returns(new YouTubeVideoLiveSample("vid-b", "Broadcast B", _clock.UtcNow, _clock.UtcNow.AddSeconds(5), 0));
+            _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>())
+                .Returns(Array.Empty<YouTubeBroadcastSummary>());
+            await monitor.RefreshLiveSnapshotAsync();
+
+            await WaitUntilAsync(() => pipelineHarness.CompletedSessions.Count == 2);
+
+            var stoppedIndex = lifecycleTrace.IndexOf("INGESTION_STOPPED");
+            var startedBIndex = lifecycleTrace.IndexOf("BROADCAST_STARTED:vid-b");
+            Assert.Multiple(() =>
+            {
+                Assert.That(stoppedIndex, Is.GreaterThanOrEqualTo(0));
+                Assert.That(startedBIndex, Is.GreaterThan(stoppedIndex));
+                Assert.That(lifecycleTrace, Does.Not.Contain("RAW:a-inflight-2"));
+                Assert.That(pipelineHarness.CompletedSessions[0].Platforms.Single().StreamId, Is.EqualTo("vid-a"));
+                Assert.That(pipelineHarness.CompletedSessions[0].MessageCount, Is.EqualTo(1));
+                Assert.That(pipelineHarness.CompletedSessions[1].Platforms.Single().StreamId, Is.EqualTo("vid-b"));
+                Assert.That(pipelineHarness.CompletedSessions[1].MessageCount, Is.EqualTo(1));
+            });
+        }
+        finally
+        {
+            releaseInFlight.TrySetResult();
+            streamA.Batches.Writer.TryComplete();
+            streamB.Batches.Writer.TryComplete();
+            await ingestion.StopAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        }
+    }
+
+    [Test]
+    public async Task LiveChatEnded_During_Concurrent_Monitor_Switch_Does_Not_Deadlock()
+    {
+        var selectionStore = new InMemoryYouTubeBroadcastSelectionStore();
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            selectionStore,
+            _authService,
+            _settingsStore,
+            _quotaGovernor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance);
+
+        var broadcastA = new YouTubeBroadcastSummary("vid-a", ChannelId, "YTBroadcaster", "chat-a", "Broadcast A", _clock.UtcNow);
+        var broadcastB = new YouTubeBroadcastSummary("vid-b", ChannelId, "YTBroadcaster", "chat-b", "Broadcast B", _clock.UtcNow);
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>()).Returns([broadcastA, broadcastB]);
+        _broadcastClient.GetVideoLiveSampleAsync("vid-a", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-a", "Broadcast A", _clock.UtcNow, null, 10));
+        _broadcastClient.GetVideoLiveSampleAsync("vid-b", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-b", "Broadcast B", _clock.UtcNow, null, 20));
+
+        selectionStore.SelectBroadcast(ChannelId, "vid-a");
+        await monitor.RefreshLiveSnapshotAsync();
+
+        var chatAEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseChatA = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var streamA = new GateThrowStreamClient(chatAEntered, releaseChatA, () =>
+            new YouTubeApiException(YouTubeApiErrorKind.LiveChatEnded, "ended", "liveChatEnded"));
+        var streamB = new ControlledStreamClient();
+        var router = new RoutedStreamClient(chatId => chatId == "chat-a" ? streamA : streamB);
+        var pollingClient = new FakePollingClient((_, _) =>
+            Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null)));
+
+        using var ingestion = CreateIngestion(router, pollingClient, monitor);
+        await ingestion.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+
+        try
+        {
+            await chatAEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            selectionStore.SelectBroadcast(ChannelId, "vid-b");
+            var switchTask = monitor.RefreshLiveSnapshotAsync();
+
+            releaseChatA.TrySetResult();
+
+            await switchTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await streamB.FirstBatchYielded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.That(monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-b"));
+            await _broadcastClient.DidNotReceive().GetVideoLiveSampleAsync("vid-b", Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            releaseChatA.TrySetResult();
+            streamB.Batches.Writer.TryComplete();
+            await ingestion.StopAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        }
+    }
+
+    [Test]
+    public async Task Direct_Broadcast_Switch_During_Rest_Polling_Sleep_Wakes_And_Stops_Ingestion_Before_Next_Session()
+    {
+        var selectionStore = new InMemoryYouTubeBroadcastSelectionStore();
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            selectionStore,
+            _authService,
+            _settingsStore,
+            _quotaGovernor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance);
+
+        var broadcastA = new YouTubeBroadcastSummary("vid-a", ChannelId, "YTBroadcaster", "chat-a", "Broadcast A", _clock.UtcNow);
+        var broadcastB = new YouTubeBroadcastSummary("vid-b", ChannelId, "YTBroadcaster", "chat-b", "Broadcast B", _clock.UtcNow);
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>()).Returns([broadcastA, broadcastB]);
+
+        var streamClient = new FakeStreamClient(_ =>
+            throw new YouTubeApiException(YouTubeApiErrorKind.TransportUnsupported, "HTTP/2 blocked"));
+
+        var restAPollCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var restBPollCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pollingClient = new FakePollingClient((liveChatId, _) =>
+        {
+            if (liveChatId == "chat-a")
+            {
+                restAPollCompleted.TrySetResult();
+                return Task.FromResult(new YouTubeLiveChatBatch(
+                    [TextItem("rest-a1", _clock.UtcNow.AddSeconds(1), "from rest A")],
+                    "tok-a",
+                    TimeSpan.FromSeconds(30),
+                    null));
+            }
+
+            restBPollCompleted.TrySetResult();
+            return Task.FromResult(new YouTubeLiveChatBatch(
+                [TextItem("rest-b1", _clock.UtcNow.AddSeconds(1), "from rest B")],
+                "tok-b",
+                TimeSpan.FromSeconds(30),
+                null));
+        });
+
+        using var ingestion = CreateIngestion(streamClient, pollingClient, monitor);
+        await using var pipelineHarness = CreatePipelineHarness(ingestion, monitor);
+
+        var lifecycleTrace = new List<string>();
+        using var stoppedSub = _eventBus.Subscribe<ChatIngestionStopped>(_ => lifecycleTrace.Add("INGESTION_STOPPED"));
+        using var startedSub = _eventBus.Subscribe<BroadcastStarted>(e => lifecycleTrace.Add($"BROADCAST_STARTED:{e.Stream?.Id}"));
+
+        selectionStore.SelectBroadcast(ChannelId, "vid-a");
+        await monitor.RefreshLiveSnapshotAsync();
+        await ingestion.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+
+        try
+        {
+            await restAPollCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await WaitUntilAsync(() => ingestion.CaptureDiagnostics().ReceivedMessages == 1);
+
+            await Task.Delay(50);
+
+            _clock.UtcNow = _clock.UtcNow.AddSeconds(5);
+            selectionStore.SelectBroadcast(ChannelId, "vid-b");
+            await monitor.RefreshLiveSnapshotAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+            await restBPollCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await WaitUntilAsync(() => ingestion.CaptureDiagnostics().ReceivedMessages == 2);
+
+            _broadcastClient.GetVideoLiveSampleAsync("vid-b", Arg.Any<CancellationToken>())
+                .Returns(new YouTubeVideoLiveSample("vid-b", "Broadcast B", _clock.UtcNow, _clock.UtcNow.AddSeconds(5), 0));
+            _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>())
+                .Returns(Array.Empty<YouTubeBroadcastSummary>());
+            await monitor.RefreshLiveSnapshotAsync();
+
+            await WaitUntilAsync(() => pipelineHarness.CompletedSessions.Count == 2);
+
+            var stoppedIndex = lifecycleTrace.IndexOf("INGESTION_STOPPED");
+            var startedBIndex = lifecycleTrace.IndexOf("BROADCAST_STARTED:vid-b");
+            Assert.Multiple(() =>
+            {
+                Assert.That(stoppedIndex, Is.GreaterThanOrEqualTo(0));
+                Assert.That(startedBIndex, Is.GreaterThan(stoppedIndex));
+                Assert.That(pipelineHarness.CompletedSessions[0].Platforms.Single().StreamId, Is.EqualTo("vid-a"));
+                Assert.That(pipelineHarness.CompletedSessions[0].MessageCount, Is.EqualTo(1));
+                Assert.That(pipelineHarness.CompletedSessions[1].Platforms.Single().StreamId, Is.EqualTo("vid-b"));
+                Assert.That(pipelineHarness.CompletedSessions[1].MessageCount, Is.EqualTo(1));
+            });
+        }
+        finally
+        {
+            await ingestion.StopAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        }
+    }
+
+    [Test]
+    public async Task InvalidPageToken_After_Broadcast_Switch_Does_Not_Publish_Gap_For_Stale_Broadcast()
+    {
+        var gaps = new List<ChatReadingGapDetected>();
+        using var gSub = _eventBus.Subscribe<ChatReadingGapDetected>(gaps.Add);
+
+        var broadcastA = new YouTubeBroadcastSummary("vid-a", ChannelId, "YTBroadcaster", "chat-a", "Broadcast A", _clock.UtcNow);
+        var broadcastB = new YouTubeBroadcastSummary("vid-b", ChannelId, "YTBroadcaster", "chat-b", "Broadcast B", _clock.UtcNow);
+        var source = new MutableBroadcastSource { CurrentBroadcast = broadcastA };
+
+        var streamClient = new FakeStreamClient(_ =>
+        {
+            source.CurrentBroadcast = broadcastB;
+            throw new YouTubeApiException(YouTubeApiErrorKind.InvalidPageToken, "expired", "pageTokenInvalid");
+        });
+        var pollingClient = new FakePollingClient((_, _) =>
+            Task.FromResult(new YouTubeLiveChatBatch([], null, TimeSpan.FromSeconds(5), null)));
+
+        using var ingestion = CreateIngestion(streamClient, pollingClient, source);
+
+        var delay = await ingestion.RunSingleIterationAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(delay, Is.EqualTo(TimeSpan.Zero));
+            Assert.That(gaps, Is.Empty);
+            Assert.That(ingestion.CaptureDiagnostics().GapCount, Is.EqualTo(0));
+        });
+    }
+
+    private PipelineHarness CreatePipelineHarness(
+        YouTubeChatIngestionService ingestion,
+        YouTubeStreamMonitor monitor)
+    {
+        var targetChannel = new FakeTargetChannelProvider(ChannelId);
+        var settings = new AppSettings();
+        settings.Twitch.Messages.WelcomeEnabled = false;
+        settings.Twitch.AutoBroadcast.StreamStatusNotificationsEnabled = false;
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        settingsManager.Current.Returns(settings);
+
+        var obsChatStore = new ObsChatStore(_eventBus, NullLogger<ObsChatStore>.Instance, Path.Combine(_directory, $"obs-{Guid.NewGuid():N}.json"));
+        var commandSettingsStore = new CommandSettingsStore(null, Path.Combine(_directory, $"commands-{Guid.NewGuid():N}.json"));
+        var audienceTracker = new AudienceTracker(settingsManager);
+        var commandProcessor = new ChatCommandProcessor([], commandSettingsStore, new(_clock), NullLogger<ChatCommandProcessor>.Instance);
+        var youtubePlatform = new YouTubeChatPlatform(
+            monitor,
+            _sessionContext,
+            monitor,
+            Substitute.For<IPlatformMessenger>(),
+            _settingsStore,
+            _accountsStore,
+            targetChannel);
+        var registry = new ChatPlatformRegistry([youtubePlatform]);
+        var channels = new PlatformChannelRegistry();
+        var pipelineHandler = new ChatPipelineHandler(
+            registry,
+            channels,
+            settingsManager,
+            obsChatStore,
+            commandSettingsStore,
+            audienceTracker,
+            commandProcessor,
+            new(_clock),
+            _eventBus,
+            NullLogger<ChatPipelineHandler>.Instance);
+
+        var historyStore = new BroadcastHistoryStore(
+            NullLogger<BroadcastHistoryStore>.Instance,
+            Path.Combine(_directory, $"broadcasts-{Guid.NewGuid():N}.json"),
+            Path.Combine(_directory, $"sessions-{Guid.NewGuid():N}.json"));
+        var activeStore = new ActiveBroadcastStore(
+            historyStore,
+            NullLogger<ActiveBroadcastStore>.Instance,
+            Path.Combine(_directory, $"active-{Guid.NewGuid():N}.json"),
+            Path.Combine(_directory, $"legacy-active-{Guid.NewGuid():N}.json"));
+        var draftCoordinator = new BroadcastDraftCoordinator(
+            historyStore,
+            activeStore,
+            targetChannel,
+            _clock,
+            NullLogger<BroadcastDraftCoordinator>.Instance);
+        var aggregator = new BroadcastAggregator(
+            _eventBus,
+            draftCoordinator,
+            targetChannel,
+            _clock,
+            NullLogger<BroadcastAggregator>.Instance);
+        var statsHandler = new StreamSessionStatisticsHandler(
+            Substitute.For<IBroadcastMessenger>(),
+            aggregator,
+            draftCoordinator,
+            targetChannel,
+            settingsManager,
+            _clock,
+            _eventBus,
+            activeStore,
+            NullLogger<StreamSessionStatisticsHandler>.Instance);
+
+        return new(pipelineHandler, aggregator, statsHandler, _eventBus);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+
+        Assert.Fail("Timed out waiting for async condition");
+    }
+
+    private sealed class PipelineHarness : IAsyncDisposable
+    {
+        private readonly ChatPipelineHandler _pipelineHandler;
+        private readonly StreamSessionStatisticsHandler _statsHandler;
+        private readonly IDisposable _completedSubscription;
+
+        public PipelineHarness(
+            ChatPipelineHandler pipelineHandler,
+            BroadcastAggregator aggregator,
+            StreamSessionStatisticsHandler statsHandler,
+            IEventBus eventBus)
+        {
+            _pipelineHandler = pipelineHandler;
+            Aggregator = aggregator;
+            _statsHandler = statsHandler;
+            _completedSubscription = eventBus.Subscribe<StreamSessionCompleted>(e => CompletedSessions.Add(e.Broadcast));
+        }
+
+        public BroadcastAggregator Aggregator { get; }
+
+        public List<BroadcastRecord> CompletedSessions { get; } = [];
+
+        public async ValueTask DisposeAsync()
+        {
+            _completedSubscription.Dispose();
+            await _statsHandler.DisposeAsync();
+            Aggregator.Dispose();
+            _pipelineHandler.Dispose();
+        }
+    }
+
     private YouTubeChatIngestionService CreateIngestion(
         IYouTubeLiveChatStreamClient streamClient,
         IYouTubeLiveChatPollingClient pollingClient,
@@ -963,6 +1514,27 @@ public class YouTubeChatIngestionServiceTests
             {
                 Closed.TrySetResult();
             }
+        }
+    }
+
+    private sealed class GateThrowStreamClient(
+        TaskCompletionSource entered,
+        TaskCompletionSource release,
+        Func<Exception> createException) : IYouTubeLiveChatStreamClient
+    {
+        public async IAsyncEnumerable<YouTubeLiveChatBatch> StreamBatchesAsync(
+            string liveChatId,
+            string? pageToken,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            entered.TrySetResult();
+            await release.Task.ConfigureAwait(false);
+            if (createException() is { } ex)
+            {
+                throw ex;
+            }
+
+            yield break;
         }
     }
 }
