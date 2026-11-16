@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Net;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
@@ -13,6 +14,7 @@ using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Core.YouTube.Chat;
+using PoproshaykaBot.Core.YouTube.Chat.InnerTube;
 using PoproshaykaBot.Core.YouTube.Chat.Transport;
 using PoproshaykaBot.Core.YouTube.Client;
 using PoproshaykaBot.Core.YouTube.Quota;
@@ -55,6 +57,19 @@ public static class YouTubeServiceCollectionExtensions
             client.BaseAddress = YouTubeEndpoints.RestApiBaseUri;
         }).AddHttpMessageHandler<BroadcasterYouTubeAuthHandler>();
 
+        services.AddHttpClient(InnerTubeEndpoints.HttpClientName, static client =>
+        {
+            client.BaseAddress = InnerTubeEndpoints.BaseUri;
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(InnerTubeEndpoints.UserAgent);
+            client.DefaultRequestHeaders.AcceptLanguage.ParseAdd(InnerTubeEndpoints.AcceptLanguage);
+        }).ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
+        {
+            UseCookies = false,
+            AutomaticDecompression = DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+        });
+
         services.AddSingleton<YouTubeGrpcChannelProvider>();
 
         services.AddSingleton<YouTubeQuotaStore>();
@@ -85,8 +100,16 @@ public static class YouTubeServiceCollectionExtensions
         services.TryAddSingleton<IYouTubeSentMessageTracker>(
             static provider => provider.GetRequiredService<YouTubeSentMessageTracker>());
         services.AddSingleton<YouTubeChatMessageMapper>();
+        services.TryAddSingleton(static _ => new YouTubeChatReaderOptions());
+        services.AddSingleton<InnerTubeLiveChatClient>();
+        services.AddSingleton<InnerTubeYouTubeLiveChatReader>();
         services.AddSingleton<IYouTubeLiveChatStreamClient, YouTubeGrpcLiveChatStreamClient>();
         services.AddSingleton<IYouTubeLiveChatPollingClient, YouTubeRestLiveChatPollingClient>();
+        services.AddSingleton<OfficialGrpcYouTubeLiveChatReader>();
+        services.AddSingleton<OfficialRestYouTubeLiveChatReader>();
+        services.AddSingleton<CompositeYouTubeLiveChatReader>();
+        services.AddSingleton<IYouTubeLiveChatReader>(
+            static provider => provider.GetRequiredService<CompositeYouTubeLiveChatReader>());
         services.AddSingleton<IYouTubeLiveChatSendClient, YouTubeRestLiveChatSendClient>();
         services.AddSingleton<YouTubeSessionContext>();
         services.AddSingleton<YouTubeMessenger>();

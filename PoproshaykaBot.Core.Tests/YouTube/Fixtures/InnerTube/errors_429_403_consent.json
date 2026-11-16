@@ -1,0 +1,7 @@
+﻿{
+  "rateLimited429Body": "{\"error\":{\"code\":429,\"message\":\"Quota or rate limit exceeded\",\"status\":\"RESOURCE_EXHAUSTED\"}}",
+  "forbidden403Body": "{\"error\":{\"code\":403,\"message\":\"The caller does not have permission\",\"status\":\"PERMISSION_DENIED\"}}",
+  "consentHtml": "<!DOCTYPE html><html><head><title>Before you continue to YouTube</title></head><body><form action=\"https://consent.youtube.com/save\"></form></body></html>",
+  "membersOnlyHtml": "<!DOCTYPE html><html><body><script>var ytInitialPlayerResponse = {\"playabilityStatus\":{\"status\":\"UNPLAYABLE\",\"reason\":\"Join this channel to get access to members-only content\",\"errorScreen\":{\"playerLegacyDesktopYpcOfferRenderer\":{}}}};</script></body></html>",
+  "loginRequiredHtml": "<!DOCTYPE html><html><body><script>var ytInitialPlayerResponse = {\"playabilityStatus\":{\"status\":\"LOGIN_REQUIRED\",\"reason\":\"Sign in to confirm your age\"}};</script></body></html>"
+}

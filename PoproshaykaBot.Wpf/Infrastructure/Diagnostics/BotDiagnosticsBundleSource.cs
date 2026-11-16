@@ -156,6 +156,7 @@ public sealed class BotDiagnosticsBundleSource(
             {
                 YouTubeChatTransport.GrpcStream => "gRPC",
                 YouTubeChatTransport.RestPolling => "REST",
+                YouTubeChatTransport.InnerTube => "InnerTube",
                 _ => "нет",
             };
 

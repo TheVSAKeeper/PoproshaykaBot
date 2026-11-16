@@ -139,26 +139,34 @@ internal sealed class YouTubeGrpcLiveChatStreamClient(
                 continue;
             }
 
-            var kind = MapKind(proto.Snippet?.Type ?? ProtoMessageType.InvalidType);
-            var publishedAt = TryParseTimestamp(proto.Snippet?.HasPublishedAt == true ? proto.Snippet.PublishedAt : null);
+            var snippet = proto.Snippet;
+            var kind = MapKind(snippet?.Type ?? ProtoMessageType.InvalidType);
+            var publishedAt = TryParseTimestamp(snippet?.HasPublishedAt == true ? snippet.PublishedAt : null);
             var author = proto.AuthorDetails;
-            var channelId = author?.ChannelId ?? proto.Snippet?.AuthorChannelId ?? string.Empty;
+            var channelId = author?.ChannelId ?? snippet?.AuthorChannelId ?? string.Empty;
             var displayName = author?.DisplayName ?? string.Empty;
+            var avatarUrl = author?.HasProfileImageUrl == true && !string.IsNullOrWhiteSpace(author.ProfileImageUrl)
+                ? author.ProfileImageUrl
+                : null;
 
             items.Add(new(
                 proto.Id,
                 kind,
                 publishedAt,
-                proto.Snippet?.TextMessageDetails?.MessageText ?? string.Empty,
-                proto.Snippet?.DisplayMessage ?? string.Empty,
+                ExtractMessageText(snippet),
+                snippet?.DisplayMessage ?? string.Empty,
                 new(
                     channelId,
                     displayName,
                     author?.IsChatOwner == true,
                     author?.IsChatModerator == true,
                     author?.IsChatSponsor == true,
-                    author?.IsVerified == true),
-                (proto.Snippet?.Type ?? ProtoMessageType.InvalidType).ToString()));
+                    author?.IsVerified == true,
+                    avatarUrl),
+                (snippet?.Type ?? ProtoMessageType.InvalidType).ToString(),
+                Monetary: MapMonetary(snippet),
+                Membership: MapMembership(snippet),
+                Moderation: MapModeration(proto.Id, kind, snippet)));
         }
 
         var interval = response.HasPollingIntervalMillis && response.PollingIntervalMillis > 0
@@ -166,12 +174,150 @@ internal sealed class YouTubeGrpcLiveChatStreamClient(
             : DefaultPollingInterval;
 
         var offlineAt = TryParseTimestamp(response.HasOfflineAt ? response.OfflineAt : null);
+        var nextPageToken = response.HasNextPageToken && !string.IsNullOrWhiteSpace(response.NextPageToken)
+            ? response.NextPageToken
+            : null;
+        var nextCursor = nextPageToken is null
+            ? null
+            : new YouTubeChatCursorToken(YouTubeChatTransportKind.OfficialGrpc, YouTubeChatMode.LiveChat, nextPageToken);
 
         return new(
             items,
-            response.HasNextPageToken && !string.IsNullOrWhiteSpace(response.NextPageToken) ? response.NextPageToken : null,
+            nextPageToken,
             interval,
-            offlineAt);
+            offlineAt,
+            nextCursor,
+            YouTubeChatTransportKind.OfficialGrpc);
+    }
+
+    private static string ExtractMessageText(LiveChatMessageSnippet? snippet)
+    {
+        if (snippet is null)
+        {
+            return string.Empty;
+        }
+
+        return snippet.DisplayedContentCase switch
+        {
+            LiveChatMessageSnippet.DisplayedContentOneofCase.TextMessageDetails =>
+                snippet.TextMessageDetails?.MessageText ?? string.Empty,
+            LiveChatMessageSnippet.DisplayedContentOneofCase.SuperChatDetails =>
+                snippet.SuperChatDetails?.UserComment ?? string.Empty,
+            LiveChatMessageSnippet.DisplayedContentOneofCase.MemberMilestoneChatDetails =>
+                snippet.MemberMilestoneChatDetails?.UserComment ?? string.Empty,
+            _ => string.Empty,
+        };
+    }
+
+    private static YouTubeMonetaryDetails? MapMonetary(LiveChatMessageSnippet? snippet)
+    {
+        if (snippet is null)
+        {
+            return null;
+        }
+
+        switch (snippet.DisplayedContentCase)
+        {
+            case LiveChatMessageSnippet.DisplayedContentOneofCase.SuperChatDetails when snippet.SuperChatDetails is { } sc:
+            {
+                var micros = sc.HasAmountMicros && sc.AmountMicros <= long.MaxValue ? (long)sc.AmountMicros : (long?)null;
+                return new(
+                    micros,
+                    micros.HasValue ? micros.Value / 1_000_000m : null,
+                    sc.HasCurrency ? sc.Currency : null,
+                    sc.HasAmountDisplayString ? sc.AmountDisplayString : string.Empty,
+                    sc.HasTier ? sc.Tier : null);
+            }
+            case LiveChatMessageSnippet.DisplayedContentOneofCase.SuperStickerDetails when snippet.SuperStickerDetails is { } ss:
+            {
+                var micros = ss.HasAmountMicros && ss.AmountMicros <= long.MaxValue ? (long)ss.AmountMicros : (long?)null;
+                return new(
+                    micros,
+                    micros.HasValue ? micros.Value / 1_000_000m : null,
+                    ss.HasCurrency ? ss.Currency : null,
+                    ss.HasAmountDisplayString ? ss.AmountDisplayString : string.Empty,
+                    ss.HasTier ? ss.Tier : null,
+                    StickerId: ss.SuperStickerMetadata?.HasStickerId == true ? ss.SuperStickerMetadata.StickerId : null,
+                    StickerAltText: ss.SuperStickerMetadata?.HasAltText == true ? ss.SuperStickerMetadata.AltText : null);
+            }
+            case LiveChatMessageSnippet.DisplayedContentOneofCase.GiftDetails when snippet.GiftDetails is { } gd:
+                return new(
+                    null,
+                    null,
+                    null,
+                    gd.HasAltText ? gd.AltText : string.Empty,
+                    StickerImageUrl: gd.HasGiftUrl ? gd.GiftUrl : null,
+                    JewelsAmount: gd.HasJewelsAmount ? gd.JewelsAmount : null);
+            default:
+                return null;
+        }
+    }
+
+    private static YouTubeMembershipDetails? MapMembership(LiveChatMessageSnippet? snippet)
+    {
+        if (snippet is null)
+        {
+            return null;
+        }
+
+        return snippet.DisplayedContentCase switch
+        {
+            LiveChatMessageSnippet.DisplayedContentOneofCase.NewSponsorDetails when snippet.NewSponsorDetails is { } ns =>
+                new(
+                    ns.HasIsUpgrade && ns.IsUpgrade
+                        ? YouTubeMembershipEventKind.Upgraded
+                        : YouTubeMembershipEventKind.NewMember,
+                    ns.HasMemberLevelName ? ns.MemberLevelName : null),
+            LiveChatMessageSnippet.DisplayedContentOneofCase.MemberMilestoneChatDetails when snippet.MemberMilestoneChatDetails is { } mm =>
+                new(
+                    YouTubeMembershipEventKind.Milestone,
+                    mm.HasMemberLevelName ? mm.MemberLevelName : null,
+                    mm.HasMemberMonth ? checked((int)mm.MemberMonth) : null),
+            LiveChatMessageSnippet.DisplayedContentOneofCase.MembershipGiftingDetails when snippet.MembershipGiftingDetails is { } mg =>
+                new(
+                    YouTubeMembershipEventKind.GiftPurchase,
+                    mg.HasGiftMembershipsLevelName ? mg.GiftMembershipsLevelName : null,
+                    GiftCount: mg.HasGiftMembershipsCount ? mg.GiftMembershipsCount : null),
+            LiveChatMessageSnippet.DisplayedContentOneofCase.GiftMembershipReceivedDetails when snippet.GiftMembershipReceivedDetails is { } gm =>
+                new(
+                    YouTubeMembershipEventKind.GiftRedemption,
+                    gm.HasMemberLevelName ? gm.MemberLevelName : null,
+                    GifterChannelId: gm.HasGifterChannelId ? gm.GifterChannelId : null,
+                    AssociatedGiftingMessageId: gm.HasAssociatedMembershipGiftingMessageId
+                        ? gm.AssociatedMembershipGiftingMessageId
+                        : null),
+            _ => null,
+        };
+    }
+
+    private static YouTubeModerationDetails? MapModeration(
+        string messageId,
+        YouTubeLiveChatItemKind kind,
+        LiveChatMessageSnippet? snippet)
+    {
+        if (kind == YouTubeLiveChatItemKind.Tombstone)
+        {
+            return new(YouTubeModerationActionKind.MessageDeleted, TargetMessageId: messageId);
+        }
+
+        if (snippet?.DisplayedContentCase == LiveChatMessageSnippet.DisplayedContentOneofCase.UserBannedDetails
+            && snippet.UserBannedDetails is { } banned)
+        {
+            var isTemporary = banned.HasBanType
+                && banned.BanType == LiveChatUserBannedMessageDetails.Types.BanTypeWrapper.Types.BanType.Temporary;
+            var duration = isTemporary && banned.HasBanDurationSeconds
+                ? TimeSpan.FromSeconds(banned.BanDurationSeconds)
+                : (TimeSpan?)null;
+
+            return new(
+                isTemporary
+                    ? YouTubeModerationActionKind.UserBannedTemporary
+                    : YouTubeModerationActionKind.UserBannedPermanent,
+                TargetChannelId: banned.BannedUserDetails?.HasChannelId == true ? banned.BannedUserDetails.ChannelId : null,
+                BanDuration: duration);
+        }
+
+        return null;
     }
 
     private static YouTubeLiveChatItemKind MapKind(ProtoMessageType type)

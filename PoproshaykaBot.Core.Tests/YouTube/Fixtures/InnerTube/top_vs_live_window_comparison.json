@@ -1,0 +1,129 @@
+﻿{
+  "topChatResponse": {
+    "continuationContents": {
+      "liveChatContinuation": {
+        "header": {
+          "liveChatHeaderRenderer": {
+            "viewSelector": {
+              "sortFilterSubMenuRenderer": {
+                "subMenuItems": [
+                  {
+                    "title": "Top chat",
+                    "selected": true,
+                    "continuation": {
+                      "reloadContinuationData": {
+                        "continuation": "SYNTHETIC_TOP_RELOAD_VIEW"
+                      }
+                    }
+                  },
+                  {
+                    "title": "Live chat",
+                    "selected": false,
+                    "continuation": {
+                      "reloadContinuationData": {
+                        "continuation": "SYNTHETIC_SWITCH_TO_ALL_LIVE_CHAT"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "continuations": [
+          {
+            "timedContinuationData": {
+              "timeoutMs": 5000,
+              "continuation": "SYNTHETIC_TOP_NEXT"
+            }
+          }
+        ],
+        "actions": [
+          {
+            "addChatItemAction": {
+              "item": {
+                "liveChatTextMessageRenderer": {
+                  "id": "ChwSYNTHETIC_TOP_ONLY_001",
+                  "timestampUsec": "1763310100000000",
+                  "authorName": { "simpleText": "CuratedUser" },
+                  "authorExternalChannelId": "UC_SYNTHETIC_CURATED_01",
+                  "message": { "runs": [ { "text": "Filtered chat message" } ] }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "liveChatResponse": {
+    "continuationContents": {
+      "liveChatContinuation": {
+        "header": {
+          "liveChatHeaderRenderer": {
+            "viewSelector": {
+              "sortFilterSubMenuRenderer": {
+                "subMenuItems": [
+                  {
+                    "title": "Top chat",
+                    "selected": false,
+                    "continuation": {
+                      "reloadContinuationData": {
+                        "continuation": "SYNTHETIC_TOP_RELOAD_VIEW"
+                      }
+                    }
+                  },
+                  {
+                    "title": "Live chat",
+                    "selected": true,
+                    "continuation": {
+                      "reloadContinuationData": {
+                        "continuation": "SYNTHETIC_SWITCH_TO_ALL_LIVE_CHAT"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "continuations": [
+          {
+            "timedContinuationData": {
+              "timeoutMs": 2000,
+              "continuation": "SYNTHETIC_LIVE_NEXT_002"
+            }
+          }
+        ],
+        "actions": [
+          {
+            "addChatItemAction": {
+              "item": {
+                "liveChatTextMessageRenderer": {
+                  "id": "ChwSYNTHETIC_TOP_ONLY_001",
+                  "timestampUsec": "1763310100000000",
+                  "authorName": { "simpleText": "CuratedUser" },
+                  "authorExternalChannelId": "UC_SYNTHETIC_CURATED_01",
+                  "message": { "runs": [ { "text": "Filtered chat message" } ] }
+                }
+              }
+            }
+          },
+          {
+            "addChatItemAction": {
+              "item": {
+                "liveChatTextMessageRenderer": {
+                  "id": "ChwSYNTHETIC_UNCENSORED_002",
+                  "timestampUsec": "1763310101000000",
+                  "authorName": { "simpleText": "FastChatter" },
+                  "authorExternalChannelId": "UC_SYNTHETIC_FAST_00002",
+                  "message": { "runs": [ { "text": "!join command missed by top chat" } ] }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

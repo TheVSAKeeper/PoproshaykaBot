@@ -1,0 +1,122 @@
+﻿{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "header": {
+        "liveChatHeaderRenderer": {
+          "viewSelector": {
+            "sortFilterSubMenuRenderer": {
+              "subMenuItems": [
+                {
+                  "title": "Top chat",
+                  "selected": true,
+                  "continuation": {
+                    "reloadContinuationData": {
+                      "continuation": "SYNTHETIC_TOP_RELOAD_CONT"
+                    }
+                  }
+                },
+                {
+                  "title": "Live chat",
+                  "selected": false,
+                  "continuation": {
+                    "reloadContinuationData": {
+                      "continuation": "SYNTHETIC_LIVE_SWITCH_CONT_001"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "continuations": [
+        {
+          "invalidationContinuationData": {
+            "timeoutMs": 3250,
+            "continuation": "SYNTHETIC_INV_CONT_002"
+          }
+        }
+      ],
+      "actions": [
+        {
+          "addLiveChatTickerItemAction": {
+            "durationSec": "300"
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "id": "ChwSYNTHETIC_TEXT_MSG_001",
+                "timestampUsec": "1763310000123000",
+                "authorName": {
+                  "simpleText": "ModViewer"
+                },
+                "authorExternalChannelId": "UC_SYNTHETIC_MOD_000001",
+                "authorPhoto": {
+                  "thumbnails": [
+                    {
+                      "url": "https://yt3.ggpht.com/synthetic/mod-avatar-64.png",
+                      "width": 64,
+                      "height": 64
+                    }
+                  ]
+                },
+                "authorBadges": [
+                  {
+                    "liveChatAuthorBadgeRenderer": {
+                      "icon": {
+                        "iconType": "MODERATOR"
+                      },
+                      "tooltip": "Moderator"
+                    }
+                  },
+                  {
+                    "liveChatAuthorBadgeRenderer": {
+                      "customThumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://yt3.ggpht.com/synthetic/member-badge.png"
+                          }
+                        ]
+                      },
+                      "tooltip": "Member (1 year)"
+                    }
+                  }
+                ],
+                "message": {
+                  "runs": [
+                    {
+                      "text": "Hello stream "
+                    },
+                    {
+                      "emoji": {
+                        "emojiId": "UC_SYNTH/emoji01",
+                        "shortcuts": [
+                          ":wave:"
+                        ],
+                        "searchTerms": [
+                          "wave"
+                        ],
+                        "isCustomEmoji": true,
+                        "image": {
+                          "thumbnails": [
+                            {
+                              "url": "https://yt3.ggpht.com/synthetic/emoji-wave-48.png",
+                              "width": 48,
+                              "height": 48
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

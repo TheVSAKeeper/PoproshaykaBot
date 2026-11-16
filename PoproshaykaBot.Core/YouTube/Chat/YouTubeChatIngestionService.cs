@@ -5,9 +5,11 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Infrastructure.Logging;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.YouTube.Chat.InnerTube;
 using PoproshaykaBot.Core.YouTube.Chat.Transport;
 using PoproshaykaBot.Core.YouTube.Client;
 using PoproshaykaBot.Core.YouTube.Quota;
@@ -16,8 +18,7 @@ using PoproshaykaBot.Core.YouTube.Streaming;
 namespace PoproshaykaBot.Core.YouTube.Chat;
 
 internal sealed class YouTubeChatIngestionService(
-    IYouTubeLiveChatStreamClient streamClient,
-    IYouTubeLiveChatPollingClient pollingClient,
+    IYouTubeLiveChatReader chatReader,
     YouTubeChatMessageMapper mapper,
     IYouTubeActiveBroadcastSource streamMonitor,
     YouTubeSessionContext sessionContext,
@@ -37,7 +38,6 @@ internal sealed class YouTubeChatIngestionService(
     private static readonly TimeSpan MinimumStreamReconnectFloor = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RapidCloseThreshold = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan MinimumRestInterval = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan RestProbeInterval = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan QuotaWaitCheckCap = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan[] RapidCloseDelays =
     [
@@ -53,6 +53,7 @@ internal sealed class YouTubeChatIngestionService(
         TimeSpan.FromSeconds(60),
     ];
 
+    private readonly CompositeYouTubeLiveChatReader? _compositeReader = chatReader as CompositeYouTubeLiveChatReader;
     private readonly IYouTubeSentMessageTracker _sentMessageTracker =
         sentMessageTracker ?? NullYouTubeSentMessageTracker.Instance;
     private readonly Lock _sync = new();
@@ -88,14 +89,41 @@ internal sealed class YouTubeChatIngestionService(
     private int _gapCount;
     private int _reconnectAttempt;
 
-    private bool _usingRestFallback;
-    private DateTimeOffset? _restProbeAtUtc;
-    private int _consecutiveGrpcTransportFailures;
     private int _consecutiveRapidCloses;
     private int _consecutiveTransientFailures;
     private bool _wakePending;
     private bool _isRunning;
     private bool _disposed;
+
+    internal YouTubeChatIngestionService(
+        IYouTubeLiveChatStreamClient streamClient,
+        IYouTubeLiveChatPollingClient pollingClient,
+        YouTubeChatMessageMapper mapper,
+        IYouTubeActiveBroadcastSource streamMonitor,
+        YouTubeSessionContext sessionContext,
+        [FromKeyedServices(StreamingPlatform.YouTube)] IPlatformAuthService authService,
+        YouTubeAccountsStore accountsStore,
+        IYouTubeQuotaGovernor quotaGovernor,
+        IEventBus eventBus,
+        TimeProvider timeProvider,
+        ILogger<YouTubeChatIngestionService> logger,
+        YouTubeSettingsStore? settingsStore = null,
+        IYouTubeSentMessageTracker? sentMessageTracker = null)
+        : this(
+            CreateOfficialCompositeReader(streamClient, pollingClient, timeProvider),
+            mapper,
+            streamMonitor,
+            sessionContext,
+            authService,
+            accountsStore,
+            quotaGovernor,
+            eventBus,
+            timeProvider,
+            logger,
+            settingsStore,
+            sentMessageTracker)
+    {
+    }
 
     public string Name => "Чтение чата YouTube";
 
@@ -312,26 +340,10 @@ internal sealed class YouTubeChatIngestionService(
 
     internal async Task<TimeSpan> RunSingleIterationAsync(CancellationToken ct)
     {
-        var botToken = await authService.GetAccessTokenAsync(PlatformAuthRole.Bot, false, ct).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(botToken))
-        {
-            await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
-
-            lock (_sync)
-            {
-                _state = ConnectionState.Disconnected;
-                _issue = YouTubeChatIssue.MissingBotAuth;
-                _transport = YouTubeChatTransport.None;
-                _connectedSince = null;
-            }
-
-            return WaitingBroadcastInterval;
-        }
-
         var broadcast = streamMonitor.CurrentBroadcast;
 
-        if (broadcast is null || string.IsNullOrWhiteSpace(broadcast.LiveChatId))
+        if (broadcast is null
+            || (string.IsNullOrWhiteSpace(broadcast.LiveChatId) && string.IsNullOrWhiteSpace(broadcast.VideoId)))
         {
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
 
@@ -348,46 +360,101 @@ internal sealed class YouTubeChatIngestionService(
             return WaitingBroadcastInterval;
         }
 
-        var channelLabel = sessionContext.Current?.ChannelLabel;
+        var session = sessionContext.Current;
+        var channelLabel = session?.ChannelLabel;
 
         if (string.IsNullOrWhiteSpace(channelLabel))
         {
             channelLabel = broadcast.ChannelId;
         }
 
+        var botChannelId = session?.BotChannelId;
+
+        if (string.IsNullOrWhiteSpace(botChannelId))
+        {
+            botChannelId = accountsStore.Load(PlatformAuthRole.Bot).ChannelId;
+        }
+
+        var broadcasterChannelId = string.IsNullOrWhiteSpace(session?.TargetChannelId)
+            ? broadcast.ChannelId
+            : session.TargetChannelId;
+
+        var isSharedAccount = !string.IsNullOrWhiteSpace(botChannelId)
+            && !string.IsNullOrWhiteSpace(broadcasterChannelId)
+            && string.Equals(botChannelId, broadcasterChannelId, StringComparison.Ordinal);
+
+        var target = new YouTubeChatTarget(
+            broadcast.VideoId,
+            broadcast.LiveChatId,
+            broadcasterChannelId,
+            YouTubeChatMode.LiveChat,
+            RequiresOfficialMessageIds: isSharedAccount);
+
+        var broadcastKey = GetBroadcastKey(broadcast)!;
+
         YouTubeChatSessionCursor cursor;
-        bool useRest;
         bool switchedChat;
 
         lock (_sync)
         {
             switchedChat = _cursor is not null
-                && !string.Equals(_cursor.LiveChatId, broadcast.LiveChatId, StringComparison.Ordinal);
+                && !string.Equals(_cursor.LiveChatId, broadcastKey, StringComparison.Ordinal);
 
             if (_cursor is null || switchedChat)
             {
-                _cursor = new(broadcast.LiveChatId, timeProvider.GetUtcNow());
+                _cursor = new(broadcastKey, timeProvider.GetUtcNow());
                 _connectedSince = null;
+                _consecutiveRapidCloses = 0;
             }
 
             cursor = _cursor;
             _channel = channelLabel;
-            _liveChatId = broadcast.LiveChatId;
-
-            if (_usingRestFallback && _restProbeAtUtc.HasValue && timeProvider.GetUtcNow() >= _restProbeAtUtc.Value)
-            {
-                _usingRestFallback = false;
-                _restProbeAtUtc = null;
-                _consecutiveGrpcTransportFailures = 0;
-            }
-
-            useRest = _usingRestFallback;
+            _liveChatId = broadcastKey;
         }
 
         if (switchedChat)
         {
             await ClearAndAwaitHoldDrainAsync().ConfigureAwait(false);
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
+        }
+
+        var selectedTransport = _compositeReader is not null
+            ? _compositeReader.SelectTransport(target)
+            : chatReader.TransportKind;
+
+        if (selectedTransport == YouTubeChatTransportKind.None)
+        {
+            await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
+
+            lock (_sync)
+            {
+                _connectedSince = null;
+                _transport = YouTubeChatTransport.None;
+                _state = ConnectionState.Connecting;
+                _issue = YouTubeChatIssue.WaitingForActiveBroadcast;
+            }
+
+            return WaitingBroadcastInterval;
+        }
+
+        if (IsOfficialTransport(selectedTransport))
+        {
+            var botToken = await authService.GetAccessTokenAsync(PlatformAuthRole.Bot, false, ct).ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(botToken))
+            {
+                await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
+
+                lock (_sync)
+                {
+                    _state = ConnectionState.Disconnected;
+                    _issue = YouTubeChatIssue.MissingBotAuth;
+                    _transport = YouTubeChatTransport.None;
+                    _connectedSince = null;
+                }
+
+                return WaitingBroadcastInterval;
+            }
         }
 
         var streamScope = CreateActiveStreamScope(broadcast, ct);
@@ -409,9 +476,15 @@ internal sealed class YouTubeChatIngestionService(
                 return TimeSpan.Zero;
             }
 
-            var stepResult = useRest
-                ? await ExecuteRestPollAsync(broadcast, cursor, channelLabel, streamCts.Token, ct).ConfigureAwait(false)
-                : await ExecuteGrpcStreamAsync(broadcast, cursor, channelLabel, streamCts.Token, ct).ConfigureAwait(false);
+            var stepResult = await ExecuteTransportStepAsync(
+                    target,
+                    selectedTransport,
+                    broadcast,
+                    cursor,
+                    channelLabel,
+                    streamCts.Token,
+                    ct)
+                .ConfigureAwait(false);
 
             shouldRefreshLiveSnapshot = stepResult.RefreshSnapshot;
             resultDelay = stepResult.Delay;
@@ -425,13 +498,54 @@ internal sealed class YouTubeChatIngestionService(
         {
             throw;
         }
+        catch (InnerTubeChatException ex)
+        {
+            var outcome = _compositeReader is not null
+                ? _compositeReader.HandleInnerTubeFailure(target, ex)
+                : ClassifyStandaloneInnerTubeFailure(target.VideoId, ex);
+
+            if (!outcome.LiveStreamEnded)
+            {
+                if (outcome.ResetCursorOnly)
+                {
+                    return await HandleInvalidPageTokenAsync(broadcast, cursor, channelLabel, ct).ConfigureAwait(false);
+                }
+
+                if (outcome.RequiresBotAuth)
+                {
+                    await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
+
+                    lock (_sync)
+                    {
+                        _state = ConnectionState.Disconnected;
+                        _issue = YouTubeChatIssue.MissingBotAuth;
+                        _transport = YouTubeChatTransport.None;
+                        _connectedSince = null;
+                    }
+
+                    return WaitingBroadcastInterval;
+                }
+
+                if (outcome.SwitchedToFallback)
+                {
+                    return TimeSpan.FromSeconds(1);
+                }
+
+                return HandleTransientFailure(ex, YouTubeChatIssue.TransientError, countTowardsGrpcFallback: false);
+            }
+
+            CoreLog.YouTubeInnerTubeChatEnded(logger, cursor.LiveChatId);
+            await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
+            shouldRefreshLiveSnapshot = IsBroadcastCurrent(broadcast);
+            resultDelay = MinimumStreamReconnectFloor;
+        }
         catch (YouTubeApiException ex) when (ex.Kind == YouTubeApiErrorKind.InvalidPageToken)
         {
             return await HandleInvalidPageTokenAsync(broadcast, cursor, channelLabel, ct).ConfigureAwait(false);
         }
         catch (YouTubeApiException ex) when (ex.Kind == YouTubeApiErrorKind.LiveChatEnded)
         {
-            logger.LogInformation(ex, "YouTube чат {LiveChatId} завершён, обновляем статус трансляции", broadcast.LiveChatId);
+            logger.LogInformation(ex, "YouTube чат {LiveChatId} завершён, обновляем статус трансляции", cursor.LiveChatId);
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
             shouldRefreshLiveSnapshot = IsBroadcastCurrent(broadcast);
             resultDelay = MinimumStreamReconnectFloor;
@@ -456,7 +570,10 @@ internal sealed class YouTubeChatIngestionService(
         }
         catch (Exception ex) when (ex is YouTubeApiException or HttpRequestException)
         {
-            return HandleTransientFailure(ex, YouTubeChatIssue.TransientError, countTowardsGrpcFallback: !useRest);
+            return HandleTransientFailure(
+                ex,
+                YouTubeChatIssue.TransientError,
+                countTowardsGrpcFallback: selectedTransport == YouTubeChatTransportKind.OfficialGrpc);
         }
         finally
         {
@@ -507,7 +624,9 @@ internal sealed class YouTubeChatIngestionService(
         }
     }
 
-    private async Task<IterationStepResult> ExecuteGrpcStreamAsync(
+    private async Task<IterationStepResult> ExecuteTransportStepAsync(
+        YouTubeChatTarget target,
+        YouTubeChatTransportKind selectedTransport,
         YouTubeBroadcastSummary broadcast,
         YouTubeChatSessionCursor cursor,
         string channelLabel,
@@ -515,24 +634,47 @@ internal sealed class YouTubeChatIngestionService(
         CancellationToken loopCt)
     {
         var openedAt = timeProvider.GetUtcNow();
-        TimeSpan lastBatchPolling = MinimumStreamReconnectFloor;
+        var mappedTransport = MapTransport(selectedTransport);
+        var defaultPolling = selectedTransport == YouTubeChatTransportKind.OfficialRest
+            ? MinimumRestInterval
+            : MinimumStreamReconnectFloor;
+        var lastPollingInterval = defaultPolling;
         var sawChatEnded = false;
         var startedPublished = false;
 
         lock (_sync)
         {
             _state = ConnectionState.Connected;
-            _transport = YouTubeChatTransport.GrpcStream;
+            _transport = mappedTransport;
             _issue = YouTubeChatIssue.None;
             _connectedSince ??= openedAt;
         }
 
-        await foreach (var batch in streamClient.StreamBatchesAsync(broadcast.LiveChatId, cursor.PageToken, streamCt).ConfigureAwait(false))
+        var maxBatches = selectedTransport == YouTubeChatTransportKind.OfficialGrpc
+            || (_compositeReader is null && chatReader.IsServerStream)
+            ? (int?)null
+            : 1;
+
+        var candidateCursorToken = cursor.GetCursorTokenFor(selectedTransport, target.Mode);
+        var batches = _compositeReader is not null
+            ? _compositeReader.ReadSelectedTransportAsync(target, selectedTransport, candidateCursorToken, maxBatches, streamCt)
+            : chatReader.ReadBatchesAsync(target, candidateCursorToken, maxBatches, streamCt);
+
+        var transitionCommitted = false;
+
+        await foreach (var batch in batches.ConfigureAwait(false))
         {
             if (!IsBroadcastCurrent(broadcast))
             {
                 await ResetInactiveStateAsync(loopCt).ConfigureAwait(false);
                 return new(TimeSpan.Zero, RefreshSnapshot: false);
+            }
+
+            if (!transitionCommitted)
+            {
+                transitionCommitted = true;
+                await CommitTransportTransitionAsync(cursor, selectedTransport, target.Mode, channelLabel, loopCt)
+                    .ConfigureAwait(false);
             }
 
             if (!startedPublished)
@@ -541,13 +683,11 @@ internal sealed class YouTubeChatIngestionService(
                 await MarkIngestionStartedAsync(timeProvider.GetUtcNow(), loopCt).ConfigureAwait(false);
             }
 
-            lastBatchPolling = batch.PollingInterval > MinimumStreamReconnectFloor
-                ? batch.PollingInterval
-                : MinimumStreamReconnectFloor;
+            _compositeReader?.RecordSuccess(selectedTransport);
+            lastPollingInterval = batch.PollingInterval;
 
             lock (_sync)
             {
-                _consecutiveGrpcTransportFailures = 0;
                 _consecutiveTransientFailures = 0;
                 _reconnectAttempt = 0;
             }
@@ -576,63 +716,43 @@ internal sealed class YouTubeChatIngestionService(
         if (sawChatEnded)
         {
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), loopCt).ConfigureAwait(false);
-            return new(MinimumStreamReconnectFloor, RefreshSnapshot: IsBroadcastCurrent(broadcast));
+            return new(defaultPolling, RefreshSnapshot: IsBroadcastCurrent(broadcast));
         }
 
-        var elapsed = timeProvider.GetUtcNow() - openedAt;
-        int rapidCloses;
-
-        lock (_sync)
+        if (selectedTransport == YouTubeChatTransportKind.OfficialGrpc)
         {
-            _consecutiveTransientFailures = 0;
-            _reconnectAttempt = 0;
+            var elapsed = timeProvider.GetUtcNow() - openedAt;
+            int rapidCloses;
 
-            if (elapsed < RapidCloseThreshold)
+            lock (_sync)
             {
-                _consecutiveRapidCloses++;
+                _consecutiveTransientFailures = 0;
+                _reconnectAttempt = 0;
+
+                if (elapsed < RapidCloseThreshold)
+                {
+                    _consecutiveRapidCloses++;
+                }
+                else
+                {
+                    _consecutiveRapidCloses = 0;
+                }
+
+                rapidCloses = _consecutiveRapidCloses;
             }
-            else
+
+            if (rapidCloses >= 3)
             {
-                _consecutiveRapidCloses = 0;
+                var index = Math.Clamp(rapidCloses - 3, 0, RapidCloseDelays.Length - 1);
+                return new(RapidCloseDelays[index], RefreshSnapshot: false);
             }
 
-            rapidCloses = _consecutiveRapidCloses;
+            var grpcInterval = lastPollingInterval > MinimumStreamReconnectFloor
+                ? lastPollingInterval
+                : MinimumStreamReconnectFloor;
+            var remainingFloor = MinimumStreamReconnectFloor - elapsed;
+            return new(remainingFloor > TimeSpan.Zero ? remainingFloor : grpcInterval, RefreshSnapshot: false);
         }
-
-        if (rapidCloses >= 3)
-        {
-            var index = Math.Clamp(rapidCloses - 3, 0, RapidCloseDelays.Length - 1);
-            return new(RapidCloseDelays[index], RefreshSnapshot: false);
-        }
-
-        var remainingFloor = MinimumStreamReconnectFloor - elapsed;
-        return new(remainingFloor > TimeSpan.Zero ? remainingFloor : lastBatchPolling, RefreshSnapshot: false);
-    }
-
-    private async Task<IterationStepResult> ExecuteRestPollAsync(
-        YouTubeBroadcastSummary broadcast,
-        YouTubeChatSessionCursor cursor,
-        string channelLabel,
-        CancellationToken streamCt,
-        CancellationToken loopCt)
-    {
-        lock (_sync)
-        {
-            _state = ConnectionState.Connected;
-            _transport = YouTubeChatTransport.RestPolling;
-            _issue = YouTubeChatIssue.None;
-            _connectedSince ??= timeProvider.GetUtcNow();
-        }
-
-        var batch = await pollingClient.ListMessagesAsync(broadcast.LiveChatId, cursor.PageToken, streamCt).ConfigureAwait(false);
-
-        if (!IsBroadcastCurrent(broadcast))
-        {
-            await ResetInactiveStateAsync(loopCt).ConfigureAwait(false);
-            return new(TimeSpan.Zero, RefreshSnapshot: false);
-        }
-
-        await MarkIngestionStartedAsync(timeProvider.GetUtcNow(), loopCt).ConfigureAwait(false);
 
         lock (_sync)
         {
@@ -640,24 +760,102 @@ internal sealed class YouTubeChatIngestionService(
             _reconnectAttempt = 0;
         }
 
-        var batchOutcome = await ProcessBatchAsync(broadcast, cursor, batch, channelLabel, loopCt).ConfigureAwait(false);
-
-        if (batchOutcome.AbortedByBroadcastChange)
+        if (selectedTransport == YouTubeChatTransportKind.OfficialRest)
         {
-            await ResetInactiveStateAsync(loopCt).ConfigureAwait(false);
-            return new(TimeSpan.Zero, RefreshSnapshot: false);
-        }
-
-        if (batchOutcome.SawChatEnded)
-        {
-            await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), loopCt).ConfigureAwait(false);
-            return new(MinimumRestInterval, RefreshSnapshot: IsBroadcastCurrent(broadcast));
+            return new(
+                lastPollingInterval > MinimumRestInterval ? lastPollingInterval : MinimumRestInterval,
+                RefreshSnapshot: false);
         }
 
         return new(
-            batch.PollingInterval > MinimumRestInterval ? batch.PollingInterval : MinimumRestInterval,
+            lastPollingInterval > TimeSpan.Zero ? lastPollingInterval : MinimumStreamReconnectFloor,
             RefreshSnapshot: false);
     }
+
+    private static CompositeYouTubeLiveChatReader CreateOfficialCompositeReader(
+        IYouTubeLiveChatStreamClient streamClient,
+        IYouTubeLiveChatPollingClient pollingClient,
+        TimeProvider timeProvider) =>
+        new(
+            innerTubeReader: null,
+            new OfficialGrpcYouTubeLiveChatReader(streamClient),
+            new OfficialRestYouTubeLiveChatReader(pollingClient, timeProvider),
+            timeProvider);
+
+    private static bool IsOfficialTransport(YouTubeChatTransportKind transport) =>
+        transport is YouTubeChatTransportKind.OfficialGrpc or YouTubeChatTransportKind.OfficialRest;
+
+    private async Task CommitTransportTransitionAsync(
+        YouTubeChatSessionCursor cursor,
+        YouTubeChatTransportKind nextTransport,
+        YouTubeChatMode nextMode,
+        string channelLabel,
+        CancellationToken ct)
+    {
+        var transitionNow = timeProvider.GetUtcNow();
+        bool transportGapDetected;
+
+        lock (_sync)
+        {
+            transportGapDetected = cursor.PrepareForTransport(nextTransport, nextMode, transitionNow);
+
+            if (transportGapDetected)
+            {
+                _gapCount++;
+            }
+        }
+
+        if (!transportGapDetected)
+        {
+            return;
+        }
+
+        CoreLog.YouTubeIncompatibleTransportSwitch(logger, cursor.LiveChatId, nextTransport.ToString());
+
+        await eventBus.PublishAsync(
+            new ChatReadingGapDetected(StreamingPlatform.YouTube, channelLabel, cursor.LiveChatId, transitionNow),
+            ct).ConfigureAwait(false);
+    }
+
+    private InnerTubeFailureOutcome ClassifyStandaloneInnerTubeFailure(string? videoId, InnerTubeChatException exception)
+    {
+        if (exception.Kind == InnerTubeErrorKind.ContinuationInvalidated)
+        {
+            CoreLog.InnerTubeCursorReset(logger, videoId, exception.Message);
+            return new(SwitchedToFallback: false, ResetCursorOnly: true, LiveStreamEnded: false, RequiresBotAuth: false, ShouldUseTransientBackoff: false);
+        }
+
+        return new(
+            SwitchedToFallback: false,
+            ResetCursorOnly: false,
+            LiveStreamEnded: exception.Kind == InnerTubeErrorKind.LiveStreamEnded,
+            RequiresBotAuth: false,
+            ShouldUseTransientBackoff: exception.Kind != InnerTubeErrorKind.LiveStreamEnded);
+    }
+
+    private static string? GetBroadcastKey(YouTubeBroadcastSummary? broadcast)
+    {
+        if (broadcast is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(broadcast.LiveChatId))
+        {
+            return broadcast.LiveChatId;
+        }
+
+        return !string.IsNullOrWhiteSpace(broadcast.VideoId) ? broadcast.VideoId : null;
+    }
+
+    private static YouTubeChatTransport MapTransport(YouTubeChatTransportKind transport) =>
+        transport switch
+        {
+            YouTubeChatTransportKind.InnerTube => YouTubeChatTransport.InnerTube,
+            YouTubeChatTransportKind.OfficialGrpc => YouTubeChatTransport.GrpcStream,
+            YouTubeChatTransportKind.OfficialRest => YouTubeChatTransport.RestPolling,
+            _ => YouTubeChatTransport.None,
+        };
 
     private async Task<BatchProcessOutcome> ProcessBatchAsync(
         YouTubeBroadcastSummary broadcast,
@@ -697,6 +895,7 @@ internal sealed class YouTubeChatIngestionService(
             if (item.Kind == YouTubeLiveChatItemKind.ChatEnded)
             {
                 sawChatEnded = true;
+                continue;
             }
 
             cursor.MarkSeen(item.Id);
@@ -713,7 +912,6 @@ internal sealed class YouTubeChatIngestionService(
             if (item.Kind == YouTubeLiveChatItemKind.ChatEnded)
             {
                 sawChatEnded = true;
-                cursor.MarkSeen(item.Id);
                 continue;
             }
 
@@ -761,7 +959,7 @@ internal sealed class YouTubeChatIngestionService(
             return new(sawChatEnded, AbortedByBroadcastChange: true);
         }
 
-        cursor.CompleteBatch(batch.NextPageToken, batchResult.LiveItems.Count > 0);
+        cursor.CompleteBatch(batch, batchResult.LiveItems.Any(static item => item.Kind != YouTubeLiveChatItemKind.ChatEnded));
         return new(sawChatEnded, AbortedByBroadcastChange: false);
     }
 
@@ -788,10 +986,10 @@ internal sealed class YouTubeChatIngestionService(
 
         logger.LogWarning(
             "YouTube чат {LiveChatId}: курсор сообщений устарел, возможен пропуск старых сообщений при пересинхронизации",
-            broadcast.LiveChatId);
+            cursor.LiveChatId);
 
         await eventBus.PublishAsync(
-            new ChatReadingGapDetected(StreamingPlatform.YouTube, channelLabel, broadcast.LiveChatId, nowUtc),
+            new ChatReadingGapDetected(StreamingPlatform.YouTube, channelLabel, cursor.LiveChatId, nowUtc),
             ct).ConfigureAwait(false);
 
         return MinimumStreamReconnectFloor;
@@ -823,7 +1021,15 @@ internal sealed class YouTubeChatIngestionService(
             return MinimumRestInterval;
         }
 
-        return remaining > QuotaWaitCheckCap ? QuotaWaitCheckCap : remaining;
+        var boundedDelay = remaining > QuotaWaitCheckCap ? QuotaWaitCheckCap : remaining;
+        var innerTubeCooldown = _compositeReader?.GetRemainingInnerTubeCooldown();
+
+        if (innerTubeCooldown is { } cooldown && cooldown < boundedDelay)
+        {
+            return cooldown;
+        }
+
+        return boundedDelay;
     }
 
     private Task MarkIngestionStartedAsync(DateTimeOffset at, CancellationToken ct)
@@ -893,19 +1099,14 @@ internal sealed class YouTubeChatIngestionService(
 
     private void SwitchToRestFallback(string reason)
     {
-        lock (_sync)
-        {
-            _usingRestFallback = true;
-            _restProbeAtUtc = timeProvider.GetUtcNow() + RestProbeInterval;
-            _consecutiveGrpcTransportFailures = 0;
-        }
-
+        _compositeReader?.SwitchToRestFallback();
         logger.LogWarning("YouTube чат: переключение на REST polling ({Reason}); повторная проба gRPC через 10 мин", reason);
     }
 
     private TimeSpan HandleTransientFailure(Exception exception, YouTubeChatIssue issue, bool countTowardsGrpcFallback)
     {
-        var switchedToRest = false;
+        var switchedToRest = countTowardsGrpcFallback
+            && (_compositeReader?.RecordGrpcTransientFailure() ?? false);
         int failures;
 
         lock (_sync)
@@ -915,19 +1116,6 @@ internal sealed class YouTubeChatIngestionService(
             failures = _consecutiveTransientFailures;
             _state = ConnectionState.Reconnecting;
             _issue = issue;
-
-            if (countTowardsGrpcFallback)
-            {
-                _consecutiveGrpcTransportFailures++;
-
-                if (_consecutiveGrpcTransportFailures >= 2)
-                {
-                    _usingRestFallback = true;
-                    _restProbeAtUtc = timeProvider.GetUtcNow() + RestProbeInterval;
-                    _consecutiveGrpcTransportFailures = 0;
-                    switchedToRest = true;
-                }
-            }
         }
 
         if (switchedToRest)
@@ -971,9 +1159,10 @@ internal sealed class YouTubeChatIngestionService(
                 activeReadTask = _activeReadTcs?.Task;
             }
 
-            shouldStopIngestion = @event.ActiveBroadcast is null
+            var activeKey = GetBroadcastKey(@event.ActiveBroadcast);
+            shouldStopIngestion = activeKey is null
                 || (_cursor is not null
-                    && !string.Equals(_cursor.LiveChatId, @event.ActiveBroadcast.LiveChatId, StringComparison.Ordinal));
+                    && !string.Equals(_cursor.LiveChatId, activeKey, StringComparison.Ordinal));
         }
 
         if (streamCts is not null)
@@ -1047,7 +1236,7 @@ internal sealed class YouTubeChatIngestionService(
 
     private bool IsBroadcastCurrent(string liveChatId)
     {
-        return string.Equals(streamMonitor.CurrentBroadcast?.LiveChatId, liveChatId, StringComparison.Ordinal);
+        return string.Equals(GetBroadcastKey(streamMonitor.CurrentBroadcast), liveChatId, StringComparison.Ordinal);
     }
 
     private static bool BroadcastMatches(YouTubeBroadcastSummary? current, YouTubeBroadcastSummary? candidate)

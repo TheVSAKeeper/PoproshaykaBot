@@ -1,0 +1,31 @@
+﻿{
+  "reloadResponse": {
+    "continuationContents": {
+      "liveChatContinuation": {
+        "continuations": [
+          {
+            "reloadContinuationData": {
+              "continuation": "SYNTHETIC_RELOAD_RESET_TOKEN"
+            }
+          }
+        ],
+        "actions": []
+      }
+    }
+  },
+  "endedResponse": {
+    "continuationContents": {
+      "liveChatContinuation": {
+        "continuations": [
+          {
+            "liveChatReplayContinuationData": {
+              "timeUntilLastMessageMsec": 0,
+              "continuation": "SYNTHETIC_REPLAY_TOKEN"
+            }
+          }
+        ],
+        "actions": []
+      }
+    }
+  }
+}
