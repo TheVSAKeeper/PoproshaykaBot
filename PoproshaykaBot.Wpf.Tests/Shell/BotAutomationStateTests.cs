@@ -171,6 +171,26 @@ public sealed class BotAutomationStateTests
         Assert.That(connection.StopCalls, Is.Zero);
     }
 
+    [Test]
+    public async Task DisconnectAsync_PlatformRacesIntoConnected_ReadsPhaseAgainAndStops()
+    {
+        var connection = new FakeBotConnectionController
+        {
+            CurrentPhase = BotLifecyclePhase.Connecting,
+            PhaseAfterWait = BotLifecyclePhase.Connected,
+        };
+        var automation = CreateAutomation(connection: connection);
+
+        var phase = await automation.DisconnectAsync(PoproshaykaBot.Core.Platforms.StreamingPlatform.YouTube);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(connection.CancelRequested, Is.True);
+            Assert.That(connection.StopCalls, Is.EqualTo(1));
+            Assert.That(phase, Is.EqualTo(BotLifecyclePhase.Disconnected));
+        });
+    }
+
     private static BotAutomation CreateAutomation(
         FakeBotConnectionController? connection = null,
         TargetChannelState? target = null,

@@ -11,6 +11,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.Onboarding;
+using PoproshaykaBot.Core.YouTube.Auth;
 using PoproshaykaBot.Wpf.Bootstrap;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Onboarding;
@@ -19,6 +20,8 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
 {
     private readonly SettingsManager _settingsManager;
     private readonly AccountsStore _accountsStore;
+    private readonly YouTubeSettingsStore? _youtubeSettingsStore;
+    private readonly YouTubeAccountsStore? _youtubeAccountsStore;
     private readonly IEventBus _eventBus;
     private readonly KestrelHttpServer _kestrelHttpServer;
     private readonly IOnboardingChannelValidator _channelValidator;
@@ -60,10 +63,14 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         IOnboardingChannelValidator channelValidator,
         BotConnectionManager botConnectionManager,
         ILogger<CompletionPageViewModel> logger,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        YouTubeSettingsStore? youtubeSettingsStore = null,
+        YouTubeAccountsStore? youtubeAccountsStore = null)
     {
         _settingsManager = settingsManager;
         _accountsStore = accountsStore;
+        _youtubeSettingsStore = youtubeSettingsStore;
+        _youtubeAccountsStore = youtubeAccountsStore;
         _eventBus = eventBus;
         _kestrelHttpServer = kestrelHttpServer;
         _channelValidator = channelValidator;
@@ -83,12 +90,22 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             ? "–"
             : context.BroadcasterAccount.Login;
 
-        SummaryText =
+        var summary =
             $"Канал: {context.Settings.Twitch.Channel}"
             + Environment.NewLine
             + $"Аккаунт бота: @{botLogin}"
             + Environment.NewLine
             + $"Аккаунт стримера: @{broadcasterLogin}";
+
+        if (context.YouTubeSettings.Enabled)
+        {
+            var ytBot = string.IsNullOrWhiteSpace(context.YouTubeBotAccount.ChannelTitle) ? "–" : context.YouTubeBotAccount.ChannelTitle;
+            var ytBroadcaster = string.IsNullOrWhiteSpace(context.YouTubeBroadcasterAccount.ChannelTitle) ? "–" : context.YouTubeBroadcasterAccount.ChannelTitle;
+            summary += Environment.NewLine
+                + $"YouTube: {context.YouTubeSettings.Channel} (бот: {ytBot}, стример: {ytBroadcaster})";
+        }
+
+        SummaryText = summary;
 
         ChatDisplayAccount = context.Settings.Twitch.ChatDisplayAccount;
 
@@ -126,12 +143,25 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         var portChanged = oldPort != newPort;
 
         bool settingsWritten;
-        bool accountsWritten;
+        bool twitchAccountsWritten;
+        bool youtubeAccountsWritten = true;
 
         try
         {
             settingsWritten = _settingsManager.SaveSettings(context.Settings);
-            accountsWritten = _accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
+            twitchAccountsWritten = _accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount);
+            if (_youtubeSettingsStore is not null)
+            {
+                settingsWritten &= _youtubeSettingsStore.Save(context.YouTubeSettings);
+            }
+
+            if (_youtubeAccountsStore is not null)
+            {
+                youtubeAccountsWritten = _youtubeAccountsStore.SaveAll(
+                    context.YouTubeClientSecret,
+                    context.YouTubeBotAccount,
+                    context.YouTubeBroadcasterAccount);
+            }
         }
         catch (Exception exception)
         {
@@ -142,11 +172,14 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
 
         await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Bot), CancellationToken.None);
         await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, PlatformAuthRole.Broadcaster), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot), CancellationToken.None);
+        await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster), CancellationToken.None);
 
-        if (!settingsWritten || !accountsWritten)
+        if (!settingsWritten || !twitchAccountsWritten || !youtubeAccountsWritten)
         {
+            var accountsWritten = twitchAccountsWritten && youtubeAccountsWritten;
             _logger.OnboardingCompletionNotWritten(settingsWritten, accountsWritten);
-            _dialogService.Warning("Настройки не записаны", DescribeNotWritten(settingsWritten, accountsWritten));
+            _dialogService.Warning("Настройки не записаны", DescribeNotWritten(settingsWritten, twitchAccountsWritten, youtubeAccountsWritten));
         }
 
         if (portChanged)
@@ -222,6 +255,21 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             TwitchScopes.BroadcasterRequired);
         lines.Add(broadcasterScopes);
         hasCritical |= broadcasterScopes.Status == ValidationStatus.Failure;
+
+        if (_context.YouTubeSettings.Enabled)
+        {
+            var ytBotScopes = ValidateScopes("Доступы YouTube бота",
+                _context.YouTubeBotAccount.Scopes,
+                YouTubeScopes.BotRequired);
+            lines.Add(ytBotScopes);
+            hasCritical |= ytBotScopes.Status == ValidationStatus.Failure;
+
+            var ytBroadcasterScopes = ValidateScopes("Доступы YouTube стримера",
+                _context.YouTubeBroadcasterAccount.Scopes,
+                YouTubeScopes.BroadcasterRequired);
+            lines.Add(ytBroadcasterScopes);
+            hasCritical |= ytBroadcasterScopes.Status == ValidationStatus.Failure;
+        }
 
         var loginConsistency = ValidateBroadcasterLogin(_context);
         lines.Add(loginConsistency);
@@ -316,13 +364,22 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             $"Канал «{context.Settings.Twitch.Channel}» не найден на Twitch. Возможно, имя написано с ошибкой.\n\nВсё равно сохранить настройки?");
     }
 
-    private static string DescribeNotWritten(bool settingsWritten, bool accountsWritten)
+    private static string DescribeNotWritten(bool settingsWritten, bool twitchAccountsWritten, bool youtubeAccountsWritten)
     {
-        var what = (settingsWritten, accountsWritten) switch
+        var accountsLabel = (twitchAccountsWritten, youtubeAccountsWritten) switch
         {
-            (false, false) => "Настройки и вход в Twitch применены и работают до перезапуска. В файл они не записаны",
-            (false, true) => "Настройки применены и работают до перезапуска. В файл они не записаны",
-            _ => "Вход в Twitch применён и работает до перезапуска. В файл он не записан",
+            (false, false) => "вход в Twitch и YouTube",
+            (false, true) => "вход в Twitch",
+            (true, false) => "вход в YouTube",
+            _ => string.Empty,
+        };
+
+        var what = (settingsWritten, accountsLabel.Length > 0) switch
+        {
+            (false, true) => $"Настройки и {accountsLabel} применены и работают до перезапуска. В файл они не записаны",
+            (false, false) => "Настройки применены и работают до перезапуска. В файл они не записаны",
+            (true, true) => $"{char.ToUpperInvariant(accountsLabel[0])}{accountsLabel[1..]} применён и работает до перезапуска. В файл он не записан",
+            _ => "Настройки не записаны в файл",
         };
 
         return $"{what}: туда только что перенесены данные предыдущей версии. Перезапустите приложение и пройдите настройку ещё раз.";

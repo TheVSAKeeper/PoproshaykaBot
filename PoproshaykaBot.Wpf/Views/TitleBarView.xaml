@@ -175,13 +175,49 @@
                     </StackPanel>
                 </Button>
 
-                <Button Style="{StaticResource Button.Primary}"
-                        Content="{Binding ConnectButtonText}"
-                        Command="{Binding ToggleConnectCommand}"
-                        VerticalAlignment="Center"
-                        MinHeight="26"
-                        Padding="14,3"
-                        Margin="0,0,10,0" />
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,10,0">
+                    <Button Style="{StaticResource Button.Primary}"
+                            Content="{Binding ConnectButtonText}"
+                            Command="{Binding ToggleConnectCommand}"
+                            VerticalAlignment="Center"
+                            MinHeight="26"
+                            Padding="14,3" />
+
+                    <Button x:Name="PlatformConnectMenuButton"
+                            Style="{StaticResource Theme.SegmentButton}"
+                            Click="OnMenuButtonClick"
+                            Width="26"
+                            MinHeight="26"
+                            Margin="2,0,0,0"
+                            VerticalAlignment="Center"
+                            ToolTip="Подключение по площадкам"
+                            AutomationProperties.Name="Управление подключением по площадкам"
+                            Visibility="{Binding ShowPlatformMenu, Converter={StaticResource BoolToVisibility}}">
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.ChevronDown}"
+                                                  Width="14"
+                                                  Height="14" />
+                        <Button.ContextMenu>
+                            <ContextMenu ItemsSource="{Binding PlatformConnections}">
+                                <ContextMenu.ItemContainerStyle>
+                                    <Style TargetType="MenuItem">
+                                        <Setter Property="Header"
+                                                Value="{Binding MenuHeader, Mode=OneWay}" />
+                                        <Setter Property="IsEnabled"
+                                                Value="{Binding CanToggle, Mode=OneWay}" />
+                                        <Setter Property="ToolTip"
+                                                Value="{Binding Tooltip, Mode=OneWay}" />
+                                        <Setter Property="Command"
+                                                Value="{Binding PlacementTarget.DataContext.TogglePlatformCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <Setter Property="CommandParameter"
+                                                Value="{Binding Platform}" />
+                                    </Style>
+                                </ContextMenu.ItemContainerStyle>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
 
                 <Button x:Name="RestartButton"
                         Style="{StaticResource Theme.SegmentButton}"

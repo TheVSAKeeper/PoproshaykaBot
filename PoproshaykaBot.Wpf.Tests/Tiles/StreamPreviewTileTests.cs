@@ -1,7 +1,9 @@
 ﻿using KeepShell.Testing;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Streaming;
@@ -9,6 +11,7 @@ using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
 using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views.Tiles;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -324,7 +327,7 @@ public class StreamPreviewTileTests
         var dispatcher = new ManualUiDispatcher();
         var stream = new FakeStreamStatus(StreamStatus.Online, OnlineInfo(server.Template));
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-        using var tile = new StreamPreviewTileViewModel(stream, bus, NullLogger<StreamPreviewTileViewModel>.Instance, dispatcher);
+        using var tile = new StreamPreviewTileViewModel(new FakePlatformRegistry(stream), bus, NullLogger<StreamPreviewTileViewModel>.Instance, dispatcher);
         var timer = dispatcher.Timers.Single();
 
         PumpUntil(() => tile.Thumbnail is not null);
@@ -508,10 +511,66 @@ public class StreamPreviewTileTests
         var stream = new FakeStreamStatus(status, info);
 
         return new(
-            stream,
+            new FakePlatformRegistry(stream),
             new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
             NullLogger<StreamPreviewTileViewModel>.Instance,
             new ManualUiDispatcher());
+    }
+
+    private sealed class FakePlatformRegistry(IStreamStatus twitchStream) : IChatPlatformRegistry
+    {
+        private readonly FakeChatPlatform _twitch = new(twitchStream);
+
+        public IReadOnlyList<IChatPlatform> All => [_twitch];
+
+        public bool TryGet(StreamingPlatform platform, [NotNullWhen(true)] out IChatPlatform? chatPlatform)
+        {
+            if (platform == StreamingPlatform.Twitch)
+            {
+                chatPlatform = _twitch;
+                return true;
+            }
+
+            chatPlatform = null;
+            return false;
+        }
+
+        public IChatPlatform? Find(StreamingPlatform platform) => platform == StreamingPlatform.Twitch ? _twitch : null;
+
+        public IChatPlatform GetRequired(StreamingPlatform platform) => Find(platform) ?? throw new KeyNotFoundException();
+
+        public IReadOnlyList<IChatPlatform> GetEnabled() => [_twitch];
+
+        public IReadOnlyList<IChatPlatform> GetConnected() => [];
+
+        public IStreamStatus GetStreamStatus(StreamingPlatform platform) => _twitch.StreamStatus;
+
+        public string GetDisplayName(StreamingPlatform platform) => platform.ToString();
+
+        public string GetConfiguredChannel(StreamingPlatform platform) => "streamer";
+
+        public string BuildStreamUrl(StreamingPlatform platform, StreamInfo? stream = null) => "https://twitch.tv/streamer";
+
+        private sealed class FakeChatPlatform(IStreamStatus streamStatus) : IChatPlatform
+        {
+            public StreamingPlatform Id => StreamingPlatform.Twitch;
+
+            public string DisplayName => "Twitch";
+
+            public PlatformCapabilities Capabilities => PlatformCapabilities.ChannelMetadataEdit;
+
+            public bool IsEnabled => true;
+
+            public bool IsConnected => false;
+
+            public IStreamStatus StreamStatus => streamStatus;
+
+            public IPlatformMessenger Messenger => null!;
+
+            public string ConfiguredChannel => "streamer";
+
+            public string BuildStreamUrl(StreamInfo? stream = null) => "https://twitch.tv/streamer";
+        }
     }
 
     private sealed class FakeStreamStatus(StreamStatus status, StreamInfo? info) : IStreamStatus

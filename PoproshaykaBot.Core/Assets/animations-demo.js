@@ -235,6 +235,24 @@
         return span;
     }
 
+    let samplePlatformToggle = false;
+
+    function buildPlatformBadge() {
+        const isYouTube = samplePlatformToggle;
+        samplePlatformToggle = !samplePlatformToggle;
+
+        const badge = document.createElement('span');
+        badge.className = isYouTube
+            ? 'platform-badge platform-badge--youtube'
+            : 'platform-badge platform-badge--twitch';
+        badge.title = isYouTube ? 'YouTube' : 'Twitch';
+        badge.setAttribute('aria-label', badge.title);
+        badge.innerHTML = isYouTube
+            ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.6 7.2a2.7 2.7 0 0 0-1.9-1.9C18 4.8 12 4.8 12 4.8s-6 0-7.7.5a2.7 2.7 0 0 0-1.9 1.9C2 8.9 2 12 2 12s0 3.1.4 4.8a2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.7.5 7.7.5s6 0 7.7-.5a2.7 2.7 0 0 0 1.9-1.9c.4-1.7.4-4.8.4-4.8s0-3.1-.4-4.8zM10 15.1V8.9L15.4 12 10 15.1z"/></svg>'
+            : '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.3 3H20v11.7l-4.7 4.7h-3.9l-2.5 2.6H6.5v-2.6H3V6.2L4.3 3zm1.7 2v11.6h3.5v2.3l2.3-2.3h4.2l2.3-2.3V5H6zm8.8 3.2h1.9v5.2h-1.9V8.2zm-4.9 0h1.9v5.2H9.9V8.2z"/></svg>';
+        return badge;
+    }
+
     function buildMessage(role) {
         const pick = pickSampleMessage();
 
@@ -259,6 +277,8 @@
         timestamp.className = 'timestamp';
         timestamp.textContent = new Date().toLocaleTimeString();
         headerEl.appendChild(timestamp);
+
+        headerEl.appendChild(buildPlatformBadge());
 
         const username = document.createElement('span');
         username.className = role && role !== 'first-time'

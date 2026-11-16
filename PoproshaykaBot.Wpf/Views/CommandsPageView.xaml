@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:platformControls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -125,6 +126,11 @@
                                         <Setter Property="TextDecorations"
                                                 Value="Strikethrough" />
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsClosedByCode}"
+                                                 Value="True">
+                                        <Setter Property="Foreground"
+                                                Value="{DynamicResource Fg.Muted}" />
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
@@ -143,11 +149,24 @@
                            Margin="0,0,12,0"
                            VerticalAlignment="Center"
                            Text="{Binding AccessText}"
-                           Foreground="{DynamicResource Fg.Secondary}"
                            FontSize="{DynamicResource Font.Size.Caption}"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding AccessHint}" />
+                           ToolTip="{Binding AccessHint}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource Fg.Secondary}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsClosedByCode}"
+                                             Value="True">
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource Fg.Muted}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
 
                 <TextBlock Grid.Column="2"
                            Style="{StaticResource RatingNumber}"
@@ -286,6 +305,43 @@
                                               Height="14" />
                 </Button>
             </Grid>
+
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="12,0,0,0">
+                <RadioButton Style="{StaticResource ToggleButton.Toolbar}"
+                             GroupName="CommandsProbePlatform"
+                             IsChecked="{Binding IsTwitchProbe, Mode=TwoWay}"
+                             AutomationProperties.Name="Проверка прав для Twitch">
+                    <StackPanel Orientation="Horizontal">
+                        <platformControls:PlatformIconView Platform="Twitch"
+                                                           Width="12"
+                                                           Height="12"
+                                                           Margin="0,0,6,0"
+                                                           VerticalAlignment="Center" />
+                        <TextBlock Text="Twitch"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </RadioButton>
+
+                <RadioButton Style="{StaticResource ToggleButton.Toolbar}"
+                             GroupName="CommandsProbePlatform"
+                             Margin="4,0,0,0"
+                             IsChecked="{Binding IsYouTubeProbe, Mode=TwoWay}"
+                             AutomationProperties.Name="Проверка прав для YouTube">
+                    <StackPanel Orientation="Horizontal">
+                        <platformControls:PlatformIconView Platform="YouTube"
+                                                           Width="12"
+                                                           Height="12"
+                                                           Margin="0,0,6,0"
+                                                           VerticalAlignment="Center" />
+                        <TextBlock Text="YouTube"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </RadioButton>
+            </StackPanel>
 
             <StackPanel Grid.Column="2"
                         Orientation="Horizontal">

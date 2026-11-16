@@ -1,13 +1,27 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class CommandRowViewModel : ObservableObject
 {
     private bool _applying;
+    private StreamingPlatform _probePlatform = StreamingPlatform.Twitch;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsClosedByCode))]
+    [NotifyPropertyChangedFor(nameof(CodeAccessText))]
+    [NotifyPropertyChangedFor(nameof(EffectiveAccessLevel))]
+    [NotifyPropertyChangedFor(nameof(HasAccessConflict))]
+    [NotifyPropertyChangedFor(nameof(AccessConflictNote))]
+    [NotifyPropertyChangedFor(nameof(AccessText))]
+    [NotifyPropertyChangedFor(nameof(AccessHint))]
+    [NotifyPropertyChangedFor(nameof(Summary))]
+    private CommandAccessLevel? _codeLevel;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Summary))]
@@ -63,7 +77,7 @@ public sealed partial class CommandRowViewModel : ObservableObject
 
         Canonical = command.Canonical;
         Description = command.Description;
-        CodeLevel = codeLevel;
+        _codeLevel = codeLevel;
         IsRestrictedToAllowedUsers = command.IsRestrictedToAllowedUsers;
 
         Invocation = prefix + command.Canonical;
@@ -96,13 +110,13 @@ public sealed partial class CommandRowViewModel : ObservableObject
 
     public string Description { get; }
 
-    public CommandAccessLevel? CodeLevel { get; }
-
     public bool IsRestrictedToAllowedUsers { get; }
 
     public bool IsClosedByCode => CodeLevel is null;
 
-    public string CodeAccessText => CommandAccessOption.DescribeSource(CodeLevel);
+    public string CodeAccessText => IsClosedByCode && _probePlatform != StreamingPlatform.Twitch
+        ? $"Недоступна ({PlatformVisuals.GetDisplayName(_probePlatform)})"
+        : CommandAccessOption.DescribeSource(CodeLevel);
 
     public CommandAccessLevel EffectiveAccessLevel => CodeLevel is { } code
         ? CommandAccessLevels.Stricter(code, AccessOption.Level ?? CommandAccessLevel.Everyone)
@@ -122,7 +136,9 @@ public sealed partial class CommandRowViewModel : ObservableObject
         {
             if (IsClosedByCode)
             {
-                return "Никто";
+                return _probePlatform == StreamingPlatform.Twitch
+                    ? "Никто"
+                    : $"Недоступна ({PlatformVisuals.GetDisplayName(_probePlatform)})";
             }
 
             var level = CommandAccessOption.Describe(EffectiveAccessLevel);
@@ -143,7 +159,9 @@ public sealed partial class CommandRowViewModel : ObservableObject
         get
         {
             var basic = IsClosedByCode
-                ? "Команда не отвечает ни зрителю, ни стримеру"
+                ? (_probePlatform == StreamingPlatform.Twitch
+                    ? "Команда не отвечает ни зрителю, ни стримеру"
+                    : $"Команда не поддерживается на площадке {PlatformVisuals.GetDisplayName(_probePlatform)}")
                 : EffectiveAccessLevel switch
                 {
                     CommandAccessLevel.Broadcaster => "Команду вызывает только владелец канала",
@@ -155,6 +173,16 @@ public sealed partial class CommandRowViewModel : ObservableObject
                 ? basic + "; по существу она отвечает только тем, кто указан в особом списке – остальным приходит отказ"
                 : basic;
         }
+    }
+
+    public void UpdateCodeAvailability(CommandAccessLevel? codeLevel, StreamingPlatform probePlatform)
+    {
+        _probePlatform = probePlatform;
+        CodeLevel = codeLevel;
+        OnPropertyChanged(nameof(CodeAccessText));
+        OnPropertyChanged(nameof(AccessText));
+        OnPropertyChanged(nameof(AccessHint));
+        OnPropertyChanged(nameof(Summary));
     }
 
     public bool IsTargetInherited => TargetOption.Target is null;

@@ -20,6 +20,7 @@ public sealed class ObsChatCssSettings
     public bool EnableAnimations { get; set; } = true;
     public int MaxMessages { get; set; } = 50;
     public bool ShowTimestamp { get; set; } = true;
+    public bool ShowPlatformBadge { get; set; }
 
     public string EmoteSize { get; set; } = "28px";
     public string BadgeSize { get; set; } = "18px";
@@ -74,6 +75,7 @@ public sealed class ObsChatCssSettings
             EnableAnimations = safeSettings.EnableAnimations,
             MaxMessages = ObsChatRanges.Clamp(safeSettings.MaxMessages, ObsChatRanges.MaxMessagesMin, ObsChatRanges.MaxMessagesMax),
             ShowTimestamp = safeSettings.ShowTimestamp,
+            ShowPlatformBadge = safeSettings.ShowPlatformBadge,
 
             EmoteSize = $"{ObsChatRanges.Clamp(safeSettings.EmoteSizePixels, ObsChatRanges.EmoteSizeMin, ObsChatRanges.EmoteSizeMax)}px",
             BadgeSize = $"{ObsChatRanges.Clamp(safeSettings.BadgeSizePixels, ObsChatRanges.BadgeSizeMin, ObsChatRanges.BadgeSizeMax)}px",

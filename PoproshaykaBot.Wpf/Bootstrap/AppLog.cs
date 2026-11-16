@@ -51,6 +51,21 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1013, Level = LogLevel.Information, Message = "Перезапуск отменён: закрытие окна не подтверждено")]
     public static partial void RestartCancelled(this ILogger logger);
 
+    [LoggerMessage(EventId = 1015, Level = LogLevel.Information, Message = "Пользователь запросил подключение площадки {Platform}")]
+    public static partial void PlatformConnectRequested(this ILogger logger, string platform);
+
+    [LoggerMessage(EventId = 1016, Level = LogLevel.Information, Message = "Пользователь запросил отключение площадки {Platform}")]
+    public static partial void PlatformDisconnectRequested(this ILogger logger, string platform);
+
+    [LoggerMessage(EventId = 1017, Level = LogLevel.Error, Message = "Ошибка запуска подключения площадки {Platform}")]
+    public static partial void PlatformStartConnectionFailed(this ILogger logger, Exception exception, string platform);
+
+    [LoggerMessage(EventId = 1018, Level = LogLevel.Error, Message = "Ошибка отключения площадки {Platform}")]
+    public static partial void PlatformDisconnectFailed(this ILogger logger, Exception exception, string platform);
+
+    [LoggerMessage(EventId = 1019, Level = LogLevel.Warning, Message = "Частичное подключение бота: работают {ConnectedPlatforms}, сбой {FailedPlatforms}")]
+    public static partial void BotPartialConnectionFailure(this ILogger logger, string connectedPlatforms, string failedPlatforms);
+
     [LoggerMessage(EventId = 1100, Level = LogLevel.Error, Message = "OAuth-поток мастера упал для роли {Role}")]
     public static partial void OAuthFlowFailed(this ILogger logger, Exception? exception, PlatformAuthRole role);
 

@@ -453,6 +453,7 @@ public partial class App : Application
         services.AddSingleton<DashboardTileViewModel, ObsInfoTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, ChatDisplayTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, ChatOverlayPreviewTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel, MultiplatformChatTileViewModel>();
 
         services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<LogsViewModel>();
@@ -522,6 +523,7 @@ public partial class App : Application
         services.AddTransient<IOnboardingPageViewModel, HttpServerCheckPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, BotAuthorizationPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, BroadcasterAuthorizationPageViewModel>();
+        services.AddTransient<IOnboardingPageViewModel, YouTubeOnboardingPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, BotConnectionPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, HealthCheckPageViewModel>();
         services.AddTransient<IOnboardingPageViewModel, CompletionPageViewModel>();

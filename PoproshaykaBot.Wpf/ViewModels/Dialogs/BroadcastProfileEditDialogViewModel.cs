@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Obs;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Collections.ObjectModel;
@@ -15,6 +17,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
 {
     private readonly ObsIntegrationService _obsIntegration;
     private readonly ObsIntegrationStore _obsIntegrationStore;
+    private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly ILogger<BroadcastProfileEditDialogViewModel> _logger;
 
     private bool _nameRequired = true;
@@ -25,6 +28,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
     [NotifyPropertyChangedFor(nameof(ConfirmButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsPlatformsSelectionEnabled))]
     private string _name = string.Empty;
 
     [ObservableProperty]
@@ -53,12 +57,15 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
         GameAutocompleteViewModel game,
         ObsIntegrationService obsIntegration,
         ObsIntegrationStore obsIntegrationStore,
-        ILogger<BroadcastProfileEditDialogViewModel> logger)
+        ILogger<BroadcastProfileEditDialogViewModel> logger,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         Game = game;
         _obsIntegration = obsIntegration;
         _obsIntegrationStore = obsIntegrationStore;
         _logger = logger;
+        _platformRegistry = platformRegistry;
+        InitializeTargetPlatforms(null);
     }
 
     public event EventHandler<bool>? RequestClose;
@@ -70,6 +77,10 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
     public string NameLabel { get; private set; } = "Имя:";
     public string? NamePlaceholder { get; private set; }
     public bool IsObsSceneVisible { get; private set; } = true;
+
+    public bool IsPlatformsSelectionEnabled => !_isCurrentSettingsMode || NewProfileName.Length > 0;
+
+    public ObservableCollection<ProfilePlatformOptionViewModel> TargetPlatforms { get; } = [];
 
     public GameAutocompleteViewModel Game { get; }
 
@@ -90,7 +101,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
 
     public string NewProfileName => Name.Trim();
 
-    public void LoadFrom(BroadcastProfile profile)
+    public void LoadFrom(BroadcastProfile profile, IReadOnlySet<StreamingPlatform>? platforms = null)
     {
         Name = profile.Name;
         ProfileTitle = profile.Title;
@@ -100,6 +111,48 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
         ObsSceneName = profile.ObsSceneName;
         _originalLanguage = profile.BroadcasterLanguage ?? "ru";
         Language = _originalLanguage;
+        InitializeTargetPlatforms(platforms);
+    }
+
+    public IReadOnlyCollection<StreamingPlatform> GetSelectedPlatforms()
+    {
+        return TargetPlatforms
+            .Where(static option => option.IsSelected)
+            .Select(static option => option.Platform)
+            .ToArray();
+    }
+
+    private void InitializeTargetPlatforms(IReadOnlySet<StreamingPlatform>? selected)
+    {
+        foreach (var existing in TargetPlatforms)
+        {
+            existing.PropertyChanged -= OnTargetPlatformPropertyChanged;
+        }
+
+        var ordered = _platformRegistry is not null
+            ? _platformRegistry.All.Select(static p => (p.Id, p.DisplayName))
+            : PlatformVisuals.OrderedPlatforms.Select(static p => (p, PlatformVisuals.GetDisplayName(p)));
+
+        TargetPlatforms.Clear();
+        foreach (var (platform, displayName) in ordered)
+        {
+            var isSelected = selected is not null
+                ? selected.Contains(platform)
+                : platform == StreamingPlatform.Twitch;
+            var option = new ProfilePlatformOptionViewModel(platform, displayName, isSelected);
+            option.PropertyChanged += OnTargetPlatformPropertyChanged;
+            TargetPlatforms.Add(option);
+        }
+
+        ConfirmCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnTargetPlatformPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ProfilePlatformOptionViewModel.IsSelected))
+        {
+            ConfirmCommand.NotifyCanExecuteChanged();
+        }
     }
 
     public void ConfigureCurrentSettingsMode()
@@ -112,6 +165,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
         _isCurrentSettingsMode = true;
         IsObsSceneVisible = false;
         _sceneBindingEnabled = false;
+        OnPropertyChanged(nameof(IsPlatformsSelectionEnabled));
     }
 
     public void WriteTo(BroadcastProfile profile)
@@ -176,10 +230,17 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
 
     public void Dispose()
     {
+        foreach (var option in TargetPlatforms)
+        {
+            option.PropertyChanged -= OnTargetPlatformPropertyChanged;
+        }
+
         Game.Dispose();
     }
 
-    private bool CanConfirm() => !_nameRequired || Name.Trim().Length > 0;
+    private bool CanConfirm() =>
+        (!_nameRequired || Name.Trim().Length > 0)
+        && (!IsPlatformsSelectionEnabled || TargetPlatforms.Any(static option => option.IsSelected));
 
     [RelayCommand(CanExecute = nameof(CanConfirm))]
     private void Confirm()
@@ -206,4 +267,20 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
         if (CurrentNumber > 1)
             CurrentNumber--;
     }
+}
+
+public sealed partial class ProfilePlatformOptionViewModel : ObservableObject
+{
+    public ProfilePlatformOptionViewModel(StreamingPlatform platform, string displayName, bool isSelected)
+    {
+        Platform = platform;
+        DisplayName = displayName;
+        _isSelected = isSelected;
+    }
+
+    public StreamingPlatform Platform { get; }
+    public string DisplayName { get; }
+
+    [ObservableProperty]
+    private bool _isSelected;
 }

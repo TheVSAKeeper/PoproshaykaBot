@@ -40,6 +40,7 @@ public sealed class ObsChatSettings
 
     public int MaxMessages { get; set; } = 50;
     public bool ShowTimestamp { get; set; } = true;
+    public bool ShowPlatformBadge { get; set; } = false;
 
     public int EmoteSizePixels { get; set; } = 28;
     public int BadgeSizePixels { get; set; } = 18;

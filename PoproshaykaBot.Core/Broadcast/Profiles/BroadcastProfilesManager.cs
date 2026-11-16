@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Broadcast.Profiles;
@@ -153,12 +154,26 @@ public class BroadcastProfilesManager(
         return profilesStore.Load().Profiles.ToList();
     }
 
+    public IReadOnlySet<StreamingPlatform> GetPlatforms(Guid profileId)
+    {
+        return profilePlatformsStore?.GetPlatformsOrDefault(profileId)
+               ?? new HashSet<StreamingPlatform> { StreamingPlatform.Twitch };
+    }
+
     public bool Upsert(BroadcastProfile profile)
+    {
+        return Upsert(profile, platforms: null);
+    }
+
+    public bool Upsert(BroadcastProfile profile, IReadOnlyCollection<StreamingPlatform>? platforms)
     {
         if (string.IsNullOrWhiteSpace(profile.Name))
         {
             throw new InvalidOperationException("Имя профиля не может быть пустым");
         }
+
+        BroadcastProfile? previous = null;
+        var previousIndex = -1;
 
         var written = profilesStore.Mutate(bp =>
         {
@@ -192,15 +207,73 @@ public class BroadcastProfilesManager(
             }
             else
             {
-                var index = profiles.IndexOf(existing);
-                profiles[index] = profile;
+                previousIndex = profiles.IndexOf(existing);
+                previous = existing;
+                profiles[previousIndex] = profile;
             }
         });
+
+        if (!written)
+        {
+            logger.LogWarning("Запись профиля трансляции {ProfileName} (Id={ProfileId}) отклонена затвором записи", profile.Name, profile.Id);
+            return false;
+        }
+
+        if (platforms is not null && profilePlatformsStore is not null)
+        {
+            bool platformsWritten;
+            try
+            {
+                platformsWritten = profilePlatformsStore.SetPlatforms(profile.Id, platforms);
+            }
+            catch
+            {
+                RollbackProfile(profile.Id, previous, previousIndex);
+                throw;
+            }
+
+            if (!platformsWritten)
+            {
+                RollbackProfile(profile.Id, previous, previousIndex);
+                logger.LogWarning("Не удалось сохранить площадки профиля {ProfileName} (Id={ProfileId}); изменения профиля откачены", profile.Name, profile.Id);
+                return false;
+            }
+        }
 
         logger.LogInformation("Upsert профиля трансляции {ProfileName} (Id={ProfileId})", profile.Name, profile.Id);
         _ = eventBus.PublishAsync(new BroadcastProfilesChanged());
 
-        return written;
+        return true;
+    }
+
+    private void RollbackProfile(Guid id, BroadcastProfile? previous, int previousIndex)
+    {
+        try
+        {
+            profilesStore.Mutate(bp =>
+            {
+                if (previous is null)
+                {
+                    bp.Profiles.RemoveAll(p => p.Id == id);
+                    return;
+                }
+
+                var currentIndex = bp.Profiles.FindIndex(p => p.Id == id);
+                if (currentIndex >= 0)
+                {
+                    bp.Profiles[currentIndex] = previous;
+                }
+                else
+                {
+                    var insertAt = Math.Clamp(previousIndex, 0, bp.Profiles.Count);
+                    bp.Profiles.Insert(insertAt, previous);
+                }
+            });
+        }
+        catch (Exception rollbackException)
+        {
+            logger.LogWarning(rollbackException, "Не удалось откатить профиль трансляции Id={ProfileId} после сбоя сохранения площадок", id);
+        }
     }
 
     public bool Remove(Guid id)

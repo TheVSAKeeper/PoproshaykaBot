@@ -36,6 +36,7 @@
         ['enableMessageShadows', '.message', 'no-shadows'],
         ['enableSpecialEffects', '.message', 'no-special-effects'],
         ['showTimestamp', '#chat .message, .demo-stage .message', 'no-timestamp'],
+        ['showPlatformBadge', '.message', 'no-platform-badge'],
         ['showUserAvatars', '.message', 'no-avatars'],
     ];
 
@@ -367,6 +368,7 @@
         bindControl('cfg-borderRadius', 'borderRadius', 'range');
         bindControl('cfg-maxMessages', 'maxMessages', 'range');
         bindControl('cfg-showTimestamp', 'showTimestamp', 'checkbox');
+        bindControl('cfg-showPlatformBadge', 'showPlatformBadge', 'checkbox');
         bindControl('cfg-emoteSizePixels', 'emoteSizePixels', 'range');
         bindControl('cfg-badgeSizePixels', 'badgeSizePixels', 'range');
         bindControl('cfg-showUserAvatars', 'showUserAvatars', 'checkbox');

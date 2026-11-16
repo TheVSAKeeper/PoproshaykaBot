@@ -62,6 +62,8 @@ internal sealed class YouTubeStreamMonitor(
     private bool _wakeSubscriptionsAttached;
     private bool _wakePending;
     private bool _disposed;
+    private StreamMonitoringStatus? _lastMonitoringStatus;
+    private string? _lastMonitoringDetail;
 
     public string Name => "Мониторинг эфиров YouTube";
 
@@ -155,6 +157,7 @@ internal sealed class YouTubeStreamMonitor(
         }
 
         runCts?.Dispose();
+        await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Disconnected, null).ConfigureAwait(false);
     }
 
     public Task RefreshLiveSnapshotAsync()
@@ -354,7 +357,11 @@ internal sealed class YouTubeStreamMonitor(
         }
         catch (Exception ex) when (ex is YouTubeApiException or HttpRequestException)
         {
-            return HandleTransientFailure(ex, YouTubeMonitorIssue.TransientError);
+            var retryDelay = HandleTransientFailure(ex, YouTubeMonitorIssue.TransientError);
+            await PublishMonitoringStatusIfChangedAsync(
+                StreamMonitoringStatus.Reconnecting,
+                "повтор после ошибки API").ConfigureAwait(false);
+            return retryDelay;
         }
     }
 
@@ -423,6 +430,7 @@ internal sealed class YouTubeStreamMonitor(
             await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None).ConfigureAwait(false);
 
             await PublishOfflineIfNeededAsync(transition, targetChannelId).ConfigureAwait(false);
+            await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Connected, null).ConfigureAwait(false);
 
             return OfflinePollInterval;
         }
@@ -456,6 +464,7 @@ internal sealed class YouTubeStreamMonitor(
         }
 
         await PublishOnlineOrMetadataAsync(onlineTransition, targetChannelId).ConfigureAwait(false);
+        await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Connected, null).ConfigureAwait(false);
 
         return OnlinePollInterval;
     }
@@ -505,6 +514,7 @@ internal sealed class YouTubeStreamMonitor(
                 _lastLoggedMultiSetKey = null;
             }
 
+            await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Connected, null).ConfigureAwait(false);
             return;
         }
 
@@ -552,6 +562,8 @@ internal sealed class YouTubeStreamMonitor(
                 new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true),
                 CancellationToken.None).ConfigureAwait(false);
         }
+
+        await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Connected, null).ConfigureAwait(false);
     }
 
     private async Task HandleNoActiveBroadcastsAsync(string targetChannelId, YouTubeBroadcastSummary? previousActive)
@@ -573,6 +585,7 @@ internal sealed class YouTubeStreamMonitor(
         }
 
         await PublishOfflineIfNeededAsync(transition, targetChannelId).ConfigureAwait(false);
+        await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Connected, null).ConfigureAwait(false);
     }
 
     private async Task HandleAmbiguousBroadcastsAsync(
@@ -616,6 +629,10 @@ internal sealed class YouTubeStreamMonitor(
         await eventBus.PublishAsync(
             new YouTubeMultipleBroadcastsDetected(targetChannelId, matches),
             CancellationToken.None).ConfigureAwait(false);
+
+        await PublishMonitoringStatusIfChangedAsync(
+            StreamMonitoringStatus.Reconnecting,
+            "несколько активных эфиров").ConfigureAwait(false);
     }
 
     private async Task TransitionToDisabledAsync()
@@ -659,6 +676,8 @@ internal sealed class YouTubeStreamMonitor(
                     IsCatchUp: previousStatus == StreamStatus.Unknown),
                 CancellationToken.None).ConfigureAwait(false);
         }
+
+        await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Disconnected, null).ConfigureAwait(false);
     }
 
     private async Task TransitionToMissingAuthAsync()
@@ -680,6 +699,8 @@ internal sealed class YouTubeStreamMonitor(
         {
             await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None).ConfigureAwait(false);
         }
+
+        await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Failed, "нет авторизации стримера").ConfigureAwait(false);
     }
 
     private async Task TransitionToInvalidChannelAsync()
@@ -702,6 +723,8 @@ internal sealed class YouTubeStreamMonitor(
         {
             await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None).ConfigureAwait(false);
         }
+
+        await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Failed, "неверный канал").ConfigureAwait(false);
     }
 
     private async Task<TimeSpan> HandleQuotaExceededAsync(bool isServerExhausted, CancellationToken ct)
@@ -731,6 +754,8 @@ internal sealed class YouTubeStreamMonitor(
         {
             await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None).ConfigureAwait(false);
         }
+
+        await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Failed, "квота исчерпана").ConfigureAwait(false);
 
         var nowUtc = timeProvider.GetUtcNow();
         var window = PacificQuotaClock.GetWindow(nowUtc);
@@ -902,6 +927,30 @@ internal sealed class YouTubeStreamMonitor(
         }
     }
 
+    private Task PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus status, string? detail)
+    {
+        lock (_sync)
+        {
+            if (_disposed)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (_lastMonitoringStatus == status && string.Equals(_lastMonitoringDetail, detail, StringComparison.Ordinal))
+            {
+                return Task.CompletedTask;
+            }
+
+            _lastMonitoringStatus = status;
+            _lastMonitoringDetail = detail;
+        }
+
+        logger.LogDebug("YouTube: публикация StreamMonitoringStatusChanged {Status} ({Detail})", status, detail ?? "–");
+        return eventBus.PublishAsync(
+            new StreamMonitoringStatusChanged(StreamingPlatform.YouTube, PlatformAuthRole.Broadcaster, status, detail),
+            CancellationToken.None);
+    }
+
     private static StreamInfo BuildStreamInfo(
         YouTubeBroadcastSummary broadcast,
         string targetChannelId,
@@ -909,6 +958,10 @@ internal sealed class YouTubeStreamMonitor(
         DateTime startedAtUtc,
         int viewerCount)
     {
+        var thumbnailUrl = string.IsNullOrWhiteSpace(broadcast.VideoId)
+            ? string.Empty
+            : $"https://i.ytimg.com/vi/{Uri.EscapeDataString(broadcast.VideoId)}/hqdefault.jpg";
+
         return new()
         {
             Id = broadcast.VideoId,
@@ -919,6 +972,7 @@ internal sealed class YouTubeStreamMonitor(
             GameName = string.Empty,
             ViewerCount = viewerCount,
             StartedAt = DateTime.SpecifyKind(startedAtUtc, DateTimeKind.Utc),
+            ThumbnailUrl = thumbnailUrl,
         };
     }
 }

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
@@ -13,7 +14,8 @@ public sealed class TwitchChatPlatform(
     ChatDecorationsProvider decorations,
     PlatformChannelRegistry channels,
     AccountsStore accountsStore,
-    ILogger<TwitchChatPlatform>? logger = null) : IChatPlatform
+    ILogger<TwitchChatPlatform>? logger = null,
+    ITargetChannelProvider? targetChannelProvider = null) : IChatPlatform
 {
     private const string BotFallbackDisplayName = "PoproshaykaBot";
 
@@ -53,5 +55,31 @@ public sealed class TwitchChatPlatform(
             var displayName = string.IsNullOrWhiteSpace(bot.Login) ? BotFallbackDisplayName : bot.Login;
             return new(bot.UserId, displayName);
         }
+    }
+
+    public string? ConfiguredChannel
+    {
+        get
+        {
+            var connected = channels.GetChannel(StreamingPlatform.Twitch);
+            if (!string.IsNullOrWhiteSpace(connected))
+            {
+                return connected.Trim();
+            }
+
+            var target = targetChannelProvider?.Current.Login;
+            return string.IsNullOrWhiteSpace(target) ? null : target.Trim();
+        }
+    }
+
+    public string? BuildStreamUrl(StreamInfo? stream = null)
+    {
+        var login = !string.IsNullOrWhiteSpace(stream?.UserLogin)
+            ? stream.UserLogin.Trim()
+            : ConfiguredChannel;
+
+        return string.IsNullOrWhiteSpace(login)
+            ? null
+            : $"https://www.twitch.tv/{Uri.EscapeDataString(login)}";
     }
 }

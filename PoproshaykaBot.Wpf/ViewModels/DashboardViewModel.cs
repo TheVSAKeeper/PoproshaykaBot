@@ -48,6 +48,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         foreach (var tile in tiles)
         {
             _tilesByTypeId[tile.TypeId] = tile;
+
+            if (tile is IUserLinkSource userLinkSource)
+            {
+                userLinkSource.UserRequested += OnTileUserRequested;
+            }
         }
 
         Reload();
@@ -62,6 +67,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     }
 
     public event EventHandler? LayoutChanged;
+
+    public event EventHandler<PoproshaykaBot.Core.Platforms.PlatformUserKey>? UserRequested;
 
     public IReadOnlyList<TileBand> Bands { get; private set; } = [];
 
@@ -231,12 +238,25 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         SetTilesLayoutEditing(false);
         SetTilesModalDialogOpen(false);
 
+        foreach (var tile in _tilesByTypeId.Values)
+        {
+            if (tile is IUserLinkSource userLinkSource)
+            {
+                userLinkSource.UserRequested -= OnTileUserRequested;
+            }
+        }
+
         foreach (var tile in _observed)
         {
             tile.PropertyChanged -= OnTilePropertyChanged;
         }
 
         _observed.Clear();
+    }
+
+    private void OnTileUserRequested(object? sender, PoproshaykaBot.Core.Platforms.PlatformUserKey key)
+    {
+        UserRequested?.Invoke(this, key);
     }
 
     [RelayCommand]

@@ -2,11 +2,14 @@
 using KeepShell.Services.Modal;
 using KeepShell.Services.Platform;
 using KeepShell.Testing;
+using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.YouTube;
 using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Core.YouTube.Quota;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.IO;
 
@@ -185,7 +188,67 @@ public sealed class YouTubeSettingsSectionTests
         }
     }
 
-    private YouTubeSettingsSectionViewModel CreateSection(TimeProvider? timeProvider = null)
+    [Test]
+    public void QuotaStatus_FormatsThresholdsWarningsAndDoesNotMarkSettingsDirty()
+    {
+        var governor = new FakeYouTubeQuotaGovernor(new YouTubeQuotaStatus(
+            "proj-1",
+            new DateOnly(2026, 11, 16),
+            new DateTimeOffset(2026, 11, 17, 8, 0, 0, TimeSpan.Zero),
+            10000,
+            2500,
+            100,
+            1500,
+            1000,
+            500,
+            false,
+            YouTubeQuotaReliability.Reliable,
+            true));
+
+        using var vm = CreateSection(TimeProvider.System, governor);
+        var changed = 0;
+        vm.SettingChanged += (_, _) => changed++;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(vm.ShowQuotaDiagnostics, Is.True);
+            Assert.That(vm.QuotaStatus.HasData, Is.True);
+            Assert.That(vm.QuotaStatus.UsageText, Contains.Substring("2\u00A0500").And.Contains("10\u00A0000"));
+            Assert.That(vm.QuotaStatus.BreakdownText, Contains.Substring("бот: 1\u00A0500").And.Contains("стример: 1\u00A0000").And.Contains("в резерве: 100"));
+            Assert.That(vm.QuotaStatus.StatusSeverity, Is.EqualTo(StatusSeverity.Success));
+            Assert.That(vm.QuotaStatus.HasWarning, Is.False);
+            Assert.That(changed, Is.Zero);
+        }
+
+        governor.Status = governor.Status with { CommittedUnits = 7500 };
+        vm.QuotaStatus.RefreshCommand.Execute(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(vm.QuotaStatus.StatusSeverity, Is.EqualTo(StatusSeverity.Warning));
+            Assert.That(vm.QuotaStatus.FillPercent, Is.EqualTo(75.0));
+            Assert.That(changed, Is.Zero);
+        }
+
+        governor.Status = governor.Status with { ExhaustedByServer = true, CanWriteFile = false, Tier1RemainingUnits = 0 };
+        vm.SetQuotaAutoRefresh(true);
+        foreach (var timer in _dispatcher.Timers)
+        {
+            timer.Tick();
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(vm.QuotaStatus.StatusSeverity, Is.EqualTo(StatusSeverity.Error));
+            Assert.That(vm.QuotaStatus.HasWarning, Is.True);
+            Assert.That(vm.QuotaStatus.WarningText, Contains.Substring("исчерпании"));
+            Assert.That(changed, Is.Zero);
+        }
+    }
+
+    private YouTubeSettingsSectionViewModel CreateSection(
+        TimeProvider? timeProvider = null,
+        IYouTubeQuotaGovernor? quotaGovernor = null)
     {
         return new(
             _oauthService,
@@ -193,7 +256,8 @@ public sealed class YouTubeSettingsSectionTests
             _dialogs,
             _dispatcher,
             timeProvider ?? TimeProvider.System,
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance,
+            quotaGovernor);
     }
 
     private sealed class FakeShellLauncher : IShellLauncher
@@ -280,5 +344,28 @@ public sealed class YouTubeSettingsSectionTests
         public void Warning(string title, string message) => Warnings.Add(message);
 
         public void Error(string title, string message) => throw new InvalidOperationException(message);
+    }
+
+    private sealed class FakeYouTubeQuotaGovernor(YouTubeQuotaStatus status) : IYouTubeQuotaGovernor
+    {
+        public YouTubeQuotaStatus Status { get; set; } = status;
+
+        public bool CanAfford(YouTubeQuotaPriority priority, int cost) => true;
+
+        public bool TryReserve(
+            PlatformAuthRole role,
+            YouTubeQuotaPriority priority,
+            int cost,
+            out YouTubeQuotaLease lease)
+        {
+            lease = default!;
+            return false;
+        }
+
+        public void MarkExhaustedFromServer(PlatformAuthRole role)
+        {
+        }
+
+        public YouTubeQuotaStatus CaptureDiagnostics() => Status;
     }
 }

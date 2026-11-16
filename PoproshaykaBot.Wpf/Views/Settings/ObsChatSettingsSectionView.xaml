@@ -228,7 +228,12 @@
 
                 <CheckBox Style="{StaticResource CheckBox.Default}"
                           Content="Показывать время"
-                          IsChecked="{Binding ShowTimestamp, Mode=TwoWay}" />
+                          IsChecked="{Binding ShowTimestamp, Mode=TwoWay}"
+                          Margin="0,0,0,8" />
+
+                <CheckBox Style="{StaticResource CheckBox.Default}"
+                          Content="Показывать значок площадки"
+                          IsChecked="{Binding ShowPlatformBadge, Mode=TwoWay}" />
             </StackPanel>
         </WrapPanel>
 

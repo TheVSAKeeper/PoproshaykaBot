@@ -29,6 +29,7 @@ public static class ObsChatSettingsValidator
 
             MaxMessages = ObsChatRanges.Clamp(source.MaxMessages, ObsChatRanges.MaxMessagesMin, ObsChatRanges.MaxMessagesMax),
             ShowTimestamp = source.ShowTimestamp,
+            ShowPlatformBadge = source.ShowPlatformBadge,
 
             EmoteSizePixels = ObsChatRanges.Clamp(source.EmoteSizePixels, ObsChatRanges.EmoteSizeMin, ObsChatRanges.EmoteSizeMax),
             BadgeSizePixels = ObsChatRanges.Clamp(source.BadgeSizePixels, ObsChatRanges.BadgeSizeMin, ObsChatRanges.BadgeSizeMax),

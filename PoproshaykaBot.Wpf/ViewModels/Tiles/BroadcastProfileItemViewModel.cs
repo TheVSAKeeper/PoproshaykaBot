@@ -2,6 +2,8 @@
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -24,7 +26,8 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
         Func<BroadcastProfileItemViewModel, int, Task> adjustNumberAsync,
         Func<BroadcastProfileItemViewModel, Task> editAsync,
         Action<BroadcastProfileItemViewModel> duplicate,
-        Action<BroadcastProfileItemViewModel> delete)
+        Action<BroadcastProfileItemViewModel> delete,
+        IReadOnlySet<StreamingPlatform>? targetPlatforms = null)
     {
         Profile = profile;
         _isActive = isActive;
@@ -57,6 +60,11 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
             parts.Add(profile.BroadcasterLanguage.ToUpperInvariant());
         MetaLine = string.Join("  •  ", parts);
         HasMetaLine = parts.Count > 0;
+
+        var selected = targetPlatforms ?? new HashSet<StreamingPlatform> { StreamingPlatform.Twitch };
+        TargetPlatforms = PlatformVisuals.OrderedPlatforms
+            .Where(selected.Contains)
+            .ToArray();
     }
 
     public BroadcastProfile Profile { get; }
@@ -67,6 +75,7 @@ public sealed partial class BroadcastProfileItemViewModel : ObservableObject
     public bool HasMetaLine { get; }
     public string NumberBadge { get; }
     public bool HasNumberPlaceholder { get; }
+    public IReadOnlyList<StreamingPlatform> TargetPlatforms { get; }
 
     [ObservableProperty]
     private bool _isApplyInFlight;

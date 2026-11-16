@@ -4,11 +4,14 @@ using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Globalization;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -24,15 +27,25 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
     private const int DecodeWidthStep = 64;
     private const double GrowthFactor = 1.5;
 
-    private readonly IStreamStatus _stream;
+    private readonly TilePlatformSelection _platformSelection;
     private readonly ILogger<StreamPreviewTileViewModel> _logger;
+    private readonly IUiDispatcher _uiDispatcher;
+    private readonly YouTubeSettingsStore? _youtubeSettingsStore;
     private readonly IUiTimer _refreshTimer;
+    private readonly ToolbarItemViewModel _switchPlatformToolbarItem;
     private readonly List<IDisposable> _subs = [];
     private string? _lastThumbnailRawUrl;
     private BitmapImage? _pending;
     private long _cacheStamp;
     private bool _isOnScreen;
     private bool _refreshDue;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedPlatformName))]
+    private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
+
+    [ObservableProperty]
+    private bool _hasMultiplePlatforms;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ContentFillsTile))]
@@ -48,28 +61,48 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
     private bool _loadFailed;
 
     public StreamPreviewTileViewModel(
-        IStreamStatus stream,
+        IChatPlatformRegistry platformRegistry,
         IEventBus bus,
         ILogger<StreamPreviewTileViewModel> logger,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        YouTubeSettingsStore? youtubeSettingsStore = null)
         : base("stream-preview", "Превью стрима", maxHeight: 280)
     {
+        ArgumentNullException.ThrowIfNull(platformRegistry);
         ArgumentNullException.ThrowIfNull(bus);
         ArgumentNullException.ThrowIfNull(uiDispatcher);
 
-        _stream = stream;
+        _platformSelection = new TilePlatformSelection(platformRegistry);
         _logger = logger;
+        _uiDispatcher = uiDispatcher;
+        _youtubeSettingsStore = youtubeSettingsStore;
         _refreshTimer = uiDispatcher.CreateTimer(AutoRefreshInterval, OnRefreshTimerTick);
+
+        _switchPlatformToolbarItem = new ToolbarItemViewModel(
+            PackIconLucideKind.ArrowLeftRight,
+            SwitchPlatformCommand,
+            toolTip: "Переключить площадку")
+        {
+            IsVisible = _platformSelection.HasMultiplePlatforms,
+        };
 
         HeaderActions.Add(new ToolbarItemViewModel(
             PackIconLucideKind.RefreshCw,
             RefreshFrameCommand,
             toolTip: "Обновить кадр"));
+        HeaderActions.Add(_switchPlatformToolbarItem);
 
-        _subs.Add(bus.SubscribePlatformOnUi<StreamWentOnline>(StreamingPlatform.Twitch, _ => ApplyCurrentStatus()));
-        _subs.Add(bus.SubscribePlatformOnUi<StreamWentOffline>(StreamingPlatform.Twitch, _ => ApplyCurrentStatus()));
-        _subs.Add(bus.SubscribePlatformOnUi<StreamMetadataResolved>(StreamingPlatform.Twitch, _ => ApplyCurrentStatus()));
-        _subs.Add(bus.SubscribePlatformOnUi<ChannelUpdated>(StreamingPlatform.Twitch, _ => ApplyCurrentStatus()));
+        _subs.Add(bus.SubscribeOnUi<StreamWentOnline>(_ => OnPlatformStateChanged()));
+        _subs.Add(bus.SubscribeOnUi<StreamWentOffline>(_ => OnPlatformStateChanged()));
+        _subs.Add(bus.SubscribeOnUi<StreamMetadataResolved>(_ => OnPlatformStateChanged()));
+        _subs.Add(bus.SubscribeOnUi<ChannelUpdated>(_ => OnPlatformStateChanged()));
+        _subs.Add(bus.SubscribeOnUi<PlatformConnectionChanged>(_ => OnPlatformStateChanged()));
+        _subs.Add(bus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(_ => OnPlatformStateChanged()));
+
+        if (_youtubeSettingsStore is not null)
+        {
+            _youtubeSettingsStore.Changed += OnYouTubeSettingsChanged;
+        }
 
         ApplyCurrentStatus();
     }
@@ -79,6 +112,8 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
     public override bool SizesToContent => true;
 
     public override bool ContentFillsTile => Thumbnail is not null;
+
+    public string SelectedPlatformName => PlatformVisuals.GetDisplayName(SelectedPlatform);
 
     public int DecodeWidth { get; private set; } = MinDecodeWidth;
 
@@ -125,8 +160,18 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         }
     }
 
+    private void OnYouTubeSettingsChanged()
+    {
+        _uiDispatcher.Invoke(OnPlatformStateChanged);
+    }
+
     public void Dispose()
     {
+        if (_youtubeSettingsStore is not null)
+        {
+            _youtubeSettingsStore.Changed -= OnYouTubeSettingsChanged;
+        }
+
         foreach (var sub in _subs)
         {
             sub.Dispose();
@@ -135,6 +180,15 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         _subs.Clear();
         _refreshTimer.Stop();
         DropPending();
+    }
+
+    [RelayCommand]
+    private void SwitchPlatform()
+    {
+        if (_platformSelection.Cycle())
+        {
+            ApplyCurrentStatus();
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanRefreshFrame))]
@@ -149,7 +203,8 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
 
     private void OnRefreshTimerTick()
     {
-        if (_lastThumbnailRawUrl is null || _stream.CurrentStatus != StreamStatus.Online)
+        var stream = _platformSelection.GetSelectedPlatform()?.StreamStatus;
+        if (_lastThumbnailRawUrl is null || stream is null || stream.CurrentStatus != StreamStatus.Online)
         {
             return;
         }
@@ -161,6 +216,12 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         }
 
         ReloadFresh();
+    }
+
+    private void OnPlatformStateChanged()
+    {
+        _platformSelection.Refresh();
+        ApplyCurrentStatus();
     }
 
     private void ReloadFresh()
@@ -186,7 +247,12 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
 
     private void ApplyCurrentStatus()
     {
-        if (_stream.CurrentStatus == StreamStatus.Online && _stream.CurrentStream is { IsBare: false } info)
+        SelectedPlatform = _platformSelection.SelectedPlatform;
+        HasMultiplePlatforms = _platformSelection.HasMultiplePlatforms;
+        _switchPlatformToolbarItem.IsVisible = HasMultiplePlatforms;
+
+        var stream = _platformSelection.GetSelectedPlatform()?.StreamStatus;
+        if (stream is { CurrentStatus: StreamStatus.Online, CurrentStream: { IsBare: false } info })
         {
             LoadThumbnail(info.ThumbnailUrl);
             return;

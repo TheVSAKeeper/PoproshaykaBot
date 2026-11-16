@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Wpf.Mcp;
@@ -10,7 +11,9 @@ public sealed record BotStateDto(
     BotStateDto.TargetChannelDto TargetChannel,
     BotStateDto.StreamStateDto Stream,
     BotStateDto.HttpServerStateDto HttpServer,
-    BotStateDto.ObsStateDto Obs)
+    BotStateDto.ObsStateDto Obs,
+    IReadOnlyList<BotStateDto.PlatformStateDto>? Platforms = null,
+    BotStateDto.BroadcastStateDto? Broadcast = null)
 {
     public sealed record TargetChannelDto(
         string Login,
@@ -30,4 +33,20 @@ public sealed record BotStateDto(
     public sealed record HttpServerStateDto(bool IsRunning, int Port, string? ChatUrl);
 
     public sealed record ObsStateDto(bool IsConnected, string? Version, string? LastError);
+
+    public sealed record PlatformStateDto(
+        StreamingPlatform Platform,
+        string DisplayName,
+        bool IsEnabled,
+        bool IsConnected,
+        BotLifecyclePhase Phase,
+        bool IsBusy,
+        string? ConfiguredChannel,
+        StreamStateDto Stream,
+        string? StreamUrl);
+
+    public sealed record BroadcastStateDto(
+        bool IsAnyLive,
+        Guid? CurrentBroadcastId,
+        IReadOnlyList<StreamingPlatform> LivePlatforms);
 }

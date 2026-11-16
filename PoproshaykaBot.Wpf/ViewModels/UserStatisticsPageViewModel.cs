@@ -11,6 +11,7 @@ using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -30,6 +31,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private readonly UserRankService _userRankService;
     private readonly UserPointsManagementService _pointsManagement;
     private readonly IChannelProvider _channelProvider;
+    private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly SettingsManager _settingsManager;
     private readonly IDialogService _dialogService;
     private readonly ISettingsStore _settings;
@@ -37,6 +39,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private readonly List<UserStatisticsRowViewModel> _allRows = [];
     private readonly ObservableCollection<UserStatisticsRowViewModel> _rows = [];
     private readonly List<IDisposable> _subscriptions = [];
+    private int _platformSliceCount;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedRow))]
@@ -57,6 +60,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     [ObservableProperty]
     private string _filterText = string.Empty;
+
+    [ObservableProperty]
+    private PlatformFilterOption _selectedPlatformFilter = PlatformFilterOption.All;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EmptyActionCommand))]
@@ -121,13 +127,15 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         IDialogService dialogService,
         IEventBus eventBus,
         ISettingsStore settings,
-        UserAvatarProvider avatars)
+        UserAvatarProvider avatars,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         _userStatistics = userStatistics;
         _statisticsAutoSaver = statisticsAutoSaver;
         _userRankService = userRankService;
         _pointsManagement = pointsManagement;
         _channelProvider = channelProvider;
+        _platformRegistry = platformRegistry;
         _settingsManager = settingsManager;
         _dialogService = dialogService;
         _settings = settings;
@@ -147,17 +155,19 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public ObservableCollection<UserStatisticsRowViewModel> Users => _rows;
 
+    public IReadOnlyList<PlatformFilterOption> PlatformOptions => PlatformFilterOption.AllOptions;
+
     public bool HasUsers => _rows.Count > 0;
 
     public string EmptyHeading => IsFilterActive ? "Ничего не найдено" : "Статистики пока нет";
 
     public string EmptyDescription => IsFilterActive
-        ? "Ни один пользователь не подходит под фильтр. Очистите поиск, чтобы увидеть всех."
+        ? "Ни один пользователь не подходит под фильтр. Сбросьте фильтр, чтобы увидеть всех."
         : "Пользователи появятся здесь, когда бот начнёт собирать сообщения чата.";
 
     public bool HasSelectedRow => SelectedRow is not null;
 
-    public string? EmptyActionText => "Сбросить поиск";
+    public string? EmptyActionText => "Сбросить фильтр";
 
     public IRelayCommand? EmptyActionCommand => IsFilterActive ? ClearFilterCommand : null;
 
@@ -174,7 +184,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         : string.Empty;
 
     public string SelectedPlaceText => SelectedRow is { } row
-        ? UserStatisticsRanking.DescribePlace(row.Place, _allRows.Count)
+        ? UserStatisticsRanking.DescribePlace(row.Place, _platformSliceCount)
         : string.Empty;
 
     public IReadOnlyList<UserRankLadderStep> RankLadderSteps => SelectedRow?.RankLadder?.Arrange(IsRankLadderExpanded) ?? [];
@@ -237,6 +247,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
         if (_rows.All(row => row.Key != key))
         {
+            SelectedPlatformFilter = PlatformFilterOption.All;
             FilterText = string.Empty;
         }
 
@@ -263,16 +274,61 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         RebuildView();
     }
 
-    private void RebuildView()
+    partial void OnSelectedPlatformFilterChanged(PlatformFilterOption value)
     {
+        ApplyPlatformSliceAndRebuild();
+    }
+
+    private List<UserStatisticsRowViewModel> GetPlatformSlice()
+    {
+        var platformFilter = SelectedPlatformFilter?.Platform;
+        return platformFilter is null
+            ? _allRows
+            : _allRows.Where(row => row.Platform == platformFilter).ToList();
+    }
+
+    private void ApplyPlatformSliceAndRebuild()
+    {
+        var slice = GetPlatformSlice();
+        _platformSliceCount = slice.Count;
+
+        long totalMessages = 0;
+        long totalPoints = 0;
+        long totalBonus = 0;
+        long totalPenalty = 0;
+
+        foreach (var row in slice)
+        {
+            totalMessages += (long)row.Source.MessageCount;
+            totalPoints += row.Points;
+            totalBonus += (long)row.Source.BonusPoints;
+            totalPenalty += (long)row.Source.PenaltyPoints;
+        }
+
+        TotalUsers = slice.Count.ToString("N0", UiCulture.Russian);
+        TotalMessages = totalMessages.ToString("N0", UiCulture.Russian);
+        TotalPoints = totalPoints.ToString("N0", UiCulture.Russian);
+        TotalBonus = totalBonus > 0 ? string.Create(UiCulture.Russian, $"+{totalBonus:N0}") : "0";
+        TotalPenalty = totalPenalty > 0 ? string.Create(UiCulture.Russian, $"−{totalPenalty:N0}") : "0";
+        HasTotalBonus = totalBonus > 0;
+        HasTotalPenalty = totalPenalty > 0;
+
+        UserStatisticsRanking.AssignPlaces(slice);
+        RebuildView(slice);
+    }
+
+    private void RebuildView(List<UserStatisticsRowViewModel>? platformSlice = null)
+    {
+        var source = platformSlice ?? GetPlatformSlice();
         var selectedKey = SelectedRow?.Key;
         var trimmed = FilterText.Trim();
-        var hasFilter = trimmed.Length > 0;
-        var visible = new List<UserStatisticsRowViewModel>(_allRows.Count);
+        var hasTextFilter = trimmed.Length > 0;
+        var hasPlatformFilter = SelectedPlatformFilter?.Platform is not null;
+        var visible = new List<UserStatisticsRowViewModel>(source.Count);
 
-        foreach (var row in _allRows)
+        foreach (var row in source)
         {
-            if (hasFilter
+            if (hasTextFilter
                 && !row.Name.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase)
                 && !row.UserId.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase))
             {
@@ -288,7 +344,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             ? _rows.FirstOrDefault(row => row.Key == selectedKey)
             : null;
 
-        IsFilterActive = hasFilter;
+        IsFilterActive = hasTextFilter || hasPlatformFilter;
         OnPropertyChanged(nameof(HasUsers));
         OnPropertyChanged(nameof(EmptyHeading));
         OnPropertyChanged(nameof(EmptyDescription));
@@ -329,7 +385,11 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     }
 
     [RelayCommand]
-    private void ClearFilter() => FilterText = string.Empty;
+    private void ClearFilter()
+    {
+        FilterText = string.Empty;
+        SelectedPlatformFilter = PlatformFilterOption.All;
+    }
 
     [RelayCommand]
     private void ToggleRankLadder() => IsRankLadderExpanded = !IsRankLadderExpanded;
@@ -371,20 +431,23 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         try
         {
             bool updated;
+            var channel = _platformRegistry is not null
+                ? _platformRegistry.GetConfiguredChannel(row.Platform) ?? string.Empty
+                : _channelProvider.Channel;
 
             if (delta < 0)
             {
                 var amount = (ulong)-delta;
                 var notification = _pointsManagement.GetPunishmentNotification(row.Name, amount);
                 _dialogService.Info("Наказание", notification);
-                updated = await _pointsManagement.PunishUserAsync(row.Key, row.Name, amount, _channelProvider.Channel, AdjustmentSource);
+                updated = await _pointsManagement.PunishUserAsync(row.Key, row.Name, amount, channel, AdjustmentSource);
             }
             else
             {
                 var amount = (ulong)delta;
                 var notification = _pointsManagement.GetRewardNotification(row.Name, amount);
                 _dialogService.Info("Поощрение", notification);
-                updated = await _pointsManagement.RewardUserAsync(row.Key, row.Name, amount, _channelProvider.Channel, AdjustmentSource);
+                updated = await _pointsManagement.RewardUserAsync(row.Key, row.Name, amount, channel, AdjustmentSource);
             }
 
             if (!updated)
@@ -521,11 +584,6 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
         _allRows.Clear();
 
-        long totalMessages = 0;
-        long totalPoints = 0;
-        long totalBonus = 0;
-        long totalPenalty = 0;
-
         var pointTerm = _userRankService.PointTerm;
         var ranks = _settingsManager.Current.Ranks.Ranks.ToArray();
 
@@ -539,23 +597,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
                     ? _avatars.For(user.UserId, user.Name)
                     : new UserAvatarViewModel(string.Empty, user.Name),
             });
-
-            totalMessages += (long)user.MessageCount;
-            totalPoints += user.Points;
-            totalBonus += (long)user.BonusPoints;
-            totalPenalty += (long)user.PenaltyPoints;
         }
 
-        TotalUsers = all.Count.ToString("N0", UiCulture.Russian);
-        TotalMessages = totalMessages.ToString("N0", UiCulture.Russian);
-        TotalPoints = totalPoints.ToString("N0", UiCulture.Russian);
-        TotalBonus = totalBonus > 0 ? string.Create(UiCulture.Russian, $"+{totalBonus:N0}") : "0";
-        TotalPenalty = totalPenalty > 0 ? string.Create(UiCulture.Russian, $"−{totalPenalty:N0}") : "0";
-        HasTotalBonus = totalBonus > 0;
-        HasTotalPenalty = totalPenalty > 0;
-
         _avatars.Track(_allRows.Where(static row => row.Platform == StreamingPlatform.Twitch).Select(static row => row.UserId));
-        UserStatisticsRanking.AssignPlaces(_allRows);
-        RebuildView();
+        ApplyPlatformSliceAndRebuild();
     }
 }

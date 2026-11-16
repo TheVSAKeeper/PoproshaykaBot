@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Diagnostics;
 
@@ -19,8 +20,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
     private readonly ILogger<HealthCheckPageViewModel> _logger;
     private readonly IShellLauncher _shellLauncher;
     private readonly List<IDisposable> _subs = [];
-
-    private bool _botStatusDetected;
+    private readonly Dictionary<StreamingPlatform, string> _botStatusByPlatform = [];
 
     [ObservableProperty]
     private string _overlayUrl = string.Empty;
@@ -30,6 +30,14 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
     [ObservableProperty]
     private bool _botStatusKnown;
+
+    [ObservableProperty]
+    private bool _hasYouTubeEnabled;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTwitchSelected))]
+    [NotifyPropertyChangedFor(nameof(IsYouTubeSelected))]
+    private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
 
     [ObservableProperty]
     private string _chatTestMessage = string.Empty;
@@ -53,10 +61,34 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
         _logger = logger;
         _shellLauncher = shellLauncher;
 
-        _subs.Add(eventBus.SubscribePlatformOnUi<ChatMessageReceived>(StreamingPlatform.Twitch, OnChatMessageReceived));
+        _subs.Add(eventBus.SubscribeOnUi<ChatMessageReceived>(OnChatMessageReceived));
     }
 
     public override string PageTitle => "Диагностика (опционально)";
+
+    public bool IsTwitchSelected
+    {
+        get => SelectedPlatform == StreamingPlatform.Twitch;
+        set
+        {
+            if (value)
+            {
+                SelectedPlatform = StreamingPlatform.Twitch;
+            }
+        }
+    }
+
+    public bool IsYouTubeSelected
+    {
+        get => SelectedPlatform == StreamingPlatform.YouTube;
+        set
+        {
+            if (value)
+            {
+                SelectedPlatform = StreamingPlatform.YouTube;
+            }
+        }
+    }
 
     public string OverlayHint =>
         "Совет: в свойствах источника снимите «Shutdown source when not visible» и "
@@ -65,6 +97,12 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
     public override void OnEnter(OnboardingContext context)
     {
         OverlayUrl = $"http://localhost:{context.Settings.Twitch.HttpServerPort}/chat";
+        HasYouTubeEnabled = context.YouTubeSettings.Enabled;
+        if (!HasYouTubeEnabled)
+        {
+            SelectedPlatform = StreamingPlatform.Twitch;
+        }
+
         ResetChatTestStatus();
         CanAdvance = true;
     }
@@ -84,7 +122,7 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
         try
         {
-            var result = _chatMessenger.Send(StreamingPlatform.Twitch, message);
+            var result = _chatMessenger.Send(SelectedPlatform, message);
 
             if (result is ChatEnqueueResult.Queued)
             {
@@ -126,15 +164,21 @@ public sealed partial class HealthCheckPageViewModel : OnboardingPageViewModelBa
 
     private void OnChatMessageReceived(ChatMessageReceived @event)
     {
-        if (_botStatusDetected || !@event.IsBot)
+        if (!@event.IsBot)
         {
             return;
         }
 
         var status = DescribeBotStatus(@event.Status);
-        _botStatusDetected = true;
-        BotStatusText = $"Бот в чате как: {status}";
+        if (!_botStatusByPlatform.TryAdd(@event.Platform, status))
+        {
+            return;
+        }
+
         BotStatusKnown = true;
+        BotStatusText = _botStatusByPlatform.Count == 1 && @event.Platform == StreamingPlatform.Twitch
+            ? $"Бот в чате как: {status}"
+            : "Бот в чате: " + string.Join(", ", _botStatusByPlatform.Select(static pair => $"{PlatformVisuals.GetDisplayName(pair.Key)} – {pair.Value}"));
     }
 
     private void ResetChatTestStatus()

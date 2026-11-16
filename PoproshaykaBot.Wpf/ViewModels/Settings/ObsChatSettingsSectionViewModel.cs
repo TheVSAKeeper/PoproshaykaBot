@@ -70,6 +70,9 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     private bool _showTimestamp = Defaults.ShowTimestamp;
 
     [ObservableProperty]
+    private bool _showPlatformBadge = Defaults.ShowPlatformBadge;
+
+    [ObservableProperty]
     private int _emoteSizePixels = Defaults.EmoteSizePixels;
 
     [ObservableProperty]
@@ -207,6 +210,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
         MaxMessages = settings.MaxMessages;
         ShowTimestamp = settings.ShowTimestamp;
+        ShowPlatformBadge = settings.ShowPlatformBadge;
 
         EmoteSizePixels = settings.EmoteSizePixels;
         BadgeSizePixels = settings.BadgeSizePixels;
@@ -272,6 +276,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
         target.MaxMessages = current.MaxMessages;
         target.ShowTimestamp = current.ShowTimestamp;
+        target.ShowPlatformBadge = current.ShowPlatformBadge;
 
         target.EmoteSizePixels = current.EmoteSizePixels;
         target.BadgeSizePixels = current.BadgeSizePixels;
@@ -568,6 +573,7 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
             MaxMessages = MaxMessages,
             ShowTimestamp = ShowTimestamp,
+            ShowPlatformBadge = ShowPlatformBadge,
 
             EmoteSizePixels = EmoteSizePixels,
             BadgeSizePixels = BadgeSizePixels,
