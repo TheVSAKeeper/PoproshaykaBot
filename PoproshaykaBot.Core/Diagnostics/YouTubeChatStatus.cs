@@ -5,6 +5,7 @@ public enum YouTubeChatTransport
     None = 0,
     GrpcStream = 1,
     RestPolling = 2,
+    InnerTube = 3,
 }
 
 public enum YouTubeChatIssue

@@ -46,4 +46,10 @@ internal sealed class BoundedSeenMessageIdSet
     {
         return !string.IsNullOrWhiteSpace(messageId) && _set.Contains(messageId);
     }
+
+    public void Clear()
+    {
+        _set.Clear();
+        _order.Clear();
+    }
 }

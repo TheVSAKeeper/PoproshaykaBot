@@ -1,0 +1,187 @@
+﻿{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "continuations": [
+        {
+          "timedContinuationData": {
+            "timeoutMs": 5000,
+            "continuation": "SYNTHETIC_TIMED_CONT_003"
+          }
+        }
+      ],
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatPaidMessageRenderer": {
+                "id": "ChwSYNTHETIC_SUPERCHAT_001",
+                "timestampUsec": "1763310005000000",
+                "authorName": {
+                  "simpleText": "PatronOne"
+                },
+                "authorExternalChannelId": "UC_SYNTHETIC_PATRON_001",
+                "purchaseAmountText": {
+                  "simpleText": "$25.00"
+                },
+                "headerBackgroundColor": 4294945280,
+                "headerTextColor": 4278190080,
+                "bodyBackgroundColor": 4294954240,
+                "bodyTextColor": 4278190080,
+                "authorNameTextColor": 3003121664,
+                "message": {
+                  "runs": [
+                    {
+                      "text": "Keep up the stream!"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatPaidStickerRenderer": {
+                "id": "ChwSYNTHETIC_STICKER_001",
+                "timestampUsec": "1763310006000000",
+                "authorName": {
+                  "simpleText": "StickerFan"
+                },
+                "authorExternalChannelId": "UC_SYNTHETIC_STICKER_01",
+                "purchaseAmountText": {
+                  "simpleText": "€10.00"
+                },
+                "backgroundColor": 4280150454,
+                "authorNameTextColor": 4294967295,
+                "sticker": {
+                  "thumbnails": [
+                    {
+                      "url": "https://lh3.googleusercontent.com/synthetic/sticker-144.png",
+                      "width": 144,
+                      "height": 144
+                    }
+                  ],
+                  "accessibility": {
+                    "accessibilityData": {
+                      "label": "Cheers sticker"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatMembershipItemRenderer": {
+                "id": "ChwSYNTHETIC_MEMBER_001",
+                "timestampUsec": "1763310007000000",
+                "authorName": {
+                  "simpleText": "NewSponsor"
+                },
+                "authorExternalChannelId": "UC_SYNTHETIC_SPONSOR_01",
+                "headerPrimaryText": {
+                  "runs": [
+                    {
+                      "text": "Member for 6 months"
+                    }
+                  ]
+                },
+                "headerSubtext": {
+                  "simpleText": "Silver Tier"
+                },
+                "message": {
+                  "runs": [
+                    {
+                      "text": "Half a year!"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatSponsorshipsGiftPurchaseAnnouncementRenderer": {
+                "id": "ChwSYNTHETIC_GIFT_PURCHASE_001",
+                "timestampUsec": "1763310008000000",
+                "authorExternalChannelId": "UC_SYNTHETIC_GIFTER_001",
+                "header": {
+                  "liveChatSponsorshipsHeaderRenderer": {
+                    "authorName": {
+                      "simpleText": "GenerousViewer"
+                    },
+                    "primaryText": {
+                      "runs": [
+                        {
+                          "text": "Gifted 5 Synthetic Channel memberships"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatSponsorshipsGiftRedemptionAnnouncementRenderer": {
+                "id": "ChwSYNTHETIC_GIFT_REDEEM_001",
+                "timestampUsec": "1763310009000000",
+                "authorName": {
+                  "simpleText": "LuckyViewer"
+                },
+                "authorExternalChannelId": "UC_SYNTHETIC_LUCKY_0001",
+                "message": {
+                  "runs": [
+                    {
+                      "text": "GenerousViewer gifted you a membership!"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "removeChatItemAction": {
+            "targetItemId": "ChwSYNTHETIC_TARGET_MSG_01"
+          }
+        },
+        {
+          "removeChatItemByAuthorAction": {
+            "externalChannelId": "UC_SYNTHETIC_SPAMMER_01"
+          }
+        },
+        {
+          "replaceChatItemAction": {
+            "targetItemId": "ChwSYNTHETIC_REPLACED_01",
+            "replacementItem": {
+              "liveChatTextMessageRenderer": {
+                "id": "ChwSYNTHETIC_REPLACED_01",
+                "timestampUsec": "1763310010000000",
+                "authorName": {
+                  "simpleText": "ModUser"
+                },
+                "authorExternalChannelId": "UC_SYNTHETIC_MOD_000002",
+                "message": {
+                  "runs": [
+                    {
+                      "text": "[deleted]"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
