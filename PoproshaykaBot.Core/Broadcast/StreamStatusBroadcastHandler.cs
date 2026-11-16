@@ -2,11 +2,13 @@
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Broadcast;
 
@@ -16,6 +18,7 @@ public sealed class StreamStatusBroadcastHandler :
     IEventHandler<BroadcastPlatformLeft>,
     IEventHandler<BroadcastEnded>,
     IEventHandler<PlatformConnectionChanged>,
+    IEventHandler<PlatformChatAvailabilityChanged>,
     IEventSubscriber,
     IDisposable
 {
@@ -31,11 +34,16 @@ public sealed class StreamStatusBroadcastHandler :
     private readonly IDisposable _leftSubscription;
     private readonly IDisposable _endedSubscription;
     private readonly IDisposable _phaseSubscription;
+    private readonly IDisposable _chatAvailabilitySubscription;
     private readonly Lock _stateLock = new();
 
     private readonly HashSet<StreamingPlatform> _connectedPlatforms = [];
     private readonly HashSet<StreamingPlatform> _pendingStartNotifications = [];
+    private readonly Dictionary<StreamingPlatform, long> _activeStartSends = [];
+    private readonly HashSet<StreamingPlatform> _retryRequestedDuringSend = [];
     private readonly Dictionary<StreamingPlatform, string> _platformChannels = [];
+    private long _broadcastGeneration;
+    private long _nextSendId;
 
     public StreamStatusBroadcastHandler(
         IBroadcastScheduler scheduler,
@@ -60,6 +68,7 @@ public sealed class StreamStatusBroadcastHandler :
         _leftSubscription = eventBus.Subscribe<BroadcastPlatformLeft>(this);
         _endedSubscription = eventBus.Subscribe<BroadcastEnded>(this);
         _phaseSubscription = eventBus.Subscribe<PlatformConnectionChanged>(this);
+        _chatAvailabilitySubscription = eventBus.Subscribe<PlatformChatAvailabilityChanged>(this);
     }
 
     public Task HandleAsync(PlatformConnectionChanged @event, CancellationToken cancellationToken)
@@ -69,6 +78,8 @@ public sealed class StreamStatusBroadcastHandler :
         var shouldStartScheduler = false;
         var shouldStopScheduler = false;
         var sendDeferredStart = false;
+        long generation = 0;
+        long sendId = 0;
         string? channelToStart = null;
 
         lock (_stateLock)
@@ -76,6 +87,7 @@ public sealed class StreamStatusBroadcastHandler :
             if (!connected)
             {
                 var wasConnected = _connectedPlatforms.Remove(@event.Platform);
+                _retryRequestedDuringSend.Remove(@event.Platform);
                 if (wasConnected && _scheduler.IsActive && !_connectedPlatforms.Overlaps(targets))
                 {
                     shouldStopScheduler = true;
@@ -92,7 +104,7 @@ public sealed class StreamStatusBroadcastHandler :
                     }
                     else
                     {
-                        sendDeferredStart = _pendingStartNotifications.Remove(@event.Platform);
+                        sendDeferredStart = TryAcquireOrDeferStartSendLocked(@event.Platform, out generation, out sendId);
 
                         if (targets.Contains(@event.Platform) && !_scheduler.IsActive)
                         {
@@ -111,14 +123,51 @@ public sealed class StreamStatusBroadcastHandler :
             return Task.CompletedTask;
         }
 
-        if (shouldStartScheduler && channelToStart is not null)
+        try
         {
-            StartSchedulerIfEnabled(channelToStart);
+            if (shouldStartScheduler && channelToStart is not null)
+            {
+                StartSchedulerIfEnabled(channelToStart);
+            }
+
+            if (sendDeferredStart)
+            {
+                SendStartNotificationToPlatform(@event.Platform, generation, sendId);
+            }
+        }
+        finally
+        {
+            if (sendDeferredStart)
+            {
+                ReleaseActiveStartSend(@event.Platform, sendId);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(PlatformChatAvailabilityChanged @event, CancellationToken cancellationToken)
+    {
+        if (!@event.IsAvailable)
+        {
+            return Task.CompletedTask;
+        }
+
+        var sendDeferredStart = false;
+        long generation = 0;
+        long sendId = 0;
+
+        lock (_stateLock)
+        {
+            if (_broadcastState.IsAnyLive && _connectedPlatforms.Contains(@event.Platform))
+            {
+                sendDeferredStart = TryAcquireOrDeferStartSendLocked(@event.Platform, out generation, out sendId);
+            }
         }
 
         if (sendDeferredStart)
         {
-            SendStartNotificationToPlatform(@event.Platform);
+            SendStartNotificationToPlatform(@event.Platform, generation, sendId);
         }
 
         return Task.CompletedTask;
@@ -129,15 +178,19 @@ public sealed class StreamStatusBroadcastHandler :
         _logger.LogInformation("Обработка старта эфира {BroadcastId} для канала {Channel}", @event.BroadcastId, @event.Channel);
 
         var targets = _targetsProvider.GetTargetPlatforms();
-        IReadOnlySet<StreamingPlatform> connectedTargets;
+        Dictionary<StreamingPlatform, long>? sendIds = null;
+        long generation;
         string channelToStart;
         var shouldStartScheduler = false;
 
         lock (_stateLock)
         {
+            _broadcastGeneration++;
+            generation = _broadcastGeneration;
+            _pendingStartNotifications.Clear();
+            _activeStartSends.Clear();
+            _retryRequestedDuringSend.Clear();
             _platformChannels[@event.FirstPlatform] = @event.Channel;
-
-            connectedTargets = _connectedPlatforms.ToHashSet();
 
             if (!@event.IsCatchUp)
             {
@@ -146,6 +199,13 @@ public sealed class StreamStatusBroadcastHandler :
                     if (!_connectedPlatforms.Contains(target))
                     {
                         _pendingStartNotifications.Add(target);
+                    }
+                    else
+                    {
+                        sendIds ??= [];
+                        var sendId = ++_nextSendId;
+                        sendIds[target] = sendId;
+                        _activeStartSends[target] = sendId;
                     }
                 }
             }
@@ -161,14 +221,24 @@ public sealed class StreamStatusBroadcastHandler :
             }
         }
 
-        if (shouldStartScheduler)
+        try
         {
-            StartSchedulerIfEnabled(channelToStart);
-        }
+            if (shouldStartScheduler)
+            {
+                StartSchedulerIfEnabled(channelToStart);
+            }
 
-        if (!@event.IsCatchUp && connectedTargets.Count > 0)
+            if (sendIds is { Count: > 0 })
+            {
+                SendStartNotification(@event.Channel, sendIds, generation);
+            }
+        }
+        finally
         {
-            SendStartNotification(@event.Channel);
+            if (sendIds is { Count: > 0 })
+            {
+                ReleaseActiveStartSends(sendIds);
+            }
         }
 
         return Task.CompletedTask;
@@ -202,7 +272,10 @@ public sealed class StreamStatusBroadcastHandler :
 
         lock (_stateLock)
         {
+            _broadcastGeneration++;
             _pendingStartNotifications.Clear();
+            _activeStartSends.Clear();
+            _retryRequestedDuringSend.Clear();
             _platformChannels.Clear();
 
             connectedTargets = _connectedPlatforms.ToHashSet();
@@ -236,6 +309,7 @@ public sealed class StreamStatusBroadcastHandler :
         _leftSubscription.Dispose();
         _endedSubscription.Dispose();
         _phaseSubscription.Dispose();
+        _chatAvailabilitySubscription.Dispose();
     }
 
     private string ResolveSchedulerChannelLocked()
@@ -269,27 +343,178 @@ public sealed class StreamStatusBroadcastHandler :
         }
     }
 
-    private void SendStartNotification(string channel)
+    private void SendStartNotification(string channel, Dictionary<StreamingPlatform, long> sendIds, long generation)
     {
         var settings = _settingsManager.Current.Twitch.AutoBroadcast;
 
-        if (settings.StreamStatusNotificationsEnabled
-            && !string.IsNullOrEmpty(settings.StreamStartMessage))
+        if (!settings.StreamStatusNotificationsEnabled
+            || string.IsNullOrEmpty(settings.StreamStartMessage))
         {
-            _logger.LogDebug("Отправка уведомления о начале стрима в канал {Channel}", channel);
-            _messenger.SendToConnected(settings.StreamStartMessage, ChatSendCategory.EventNotification);
+            return;
+        }
+
+        _logger.LogDebug("Отправка уведомления о начале стрима в канал {Channel}", channel);
+        var sendResult = _messenger.SendToConnected(settings.StreamStartMessage, ChatSendCategory.EventNotification);
+
+        if (sendResult.PerPlatform is not { } perPlatform)
+        {
+            return;
+        }
+
+        List<(StreamingPlatform Platform, long SendId)>? platformsToRetry = null;
+
+        lock (_stateLock)
+        {
+            foreach (var (platform, sendId) in sendIds)
+            {
+                var failedNotConnected = !perPlatform.TryGetValue(platform, out var enqueueResult)
+                    || enqueueResult == ChatEnqueueResult.NotConnected;
+
+                if (TryHandleSendCompletionLocked(platform, generation, sendId, failedNotConnected))
+                {
+                    platformsToRetry ??= [];
+                    platformsToRetry.Add((platform, sendId));
+                }
+            }
+        }
+
+        if (platformsToRetry is null)
+        {
+            return;
+        }
+
+        foreach (var (platform, sendId) in platformsToRetry)
+        {
+            SendStartNotificationToPlatform(platform, generation, sendId);
         }
     }
 
-    private void SendStartNotificationToPlatform(StreamingPlatform platform)
+    private void SendStartNotificationToPlatform(StreamingPlatform platform, long generation, long sendId)
     {
-        var settings = _settingsManager.Current.Twitch.AutoBroadcast;
-
-        if (settings.StreamStatusNotificationsEnabled
-            && !string.IsNullOrEmpty(settings.StreamStartMessage))
+        try
         {
-            _logger.LogDebug("Отправка отложенного уведомления о начале стрима на площадку {Platform}", platform);
-            _messenger.Send(platform, settings.StreamStartMessage, ChatSendCategory.EventNotification);
+            while (true)
+            {
+                lock (_stateLock)
+                {
+                    if (!_broadcastState.IsAnyLive
+                        || _broadcastGeneration != generation
+                        || !_connectedPlatforms.Contains(platform)
+                        || !_activeStartSends.TryGetValue(platform, out var currentSendId)
+                        || currentSendId != sendId)
+                    {
+                        return;
+                    }
+                }
+
+                var settings = _settingsManager.Current.Twitch.AutoBroadcast;
+
+                if (!settings.StreamStatusNotificationsEnabled
+                    || string.IsNullOrEmpty(settings.StreamStartMessage))
+                {
+                    return;
+                }
+
+                _logger.LogDebug("Отправка отложенного уведомления о начале стрима на площадку {Platform}", platform);
+                var enqueueResult = _messenger.Send(platform, settings.StreamStartMessage, ChatSendCategory.EventNotification);
+
+                lock (_stateLock)
+                {
+                    if (!TryHandleSendCompletionLocked(platform, generation, sendId, enqueueResult == ChatEnqueueResult.NotConnected))
+                    {
+                        return;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            ReleaseActiveStartSend(platform, sendId);
+        }
+    }
+
+    private bool TryAcquireOrDeferStartSendLocked(
+        StreamingPlatform platform,
+        out long generation,
+        out long sendId)
+    {
+        if (_activeStartSends.ContainsKey(platform))
+        {
+            _retryRequestedDuringSend.Add(platform);
+            generation = 0;
+            sendId = 0;
+            return false;
+        }
+
+        if (_pendingStartNotifications.Remove(platform))
+        {
+            generation = _broadcastGeneration;
+            sendId = ++_nextSendId;
+            _activeStartSends[platform] = sendId;
+            return true;
+        }
+
+        generation = 0;
+        sendId = 0;
+        return false;
+    }
+
+    private bool TryHandleSendCompletionLocked(
+        StreamingPlatform platform,
+        long generation,
+        long sendId,
+        bool failedNotConnected)
+    {
+        if (!_activeStartSends.TryGetValue(platform, out var currentSendId) || currentSendId != sendId)
+        {
+            return false;
+        }
+
+        if (!failedNotConnected
+            || !_broadcastState.IsAnyLive
+            || _broadcastGeneration != generation)
+        {
+            _activeStartSends.Remove(platform);
+            _retryRequestedDuringSend.Remove(platform);
+            return false;
+        }
+
+        if (_connectedPlatforms.Contains(platform) && _retryRequestedDuringSend.Remove(platform))
+        {
+            return true;
+        }
+
+        _activeStartSends.Remove(platform);
+        _retryRequestedDuringSend.Remove(platform);
+        _pendingStartNotifications.Add(platform);
+        return false;
+    }
+
+    private void ReleaseActiveStartSend(StreamingPlatform platform, long sendId)
+    {
+        lock (_stateLock)
+        {
+            ReleaseActiveStartSendLocked(platform, sendId);
+        }
+    }
+
+    private void ReleaseActiveStartSends(Dictionary<StreamingPlatform, long> sendIds)
+    {
+        lock (_stateLock)
+        {
+            foreach (var (platform, sendId) in sendIds)
+            {
+                ReleaseActiveStartSendLocked(platform, sendId);
+            }
+        }
+    }
+
+    private void ReleaseActiveStartSendLocked(StreamingPlatform platform, long sendId)
+    {
+        if (_activeStartSends.TryGetValue(platform, out var currentSendId) && currentSendId == sendId)
+        {
+            _activeStartSends.Remove(platform);
+            _retryRequestedDuringSend.Remove(platform);
         }
     }
 }
