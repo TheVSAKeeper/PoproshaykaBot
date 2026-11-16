@@ -2,4 +2,7 @@
 
 namespace PoproshaykaBot.Core.Infrastructure.Events.Chat;
 
-public sealed record ChatHistoryCleared(StreamingPlatform Platform, string? Channel = null) : EventBase, IPlatformEvent;
+public sealed record ChatHistoryCleared(
+    StreamingPlatform Platform,
+    string? Channel = null,
+    DateTimeOffset? ClearedAtUtc = null) : EventBase, IPlatformEvent;

@@ -16,7 +16,8 @@ public sealed record ChatMessageReceived(
     bool IsFirstTime,
     ChatMessageData HistoryEntry,
     bool IsBot = false,
-    CommandResponseMark? CommandResponse = null) : EventBase, IPlatformEvent
+    CommandResponseMark? CommandResponse = null,
+    bool IsReplacement = false) : EventBase, IPlatformEvent
 {
     public PlatformUserKey SenderKey => new(Platform, UserId);
 }

@@ -17,6 +17,8 @@ public sealed record ChatMessage(
     bool IsVip,
     bool IsSubscriber,
     bool IsBot = false,
-    string Color = "");
+    string Color = "",
+    string ChannelId = "",
+    string? ChatSessionId = null);
 
 public sealed record EmoteOccurrence(string EmoteId, string Name, int StartIndex, int EndIndex);

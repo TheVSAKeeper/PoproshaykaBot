@@ -26,6 +26,7 @@ public sealed class SettingsWriteGateTests
     private static readonly Type[] OwnerTypes =
     [
         typeof(SettingsManager),
+        typeof(ChatSettingsStore),
         typeof(AccountsStore),
         typeof(BroadcastProfilesStore),
         typeof(BroadcastProfilePlatformsStore),
@@ -47,6 +48,12 @@ public sealed class SettingsWriteGateTests
         {
             var manager = new SettingsManager(NullLogger<SettingsManager>.Instance, path, gate);
             return () => manager.SaveSettings(manager.Current);
+        });
+
+        yield return Owner("chat.json", (path, gate) =>
+        {
+            var store = new ChatSettingsStore(null, null, path, gate);
+            return () => store.Save(new());
         });
 
         yield return Owner("accounts.json", (path, gate) =>

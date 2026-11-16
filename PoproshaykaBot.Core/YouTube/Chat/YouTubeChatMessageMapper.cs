@@ -28,7 +28,8 @@ internal sealed class YouTubeChatMessageMapper(IYouTubeSentMessageTracker? sentM
         YouTubeLiveChatItem item,
         string channel,
         string? botChannelId,
-        string? broadcasterChannelId)
+        string? broadcasterChannelId,
+        string? liveChatId = null)
     {
         ArgumentNullException.ThrowIfNull(item);
 
@@ -80,6 +81,10 @@ internal sealed class YouTubeChatMessageMapper(IYouTubeSentMessageTracker? sentM
                 && !item.Author.IsChatOwner
                 && string.Equals(item.Author.ChannelId, botChannelId, StringComparison.Ordinal));
 
+        var resolvedChannelId = string.IsNullOrWhiteSpace(broadcasterChannelId)
+            ? item.Author.ChannelId
+            : broadcasterChannelId.Trim();
+
         var message = new ChatMessage(
             StreamingPlatform.YouTube,
             channel,
@@ -94,7 +99,9 @@ internal sealed class YouTubeChatMessageMapper(IYouTubeSentMessageTracker? sentM
             item.Author.IsChatModerator,
             false,
             item.Author.IsChatSponsor,
-            isBot);
+            isBot,
+            ChannelId: resolvedChannelId,
+            ChatSessionId: liveChatId);
 
         return new(YouTubeChatMapKind.ChatMessage, message);
     }

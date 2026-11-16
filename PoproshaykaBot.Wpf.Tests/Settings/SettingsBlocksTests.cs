@@ -186,6 +186,7 @@ public class SettingsBlocksTests
         var accountsStore = new AccountsStore(null, Path.Combine(_root, "accounts.json"), gate);
         var youtubeSettingsStore = new YouTubeSettingsStore(null, Path.Combine(_root, "youtube.json"), gate);
         var youtubeAccountsStore = new YouTubeAccountsStore(null, Path.Combine(_root, "youtube-accounts.json"), gate);
+        var chatSettingsStore = new ChatSettingsStore(settingsManager, null, Path.Combine(_root, "chat.json"), gate);
         var obsChatStore = new ObsChatStore(bus, null, Path.Combine(_root, "obs-chat.json"), gate);
         var obsIntegrationStore = new ObsIntegrationStore(bus, null, Path.Combine(_root, "obs-integration.json"), gate);
         var updateStore = new UpdateStore(null, Path.Combine(_root, "update.json"), gate);
@@ -227,6 +228,7 @@ public class SettingsBlocksTests
             new BasicSettingsSectionContributor(new(), new(), new(), settingsManager, new FakeTargetChannelProvider()),
             new TwitchConnectionSettingsContributor(oauth, accountsStore, settingsManager, NullLogger<TwitchConnectionSettingsContributor>.Instance),
             new YouTubeConnectionSettingsContributor(youTube, youtubeSettingsStore, youtubeAccountsStore),
+            new ChatSettingsSectionContributor(new(), chatSettingsStore),
             new ObsSettingsSectionContributor(obsIntegration, obsChat, new(kestrel, dialogs, null!), obsIntegrationStore, obsChatStore, dialogs),
             new StreamSettingsSectionContributor(new(), new(), polls),
             new RanksSettingsSectionContributor(new()),

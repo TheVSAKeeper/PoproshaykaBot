@@ -31,7 +31,7 @@ public sealed class UpdateSettingsSectionContributor : ISettingsSectionContribut
         _updateStore = updateStore;
     }
 
-    public int Order => 7;
+    public int Order => 8;
 
     public string SectionKey => "update";
 

@@ -23,7 +23,7 @@ public sealed class DebugChannelSettingsSectionContributor : ISettingsSectionCon
         _debugChannelStore = debugChannelStore;
     }
 
-    public int Order => 8;
+    public int Order => 9;
 
     public string SectionKey => "debug";
 

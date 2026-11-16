@@ -353,9 +353,26 @@
             }
         });
 
-        es.addEventListener('clear', function () {
+        es.addEventListener('clear', function (event) {
             markAlive();
-            clearChat();
+            let payload = null;
+            if (event && event.data) {
+                try {
+                    payload = JSON.parse(event.data);
+                } catch {
+                    payload = null;
+                }
+            }
+            clearChat(payload);
+        });
+
+        es.addEventListener('delete', function (event) {
+            markAlive();
+            try {
+                deleteChatMessages(JSON.parse(event.data));
+            } catch (e) {
+                console.error('Ошибка парсинга SSE delete:', e);
+            }
         });
 
         es.addEventListener('chat_settings_changed', function (event) {
@@ -522,15 +539,39 @@
             return;
         }
 
+        const isImportedHistory = message.isHistory === true;
+        const suppressEntryAnimation = isHistoryMessage || isImportedHistory;
+        const parsedTimestampMs = new Date(message.timestamp).getTime();
+        const msgTimestampMs = Number.isNaN(parsedTimestampMs) ? Date.now() : parsedTimestampMs;
+
+        let insertBeforeEl = null;
+        if (isImportedHistory) {
+            const existingMessages = Array.from(chatContainer.querySelectorAll('.message:not(.reload-banner)'));
+            if (existingMessages.length >= maxMessages) {
+                const oldestTs = Number(existingMessages[0].dataset.timestampMs || '0');
+                if (msgTimestampMs <= oldestTs) {
+                    return;
+                }
+            }
+
+            insertBeforeEl = existingMessages.find(el => Number(el.dataset.timestampMs || '0') > msgTimestampMs) || null;
+        }
+
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message';
+        messageDiv.dataset.messageId = message.messageId || '';
+        messageDiv.dataset.userId = message.userId || '';
+        messageDiv.dataset.platform = message.platform || '';
+        messageDiv.dataset.channelId = message.channelId || '';
+        messageDiv.dataset.chatSessionId = message.chatSessionId || '';
+        messageDiv.dataset.timestampMs = String(msgTimestampMs);
 
-        const createdAtMs = isHistoryMessage
-            ? new Date(message.timestamp).getTime()
+        const createdAtMs = isHistoryMessage && !isImportedHistory && !Number.isNaN(parsedTimestampMs)
+            ? parsedTimestampMs
             : Date.now();
         messageDiv.dataset.createdAt = String(createdAtMs);
 
-        applyEntryAnimation(messageDiv, message, isHistoryMessage);
+        applyEntryAnimation(messageDiv, message, suppressEntryAnimation);
 
         const userTypeClasses = getUserTypeClasses(message.status || 0);
         userTypeClasses.forEach(cls => messageDiv.classList.add(cls));
@@ -595,7 +636,11 @@
             attachMessageImage(messageDiv);
         }
 
-        chatContainer.appendChild(messageDiv);
+        if (insertBeforeEl) {
+            chatContainer.insertBefore(messageDiv, insertBeforeEl);
+        } else {
+            chatContainer.appendChild(messageDiv);
+        }
 
         scheduleFadeOut(messageDiv);
 
@@ -607,7 +652,7 @@
             }
         }
 
-        if (isHistoryMessage) {
+        if (suppressEntryAnimation) {
             chatContainer.scrollTop = chatContainer.scrollHeight;
             return;
         }
@@ -620,12 +665,82 @@
         requestAnimationFrame(() => smoothScrollToBottom());
     }
 
-    function clearChat() {
+    function clearChat(payload) {
+        const cutoffMs = payload && payload.clearedAtUtc ? new Date(payload.clearedAtUtc).getTime() : NaN;
+        if (!Number.isNaN(cutoffMs)) {
+            chatContainer.querySelectorAll('.message').forEach(el => {
+                const msgTs = Number(el.dataset.timestampMs || '0');
+                if (el.classList.contains('reload-banner') || msgTs <= cutoffMs) {
+                    cancelFadeOut(el);
+                    el.remove();
+                }
+            });
+
+            const survivingIds = new Set();
+            chatContainer.querySelectorAll('.message').forEach(el => {
+                if (el.dataset.messageId) {
+                    survivingIds.add(el.dataset.messageId);
+                }
+            });
+
+            seenMessageIds.clear();
+            seenMessageIdsOrder.length = 0;
+            survivingIds.forEach(id => {
+                seenMessageIds.add(id);
+                seenMessageIdsOrder.push(id);
+            });
+
+            if (chatContainer.children.length === 0) {
+                scrollPaused = false;
+                hideNewMessagesIndicator();
+            }
+
+            return;
+        }
+
         chatContainer.replaceChildren();
         seenMessageIds.clear();
         seenMessageIdsOrder.length = 0;
         scrollPaused = false;
         hideNewMessagesIndicator();
+    }
+
+    function deleteChatMessages(payload) {
+        if (!payload) return;
+
+        const messageIds = new Set(Array.isArray(payload.messageIds) ? payload.messageIds.filter(Boolean) : []);
+        const targetUserId = payload.userId || '';
+        const targetPlatform = payload.platform || '';
+        const targetChannelId = payload.channelId || '';
+        const targetSessionId = payload.sessionScopeId || '';
+        const allowReplacement = payload.allowReplacement === true;
+        const cutoffMs = payload.cutoffUtc ? new Date(payload.cutoffUtc).getTime() : NaN;
+        const hasCutoff = !Number.isNaN(cutoffMs);
+
+        if (allowReplacement && messageIds.size > 0) {
+            messageIds.forEach(id => seenMessageIds.delete(id));
+        }
+
+        document.querySelectorAll('#chat .message').forEach(messageDiv => {
+            const msgId = messageDiv.dataset.messageId || '';
+            const msgUserId = messageDiv.dataset.userId || '';
+            const msgPlatform = messageDiv.dataset.platform || '';
+            const msgChannelId = messageDiv.dataset.channelId || '';
+            const msgSessionId = messageDiv.dataset.chatSessionId || '';
+            const msgTimestampMs = Number(messageDiv.dataset.timestampMs || '0');
+
+            const platformMatches = !targetPlatform || !msgPlatform || msgPlatform === targetPlatform;
+            const channelMatches = !targetChannelId || !msgChannelId || msgChannelId === targetChannelId;
+            const sessionMatches = !targetSessionId || !msgSessionId || msgSessionId === targetSessionId;
+            if (!platformMatches || !channelMatches || !sessionMatches) return;
+
+            const matchesById = Boolean(msgId && messageIds.has(msgId));
+            const matchesByUser = Boolean(targetUserId && msgUserId === targetUserId && (!hasCutoff || msgTimestampMs <= cutoffMs));
+            if (matchesById || matchesByUser) {
+                cancelFadeOut(messageDiv);
+                messageDiv.remove();
+            }
+        });
     }
 
     function renderBadges(badges) {

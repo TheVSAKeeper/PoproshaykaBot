@@ -495,4 +495,30 @@ public sealed class LegacyDataImporterTests
             Assert.That(File.ReadAllText(backups[0]), Does.Not.Contain("old-sec").And.Not.Contain("old-at").And.Not.Contain("old-rt"));
         }
     }
+
+    [Test]
+    public void Import_CopiesChatSettingsAndValidChatHistoryFiles_IgnoringServiceBackups()
+    {
+        var cacheHash = new string('a', 64) + ".json";
+        const string ChatSettingsJson = """{"showHistoryInApp":true,"showHistoryInObs":false,"historyMaxItems":450}""";
+        const string CacheJson = """{"schemaVersion":1,"platform":1,"channelId":"1","messages":[]}""";
+
+        LegacyDataFixture.Write(_source, Path.Combine("settings", "chat.json"), ChatSettingsJson);
+        LegacyDataFixture.Write(_source, Path.Combine("chat-history", cacheHash), CacheJson);
+        LegacyDataFixture.Write(_source, Path.Combine("chat-history", cacheHash + ".bak"), "ignored");
+        LegacyDataFixture.Write(_source, Path.Combine("chat-history", new string('a', 64) + ".invalid-2026.json"), "ignored");
+
+        var result = LegacyDataImporter.Import(_source, _target, overwrite: false, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Failures, Is.Empty);
+            Assert.That(result.CopiedSettingsFiles, Does.Contain("chat.json"));
+            Assert.That(result.CopiedChatHistory, Is.True);
+            Assert.That(File.ReadAllText(TargetSettings("chat.json")), Is.EqualTo(ChatSettingsJson));
+            Assert.That(File.ReadAllText(Path.Combine(_target, "chat-history", cacheHash)), Is.EqualTo(CacheJson));
+            Assert.That(File.Exists(Path.Combine(_target, "chat-history", cacheHash + ".bak")), Is.False);
+            Assert.That(File.Exists(Path.Combine(_target, "chat-history", new string('a', 64) + ".invalid-2026.json")), Is.False);
+        }
+    }
 }

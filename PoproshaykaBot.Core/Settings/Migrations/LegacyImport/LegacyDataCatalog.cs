@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Statistics;
+﻿using PoproshaykaBot.Core.Chat.History;
+using PoproshaykaBot.Core.Statistics;
 
 namespace PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 
@@ -13,6 +14,7 @@ internal enum LegacyDataCategory
     Settings = 6,
     UiPreferences = 7,
     YouTubeQuota = 8,
+    ChatHistory = 9,
 }
 
 internal sealed record LegacyDataEntry(
@@ -25,8 +27,10 @@ internal sealed record LegacyDataEntry(
 internal static class LegacyDataCatalog
 {
     public const string SettingsFolderName = "settings";
+    public const string ChatHistoryFolderName = "chat-history";
     public const string YouTubeFolderName = "youtube";
     public const string SettingsFileName = "settings.json";
+    public const string ChatSettingsFileName = "chat.json";
     public const string AccountsFileName = "accounts.json";
     public const string UserStatisticsFileName = "users_statistics.json";
     public const string BotStatisticsFileName = "bot_statistics.json";
@@ -56,6 +60,7 @@ internal static class LegacyDataCatalog
         new("chat-blockers.txt", "chat-blockers.txt", LegacyDataCategory.ChatRuntime),
         new("chat-zoom.txt", "chat-zoom.txt", LegacyDataCategory.ChatRuntime),
         new(SettingsFileName, $"{SettingsFolderName}/{SettingsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
+        new(ChatSettingsFileName, $"{SettingsFolderName}/{ChatSettingsFileName}", LegacyDataCategory.Settings, true),
         new(AccountsFileName, $"{SettingsFolderName}/{AccountsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
         new("broadcast-profiles.json", $"{SettingsFolderName}/broadcast-profiles.json", LegacyDataCategory.Settings, true),
         new(BroadcastProfilePlatformsFileName, $"{SettingsFolderName}/{BroadcastProfilePlatformsFileName}", LegacyDataCategory.Settings, true),
@@ -114,7 +119,30 @@ internal static class LegacyDataCatalog
             }
         }
 
+        var chatHistoryDirectory = Path.Combine(sourceDirectory, ChatHistoryFolderName);
+        if (Directory.Exists(chatHistoryDirectory))
+        {
+            foreach (var path in Directory.EnumerateFiles(chatHistoryDirectory).OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
+            {
+                var name = Path.GetFileName(path);
+                if (!ChatHistoryCacheStore.IsCacheFileName(name))
+                {
+                    continue;
+                }
+
+                if (TryDescribe(name, path, Path.Combine(ChatHistoryFolderName, name)) is { } file)
+                {
+                    files.Add(file);
+                }
+            }
+        }
+
         return files;
+    }
+
+    public static bool IsChatHistoryPath(string relativePath)
+    {
+        return NormalizeRelativePath(relativePath).StartsWith(ChatHistoryFolderName + "/", StringComparison.OrdinalIgnoreCase);
     }
 
     public static string NormalizeRelativePath(string path)

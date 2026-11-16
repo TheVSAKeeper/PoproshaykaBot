@@ -148,7 +148,7 @@ public static class LegacyDataImporter
                     continue;
                 }
 
-                CopyAtomic(file.SourcePath, targetPath, file.Name, logger);
+                CopyAtomic(file.SourcePath, targetPath, file.Name, file.RelativeTargetPath, logger);
                 copied.Add(file.RelativeTargetPath);
 
                 logger?.LogInformation("Импорт данных: {Source} перенесён в {Target}", file.SourcePath, targetPath);
@@ -258,12 +258,12 @@ public static class LegacyDataImporter
         return leftovers;
     }
 
-    private static void CopyAtomic(string source, string target, string fileName, ILogger? logger)
+    private static void CopyAtomic(string source, string target, string fileName, string relativeTargetPath, ILogger? logger)
     {
         AtomicFile.Save(target,
             temporaryPath => File.Copy(source, temporaryPath, true),
             logger,
-            keepBackup: !LegacyDataCatalog.CarriesTokens(fileName));
+            keepBackup: !LegacyDataCatalog.CarriesTokens(fileName) && !LegacyDataCatalog.IsChatHistoryPath(relativeTargetPath));
     }
 
     private static Func<string, string>? ResolveRedactor(string fileName)

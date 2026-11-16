@@ -1,8 +1,19 @@
-﻿namespace PoproshaykaBot.Core.Settings;
+﻿using PoproshaykaBot.Core.Settings.Chat;
+
+namespace PoproshaykaBot.Core.Settings;
 
 public static class SettingsDescriber
 {
     public const string Unset = "–";
+
+    public static string Describe(ChatSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return $"история в окне бота {OnOff(settings.ShowHistoryInApp)}, "
+            + $"история в OBS {OnOff(settings.ShowHistoryInObs)}, "
+            + $"лимит кэша {settings.HistoryMaxItems}";
+    }
 
     public static string Describe(AppSettings settings)
     {

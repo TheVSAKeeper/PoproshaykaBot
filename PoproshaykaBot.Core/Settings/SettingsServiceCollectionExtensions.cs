@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using PoproshaykaBot.Core.Chat.History;
 using PoproshaykaBot.Core.Dashboard;
 using PoproshaykaBot.Core.Infrastructure.Diagnostics;
 using PoproshaykaBot.Core.Settings.Onboarding;
@@ -12,6 +13,8 @@ public static class SettingsServiceCollectionExtensions
     {
         services.AddSingleton<SettingsWriteGate>();
         services.AddSingleton<SettingsManager>();
+        services.AddSingleton<ChatSettingsStore>();
+        services.AddSingleton<IChatHistorySettingsProvider>(static provider => provider.GetRequiredService<ChatSettingsStore>());
         services.AddSingleton<AccountsStore>();
         services.AddSingleton<YouTubeSettingsStore>();
         services.AddSingleton<YouTubeAccountsStore>();
@@ -31,6 +34,7 @@ public static class SettingsServiceCollectionExtensions
         services.AddSingleton<ISettingsSnapshotContributor>(static provider => new DelegateSettingsSnapshotContributor(() =>
         [
             new(nameof(AppSettings), SettingsDescriber.Describe(provider.GetRequiredService<SettingsManager>().Current)),
+            new("ChatSettings", ChatSettingsStore.Describe(provider.GetRequiredService<ChatSettingsStore>().Load())),
             new("ObsIntegrationSettings", ObsIntegrationStore.Describe(provider.GetRequiredService<ObsIntegrationStore>().Load())),
             new("ObsChatSettings", ObsChatStore.Describe(provider.GetRequiredService<ObsChatStore>().Load())),
             new("UpdateSettings", UpdateStore.Describe(provider.GetRequiredService<UpdateStore>().Load())),

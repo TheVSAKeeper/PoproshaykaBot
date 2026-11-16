@@ -11,6 +11,7 @@ public static class LegacyImportText
     private static readonly Dictionary<string, string> FileTitles = new(StringComparer.OrdinalIgnoreCase)
     {
         ["settings.json"] = "Основные настройки",
+        ["chat.json"] = "Настройки чата",
         ["accounts.json"] = "Данные входа в Twitch",
         ["youtube.json"] = "Настройки YouTube",
         ["youtube-accounts.json"] = "Данные входа в YouTube",
@@ -153,6 +154,11 @@ public static class LegacyImportText
             frozen.Add("расход квоты YouTube");
         }
 
+        if (result.CopiedChatHistory)
+        {
+            frozen.Add("кэш истории чата");
+        }
+
         if (frozen.Count == 0)
         {
             return Restart;
@@ -242,6 +248,11 @@ public static class LegacyImportText
         }
 
         var normalizedPath = relativeTargetPath.Replace('\\', '/');
+
+        if (LegacyImportResult.IsChatHistoryPath(normalizedPath))
+        {
+            return "Кэш истории чата";
+        }
 
         if (FileTitles.TryGetValue(normalizedPath, out var pathTitle))
         {

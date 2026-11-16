@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Chat.History;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
@@ -30,8 +31,9 @@ public sealed class SseChatBridgeHandlerTests
 
         _logger = new();
         _bus = new(NullLogger<InMemoryEventBus>.Instance);
+        _chatSettingsStore = new(null, null, Path.Combine(_root, "chat.json"));
         _service = new(settingsManager, obsChatStore, _logger, new(), new(), new());
-        _handler = new(_service, _bus);
+        _handler = new(_service, _bus, _chatSettingsStore);
     }
 
     [TearDown]
@@ -52,6 +54,7 @@ public sealed class SseChatBridgeHandlerTests
     private string _root = null!;
     private RecordingLogger<SseService> _logger = null!;
     private InMemoryEventBus _bus = null!;
+    private ChatSettingsStore _chatSettingsStore = null!;
     private SseService _service = null!;
     private SseChatBridgeHandler _handler = null!;
 
@@ -81,6 +84,48 @@ public sealed class SseChatBridgeHandlerTests
         await _bus.PublishAsync(new ChatHistoryCleared(platform, "test-channel"));
 
         Assert.That(_logger.Entries.Count(entry => entry.Message == "Инициация события очистки чата для всех SSE клиентов"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Загруженная_история_уходит_в_SSE_только_при_включённой_настройке_OBS()
+    {
+        var scope = ChatHistoryScope.ForTwitch("1", "chan");
+        var entries = new ChatMessageData[]
+        {
+            new()
+            {
+                Platform = StreamingPlatform.Twitch,
+                MessageId = "h-1",
+                Timestamp = DateTime.UtcNow.AddMinutes(-5),
+                UserId = "u1",
+                DisplayName = "user",
+                Message = "past",
+                IsHistorical = true,
+            },
+            new()
+            {
+                Platform = StreamingPlatform.Twitch,
+                MessageId = "h-cmd",
+                Timestamp = DateTime.UtcNow.AddMinutes(-4),
+                UserId = "bot",
+                DisplayName = "bot",
+                Message = "hidden",
+                IsHistorical = true,
+                IsBot = true,
+                CommandResponse = new("ранг", CommandSettings.CallerOnly),
+            },
+        };
+
+        await _bus.PublishAsync(new ChatHistoryLoaded(scope, entries, entries));
+        Assert.That(AddedMessages(), Is.Zero);
+
+        _chatSettingsStore.Save(new() { ShowHistoryInObs = true });
+        await _bus.PublishAsync(new ChatHistoryLoaded(scope, entries, entries));
+        Assert.That(AddedMessages(), Is.Zero);
+
+        _service.Start();
+        await _bus.PublishAsync(new ChatHistoryLoaded(scope, entries, entries));
+        Assert.That(AddedMessages(), Is.EqualTo(1));
     }
 
     private static ChatMessageReceived CreateEvent(CommandResponseMark? mark)

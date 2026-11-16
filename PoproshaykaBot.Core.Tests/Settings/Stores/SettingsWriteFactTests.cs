@@ -28,6 +28,12 @@ public sealed class SettingsWriteFactTests
         yield return Case("accounts.json", "AccountsStore.SaveAll", (path, gate) =>
             new AccountsStore(null, path, gate).SaveAll(new() { Login = "bot" }, new() { Login = "streamer" }));
 
+        yield return Case("chat.json", "ChatSettingsStore.Save", (path, gate) =>
+            new ChatSettingsStore(null, null, path, gate).Save(new() { ShowHistoryInApp = true }));
+
+        yield return Case("chat.json", "ChatSettingsStore.Mutate", (path, gate) =>
+            new ChatSettingsStore(null, null, path, gate).Mutate(settings => settings.ShowHistoryInObs = true));
+
         yield return Case("youtube.json", "YouTubeSettingsStore.Save", (path, gate) =>
             new YouTubeSettingsStore(null, path, gate).Save(new() { Enabled = true }));
 

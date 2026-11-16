@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Chat.History;
 using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
@@ -889,6 +891,12 @@ internal sealed class YouTubeChatIngestionService(
         }
 
         var sawChatEnded = false;
+        var historyScope = ChatHistoryScope.ForYouTube(
+            string.IsNullOrWhiteSpace(broadcasterChannelId) ? channelLabel : broadcasterChannelId,
+            cursor.LiveChatId,
+            channelLabel);
+        List<(ChatMessage Message, DateTimeOffset Timestamp)> historicalMessages = [];
+        List<ChatModerationAction> historicalModerations = [];
 
         foreach (var item in batchResult.HistoricalItems)
         {
@@ -898,7 +906,53 @@ internal sealed class YouTubeChatIngestionService(
                 continue;
             }
 
+            var itemTimestampUtc = item.PublishedAtUtc ?? cursor.BoundaryUtc;
+
+            if (item.Moderation is { } moderation)
+            {
+                if (TryMapModeration(moderation, itemTimestampUtc) is { } action)
+                {
+                    historicalModerations.Add(action);
+                }
+
+                if (moderation.ActionKind == YouTubeModerationActionKind.MessageReplaced
+                    && moderation.ReplacementItem is { } replacement)
+                {
+                    var mappedReplacement = mapper.Map(replacement, channelLabel, botChannelId, broadcasterChannelId, cursor.LiveChatId);
+                    if (mappedReplacement.Kind == YouTubeChatMapKind.ChatMessage && mappedReplacement.Message is not null)
+                    {
+                        historicalMessages.Add((mappedReplacement.Message, replacement.PublishedAtUtc ?? itemTimestampUtc));
+                    }
+                }
+
+                cursor.MarkSeen(item.Id);
+                continue;
+            }
+
+            var mapped = mapper.Map(item, channelLabel, botChannelId, broadcasterChannelId, cursor.LiveChatId);
+            if (mapped.Kind == YouTubeChatMapKind.ChatMessage && mapped.Message is not null)
+            {
+                historicalMessages.Add((mapped.Message, itemTimestampUtc));
+            }
+
             cursor.MarkSeen(item.Id);
+        }
+
+        if (IsBroadcastCurrent(broadcast))
+        {
+            if (historicalMessages.Count > 0)
+            {
+                await eventBus.PublishAsync(
+                    new RawChatHistoryReceived(historyScope, historicalMessages, historicalModerations),
+                    ct).ConfigureAwait(false);
+            }
+            else
+            {
+                foreach (var action in historicalModerations)
+                {
+                    await eventBus.PublishAsync(new RawChatModerationReceived(historyScope, action), ct).ConfigureAwait(false);
+                }
+            }
         }
 
         foreach (var item in batchResult.LiveItems)
@@ -917,6 +971,31 @@ internal sealed class YouTubeChatIngestionService(
 
             var messageTimestampUtc = item.PublishedAtUtc ?? nowUtc;
 
+            if (item.Moderation is { } liveModeration)
+            {
+                if (TryMapModeration(liveModeration, messageTimestampUtc) is { } action)
+                {
+                    await eventBus.PublishAsync(new RawChatModerationReceived(historyScope, action), ct).ConfigureAwait(false);
+                }
+
+                if (liveModeration.ActionKind == YouTubeModerationActionKind.MessageReplaced
+                    && liveModeration.ReplacementItem is { } replacement)
+                {
+                    await PublishItemAsync(
+                        replacement,
+                        cursor.LiveChatId,
+                        channelLabel,
+                        botChannelId,
+                        broadcasterChannelId,
+                        replacement.PublishedAtUtc ?? messageTimestampUtc,
+                        ct,
+                        isReplacement: true).ConfigureAwait(false);
+                }
+
+                cursor.MarkSeen(item.Id);
+                continue;
+            }
+
             if (TryHoldSharedAccountCandidate(
                     cursor.LiveChatId,
                     item,
@@ -932,6 +1011,7 @@ internal sealed class YouTubeChatIngestionService(
                 {
                     await PublishItemAsync(
                         overflowCandidate.Item,
+                        overflowCandidate.LiveChatId,
                         overflowCandidate.ChannelLabel,
                         overflowCandidate.BotChannelId,
                         overflowCandidate.BroadcasterChannelId,
@@ -945,6 +1025,7 @@ internal sealed class YouTubeChatIngestionService(
 
             await PublishItemAsync(
                 item,
+                cursor.LiveChatId,
                 channelLabel,
                 botChannelId,
                 broadcasterChannelId,
@@ -1480,6 +1561,7 @@ internal sealed class YouTubeChatIngestionService(
                 {
                     await PublishItemAsync(
                         released.Item,
+                        released.LiveChatId,
                         released.ChannelLabel,
                         released.BotChannelId,
                         released.BroadcasterChannelId,
@@ -1570,17 +1652,19 @@ internal sealed class YouTubeChatIngestionService(
 
     private async Task PublishItemAsync(
         YouTubeLiveChatItem item,
+        string? liveChatId,
         string channelLabel,
         string? botChannelId,
         string? broadcasterChannelId,
         DateTimeOffset timestamp,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool isReplacement = false)
     {
-        var mapped = mapper.Map(item, channelLabel, botChannelId, broadcasterChannelId);
+        var mapped = mapper.Map(item, channelLabel, botChannelId, broadcasterChannelId, liveChatId);
 
         if (mapped.Kind == YouTubeChatMapKind.ChatMessage && mapped.Message is not null)
         {
-            await eventBus.PublishAsync(new RawChatMessageReceived(mapped.Message, timestamp), ct).ConfigureAwait(false);
+            await eventBus.PublishAsync(new RawChatMessageReceived(mapped.Message, timestamp, isReplacement), ct).ConfigureAwait(false);
 
             lock (_sync)
             {
@@ -1595,6 +1679,32 @@ internal sealed class YouTubeChatIngestionService(
                 mapped.DiagnosticEventType,
                 mapped.DiagnosticSummary ?? "-");
         }
+    }
+
+    private static ChatModerationAction? TryMapModeration(YouTubeModerationDetails moderation, DateTimeOffset cutoffUtc)
+    {
+        return moderation.ActionKind switch
+        {
+            YouTubeModerationActionKind.MessageDeleted => new(
+                ChatModerationActionKind.MessageDeleted,
+                moderation.TargetMessageId,
+                null,
+                cutoffUtc),
+            YouTubeModerationActionKind.MessageReplaced => new(
+                ChatModerationActionKind.MessageReplaced,
+                moderation.TargetMessageId,
+                null,
+                cutoffUtc,
+                moderation.ReplacementItem?.Id),
+            YouTubeModerationActionKind.AuthorMessagesDeleted
+                or YouTubeModerationActionKind.UserBannedTemporary
+                or YouTubeModerationActionKind.UserBannedPermanent => new(
+                ChatModerationActionKind.AuthorMessagesDeleted,
+                null,
+                moderation.TargetChannelId,
+                cutoffUtc),
+            _ => null,
+        };
     }
 
     private sealed record HeldEchoCandidate(

@@ -60,7 +60,7 @@ public abstract class DraftlessSettingsSectionContributorBase(
 
 public sealed class McpSettingsSectionContributor(McpSettingsSectionViewModel mcp)
     : DraftlessSettingsSectionContributorBase(
-        9,
+        10,
         "mcp",
         "Агентная отладка",
         PackIconLucideKind.Bot,
@@ -69,7 +69,7 @@ public sealed class McpSettingsSectionContributor(McpSettingsSectionViewModel mc
 
 public sealed class AppearanceSettingsSectionContributor(AppearanceSettingsSectionViewModel appearance)
     : DraftlessSettingsSectionContributorBase(
-        10,
+        11,
         "appearance",
         "Оформление",
         PackIconLucideKind.Palette,
@@ -78,7 +78,7 @@ public sealed class AppearanceSettingsSectionContributor(AppearanceSettingsSecti
 
 public sealed class MiscSettingsSectionContributor(MiscSettingsSectionViewModel misc)
     : DraftlessSettingsSectionContributorBase(
-        11,
+        12,
         "misc",
         "Прочее",
         PackIconLucideKind.Wrench,

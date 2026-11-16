@@ -116,6 +116,15 @@ public class LegacyImportResultTests
             "Гейт ключуется именем файла, поэтому принесённое копированием и переписанное миграцией раскладки сходятся в один список без повторов");
     }
 
+    [TestCase(new[] { "chat-history/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.json" }, true)]
+    [TestCase(new[] { "chat-history\\0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.json" }, true)]
+    [TestCase(new[] { "settings/chat.json" }, false)]
+    [TestCase(new string[0], false)]
+    public void Перенос_считается_тронувшим_кэш_истории_чата_по_папке(string[] copied, bool expected)
+    {
+        Assert.That(Build(copied).CopiedChatHistory, Is.EqualTo(expected));
+    }
+
     private static LegacyImportResult Build(string[] copied)
     {
         return new()

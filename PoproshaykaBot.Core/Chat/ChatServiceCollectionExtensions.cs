@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Chat.Display;
+using PoproshaykaBot.Core.Chat.History;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Infrastructure.Hosting.Components;
@@ -31,7 +33,10 @@ public static class ChatServiceCollectionExtensions
         services.AddPlatformHost(StreamingPlatform.Twitch);
         services.AddSingleton<IPlatformConnectionAdapter, TwitchPlatformConnectionAdapter>();
 
+        services.AddSingleton<ChatHistoryCacheStore>();
+        services.AddSingleton<IChatHistoryPersistenceSink>(static sp => sp.GetRequiredService<ChatHistoryCacheStore>());
         services.AddSingleton<ChatHistoryManager>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAppLifetimeComponent, ChatHistoryCacheLifecycle>());
         services.AddSingleton<ChatDisplayStore>();
         services.AddSingleton<ChatDecorationsProvider>();
         services.AddSingleton<UserRankService>();

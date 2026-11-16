@@ -1,5 +1,8 @@
 ﻿using KeepShell.Services.Platform;
 using Microsoft.Extensions.Logging.Abstractions;
+using PoproshaykaBot.Core.Chat.History;
+using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Wpf.ViewModels.Migration;
 using System.IO;
 
@@ -68,6 +71,41 @@ public class LegacyImportViewModelTests
 
         Assert.That(viewModel.CanDismiss, Is.EqualTo(expectsDismissCheckbox),
             "Из настроек окно открывают сами, и «Больше не предлагать» там нечего отключать.");
+    }
+
+    [Test]
+    public async Task ImportAsync_RevokesChatHistoryCacheWrites_WhenChatHistoryCopied()
+    {
+        var sourceDir = Path.Combine(_folder, "source");
+        var targetDir = Path.Combine(_folder, "target");
+        Directory.CreateDirectory(Path.Combine(sourceDir, "chat-history"));
+        Directory.CreateDirectory(targetDir);
+
+        var cacheFile = new string('b', 64) + ".json";
+        await File.WriteAllTextAsync(Path.Combine(sourceDir, "chat-history", cacheFile), """{"schemaVersion":1,"platform":1,"channelId":"1","messages":[]}""");
+
+        using var cacheStore = new ChatHistoryCacheStore(cacheDirectory: Path.Combine(targetDir, "chat-history"));
+        var summary = LegacyDataScanner.Inspect(sourceDir, NullLogger.Instance)!;
+
+        var viewModel = new LegacyImportViewModel(
+            [summary],
+            hasOwnData: true,
+            isSettingsEntry: true,
+            new FakeFilePicker(_folder),
+            NullLogger.Instance,
+            chatHistoryCache: cacheStore,
+            import: (src, overwrite, log) => LegacyDataImporter.Import(src, targetDir, overwrite, log));
+
+        viewModel.Sources[0].IsSelected = true;
+        await viewModel.ImportCommand.ExecuteAsync(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.IsCompleted, Is.True);
+            Assert.That(viewModel.Result?.CopiedChatHistory, Is.True);
+            Assert.That(cacheStore.IsWriteRevoked, Is.True);
+            Assert.That(viewModel.ResultRestartNotice, Does.Contain("кэш истории чата"));
+        }
     }
 
     private sealed class FakeFilePicker(string folder) : IFilePicker
