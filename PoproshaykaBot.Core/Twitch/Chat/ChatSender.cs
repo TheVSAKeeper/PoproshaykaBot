@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch.Helix;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
@@ -141,9 +142,9 @@ public sealed class ChatSender(
         return Task.CompletedTask;
     }
 
-    public ChatEnqueueResult Enqueue(string message, string? replyParentMessageId, CommandResponseMark? commandResponse)
+    public ChatEnqueueResult Enqueue(string message, string? replyParentMessageId, CommandResponseMark? commandResponse, ChatOrigin? origin = null)
     {
-        return Enqueue(message, replyParentMessageId, commandResponse, null);
+        return Enqueue(message, replyParentMessageId, commandResponse, null, origin);
     }
 
     public Task EnqueueWhisperAsync(
@@ -151,7 +152,8 @@ public sealed class ChatSender(
         string toUserId,
         string fallbackReplyParentMessageId,
         CommandResponseMark? commandResponse,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChatOrigin? origin = null)
     {
         WhisperRoute? whisper = null;
 
@@ -164,7 +166,7 @@ public sealed class ChatSender(
             whisper = new(toUserId);
         }
 
-        Enqueue(message, fallbackReplyParentMessageId, commandResponse, whisper);
+        Enqueue(message, fallbackReplyParentMessageId, commandResponse, whisper, origin);
         return Task.CompletedTask;
     }
 
@@ -172,11 +174,17 @@ public sealed class ChatSender(
         string message,
         string? replyParentMessageId,
         CommandResponseMark? commandResponse,
-        WhisperRoute? whisper)
+        WhisperRoute? whisper,
+        ChatOrigin? origin)
     {
         if (string.IsNullOrWhiteSpace(message))
         {
             return ChatEnqueueResult.EmptyMessage;
+        }
+
+        if (origin is not null && (!origin.IsCurrent || origin.Channel.Platform != StreamingPlatform.Twitch))
+        {
+            return ChatEnqueueResult.NotConnected;
         }
 
         var target = targetChannelProvider.Current;
@@ -196,7 +204,7 @@ public sealed class ChatSender(
 
         foreach (var chunk in SplitByLength(message, MaxMessageLength))
         {
-            var item = new ChatSendItem(chunk, replyParentMessageId, target.Login, commandResponse, whisper);
+            var item = new ChatSendItem(chunk, replyParentMessageId, target.Login, commandResponse, whisper, origin);
 
             if (channel.Writer.TryWrite(item))
             {
@@ -334,7 +342,12 @@ public sealed class ChatSender(
     {
         try
         {
-            var broadcasterId = await broadcasterIdProvider.GetAsync(ct);
+            if (!CanSend(item))
+            {
+                return SendOutcome.Done;
+            }
+
+            var broadcasterId = item.Origin?.Channel.ChannelId ?? await broadcasterIdProvider.GetAsync(ct);
 
             if (string.IsNullOrEmpty(broadcasterId))
             {
@@ -352,8 +365,18 @@ public sealed class ChatSender(
                 return SendOutcome.Done;
             }
 
+            if (!CanSend(item))
+            {
+                return SendOutcome.Done;
+            }
+
             if (item.Whisper is { Refused: false } whisper
                 && await TryWhisperAsync(item.Message, whisper, senderId, ct))
+            {
+                return SendOutcome.Done;
+            }
+
+            if (!CanSend(item))
             {
                 return SendOutcome.Done;
             }
@@ -365,7 +388,7 @@ public sealed class ChatSender(
 
             if (item.CommandResponse is { } commandResponse && !string.IsNullOrEmpty(messageId))
             {
-                commandResponseTracker.Expect(messageId, commandResponse);
+                commandResponseTracker.Expect(StreamingPlatform.Twitch, messageId, commandResponse, new ChannelKey(StreamingPlatform.Twitch, broadcasterId));
             }
 
             if (string.IsNullOrEmpty(item.ReplyParentMessageId))
@@ -483,12 +506,27 @@ public sealed class ChatSender(
         }
     }
 
+    private bool CanSend(ChatSendItem item)
+    {
+        var target = targetChannelProvider.Current;
+        if (target.IsSendingAllowed
+            && (item.Origin?.IsCurrent ?? string.Equals(target.Login, item.TargetLogin, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        Interlocked.Increment(ref _failedCount);
+        logger.LogDebug("ChatSender: сообщение пропущено – адрес исходного чата недоступен или отправка отключена");
+        return false;
+    }
+
     private sealed record ChatSendItem(
         string Message,
         string? ReplyParentMessageId,
         string TargetLogin,
         CommandResponseMark? CommandResponse,
-        WhisperRoute? Whisper);
+        WhisperRoute? Whisper,
+        ChatOrigin? Origin);
 
     private sealed class WhisperRoute(string toUserId)
     {

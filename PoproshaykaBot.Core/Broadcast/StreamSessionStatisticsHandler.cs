@@ -444,14 +444,15 @@ public sealed class StreamSessionStatisticsHandler :
 
     public Task HandleAsync(ChatMessageReceived @event, CancellationToken cancellationToken)
     {
-        if (@event.IsBot || !_targetChannelProvider.Current.RecordsUserData)
+        if (@event.IsBot || !(@event.RecordsUserData ?? _targetChannelProvider.Current.RecordsUserData))
         {
             return Task.CompletedTask;
         }
 
         lock (_stateLock)
         {
-            if (_activeBroadcastId is null
+            if (@event.Origin is { IsCurrent: false }
+                || _activeBroadcastId is null
                 || !_platforms.TryGetValue(@event.Platform, out var collector)
                 || collector.EndedAt is not null)
             {

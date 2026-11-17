@@ -59,4 +59,17 @@ public class StatisticsTrackingHandlerTests
             false,
             new() { Platform = StreamingPlatform.Twitch });
     }
+
+    [Test]
+    public async Task Closed_Origin_Cannot_Write_User_Statistics()
+    {
+        _handler = new(_userStatistics, _botStatistics, _targetChannel, _eventBus);
+        var origin = new ChatOrigin(new(StreamingPlatform.Twitch, "123"), "123");
+        origin.Close();
+
+        await _handler.HandleAsync(Message() with { Origin = origin, RecordsUserData = true }, CancellationToken.None);
+
+        _userStatistics.DidNotReceive().TrackMessage(Arg.Any<PlatformUserKey>(), Arg.Any<string>());
+        _botStatistics.DidNotReceive().IncrementMessagesProcessed();
+    }
 }

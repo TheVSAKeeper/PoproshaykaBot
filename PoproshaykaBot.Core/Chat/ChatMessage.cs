@@ -19,6 +19,7 @@ public sealed record ChatMessage(
     bool IsBot = false,
     string Color = "",
     string ChannelId = "",
-    string? ChatSessionId = null);
+    string? ChatSessionId = null,
+    ChatOrigin? Origin = null);
 
 public sealed record EmoteOccurrence(string EmoteId, string Name, int StartIndex, int EndIndex);

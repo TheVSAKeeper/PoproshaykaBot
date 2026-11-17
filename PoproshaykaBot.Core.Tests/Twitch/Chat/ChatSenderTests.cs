@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Tests.Debugging;
 using PoproshaykaBot.Core.Tests.Polls;
 using PoproshaykaBot.Core.Tests.Server;
@@ -14,6 +15,8 @@ namespace PoproshaykaBot.Core.Tests.Twitch.Chat;
 [TestFixture]
 public class ChatSenderTests
 {
+    private static readonly ChannelKey TestChannel = new(StreamingPlatform.Twitch, "1");
+
     [SetUp]
     public void SetUp()
     {
@@ -44,6 +47,24 @@ public class ChatSenderTests
     private CommandResponseTracker _tracker = null!;
     private RecordingLogger<ChatSender> _logger = null!;
     private ChatSender _sender = null!;
+
+    [Test]
+    public async Task Addressed_Response_Uses_Original_Broadcaster_And_Rejects_Closed_Connection()
+    {
+        var origin = new ChatOrigin(TestChannel, TestChannel.ChannelId);
+        _broadcasterIdProvider.GetAsync(Arg.Any<CancellationToken>()).Returns("new-broadcaster");
+        _helix.SendChatMessageAsync(Arg.Any<string>(), "2", Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns("outgoing-id");
+
+        var progress = new Progress<string>();
+        await _sender.StartAsync(progress, CancellationToken.None);
+        Assert.That(_sender.Enqueue("reply", "incoming-id", null, origin), Is.EqualTo(ChatEnqueueResult.Queued));
+        await _sender.StopAsync(progress, CancellationToken.None);
+
+        await _helix.Received(1).SendChatMessageAsync(TestChannel.ChannelId, "2", "reply", "incoming-id", Arg.Any<CancellationToken>());
+        origin.Close();
+        Assert.That(_sender.Enqueue("late", "incoming-id", null, origin), Is.EqualTo(ChatEnqueueResult.NotConnected));
+    }
 
     [Test]
     public async Task EnqueueAsync_AfterRestart_DeliversMessage()
@@ -159,8 +180,8 @@ public class ChatSenderTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(_tracker.TryConsume("msg-1"), Is.EqualTo(mark), "Первый чанк должен попасть в набор");
-            Assert.That(_tracker.TryConsume("msg-2"), Is.EqualTo(mark), "Второй чанк должен попасть в набор");
+            Assert.That(_tracker.TryConsume(StreamingPlatform.Twitch, "msg-1", TestChannel), Is.EqualTo(mark), "Первый чанк должен попасть в набор");
+            Assert.That(_tracker.TryConsume(StreamingPlatform.Twitch, "msg-2", TestChannel), Is.EqualTo(mark), "Второй чанк должен попасть в набор");
         });
     }
 
@@ -188,7 +209,7 @@ public class ChatSenderTests
         await attempted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await _sender.StopAsync(progress, CancellationToken.None);
 
-        Assert.That(_tracker.TryConsume("msg-1"), Is.Null);
+        Assert.That(_tracker.TryConsume(StreamingPlatform.Twitch, "msg-1", TestChannel), Is.Null);
     }
 
     [Test]
@@ -254,8 +275,8 @@ public class ChatSenderTests
         {
             Assert.That(replies, Is.EqualTo(new[] { "incoming-1", "incoming-1" }), "Оба чанка уходят реплаем на сообщение вызвавшего");
             Assert.That(refusals, Is.EqualTo(1), "Отказ пишется одной строкой, второй чанк шёпот уже не пробует");
-            Assert.That(_tracker.TryConsume("msg-1"), Is.EqualTo(mark), "Эхо отката опознаётся как ответ команды");
-            Assert.That(_tracker.TryConsume("msg-2"), Is.EqualTo(mark));
+            Assert.That(_tracker.TryConsume(StreamingPlatform.Twitch, "msg-1", TestChannel), Is.EqualTo(mark), "Эхо отката опознаётся как ответ команды");
+            Assert.That(_tracker.TryConsume(StreamingPlatform.Twitch, "msg-2", TestChannel), Is.EqualTo(mark));
         });
 
         await _helix.Received(1).SendWhisperAsync("2", "u1", Arg.Any<string>(), Arg.Any<CancellationToken>());

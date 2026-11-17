@@ -34,25 +34,29 @@ public sealed class ChatHistoryManagerTests
     }
 
     [Test]
-    public void Scopes_IsolateTwitchAndDifferentYouTubeLiveChats()
+    public void Scopes_Isolate_Channels_And_YouTube_Live_Chats()
     {
         var now = new DateTimeOffset(2026, 11, 16, 12, 0, 0, TimeSpan.Zero);
         var manager = CreateManager(now, out _);
 
         var twitchScope = ChatHistoryScope.ForTwitch("100", "chan");
+        var otherTwitchScope = ChatHistoryScope.ForTwitch("200", "other");
         var ytBroadcast1 = ChatHistoryScope.ForYouTube("UC100", "live-1", "YouTube");
         var ytBroadcast2 = ChatHistoryScope.ForYouTube("UC100", "live-2", "YouTube");
 
         manager.AddMessage(LiveMessage(StreamingPlatform.Twitch, "100", "chan", "same-id", now.UtcDateTime, "tw"));
+        manager.AddMessage(LiveMessage(StreamingPlatform.Twitch, "200", "other", "same-id", now.UtcDateTime, "other tw"));
+        manager.AddMessage(LiveMessage(StreamingPlatform.Twitch, "100", "renamed", "same-id", now.UtcDateTime, "duplicate"));
         manager.AddMessage(LiveMessage(StreamingPlatform.YouTube, "UC100", "YouTube", "same-id", now.UtcDateTime.AddSeconds(1), "yt1", "live-1"));
         manager.AddMessage(LiveMessage(StreamingPlatform.YouTube, "UC100", "YouTube", "same-id", now.UtcDateTime.AddSeconds(2), "yt2", "live-2"));
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(manager.GetHistory(twitchScope).Select(static m => m.Message), Is.EqualTo(new[] { "tw" }));
+            Assert.That(manager.GetHistory(otherTwitchScope).Select(static m => m.Message), Is.EqualTo(new[] { "other tw" }));
             Assert.That(manager.GetHistory(ytBroadcast1).Select(static m => m.Message), Is.EqualTo(new[] { "yt1" }));
             Assert.That(manager.GetHistory(ytBroadcast2).Select(static m => m.Message), Is.EqualTo(new[] { "yt2" }));
-            Assert.That(manager.GetHistory(), Has.Count.EqualTo(3));
+            Assert.That(manager.GetHistory(), Has.Count.EqualTo(4));
         }
     }
 

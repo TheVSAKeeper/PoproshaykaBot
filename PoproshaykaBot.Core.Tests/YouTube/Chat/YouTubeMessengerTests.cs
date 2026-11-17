@@ -129,9 +129,11 @@ public class YouTubeMessengerTests
         {
             Assert.That(r1, Is.EqualTo(ChatEnqueueResult.Queued));
             Assert.That(r2, Is.EqualTo(ChatEnqueueResult.Queued));
-            Assert.That(_sentTracker.Contains("yt-out-1"), Is.True);
-            Assert.That(_sentTracker.Contains("yt-out-cmd"), Is.True);
-            Assert.That(_responseTracker.TryConsume(StreamingPlatform.YouTube, "yt-out-cmd"), Is.EqualTo(mark));
+            Assert.That(_sentTracker.Contains("yt-out-1", "chat-1"), Is.True);
+            Assert.That(_sentTracker.Contains("yt-out-cmd", "chat-1"), Is.True);
+            Assert.That(_sentTracker.Contains("yt-out-cmd", "chat-2"), Is.False);
+            Assert.That(_responseTracker.TryConsume(StreamingPlatform.YouTube, "yt-out-cmd", new(StreamingPlatform.YouTube, "UCbroadcaster"), "chat-2"), Is.Null);
+            Assert.That(_responseTracker.TryConsume(StreamingPlatform.YouTube, "yt-out-cmd", new(StreamingPlatform.YouTube, "UCbroadcaster"), "chat-1"), Is.EqualTo(mark));
             Assert.That(sentCalls.Count, Is.EqualTo(3));
         });
     }
@@ -215,7 +217,7 @@ public class YouTubeMessengerTests
         Assert.Multiple(() =>
         {
             Assert.That(calls, Is.EqualTo(3));
-            Assert.That(_sentTracker.Contains("id-after-401"), Is.True);
+            Assert.That(_sentTracker.Contains("id-after-401", "chat-1"), Is.True);
             Assert.That(messenger.SentCount, Is.EqualTo(1));
             Assert.That(messenger.FailedCount, Is.EqualTo(1));
         });
@@ -283,6 +285,30 @@ public class YouTubeMessengerTests
 
         await messenger2.StopAsync(new Progress<string>(), CancellationToken.None);
         Assert.That(calls, Is.EqualTo(1), "Просроченные и относящиеся к старому liveChatId элементы не должны отправляться");
+    }
+
+    [Test]
+    public async Task Send_Refuses_Response_From_Previous_Live_Chat_Even_Before_Queueing()
+    {
+        var sends = new List<string>();
+        var client = new StubSendClient((chatId, _, _, _) =>
+        {
+            sends.Add(chatId);
+            return Task.FromResult(new YouTubeInsertMessageResult("sent", _clock.GetUtcNow()));
+        });
+
+        using var messenger = CreateMessenger(client);
+        await messenger.StartAsync(new Progress<string>(), CancellationToken.None);
+
+        var channel = new ChannelKey(StreamingPlatform.YouTube, "UCbroadcaster");
+        var previous = new ChatOrigin(channel, "chat-1");
+        _broadcastSource.CurrentBroadcast.Returns(new YouTubeBroadcastSummary("vid-2", channel.ChannelId, "Channel", "chat-2", "Live 2", _clock.GetUtcNow()));
+
+        Assert.That(messenger.Send("old response", origin: previous), Is.EqualTo(ChatEnqueueResult.NotConnected));
+        Assert.That(messenger.Send("new response", origin: new(channel, "chat-2")), Is.EqualTo(ChatEnqueueResult.Queued));
+        await WaitAndAdvanceUntilAsync(() => sends.Count == 1);
+        await messenger.StopAsync(new Progress<string>(), CancellationToken.None);
+        Assert.That(sends, Is.EqualTo(new[] { "chat-2" }));
     }
 
     [Test]

@@ -164,7 +164,8 @@ internal sealed class YouTubeMessenger(
     public ChatEnqueueResult Send(
         string text,
         CommandResponseMark? commandResponse = null,
-        ChatSendCategory category = ChatSendCategory.None)
+        ChatSendCategory category = ChatSendCategory.None,
+        ChatOrigin? origin = null)
     {
         var chunks = YouTubeMessageSplitter.Split(text);
 
@@ -179,9 +180,11 @@ internal sealed class YouTubeMessenger(
             return ChatEnqueueResult.ObserverMode;
         }
 
-        var liveChatId = activeBroadcastSource.CurrentBroadcast?.LiveChatId;
+        var broadcast = activeBroadcastSource.CurrentBroadcast;
+        var liveChatId = origin?.ChatId ?? broadcast?.LiveChatId;
+        var channelKey = origin?.Channel ?? ChannelKey.FromId(StreamingPlatform.YouTube, broadcast?.ChannelId);
 
-        if (string.IsNullOrWhiteSpace(liveChatId))
+        if (string.IsNullOrWhiteSpace(liveChatId) || !IsAddressCurrent(origin, broadcast))
         {
             logger.LogDebug("YouTubeMessenger: отправка пропущена – активный чат эфира отсутствует");
             return ChatEnqueueResult.NotConnected;
@@ -212,7 +215,7 @@ internal sealed class YouTubeMessenger(
         var ttl = priority == YouTubeQuotaPriority.ScheduledBroadcast
             ? ScheduledBroadcastTtl
             : CommandAndGreetingTtl;
-        var item = new YouTubeSendItem(chunks, priority, commandResponse, liveChatId, pacificDate, nowUtc + ttl);
+        var item = new YouTubeSendItem(chunks, priority, commandResponse, liveChatId, pacificDate, nowUtc + ttl, channelKey, origin);
 
         if (!channel.Writer.TryWrite(item))
         {
@@ -236,7 +239,8 @@ internal sealed class YouTubeMessenger(
         string callerDisplayName,
         string text,
         CommandResponseMark? commandResponse = null,
-        ChatSendCategory category = ChatSendCategory.None)
+        ChatSendCategory category = ChatSendCategory.None,
+        ChatOrigin? origin = null)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -251,7 +255,7 @@ internal sealed class YouTubeMessenger(
             ? ChatSendCategory.Greeting
             : category;
 
-        _ = Send(outgoingText, commandResponse, effectiveCategory);
+        _ = Send(outgoingText, commandResponse, effectiveCategory, origin);
     }
 
     public void Whisper(
@@ -260,10 +264,11 @@ internal sealed class YouTubeMessenger(
         string callerDisplayName,
         string text,
         CommandResponseMark? commandResponse = null,
-        ChatSendCategory category = ChatSendCategory.None)
+        ChatSendCategory category = ChatSendCategory.None,
+        ChatOrigin? origin = null)
     {
         logger.LogDebug("Личное сообщение на YouTube перенаправлено в публичный чат (площадка не поддерживает личные сообщения)");
-        Reply(fallbackReplyToMessageId, callerDisplayName, text, commandResponse, category);
+        Reply(fallbackReplyToMessageId, callerDisplayName, text, commandResponse, category, origin);
     }
 
     public void Dispose()
@@ -487,7 +492,7 @@ internal sealed class YouTubeMessenger(
 
                 if (item.CommandResponse is { } mark && !string.IsNullOrEmpty(result.MessageId))
                 {
-                    commandResponseTracker.Expect(StreamingPlatform.YouTube, result.MessageId, mark);
+                    commandResponseTracker.Expect(StreamingPlatform.YouTube, result.MessageId, mark, item.Channel, item.TargetLiveChatId);
                 }
 
                 inFlightScope.CompleteConfirmed(result.MessageId);
@@ -598,9 +603,11 @@ internal sealed class YouTubeMessenger(
             return false;
         }
 
-        var currentLiveChatId = activeBroadcastSource.CurrentBroadcast?.LiveChatId;
+        var broadcast = activeBroadcastSource.CurrentBroadcast;
 
-        if (!string.Equals(currentLiveChatId, item.TargetLiveChatId, StringComparison.Ordinal))
+        if (!string.Equals(broadcast?.LiveChatId, item.TargetLiveChatId, StringComparison.Ordinal)
+            || item.Channel != ChannelKey.FromId(StreamingPlatform.YouTube, broadcast?.ChannelId)
+            || item.Origin is { IsCurrent: false })
         {
             reason = "сменился или завершился активный чат";
             return false;
@@ -608,6 +615,13 @@ internal sealed class YouTubeMessenger(
 
         reason = string.Empty;
         return true;
+    }
+
+    private static bool IsAddressCurrent(ChatOrigin? origin, YouTubeBroadcastSummary? broadcast)
+    {
+        return origin is null || (origin.IsCurrent
+            && origin.Channel == ChannelKey.FromId(StreamingPlatform.YouTube, broadcast?.ChannelId)
+            && string.Equals(origin.ChatId, broadcast?.LiveChatId, StringComparison.Ordinal));
     }
 
     private void LogQuotaSuppressedOnce(DateOnly pacificDate, YouTubeQuotaPriority priority, string detail)
@@ -645,5 +659,7 @@ internal sealed class YouTubeMessenger(
         CommandResponseMark? CommandResponse,
         string TargetLiveChatId,
         DateOnly EnqueuedPacificDate,
-        DateTimeOffset ExpiresAtUtc);
+        DateTimeOffset ExpiresAtUtc,
+        ChannelKey? Channel,
+        ChatOrigin? Origin);
 }

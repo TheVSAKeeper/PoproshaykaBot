@@ -15,9 +15,10 @@ public sealed class TwitchChatMessenger(
     public ChatEnqueueResult Send(
         string text,
         CommandResponseMark? commandResponse = null,
-        ChatSendCategory category = ChatSendCategory.None)
+        ChatSendCategory category = ChatSendCategory.None,
+        ChatOrigin? origin = null)
     {
-        return chatSender.Enqueue(text, null, commandResponse);
+        return chatSender.Enqueue(text, null, commandResponse, origin);
     }
 
     public void Reply(
@@ -25,9 +26,10 @@ public sealed class TwitchChatMessenger(
         string callerDisplayName,
         string text,
         CommandResponseMark? commandResponse = null,
-        ChatSendCategory category = ChatSendCategory.None)
+        ChatSendCategory category = ChatSendCategory.None,
+        ChatOrigin? origin = null)
     {
-        _ = chatSender.EnqueueAsync(text, replyToMessageId, commandResponse, CancellationToken.None);
+        _ = chatSender.Enqueue(text, replyToMessageId, commandResponse, origin);
     }
 
     public void Whisper(
@@ -36,12 +38,13 @@ public sealed class TwitchChatMessenger(
         string callerDisplayName,
         string text,
         CommandResponseMark? commandResponse = null,
-        ChatSendCategory category = ChatSendCategory.None)
+        ChatSendCategory category = ChatSendCategory.None,
+        ChatOrigin? origin = null)
     {
         if (TwitchScopes.IsGranted(accountsStore.LoadBot(), TwitchScopes.UserManageWhispers))
         {
             Volatile.Write(ref _whisperScopeMissingReported, 0);
-            _ = chatSender.EnqueueWhisperAsync(text, toUserId, fallbackReplyToMessageId, commandResponse, CancellationToken.None);
+            _ = chatSender.EnqueueWhisperAsync(text, toUserId, fallbackReplyToMessageId, commandResponse, CancellationToken.None, origin);
             return;
         }
 
@@ -58,6 +61,6 @@ public sealed class TwitchChatMessenger(
                 TwitchScopes.UserManageWhispers);
         }
 
-        Reply(fallbackReplyToMessageId, callerDisplayName, text, commandResponse);
+        Reply(fallbackReplyToMessageId, callerDisplayName, text, commandResponse, category, origin);
     }
 }

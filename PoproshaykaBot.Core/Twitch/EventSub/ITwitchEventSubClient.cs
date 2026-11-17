@@ -29,7 +29,8 @@ public sealed record EventSubNotificationArgs(
     string SubscriptionVersion,
     string MessageId,
     DateTime MessageTimestamp,
-    JsonElement Payload);
+    JsonElement Payload,
+    string? SubscriptionId = null);
 
 public sealed record EventSubReconnectArgs(string ReconnectUrl, string OldSessionId, string NewSessionId);
 

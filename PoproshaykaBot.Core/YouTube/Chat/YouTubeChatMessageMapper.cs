@@ -76,7 +76,7 @@ internal sealed class YouTubeChatMessageMapper(IYouTubeSentMessageTracker? sentM
         var isDedicatedBot = !string.IsNullOrWhiteSpace(botChannelId)
             && !string.Equals(botChannelId, broadcasterChannelId, StringComparison.Ordinal);
 
-        var isBot = _sentMessageTracker.Contains(item.Id)
+        var isBot = _sentMessageTracker.Contains(item.Id, liveChatId)
             || (isDedicatedBot
                 && !item.Author.IsChatOwner
                 && string.Equals(item.Author.ChannelId, botChannelId, StringComparison.Ordinal));

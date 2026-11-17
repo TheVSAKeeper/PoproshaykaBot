@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat.Commands;
+using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
@@ -32,6 +33,7 @@ public sealed class ChatPipelineHandler :
     private readonly CommandResponseTracker _commandResponseTracker;
     private readonly IEventBus _eventBus;
     private readonly ILogger<ChatPipelineHandler> _logger;
+    private readonly ITargetChannelProvider? _targetChannelProvider;
     private readonly List<IDisposable> _subscriptions;
 
     public ChatPipelineHandler(
@@ -44,7 +46,8 @@ public sealed class ChatPipelineHandler :
         ChatCommandProcessor commandProcessor,
         CommandResponseTracker commandResponseTracker,
         IEventBus eventBus,
-        ILogger<ChatPipelineHandler> logger)
+        ILogger<ChatPipelineHandler> logger,
+        ITargetChannelProvider? targetChannelProvider = null)
     {
         _platformRegistry = platformRegistry;
         _channels = channels;
@@ -56,6 +59,7 @@ public sealed class ChatPipelineHandler :
         _commandResponseTracker = commandResponseTracker;
         _eventBus = eventBus;
         _logger = logger;
+        _targetChannelProvider = targetChannelProvider;
 
         _subscriptions =
         [
@@ -99,6 +103,12 @@ public sealed class ChatPipelineHandler :
     public async Task HandleAsync(RawChatMessageReceived @event, CancellationToken cancellationToken)
     {
         var chatMessage = @event.Message;
+        var origin = chatMessage.Origin;
+        var recordsUserData = _targetChannelProvider?.Current.RecordsUserData;
+        if (origin is { IsCurrent: false })
+        {
+            return;
+        }
 
         _channels.SetChannelIfUnset(chatMessage.Platform, chatMessage.Channel);
 
@@ -110,14 +120,18 @@ public sealed class ChatPipelineHandler :
 
         var messages = _settingsManager.Current.ChatMessages;
         var obsChat = _obsChatStore.Load();
-        var audience = _audienceTracker.ForPlatform(chatMessage.Platform);
+        var audience = _audienceTracker.ForIncomingMessage(chatMessage.Platform, @event.ChannelKey, origin);
+        if (audience is null)
+        {
+            return;
+        }
 
         var isFirstSeen = !chatMessage.IsBot
                           && !@event.IsReplacement
                           && audience.OnUserMessage(chatMessage.UserId, chatMessage.DisplayName);
 
         var commandResponse = chatMessage.IsBot
-            ? _commandResponseTracker.TryConsume(chatMessage.Platform, chatMessage.Id)
+            ? _commandResponseTracker.TryConsume(chatMessage.Platform, chatMessage.Id, @event.ChannelKey, chatMessage.ChatSessionId)
             : null;
 
         var historyEntry = ChatMessageDataFactory.Create(
@@ -143,7 +157,9 @@ public sealed class ChatPipelineHandler :
             historyEntry,
             chatMessage.IsBot,
             commandResponse,
-            @event.IsReplacement), cancellationToken);
+            @event.IsReplacement,
+            origin,
+            recordsUserData), cancellationToken);
 
         if (chatMessage.IsBot || @event.IsReplacement)
         {
@@ -159,6 +175,8 @@ public sealed class ChatPipelineHandler :
         {
             Platform = chatMessage.Platform,
             Channel = chatMessage.Channel,
+            ChannelKey = @event.ChannelKey,
+            Origin = origin,
             MessageId = chatMessage.Id,
             UserId = chatMessage.UserId,
             Username = chatMessage.Username,
@@ -168,6 +186,11 @@ public sealed class ChatPipelineHandler :
         };
 
         var commandResult = await _commandProcessor.TryProcessAsync(chatMessage.Message, context, cancellationToken);
+        if (origin is { IsCurrent: false })
+        {
+            return;
+        }
+
         var response = commandResult.Response;
         var canonical = commandResult.Canonical ?? string.Empty;
 
@@ -187,7 +210,7 @@ public sealed class ChatPipelineHandler :
                 }
                 else
                 {
-                    platform.Messenger.Reply(chatMessage.Id, chatMessage.DisplayName, welcomeMessage, category: ChatSendCategory.Greeting);
+                    platform.Messenger.Reply(chatMessage.Id, chatMessage.DisplayName, welcomeMessage, category: ChatSendCategory.Greeting, origin: origin);
                 }
             }
         }
@@ -235,19 +258,19 @@ public sealed class ChatPipelineHandler :
         switch (decision.Action)
         {
             case CommandDeliveryAction.Whisper:
-                platform.Messenger.Whisper(context.UserId, context.MessageId, context.DisplayName, response.Text, mark, ChatSendCategory.CommandReply);
+                platform.Messenger.Whisper(context.UserId, context.MessageId, context.DisplayName, response.Text, mark, ChatSendCategory.CommandReply, context.Origin);
                 break;
 
             case CommandDeliveryAction.ReplyThread:
-                platform.Messenger.Reply(decision.ReplyToMessageId ?? context.MessageId, context.DisplayName, response.Text, mark, ChatSendCategory.CommandReply);
+                platform.Messenger.Reply(decision.ReplyToMessageId ?? context.MessageId, context.DisplayName, response.Text, mark, ChatSendCategory.CommandReply, context.Origin);
                 break;
 
             case CommandDeliveryAction.MentionSend:
-                platform.Messenger.Send(CommandResponseRouting.PrependCallerMention(context.DisplayName, response.Text), mark, ChatSendCategory.CommandReply);
+                platform.Messenger.Send(CommandResponseRouting.PrependCallerMention(context.DisplayName, response.Text), mark, ChatSendCategory.CommandReply, context.Origin);
                 break;
 
             case CommandDeliveryAction.Send:
-                platform.Messenger.Send(response.Text, mark, ChatSendCategory.CommandReply);
+                platform.Messenger.Send(response.Text, mark, ChatSendCategory.CommandReply, context.Origin);
                 break;
 
             case CommandDeliveryAction.OverlayOnly:
@@ -288,6 +311,11 @@ public sealed class ChatPipelineHandler :
             CommandResponse = mark,
         };
 
+        if (source.Origin is { IsCurrent: false })
+        {
+            return Task.CompletedTask;
+        }
+
         return _eventBus.PublishAsync(new ChatMessageReceived(source.Platform,
             source.Channel,
             messageId,
@@ -299,6 +327,7 @@ public sealed class ChatPipelineHandler :
             false,
             historyEntry,
             true,
-            mark), cancellationToken);
+            mark,
+            Origin: source.Origin), cancellationToken);
     }
 }

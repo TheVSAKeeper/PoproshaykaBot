@@ -143,6 +143,8 @@ public sealed class ChatCommandProcessor
         {
             Platform = context.Platform,
             Channel = context.Channel,
+            ChannelKey = context.ChannelKey,
+            Origin = context.Origin,
             MessageId = context.MessageId,
             UserId = context.UserId,
             Username = context.Username,
@@ -266,6 +268,8 @@ public sealed class CommandContext
 {
     public required StreamingPlatform Platform { get; init; }
     public string Channel { get; init; } = string.Empty;
+    public ChannelKey? ChannelKey { get; init; }
+    public ChatOrigin? Origin { get; init; }
     public string MessageId { get; init; } = string.Empty;
     public string UserId { get; init; } = string.Empty;
     public string Username { get; init; } = string.Empty;

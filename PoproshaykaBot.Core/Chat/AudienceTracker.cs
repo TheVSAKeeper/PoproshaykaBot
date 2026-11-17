@@ -6,28 +6,71 @@ namespace PoproshaykaBot.Core.Chat;
 
 public sealed class AudienceTracker(SettingsManager settingsManager)
 {
-    private readonly ConcurrentDictionary<StreamingPlatform, PlatformAudienceTracker> _byPlatform = new();
+    private readonly Lock _sync = new();
+    private readonly Dictionary<StreamingPlatform, ChannelAudience> _byPlatform = [];
 
-    public PlatformAudienceTracker ForPlatform(StreamingPlatform platform)
+    public PlatformAudienceTracker ForPlatform(StreamingPlatform platform, ChannelKey? channel = null)
     {
-        return _byPlatform.GetOrAdd(platform, _ => new PlatformAudienceTracker(settingsManager));
+        lock (_sync)
+        {
+            if (_byPlatform.TryGetValue(platform, out var active))
+            {
+                return channel is null || channel == active.Channel
+                    ? active.Tracker
+                    : new PlatformAudienceTracker(settingsManager);
+            }
+
+            var tracker = new PlatformAudienceTracker(settingsManager);
+            _byPlatform.Add(platform, new(channel, tracker));
+            return tracker;
+        }
+    }
+
+    internal PlatformAudienceTracker? ForIncomingMessage(StreamingPlatform platform, ChannelKey? channel, ChatOrigin? origin)
+    {
+        lock (_sync)
+        {
+            if (origin is { IsCurrent: false })
+            {
+                return null;
+            }
+
+            if (_byPlatform.TryGetValue(platform, out var active) && (channel is null || channel == active.Channel))
+            {
+                return active.Tracker;
+            }
+
+            var tracker = new PlatformAudienceTracker(settingsManager);
+            _byPlatform[platform] = new(channel, tracker);
+            return tracker;
+        }
     }
 
     public void Clear(StreamingPlatform platform)
     {
-        if (_byPlatform.TryGetValue(platform, out var tracker))
+        lock (_sync)
         {
-            tracker.Clear();
+            if (_byPlatform.Remove(platform, out var active))
+            {
+                active.Tracker.Clear();
+            }
         }
     }
 
     public void ClearAll()
     {
-        foreach (var tracker in _byPlatform.Values)
+        lock (_sync)
         {
-            tracker.Clear();
+            foreach (var active in _byPlatform.Values)
+            {
+                active.Tracker.Clear();
+            }
+
+            _byPlatform.Clear();
         }
     }
+
+    private sealed record ChannelAudience(ChannelKey? Channel, PlatformAudienceTracker Tracker);
 }
 
 public sealed class PlatformAudienceTracker(SettingsManager settingsManager)

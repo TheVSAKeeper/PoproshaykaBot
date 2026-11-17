@@ -5,12 +5,13 @@ internal sealed class YouTubeSentMessageTracker : IYouTubeSentMessageTracker
     public const int DefaultCapacity = 1_024;
 
     private readonly Lock _sync = new();
-    private readonly BoundedSeenMessageIdSet _sentIds = new(DefaultCapacity);
+    private readonly HashSet<(string? ChatId, string MessageId)> _sentIds = new(DefaultCapacity);
+    private readonly Queue<(string? ChatId, string MessageId)> _sentOrder = new(DefaultCapacity);
     private readonly List<InFlightEntry> _inFlight = [];
     private readonly List<Waiter> _waiters = [];
     private long _nextSequence;
 
-    public bool Contains(string messageId)
+    public bool Contains(string messageId, string? liveChatId = null)
     {
         if (string.IsNullOrWhiteSpace(messageId))
         {
@@ -19,11 +20,11 @@ internal sealed class YouTubeSentMessageTracker : IYouTubeSentMessageTracker
 
         lock (_sync)
         {
-            return _sentIds.Contains(messageId);
+            return _sentIds.Contains((liveChatId, messageId));
         }
     }
 
-    public void TrackSent(string messageId)
+    public void TrackSent(string messageId, string? liveChatId = null)
     {
         if (string.IsNullOrWhiteSpace(messageId))
         {
@@ -32,8 +33,8 @@ internal sealed class YouTubeSentMessageTracker : IYouTubeSentMessageTracker
 
         lock (_sync)
         {
-            _sentIds.TryAdd(messageId);
-            NotifyWaitersLocked(liveChatId: null, messageId);
+            TrackSentLocked(liveChatId, messageId);
+            NotifyWaitersLocked(liveChatId, messageId);
         }
     }
 
@@ -95,7 +96,7 @@ internal sealed class YouTubeSentMessageTracker : IYouTubeSentMessageTracker
 
         lock (_sync)
         {
-            if (_sentIds.Contains(candidateMessageId) || !HasInFlightAtOrBeforeLocked(liveChatId, watermarkSeq))
+            if (_sentIds.Contains((liveChatId, candidateMessageId)) || !HasInFlightAtOrBeforeLocked(liveChatId, watermarkSeq))
             {
                 return;
             }
@@ -158,10 +159,23 @@ internal sealed class YouTubeSentMessageTracker : IYouTubeSentMessageTracker
 
             if (!string.IsNullOrWhiteSpace(confirmedMessageId))
             {
-                _sentIds.TryAdd(confirmedMessageId);
+                TrackSentLocked(liveChatId, confirmedMessageId);
             }
 
             NotifyWaitersLocked(liveChatId, confirmedMessageId);
+        }
+    }
+
+    private void TrackSentLocked(string? liveChatId, string messageId)
+    {
+        var key = (liveChatId, messageId);
+        if (_sentIds.Add(key))
+        {
+            _sentOrder.Enqueue(key);
+            if (_sentOrder.Count > DefaultCapacity)
+            {
+                _sentIds.Remove(_sentOrder.Dequeue());
+            }
         }
     }
 
@@ -184,6 +198,7 @@ internal sealed class YouTubeSentMessageTracker : IYouTubeSentMessageTracker
         {
             var waiter = _waiters[i];
             var matchedId = !string.IsNullOrWhiteSpace(confirmedMessageId)
+                && string.Equals(waiter.LiveChatId, liveChatId, StringComparison.Ordinal)
                 && string.Equals(waiter.CandidateMessageId, confirmedMessageId, StringComparison.Ordinal);
             var completedWatermark = liveChatId is not null
                 && string.Equals(waiter.LiveChatId, liveChatId, StringComparison.Ordinal)

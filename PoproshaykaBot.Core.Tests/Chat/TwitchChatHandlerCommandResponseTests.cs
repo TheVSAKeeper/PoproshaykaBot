@@ -500,7 +500,8 @@ public sealed class TwitchChatHandlerCommandResponseTests
                 false,
                 false,
                 false,
-                false),
+                false,
+                ChannelId: "1"),
             DateTimeOffset.UtcNow);
     }
 
@@ -519,7 +520,8 @@ public sealed class TwitchChatHandlerCommandResponseTests
                 false,
                 false,
                 false,
-                true),
+                true,
+                ChannelId: "1"),
             DateTimeOffset.UtcNow);
     }
 

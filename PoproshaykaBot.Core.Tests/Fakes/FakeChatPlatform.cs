@@ -112,7 +112,8 @@ internal sealed class FakeChatPlatform : IChatPlatform
         public ChatEnqueueResult Send(
             string text,
             CommandResponseMark? commandResponse = null,
-            ChatSendCategory category = ChatSendCategory.None)
+            ChatSendCategory category = ChatSendCategory.None,
+            ChatOrigin? origin = null)
         {
             if (EnqueueResult == ChatEnqueueResult.Queued)
             {
@@ -128,7 +129,8 @@ internal sealed class FakeChatPlatform : IChatPlatform
             string callerDisplayName,
             string text,
             CommandResponseMark? commandResponse = null,
-            ChatSendCategory category = ChatSendCategory.None)
+            ChatSendCategory category = ChatSendCategory.None,
+            ChatOrigin? origin = null)
         {
             Replies.Add((replyToMessageId, callerDisplayName, text, commandResponse));
             ReplyCategories.Add(category);
@@ -140,7 +142,8 @@ internal sealed class FakeChatPlatform : IChatPlatform
             string callerDisplayName,
             string text,
             CommandResponseMark? commandResponse = null,
-            ChatSendCategory category = ChatSendCategory.None)
+            ChatSendCategory category = ChatSendCategory.None,
+            ChatOrigin? origin = null)
         {
             Whispers.Add((toUserId, fallbackReplyToMessageId, callerDisplayName, text, commandResponse));
             WhisperCategories.Add(category);
