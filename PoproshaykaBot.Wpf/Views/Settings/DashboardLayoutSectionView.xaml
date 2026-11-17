@@ -30,22 +30,29 @@
         <WrapPanel DockPanel.Dock="Top"
                    Orientation="Horizontal"
                    Margin="0,0,0,16">
-            <StackPanel Orientation="Horizontal"
-                        VerticalAlignment="Center"
-                        Margin="0,0,24,8">
-                <TextBlock Text="Эталон"
-                           VerticalAlignment="Center"
-                           Margin="0,0,8,0" />
-                <ComboBox MinWidth="170"
-                          VerticalAlignment="Center"
-                          ItemsSource="{Binding References}"
-                          SelectedItem="{Binding Reference, Mode=TwoWay}"
-                          DisplayMemberPath="Label" />
+            <WrapPanel Orientation="Horizontal"
+                       VerticalAlignment="Center"
+                       Margin="0,0,24,8">
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,12,4">
+                    <TextBlock Text="Эталон"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <ComboBox MinWidth="170"
+                              VerticalAlignment="Center"
+                              AutomationProperties.Name="Эталон размера окна"
+                              ItemsSource="{Binding References}"
+                              SelectedItem="{Binding Reference, Mode=TwoWay}"
+                              DisplayMemberPath="Label" />
+                </StackPanel>
                 <TextBlock Text="{Binding ReferenceCaption}"
                            Style="{StaticResource TextBlock.Subtle}"
                            VerticalAlignment="Center"
-                           Margin="12,0,0,0" />
-            </StackPanel>
+                           TextWrapping="Wrap"
+                           ToolTip="{Binding ReferenceCaption}"
+                           Margin="0,0,0,4" />
+            </WrapPanel>
 
             <StackPanel Orientation="Horizontal"
                         VerticalAlignment="Center"

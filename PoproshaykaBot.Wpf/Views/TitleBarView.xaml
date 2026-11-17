@@ -277,7 +277,8 @@
 
                 <Button Style="{StaticResource Chrome.Button}"
                         keepshell:ChromeAction.Action="Minimize"
-                        ToolTip="Свернуть">
+                        ToolTip="Свернуть"
+                        AutomationProperties.Name="Свернуть">
                     <Path Style="{StaticResource Chrome.Glyph.Minimize}" />
                 </Button>
                 <Button Style="{StaticResource Chrome.Button.MaxRestore}"
@@ -286,7 +287,8 @@
                 </Button>
                 <Button Style="{StaticResource Chrome.Button.Close}"
                         keepshell:ChromeAction.Action="Close"
-                        ToolTip="Закрыть">
+                        ToolTip="Закрыть"
+                        AutomationProperties.Name="Закрыть">
                     <Path Style="{StaticResource Chrome.Glyph.Close}" />
                 </Button>
             </StackPanel>
