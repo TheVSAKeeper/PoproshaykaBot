@@ -19,6 +19,7 @@ public static class SettingsKeys
     public const string StreamSortDescending = "ui.streams.sort_descending";
 
     public const string UserBalanceExpanded = "ui.users.balance_expanded";
+    public const string UserSummaryExpanded = "ui.users.summary_expanded";
 
     public const string WindowLeft = "ui.window.left";
     public const string WindowTop = "ui.window.top";

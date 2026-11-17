@@ -15,7 +15,22 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
         typeof(UserStatisticsPageView),
         new PropertyMetadata(true));
 
+    public static readonly DependencyProperty IsCompactFilterBarProperty = DependencyProperty.Register(
+        nameof(IsCompactFilterBar),
+        typeof(bool),
+        typeof(UserStatisticsPageView),
+        new PropertyMetadata(false));
+
+    public static readonly DependencyProperty IsInspectorScrollCombinedProperty = DependencyProperty.Register(
+        nameof(IsInspectorScrollCombined),
+        typeof(bool),
+        typeof(UserStatisticsPageView),
+        new PropertyMetadata(false));
+
     public const double RankColumnListWidth = 464;
+    public const double SummaryCompactHeight = 460;
+    public const double InspectorCombinedScrollHeight = 500;
+    public const double ToolbarWrapWidth = 370;
 
     private double _listWidth;
     private string? _announcedAdjustmentError;
@@ -25,6 +40,7 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        SizeChanged += OnSizeChanged;
         RatingList.SizeChanged += OnRatingListSizeChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -34,6 +50,18 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
     {
         get => (bool)GetValue(ShowsRankColumnProperty);
         set => SetValue(ShowsRankColumnProperty, value);
+    }
+
+    public bool IsCompactFilterBar
+    {
+        get => (bool)GetValue(IsCompactFilterBarProperty);
+        set => SetValue(IsCompactFilterBarProperty, value);
+    }
+
+    public bool IsInspectorScrollCombined
+    {
+        get => (bool)GetValue(IsInspectorScrollCombinedProperty);
+        set => SetValue(IsInspectorScrollCombinedProperty, value);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -48,6 +76,7 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
         }
 
         ApplyRankColumn();
+        ApplyResponsiveLayout();
         ScrollToSelected();
     }
 
@@ -63,7 +92,16 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
 
     private void OnFontScaleChanged(object? sender, double scale)
     {
-        _ = Dispatcher.BeginInvoke(ApplyRankColumn);
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            ApplyRankColumn();
+            ApplyResponsiveLayout();
+        });
+    }
+
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        ApplyResponsiveLayout();
     }
 
     private void OnRatingListSizeChanged(object sender, SizeChangedEventArgs e)
@@ -82,6 +120,27 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
         ShowsRankColumn = _listWidth >= RankColumnListWidth * FontScaleManager.Current;
     }
 
+    private void ApplyResponsiveLayout()
+    {
+        var scale = FontScaleManager.Current;
+        var filterWidth = FilterBar.ActualWidth > 0 ? FilterBar.ActualWidth : ActualWidth;
+
+        if (filterWidth > 0)
+        {
+            IsCompactFilterBar = filterWidth < ToolbarWrapWidth * scale;
+        }
+
+        if (ActualHeight > 0)
+        {
+            IsInspectorScrollCombined = ActualHeight < InspectorCombinedScrollHeight;
+
+            if (DataContext is UserStatisticsPageViewModel viewModel)
+            {
+                viewModel.IsSummaryHeightConstrained = ActualHeight < SummaryCompactHeight * scale;
+            }
+        }
+    }
+
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (_viewModel is not null)
@@ -96,6 +155,8 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
+
+        ApplyResponsiveLayout();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

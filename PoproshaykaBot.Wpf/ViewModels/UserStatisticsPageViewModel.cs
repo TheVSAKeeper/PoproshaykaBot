@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KeepShell.Services.Platform;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -13,6 +14,7 @@ using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
+using Serilog;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
@@ -36,10 +38,16 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private readonly IDialogService _dialogService;
     private readonly ISettingsStore _settings;
     private readonly UserAvatarProvider _avatars;
+    private readonly StatisticsPreload? _preload;
+    private readonly IUiDispatcher? _uiDispatcher;
     private readonly List<UserStatisticsRowViewModel> _allRows = [];
     private readonly ObservableCollection<UserStatisticsRowViewModel> _rows = [];
     private readonly List<IDisposable> _subscriptions = [];
     private int _platformSliceCount;
+    private bool _isHydrated;
+    private bool _isDisposed;
+    private bool _summaryUserToggled;
+    private Task? _activeHydrationTask;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedRow))]
@@ -57,6 +65,16 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BalanceToggleCaption))]
     private bool _isBalanceExpanded;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowExpandedSummary))]
+    [NotifyPropertyChangedFor(nameof(SummaryToggleCaption))]
+    private bool _isSummaryExpanded;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowExpandedSummary))]
+    [NotifyPropertyChangedFor(nameof(SummaryToggleCaption))]
+    private bool _isSummaryHeightConstrained;
 
     [ObservableProperty]
     private string _filterText = string.Empty;
@@ -97,24 +115,31 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private bool _isBusy;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _totalUsers = "0";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _totalMessages = "0";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _totalPoints = "0";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _totalBonus = "0";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _totalPenalty = "0";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private bool _hasTotalBonus;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private bool _hasTotalPenalty;
 
     public UserStatisticsPageViewModel(
@@ -128,7 +153,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         IEventBus eventBus,
         ISettingsStore settings,
         UserAvatarProvider avatars,
-        IChatPlatformRegistry? platformRegistry = null)
+        IChatPlatformRegistry? platformRegistry = null,
+        StatisticsPreload? preload = null,
+        IUiDispatcher? uiDispatcher = null)
     {
         _userStatistics = userStatistics;
         _statisticsAutoSaver = statisticsAutoSaver;
@@ -140,13 +167,43 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         _dialogService = dialogService;
         _settings = settings;
         _avatars = avatars;
+        _preload = preload;
+        _uiDispatcher = uiDispatcher;
         _isBalanceExpanded = settings.GetBool(SettingsKeys.UserBalanceExpanded, true);
+        _isSummaryExpanded = settings.GetBool(SettingsKeys.UserSummaryExpanded, true);
 
         _subscriptions.Add(eventBus.SubscribeOnUi<UserPunished>(_ => Reload()));
         _subscriptions.Add(eventBus.SubscribeOnUi<UserRewarded>(_ => Reload()));
         _subscriptions.Add(eventBus.SubscribeOnUi<RanksSettingsChanged>(_ => Reload()));
 
-        Reload();
+        if (_preload is null)
+        {
+            Reload();
+        }
+        else
+        {
+            _preload.ScheduleAfterLoad(CompleteDeferredHydration);
+        }
+    }
+
+    public void OnEnter()
+    {
+        _summaryUserToggled = false;
+        OnPropertyChanged(nameof(ShowExpandedSummary));
+        OnPropertyChanged(nameof(SummaryToggleCaption));
+
+        if (_isDisposed || _isHydrated)
+        {
+            return;
+        }
+
+        if (_preload is null || _preload.IsCompleted)
+        {
+            Reload();
+            return;
+        }
+
+        _activeHydrationTask ??= UiAsync.RunGuardedAsync(HydrateAfterPreloadAsync, LogHydrationFailure);
     }
 
     public string PageTitle => "Пользователи";
@@ -195,6 +252,35 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public string BalanceToggleCaption => IsBalanceExpanded ? "Свернуть блок «Баланс»" : "Развернуть блок «Баланс»";
 
+    public bool ShowExpandedSummary => IsSummaryExpanded && (!IsSummaryHeightConstrained || _summaryUserToggled);
+
+    public string SummaryToggleCaption => ShowExpandedSummary ? "Скрыть сводку" : "Показать сводку";
+
+    public string SummaryLine
+    {
+        get
+        {
+            var baseLine = $"{TotalUsers} участн. · {TotalMessages} сообщ. · {TotalPoints} баллов";
+            if (!HasTotalBonus && !HasTotalPenalty)
+            {
+                return baseLine;
+            }
+
+            var extras = new List<string>(2);
+            if (HasTotalBonus)
+            {
+                extras.Add($"+{TotalBonus} бонус");
+            }
+
+            if (HasTotalPenalty)
+            {
+                extras.Add($"−{TotalPenalty} штраф");
+            }
+
+            return $"{baseLine} · {string.Join(" · ", extras)}";
+        }
+    }
+
     public long AdjustmentAmount => ParseAdjustment(AdjustmentText).Amount;
 
     public string? AdjustmentError => ParseAdjustment(AdjustmentText).Error;
@@ -215,6 +301,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             };
         }
     }
+
+    internal bool NeedsPreloadWait => !_isHydrated && _preload is { IsCompleted: false };
 
     public bool TrySelectAt(int index)
     {
@@ -240,6 +328,11 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             return false;
         }
 
+        if (!_isHydrated && (_preload is null || _preload.IsCompleted))
+        {
+            Reload();
+        }
+
         if (_allRows.All(row => row.Key != key))
         {
             return false;
@@ -254,6 +347,33 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         SelectedRow = _rows.FirstOrDefault(row => row.Key == key);
 
         return SelectedRow is not null;
+    }
+
+    public async Task<bool> TrySelectAfterPreloadAsync(PlatformUserKey key)
+    {
+        if (key.UserId is not { Length: > 0 } || _isDisposed)
+        {
+            return false;
+        }
+
+        if (!_isHydrated && _preload is { IsCompleted: false })
+        {
+            await (_activeHydrationTask ??= UiAsync.RunGuardedAsync(HydrateAfterPreloadAsync, LogHydrationFailure));
+        }
+
+        if (_isDisposed)
+        {
+            return false;
+        }
+
+        if (_uiDispatcher is not null)
+        {
+            var selected = false;
+            await _uiDispatcher.InvokeAsync(() => selected = TrySelect(key));
+            return selected;
+        }
+
+        return TrySelect(key);
     }
 
     public void RequestAvatar(UserAvatarViewModel avatar)
@@ -400,6 +520,36 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     partial void OnIsBalanceExpandedChanged(bool value)
     {
         _settings.SetBool(SettingsKeys.UserBalanceExpanded, value);
+    }
+
+    [RelayCommand]
+    private void ToggleSummary()
+    {
+        if (IsSummaryHeightConstrained && IsSummaryExpanded && !_summaryUserToggled)
+        {
+            _summaryUserToggled = true;
+            OnPropertyChanged(nameof(ShowExpandedSummary));
+            OnPropertyChanged(nameof(SummaryToggleCaption));
+            return;
+        }
+
+        if (IsSummaryHeightConstrained && !IsSummaryExpanded)
+        {
+            _summaryUserToggled = true;
+            IsSummaryExpanded = true;
+            return;
+        }
+
+        IsSummaryExpanded = !IsSummaryExpanded;
+        if (!IsSummaryExpanded)
+        {
+            _summaryUserToggled = false;
+        }
+    }
+
+    partial void OnIsSummaryExpandedChanged(bool value)
+    {
+        _settings.SetBool(SettingsKeys.UserSummaryExpanded, value);
     }
 
     [RelayCommand]
@@ -570,12 +720,54 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public void Dispose()
     {
+        _isDisposed = true;
+
         foreach (var sub in _subscriptions)
         {
             sub.Dispose();
         }
 
         _subscriptions.Clear();
+    }
+
+    private async Task HydrateAfterPreloadAsync()
+    {
+        if (_preload is null)
+        {
+            return;
+        }
+
+        await _preload.EnsureLoadedAsync().ConfigureAwait(false);
+
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (_uiDispatcher is not null)
+        {
+            await _uiDispatcher.InvokeAsync(CompleteDeferredHydration);
+        }
+        else
+        {
+            CompleteDeferredHydration();
+        }
+    }
+
+    private void CompleteDeferredHydration()
+    {
+        if (_isDisposed || _isHydrated)
+        {
+            return;
+        }
+
+        Reload();
+    }
+
+    private static void LogHydrationFailure(Exception exception)
+    {
+        Log.ForContext<UserStatisticsPageViewModel>()
+            .Warning(exception, "Не удалось обновить страницу «Пользователи» после загрузки статистики");
     }
 
     private void Reload()
@@ -601,5 +793,10 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
         _avatars.Track(_allRows.Where(static row => row.Platform == StreamingPlatform.Twitch).Select(static row => row.UserId));
         ApplyPlatformSliceAndRebuild();
+
+        if (_preload is null || _preload.IsCompleted)
+        {
+            _isHydrated = true;
+        }
     }
 }

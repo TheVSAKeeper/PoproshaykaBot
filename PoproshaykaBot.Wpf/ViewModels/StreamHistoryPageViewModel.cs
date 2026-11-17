@@ -70,6 +70,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private readonly IUserStatisticsRepository _userStatistics;
     private readonly ISettingsStore _settings;
     private readonly GameBoxArtProvider _boxArt;
+    private readonly StatisticsPreload? _preload;
     private readonly List<IDisposable> _subs = [];
     private readonly List<StreamSessionRowViewModel> _allSessions = [];
     private readonly List<StreamSessionRowViewModel> _visibleSessions = [];
@@ -77,6 +78,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private readonly ObservableCollection<StreamSessionRowViewModel> _sortedSessions = [];
 
     private CancellationTokenSource? _boxArtCancellation;
+    private Task _boxArtLoading = Task.CompletedTask;
+    private bool _isHydrated;
+    private bool _isDisposed;
 
     private double _averageMessages;
     private double _averageChatters;
@@ -187,6 +191,17 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private bool _isSummaryExpanded;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSummaryOpen))]
+    [NotifyPropertyChangedFor(nameof(SummaryToggleCaption))]
+    private bool _isSummaryHeightConstrained;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTrend))]
+    [NotifyPropertyChangedFor(nameof(HasTrendLabels))]
+    [NotifyPropertyChangedFor(nameof(HasTrendBaseline))]
+    private bool _isTrendAutoHidden;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTrendLabels))]
     [NotifyPropertyChangedFor(nameof(HasTrendBaseline))]
     [NotifyPropertyChangedFor(nameof(HasWideSummary))]
@@ -205,18 +220,21 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private bool _sortDescending;
 
     private bool _rebuildingSortedView;
+    private bool _summaryUserToggled;
 
     public StreamHistoryPageViewModel(
         BroadcastHistoryStore historyStore,
         IUserStatisticsRepository userStatistics,
         ISettingsStore settings,
         GameBoxArtProvider boxArt,
-        IEventBus eventBus)
+        IEventBus eventBus,
+        StatisticsPreload? preload = null)
     {
         _historyStore = historyStore;
         _userStatistics = userStatistics;
         _settings = settings;
         _boxArt = boxArt;
+        _preload = preload;
 
         _trendMetric = NormalizeMetric(settings.GetEnum(SettingsKeys.StreamTrendMetric, StreamTrendMetric.PeakViewers));
         _trendLength = NormalizeLength(settings.GetInt(SettingsKeys.StreamTrendLength, DefaultTrendLength));
@@ -254,7 +272,14 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
         _subs.Add(eventBus.SubscribeOnUi<StreamSessionCompleted>(_ => RefreshCommand.Execute(null)));
 
-        Refresh();
+        if (_preload is null)
+        {
+            Refresh();
+        }
+        else
+        {
+            _preload.ScheduleAfterLoad(OnPreloadCompleted);
+        }
     }
 
     public event EventHandler<PlatformUserKey>? UserRequested;
@@ -262,7 +287,15 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public string PageTitle => "История стримов";
     public string? PageDescription => "Сессии стримов, их сегменты и чаттеры";
 
-    public Task BoxArtLoading { get; private set; } = Task.CompletedTask;
+    public Task BoxArtLoading
+    {
+        get
+        {
+            EnsureHydrated();
+            return _boxArtLoading;
+        }
+        private set => _boxArtLoading = value;
+    }
 
     public ObservableCollection<StreamSessionRowViewModel> Sessions => _sessions;
     public ObservableCollection<StreamSessionRowViewModel> SortedSessions => _sortedSessions;
@@ -340,7 +373,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     public int HiddenCount { get; private set; }
     public bool CanShowTrend => Trend.Count > 1;
-    public bool HasTrend => IsTrendVisible && CanShowTrend;
+    public bool HasTrend => IsTrendVisible && !IsTrendAutoHidden && CanShowTrend;
     public bool HasTrendLabels => HasTrend && !IsCompactLayout;
     public bool HasTrendBaseline => HasTrendLabels;
     public bool HasWideSummary => !IsCompactLayout;
@@ -361,9 +394,9 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     public bool HasTopCategories => TopCategories.Count > 0;
     public bool HasRecords => Records.Count > 0;
     public bool HasSummaryStrip => HasTopCategories || HasRecords;
-    public bool IsSummaryOpen => IsSummaryExpanded && HasSummaryStrip;
+    public bool IsSummaryOpen => HasSummaryStrip && IsSummaryExpanded && (!IsSummaryHeightConstrained || _summaryUserToggled);
 
-    public string SummaryToggleCaption => IsSummaryExpanded ? "Скрыть сводку" : "Показать сводку";
+    public string SummaryToggleCaption => IsSummaryOpen ? "Скрыть сводку" : "Показать сводку";
 
     public string TopCategoriesHeading => string.Create(UiCulture.Russian, $"Топ категорий ({TopCategories.Count:N0})");
 
@@ -622,6 +655,8 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     public void Dispose()
     {
+        _isDisposed = true;
+
         foreach (var sub in _subs)
         {
             sub.Dispose();
@@ -634,12 +669,18 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     public void OnEnter()
     {
+        EnsureHydrated();
+        _summaryUserToggled = false;
+        OnPropertyChanged(nameof(IsSummaryOpen));
+        OnPropertyChanged(nameof(SummaryToggleCaption));
         Notice = null;
         ShowHidden = false;
     }
 
     public bool TrySelectAt(int index)
     {
+        EnsureHydrated();
+
         if (index < 0 || index >= _sessions.Count)
         {
             return false;
@@ -729,7 +770,26 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     [RelayCommand]
     private void ToggleSummary()
     {
+        if (IsSummaryHeightConstrained && IsSummaryExpanded && !_summaryUserToggled)
+        {
+            _summaryUserToggled = true;
+            OnPropertyChanged(nameof(IsSummaryOpen));
+            OnPropertyChanged(nameof(SummaryToggleCaption));
+            return;
+        }
+
+        if (IsSummaryHeightConstrained && !IsSummaryExpanded)
+        {
+            _summaryUserToggled = true;
+            IsSummaryExpanded = true;
+            return;
+        }
+
         IsSummaryExpanded = !IsSummaryExpanded;
+        if (!IsSummaryExpanded)
+        {
+            _summaryUserToggled = false;
+        }
     }
 
     [RelayCommand]
@@ -810,9 +870,41 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
 
     ICommand IPageRefresh.RefreshCommand => RefreshCommand;
 
+    private void EnsureHydrated()
+    {
+        if (_isHydrated || _isDisposed)
+        {
+            return;
+        }
+
+        Refresh();
+    }
+
+    private void OnPreloadCompleted()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (!_isHydrated)
+        {
+            EnsureHydrated();
+            return;
+        }
+
+        if (SelectedRow is { } selected)
+        {
+            Chatters.SyncTo(BuildChatters(selected.Source));
+            OnPropertyChanged(nameof(HasChatters));
+            OnPropertyChanged(nameof(ChattersHeading));
+        }
+    }
+
     [RelayCommand]
     private void Refresh()
     {
+        _isHydrated = true;
         var history = _historyStore.Load();
 
         _allSessions.Clear();

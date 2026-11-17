@@ -5,14 +5,17 @@ using PoproshaykaBot.Wpf.ViewModels.Migration;
 using PoproshaykaBot.Wpf.Views.Migration;
 using Serilog;
 using Serilog.Extensions.Logging;
+using System.Diagnostics;
 using System.IO;
 
 namespace PoproshaykaBot.Wpf;
 
 public partial class App
 {
-    private static ISettingsStore OfferLegacyDataImport(ISettingsStore uiSettings, string uiSettingsPath)
+    private static ISettingsStore OfferLegacyDataImport(ISettingsStore uiSettings, string uiSettingsPath, out TimeSpan modalWait)
     {
+        modalWait = TimeSpan.Zero;
+
         if (uiSettings.GetBool(SettingsKeys.LegacyImportDismissed))
         {
             return uiSettings;
@@ -36,7 +39,9 @@ public partial class App
 
             HostLog.Information("Предложен перенос данных предыдущей версии: источников – {Count}", candidates.Count);
 
+            var modalStart = Stopwatch.GetTimestamp();
             window.ShowDialog();
+            modalWait = Stopwatch.GetElapsedTime(modalStart);
 
             if (viewModel.Result is null)
             {

@@ -89,14 +89,19 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        var startupTimestamp = Stopwatch.GetTimestamp();
+        var interactiveWait = TimeSpan.Zero;
+
         base.OnStartup(e);
 
         ApplyUiCulture();
 
         StartupArguments = e.Args;
         var previousInstance = AppRestart.FindPreviousProcessId(e.Args);
+        var handoffStart = Stopwatch.GetTimestamp();
         var previousInstanceExited = previousInstance is not { } previousProcessId
                                      || AppRestart.WaitForExit(previousProcessId, AppRestart.HandoffTimeout);
+        interactiveWait += Stopwatch.GetElapsedTime(handoffStart);
 
         IsHeadless = e.Args.Any(arg => string.Equals(arg, "--ui-smoke", StringComparison.OrdinalIgnoreCase));
         DebugChannel = DebugChannelOverride.Parse(e.Args);
@@ -200,7 +205,8 @@ public partial class App : Application
 
             if (!IsHeadless)
             {
-                uiSettings = OfferLegacyDataImport(uiSettings, uiSettingsPath);
+                uiSettings = OfferLegacyDataImport(uiSettings, uiSettingsPath, out var modalWait);
+                interactiveWait += modalWait;
             }
 
             MigrateLegacySettingsLayout();
@@ -218,7 +224,7 @@ public partial class App : Application
             _services.GetRequiredService<IBroadcastDraftCoordinator>().RecoverCompletedDraftOnStartup();
             _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
             ReportConfiguration(_services);
-            StatisticsBootstrap.LoadUserStatistics(_services);
+            _services.GetRequiredService<StatisticsPreload>().Start();
 
             _appLifetime = _services.GetRequiredService<AppLifetime>();
 
@@ -260,6 +266,8 @@ public partial class App : Application
             }
 
             ShutdownMode = ShutdownMode.OnMainWindowClose;
+
+            _services.GetRequiredService<PerformanceMonitor>().ReportStartup(ComputeStartupElapsed(startupTimestamp, interactiveWait));
 
             MaybeLaunchOnboardingWizard();
         }
@@ -455,6 +463,18 @@ public partial class App : Application
         services.AddSingleton<DashboardTileViewModel, ChatOverlayPreviewTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, MultiplatformChatTileViewModel>();
 
+        services.AddSingleton<StatisticsPreload>(static provider => new(
+            provider.GetRequiredService<UserStatisticsLoader>(),
+            static action =>
+            {
+                if (Current?.Dispatcher is { HasShutdownStarted: false, HasShutdownFinished: false } dispatcher)
+                {
+                    _ = dispatcher.BeginInvoke(DispatcherPriority.Background, action);
+                    return;
+                }
+
+                action();
+            }));
         services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<LogsViewModel>();
         services.AddSingleton<UserStatisticsPageViewModel>();
@@ -560,7 +580,15 @@ public partial class App : Application
             StopAppLifetime(_appLifetime, shutdownToken);
         }
 
+        _services!.GetService<StatisticsPreload>()?.Stop(shutdownToken);
+
         _services!.DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
+
+    public static TimeSpan ComputeStartupElapsed(long startTimestamp, TimeSpan excludedWait)
+    {
+        var elapsed = Stopwatch.GetElapsedTime(startTimestamp) - excludedWait;
+        return elapsed > TimeSpan.Zero ? elapsed : TimeSpan.Zero;
     }
 
     private void AttachFatalExceptionTrap()

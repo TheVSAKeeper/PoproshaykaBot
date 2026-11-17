@@ -8,10 +8,11 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:PointTermDialogViewModel}"
              MinWidth="420"
-             MaxWidth="520">
+             MaxWidth="640">
     <StackPanel Margin="24">
         <TextBlock Text="{Binding Title}"
                    Style="{StaticResource TextBlock.Heading}"
+                   TextWrapping="Wrap"
                    Margin="0,0,0,16" />
 
         <Grid Margin="0,0,0,16">
@@ -21,39 +22,45 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="120" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" MinWidth="180" />
             </Grid.ColumnDefinitions>
 
             <TextBlock Grid.Row="0"
                        Grid.Column="0"
                        Text="Единственное:"
+                       TextWrapping="NoWrap"
+                       Margin="0,0,12,8"
                        VerticalAlignment="Center" />
             <TextBox Grid.Row="0"
                      Grid.Column="1"
                      Style="{StaticResource TextBox.Form}"
                      Text="{Binding Singular, Mode=TwoWay}"
-                     Margin="8,0,0,8" />
+                     Margin="0,0,0,8" />
 
             <TextBlock Grid.Row="1"
                        Grid.Column="0"
                        Text="От 2 до 4:"
+                       TextWrapping="NoWrap"
+                       Margin="0,0,12,8"
                        VerticalAlignment="Center" />
             <TextBox Grid.Row="1"
                      Grid.Column="1"
                      Style="{StaticResource TextBox.Form}"
                      Text="{Binding Few, Mode=TwoWay}"
-                     Margin="8,0,0,8" />
+                     Margin="0,0,0,8" />
 
             <TextBlock Grid.Row="2"
                        Grid.Column="0"
                        Text="Множественное:"
+                       TextWrapping="NoWrap"
+                       Margin="0,0,12,0"
                        VerticalAlignment="Center" />
             <TextBox Grid.Row="2"
                      Grid.Column="1"
                      Style="{StaticResource TextBox.Form}"
                      Text="{Binding Many, Mode=TwoWay}"
-                     Margin="8,0,0,0" />
+                     Margin="0" />
         </Grid>
 
         <Border Padding="12"
@@ -67,22 +74,23 @@
                        TextWrapping="Wrap" />
         </Border>
 
-        <StackPanel Orientation="Horizontal"
-                    HorizontalAlignment="Right">
+        <WrapPanel Orientation="Horizontal"
+                   HorizontalAlignment="Right"
+                   Margin="0,0,0,-4">
             <Button Content="По умолчанию"
                     Style="{StaticResource Button.Ghost}"
                     Command="{Binding ResetDefaultsCommand}"
-                    Margin="0,0,8,0"
-                    MinWidth="120" />
+                    Margin="8,0,0,4" />
             <Button Content="Отмена"
                     Style="{StaticResource Button.Ghost}"
                     Command="{Binding CancelCommand}"
-                    Margin="0,0,8,0"
-                    MinWidth="96" />
+                    Margin="8,0,0,4"
+                    MinWidth="88" />
             <Button Content="ОК"
                     Style="{StaticResource Button.Primary}"
                     Command="{Binding ConfirmCommand}"
-                    MinWidth="120" />
-        </StackPanel>
+                    Margin="8,0,0,4"
+                    MinWidth="96" />
+        </WrapPanel>
     </StackPanel>
 </UserControl>
