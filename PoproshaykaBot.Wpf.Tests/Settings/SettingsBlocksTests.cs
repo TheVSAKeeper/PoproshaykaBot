@@ -26,6 +26,7 @@ using PoproshaykaBot.Wpf.Views.Settings;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace PoproshaykaBot.Wpf.Tests.Settings;
@@ -126,6 +127,103 @@ public class SettingsBlocksTests
 
         var updatedBlocks = (IReadOnlyList<(string Key, FrameworkElement Element)>)blocksMethod.Invoke(view, null)!;
         Assert.That(updatedBlocks.Select(block => block.Key), Is.EquivalentTo(["beta/two"]));
+    }
+
+    [Test]
+    public void Невыбранные_разделы_не_строят_визуальное_дерево_до_первого_открытия_и_сохраняют_его_после_ухода()
+    {
+        using var pageVm = CreateFullPageViewModel();
+        var view = new SettingsPageView { DataContext = pageVm };
+        Render(view);
+
+        var sectionsHost = (ItemsControl)view.FindName("SectionsHost")!;
+        var initialKey = pageVm.Sections.Selected!.Key;
+        var presenters = new List<(string Key, ContentPresenter Presenter)>();
+
+        for (var i = 0; i < pageVm.SectionPresentations.Count; i++)
+        {
+            var presenter = (ContentPresenter)sectionsHost.ItemContainerGenerator.ContainerFromIndex(i);
+            presenters.Add((pageVm.SectionPresentations[i].Section.Key, presenter));
+        }
+
+        var initialPresenter = presenters.Single(p => p.Key == initialKey).Presenter;
+        Assert.Multiple(() =>
+        {
+            Assert.That(initialPresenter.Visibility, Is.EqualTo(Visibility.Visible));
+            Assert.That(VisualTreeHelper.GetChildrenCount(initialPresenter), Is.EqualTo(1));
+            Assert.That(presenters.Where(p => p.Key != initialKey).Select(p => VisualTreeHelper.GetChildrenCount(p.Presenter)),
+                Is.All.EqualTo(0),
+                "Неоткрытые разделы не должны строить визуальное дерево до выбора");
+        });
+
+        var firstRoot = VisualTreeHelper.GetChild(initialPresenter, 0);
+
+        pageVm.Sections.Selected = pageVm.Sections["obs"];
+        Render(view);
+
+        var obsPresenter = presenters.Single(p => p.Key == "obs").Presenter;
+        Assert.Multiple(() =>
+        {
+            Assert.That(obsPresenter.Visibility, Is.EqualTo(Visibility.Visible));
+            Assert.That(VisualTreeHelper.GetChildrenCount(obsPresenter), Is.EqualTo(1));
+            Assert.That(initialPresenter.Visibility, Is.EqualTo(Visibility.Collapsed));
+            Assert.That(presenters.Where(p => p.Key != initialKey && p.Key != "obs")
+                    .Select(p => VisualTreeHelper.GetChildrenCount(p.Presenter)),
+                Is.All.EqualTo(0));
+        });
+
+        pageVm.Sections.Selected = pageVm.Sections[initialKey];
+        Render(view);
+
+        Assert.That(VisualTreeHelper.GetChild(initialPresenter, 0), Is.SameAs(firstRoot),
+            "Повторное открытие раздела должно возвращать уже построенное дерево");
+    }
+
+    [Test]
+    public void Прокрутка_к_подпункту_нераскрытого_раздела_материализует_блоки_и_находит_якорь()
+    {
+        using var pageVm = CreateFullPageViewModel();
+        var view = new SettingsPageView { DataContext = pageVm };
+        var window = new Window
+        {
+            Content = view,
+            Width = 1100,
+            Height = 120,
+            WindowStyle = WindowStyle.None,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -32000,
+            Top = -32000,
+        };
+
+        try
+        {
+            window.Show();
+            view.UpdateLayout();
+
+            var findBlock = typeof(SettingsPageView).GetMethod("FindBlock", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var scrollToBlock = typeof(SettingsPageView).GetMethod("ScrollToBlock", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var sectionScroll = (ScrollViewer)view.FindName("SectionScroll")!;
+
+            var targetSection = pageVm.Sections.Items.Last(s => s.Children.Count >= 2 && s.Key != pageVm.Sections.Selected?.Key);
+            pageVm.Sections.Selected = targetSection;
+            var lastChild = targetSection.Children[^1];
+            scrollToBlock.Invoke(view, [lastChild]);
+            view.UpdateLayout();
+
+            var anchor = (FrameworkElement?)findBlock.Invoke(view, [$"{targetSection.Key}/{lastChild.Key}"]);
+            Assert.Multiple(() =>
+            {
+                Assert.That(anchor, Is.Not.Null);
+                Assert.That(anchor!.IsVisible, Is.True);
+                Assert.That(sectionScroll.VerticalOffset, Is.GreaterThan(0));
+            });
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [TestCase(0, false, "channel", TestName = "Спай_в_начале_карточки_берёт_первый_блок")]

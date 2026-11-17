@@ -82,6 +82,58 @@ public static class DiagnosticsFormat
         return moment is { } value ? RelativeTime.DescribeMoment(value, now) : Unset;
     }
 
+    internal static (int Kind, long Value) GetAgoBucket(DateTimeOffset? moment, DateTimeOffset now)
+    {
+        if (moment is not { } value)
+        {
+            return (0, 0);
+        }
+
+        var elapsed = now - value;
+        if (elapsed < TimeSpan.FromMinutes(1))
+        {
+            return (1, 0);
+        }
+
+        if (elapsed < TimeSpan.FromHours(1))
+        {
+            return (2, (int)elapsed.TotalMinutes);
+        }
+
+        if (elapsed < TimeSpan.FromHours(24))
+        {
+            return (3, (int)elapsed.TotalHours);
+        }
+
+        return (4, (now.ToLocalTime().Date - value.ToLocalTime().Date).Days);
+    }
+
+    internal static (int Kind, long Value) GetUntilBucket(DateTimeOffset? moment, DateTimeOffset now)
+    {
+        if (moment is not { } value)
+        {
+            return (0, 0);
+        }
+
+        var left = value - now;
+        if (left <= TimeSpan.Zero)
+        {
+            return (1, 0);
+        }
+
+        if (left.TotalMinutes < 1)
+        {
+            return (2, (int)left.TotalSeconds);
+        }
+
+        if (left.TotalHours < 1)
+        {
+            return (3, (int)left.TotalMinutes);
+        }
+
+        return (4, ((long)(int)left.TotalHours * 60) + left.Minutes);
+    }
+
     public static string Moment(DateTimeOffset? moment)
     {
         return moment is { } value ? RelativeTime.FormatMoment(value) : Unset;

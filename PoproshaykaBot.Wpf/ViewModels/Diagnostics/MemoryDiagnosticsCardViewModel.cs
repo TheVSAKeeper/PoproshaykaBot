@@ -13,7 +13,21 @@ public sealed class MemoryDiagnosticsCardViewModel : DiagnosticsCardViewModel
 
     private const string WebViewProcessName = "msedgewebview2";
 
+    private static readonly DiagnosticsCardContent NoMemoryContent = new(
+        DiagnosticsCardState.Unknown,
+        [
+            new("Замеры", "нет данных")
+            {
+                Hint = "Сторож памяти не запущен – под ключом --ui-smoke он не создаётся вовсе, и мерить память некому",
+            },
+        ]);
+
     private readonly PerformanceMonitor _monitor;
+    private (DateTimeOffset MeasuredAt, int ChildCount, long ChildBytes)? _cachedUsageKey;
+    private ShellChildProcessUsage? _cachedShellUsage;
+    private MemoryUsage? _cachedMemory;
+    private (int Kind, long Value) _cachedAgoBucket;
+    private DiagnosticsCardContent? _cachedContent;
 
     public MemoryDiagnosticsCardViewModel(DiagnosticsSnapshotPublisher publisher, PerformanceMonitor monitor)
         : base(publisher)
@@ -31,18 +45,29 @@ public sealed class MemoryDiagnosticsCardViewModel : DiagnosticsCardViewModel
 
         if (snapshot.Memory is not { } memory)
         {
+            _cachedUsageKey = null;
+            _cachedShellUsage = null;
+            _cachedMemory = null;
+            _cachedContent = null;
             _monitor.ReportChildProcesses(null);
 
-            return new(DiagnosticsCardState.Unknown,
-            [
-                new("Замеры", "нет данных")
-                {
-                    Hint = "Сторож памяти не запущен – под ключом --ui-smoke он не создаётся вовсе, и мерить память некому",
-                },
-            ]);
+            return NoMemoryContent;
         }
 
-        _monitor.ReportChildProcesses(ToShellUsage(memory));
+        var usageKey = (memory.MeasuredAt, memory.ChildCount, memory.ChildBytes);
+        if (_cachedUsageKey != usageKey || _cachedShellUsage is null)
+        {
+            _cachedUsageKey = usageKey;
+            _cachedShellUsage = ToShellUsage(memory);
+        }
+
+        _monitor.ReportChildProcesses(_cachedShellUsage);
+
+        var agoBucket = DiagnosticsFormat.GetAgoBucket(memory.MeasuredAt, snapshot.CapturedAt);
+        if (ReferenceEquals(_cachedMemory, memory) && _cachedAgoBucket == agoBucket && _cachedContent is { } cached)
+        {
+            return cached;
+        }
 
         var selfShare = DiagnosticsFormat.Share(memory.SelfBytes, memory.SelfThresholdBytes);
         var totalShare = DiagnosticsFormat.Share(memory.TotalBytes, memory.TotalThresholdBytes);
@@ -70,7 +95,12 @@ public sealed class MemoryDiagnosticsCardViewModel : DiagnosticsCardViewModel
             Hint = DiagnosticsFormat.Moment(memory.MeasuredAt),
         });
 
-        return new(ResolveState(memory, selfShare, totalShare), rows);
+        var content = new DiagnosticsCardContent(ResolveState(memory, selfShare, totalShare), rows);
+        _cachedMemory = memory;
+        _cachedAgoBucket = agoBucket;
+        _cachedContent = content;
+
+        return content;
     }
 
     private static string Threshold(double? share, long limit)

@@ -74,6 +74,11 @@ public abstract partial class DiagnosticsCardViewModel : ObservableObject, IDiag
 
     private static bool SameRows(IReadOnlyList<DiagnosticsCardRow> current, IReadOnlyList<DiagnosticsCardRow> next)
     {
+        if (ReferenceEquals(current, next))
+        {
+            return true;
+        }
+
         if (current.Count != next.Count)
         {
             return false;

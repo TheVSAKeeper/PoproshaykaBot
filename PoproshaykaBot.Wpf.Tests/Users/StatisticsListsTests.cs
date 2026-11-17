@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.Views;
 using System.IO;
@@ -108,6 +109,148 @@ public class StatisticsListsTests
         {
             Assert.That(before, Is.Not.Empty);
             Assert.That(after.Where(container => !before.Contains(container)), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void Выбор_скрытого_двойным_фильтром_пользователя_пересобирает_список_за_один_проход()
+    {
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings-dual.json"));
+        var statistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
+        var eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+
+        statistics.SeedPlatform(StreamingPlatform.Twitch,
+        [
+            new() { UserId = "1", Name = "twitchTarget", MessageCount = 50 },
+        ]);
+        statistics.SeedPlatform(StreamingPlatform.YouTube,
+        [
+            new() { UserId = "2", Name = "ytUser", MessageCount = 10 },
+        ]);
+
+        using var page = new UserStatisticsPageViewModel(
+            statistics,
+            null!,
+            new UserRankService(settingsManager),
+            new UserPointsManagementService(statistics, settingsManager, eventBus, NullLogger<UserPointsManagementService>.Instance),
+            new FakeChannelProvider(),
+            settingsManager,
+            null!,
+            eventBus,
+            new MemorySettings(),
+            Support.FakeAvatarCache.CreateProvider());
+
+        page.SelectedPlatformFilter = PlatformFilterOption.AllOptions.First(static o => o.Platform == StreamingPlatform.YouTube);
+        page.FilterText = "missing";
+
+        var addedEvents = 0;
+        page.Users.CollectionChanged += (_, args) =>
+        {
+            if (args.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+            {
+                addedEvents++;
+            }
+        };
+
+        var targetKey = new PlatformUserKey(StreamingPlatform.Twitch, "1");
+        var selected = page.TrySelect(targetKey);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(selected, Is.True);
+            Assert.That(page.SelectedPlatformFilter, Is.EqualTo(PlatformFilterOption.All));
+            Assert.That(page.FilterText, Is.Empty);
+            Assert.That(page.SelectedRow?.Key, Is.EqualTo(targetKey));
+            Assert.That(addedEvents, Is.EqualTo(2), "Сброс обоих фильтров должен пересобрать видимый список за один проход, без промежуточного YouTube-прохода");
+        }
+    }
+
+    [Test]
+    public void Смена_места_вне_тройки_лидеров_не_дёргает_IsTopThree()
+    {
+        var page = CreateUsersPage(10);
+        var rows = page.Users.ToList();
+        var leaderNotifications = 0;
+        var middlePositionNotifications = 0;
+        var middleTopThreeNotifications = 0;
+
+        var topRow = rows[0];
+        var midRow = rows[4];
+
+        topRow.PropertyChanged += (_, e) => leaderNotifications += e.PropertyName == nameof(UserStatisticsRowViewModel.IsTopThree) ? 1 : 0;
+        midRow.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(UserStatisticsRowViewModel.Position))
+            {
+                middlePositionNotifications++;
+            }
+            else if (e.PropertyName == nameof(UserStatisticsRowViewModel.IsTopThree))
+            {
+                middleTopThreeNotifications++;
+            }
+        };
+
+        UserStatisticsRanking.Arrange(rows, UserStatisticsSortKey.Points, descending: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(leaderNotifications, Is.EqualTo(1));
+            Assert.That(middlePositionNotifications, Is.EqualTo(1));
+            Assert.That(middleTopThreeNotifications, Is.Zero);
+        }
+    }
+
+    [Test]
+    public void Неактивный_режим_истории_отвязан_от_коллекции_и_переключение_сохраняет_выбор()
+    {
+        var page = CreateStreamsPage(Enumerable.Range(0, 30).Select(index => Session(index, segments: 1)).ToArray());
+        var view = new StreamHistoryPageView { DataContext = page };
+        Arrange(view);
+
+        var tableList = (ListBox)view.FindName("SessionsList")!;
+        var cardsList = (ListBox)view.FindName("SessionCards")!;
+        var chosen = page.SortedSessions[10];
+        page.SelectedRow = chosen;
+        Arrange(view);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tableList.ItemsSource, Is.SameAs(page.SortedSessions));
+            Assert.That(tableList.SelectedItem, Is.SameAs(chosen));
+            Assert.That(cardsList.ItemsSource, Is.Null);
+            Assert.That(cardsList.Items, Is.Empty);
+        }
+
+        page.IsCardsView = true;
+        Arrange(view);
+        var cardContainersBefore = Containers(cardsList);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.SelectedRow, Is.SameAs(chosen));
+            Assert.That(cardsList.ItemsSource, Is.SameAs(page.SortedSessions));
+            Assert.That(cardsList.SelectedItem, Is.SameAs(chosen));
+            Assert.That(tableList.ItemsSource, Is.Null);
+        }
+
+        page.SortByColumnCommand.Execute(StreamSortKey.Duration);
+        Arrange(view);
+        var cardContainersAfter = Containers(cardsList);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cardContainersBefore, Is.Not.Empty);
+            Assert.That(cardContainersAfter.Where(c => !cardContainersBefore.Contains(c)), Is.Empty);
+            Assert.That(tableList.Items, Is.Empty);
+        });
+
+        page.IsTableView = true;
+        Arrange(view);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.SelectedRow, Is.SameAs(chosen));
+            Assert.That(tableList.SelectedItem, Is.SameAs(chosen));
         }
     }
 

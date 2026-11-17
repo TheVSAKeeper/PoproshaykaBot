@@ -21,7 +21,7 @@
 
             <DataTemplate x:Key="MultiBlockSectionTemplate"
                           DataType="{x:Type settingsVm:SettingsSectionPresentation}">
-                <Grid Visibility="{Binding Section.IsSelected, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"
                                           MaxWidth="{StaticResource Setting.ContentWidth}" />
@@ -57,7 +57,7 @@
 
             <DataTemplate x:Key="SingleBlockSectionTemplate"
                           DataType="{x:Type settingsVm:SettingsSectionPresentation}">
-                <Grid Visibility="{Binding Section.IsSelected, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*">
                             <ColumnDefinition.Style>
@@ -150,7 +150,7 @@
                           Padding="0,0,12,0"
                           ScrollChanged="SectionScroll_OnScrollChanged">
                 <ItemsControl x:Name="SectionsHost"
-                              ItemsSource="{Binding SectionPresentations}"
+                              ItemsSource="{Binding SectionPresentations, Mode=OneTime}"
                               ItemTemplateSelector="{StaticResource SectionTemplateSelector}"
                               Focusable="False"
                               RequestBringIntoView="SuppressAutoScroll">
@@ -159,6 +159,12 @@
                             <Grid />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="Visibility"
+                                    Value="{Binding Content.Section.IsSelected, RelativeSource={RelativeSource Self}, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
                 </ItemsControl>
             </ScrollViewer>
         </Grid>

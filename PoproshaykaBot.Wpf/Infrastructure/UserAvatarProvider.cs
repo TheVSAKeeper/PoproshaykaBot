@@ -7,19 +7,41 @@ using System.Windows.Media.Imaging;
 
 namespace PoproshaykaBot.Wpf.Infrastructure;
 
-public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvatarProvider> logger)
+public sealed class UserAvatarProvider
 {
     public const int DecodePixelSize = 96;
+    public const int DefaultMaxLoadedImages = 512;
 
+    private readonly IUserAvatarCache _cache;
+    private readonly ILogger<UserAvatarProvider> _logger;
+    private readonly int _maxLoadedImages;
     private readonly Lock _sync = new();
     private readonly Dictionary<string, UserAvatarViewModel> _handles = new(StringComparer.Ordinal);
     private readonly HashSet<string> _queue = new(StringComparer.Ordinal);
     private readonly HashSet<string> _requested = new(StringComparer.Ordinal);
+    private readonly LinkedList<string> _lruOrder = new();
+    private readonly Dictionary<string, LinkedListNode<string>> _lruNodes = new(StringComparer.Ordinal);
 
     private string[] _tracked = [];
     private bool _resolveNeeded;
     private bool _pumping;
     private Task _loading = Task.CompletedTask;
+
+    public UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvatarProvider> logger)
+        : this(cache, logger, DefaultMaxLoadedImages)
+    {
+    }
+
+    internal UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvatarProvider> logger, int maxLoadedImages)
+    {
+        ArgumentNullException.ThrowIfNull(cache);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxLoadedImages, 1);
+
+        _cache = cache;
+        _logger = logger;
+        _maxLoadedImages = maxLoadedImages;
+    }
 
     public Task Loading
     {
@@ -98,8 +120,9 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
 
             _requested.Add(handle.UserId);
 
-            if (handle.HasImage && !handle.IsOutdated)
+            if (_lruNodes.ContainsKey(handle.UserId) && handle.HasImage && !handle.IsOutdated)
             {
+                TouchLruCore(handle.UserId);
                 return;
             }
 
@@ -131,7 +154,7 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
             }
             catch (Exception exception)
             {
-                logger.UserAvatarLoadFailed(exception);
+                _logger.UserAvatarLoadFailed(exception);
             }
         }
     }
@@ -157,27 +180,33 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
     private async Task LoadAsync(List<string> ids)
     {
         var unreadable = new HashSet<string>(StringComparer.Ordinal);
+        HashSet<string>? decodedFromCache = null;
 
         if (ids.Count > 0)
         {
-            var cached = await Task.Run(() => Decode(cache.GetCachedPaths(ids), unreadable));
+            var cached = await Task.Run(() => Decode(_cache.GetCachedPaths(ids), unreadable));
+            if (cached.Count > 0)
+            {
+                decodedFromCache = cached.Select(static item => item.UserId).ToHashSet(StringComparer.Ordinal);
+            }
+
             Apply(cached);
         }
 
         if (TakeResolve() is { } tracked)
         {
-            var changed = await Task.Run(() => cache.ResolveAsync(tracked));
+            var changed = await Task.Run(() => _cache.ResolveAsync(tracked));
             MarkOutdated(changed);
         }
 
-        var missing = Missing(ids);
+        var missing = Missing(decodedFromCache is null ? ids : ids.Where(id => !decodedFromCache.Contains(id)));
 
         if (missing.Count == 0)
         {
             return;
         }
 
-        var loaded = await Task.Run(async () => Decode(await cache.GetPathsAsync(missing).ConfigureAwait(false), unreadable));
+        var loaded = await Task.Run(async () => Decode(await _cache.GetPathsAsync(missing).ConfigureAwait(false), unreadable));
         Apply(loaded);
 
         var outdated = Outdated(missing);
@@ -187,7 +216,7 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
             return;
         }
 
-        var unavailable = await Task.Run(() => cache.GetUnavailable(outdated));
+        var unavailable = await Task.Run(() => _cache.GetUnavailable(outdated));
         Discard(outdated.Where(id => unreadable.Contains(id) || unavailable.Contains(id, StringComparer.Ordinal)));
     }
 
@@ -221,7 +250,7 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
         }
     }
 
-    private List<string> Missing(List<string> ids)
+    private List<string> Missing(IEnumerable<string> ids)
     {
         lock (_sync)
         {
@@ -253,7 +282,7 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
             }
             else
             {
-                cache.Invalidate(userId);
+                _cache.Invalidate(userId);
                 unreadable.Add(userId);
             }
         }
@@ -275,6 +304,7 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
                 }
 
                 handle.IsOutdated = false;
+                RemoveLruCore(userId);
             }
 
             handle.Image = null;
@@ -295,9 +325,72 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
                 }
 
                 handle.IsOutdated = false;
+                TouchLruCore(userId);
             }
 
             handle.Image = image;
+        }
+
+        if (images.Count > 0)
+        {
+            EvictExcess();
+        }
+    }
+
+    private void TouchLruCore(string userId)
+    {
+        if (_lruNodes.TryGetValue(userId, out var existing))
+        {
+            _lruOrder.Remove(existing);
+            _lruOrder.AddLast(existing);
+            return;
+        }
+
+        _lruNodes[userId] = _lruOrder.AddLast(userId);
+    }
+
+    private void RemoveLruCore(string userId)
+    {
+        if (_lruNodes.Remove(userId, out var node))
+        {
+            _lruOrder.Remove(node);
+        }
+    }
+
+    private void EvictExcess()
+    {
+        while (true)
+        {
+            UserAvatarViewModel? victim;
+            string? victimId;
+
+            lock (_sync)
+            {
+                if (_lruOrder.Count <= _maxLoadedImages || _lruOrder.First is not { } oldest)
+                {
+                    return;
+                }
+
+                victimId = oldest.Value;
+                _lruOrder.RemoveFirst();
+                _lruNodes.Remove(victimId);
+                _requested.Remove(victimId);
+                _handles.TryGetValue(victimId, out victim);
+            }
+
+            if (victim is not null && victimId is not null)
+            {
+                victim.Image = null;
+
+                lock (_sync)
+                {
+                    if (_requested.Contains(victimId) && !_lruNodes.ContainsKey(victimId))
+                    {
+                        _queue.Add(victimId);
+                        StartPump();
+                    }
+                }
+            }
         }
     }
 
@@ -318,7 +411,7 @@ public sealed class UserAvatarProvider(IUserAvatarCache cache, ILogger<UserAvata
         }
         catch (Exception exception)
         {
-            logger.UserAvatarDecodeFailed(exception, path);
+            _logger.UserAvatarDecodeFailed(exception, path);
 
             return null;
         }

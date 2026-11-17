@@ -54,11 +54,20 @@ public static class UserStatisticsRanking
         for (var index = 0; index < ordered.Count; index++)
         {
             var row = ordered[index];
-
-            row.Position = index + 1;
-            row.Share = leader > 0
+            var position = index + 1;
+            var share = leader > 0
                 ? Math.Clamp((double)row.Points / leader, MinimumShare, 1)
                 : MinimumShare;
+
+            if (row.Position != position)
+            {
+                row.Position = position;
+            }
+
+            if (row.Share != share)
+            {
+                row.Share = share;
+            }
         }
 
         return ordered;

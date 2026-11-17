@@ -89,6 +89,74 @@ public class StreamHistoryBoxArtTests
     }
 
     [Test]
+    public async Task Мягкий_потолок_обложек_сбрасывает_недавние_промахи_в_памяти_не_трогая_диск_и_восстанавливает_ту_же_ручку()
+    {
+        _cache.Cached["Game1"] = WriteImage("g1");
+        _cache.Cached["Game2"] = WriteImage("g2");
+        _cache.Cached["Game3"] = WriteImage("g3");
+
+        var provider = new GameBoxArtProvider(_cache, NullLogger<GameBoxArtProvider>.Instance, maxLoadedImages: 2);
+        var h1 = provider.For("Game1");
+        var h2 = provider.For("Game2");
+        var h3 = provider.For("Game3");
+
+        await provider.LoadAsync(["Game1", "Game2"], CancellationToken.None);
+        await provider.LoadAsync(["Game1"], CancellationToken.None);
+        await provider.LoadAsync(["Game3"], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(h1.HasImage, Is.True);
+            Assert.That(h3.HasImage, Is.True);
+            Assert.That(h2.HasImage, Is.False);
+            Assert.That(_cache.Invalidated, Is.Empty);
+        }
+
+        var networkBefore = _cache.NetworkRequests.Count;
+        await provider.LoadAsync(["Game2"], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.For("Game2"), Is.SameAs(h2));
+            Assert.That(h2.HasImage, Is.True);
+            Assert.That(h1.HasImage, Is.False);
+            Assert.That(_cache.NetworkRequests, Has.Count.EqualTo(networkBefore));
+        }
+    }
+
+    [Test]
+    public async Task Параллельные_запросы_ручек_и_подгрузки_обложек_потокобезопасны()
+    {
+        for (var i = 0; i < 12; i++)
+        {
+            _cache.Cached[$"Game{i}"] = WriteImage($"pg{i}");
+        }
+
+        var provider = new GameBoxArtProvider(_cache, NullLogger<GameBoxArtProvider>.Instance, maxLoadedImages: 4);
+        var tasks = Enumerable.Range(0, 16)
+            .Select(i => Task.Run(async () =>
+            {
+                var name = $"Game{i % 12}";
+                var handle = provider.For(name);
+                await provider.LoadAsync([name, $"Game{(i + 3) % 12}"], CancellationToken.None);
+                return handle;
+            }))
+            .ToArray();
+
+        var handles = await Task.WhenAll(tasks);
+
+        var loadedCount = Enumerable.Range(0, 12)
+            .Count(i => provider.For($"Game{i}").HasImage);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handles, Has.All.Not.Null);
+            Assert.That(provider.For("game0"), Is.SameAs(provider.For("GAME0")));
+            Assert.That(loadedCount, Is.LessThanOrEqualTo(4));
+        }
+    }
+
+    [Test]
     public async Task Обложка_из_кеша_видна_в_таблице_в_сегментах_в_шапке_и_в_топе_категорий()
     {
         _cache.Cached["Just Chatting"] = WriteImage("just-chatting");

@@ -268,6 +268,149 @@ public class DiagnosticsCardTests
         }
     }
 
+    [Test]
+    public void Карточка_памяти_переиспользует_снимок_дочерних_процессов_пока_замер_сторожа_не_обновился()
+    {
+        var dispatcher = new ManualUiDispatcher();
+        var monitor = new PerformanceMonitor(new(), dispatcher, NullLogger<PerformanceMonitor>.Instance);
+        var snapshot = DiagnosticsSnapshots.Full();
+        var publisher = new DiagnosticsSnapshotPublisher(dispatcher, () => snapshot, NullLogger<DiagnosticsSnapshotPublisher>.Instance);
+        var card = new MemoryDiagnosticsCardViewModel(publisher, monitor);
+
+        monitor.Start();
+        card.SetActive(true);
+        dispatcher.Timers[1].Tick();
+
+        var firstChildren = monitor.Snapshot.Children;
+        var firstRows = card.Rows;
+
+        snapshot = snapshot with { CapturedAt = DiagnosticsSnapshots.CapturedAt.AddSeconds(1) };
+        dispatcher.Timers[0].Tick();
+        dispatcher.Timers[1].Tick();
+
+        var idleChildren = monitor.Snapshot.Children;
+        var idleRows = card.Rows;
+
+        snapshot = snapshot with
+        {
+            CapturedAt = DiagnosticsSnapshots.CapturedAt.AddSeconds(2),
+            Memory = snapshot.Memory! with
+            {
+                MeasuredAt = DiagnosticsSnapshots.CapturedAt.AddSeconds(2),
+                ChildBytes = 128L * 1024 * 1024,
+            },
+        };
+        dispatcher.Timers[0].Tick();
+        dispatcher.Timers[1].Tick();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(firstChildren, Is.Not.Null);
+            Assert.That(idleChildren, Is.SameAs(firstChildren), "До нового замера сторожа объект ChildProcessUsage не должен аллоцироваться повторно");
+            Assert.That(idleRows, Is.SameAs(firstRows));
+            Assert.That(monitor.Snapshot.Children, Is.Not.SameAs(firstChildren));
+            Assert.That(monitor.Snapshot.Children!.PrivateBytes, Is.EqualTo(128L * 1024 * 1024));
+        }
+
+        monitor.Stop();
+    }
+
+    [Test]
+    public void Карточка_очереди_не_пересобирает_расписание_и_строки_внутри_минутного_окна_и_обновляет_на_границе()
+    {
+        var dispatcher = new ManualUiDispatcher();
+        var baseTime = DiagnosticsSnapshots.CapturedAt;
+        var snapshot = DiagnosticsSnapshots.Full() with
+        {
+            CapturedAt = baseTime,
+            ChatQueue = DiagnosticsSnapshots.Full().ChatQueue! with { LastSentAt = baseTime },
+            Jobs =
+            [
+                new(ScheduledJob.StatisticsAutoSave, TimeSpan.FromMinutes(1), baseTime.AddMinutes(5).AddSeconds(30), baseTime.AddMinutes(-10), null),
+            ],
+        };
+
+        var publisher = new DiagnosticsSnapshotPublisher(dispatcher, () => snapshot, NullLogger<DiagnosticsSnapshotPublisher>.Instance);
+        var card = new QueueDiagnosticsCardViewModel(publisher);
+        var rowRebuilds = 0;
+
+        card.SetActive(true);
+        card.PropertyChanged += (_, e) => rowRebuilds += e.PropertyName == nameof(card.Rows) ? 1 : 0;
+
+        var initialRows = card.Rows;
+        var initialHint = initialRows.Single(static r => r.Key == "Следующее автосохранение").Hint!;
+
+        snapshot = snapshot with { CapturedAt = baseTime.AddSeconds(20) };
+        dispatcher.Timers[0].Tick();
+
+        var sameWindowRows = card.Rows;
+
+        snapshot = snapshot with
+        {
+            CapturedAt = baseTime,
+            Jobs =
+            [
+                new(ScheduledJob.StatisticsAutoSave, TimeSpan.FromMinutes(1), baseTime.AddSeconds(45), baseTime, null),
+            ],
+        };
+        dispatcher.Timers[0].Tick();
+        var sec45Hint = card.Rows.Single(static r => r.Key == "Следующее автосохранение").Hint!;
+
+        snapshot = snapshot with { CapturedAt = baseTime.AddSeconds(1) };
+        dispatcher.Timers[0].Tick();
+        var sec44Row = card.Rows.Single(static r => r.Key == "Следующее автосохранение");
+
+        snapshot = snapshot with { CapturedAt = baseTime.AddSeconds(61) };
+        dispatcher.Timers[0].Tick();
+        var boundaryHint = card.Rows.Single(static r => r.Key == "Следующее автосохранение").Hint!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sameWindowRows, Is.SameAs(initialRows));
+            Assert.That(rowRebuilds, Is.EqualTo(3));
+            Assert.That(sec44Row.Value, Is.EqualTo("через 44 с"));
+            Assert.That(sec44Row.Hint, Is.SameAs(sec45Hint), "Строка расписания должна переиспользоваться на посекундном отсчёте");
+            Assert.That(sec45Hint, Does.Contain("последний запуск только что"));
+            Assert.That(boundaryHint, Does.Contain("1 мин. назад"));
+            Assert.That(initialHint, Does.Contain("10 мин. назад"));
+        }
+    }
+
+    [Test]
+    public void Карточка_очереди_обновляет_строки_при_смене_набора_или_порядка_заданий()
+    {
+        var dispatcher = new ManualUiDispatcher();
+        var baseTime = DiagnosticsSnapshots.CapturedAt;
+        var jobA = new ScheduledJobStatus(ScheduledJob.Broadcast, TimeSpan.FromMinutes(1), baseTime.AddMinutes(5), baseTime, null);
+        var jobB = new ScheduledJobStatus(ScheduledJob.StatisticsAutoSave, TimeSpan.FromMinutes(2), baseTime.AddMinutes(8), baseTime, null);
+
+        var snapshot = DiagnosticsSnapshots.Full() with { CapturedAt = baseTime, Jobs = [jobA, jobB] };
+        var publisher = new DiagnosticsSnapshotPublisher(dispatcher, () => snapshot, NullLogger<DiagnosticsSnapshotPublisher>.Instance);
+        var card = new QueueDiagnosticsCardViewModel(publisher);
+
+        card.SetActive(true);
+        Assert.That(card.Rows.Select(static r => r.Key), Does.Contain("Следующая рассылка"));
+        Assert.That(card.Rows.Select(static r => r.Key), Does.Contain("Следующее автосохранение"));
+
+        snapshot = snapshot with { Jobs = [jobA] };
+        dispatcher.Timers[0].Tick();
+        Assert.That(card.Rows.Select(static r => r.Key), Does.Contain("Следующая рассылка"));
+        Assert.That(card.Rows.Select(static r => r.Key), Does.Not.Contain("Следующее автосохранение"));
+
+        snapshot = snapshot with { Jobs = [jobB] };
+        dispatcher.Timers[0].Tick();
+        Assert.That(card.Rows.Select(static r => r.Key), Does.Contain("Следующее автосохранение"));
+        Assert.That(card.Rows.Select(static r => r.Key), Does.Not.Contain("Следующая рассылка"));
+
+        snapshot = snapshot with { Jobs = [jobA, jobB] };
+        dispatcher.Timers[0].Tick();
+        snapshot = snapshot with { Jobs = [jobB, jobA] };
+        dispatcher.Timers[0].Tick();
+
+        var keys = card.Rows.Select(static r => r.Key).ToList();
+        Assert.That(keys.IndexOf("Следующее автосохранение"), Is.LessThan(keys.IndexOf("Следующая рассылка")));
+    }
+
     private static DiagnosticsSnapshot Bus(int types)
     {
         var byType = Enumerable.Range(0, types)

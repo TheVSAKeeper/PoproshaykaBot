@@ -364,6 +364,54 @@ public class UserAvatarTests
         }
     }
 
+    [Test]
+    public async Task Мягкий_потолок_выгружает_старые_картинки_из_памяти_сохраняя_файловый_кеш_и_перечитывает_при_возврате()
+    {
+        _cache.Cached["1"] = WriteImage("u1");
+        _cache.Cached["2"] = WriteImage("u2");
+        _cache.Cached["3"] = WriteImage("u3");
+
+        var provider = new UserAvatarProvider(_cache, NullLogger<UserAvatarProvider>.Instance, maxLoadedImages: 2);
+        var h1 = provider.For("1", "one");
+        var h2 = provider.For("2", "two");
+        var h3 = provider.For("3", "three");
+
+        provider.Track(["1", "2", "3"]);
+        provider.Request(h1);
+        provider.Request(h2);
+        await provider.Loading;
+
+        provider.Request(h1);
+        provider.Request(h3);
+        await provider.Loading;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(h1.HasImage, Is.True);
+            Assert.That(h3.HasImage, Is.True);
+            Assert.That(h2.HasImage, Is.False);
+            Assert.That(_cache.Invalidated, Is.Empty);
+        }
+
+        var networkCountBeforeTrack = _cache.NetworkRequests.Count;
+        provider.Track(["1", "2", "3"]);
+        await provider.Loading;
+        Assert.That(_cache.NetworkRequests, Has.Count.EqualTo(networkCountBeforeTrack),
+            "Выгруженная из памяти аватарка не должна выкачиваться повторно при обновлении");
+
+        provider.Request(h2);
+        await provider.Loading;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.For("2", "two"), Is.SameAs(h2));
+            Assert.That(h2.HasImage, Is.True);
+            Assert.That(h1.HasImage, Is.False);
+            Assert.That(_cache.NetworkRequests, Has.Count.EqualTo(networkCountBeforeTrack),
+                "Повторный запрос выгруженной аватарки должен брать её из дискового кеша");
+        }
+    }
+
     private static Color ColorOf(ResourceDictionary tokens, string key)
     {
         return tokens[key] switch

@@ -17,11 +17,18 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
     private UserRankLadder? _rankLadder;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTopThree))]
     private int _position;
 
     [ObservableProperty]
     private double _share;
+
+    partial void OnPositionChanged(int oldValue, int newValue)
+    {
+        if ((oldValue is > 0 and <= 3) != (newValue is > 0 and <= 3))
+        {
+            OnPropertyChanged(nameof(IsTopThree));
+        }
+    }
 
     public UserStatisticsRowViewModel(UserStatistics source, UserRankStanding standing, PointTerm pointTerm)
     {
