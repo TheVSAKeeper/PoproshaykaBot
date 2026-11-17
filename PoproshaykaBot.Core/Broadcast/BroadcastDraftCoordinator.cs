@@ -66,10 +66,11 @@ public sealed class BroadcastDraftCoordinator(
         }
 
         var streamId = string.IsNullOrEmpty(stream?.Id) ? null : stream.Id;
+        var channelId = string.IsNullOrWhiteSpace(stream?.UserId) ? null : stream.UserId;
 
         foreach (var candidate in draft.Platforms)
         {
-            if (IsSamePlatformStream(candidate, platform, channel, streamId, startedAt))
+            if (IsSamePlatformStream(candidate, platform, channel, streamId, startedAt, channelId))
             {
                 return draft.BroadcastId;
             }
@@ -206,14 +207,22 @@ public sealed class BroadcastDraftCoordinator(
         StreamingPlatform platform,
         string channel,
         string? streamId,
-        DateTimeOffset startedAt)
+        DateTimeOffset startedAt,
+        string? channelId = null)
     {
         if (candidate.Platform != platform || candidate.StartedAt == default || string.IsNullOrEmpty(candidate.Channel))
         {
             return false;
         }
 
-        if (!string.Equals(candidate.Channel, channel, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(candidate.ChannelId) && !string.IsNullOrWhiteSpace(channelId))
+        {
+            if (!string.Equals(candidate.ChannelId, channelId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        else if (!string.Equals(candidate.Channel, channel, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }

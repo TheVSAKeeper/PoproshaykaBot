@@ -183,6 +183,7 @@ public sealed class ChatPipelineHandler :
             DisplayName = chatMessage.DisplayName,
             IsBroadcaster = chatMessage.IsBroadcaster,
             IsModerator = chatMessage.IsModerator,
+            RecordsUserData = recordsUserData ?? true,
         };
 
         var commandResult = await _commandProcessor.TryProcessAsync(chatMessage.Message, context, cancellationToken);

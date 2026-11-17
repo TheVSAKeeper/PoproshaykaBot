@@ -311,7 +311,7 @@ public sealed class ChatIngestionService(
             }
         }
 
-        return eventBus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.Twitch, now), CancellationToken.None);
+        return eventBus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.Twitch, now, broadcasterId), CancellationToken.None);
     }
 
     private Task MarkLeftAsync()
@@ -322,12 +322,14 @@ public sealed class ChatIngestionService(
     private Task MarkLeftAsync(out long generation, out IReadOnlyList<string> subscriptionIds)
     {
         long previous;
+        string? leftChannelId;
 
         lock (_joinLock)
         {
             generation = ++_generation;
             subscriptionIds = _subscriptionIds;
             _subscriptionIds = [];
+            leftChannelId = _origin?.Channel.ChannelId;
             _origin?.Close();
             _origin = null;
             previous = Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
@@ -336,7 +338,7 @@ public sealed class ChatIngestionService(
         _retry.Cancel();
 
         return previous != 0
-            ? eventBus.PublishAsync(new ChatIngestionStopped(StreamingPlatform.Twitch, timeProvider.GetUtcNow()), CancellationToken.None)
+            ? eventBus.PublishAsync(new ChatIngestionStopped(StreamingPlatform.Twitch, timeProvider.GetUtcNow(), leftChannelId), CancellationToken.None)
             : Task.CompletedTask;
     }
 }

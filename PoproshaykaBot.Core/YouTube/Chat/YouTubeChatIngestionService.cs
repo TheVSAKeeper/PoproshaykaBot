@@ -1122,6 +1122,7 @@ internal sealed class YouTubeChatIngestionService(
 
     private Task MarkIngestionStartedAsync(DateTimeOffset at, CancellationToken ct)
     {
+        string? channelId;
         lock (_sync)
         {
             if (_ingestionPublished)
@@ -1130,9 +1131,10 @@ internal sealed class YouTubeChatIngestionService(
             }
 
             _ingestionPublished = true;
+            channelId = _origin?.Channel.ChannelId;
         }
 
-        return eventBus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.YouTube, at), ct);
+        return eventBus.PublishAsync(new ChatIngestionStarted(StreamingPlatform.YouTube, at, channelId), ct);
     }
 
     private Task MarkIngestionStoppedAsync(DateTimeOffset at, CancellationToken ct)
@@ -1140,9 +1142,11 @@ internal sealed class YouTubeChatIngestionService(
         TaskCompletionSource? ownedTcs = null;
         Task? inFlightStop = null;
         long generation = 0;
+        string? channelId = null;
 
         lock (_sync)
         {
+            channelId = _origin?.Channel.ChannelId;
             CloseOrigin();
             if (!_ingestionPublished)
             {
@@ -1159,17 +1163,21 @@ internal sealed class YouTubeChatIngestionService(
 
         if (ownedTcs is not null)
         {
-            return PublishIngestionStoppedCoreAsync(at, generation, ownedTcs);
+            return PublishIngestionStoppedCoreAsync(at, generation, channelId, ownedTcs);
         }
 
         return inFlightStop is not null ? inFlightStop.WaitAsync(ct) : Task.CompletedTask;
     }
 
-    private async Task PublishIngestionStoppedCoreAsync(DateTimeOffset at, long generation, TaskCompletionSource stopTcs)
+    private async Task PublishIngestionStoppedCoreAsync(
+        DateTimeOffset at,
+        long generation,
+        string? channelId,
+        TaskCompletionSource stopTcs)
     {
         try
         {
-            await eventBus.PublishAsync(new ChatIngestionStopped(StreamingPlatform.YouTube, at), CancellationToken.None)
+            await eventBus.PublishAsync(new ChatIngestionStopped(StreamingPlatform.YouTube, at, channelId), CancellationToken.None)
                 .ConfigureAwait(false);
         }
         finally

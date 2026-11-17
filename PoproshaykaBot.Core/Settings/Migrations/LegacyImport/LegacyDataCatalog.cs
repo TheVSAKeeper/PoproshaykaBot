@@ -32,6 +32,8 @@ internal static class LegacyDataCatalog
     public const string SettingsFileName = "settings.json";
     public const string ChatSettingsFileName = "chat.json";
     public const string AccountsFileName = "accounts.json";
+    public const string ChannelsFileName = "channels.json";
+    public const string UserStatisticsCatalogFileName = "user_statistics_catalog.json";
     public const string UserStatisticsFileName = "users_statistics.json";
     public const string BotStatisticsFileName = "bot_statistics.json";
     public const string BroadcastsFileName = "broadcasts.json";
@@ -46,6 +48,7 @@ internal static class LegacyDataCatalog
 
     private static readonly LegacyDataEntry[] Entries =
     [
+        new(UserStatisticsCatalogFileName, UserStatisticsCatalogFileName, LegacyDataCategory.UserStatistics),
         .. UserStatisticsPlatformCatalog.All.Select(static descriptor => new LegacyDataEntry(
             UserStatisticsFileName,
             descriptor.RelativePath,
@@ -73,6 +76,7 @@ internal static class LegacyDataCatalog
         new(UiPreferencesFileName, $"{SettingsFolderName}/{UiPreferencesFileName}", LegacyDataCategory.UiPreferences, true),
         new(YouTubeSettingsFileName, $"{SettingsFolderName}/{YouTubeSettingsFileName}", LegacyDataCategory.Settings, true),
         new(YouTubeAccountsFileName, $"{SettingsFolderName}/{YouTubeAccountsFileName}", LegacyDataCategory.Settings, true, CarriesTokens: true),
+        new(ChannelsFileName, $"{SettingsFolderName}/{ChannelsFileName}", LegacyDataCategory.Settings, true),
     ];
 
     public static IReadOnlyList<LegacyDataEntry> AllEntries => Entries;

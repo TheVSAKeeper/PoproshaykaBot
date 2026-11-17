@@ -1,0 +1,89 @@
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Settings.ChannelGroupsSettingsSectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:ChannelGroupsSettingsSectionViewModel}"
+             d:DesignHeight="420"
+             d:DesignWidth="700">
+
+    <StackPanel>
+        <TextBlock Text="Один канал может входить в несколько групп; общий рейтинг всё равно считает каждый канал только один раз."
+                   Style="{StaticResource Form.Hint}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12" />
+
+        <DockPanel Margin="0,0,0,12">
+            <Button DockPanel.Dock="Right"
+                    Content="Добавить группу"
+                    Style="{StaticResource Button.Secondary}"
+                    Command="{Binding AddGroupCommand}"
+                    Margin="8,0,0,0" />
+            <TextBox Text="{Binding NewGroupName, UpdateSourceTrigger=PropertyChanged}"
+                     Style="{StaticResource TextBox.Form}"
+                     AutomationProperties.Name="Название новой группы каналов" />
+        </DockPanel>
+
+        <Grid Visibility="{Binding HasGroups, Converter={StaticResource BoolToVisibility}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <ListBox ItemsSource="{Binding Groups}"
+                         SelectedItem="{Binding SelectedGroup, Mode=TwoWay}"
+                         DisplayMemberPath="Name"
+                         MinHeight="140"
+                         MaxHeight="280"
+                         BorderBrush="{DynamicResource Border.Default}"
+                         BorderThickness="1" />
+
+                <Button Content="Удалить группу"
+                        Style="{StaticResource Button.Secondary}"
+                        Command="{Binding RemoveSelectedGroupCommand}"
+                        HorizontalAlignment="Left"
+                        Margin="0,8,0,0" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="2"
+                        Visibility="{Binding HasSelectedGroup, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="Название группы"
+                           Style="{StaticResource Form.Label}"
+                           Margin="0,0,0,4" />
+                <TextBox Text="{Binding SelectedGroup.Name, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource TextBox.Form}"
+                         Margin="0,0,0,12"
+                         AutomationProperties.Name="Название выбранной группы каналов" />
+
+                <TextBlock Text="Каналы в группе"
+                           Style="{StaticResource Form.Label}"
+                           Margin="0,0,0,6" />
+
+                <ItemsControl ItemsSource="{Binding SelectedGroup.Channels}"
+                              Visibility="{Binding SelectedGroup.HasKnownChannels, Converter={StaticResource BoolToVisibility}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:ChannelGroupMemberChoiceViewModel}">
+                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                      Content="{Binding Label}"
+                                      Margin="0,0,0,6" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Text="Каналы появятся здесь после первого сообщения или привязки профиля канала."
+                           Style="{StaticResource Form.Hint}"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding SelectedGroup.HasKnownChannels, Converter={StaticResource InverseBoolToVisibility}}" />
+            </StackPanel>
+        </Grid>
+
+        <TextBlock Text="Групп каналов пока нет. Введите название выше и нажмите «Добавить группу»."
+                   Style="{StaticResource Form.Hint}"
+                   TextWrapping="Wrap"
+                   Visibility="{Binding HasGroups, Converter={StaticResource InverseBoolToVisibility}}" />
+    </StackPanel>
+</UserControl>

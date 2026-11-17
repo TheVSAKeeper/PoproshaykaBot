@@ -6,7 +6,8 @@ public sealed record UserPunished(
     PlatformUserKey User,
     string UserName,
     ulong RemovedPoints,
-    string? Channel) : EventBase, IPlatformEvent
+    string? Channel,
+    ChannelKey? ChannelKey = null) : EventBase, IPlatformEvent
 {
     public StreamingPlatform Platform => User.Platform;
 }

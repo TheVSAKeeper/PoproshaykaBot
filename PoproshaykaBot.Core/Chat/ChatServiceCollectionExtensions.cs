@@ -105,5 +105,7 @@ public static class ChatServiceCollectionExtensions
         services.AddSingleton<IChatCommand, PeakStreamCommand>();
         services.AddSingleton<IChatCommand, WasThereCommand>();
         services.AddSingleton<IChatCommand, TopStreamsCommand>();
+        services.AddSingleton<IChatCommand, LinkAccountCommand>();
+        services.AddSingleton<IChatCommand, UnlinkAccountCommand>();
     }
 }

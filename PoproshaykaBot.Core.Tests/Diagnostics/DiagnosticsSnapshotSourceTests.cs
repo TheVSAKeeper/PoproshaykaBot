@@ -91,19 +91,20 @@ public sealed class DiagnosticsSnapshotSourceTests
         var userRepository = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         var botRepository = Substitute.For<IBotStatisticsRepository>();
         var fileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _directory);
-        var userUnits = UserStatisticsPlatformCatalog.All
-            .Select(descriptor => new PlatformUserStatisticsUnit(
-                descriptor,
-                userRepository.GetPartition(descriptor.Platform),
+        var userUnit = new UserStatisticsCatalogPersistenceUnit(
+            userRepository,
+            fileStore,
+            new LegacyUserStatisticsMigrator(
                 fileStore,
-                NullLogger<PlatformUserStatisticsUnit>.Instance))
-            .ToArray();
+                new KnownChannelIdentityResolver(),
+                NullLogger<LegacyUserStatisticsMigrator>.Instance),
+            NullLogger<UserStatisticsCatalogPersistenceUnit>.Instance);
         var botUnit = new BotStatisticsPersistenceUnit(botRepository, fileStore, NullLogger<BotStatisticsPersistenceUnit>.Instance);
         var commandUnit = new CommandUsagePersistenceUnit(new(TimeProvider.System), fileStore, NullLogger<CommandUsagePersistenceUnit>.Instance);
 
         _statisticsAutoSaver = new(
-            [.. userUnits, botUnit, commandUnit],
-            [.. userUnits, botUnit, commandUnit],
+            [userUnit, botUnit, commandUnit],
+            [userUnit, botUnit, commandUnit],
             [],
             NullLogger<StatisticsAutoSaver>.Instance);
 

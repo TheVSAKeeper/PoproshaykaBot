@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Statistics;
 
 namespace PoproshaykaBot.Core.Tests.Statistics;
@@ -14,22 +13,29 @@ internal sealed class StatisticsTestGraph
         CommandUsageRepository? commandUsageRepository = null,
         ILogger<StatisticsAutoSaver>? saverLogger = null,
         TimeSpan? autoSaveInterval = null,
+        BroadcastHistoryStore? broadcastHistoryStore = null,
+        ActiveBroadcastStore? activeBroadcastStore = null,
+        KnownChannelIdentityResolver? identityResolver = null,
         params IExternalWriteParticipant[] extraParticipants)
     {
         UserRepository = userRepository ?? new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         BotRepository = botRepository ?? new BotStatisticsRepository();
         CommandUsageRepository = commandUsageRepository ?? new CommandUsageRepository(TimeProvider.System);
         FileStore = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, directory);
+        var migrator = new LegacyUserStatisticsMigrator(
+            FileStore,
+            identityResolver ?? new KnownChannelIdentityResolver(),
+            NullLogger<LegacyUserStatisticsMigrator>.Instance,
+            broadcastHistoryStore,
+            activeBroadcastStore);
 
-        UserUnits = UserStatisticsPlatformCatalog.All
-            .Select(descriptor => new PlatformUserStatisticsUnit(
-                descriptor,
-                UserRepository.GetPartition(descriptor.Platform),
-                FileStore,
-                NullLogger<PlatformUserStatisticsUnit>.Instance))
-            .ToArray();
+        UserUnit = new UserStatisticsCatalogPersistenceUnit(
+            UserRepository,
+            FileStore,
+            migrator,
+            NullLogger<UserStatisticsCatalogPersistenceUnit>.Instance);
 
-        UserLoader = new UserStatisticsLoader(UserUnits);
+        UserLoader = new UserStatisticsLoader(UserUnit);
 
         var botUnit = new BotStatisticsPersistenceUnit(
             BotRepository,
@@ -41,8 +47,8 @@ internal sealed class StatisticsTestGraph
             FileStore,
             NullLogger<CommandUsagePersistenceUnit>.Instance);
 
-        IPeriodicStatisticsUnit[] periodicUnits = [.. UserUnits, botUnit, commandUsageUnit];
-        IExternalWriteParticipant[] participants = [.. UserUnits, botUnit, commandUsageUnit, .. extraParticipants];
+        IPeriodicStatisticsUnit[] periodicUnits = [UserUnit, botUnit, commandUsageUnit];
+        IExternalWriteParticipant[] participants = [UserUnit, botUnit, commandUsageUnit, .. extraParticipants];
         IFlushableHistoryStore[] flushableStores = [.. extraParticipants.OfType<IFlushableHistoryStore>()];
 
         var logger = saverLogger ?? NullLogger<StatisticsAutoSaver>.Instance;
@@ -59,14 +65,9 @@ internal sealed class StatisticsTestGraph
 
     public StatisticsFileStore FileStore { get; }
 
-    public IReadOnlyList<PlatformUserStatisticsUnit> UserUnits { get; }
+    internal UserStatisticsCatalogPersistenceUnit UserUnit { get; }
 
     public UserStatisticsLoader UserLoader { get; }
 
     public StatisticsAutoSaver AutoSaver { get; }
-
-    internal PlatformUserStatisticsUnit GetUserUnit(StreamingPlatform platform)
-    {
-        return UserUnits.Single(unit => unit.Platform == platform);
-    }
 }

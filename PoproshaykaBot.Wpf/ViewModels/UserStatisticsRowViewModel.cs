@@ -1,8 +1,10 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Windows;
 
 namespace PoproshaykaBot.Wpf.ViewModels;
@@ -31,22 +33,57 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
     }
 
     public UserStatisticsRowViewModel(UserStatistics source, UserRankStanding standing, PointTerm pointTerm)
+        : this(
+            ToAggregate(source ?? throw new ArgumentNullException(nameof(source))),
+            standing,
+            pointTerm,
+            channelCatalog: null,
+            legacySource: source)
     {
-        ArgumentNullException.ThrowIfNull(source);
+    }
+
+    public UserStatisticsRowViewModel(
+        ViewerAggregateStatistics aggregate,
+        UserRankStanding standing,
+        PointTerm pointTerm,
+        ChannelCatalogStore? channelCatalog = null)
+        : this(aggregate, standing, pointTerm, channelCatalog, legacySource: null)
+    {
+    }
+
+    private UserStatisticsRowViewModel(
+        ViewerAggregateStatistics aggregate,
+        UserRankStanding standing,
+        PointTerm pointTerm,
+        ChannelCatalogStore? channelCatalog,
+        UserStatistics? legacySource)
+    {
+        ArgumentNullException.ThrowIfNull(aggregate);
         ArgumentNullException.ThrowIfNull(standing);
         ArgumentNullException.ThrowIfNull(pointTerm);
 
-        Source = source;
+        Aggregate = aggregate;
+        Source = legacySource ?? new UserStatistics
+        {
+            Platform = aggregate.PrimaryKey.Platform,
+            UserId = aggregate.PrimaryKey.UserId,
+            Name = aggregate.DisplayName,
+            MessageCount = aggregate.MessageCount,
+            BonusPoints = aggregate.BonusPoints,
+            PenaltyPoints = aggregate.PenaltyPoints,
+            FirstSeen = aggregate.FirstSeen,
+            LastSeen = aggregate.LastSeen,
+        };
         Standing = standing;
         RankDisplay = standing.Display;
-        PointsDisplay = source.Points.ToString("N0", UiCulture.Russian);
-        MessageCountDisplay = source.MessageCount.ToString("N0", UiCulture.Russian);
+        PointsDisplay = aggregate.Points.ToString("N0", UiCulture.Russian);
+        MessageCountDisplay = aggregate.MessageCount.ToString("N0", UiCulture.Russian);
 
-        var messageCount = (long)Math.Min(source.MessageCount, (ulong)long.MaxValue);
-        var bonus = (long)Math.Min(source.BonusPoints, (ulong)long.MaxValue);
-        var penalty = (long)Math.Min(source.PenaltyPoints, (ulong)long.MaxValue);
+        var messageCount = (long)Math.Min(aggregate.MessageCount, (ulong)long.MaxValue);
+        var bonus = (long)Math.Min(aggregate.BonusPoints, (ulong)long.MaxValue);
+        var penalty = (long)Math.Min(aggregate.PenaltyPoints, (ulong)long.MaxValue);
 
-        Summary = $"{source.Name} · {PointsDisplay} {pointTerm.ForCount(source.Points)} · "
+        Summary = $"{aggregate.DisplayName} · {PointsDisplay} {pointTerm.ForCount(aggregate.Points)} · "
             + $"{MessageCountDisplay} {MessageTerm.ForCount(messageCount)}";
 
         HasBonus = bonus > 0;
@@ -73,8 +110,8 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
         _pointTerm = pointTerm;
 
         var now = DateTimeOffset.Now;
-        var firstSeen = RelativeTime.ToOffset(source.FirstSeen);
-        var lastSeen = RelativeTime.ToOffset(source.LastSeen);
+        var firstSeen = RelativeTime.ToOffset(aggregate.FirstSeen);
+        var lastSeen = RelativeTime.ToOffset(aggregate.LastSeen);
         var days = Math.Max(1, (int)(now.Date - firstSeen.ToLocalTime().Date).TotalDays + 1);
 
         FirstSeenDisplay = RelativeTime.FormatDate(firstSeen);
@@ -83,19 +120,38 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
         LastSeenMoment = RelativeTime.FormatMoment(lastSeen);
         DaysInChatDisplay = days.ToString("N0", UiCulture.Russian);
         DailyRateDisplay = ((double)messageCount / days).ToString("N1", UiCulture.Russian);
+
+        ChannelBreakdowns = aggregate.ChannelBreakdowns
+            .Select(b => CreateBreakdownRow(b, pointTerm, channelCatalog))
+            .ToList();
+
+        LinkedAccounts = aggregate.Accounts
+            .Select(a => new UserLinkedAccountRowViewModel(
+                a.Key,
+                PlatformVisuals.GetDisplayName(a.Key.Platform),
+                a.Name,
+                a.LinkOrigin switch
+                {
+                    AccountLinkOrigin.ViewerConfirmed => "подтверждено зрителем",
+                    AccountLinkOrigin.StreamerManual => "вручную стримером",
+                    _ => string.Empty,
+                },
+                aggregate.IsLinked))
+            .ToList();
     }
 
+    public ViewerAggregateStatistics Aggregate { get; }
     public UserStatistics Source { get; }
     public UserRankStanding Standing { get; }
     public UserAvatarViewModel Avatar { get; init; } = UserAvatarViewModel.None;
-    public PlatformUserKey Key => Source.Key;
-    public StreamingPlatform Platform => Source.Platform;
-    public string UserId => Source.UserId;
-    public string Name => Source.Name;
-    public ulong MessageCount => Source.MessageCount;
-    public long Points => Source.Points;
-    public ulong BonusPoints => Source.BonusPoints;
-    public ulong PenaltyPoints => Source.PenaltyPoints;
+    public PlatformUserKey Key => Aggregate.PrimaryKey;
+    public StreamingPlatform Platform => Aggregate.PrimaryKey.Platform;
+    public string UserId => Aggregate.PrimaryKey.UserId;
+    public string Name => Aggregate.DisplayName;
+    public ulong MessageCount => Aggregate.MessageCount;
+    public long Points => Aggregate.Points;
+    public ulong BonusPoints => Aggregate.BonusPoints;
+    public ulong PenaltyPoints => Aggregate.PenaltyPoints;
     public ulong RankOrder => Standing.Order;
     public string RankDisplay { get; }
     public string PointsDisplay { get; }
@@ -125,11 +181,84 @@ public sealed partial class UserStatisticsRowViewModel : ObservableObject
     public string LastSeenMoment { get; }
     public string DaysInChatDisplay { get; }
     public string DailyRateDisplay { get; }
+    public bool IsLinked => Aggregate.IsLinked;
+    public IReadOnlyList<UserChannelBreakdownRowViewModel> ChannelBreakdowns { get; }
+    public bool HasChannelBreakdowns => ChannelBreakdowns.Count > 1 || IsLinked;
+    public IReadOnlyList<UserLinkedAccountRowViewModel> LinkedAccounts { get; }
 
     public bool IsTopThree => Position is > 0 and <= 3;
+
+    public bool MatchesAccount(PlatformUserKey key) => Aggregate.MatchesAccount(key);
+
+    public bool MatchesQuery(string query)
+    {
+        return Aggregate.Accounts.Any(account =>
+            account.Name.Contains(query, StringComparison.InvariantCultureIgnoreCase)
+            || account.Key.UserId.Contains(query, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+    private static ViewerAggregateStatistics ToAggregate(UserStatistics source)
+    {
+        var key = source.Key;
+        return new(
+            ViewerIdentityKey.FromUser(key),
+            key,
+            source.Name,
+            source.MessageCount,
+            source.BonusPoints,
+            source.PenaltyPoints,
+            source.FirstSeen,
+            source.LastSeen,
+            [new ViewerAccountInfo(key, source.Name, source.FirstSeen, source.LastSeen)],
+            [
+                new ViewerChannelBreakdown(
+                    StatisticsCounterTarget.ForUnattributed(source.Platform),
+                    source.MessageCount,
+                    source.BonusPoints,
+                    source.PenaltyPoints,
+                    source.FirstSeen,
+                    source.LastSeen),
+            ],
+            null);
+    }
+
+    private static UserChannelBreakdownRowViewModel CreateBreakdownRow(
+        ViewerChannelBreakdown breakdown,
+        PointTerm pointTerm,
+        ChannelCatalogStore? channelCatalog)
+    {
+        var platformLabel = PlatformVisuals.GetDisplayName(breakdown.Target.Platform);
+        var label = breakdown.Target.AsChannelKey is { } channelKey
+            ? $"{platformLabel} · {channelCatalog?.ResolveDisplayName(channelKey) ?? channelKey.ChannelId}"
+            : $"{platformLabel} · без канала";
+
+        var messageText = $"{breakdown.MessageCount.ToString("N0", UiCulture.Russian)} {MessageTerm.ForCount((long)breakdown.MessageCount)}";
+        var pointsText = $"{breakdown.Points.ToString("N0", UiCulture.Russian)} {pointTerm.ForCount(breakdown.Points)}";
+
+        return new(breakdown.Target, label, messageText, pointsText, breakdown.LastSeen);
+    }
 
     private static bool IsBelowVisibleShare(long part, double earned)
     {
         return part > 0 && part / earned < VisibleTrackShare;
     }
+}
+
+public sealed record UserChannelBreakdownRowViewModel(
+    StatisticsCounterTarget Target,
+    string Label,
+    string MessageCountDisplay,
+    string PointsDisplay,
+    DateTime LastSeen);
+
+public sealed record UserLinkedAccountRowViewModel(
+    PlatformUserKey Key,
+    string PlatformLabel,
+    string Name,
+    string OriginLabel,
+    bool CanUnlink)
+{
+    public StreamingPlatform Platform => Key.Platform;
+    public string UserId => Key.UserId;
+    public bool HasOriginLabel => OriginLabel.Length > 0;
 }

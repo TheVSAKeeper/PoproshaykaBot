@@ -90,11 +90,24 @@ public static class LegacyDataScanner
                        ?? LegacyDataReader.ReadString(twitch, "botUsername");
 
         var userStatisticsCount = 0;
-        foreach (var relativePath in LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics))
+        var catalogNode = LegacyDataReader.TryRead(Path.Combine(fullPath, LegacyDataCatalog.UserStatisticsCatalogFileName), logger);
+        if (LegacyDataReader.Property(catalogNode, "accounts") is { } catalogAccounts)
         {
-            var nativePath = relativePath.Replace('/', Path.DirectorySeparatorChar);
-            var users = LegacyDataReader.TryRead(Path.Combine(fullPath, nativePath), logger);
-            userStatisticsCount += LegacyDataReader.CountItems(users);
+            userStatisticsCount = LegacyDataReader.CountItems(catalogAccounts);
+        }
+        else
+        {
+            foreach (var relativePath in LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics))
+            {
+                if (string.Equals(relativePath, LegacyDataCatalog.UserStatisticsCatalogFileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var nativePath = relativePath.Replace('/', Path.DirectorySeparatorChar);
+                var users = LegacyDataReader.TryRead(Path.Combine(fullPath, nativePath), logger);
+                userStatisticsCount += LegacyDataReader.CountItems(users);
+            }
         }
 
         var botStatistics = LegacyDataReader.TryRead(Path.Combine(fullPath, LegacyDataCatalog.BotStatisticsFileName), logger);

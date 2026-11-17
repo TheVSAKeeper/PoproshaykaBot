@@ -518,6 +518,7 @@ public partial class App : Application
         services.AddSingleton<UpdateSettingsSectionViewModel>();
         services.AddTransient<DashboardLayoutSectionViewModel>();
         services.AddTransient<RanksSettingsSectionViewModel>();
+        services.AddTransient<ChannelGroupsSettingsSectionViewModel>();
         services.AddTransient<DebugChannelSectionViewModel>();
         services.AddSingleton<McpSettingsSectionViewModel>();
         services.AddTransient<AppearanceSettingsSectionViewModel>();
@@ -529,6 +530,7 @@ public partial class App : Application
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.ObsSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.StreamSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.RanksSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.ChannelGroupsSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.DashboardSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.UpdateSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.DebugChannelSettingsSectionContributor>();

@@ -9,7 +9,8 @@ public sealed record BroadcastStarted(
     string Channel,
     StreamInfo? Stream,
     DateTimeOffset StartedAt,
-    bool IsCatchUp = false) : EventBase;
+    bool IsCatchUp = false,
+    string? ChannelId = null) : EventBase;
 
 public sealed record BroadcastPlatformJoined(
     Guid BroadcastId,
@@ -17,25 +18,29 @@ public sealed record BroadcastPlatformJoined(
     string Channel,
     StreamInfo? Stream,
     DateTimeOffset JoinedAt,
-    bool IsCatchUp = false) : EventBase;
+    bool IsCatchUp = false,
+    string? ChannelId = null) : EventBase;
 
 public sealed record BroadcastPlatformLeft(
     Guid BroadcastId,
     StreamingPlatform Platform,
     string Channel,
     DateTimeOffset LeftAt,
-    bool IsCatchUp = false) : EventBase;
+    bool IsCatchUp = false,
+    string? ChannelId = null) : EventBase;
 
 public sealed record BroadcastEnded(
     Guid BroadcastId,
     StreamingPlatform LastPlatform,
     string LastChannel,
     DateTimeOffset EndedAt,
-    bool IsCatchUp = false) : EventBase;
+    bool IsCatchUp = false,
+    string? ChannelId = null) : EventBase;
 
 public sealed record ViewerSampleObserved(
     StreamingPlatform Platform,
     string Channel,
     int ViewerCount,
     DateTimeOffset SampledAtUtc,
-    string? StreamId = null) : EventBase, IPlatformEvent;
+    string? StreamId = null,
+    string? ChannelId = null) : EventBase, IPlatformEvent;

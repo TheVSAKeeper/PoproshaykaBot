@@ -1,13 +1,17 @@
-﻿using PoproshaykaBot.Core.Statistics;
+﻿using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class MyProfileCommand(IUserStatisticsRepository statistics, UserRankService rankService) : IChatCommand
+public sealed class MyProfileCommand(
+    IUserStatisticsRepository statistics,
+    UserRankService rankService,
+    ChannelCatalogStore? channelCatalog = null) : IChatCommand
 {
     public string Canonical => "мойпрофиль";
     public IReadOnlyCollection<string> Aliases => ["profile", "профиль"];
-    public string Description => "твоя статистика";
+    public string Description => "твоя статистика (по каналу вызова, 'группа <имя>' или 'все')";
 
     public bool CanExecute(CommandContext context)
     {
@@ -16,38 +20,25 @@ public sealed class MyProfileCommand(IUserStatisticsRepository statistics, UserR
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var platformUsers = statistics.ForPlatform(context.Platform);
-        var targetUserId = context.UserId;
-        var targetDisplayName = "твоя";
-
-        if (context.Arguments.Count > 0)
+        var lookup = StatisticsCommandSliceParser.ResolveViewer(context, statistics, channelCatalog);
+        if (!lookup.Succeeded)
         {
-            var username = context.Arguments[0];
-            var otherUserStats = platformUsers.GetByName(username);
-            if (otherUserStats != null)
-            {
-                targetUserId = otherUserStats.UserId;
-                targetDisplayName = $"статистика {otherUserStats.Name}";
-            }
-            else
-            {
-                return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply($"Пользователь {username} не найден", context.MessageId));
-            }
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(lookup.ErrorMessage!, context.MessageId));
         }
 
-        var userStats = platformUsers.GetById(targetUserId);
-
-        if (userStats == null)
+        var viewer = lookup.Viewer;
+        if (viewer is null)
         {
-            var msg = targetUserId == context.UserId ? "У тебя пока нет статистики" : "У этого пользователя пока нет статистики";
+            var msg = lookup.IsSelf ? "У тебя пока нет статистики" : "У этого пользователя пока нет статистики";
             return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(msg, context.MessageId));
         }
 
-        var messages = FormattingUtils.FormatNumber((long)userStats.MessageCount);
-        var points = rankService.FormatPoints(userStats.Points);
-        var firstSeen = FormattingUtils.FormatDateTime(userStats.FirstSeen);
-        var lastSeen = FormattingUtils.FormatDateTime(userStats.LastSeen);
-        var rankDisplay = rankService.GetRankDisplay(userStats.Points);
+        var targetDisplayName = lookup.IsSelf ? "твоя" : $"статистика {viewer.DisplayName}";
+        var messages = FormattingUtils.FormatNumber((long)viewer.MessageCount);
+        var points = rankService.FormatPoints(viewer.Points);
+        var firstSeen = FormattingUtils.FormatDateTime(viewer.FirstSeen);
+        var lastSeen = FormattingUtils.FormatDateTime(viewer.LastSeen);
+        var rankDisplay = rankService.GetRankDisplay(viewer.Points);
 
         var text = $"👤 {targetDisplayName} {rankDisplay} | 💬 {messages} мсг | 🏆 {points} | С нами с: {firstSeen} | В чате: {lastSeen}";
         return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));

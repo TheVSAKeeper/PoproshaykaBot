@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
-using PoproshaykaBot.Core.Platforms;
+﻿using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.Statistics;
 
@@ -41,11 +40,14 @@ public sealed class YouTubeStatisticsOwnershipTests
     }
 
     [Test]
-    public async Task LegacyTwitchJsonOmitsPlatformOnResave_WhileYouTubeWritesPlatformYouTube()
+    public async Task MigrationWritesUnifiedCatalog_AndLeavesLegacyPlatformFilesUntouched()
     {
         var twitchPath = Path.Combine(_directory, "users_statistics.json");
-        var youtubePath = Path.Combine(_directory, "youtube", "users_statistics.json");
+        var youtubeDir = Path.Combine(_directory, "youtube");
+        var youtubePath = Path.Combine(youtubeDir, "users_statistics.json");
+        Directory.CreateDirectory(youtubeDir);
         await File.WriteAllTextAsync(twitchPath, LegacyTwitchJson);
+        await File.WriteAllTextAsync(youtubePath, "[]");
 
         var graph = new StatisticsTestGraph(_directory);
         await graph.AutoSaver.StartAsync(new Progress<string>(), CancellationToken.None);
@@ -57,13 +59,13 @@ public sealed class YouTubeStatisticsOwnershipTests
 
             await graph.AutoSaver.SaveNowAsync();
 
-            var savedTwitchJson = await File.ReadAllTextAsync(twitchPath);
-            var savedYouTubeJson = await File.ReadAllTextAsync(youtubePath);
+            var savedCatalog = await graph.FileStore.LoadUserStatisticsCatalogAsync();
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(savedTwitchJson, Does.Not.Contain("\"platform\""));
-                Assert.That(savedYouTubeJson, Does.Contain("\"platform\": \"YouTube\""));
+                Assert.That(await File.ReadAllTextAsync(twitchPath), Is.EqualTo(LegacyTwitchJson));
+                Assert.That(await File.ReadAllTextAsync(youtubePath), Is.EqualTo("[]"));
+                Assert.That(savedCatalog.Value, Is.Not.Null);
                 Assert.That(graph.UserRepository.ForPlatform(StreamingPlatform.Twitch).GetById("u1")!.MessageCount, Is.EqualTo(13ul));
                 Assert.That(graph.UserRepository.ForPlatform(StreamingPlatform.YouTube).GetById("yt1")!.Platform, Is.EqualTo(StreamingPlatform.YouTube));
             }
@@ -75,7 +77,7 @@ public sealed class YouTubeStatisticsOwnershipTests
     }
 
     [Test]
-    public async Task CorruptYouTubeFile_AbandonsYouTubeOnly_LeavesTwitchOperationalAndCreatesBackupInYouTubeFolder()
+    public async Task CorruptYouTubeFile_AbortsWholeMigration_CreatesInvalidBackupAndDoesNotCreateCatalog()
     {
         var twitchPath = Path.Combine(_directory, "users_statistics.json");
         var youtubeDir = Path.Combine(_directory, "youtube");
@@ -97,11 +99,11 @@ public sealed class YouTubeStatisticsOwnershipTests
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(graph.UserLoader.IsLoadedFor(StreamingPlatform.Twitch), Is.True);
-                Assert.That(graph.UserLoader.IsLoadedFor(StreamingPlatform.YouTube), Is.False);
+                Assert.That(graph.UserLoader.IsLoaded, Is.False);
+                Assert.That(File.Exists(Path.Combine(_directory, LegacyDataCatalog.UserStatisticsCatalogFileName)), Is.False);
                 Assert.That(await File.ReadAllTextAsync(youtubePath), Is.EqualTo("{broken"));
+                Assert.That(await File.ReadAllTextAsync(twitchPath), Is.EqualTo(LegacyTwitchJson));
                 Assert.That(Directory.GetFiles(youtubeDir, "users_statistics.invalid-*.json"), Is.Not.Empty);
-                Assert.That((await graph.FileStore.LoadUsersAsync(StreamingPlatform.Twitch)).Value!.Single().MessageCount, Is.EqualTo(13ul));
             }
         }
         finally
@@ -111,11 +113,10 @@ public sealed class YouTubeStatisticsOwnershipTests
     }
 
     [Test]
-    public async Task PartialSaveFailure_RollsBackOnlyUncommittedUnits_LeavingCommittedPlatformClean()
+    public async Task FailedCatalogSave_RollsBackHasChanges_AndRetriesOnNextSave()
     {
-        var youtubeDir = Path.Combine(_directory, "youtube");
-        var blockedYouTubeTmp = Path.Combine(youtubeDir, "users_statistics.json.tmp");
-        Directory.CreateDirectory(blockedYouTubeTmp);
+        var blockedCatalogTmp = Path.Combine(_directory, $"{LegacyDataCatalog.UserStatisticsCatalogFileName}.tmp");
+        Directory.CreateDirectory(blockedCatalogTmp);
 
         var graph = new StatisticsTestGraph(_directory);
         await graph.AutoSaver.StartAsync(new Progress<string>(), CancellationToken.None);
@@ -129,19 +130,18 @@ public sealed class YouTubeStatisticsOwnershipTests
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(graph.UserRepository.GetPartition(StreamingPlatform.Twitch).HasChanges, Is.False);
-                Assert.That(graph.UserRepository.GetPartition(StreamingPlatform.YouTube).HasChanges, Is.True);
-                Assert.That(File.Exists(Path.Combine(_directory, "users_statistics.json")), Is.True);
-                Assert.That(File.Exists(Path.Combine(youtubeDir, "users_statistics.json")), Is.False);
+                Assert.That(graph.UserRepository.HasChanges, Is.True);
+                Assert.That(File.Exists(Path.Combine(_directory, LegacyDataCatalog.UserStatisticsCatalogFileName)), Is.False);
             }
 
-            Directory.Delete(blockedYouTubeTmp);
+            Directory.Delete(blockedCatalogTmp);
             await graph.AutoSaver.SaveNowAsync();
 
+            var catalog = await graph.FileStore.LoadUserStatisticsCatalogAsync();
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(graph.UserRepository.GetPartition(StreamingPlatform.YouTube).HasChanges, Is.False);
-                Assert.That((await graph.FileStore.LoadUsersAsync(StreamingPlatform.YouTube)).Value!.Single().Name, Is.EqualTo("BobYT"));
+                Assert.That(graph.UserRepository.HasChanges, Is.False);
+                Assert.That(catalog.Value!.Accounts.Select(static a => a.Name), Is.EquivalentTo(new[] { "Alice", "BobYT" }));
             }
         }
         finally
@@ -150,13 +150,13 @@ public sealed class YouTubeStatisticsOwnershipTests
         }
     }
 
-    [TestCase("youtube/users_statistics.json", true, false, true)]
-    [TestCase("users_statistics.json", false, true, true)]
-    [TestCase("bot_statistics.json", true, true, false)]
-    public async Task ExternalWrite_RevokesOnlyTouchedFileParticipant(
+    [TestCase("youtube/users_statistics.json", false, true)]
+    [TestCase("users_statistics.json", false, true)]
+    [TestCase("user_statistics_catalog.json", false, true)]
+    [TestCase("bot_statistics.json", true, false)]
+    public async Task ExternalWrite_RevokesCatalogParticipantOnAnyOwnedUserPath(
         string touchedRelativePath,
-        bool expectTwitchLoaded,
-        bool expectYouTubeLoaded,
+        bool expectCatalogUpdated,
         bool expectBotUpdated)
     {
         var twitchPath = Path.Combine(_directory, "users_statistics.json");
@@ -179,7 +179,6 @@ public sealed class YouTubeStatisticsOwnershipTests
                 _ => StatisticsExternalWrite.Files(touchedRelativePath));
 
             await graph.AutoSaver.RunExternalWriteAsync(() => 0, _ => StatisticsExternalWrite.None);
-            await graph.AutoSaver.RunExternalWriteAsync(() => 0, _ => StatisticsExternalWrite.None);
 
             graph.UserRepository.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "Alice");
             graph.UserRepository.TrackMessage(new PlatformUserKey(StreamingPlatform.YouTube, "yt1"), "BobYT");
@@ -188,18 +187,15 @@ public sealed class YouTubeStatisticsOwnershipTests
             await graph.AutoSaver.SaveNowAsync();
 
             var savedBot = await graph.FileStore.LoadBotAsync();
+            var savedCatalog = await graph.FileStore.LoadUserStatisticsCatalogAsync();
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(graph.UserLoader.IsLoadedFor(StreamingPlatform.Twitch), Is.EqualTo(expectTwitchLoaded));
-                Assert.That(graph.UserLoader.IsLoadedFor(StreamingPlatform.YouTube), Is.EqualTo(expectYouTubeLoaded));
+                Assert.That(graph.UserLoader.IsLoaded, Is.EqualTo(expectCatalogUpdated));
                 Assert.That(savedBot.Value!.TotalMessagesProcessed > 7ul, Is.EqualTo(expectBotUpdated));
                 Assert.That(
-                    (await graph.FileStore.LoadUsersAsync(StreamingPlatform.Twitch)).Value!.Single().MessageCount == 13ul,
-                    Is.EqualTo(expectTwitchLoaded));
-                Assert.That(
-                    (await graph.FileStore.LoadUsersAsync(StreamingPlatform.YouTube)).Value!.Count == 1,
-                    Is.EqualTo(expectYouTubeLoaded));
+                    savedCatalog.Value!.UnattributedCounters.Single(static c => c.UserId == "u1").MessageCount == 13ul,
+                    Is.EqualTo(expectCatalogUpdated));
             }
         }
         finally

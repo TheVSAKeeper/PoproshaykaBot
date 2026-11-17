@@ -6,7 +6,8 @@ public sealed record UserRewarded(
     PlatformUserKey User,
     string UserName,
     ulong AddedPoints,
-    string? Channel) : EventBase, IPlatformEvent
+    string? Channel,
+    ChannelKey? ChannelKey = null) : EventBase, IPlatformEvent
 {
     public StreamingPlatform Platform => User.Platform;
 }

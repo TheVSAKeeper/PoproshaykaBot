@@ -9,7 +9,16 @@ public sealed class BroadcastPlatformRecord
 
     public string Channel { get; set; } = string.Empty;
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ChannelId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? ProjectionSessionId { get; set; }
+
     public string? StreamId { get; set; }
+
+    [JsonIgnore]
+    public ChannelKey? ChannelKey => Platforms.ChannelKey.FromId(Platform, ChannelId);
 
     public DateTimeOffset StartedAt { get; set; }
 

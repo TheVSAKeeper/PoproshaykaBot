@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 
 namespace PoproshaykaBot.Core.Chat.Handlers;
 
@@ -13,16 +14,22 @@ public sealed class ModerationChatNotificationHandler :
 {
     private readonly IBroadcastMessenger _messenger;
     private readonly SettingsManager _settingsManager;
+    private readonly IChatPlatformRegistry? _platformRegistry;
+    private readonly ChannelCatalogStore? _channelCatalog;
     private readonly IDisposable _punishedSubscription;
     private readonly IDisposable _rewardedSubscription;
 
     public ModerationChatNotificationHandler(
         IBroadcastMessenger messenger,
         SettingsManager settingsManager,
-        IEventBus eventBus)
+        IEventBus eventBus,
+        IChatPlatformRegistry? platformRegistry = null,
+        ChannelCatalogStore? channelCatalog = null)
     {
         _messenger = messenger;
         _settingsManager = settingsManager;
+        _platformRegistry = platformRegistry;
+        _channelCatalog = channelCatalog;
         _punishedSubscription = eventBus.Subscribe<UserPunished>(this);
         _rewardedSubscription = eventBus.Subscribe<UserRewarded>(this);
     }
@@ -31,7 +38,9 @@ public sealed class ModerationChatNotificationHandler :
     {
         var messageSettings = _settingsManager.Current.ChatMessages;
 
-        if (!messageSettings.PunishmentEnabled || string.IsNullOrWhiteSpace(@event.Channel))
+        if (!messageSettings.PunishmentEnabled
+            || string.IsNullOrWhiteSpace(@event.Channel)
+            || !ShouldSendNotification(@event.Platform, @event.ChannelKey, @event.Channel))
         {
             return Task.CompletedTask;
         }
@@ -47,7 +56,9 @@ public sealed class ModerationChatNotificationHandler :
     {
         var messageSettings = _settingsManager.Current.ChatMessages;
 
-        if (!messageSettings.RewardEnabled || string.IsNullOrWhiteSpace(@event.Channel))
+        if (!messageSettings.RewardEnabled
+            || string.IsNullOrWhiteSpace(@event.Channel)
+            || !ShouldSendNotification(@event.Platform, @event.ChannelKey, @event.Channel))
         {
             return Task.CompletedTask;
         }
@@ -57,6 +68,62 @@ public sealed class ModerationChatNotificationHandler :
         _messenger.Send(@event.Platform, message, ChatSendCategory.EventNotification);
 
         return Task.CompletedTask;
+    }
+
+    private bool ShouldSendNotification(StreamingPlatform platform, ChannelKey? targetChannelKey, string? eventChannel)
+    {
+        if (targetChannelKey is not { } targetKey)
+        {
+            return true;
+        }
+
+        if (_platformRegistry is null)
+        {
+            return true;
+        }
+
+        var activeChannel = _platformRegistry.GetConfiguredChannel(platform)?.Trim();
+        if (string.IsNullOrWhiteSpace(activeChannel))
+        {
+            return false;
+        }
+
+        if (string.Equals(targetKey.ChannelId, activeChannel, StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(eventChannel)
+                && string.Equals(eventChannel.Trim(), activeChannel, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (_channelCatalog is null)
+        {
+            return false;
+        }
+
+        var entries = _channelCatalog.Load().Channels;
+        foreach (var entry in entries)
+        {
+            if (entry.Platform != targetKey.Platform)
+            {
+                continue;
+            }
+
+            var matchesActive = string.Equals(entry.ChannelId, activeChannel, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(entry.DisplayName, activeChannel, StringComparison.OrdinalIgnoreCase)
+                || entry.KnownAliases.Any(alias => string.Equals(alias, activeChannel, StringComparison.OrdinalIgnoreCase));
+
+            if (string.Equals(entry.ChannelId, targetKey.ChannelId, StringComparison.Ordinal))
+            {
+                return matchesActive;
+            }
+
+            if (matchesActive)
+            {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     public void Dispose()

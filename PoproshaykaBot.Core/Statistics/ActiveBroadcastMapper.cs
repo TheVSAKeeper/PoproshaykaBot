@@ -184,6 +184,7 @@ internal static class ActiveBroadcastMapper
         {
             Platform = draft.Platform,
             Channel = draft.Channel,
+            ChannelId = draft.ChannelId,
             StreamId = draft.StreamId,
             StartedAt = startedAt,
             EndedAt = endedAt,

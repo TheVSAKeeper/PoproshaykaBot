@@ -25,7 +25,7 @@ public readonly record struct PlatformUserKey : IEquatable<PlatformUserKey>
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(Platform, StringComparer.Ordinal.GetHashCode(UserId));
+        return HashCode.Combine(Platform, UserId is null ? 0 : StringComparer.Ordinal.GetHashCode(UserId));
     }
 
     public override string ToString()

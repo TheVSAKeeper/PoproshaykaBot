@@ -1,12 +1,15 @@
-﻿using PoproshaykaBot.Core.Statistics;
+﻿using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class HowManyMessagesCommand(IUserStatisticsRepository statistics) : IChatCommand
+public sealed class HowManyMessagesCommand(
+    IUserStatisticsRepository statistics,
+    ChannelCatalogStore? channelCatalog = null) : IChatCommand
 {
     public string Canonical => "сколькосообщений";
     public IReadOnlyCollection<string> Aliases => ["messages", "cc"];
-    public string Description => "твой счётчик сообщений";
+    public string Description => "твой счётчик сообщений (по каналу вызова, 'группа <имя>' или 'все')";
 
     public bool CanExecute(CommandContext context)
     {
@@ -15,27 +18,15 @@ public sealed class HowManyMessagesCommand(IUserStatisticsRepository statistics)
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var platformUsers = statistics.ForPlatform(context.Platform);
-        var targetUserId = context.UserId;
-        var targetDisplayName = "У тебя";
-
-        if (context.Arguments.Count > 0)
+        var lookup = StatisticsCommandSliceParser.ResolveViewer(context, statistics, channelCatalog);
+        if (!lookup.Succeeded)
         {
-            var username = context.Arguments[0];
-            var otherUserStats = platformUsers.GetByName(username);
-            if (otherUserStats != null)
-            {
-                targetUserId = otherUserStats.UserId;
-                targetDisplayName = $"У {otherUserStats.Name}";
-            }
-            else
-            {
-                return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply($"Пользователь {username} не найден", context.MessageId));
-            }
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(lookup.ErrorMessage!, context.MessageId));
         }
 
-        var userStats = platformUsers.GetById(targetUserId);
-        var messageCount = (long?)userStats?.MessageCount ?? 0;
+        var viewer = lookup.Viewer;
+        var targetDisplayName = lookup.IsSelf ? "У тебя" : $"У {viewer!.DisplayName}";
+        var messageCount = (long?)viewer?.MessageCount ?? 0;
 
         var text = $"💬 {targetDisplayName} {FormattingUtils.FormatNumber(messageCount)} сообщений";
         return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(text, context.MessageId));

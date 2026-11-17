@@ -1,43 +1,45 @@
-﻿using System.Collections.Frozen;
-using PoproshaykaBot.Core.Platforms;
+﻿using PoproshaykaBot.Core.Platforms;
 
 namespace PoproshaykaBot.Core.Statistics;
 
 public sealed class UserStatisticsLoader
 {
-    private readonly FrozenDictionary<StreamingPlatform, PlatformUserStatisticsUnit> _units;
+    private readonly UserStatisticsCatalogPersistenceUnit _unit;
 
-    internal UserStatisticsLoader(IEnumerable<PlatformUserStatisticsUnit> units)
+    internal UserStatisticsLoader(UserStatisticsCatalogPersistenceUnit unit)
     {
-        _units = units.ToFrozenDictionary(static unit => unit.Platform);
+        ArgumentNullException.ThrowIfNull(unit);
+        _unit = unit;
     }
 
-    public bool IsAnyLoaded => _units.Values.Any(static unit => unit.IsLoaded);
+    public bool IsLoaded => _unit.IsLoaded;
 
-    public bool IsLoadedFor(StreamingPlatform platform) => GetUnit(platform).IsLoaded;
+    public bool IsAnyLoaded => _unit.IsLoaded;
 
-    public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
+    public bool IsLoadedFor(StreamingPlatform platform) => _unit.IsLoaded;
+
+    public Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
-        foreach (var unit in _units.Values)
-        {
-            await unit.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
-        }
+        return _unit.EnsureLoadedAsync(cancellationToken);
+    }
+
+    public ValueTask<bool> InvalidateAsync(CancellationToken cancellationToken = default)
+    {
+        return _unit.InvalidateAsync(cancellationToken);
     }
 
     public ValueTask<bool> InvalidateAsync(StreamingPlatform platform, CancellationToken cancellationToken = default)
     {
-        return GetUnit(platform).InvalidateAsync(cancellationToken);
+        return _unit.InvalidateAsync(cancellationToken);
+    }
+
+    public ValueTask RestoreAsync(bool wasLoaded)
+    {
+        return _unit.RestoreAsync(wasLoaded);
     }
 
     public ValueTask RestoreAsync(StreamingPlatform platform, bool wasLoaded)
     {
-        return GetUnit(platform).RestoreAsync(wasLoaded);
-    }
-
-    private PlatformUserStatisticsUnit GetUnit(StreamingPlatform platform)
-    {
-        return _units.TryGetValue(platform, out var unit)
-            ? unit
-            : throw new ArgumentOutOfRangeException(nameof(platform), platform, "Неизвестная площадка.");
+        return _unit.RestoreAsync(wasLoaded);
     }
 }

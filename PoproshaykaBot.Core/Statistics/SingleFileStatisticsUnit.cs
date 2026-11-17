@@ -5,7 +5,8 @@ namespace PoproshaykaBot.Core.Statistics;
 internal abstract class SingleFileStatisticsUnit<TSnapshot>(
     string relativePath,
     string displayName,
-    ILogger logger)
+    ILogger logger,
+    IReadOnlyCollection<string>? ownedRelativePaths = null)
     : IPeriodicStatisticsUnit, IExternalWriteParticipant, IDisposable
     where TSnapshot : class
 {
@@ -19,7 +20,7 @@ internal abstract class SingleFileStatisticsUnit<TSnapshot>(
 
     public bool IsLoaded => LoadState == StatisticsLoadState.Loaded;
 
-    public IReadOnlyCollection<string> OwnedRelativePaths { get; } = [relativePath];
+    public IReadOnlyCollection<string> OwnedRelativePaths { get; } = ownedRelativePaths ?? [relativePath];
 
     protected abstract bool HasChanges { get; }
 

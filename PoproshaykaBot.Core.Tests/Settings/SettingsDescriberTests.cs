@@ -207,6 +207,7 @@ public sealed class SettingsDescriberTests
             "BroadcastProfilePlatformsSettings",
             "PollsSettings",
             "CommandSettings",
+            "ChannelsSettings",
             "Account.Bot",
             "Account.Broadcaster",
             "YouTubeSettings",

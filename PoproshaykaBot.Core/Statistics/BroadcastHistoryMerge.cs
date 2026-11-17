@@ -15,7 +15,7 @@ public static class BroadcastHistoryMerge
         Array.Fill(groupOf, -1);
 
         var groups = new List<List<int>>();
-        var groupBounds = new List<(DateTimeOffset StartedAt, DateTimeOffset EndedAt, HashSet<(StreamingPlatform Platform, string Channel)> Keys)>();
+        var groupBounds = new List<(DateTimeOffset StartedAt, DateTimeOffset EndedAt, List<ChannelIdentity> Keys)>();
 
         var orderedIndices = Enumerable.Range(0, broadcasts.Count)
             .Where(index => !broadcasts[index].IsHidden)
@@ -27,7 +27,7 @@ public static class BroadcastHistoryMerge
             var record = broadcasts[index];
             var startedAt = record.StartedAt;
             var endedAt = record.EndedAt > startedAt ? record.EndedAt : startedAt;
-            var keys = GetPlatformKeys(record);
+            var keys = GetChannelKeys(record);
 
             var matchingGroup = FindMatchingGroup(groupBounds, keys, startedAt);
 
@@ -39,7 +39,24 @@ public static class BroadcastHistoryMerge
                 var existing = groupBounds[matchingGroup];
                 var mergedEnd = endedAt > existing.EndedAt ? endedAt : existing.EndedAt;
                 var mergedStart = startedAt < existing.StartedAt ? startedAt : existing.StartedAt;
-                existing.Keys.UnionWith(keys);
+                foreach (var key in keys)
+                {
+                    if (!existing.Keys.Any(k => k.Matches(key)))
+                    {
+                        existing.Keys.Add(key);
+                    }
+                    else
+                    {
+                        for (var kIdx = 0; kIdx < existing.Keys.Count; kIdx++)
+                        {
+                            if (existing.Keys[kIdx].Matches(key))
+                            {
+                                existing.Keys[kIdx] = existing.Keys[kIdx].CombineWith(key);
+                            }
+                        }
+                    }
+                }
+
                 groupBounds[matchingGroup] = (mergedStart, mergedEnd, existing.Keys);
                 continue;
             }
@@ -84,8 +101,8 @@ public static class BroadcastHistoryMerge
     }
 
     private static int FindMatchingGroup(
-        List<(DateTimeOffset StartedAt, DateTimeOffset EndedAt, HashSet<(StreamingPlatform Platform, string Channel)> Keys)> groupBounds,
-        HashSet<(StreamingPlatform Platform, string Channel)> candidateKeys,
+        List<(DateTimeOffset StartedAt, DateTimeOffset EndedAt, List<ChannelIdentity> Keys)> groupBounds,
+        List<ChannelIdentity> candidateKeys,
         DateTimeOffset startedAt)
     {
         for (var i = groupBounds.Count - 1; i >= 0; i--)
@@ -107,12 +124,12 @@ public static class BroadcastHistoryMerge
     }
 
     private static bool SharesPlatformChannel(
-        HashSet<(StreamingPlatform Platform, string Channel)> left,
-        HashSet<(StreamingPlatform Platform, string Channel)> right)
+        List<ChannelIdentity> left,
+        List<ChannelIdentity> right)
     {
         foreach (var item in right)
         {
-            if (left.Contains(item))
+            if (left.Any(existing => existing.Matches(item)))
             {
                 return true;
             }
@@ -126,16 +143,20 @@ public static class BroadcastHistoryMerge
         return startedAt <= groupEnd || (startedAt - groupStart).Duration() <= StartTolerance;
     }
 
-    private static HashSet<(StreamingPlatform Platform, string Channel)> GetPlatformKeys(BroadcastRecord record)
+    private static List<ChannelIdentity> GetChannelKeys(BroadcastRecord record)
     {
-        var set = new HashSet<(StreamingPlatform, string)>();
+        var list = new List<ChannelIdentity>();
 
         foreach (var platform in record.Platforms)
         {
-            set.Add((platform.Platform, platform.Channel.ToUpperInvariant()));
+            var identity = ChannelIdentity.FromRecord(platform);
+            if (!list.Any(existing => existing.Matches(identity)))
+            {
+                list.Add(identity);
+            }
         }
 
-        return set;
+        return list;
     }
 
     private static BroadcastRecord Combine(IReadOnlyList<BroadcastRecord> group)
@@ -150,14 +171,27 @@ public static class BroadcastHistoryMerge
         }
 
         var mergedPlatforms = CombinePlatforms(group);
+        var activeProjectionIds = mergedPlatforms
+            .Where(static p => p.ProjectionSessionId.HasValue)
+            .Select(static p => p.ProjectionSessionId!.Value)
+            .ToHashSet();
+        var mergedIds = group
+            .SelectMany(static record =>
+                (record.MergedBroadcastIds ?? [])
+                .Concat(record.Platforms
+                    .Where(static p => p.ProjectionSessionId.HasValue)
+                    .Select(static p => p.ProjectionSessionId!.Value))
+                .Prepend(record.Id))
+            .Where(id => id != primary.Id && !activeProjectionIds.Contains(id))
+            .Distinct()
+            .ToList();
         var mergedSeries = CombineViewerSeries(group);
         var (peakViewers, averageViewers) = CombineBroadcastViewers(group, mergedSeries, startedAt);
 
         var result = new BroadcastRecord
         {
             Id = primary.Id,
-            MergedBroadcastIds = group.SelectMany(static record => (record.MergedBroadcastIds ?? []).Prepend(record.Id))
-                .Where(id => id != primary.Id).Distinct().ToList(),
+            MergedBroadcastIds = mergedIds,
             StartedAt = startedAt,
             EndedAt = endedAt,
             IsHidden = false,
@@ -173,36 +207,46 @@ public static class BroadcastHistoryMerge
 
     private static List<BroadcastPlatformRecord> CombinePlatforms(IReadOnlyList<BroadcastRecord> group)
     {
-        var byPlatform = new Dictionary<StreamingPlatform, List<BroadcastPlatformRecord>>();
-        var order = new List<StreamingPlatform>();
+        var buckets = new List<(ChannelIdentity Identity, List<BroadcastPlatformRecord> Items)>();
 
         foreach (var broadcast in group)
         {
             foreach (var platformRecord in broadcast.Platforms)
             {
-                if (!byPlatform.TryGetValue(platformRecord.Platform, out var list))
+                var identity = ChannelIdentity.FromRecord(platformRecord);
+                var matchedBucket = -1;
+                for (var i = 0; i < buckets.Count; i++)
                 {
-                    list = [];
-                    byPlatform[platformRecord.Platform] = list;
-                    order.Add(platformRecord.Platform);
+                    if (buckets[i].Identity.Matches(identity))
+                    {
+                        matchedBucket = i;
+                        break;
+                    }
                 }
 
-                list.Add(platformRecord);
+                if (matchedBucket >= 0)
+                {
+                    buckets[matchedBucket].Items.Add(platformRecord);
+                    buckets[matchedBucket] = (buckets[matchedBucket].Identity.CombineWith(identity), buckets[matchedBucket].Items);
+                }
+                else
+                {
+                    buckets.Add((identity, [platformRecord]));
+                }
             }
         }
 
-        var result = new List<BroadcastPlatformRecord>(order.Count);
+        var result = new List<BroadcastPlatformRecord>(buckets.Count);
 
-        foreach (var platform in order)
+        foreach (var (identity, items) in buckets)
         {
-            var items = byPlatform[platform];
-            result.Add(items.Count == 1 ? ClonePlatform(items[0]) : CombineSinglePlatform(platform, items));
+            result.Add(items.Count == 1 ? ClonePlatform(items[0]) : CombineSingleChannel(identity.Platform, items));
         }
 
         return result;
     }
 
-    private static BroadcastPlatformRecord CombineSinglePlatform(
+    private static BroadcastPlatformRecord CombineSingleChannel(
         StreamingPlatform platform,
         IReadOnlyList<BroadcastPlatformRecord> group)
     {
@@ -217,11 +261,15 @@ public static class BroadcastHistoryMerge
 
         var chatters = MergeChatters(group);
         var streamId = group.Select(static r => r.StreamId).FirstOrDefault(static id => !string.IsNullOrEmpty(id));
+        var channelId = group.Select(static r => r.ChannelId).FirstOrDefault(static id => !string.IsNullOrWhiteSpace(id));
+        var projectionSessionId = group.Select(static r => r.ProjectionSessionId).FirstOrDefault(static id => id.HasValue);
 
         return new()
         {
             Platform = platform,
             Channel = first.Channel,
+            ChannelId = channelId,
+            ProjectionSessionId = projectionSessionId,
             StreamId = streamId,
             StartedAt = startedAt,
             MergedStartedAts = group.SelectMany(static record => (record.MergedStartedAts ?? []).Prepend(record.StartedAt))
@@ -455,6 +503,8 @@ public static class BroadcastHistoryMerge
         {
             Platform = source.Platform,
             Channel = source.Channel,
+            ChannelId = source.ChannelId,
+            ProjectionSessionId = source.ProjectionSessionId,
             StreamId = source.StreamId,
             StartedAt = source.StartedAt,
             MergedStartedAts = source.MergedStartedAts is null ? null : [.. source.MergedStartedAts],
@@ -495,5 +545,42 @@ public static class BroadcastHistoryMerge
                 })
                 .ToList(),
         };
+    }
+
+    private readonly record struct ChannelIdentity(
+        StreamingPlatform Platform,
+        string? ChannelId,
+        string NormalizedChannel)
+    {
+        public static ChannelIdentity FromRecord(BroadcastPlatformRecord record)
+        {
+            return new(
+                record.Platform,
+                string.IsNullOrWhiteSpace(record.ChannelId) ? null : record.ChannelId.Trim(),
+                record.Channel.Trim().ToUpperInvariant());
+        }
+
+        public bool Matches(ChannelIdentity other)
+        {
+            if (Platform != other.Platform)
+            {
+                return false;
+            }
+
+            if (ChannelId is not null && other.ChannelId is not null)
+            {
+                return string.Equals(ChannelId, other.ChannelId, StringComparison.Ordinal);
+            }
+
+            return string.Equals(NormalizedChannel, other.NormalizedChannel, StringComparison.Ordinal);
+        }
+
+        public ChannelIdentity CombineWith(ChannelIdentity other)
+        {
+            return new(
+                Platform,
+                ChannelId ?? other.ChannelId,
+                !string.IsNullOrEmpty(NormalizedChannel) ? NormalizedChannel : other.NormalizedChannel);
+        }
     }
 }

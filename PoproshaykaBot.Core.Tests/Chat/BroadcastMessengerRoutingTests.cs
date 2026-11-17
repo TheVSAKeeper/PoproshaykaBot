@@ -248,4 +248,45 @@ public sealed class BroadcastMessengerRoutingTests
             Assert.That(twitch.FakeMessenger.Sent, Is.Empty);
         });
     }
+
+    [Test]
+    public async Task ModerationChatNotificationHandler_SuppressesNotificationForInactiveChannelOnSamePlatform()
+    {
+        var ytMessenger = Substitute.For<IPlatformMessenger>();
+        var platformB = Substitute.For<IChatPlatform>();
+        platformB.Id.Returns(StreamingPlatform.YouTube);
+        platformB.IsConnected.Returns(true);
+        platformB.ConfiguredChannel.Returns("UC_b");
+        platformB.Messenger.Returns(ytMessenger);
+
+        var registry = new ChatPlatformRegistry([platformB]);
+        var messenger = new BroadcastMessenger(registry, NullLogger<BroadcastMessenger>.Instance);
+        var catalog = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"));
+        catalog.EnsureChannelKnown(new(StreamingPlatform.YouTube, "UC_a"), "Канал A");
+        catalog.EnsureChannelKnown(new(StreamingPlatform.YouTube, "UC_b"), "Канал B");
+
+        var settings = new AppSettings
+        {
+            ChatMessages =
+            {
+                RewardEnabled = true,
+                RewardMessage = "+{points} для {username}",
+            },
+        };
+        var settingsManager = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        settingsManager.Current.Returns(settings);
+
+        var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+        using var moderation = new ModerationChatNotificationHandler(messenger, settingsManager, bus, registry, catalog);
+
+        await moderation.HandleAsync(
+            new UserRewarded(new(StreamingPlatform.YouTube, "u1"), "Alice", 15, "UC_a", new(StreamingPlatform.YouTube, "UC_a")),
+            CancellationToken.None);
+        ytMessenger.DidNotReceive().Send(Arg.Any<string>(), Arg.Any<CommandResponseMark?>(), Arg.Any<ChatSendCategory>(), Arg.Any<ChatOrigin?>());
+
+        await moderation.HandleAsync(
+            new UserRewarded(new(StreamingPlatform.YouTube, "u1"), "Alice", 20, "UC_b", new(StreamingPlatform.YouTube, "UC_b")),
+            CancellationToken.None);
+        ytMessenger.Received(1).Send(Arg.Any<string>(), Arg.Any<CommandResponseMark?>(), ChatSendCategory.EventNotification, Arg.Any<ChatOrigin?>());
+    }
 }

@@ -1,0 +1,101 @@
+﻿<UserControl x:Class="PoproshaykaBot.Wpf.Views.Dialogs.LinkAccountDialogView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Dialogs"
+             xmlns:platformControls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:LinkAccountDialogViewModel}"
+             MinWidth="440"
+             MinHeight="340"
+             Width="500"
+             Height="420">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="{Binding Title}"
+                   Style="{StaticResource TextBlock.Heading}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12" />
+
+        <TextBox Grid.Row="1"
+                 Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                 Style="{StaticResource TextBox.Form}"
+                 Margin="0,0,0,10"
+                 AutomationProperties.Name="Поиск аккаунта по нику или ID" />
+
+        <ListBox Grid.Row="2"
+                 ItemsSource="{Binding FilteredCandidates}"
+                 SelectedItem="{Binding SelectedCandidate, Mode=TwoWay}"
+                 BorderBrush="{DynamicResource Border.Default}"
+                 BorderThickness="1"
+                 Visibility="{Binding HasCandidates, Converter={StaticResource BoolToVisibility}}">
+            <ListBox.InputBindings>
+                <MouseBinding MouseAction="LeftDoubleClick"
+                              Command="{Binding AcceptCommand}" />
+            </ListBox.InputBindings>
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:LinkableAccountCandidate}">
+                    <Grid Margin="4,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <platformControls:PlatformIconView Grid.Column="0"
+                                                           Platform="{Binding Platform, Mode=OneWay}"
+                                                           Width="14"
+                                                           Height="14"
+                                                           Margin="0,0,8,0"
+                                                           VerticalAlignment="Center" />
+
+                        <StackPanel Grid.Column="1"
+                                    Margin="0,0,8,0">
+                            <TextBlock Text="{Binding Name}"
+                                       FontWeight="{DynamicResource Font.Weight.SemiBold}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding PlatformLabel}"
+                                       FontSize="{DynamicResource Font.Size.Caption}"
+                                       Foreground="{DynamicResource Fg.Muted}" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding UserId}"
+                                   FontFamily="{DynamicResource Font.Mono}"
+                                   FontSize="{DynamicResource Font.Size.Caption}"
+                                   Foreground="{DynamicResource Fg.Muted}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock Grid.Row="2"
+                   Text="Нет доступных аккаунтов для привязки."
+                   Style="{StaticResource TextBlock.Subtle}"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Visibility="{Binding HasCandidates, Converter={StaticResource InverseBoolToVisibility}}" />
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,14,0,0">
+            <Button Content="Отмена"
+                    Style="{StaticResource Button.Secondary}"
+                    Command="{Binding CancelCommand}"
+                    Margin="0,0,8,0" />
+            <Button Content="Привязать"
+                    Style="{StaticResource Button.Primary}"
+                    Command="{Binding AcceptCommand}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

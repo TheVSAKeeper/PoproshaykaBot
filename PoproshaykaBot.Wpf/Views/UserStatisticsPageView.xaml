@@ -330,11 +330,11 @@
 
             <ComboBox HorizontalAlignment="Left"
                       VerticalAlignment="Center"
-                      MinWidth="128"
-                      ItemsSource="{Binding PlatformOptions}"
-                      SelectedItem="{Binding SelectedPlatformFilter, Mode=TwoWay}"
+                      MinWidth="156"
+                      ItemsSource="{Binding SliceOptions}"
+                      SelectedItem="{Binding SelectedSliceOption, Mode=TwoWay}"
                       DisplayMemberPath="Label"
-                      AutomationProperties.Name="Фильтр по площадке">
+                      AutomationProperties.Name="Срез статистики">
                 <ComboBox.Style>
                     <Style TargetType="ComboBox"
                            BasedOn="{StaticResource ComboBox.Toolbar}">
@@ -1264,6 +1264,87 @@
                                         Margin="30,4,0,0"
                                         Visibility="{Binding SelectedRow.RankLadder.CanCollapse, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
                             </StackPanel>
+
+                            <StackPanel x:Name="ChannelBreakdownsSection"
+                                        Margin="0,12,0,0"
+                                        Visibility="{Binding SelectedRow.HasChannelBreakdowns, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                                <TextBlock Text="По каналам"
+                                           Style="{StaticResource TextBlock.Subtle}"
+                                           Margin="0,0,0,6" />
+
+                                <ItemsControl ItemsSource="{Binding SelectedRow.ChannelBreakdowns}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:UserChannelBreakdownRowViewModel}">
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Label}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Label}"
+                                                           Margin="0,0,8,0" />
+                                                <TextBlock Grid.Column="1"
+                                                           Foreground="{DynamicResource Fg.Secondary}"
+                                                           TextWrapping="NoWrap">
+                                                    <Run Text="{Binding PointsDisplay, Mode=OneWay}" />
+                                                    <Run Text=" · " />
+                                                    <Run Text="{Binding MessageCountDisplay, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <StackPanel x:Name="LinkedAccountsSection"
+                                        Margin="0,12,0,0"
+                                        Visibility="{Binding CanManageLinks, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                                <TextBlock Text="Связанные аккаунты"
+                                           Style="{StaticResource TextBlock.Subtle}"
+                                           Margin="0,0,0,6" />
+
+                                <ItemsControl ItemsSource="{Binding SelectedRow.LinkedAccounts}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:UserLinkedAccountRowViewModel}">
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0"
+                                                            Margin="0,0,8,0">
+                                                    <TextBlock TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis">
+                                                        <Run Text="{Binding PlatformLabel, Mode=OneWay}" />
+                                                        <Run Text=" · " />
+                                                        <Run Text="{Binding Name, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding OriginLabel}"
+                                                               Style="{StaticResource TextBlock.Subtle}"
+                                                               FontSize="{DynamicResource Font.Size.Caption}"
+                                                               Visibility="{Binding HasOriginLabel, Converter={StaticResource BoolToVisibility}}" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1"
+                                                        Style="{StaticResource Button.Link}"
+                                                        FontSize="{DynamicResource Font.Size.Caption}"
+                                                        Content="Отвязать"
+                                                        VerticalAlignment="Center"
+                                                        Command="{Binding DataContext.UnlinkAccountCommand, RelativeSource={RelativeSource AncestorType=views:UserStatisticsPageView}}"
+                                                        CommandParameter="{Binding}"
+                                                        Visibility="{Binding CanUnlink, Converter={StaticResource BoolToVisibility}}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Button Style="{StaticResource Button.Secondary}"
+                                        Content="Привязать аккаунт…"
+                                        Command="{Binding LinkAccountCommand}"
+                                        HorizontalAlignment="Left"
+                                        Margin="0,4,0,0" />
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
 
@@ -1313,6 +1394,17 @@
                         <StackPanel x:Name="BalanceBody"
                                     Margin="0,6,0,0"
                                     Visibility="{Binding IsBalanceExpanded, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Margin="0,0,0,8"
+                                        Visibility="{Binding HasMultipleAdjustmentTargets, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                                <TextBlock Text="Канал начисления"
+                                           Style="{StaticResource TextBlock.Subtle}"
+                                           Margin="0,0,0,4" />
+                                <ComboBox ItemsSource="{Binding AdjustmentTargetOptions}"
+                                          SelectedItem="{Binding SelectedAdjustmentTarget, Mode=TwoWay}"
+                                          DisplayMemberPath="Label"
+                                          AutomationProperties.Name="Канал начисления" />
+                            </StackPanel>
+
                             <UniformGrid Columns="4"
                                          Margin="0,0,0,8">
                                 <Button Style="{StaticResource QuickAmountButton}"

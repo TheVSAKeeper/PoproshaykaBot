@@ -277,6 +277,7 @@ public sealed class CommandContext
     public IReadOnlyList<string> Arguments { get; init; } = [];
     public bool IsBroadcaster { get; init; }
     public bool IsModerator { get; init; }
+    public bool RecordsUserData { get; init; } = true;
 }
 
 public sealed record OutgoingMessage

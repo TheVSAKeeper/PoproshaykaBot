@@ -4,6 +4,7 @@ using KeepShell.ViewModels;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Statistics;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -71,6 +72,7 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
     private readonly ISettingsStore _settings;
     private readonly GameBoxArtProvider _boxArt;
     private readonly StatisticsPreload? _preload;
+    private readonly ChannelCatalogStore? _channelCatalog;
     private readonly List<IDisposable> _subs = [];
     private readonly List<StreamSessionRowViewModel> _allSessions = [];
     private readonly List<StreamSessionRowViewModel> _visibleSessions = [];
@@ -228,13 +230,15 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         ISettingsStore settings,
         GameBoxArtProvider boxArt,
         IEventBus eventBus,
-        StatisticsPreload? preload = null)
+        StatisticsPreload? preload = null,
+        ChannelCatalogStore? channelCatalog = null)
     {
         _historyStore = historyStore;
         _userStatistics = userStatistics;
         _settings = settings;
         _boxArt = boxArt;
         _preload = preload;
+        _channelCatalog = channelCatalog;
 
         _trendMetric = NormalizeMetric(settings.GetEnum(SettingsKeys.StreamTrendMetric, StreamTrendMetric.PeakViewers));
         _trendLength = NormalizeLength(settings.GetInt(SettingsKeys.StreamTrendLength, DefaultTrendLength));
@@ -1316,12 +1320,21 @@ public sealed partial class StreamHistoryPageViewModel : ObservableObject, IPage
         var platforms = row.Source.Platforms;
         var showBreakdown = platforms.Count > 1 || (platforms.Count == 1 && platforms[0].Platform != StreamingPlatform.Twitch);
         DetailPlatformBreakdown.SyncTo(showBreakdown
-            ? platforms.Select(static p => new StreamSessionPlatformBreakdownViewModel(p)).ToList()
+            ? platforms.Select(p =>
+            {
+                var resolvedName = p.ChannelKey is { } chKey
+                    ? _channelCatalog?.ResolveDisplayName(chKey)
+                    : null;
+                return new StreamSessionPlatformBreakdownViewModel(p, resolvedName);
+            }).ToList()
             : []);
         HasDetailPlatformBreakdown = showBreakdown;
-        DetailChatterSumNote = platforms.Count > 1
-            ? "Сумма уникальных авторов по площадкам (зритель, писавший на обеих площадках, учтён на каждой)"
-            : string.Empty;
+        var distinctPlatforms = platforms.Select(static p => p.Platform).Distinct().Count();
+        DetailChatterSumNote = distinctPlatforms > 1
+            ? "Сумма уникальных авторов по площадкам (непривязанный зритель учитывается на каждой)"
+            : platforms.Count > 1
+                ? "Сумма уникальных авторов по каналам"
+                : string.Empty;
 
         (DetailMessagesDelta, DetailMessagesDeltaTone) = DescribeDelta(row.MessageCount, _averageMessages, _visibleSessions.Count, withValue: true);
         (DetailChattersDelta, DetailChattersDeltaTone) = DescribeDelta(row.ChatterCount, _averageChatters, _visibleSessions.Count, withValue: true);
@@ -1781,13 +1794,13 @@ public sealed class StreamSessionChatterRowViewModel
 
 public sealed class StreamSessionPlatformBreakdownViewModel
 {
-    public StreamSessionPlatformBreakdownViewModel(BroadcastPlatformRecord source)
+    public StreamSessionPlatformBreakdownViewModel(BroadcastPlatformRecord source, string? resolvedChannel = null)
     {
         ArgumentNullException.ThrowIfNull(source);
 
         Platform = source.Platform;
         DisplayName = PlatformVisuals.GetDisplayName(source.Platform);
-        Channel = source.Channel;
+        Channel = !string.IsNullOrWhiteSpace(resolvedChannel) ? resolvedChannel : source.Channel;
         HasTitle = source.Title is { Length: > 0 };
         Title = HasTitle ? source.Title! : "Без названия";
         var duration = source.EndedAt > source.StartedAt ? source.EndedAt - source.StartedAt : TimeSpan.Zero;
