@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Settings;
+using System.ComponentModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
@@ -7,13 +8,26 @@ public sealed record SettingsSectionBlockDescriptor(
     string Key,
     string Title,
     string? Hint,
-    object Content);
+    object Content) : INotifyPropertyChanged
+{
+    public event PropertyChangedEventHandler? PropertyChanged
+    {
+        add { }
+        remove { }
+    }
+}
 
 public sealed record SettingsSectionPresentation(
     SettingsSection Section,
     IReadOnlyList<SettingsSectionBlockDescriptor> Blocks,
-    bool IsFullWidth)
+    bool IsFullWidth) : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged
+    {
+        add { }
+        remove { }
+    }
+
     public bool HasMultipleBlocks => Blocks.Count > 1 || Section.Children.Count > 0;
 }
 

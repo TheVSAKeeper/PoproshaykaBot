@@ -76,6 +76,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     private double _detailWidthScale = 1;
     private double? _detailShare;
     private GridLength? _stackedDetailHeight;
+    private StreamHistoryPageViewModel? _viewModel;
 
     public StreamHistoryPageView()
         : this(new ClipboardService())
@@ -130,18 +131,23 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         _layoutApplied = false;
         UpdateLayoutMode();
 
-        if (DataContext is StreamHistoryPageViewModel viewModel)
+        if (_viewModel is not null)
         {
-            viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-            viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
-            ScrollToSelection(viewModel);
+            ScrollToSelection(_viewModel);
         }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         FontScaleManager.Changed -= OnFontScaleChanged;
+
+        if (_viewModel is not null)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        }
     }
 
     private void OnFontScaleChanged(object? sender, double scale)
@@ -522,17 +528,20 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.OldValue is StreamHistoryPageViewModel oldViewModel)
+        if (_viewModel is not null)
         {
-            oldViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
-        if (e.NewValue is StreamHistoryPageViewModel newViewModel)
+        _viewModel = e.NewValue as StreamHistoryPageViewModel;
+
+        if (_viewModel is not null)
         {
-            newViewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
             _layoutApplied = false;
             UpdateLayoutMode();
-            ScrollToSelection(newViewModel);
+            ScrollToSelection(_viewModel);
         }
     }
 
