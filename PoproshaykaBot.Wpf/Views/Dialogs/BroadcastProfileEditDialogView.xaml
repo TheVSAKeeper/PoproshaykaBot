@@ -9,7 +9,7 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:BroadcastProfileEditDialogViewModel}"
              MinWidth="500"
-             MaxWidth="700"
+             MaxWidth="780"
              Loaded="OnLoaded">
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -21,12 +21,13 @@
         <TextBlock Grid.Row="0"
                    Text="{Binding Title}"
                    Style="{StaticResource TextBlock.Heading}"
+                   TextWrapping="Wrap"
                    Margin="0,0,0,16" />
 
         <ScrollViewer Grid.Row="1"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
-        <StackPanel>
+        <StackPanel Grid.IsSharedSizeScope="True">
             <Grid Margin="0,0,0,8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -38,14 +39,15 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="110" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="DialogLabel" />
+                    <ColumnDefinition Width="*" MinWidth="220" />
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0"
                            Text="Заголовок:"
+                           TextWrapping="NoWrap"
                            VerticalAlignment="Top"
-                           Margin="0,4,8,8" />
+                           Margin="0,4,12,8" />
                 <TextBox Grid.Row="0" Grid.Column="1"
                          Style="{StaticResource TextBox.Form}"
                          Text="{Binding ProfileTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -76,8 +78,9 @@
 
                 <TextBlock Grid.Row="2" Grid.Column="0"
                            Text="Серия №:"
+                           TextWrapping="NoWrap"
                            VerticalAlignment="Center"
-                           Margin="0,0,8,8" />
+                           Margin="0,0,12,8" />
                 <controls:NumericSettingField Grid.Row="2" Grid.Column="1"
                                               Value="{Binding CurrentNumber, Mode=TwoWay}"
                                               IncreaseCommand="{Binding IncreaseNumberCommand}"
@@ -88,16 +91,18 @@
 
                 <TextBlock Grid.Row="3" Grid.Column="0"
                            Text="Игра:"
+                           TextWrapping="NoWrap"
                            VerticalAlignment="Top"
-                           Margin="0,4,8,8" />
+                           Margin="0,4,12,8" />
                 <ContentControl Grid.Row="3" Grid.Column="1"
                                 Content="{Binding Game}"
                                 Margin="0,0,0,8" />
 
                 <TextBlock Grid.Row="4" Grid.Column="0"
                            Text="Теги:"
+                           TextWrapping="NoWrap"
                            VerticalAlignment="Center"
-                           Margin="0,0,8,8" />
+                           Margin="0,0,12,8" />
                 <TextBox Grid.Row="4" Grid.Column="1"
                          Style="{StaticResource TextBox.Form}"
                          Text="{Binding Tags, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -106,8 +111,9 @@
 
                 <TextBlock Grid.Row="5" Grid.Column="0"
                            Text="Язык:"
+                           TextWrapping="NoWrap"
                            VerticalAlignment="Center"
-                           Margin="0,0,8,8" />
+                           Margin="0,0,12,8" />
                 <ComboBox Grid.Row="5" Grid.Column="1"
                           Style="{StaticResource ComboBox.Form}"
                           ItemsSource="{Binding LanguageOptions}"
@@ -116,8 +122,9 @@
 
                 <TextBlock Grid.Row="6" Grid.Column="0"
                            Text="{Binding NameLabel}"
+                           TextWrapping="NoWrap"
                            VerticalAlignment="Center"
-                           Margin="0,0,8,8" />
+                           Margin="0,0,12,8" />
                 <TextBox Grid.Row="6" Grid.Column="1"
                          Style="{StaticResource TextBox.Form}"
                          Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -128,13 +135,14 @@
             <Grid Margin="0,0,0,8"
                   IsEnabled="{Binding IsPlatformsSelectionEnabled}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="110" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="DialogLabel" />
+                    <ColumnDefinition Width="*" MinWidth="220" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
                            Text="Площадки:"
+                           TextWrapping="NoWrap"
                            VerticalAlignment="Center"
-                           Margin="0,0,8,0" />
+                           Margin="0,0,12,0" />
                 <ItemsControl Grid.Column="1"
                               Focusable="False"
                               ItemsSource="{Binding TargetPlatforms}">
@@ -157,13 +165,14 @@
             <Grid Margin="0,0,0,8"
                   Visibility="{Binding IsObsSceneVisible, Converter={StaticResource BoolToVisibility}}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="110" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="DialogLabel" />
+                    <ColumnDefinition Width="*" MinWidth="220" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
                            Text="Сцена OBS:"
+                           TextWrapping="NoWrap"
                            VerticalAlignment="Center"
-                           Margin="0,0,8,0" />
+                           Margin="0,0,12,0" />
                 <ComboBox Grid.Column="1"
                           IsEditable="True"
                           ItemsSource="{Binding ObsScenes}"
@@ -172,19 +181,20 @@
         </StackPanel>
         </ScrollViewer>
 
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Margin="0,12,0,0">
+        <WrapPanel Grid.Row="2"
+                   Orientation="Horizontal"
+                   HorizontalAlignment="Right"
+                   Margin="0,12,0,-4">
             <Button Content="Отмена"
                     Style="{StaticResource Button.Ghost}"
                     Command="{Binding CancelCommand}"
-                    Margin="0,0,8,0"
+                    Margin="8,0,0,4"
                     MinWidth="96" />
             <Button Content="{Binding ConfirmButtonText}"
                     Style="{StaticResource Button.Primary}"
                     Command="{Binding ConfirmCommand}"
+                    Margin="8,0,0,4"
                     MinWidth="120" />
-        </StackPanel>
+        </WrapPanel>
     </Grid>
 </UserControl>

@@ -6,20 +6,29 @@ namespace PoproshaykaBot.Wpf.Bootstrap;
 
 public static class StatisticsBootstrap
 {
-    public static void LoadUserStatistics(IServiceProvider services)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-
-        Task.Run(() => LoadUserStatisticsAsync(services)).GetAwaiter().GetResult();
-    }
-
     public static async Task LoadUserStatisticsAsync(IServiceProvider services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        if (services.GetService<StatisticsPreload>() is { } preload)
+        {
+            await preload.EnsureLoadedAsync().ConfigureAwait(false);
+            return;
+        }
+
+        await LoadCoreAsync(services.GetRequiredService<UserStatisticsLoader>(), CancellationToken.None).ConfigureAwait(false);
+    }
+
+    internal static async Task LoadCoreAsync(UserStatisticsLoader loader, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(loader);
+
         try
         {
-            await services.GetRequiredService<UserStatisticsLoader>().EnsureLoadedAsync().ConfigureAwait(false);
+            await loader.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         catch (Exception exception)
         {

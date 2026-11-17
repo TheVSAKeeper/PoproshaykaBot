@@ -30,11 +30,29 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         typeof(StreamHistoryPageView),
         new PropertyMetadata(RecordsPaneMinWidth));
 
+    public static readonly DependencyProperty ScaledCategoriesPaneMinWidthProperty = DependencyProperty.Register(
+        nameof(ScaledCategoriesPaneMinWidth),
+        typeof(double),
+        typeof(StreamHistoryPageView),
+        new PropertyMetadata(CategoriesPaneMinWidth));
+
+    public static readonly DependencyProperty IsSummaryStackedProperty = DependencyProperty.Register(
+        nameof(IsSummaryStacked),
+        typeof(bool),
+        typeof(StreamHistoryPageView),
+        new PropertyMetadata(false));
+
+    public static readonly DependencyProperty SummaryStripMaxHeightProperty = DependencyProperty.Register(
+        nameof(SummaryStripMaxHeight),
+        typeof(double),
+        typeof(StreamHistoryPageView),
+        new PropertyMetadata(double.PositiveInfinity));
+
     public const double SegmentCardMinWidth = 272;
     public const double SegmentsPaneMinWidth = 220;
     public const int SegmentCardMaxColumns = 3;
-    public const double SideBySideWidth = 1240;
-    public const double StackedWidth = 1200;
+    public const double SideBySideWidth = 1200;
+    public const double StackedWidth = 1160;
     public const double DetailMinWidth = 360;
     public const double TableMinWidth = 792;
     public const double DetailSplitWidth = 740;
@@ -42,6 +60,17 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     public const double ChattersMinWidth = 240;
     public const double RecordCardMinWidth = 164;
     public const double RecordsPaneMinWidth = 2 * (RecordCardMinWidth + 8);
+    public const double CategoriesPaneMinWidth = 300;
+    public const double SummarySplitWidth = CategoriesPaneMinWidth + RecordsPaneMinWidth + 40;
+    public const double SummaryCollapseHeight = 500;
+    public const double ConstrainedStackHeight = 320;
+    public const double CompactListRowMinHeight = 120;
+    public const double CompactDetailRowMinHeight = 110;
+    public const double CompactDetailEmptyMinHeight = 56;
+    private const int CompactVisibleRows = 4;
+    private const double CompactRowMinHeight = 34;
+    private const double CompactDetailEmptyFloorHeight = 32;
+    private const double CompactDetailCardFloorHeight = 48;
     public const double TrendStripHeight = 40;
     public const double TrendStripCompactHeight = 36;
     public const double CardHeight = 96;
@@ -64,6 +93,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
 
     private bool _sideBySide;
     private bool _layoutApplied;
+    private bool _compactStack;
     private bool _detailStacked;
     private bool _detailApplied;
     private bool _detailRowsQueued;
@@ -92,6 +122,8 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
 
         DataContextChanged += OnDataContextChanged;
         SizeChanged += OnSizeChanged;
+        HeaderStack.SizeChanged += OnHeaderOrTableChromeSizeChanged;
+        SessionsHeader.SizeChanged += OnHeaderOrTableChromeSizeChanged;
         DetailSplit.SizeChanged += OnDetailSplitSizeChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -113,6 +145,24 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     {
         get => (double)GetValue(ScaledRecordsPaneMinWidthProperty);
         set => SetValue(ScaledRecordsPaneMinWidthProperty, value);
+    }
+
+    public double ScaledCategoriesPaneMinWidth
+    {
+        get => (double)GetValue(ScaledCategoriesPaneMinWidthProperty);
+        set => SetValue(ScaledCategoriesPaneMinWidthProperty, value);
+    }
+
+    public bool IsSummaryStacked
+    {
+        get => (bool)GetValue(IsSummaryStackedProperty);
+        set => SetValue(IsSummaryStackedProperty, value);
+    }
+
+    public double SummaryStripMaxHeight
+    {
+        get => (double)GetValue(SummaryStripMaxHeightProperty);
+        set => SetValue(SummaryStripMaxHeightProperty, value);
     }
 
     private static void Place(UIElement element, int row, int column, int rowSpan = 1, int columnSpan = 1)
@@ -166,6 +216,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
 
         ScaledRecordCardMinWidth = RecordCardMinWidth * scale;
         ScaledRecordsPaneMinWidth = RecordsPaneMinWidth * scale;
+        ScaledCategoriesPaneMinWidth = CategoriesPaneMinWidth * scale;
     }
 
     private void OnSegmentCardsSizeChanged(object sender, SizeChangedEventArgs e)
@@ -189,6 +240,14 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         UpdateLayoutMode();
+    }
+
+    private void OnHeaderOrTableChromeSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_layoutApplied && !_sideBySide && _compactStack)
+        {
+            UpdateCompactStackedBudget(FontScaleManager.Current);
+        }
     }
 
     private void OnDetailSplitSizeChanged(object sender, SizeChangedEventArgs e)
@@ -398,15 +457,26 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
             ? width >= StackedWidth * scale
             : width >= SideBySideWidth * scale;
 
-        if (_layoutApplied && sideBySide == _sideBySide)
+        var compactStack = ApplyHeightBudget(width, scale, sideBySide);
+
+        if (_layoutApplied && sideBySide == _sideBySide && compactStack == _compactStack)
         {
-            ApplyDetailCeiling(width);
+            if (sideBySide)
+            {
+                ApplyDetailCeiling(width);
+            }
+            else if (compactStack)
+            {
+                UpdateCompactStackedBudget(scale);
+            }
+
             return;
         }
 
         RememberSplit();
 
         _sideBySide = sideBySide;
+        _compactStack = compactStack;
         _layoutApplied = true;
 
         ApplyCompactMode(!sideBySide, scale);
@@ -418,8 +488,27 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         }
         else
         {
-            ApplyStacked();
+            ApplyStacked(compactStack, scale);
         }
+    }
+
+    private bool ApplyHeightBudget(double width, double scale, bool sideBySide)
+    {
+        IsSummaryStacked = width < SummarySplitWidth * scale;
+
+        var height = ActualHeight;
+        var summaryConstrained = height > 0 && height < SummaryCollapseHeight * scale;
+        SummaryStripMaxHeight = summaryConstrained ? Math.Max(130, height * 0.38) : double.PositiveInfinity;
+
+        var compactStack = !sideBySide && height > 0 && height < ConstrainedStackHeight * scale;
+
+        if (DataContext is StreamHistoryPageViewModel viewModel)
+        {
+            viewModel.IsSummaryHeightConstrained = summaryConstrained;
+            viewModel.IsTrendAutoHidden = compactStack;
+        }
+
+        return compactStack;
     }
 
     private void RememberSplit()
@@ -462,30 +551,39 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         }
     }
 
-    private void ApplyStacked()
+    private void ApplyStacked(bool compactStack, double scale)
     {
         PageGrid.ColumnDefinitions.Clear();
         PageGrid.RowDefinitions.Clear();
 
-        var cards = DataContext is StreamHistoryPageViewModel { IsCardsView: true };
+        var viewModel = DataContext as StreamHistoryPageViewModel;
+        var cards = viewModel is { IsCardsView: true };
+        var hasSelection = viewModel is { HasSelection: true };
         var listHeight = new GridLength(ListRowShare, GridUnitType.Star);
         var detailHeight = new GridLength(cards ? DetailCardsRowShare : DetailRowShare, GridUnitType.Star);
+        double listMinHeight = 160;
+        double detailMinHeight = cards ? DetailCardsRowMinHeight : DetailRowMinHeight;
 
         if (_detailShare is { } share)
         {
             listHeight = new(1 - share, GridUnitType.Star);
             detailHeight = new(share, GridUnitType.Star);
         }
+        else if (compactStack)
+        {
+            detailHeight = new(1, GridUnitType.Star);
+            (listMinHeight, detailMinHeight) = ComputeCompactStackedHeights(hasSelection, cards, scale);
+        }
 
         _stackedDetailHeight = detailHeight;
 
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        PageGrid.RowDefinitions.Add(new() { Height = listHeight, MinHeight = 160 });
+        PageGrid.RowDefinitions.Add(new() { Height = listHeight, MinHeight = listMinHeight });
         PageGrid.RowDefinitions.Add(new() { Height = GridLength.Auto });
         PageGrid.RowDefinitions.Add(new()
         {
             Height = detailHeight,
-            MinHeight = cards ? DetailCardsRowMinHeight : DetailRowMinHeight,
+            MinHeight = detailMinHeight,
         });
 
         Place(HeaderStack, 0, 0);
@@ -498,6 +596,109 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         LayoutSplitter.ResizeDirection = GridResizeDirection.Rows;
         LayoutSplitter.Width = double.NaN;
         LayoutSplitter.Height = 8;
+    }
+
+    private void UpdateCompactStackedBudget(double scale)
+    {
+        if (_detailShare is not null || PageGrid.RowDefinitions.Count != 4)
+        {
+            return;
+        }
+
+        var viewModel = DataContext as StreamHistoryPageViewModel;
+        var cards = viewModel is { IsCardsView: true };
+        var hasSelection = viewModel is { HasSelection: true };
+        var (listMinHeight, detailMinHeight) = ComputeCompactStackedHeights(hasSelection, cards, scale);
+
+        if (Math.Abs(PageGrid.RowDefinitions[1].MinHeight - listMinHeight) > 0.5)
+        {
+            PageGrid.RowDefinitions[1].MinHeight = listMinHeight;
+        }
+
+        if (Math.Abs(PageGrid.RowDefinitions[3].MinHeight - detailMinHeight) > 0.5)
+        {
+            PageGrid.RowDefinitions[3].MinHeight = detailMinHeight;
+        }
+    }
+
+    private (double ListMinHeight, double DetailMinHeight) ComputeCompactStackedHeights(bool hasSelection, bool cards, double scale)
+    {
+        var tableOverhead = MeasureTableOverheadHeight(cards);
+        var desiredTableHeight = cards
+            ? Math.Ceiling(tableOverhead + (CardCompactHeight * scale) + 6)
+            : Math.Ceiling(tableOverhead + (CompactVisibleRows * MeasureSessionRowHeight()));
+        var targetListMin = Math.Max(CompactListRowMinHeight, desiredTableHeight);
+
+        var detailTarget = hasSelection ? CompactDetailRowMinHeight : CompactDetailEmptyMinHeight;
+        var detailFloor = hasSelection ? CompactDetailCardFloorHeight : CompactDetailEmptyFloorHeight;
+
+        var totalHeight = ActualHeight;
+        if (totalHeight <= 0)
+        {
+            return (targetListMin, detailTarget);
+        }
+
+        var headerHeight = Math.Max(HeaderStack.ActualHeight, HeaderStack.DesiredSize.Height);
+        if (headerHeight <= 0 && ActualWidth > 0)
+        {
+            HeaderStack.Measure(new(ActualWidth, double.PositiveInfinity));
+            headerHeight = HeaderStack.DesiredSize.Height;
+        }
+
+        var splitterHeight = LayoutSplitter.Visibility == Visibility.Visible ? 8.0 : 0.0;
+        var available = Math.Max(0, totalHeight - headerHeight - splitterHeight);
+
+        var detailFloorClamped = Math.Min(detailFloor, available);
+        var detailMin = Math.Clamp(available - targetListMin, detailFloorClamped, detailTarget);
+        var listMin = Math.Min(targetListMin, Math.Max(0, available - detailMin));
+
+        return (listMin, detailMin);
+    }
+
+    private double MeasureTableOverheadHeight(bool cards)
+    {
+        var border = TableCard.BorderThickness.Top + TableCard.BorderThickness.Bottom;
+        var trend = 0.0;
+
+        if (TrendStrip.Visibility == Visibility.Visible)
+        {
+            trend += (TrendStrip.ActualHeight > 0 ? TrendStrip.ActualHeight : TrendStrip.Height)
+                + TrendStrip.Margin.Top
+                + TrendStrip.Margin.Bottom
+                + (TrendBaseline.Visibility == Visibility.Visible ? 1 : 0)
+                + (TrendLabels.Visibility == Visibility.Visible
+                    ? Math.Max(TrendLabels.ActualHeight, TrendLabels.DesiredSize.Height) + TrendLabels.Margin.Top + TrendLabels.Margin.Bottom
+                    : 0)
+                + (TrendDivider.Visibility == Visibility.Visible ? 1 : 0);
+        }
+
+        if (cards || SessionsTable.Visibility != Visibility.Visible)
+        {
+            return border + trend;
+        }
+
+        var sessionsHeaderHeight = Math.Max(SessionsHeader.ActualHeight, SessionsHeader.DesiredSize.Height);
+        if (sessionsHeaderHeight <= 0 && ActualWidth > 0)
+        {
+            SessionsHeader.Measure(new(ActualWidth, double.PositiveInfinity));
+            sessionsHeaderHeight = SessionsHeader.DesiredSize.Height;
+        }
+
+        return border + trend + sessionsHeaderHeight + SessionsHeader.Margin.Top + SessionsHeader.Margin.Bottom + 1;
+    }
+
+    private double MeasureSessionRowHeight()
+    {
+        if (SessionsList.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement item)
+        {
+            var measured = Math.Max(item.ActualHeight, item.DesiredSize.Height);
+            if (measured > 0)
+            {
+                return measured;
+            }
+        }
+
+        return CompactRowMinHeight;
     }
 
     private void ApplySideBySide(double scale)
@@ -552,7 +753,8 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
             return;
         }
 
-        if (e.PropertyName is nameof(StreamHistoryPageViewModel.IsCardsView))
+        if (e.PropertyName == nameof(StreamHistoryPageViewModel.IsCardsView)
+            || (_compactStack && e.PropertyName == nameof(StreamHistoryPageViewModel.HasSelection)))
         {
             _layoutApplied = false;
             UpdateLayoutMode();

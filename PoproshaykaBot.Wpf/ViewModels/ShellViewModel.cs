@@ -44,6 +44,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private NavigationItem? _current;
     private bool _returningToPage;
     private string? _lastPartialFailureKey;
+    private int _userRequestVersion;
+    private bool _disposed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConnectButtonText))]
@@ -106,7 +108,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _settingsSection = new("Настройки", PackIconLucideKind.Settings, settingsPage, activate: GuardReturn(settingsPage.OnEnter), key: SectionKeys.Settings);
 
         _statisticsPage = statisticsPage;
-        _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, key: SectionKeys.Users) { StartsGroup = true };
+        _statisticsSection = new("Пользователи", PackIconLucideKind.Users, statisticsPage, activate: statisticsPage.OnEnter, key: SectionKeys.Users) { StartsGroup = true };
         _streamHistorySection = new(
             "История стримов",
             PackIconLucideKind.History,
@@ -205,6 +207,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         _uiSettings.WriteFailed -= OnUiSettingsWriteFailed;
         _settingsPage.SettingsSaved -= OnSettingsSaved;
         _streamHistoryPage.UserRequested -= OnUserRequested;
@@ -231,6 +234,40 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     }
 
     private void OnUserRequested(object? sender, PoproshaykaBot.Core.Platforms.PlatformUserKey key)
+    {
+        var version = ++_userRequestVersion;
+
+        if (!_statisticsPage.NeedsPreloadWait)
+        {
+            SelectUserOrNotify(key);
+            return;
+        }
+
+        _ = UiAsync.RunGuardedAsync(
+            () => SelectUserAfterPreloadAsync(key, version),
+            static exception => Serilog.Log.ForContext<ShellViewModel>()
+                .Warning(exception, "Не удалось открыть карточку пользователя после загрузки статистики"));
+    }
+
+    private async Task SelectUserAfterPreloadAsync(PoproshaykaBot.Core.Platforms.PlatformUserKey key, int version)
+    {
+        var found = await _statisticsPage.TrySelectAfterPreloadAsync(key);
+
+        if (_disposed || version != _userRequestVersion)
+        {
+            return;
+        }
+
+        if (!found)
+        {
+            SetStatus("Этого пользователя нет в статистике", StatusSeverity.Info);
+            return;
+        }
+
+        Selected = _statisticsSection;
+    }
+
+    private void SelectUserOrNotify(PoproshaykaBot.Core.Platforms.PlatformUserKey key)
     {
         if (!_statisticsPage.TrySelect(key))
         {

@@ -1131,185 +1131,52 @@
         <StackPanel x:Name="HeaderStack"
                     Grid.Row="0">
 
-        <DockPanel x:Name="SummaryBar"
-                   LastChildFill="True"
-                   Margin="0,0,0,8">
-            <Button DockPanel.Dock="Left"
-                    Style="{StaticResource Button.Ghost}"
-                    Command="{Binding ToggleSummaryCommand}"
-                    VerticalAlignment="Center"
-                    Padding="8,4"
-                    AutomationProperties.Name="{Binding SummaryToggleCaption}"
-                    ToolTip="{Binding SummaryToggleCaption}"
-                    Visibility="{Binding HasSummaryStrip, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel Orientation="Horizontal">
-                    <iconPacks:PackIconLucide Style="{StaticResource SummaryChevron}" />
+        <Grid x:Name="SummaryBar"
+              Margin="0,0,0,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-                    <TextBlock Text="Сводка"
-                               FontSize="{DynamicResource Font.Size.S}"
-                               Margin="8,0,0,0"
-                               VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-
-            <ComboBox DockPanel.Dock="Left"
-                      VerticalAlignment="Center"
-                      Margin="8,0,0,0"
-                      MinWidth="128"
-                      Style="{StaticResource ComboBox.Toolbar}"
-                      ItemsSource="{Binding PlatformOptions}"
-                      SelectedItem="{Binding SelectedPlatformFilter, Mode=TwoWay}"
-                      DisplayMemberPath="Label"
-                      AutomationProperties.Name="Фильтр по площадке" />
-
-            <StackPanel DockPanel.Dock="Right"
+            <StackPanel Grid.Row="0"
+                        Grid.Column="0"
                         Orientation="Horizontal"
+                        VerticalAlignment="Center">
+                <Button Style="{StaticResource Button.Ghost}"
+                        Command="{Binding ToggleSummaryCommand}"
                         VerticalAlignment="Center"
-                        Margin="8,0,0,0">
-                <RadioButton Style="{StaticResource ToggleButton.Toolbar}"
-                             GroupName="StreamListView"
-                             IsChecked="{Binding IsTableView, Mode=TwoWay}"
-                             AutomationProperties.Name="Показать стримы таблицей"
-                             ToolTip="Показать стримы таблицей">
+                        Padding="8,4"
+                        AutomationProperties.Name="{Binding SummaryToggleCaption}"
+                        ToolTip="{Binding SummaryToggleCaption}"
+                        Visibility="{Binding HasSummaryStrip, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel Orientation="Horizontal">
-                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Table}"
-                                                  Width="13"
-                                                  Height="13"
-                                                  VerticalAlignment="Center" />
-                        <TextBlock Text="Таблица"
-                                   Margin="6,0,0,0"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </RadioButton>
+                        <iconPacks:PackIconLucide Style="{StaticResource SummaryChevron}" />
 
-                <RadioButton Style="{StaticResource ToggleButton.Toolbar}"
-                             GroupName="StreamListView"
-                             Margin="4,0,0,0"
-                             IsChecked="{Binding IsCardsView, Mode=TwoWay}"
-                             AutomationProperties.Name="Показать стримы карточками"
-                             ToolTip="Показать стримы карточками">
-                    <StackPanel Orientation="Horizontal">
-                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.LayoutList}"
-                                                  Width="13"
-                                                  Height="13"
-                                                  VerticalAlignment="Center" />
-                        <TextBlock Text="Карточки"
-                                   Margin="6,0,0,0"
+                        <TextBlock Text="Сводка"
+                                   FontSize="{DynamicResource Font.Size.S}"
+                                   Margin="8,0,0,0"
                                    VerticalAlignment="Center" />
                     </StackPanel>
-                </RadioButton>
+                </Button>
+
+                <ComboBox VerticalAlignment="Center"
+                          Margin="8,0,0,0"
+                          MinWidth="128"
+                          Style="{StaticResource ComboBox.Toolbar}"
+                          ItemsSource="{Binding PlatformOptions}"
+                          SelectedItem="{Binding SelectedPlatformFilter, Mode=TwoWay}"
+                          DisplayMemberPath="Label"
+                          AutomationProperties.Name="Фильтр по площадке" />
             </StackPanel>
 
-            <Button DockPanel.Dock="Right"
-                    x:Name="SortMenuButton"
-                    Style="{StaticResource Button.Icon}"
-                    Click="OnSortMenuClick"
-                    VerticalAlignment="Center"
-                    Margin="6,0,0,0"
-                    AutomationProperties.Name="{Binding SortCaption}"
-                    ToolTip="{Binding SortCaption}"
-                    Visibility="{Binding IsCardsView, Converter={StaticResource BoolToVisibility}}">
-                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.ArrowUpDown}"
-                                          Width="14"
-                                          Height="14" />
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Сортировка"
-                                  ItemsSource="{Binding SortOptions}"
-                                  ItemContainerStyle="{StaticResource TrendOptionItem}" />
-                        <MenuItem Header="Порядок"
-                                  ItemsSource="{Binding SortDirectionOptions}"
-                                  ItemContainerStyle="{StaticResource TrendOptionItem}" />
-                    </ContextMenu>
-                </Button.ContextMenu>
-            </Button>
-
-            <Button DockPanel.Dock="Right"
-                    Style="{StaticResource Button.Icon}"
-                    Command="{Binding RefreshCommand}"
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="Перечитать историю стримов"
-                    ToolTip="Перечитать историю стримов">
-                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.RefreshCw}"
-                                          Width="14"
-                                          Height="14" />
-            </Button>
-
-            <Button DockPanel.Dock="Right"
-                    x:Name="TrendMenuButton"
-                    Style="{StaticResource Button.Icon}"
-                    Click="OnTrendMenuClick"
-                    VerticalAlignment="Center"
-                    Margin="6,0,0,0"
-                    AutomationProperties.Name="Настройки полосы зрителей"
-                    ToolTip="Что показывать на полосе зрителей"
-                    Visibility="{Binding CanShowTrend, Converter={StaticResource BoolToVisibility}}">
-                <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings2}"
-                                          Width="14"
-                                          Height="14" />
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Метрика"
-                                  ItemsSource="{Binding MetricOptions}"
-                                  ItemContainerStyle="{StaticResource TrendOptionItem}" />
-                        <MenuItem Header="Глубина"
-                                  ItemsSource="{Binding LengthOptions}"
-                                  ItemContainerStyle="{StaticResource TrendOptionItem}" />
-                        <Separator />
-                        <MenuItem Header="{Binding TrendVisibilityCaption}"
-                                  Command="{Binding ToggleTrendCommand}" />
-                    </ContextMenu>
-                </Button.ContextMenu>
-            </Button>
-
-            <ToggleButton DockPanel.Dock="Right"
-                          Style="{StaticResource ToggleButton.Toolbar}"
-                          IsChecked="{Binding ShowHidden, Mode=TwoWay}"
-                          VerticalAlignment="Center"
-                          Margin="6,0,0,0"
-                          AutomationProperties.Name="{Binding HiddenToggleHint}"
-                          ToolTip="{Binding HiddenToggleHint}"
-                          Visibility="{Binding HasHiddenSessions, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel Orientation="Horizontal">
-                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.EyeOff}"
-                                              Width="13"
-                                              Height="13"
-                                              VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding HiddenToggleCaption}"
-                               Margin="6,0,0,0"
-                               VerticalAlignment="Center" />
-                </StackPanel>
-            </ToggleButton>
-
-            <Border DockPanel.Dock="Right"
-                    Style="{StaticResource Badge}"
-                    VerticalAlignment="Center"
-                    Margin="12,0,8,0"
-                    Visibility="{Binding HasGameFilter, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding GameFilterText}"
-                               FontSize="{DynamicResource Font.Size.Caption}"
-                               Foreground="{DynamicResource Fg.Secondary}"
-                               VerticalAlignment="Center"
-                               TextWrapping="NoWrap"
-                               MaxWidth="240"
-                               TextTrimming="CharacterEllipsis" />
-
-                    <Button Style="{StaticResource Button.Icon}"
-                            Command="{Binding ClearGameFilterCommand}"
-                            Margin="6,0,-4,0"
-                            Width="20"
-                            Height="20"
-                            AutomationProperties.Name="Снять фильтр по игре"
-                            ToolTip="Снять фильтр по игре">
-                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.X}"
-                                                  Width="10"
-                                                  Height="10" />
-                    </Button>
-                </StackPanel>
-            </Border>
-
             <Grid x:Name="SummaryHeader"
+                  Grid.Row="0"
+                  Grid.Column="1"
                   Margin="12,0,8,0"
                   VerticalAlignment="Center"
                   Visibility="{Binding HasSessions, Converter={StaticResource BoolToVisibility}}">
@@ -1358,7 +1225,181 @@
                 </WrapPanel>
             </Grid>
 
-        </DockPanel>
+            <WrapPanel x:Name="RightControls"
+                       Orientation="Horizontal">
+                <WrapPanel.Style>
+                    <Style TargetType="WrapPanel">
+                        <Setter Property="Grid.Row"
+                                Value="0" />
+                        <Setter Property="Grid.Column"
+                                Value="2" />
+                        <Setter Property="HorizontalAlignment"
+                                Value="Right" />
+                        <Setter Property="VerticalAlignment"
+                                Value="Center" />
+                        <Setter Property="Margin"
+                                Value="0" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompactLayout}"
+                                         Value="True">
+                                <Setter Property="Grid.Row"
+                                        Value="1" />
+                                <Setter Property="Grid.Column"
+                                        Value="0" />
+                                <Setter Property="Grid.ColumnSpan"
+                                        Value="3" />
+                                <Setter Property="HorizontalAlignment"
+                                        Value="Left" />
+                                <Setter Property="Margin"
+                                        Value="0,6,0,-4" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </WrapPanel.Style>
+
+                <Border Style="{StaticResource Badge}"
+                        VerticalAlignment="Center"
+                        Margin="0,0,6,4"
+                        Visibility="{Binding HasGameFilter, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding GameFilterText}"
+                                   FontSize="{DynamicResource Font.Size.Caption}"
+                                   Foreground="{DynamicResource Fg.Secondary}"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="NoWrap"
+                                   MaxWidth="240"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <Button Style="{StaticResource Button.Icon}"
+                                Command="{Binding ClearGameFilterCommand}"
+                                Margin="6,0,-4,0"
+                                Width="20"
+                                Height="20"
+                                AutomationProperties.Name="Снять фильтр по игре"
+                                ToolTip="Снять фильтр по игре">
+                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.X}"
+                                                      Width="10"
+                                                      Height="10" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <ToggleButton Style="{StaticResource ToggleButton.Toolbar}"
+                              IsChecked="{Binding ShowHidden, Mode=TwoWay}"
+                              VerticalAlignment="Center"
+                              Margin="0,0,6,4"
+                              AutomationProperties.Name="{Binding HiddenToggleHint}"
+                              ToolTip="{Binding HiddenToggleHint}"
+                              Visibility="{Binding HasHiddenSessions, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.EyeOff}"
+                                                  Width="13"
+                                                  Height="13"
+                                                  VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding HiddenToggleCaption}"
+                                   Margin="6,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+
+                <Button x:Name="TrendMenuButton"
+                        Style="{StaticResource Button.Icon}"
+                        Click="OnTrendMenuClick"
+                        VerticalAlignment="Center"
+                        Margin="0,0,6,4"
+                        AutomationProperties.Name="Настройки полосы зрителей"
+                        ToolTip="Что показывать на полосе зрителей"
+                        Visibility="{Binding CanShowTrend, Converter={StaticResource BoolToVisibility}}">
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Settings2}"
+                                              Width="14"
+                                              Height="14" />
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Метрика"
+                                      ItemsSource="{Binding MetricOptions}"
+                                      ItemContainerStyle="{StaticResource TrendOptionItem}" />
+                            <MenuItem Header="Глубина"
+                                      ItemsSource="{Binding LengthOptions}"
+                                      ItemContainerStyle="{StaticResource TrendOptionItem}" />
+                            <Separator />
+                            <MenuItem Header="{Binding TrendVisibilityCaption}"
+                                      Command="{Binding ToggleTrendCommand}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
+                <Button Style="{StaticResource Button.Icon}"
+                        Command="{Binding RefreshCommand}"
+                        VerticalAlignment="Center"
+                        Margin="0,0,6,4"
+                        AutomationProperties.Name="Перечитать историю стримов"
+                        ToolTip="Перечитать историю стримов">
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.RefreshCw}"
+                                              Width="14"
+                                              Height="14" />
+                </Button>
+
+                <Button x:Name="SortMenuButton"
+                        Style="{StaticResource Button.Icon}"
+                        Click="OnSortMenuClick"
+                        VerticalAlignment="Center"
+                        Margin="0,0,6,4"
+                        AutomationProperties.Name="{Binding SortCaption}"
+                        ToolTip="{Binding SortCaption}"
+                        Visibility="{Binding IsCardsView, Converter={StaticResource BoolToVisibility}}">
+                    <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.ArrowUpDown}"
+                                              Width="14"
+                                              Height="14" />
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Сортировка"
+                                      ItemsSource="{Binding SortOptions}"
+                                      ItemContainerStyle="{StaticResource TrendOptionItem}" />
+                            <MenuItem Header="Порядок"
+                                      ItemsSource="{Binding SortDirectionOptions}"
+                                      ItemContainerStyle="{StaticResource TrendOptionItem}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,4">
+                    <RadioButton Style="{StaticResource ToggleButton.Toolbar}"
+                                 GroupName="StreamListView"
+                                 IsChecked="{Binding IsTableView, Mode=TwoWay}"
+                                 AutomationProperties.Name="Показать стримы таблицей"
+                                 ToolTip="Показать стримы таблицей">
+                        <StackPanel Orientation="Horizontal">
+                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.Table}"
+                                                      Width="13"
+                                                      Height="13"
+                                                      VerticalAlignment="Center" />
+                            <TextBlock Text="Таблица"
+                                       Margin="6,0,0,0"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton Style="{StaticResource ToggleButton.Toolbar}"
+                                 GroupName="StreamListView"
+                                 Margin="4,0,0,0"
+                                 IsChecked="{Binding IsCardsView, Mode=TwoWay}"
+                                 AutomationProperties.Name="Показать стримы карточками"
+                                 ToolTip="Показать стримы карточками">
+                        <StackPanel Orientation="Horizontal">
+                            <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.LayoutList}"
+                                                      Width="13"
+                                                      Height="13"
+                                                      VerticalAlignment="Center" />
+                            <TextBlock Text="Карточки"
+                                       Margin="6,0,0,0"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </RadioButton>
+                </StackPanel>
+            </WrapPanel>
+        </Grid>
 
         <Border x:Name="NoticeStrip"
                 Margin="0,0,0,8"
@@ -1377,8 +1418,15 @@
                 Style="{StaticResource Card}"
                 Padding="0"
                 Margin="0,0,0,8"
+                MaxHeight="{Binding SummaryStripMaxHeight, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}"
                 Visibility="{Binding IsSummaryOpen, Converter={StaticResource BoolToVisibility}}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
                 <Grid Margin="12,10,12,10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition>
                             <ColumnDefinition.Style>
@@ -1386,8 +1434,15 @@
                                     <Setter Property="Width"
                                             Value="3*" />
                                     <Setter Property="MinWidth"
-                                            Value="220" />
+                                            Value="{Binding ScaledCategoriesPaneMinWidth, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}" />
                                     <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSummaryStacked, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}"
+                                                     Value="True">
+                                            <Setter Property="Width"
+                                                    Value="*" />
+                                            <Setter Property="MinWidth"
+                                                    Value="0" />
+                                        </DataTrigger>
                                         <DataTrigger Binding="{Binding HasTopCategories}"
                                                      Value="False">
                                             <Setter Property="Width"
@@ -1407,6 +1462,13 @@
                                     <Setter Property="MinWidth"
                                             Value="{Binding ScaledRecordsPaneMinWidth, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}" />
                                     <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSummaryStacked, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}"
+                                                     Value="True">
+                                            <Setter Property="Width"
+                                                    Value="0" />
+                                            <Setter Property="MinWidth"
+                                                    Value="0" />
+                                        </DataTrigger>
                                         <DataTrigger Binding="{Binding HasRecords}"
                                                      Value="False">
                                             <Setter Property="Width"
@@ -1420,9 +1482,22 @@
                         </ColumnDefinition>
                     </Grid.ColumnDefinitions>
 
-                    <Grid Grid.Column="0"
-                          Margin="0,0,16,0"
+                    <Grid Grid.Row="0"
+                          Grid.Column="0"
                           Visibility="{Binding HasTopCategories, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Margin"
+                                        Value="0,0,16,0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSummaryStacked, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}"
+                                                 Value="True">
+                                        <Setter Property="Margin"
+                                                Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -1448,8 +1523,28 @@
                                  ScrollViewer.VerticalScrollBarVisibility="Disabled" />
                     </Grid>
 
-                    <Grid Grid.Column="1"
-                          Visibility="{Binding HasRecords, Converter={StaticResource BoolToVisibility}}">
+                    <Grid Visibility="{Binding HasRecords, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Grid.Row"
+                                        Value="0" />
+                                <Setter Property="Grid.Column"
+                                        Value="1" />
+                                <Setter Property="Margin"
+                                        Value="0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSummaryStacked, RelativeSource={RelativeSource AncestorType=views:StreamHistoryPageView}}"
+                                                 Value="True">
+                                        <Setter Property="Grid.Row"
+                                                Value="1" />
+                                        <Setter Property="Grid.Column"
+                                                Value="0" />
+                                        <Setter Property="Margin"
+                                                Value="0,12,0,0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -1498,6 +1593,7 @@
                         </ItemsControl>
                     </Grid>
                 </Grid>
+            </ScrollViewer>
         </Border>
 
         </StackPanel>
@@ -1818,6 +1914,7 @@
                              Description="Детали, сегменты и чаттеры появятся здесь."
                              DescriptionMaxWidth="360"
                              IconSize="24"
+                             ClipToBounds="True"
                              Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}" />
 
         <Border x:Name="DetailCard"

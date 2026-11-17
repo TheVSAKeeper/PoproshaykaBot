@@ -281,17 +281,24 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0"
-              Margin="0,0,0,12">
+        <Grid x:Name="FilterBar"
+              Grid.Row="0"
+              Margin="0,0,0,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"
                                   MinWidth="150"
                                   MaxWidth="420" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Grid Grid.Column="0">
+            <Grid Grid.Row="0"
+                  Grid.Column="0">
                 <TextBox x:Name="SearchBox"
                          Style="{StaticResource TextBox.IconField}"
                          Padding="10,0,32,0"
@@ -321,24 +328,67 @@
                 </Button>
             </Grid>
 
-            <ComboBox Grid.Column="1"
-                      HorizontalAlignment="Left"
+            <ComboBox HorizontalAlignment="Left"
                       VerticalAlignment="Center"
-                      Margin="8,0,0,0"
-                      MinWidth="136"
-                      Style="{StaticResource ComboBox.Toolbar}"
+                      MinWidth="128"
                       ItemsSource="{Binding PlatformOptions}"
                       SelectedItem="{Binding SelectedPlatformFilter, Mode=TwoWay}"
                       DisplayMemberPath="Label"
-                      AutomationProperties.Name="Фильтр по площадке" />
+                      AutomationProperties.Name="Фильтр по площадке">
+                <ComboBox.Style>
+                    <Style TargetType="ComboBox"
+                           BasedOn="{StaticResource ComboBox.Toolbar}">
+                        <Setter Property="Grid.Row"
+                                Value="0" />
+                        <Setter Property="Grid.Column"
+                                Value="1" />
+                        <Setter Property="Margin"
+                                Value="8,0,0,0" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompactFilterBar, RelativeSource={RelativeSource AncestorType=views:UserStatisticsPageView}}"
+                                         Value="True">
+                                <Setter Property="Grid.Row"
+                                        Value="1" />
+                                <Setter Property="Grid.Column"
+                                        Value="0" />
+                                <Setter Property="Margin"
+                                        Value="0,6,0,0" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ComboBox.Style>
+            </ComboBox>
 
-            <StackPanel Grid.Column="2"
-                        Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Grid.Row"
+                                Value="0" />
+                        <Setter Property="Grid.Column"
+                                Value="3" />
+                        <Setter Property="Margin"
+                                Value="0" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompactFilterBar, RelativeSource={RelativeSource AncestorType=views:UserStatisticsPageView}}"
+                                         Value="True">
+                                <Setter Property="Grid.Row"
+                                        Value="1" />
+                                <Setter Property="Grid.Column"
+                                        Value="1" />
+                                <Setter Property="Grid.ColumnSpan"
+                                        Value="3" />
+                                <Setter Property="Margin"
+                                        Value="8,6,0,0" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
                 <Button Content="Названия баллов"
                         Style="{StaticResource Button.Secondary}"
                         Command="{Binding EditPointTermCommand}"
                         AutomationProperties.Name="Изменить названия баллов"
-                        Margin="16,0,8,0" />
+                        Margin="8,0,8,0" />
                 <Button Style="{StaticResource Button.Icon}"
                         Command="{Binding RefreshCommand}"
                         AutomationProperties.Name="Перечитать статистику"
@@ -382,9 +432,57 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0"
-                                Margin="16,16,16,12">
+                                Margin="16,10,16,8">
+                        <DockPanel LastChildFill="True">
+                            <Button DockPanel.Dock="Left"
+                                    Style="{StaticResource Button.Ghost}"
+                                    Command="{Binding ToggleSummaryCommand}"
+                                    HorizontalAlignment="Left"
+                                    MinHeight="0"
+                                    Padding="4,2"
+                                    Margin="-4,0,8,0"
+                                    AutomationProperties.Name="{Binding SummaryToggleCaption}"
+                                    ToolTip="{Binding SummaryToggleCaption}">
+                                <StackPanel Orientation="Horizontal">
+                                    <iconPacks:PackIconLucide Width="13"
+                                                              Height="13"
+                                                              VerticalAlignment="Center"
+                                                              Foreground="{DynamicResource Fg.Secondary}">
+                                        <iconPacks:PackIconLucide.Style>
+                                            <Style TargetType="iconPacks:PackIconLucide">
+                                                <Setter Property="Kind"
+                                                        Value="ChevronRight" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ShowExpandedSummary}"
+                                                                 Value="True">
+                                                        <Setter Property="Kind"
+                                                                Value="ChevronDown" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </iconPacks:PackIconLucide.Style>
+                                    </iconPacks:PackIconLucide>
+                                    <TextBlock Text="Сводка"
+                                               FontSize="{DynamicResource Font.Size.Caption}"
+                                               Foreground="{DynamicResource Fg.Muted}"
+                                               Margin="6,0,0,0"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <TextBlock Text="{Binding SummaryLine}"
+                                       FontSize="{DynamicResource Font.Size.S}"
+                                       Foreground="{DynamicResource Fg.Secondary}"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding SummaryLine}"
+                                       Visibility="{Binding ShowExpandedSummary, Converter={StaticResource InverseBoolToVisibility}}" />
+                        </DockPanel>
+
                         <WrapPanel Orientation="Horizontal"
-                                   Margin="0,0,-8,-8">
+                                   Margin="0,6,-8,-8"
+                                   Visibility="{Binding ShowExpandedSummary, Converter={StaticResource BoolToVisibility}}">
                             <Border Style="{StaticResource StatCell}">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource StatValue}"
@@ -432,7 +530,7 @@
                         </WrapPanel>
 
                         <TextBlock Style="{StaticResource StatLabel}"
-                                   Margin="0,10,0,0"
+                                   Margin="0,6,0,0"
                                    Text="{Binding VisibleCountText}"
                                    Visibility="{Binding IsFilterActive, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
@@ -540,19 +638,47 @@
             <Border x:Name="InspectorCard"
                     Grid.Column="1"
                     Style="{StaticResource Card}"
-                    Padding="16"
+                    Padding="16,12"
                     Visibility="{Binding HasUsers, Converter={StaticResource BoolToVisibility}}">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+                <ScrollViewer x:Name="OuterInspectorScroll"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer.Style>
+                        <Style TargetType="ScrollViewer">
+                            <Setter Property="VerticalScrollBarVisibility"
+                                    Value="Disabled" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsInspectorScrollCombined, RelativeSource={RelativeSource AncestorType=views:UserStatisticsPageView}}"
+                                             Value="True">
+                                    <Setter Property="VerticalScrollBarVisibility"
+                                            Value="Auto" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ScrollViewer.Style>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                    <ScrollViewer Grid.Row="0"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  Visibility="{Binding HasSelectedRow, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel Margin="0,0,12,0">
+                        <ScrollViewer x:Name="ProfileStatsScroll"
+                                      Grid.Row="0"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Visibility="{Binding HasSelectedRow, Converter={StaticResource BoolToVisibility}}">
+                            <ScrollViewer.Style>
+                                <Style TargetType="ScrollViewer">
+                                    <Setter Property="VerticalScrollBarVisibility"
+                                            Value="Auto" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsInspectorScrollCombined, RelativeSource={RelativeSource AncestorType=views:UserStatisticsPageView}}"
+                                                     Value="True">
+                                            <Setter Property="VerticalScrollBarVisibility"
+                                                    Value="Disabled" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ScrollViewer.Style>
+                            <StackPanel Margin="0,0,12,0">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -569,32 +695,29 @@
 
                                 <StackPanel Grid.Column="1"
                                             VerticalAlignment="Center">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <TextBlock Grid.Column="0"
-                                                   Text="{Binding SelectedRow.Name}"
+                                    <WrapPanel x:Name="IdentityHeader"
+                                               Orientation="Horizontal">
+                                        <TextBlock Text="{Binding SelectedRow.Name}"
+                                                   MaxWidth="{Binding ActualWidth, ElementName=IdentityHeader}"
                                                    FontSize="{DynamicResource Font.Size.XL}"
                                                    FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                                    Foreground="{DynamicResource Fg.Primary}"
                                                    TextWrapping="NoWrap"
                                                    TextTrimming="CharacterEllipsis"
                                                    ToolTip="{Binding SelectedRow.Name}"
-                                                   VerticalAlignment="Center" />
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,2" />
 
-                                        <Border Grid.Column="1"
-                                                Style="{StaticResource Badge}"
+                                        <Border Style="{StaticResource Badge}"
                                                 VerticalAlignment="Center"
-                                                Margin="10,0,0,0">
+                                                Margin="0,2,0,2">
                                             <TextBlock Text="{Binding SelectedRow.RankDisplay}"
                                                        FontSize="{DynamicResource Font.Size.Caption}"
                                                        Foreground="{DynamicResource Fg.Secondary}"
-                                                       TextWrapping="NoWrap" />
+                                                       TextWrapping="NoWrap"
+                                                       TextTrimming="CharacterEllipsis" />
                                         </Border>
-                                    </Grid>
+                                    </WrapPanel>
 
                                     <StackPanel Orientation="Horizontal"
                                                 Margin="0,4,0,0">
@@ -613,56 +736,58 @@
 
                                     <TextBlock Text="{Binding SelectedPlaceText}"
                                                Foreground="{DynamicResource Fg.Secondary}"
+                                               TextWrapping="Wrap"
                                                Margin="0,2,0,0" />
                                 </StackPanel>
                             </Grid>
 
                             <UniformGrid Columns="2"
-                                         Margin="0,16,0,0">
-                                <StackPanel Margin="0,0,12,10">
+                                         Margin="0,12,0,0">
+                                <StackPanel Margin="0,0,12,6">
                                     <TextBlock Style="{StaticResource StatValue.Small}"
                                                Text="{Binding SelectedRow.PointsDisplay}" />
-                                    <TextBlock Style="{StaticResource StatLabel}"
+                                    <TextBlock Style="{StaticResource StatLabel.Wrap}"
                                                Text="баллов" />
                                 </StackPanel>
 
-                                <StackPanel Margin="0,0,0,10">
+                                <StackPanel Margin="0,0,0,6">
                                     <TextBlock Style="{StaticResource StatValue.Small}"
                                                Text="{Binding SelectedRow.MessageCountDisplay}" />
-                                    <TextBlock Style="{StaticResource StatLabel}"
+                                    <TextBlock Style="{StaticResource StatLabel.Wrap}"
                                                Text="сообщений" />
                                 </StackPanel>
 
-                                <StackPanel Margin="0,0,12,10">
+                                <StackPanel Margin="0,0,12,6">
                                     <TextBlock Style="{StaticResource InspectorBonusValue}"
                                                Text="{Binding SelectedRow.BonusDisplay}" />
-                                    <TextBlock Style="{StaticResource StatLabel}"
+                                    <TextBlock Style="{StaticResource StatLabel.Wrap}"
                                                Text="бонус" />
                                 </StackPanel>
 
-                                <StackPanel Margin="0,0,0,10">
+                                <StackPanel Margin="0,0,0,6">
                                     <TextBlock Style="{StaticResource InspectorPenaltyValue}"
                                                Text="{Binding SelectedRow.PenaltyDisplay}" />
-                                    <TextBlock Style="{StaticResource StatLabel}"
+                                    <TextBlock Style="{StaticResource StatLabel.Wrap}"
                                                Text="штраф" />
                                 </StackPanel>
 
-                                <StackPanel Margin="0,0,12,10">
+                                <StackPanel Margin="0,0,12,6">
                                     <TextBlock Style="{StaticResource StatValue.Small}"
                                                Text="{Binding SelectedRow.DaysInChatDisplay}" />
-                                    <TextBlock Style="{StaticResource StatLabel}"
+                                    <TextBlock Style="{StaticResource StatLabel.Wrap}"
                                                Text="дней в чате" />
                                 </StackPanel>
 
-                                <StackPanel Margin="0,0,0,10">
+                                <StackPanel Margin="0,0,0,6">
                                     <TextBlock Style="{StaticResource StatValue.Small}"
                                                Text="{Binding SelectedRow.DailyRateDisplay}" />
-                                    <TextBlock Style="{StaticResource StatLabel}"
+                                    <TextBlock Style="{StaticResource StatLabel.Wrap}"
                                                Text="сообщений в день" />
                                 </StackPanel>
                             </UniformGrid>
 
-                            <Grid x:Name="ActivityStats">
+                            <Grid x:Name="ActivityStats"
+                                  Margin="0,4,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
@@ -1146,7 +1271,7 @@
                                 Visibility="{Binding HasSelectedRow, Converter={StaticResource BoolToVisibility}}">
                         <Border Height="1"
                                 Background="{DynamicResource Border.Subtle}"
-                                Margin="0,16,0,0" />
+                                Margin="0,8,0,0" />
 
                         <Button x:Name="BalanceToggle"
                                 Style="{StaticResource Button.Ghost}"
@@ -1154,7 +1279,7 @@
                                 HorizontalAlignment="Left"
                                 MinHeight="0"
                                 Padding="6,4"
-                                Margin="-6,10,0,0"
+                                Margin="-6,6,0,0"
                                 AutomationProperties.Name="{Binding BalanceToggleCaption}"
                                 ToolTip="{Binding BalanceToggleCaption}">
                             <StackPanel Orientation="Horizontal">
@@ -1186,10 +1311,10 @@
                         </Button>
 
                         <StackPanel x:Name="BalanceBody"
-                                    Margin="0,8,0,0"
+                                    Margin="0,6,0,0"
                                     Visibility="{Binding IsBalanceExpanded, Converter={StaticResource BoolToVisibility}}">
                             <UniformGrid Columns="4"
-                                         Margin="0,0,0,10">
+                                         Margin="0,0,0,8">
                                 <Button Style="{StaticResource QuickAmountButton}"
                                         Command="{Binding SetAdjustmentCommand}"
                                         Content="−100"
@@ -1228,7 +1353,7 @@
                             </UniformGrid>
 
                             <StackPanel x:Name="AdjustmentField"
-                                        Margin="0,0,0,12">
+                                        Margin="0,0,0,8">
                                 <TextBlock Text="Изменение баланса"
                                            Style="{StaticResource TextBlock.Subtle}"
                                            TextWrapping="Wrap"
@@ -1294,6 +1419,7 @@
                                    Margin="0,8,0,0" />
                     </StackPanel>
                 </Grid>
+                </ScrollViewer>
             </Border>
         </Grid>
     </Grid>

@@ -236,6 +236,13 @@
                 Value="0,2,0,0" />
     </Style>
 
+    <Style x:Key="StatLabel.Wrap"
+           TargetType="TextBlock"
+           BasedOn="{StaticResource StatLabel}">
+        <Setter Property="TextWrapping"
+                Value="Wrap" />
+    </Style>
+
     <Style x:Key="StatCell"
            TargetType="Border">
         <Setter Property="BorderBrush"
