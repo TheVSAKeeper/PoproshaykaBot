@@ -19,6 +19,7 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
 
     private double _listWidth;
     private string? _announcedAdjustmentError;
+    private UserStatisticsPageViewModel? _viewModel;
 
     public UserStatisticsPageView()
     {
@@ -39,6 +40,13 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
     {
         FontScaleManager.Changed -= OnFontScaleChanged;
         FontScaleManager.Changed += OnFontScaleChanged;
+
+        if (_viewModel is not null)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
+
         ApplyRankColumn();
         ScrollToSelected();
     }
@@ -46,6 +54,11 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         FontScaleManager.Changed -= OnFontScaleChanged;
+
+        if (_viewModel is not null)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        }
     }
 
     private void OnFontScaleChanged(object? sender, double scale)
@@ -71,14 +84,17 @@ public partial class UserStatisticsPageView : IView<UserStatisticsPageViewModel>
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.OldValue is UserStatisticsPageViewModel oldViewModel)
+        if (_viewModel is not null)
         {
-            oldViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
-        if (e.NewValue is UserStatisticsPageViewModel newViewModel)
+        _viewModel = e.NewValue as UserStatisticsPageViewModel;
+
+        if (_viewModel is not null)
         {
-            newViewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
     }
 

@@ -29,22 +29,22 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0">
-                        <TextBlock Text="{Binding Section.Title}"
+                        <TextBlock Text="{Binding Section.Title, Mode=OneTime}"
                                    Style="{StaticResource Setting.SectionTitle}" />
 
-                        <ItemsControl ItemsSource="{Binding Blocks}"
+                        <ItemsControl ItemsSource="{Binding Blocks, Mode=OneTime}"
                                       Focusable="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type settingsVm:SettingsSectionBlockDescriptor}">
                                     <HeaderedContentControl Style="{StaticResource Form.Panel}"
-                                                            Header="{Binding Title}"
+                                                            Header="{Binding Title, Mode=OneTime}"
                                                             Margin="{StaticResource Setting.BlockGap}"
-                                                            settings:SettingsBlock.Key="{Binding Key}">
+                                                            settings:SettingsBlock.Key="{Binding Key, Mode=OneTime}">
                                         <StackPanel>
-                                            <TextBlock Text="{Binding Hint}"
+                                            <TextBlock Text="{Binding Hint, Mode=OneTime}"
                                                        Style="{StaticResource Setting.BlockHint}"
-                                                       Visibility="{Binding Hint, Converter={StaticResource NullToVisibility}}" />
-                                            <ContentControl Content="{Binding Content}"
+                                                       Visibility="{Binding Hint, Mode=OneTime, Converter={StaticResource NullToVisibility}}" />
+                                            <ContentControl Content="{Binding Content, Mode=OneTime}"
                                                             Focusable="False" />
                                         </StackPanel>
                                     </HeaderedContentControl>
@@ -65,7 +65,7 @@
                                     <Setter Property="MaxWidth"
                                             Value="{StaticResource Setting.ContentWidth}" />
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsFullWidth}"
+                                        <DataTrigger Binding="{Binding IsFullWidth, Mode=OneTime}"
                                                      Value="True">
                                             <Setter Property="MaxWidth"
                                                     Value="{x:Static sys:Double.PositiveInfinity}" />
@@ -79,12 +79,12 @@
 
                     <HeaderedContentControl Grid.Column="0"
                                             Style="{StaticResource Form.Panel}"
-                                            Header="{Binding Section.Title}">
+                                            Header="{Binding Section.Title, Mode=OneTime}">
                         <StackPanel>
-                            <TextBlock Text="{Binding Blocks[0].Hint}"
+                            <TextBlock Text="{Binding Blocks[0].Hint, Mode=OneTime}"
                                        Style="{StaticResource Setting.BlockHint}"
-                                       Visibility="{Binding Blocks[0].Hint, Converter={StaticResource NullToVisibility}}" />
-                            <ContentControl Content="{Binding Blocks[0].Content}"
+                                       Visibility="{Binding Blocks[0].Hint, Mode=OneTime, Converter={StaticResource NullToVisibility}}" />
+                            <ContentControl Content="{Binding Blocks[0].Content, Mode=OneTime}"
                                             Focusable="False" />
                         </StackPanel>
                     </HeaderedContentControl>
