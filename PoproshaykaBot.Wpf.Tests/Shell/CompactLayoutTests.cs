@@ -1,12 +1,16 @@
 ﻿using KeepShell.Bootstrap;
+using KeepShell.Services;
 using KeepShell.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Settings.Ui;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -15,10 +19,13 @@ using PoproshaykaBot.Wpf.Tests.Support;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
+using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.Views;
 using PoproshaykaBot.Wpf.Views.Dialogs;
+using PoproshaykaBot.Wpf.Views.Settings;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 
@@ -38,6 +45,7 @@ public class CompactLayoutTests
         "pack://application:,,,/PoproshaykaBot.Wpf;component/Infrastructure/Converters/AppConverters.xaml",
         "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/TableStyles.xaml",
         "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/RatingStyles.xaml",
+        "pack://application:,,,/PoproshaykaBot.Wpf;component/Resources/PlatformIcons.xaml",
     ];
 
     private string _directory = null!;
@@ -213,6 +221,123 @@ public class CompactLayoutTests
         }
     }
 
+    [Test]
+    public void TitleBarView_системные_кнопки_свернуть_и_закрыть_имеют_AutomationProperties_Name()
+    {
+        var view = new TitleBarView();
+        Arrange(view, new(1024, 40));
+
+        var buttons = Descendants<Button>(view).ToList();
+        var minimize = buttons.First(b => Equals(b.ToolTip, "Свернуть"));
+        var close = buttons.First(b => Equals(b.ToolTip, "Закрыть"));
+        var maxRestoreStyle = Application.Current.TryFindResource("Chrome.Button.MaxRestore");
+        var maxRestore = buttons.First(b => ReferenceEquals(b.Style, maxRestoreStyle));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutomationProperties.GetName(minimize), Is.EqualTo("Свернуть"));
+            Assert.That(AutomationProperties.GetName(close), Is.EqualTo("Закрыть"));
+            Assert.That(maxRestore.ReadLocalValue(AutomationProperties.NameProperty), Is.EqualTo(DependencyProperty.UnsetValue));
+            Assert.That(maxRestore.ReadLocalValue(FrameworkElement.ToolTipProperty), Is.EqualTo(DependencyProperty.UnsetValue));
+        });
+    }
+
+    [Test]
+    public void DashboardLayoutSectionView_эталон_и_подпись_не_режутся_при_1024x640_1_6()
+    {
+        var store = new DashboardLayoutStore(null, Path.Combine(_directory, "dashboard-layout.json"));
+        var vm = new DashboardLayoutSectionViewModel([], new MemorySettings(), store);
+        var view = new DashboardLayoutSectionView { DataContext = vm };
+        var host = HostWithMainWindowFont(view);
+
+        ApplyScale(1.6);
+        SyncMainWindowFont(host);
+        Arrange(host, new(768, 560));
+
+        var combo = Descendants<ComboBox>(view).First();
+        var caption = Descendants<TextBlock>(view).First(t => t.Text == vm.ReferenceCaption);
+        var bounds = caption.TransformToAncestor(view).TransformBounds(new(caption.RenderSize));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(view.FontSize, Is.GreaterThan(20));
+            Assert.That(AutomationProperties.GetName(combo), Is.EqualTo("Эталон размера окна"));
+            Assert.That(caption.TextWrapping, Is.EqualTo(TextWrapping.Wrap));
+            Assert.That(bounds.Right, Is.LessThanOrEqualTo(view.ActualWidth + 0.5));
+        });
+    }
+
+    [Test]
+    public void CommandsPageView_не_режет_последний_вызов_при_1024x640_и_держит_CanContentScroll_False()
+    {
+        var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "cmd-settings.json"));
+        var cmdStore = new CommandSettingsStore(null, Path.Combine(_directory, "commands.json"));
+        var usage = new CommandUsageRepository(TimeProvider.System);
+        var commands = Enumerable.Range(1, 16)
+            .Select(i => (IChatCommand)new StubChatCommand($"команда{i:D2}"))
+            .ToArray();
+        var processor = new ChatCommandProcessor(
+            commands,
+            cmdStore,
+            usage,
+            NullLogger<ChatCommandProcessor>.Instance,
+            "!");
+
+        var pageVm = new CommandsPageViewModel(
+            processor,
+            cmdStore,
+            settingsManager,
+            usage,
+            new StubPrompt(),
+            new AccountsStore(null, Path.Combine(_directory, "cmd-accounts.json")),
+            NullLogger<CommandsPageViewModel>.Instance);
+
+        var view = new CommandsPageView { DataContext = pageVm };
+        var host = HostWithMainWindowFont(view);
+        var tableScroll = (ScrollViewer)view.FindName("TableScroll")!;
+        var commandList = (ListBox)view.FindName("CommandList")!;
+
+        ApplyScale(1.0);
+        SyncMainWindowFont(host);
+        Arrange(host, new(768, 540));
+
+        var lastCallHeader = Descendants<TextBlock>(view).First(static t => t.Text == "Последний вызов");
+        var totalHeader = Descendants<TextBlock>(view).First(static t => t.Text == "Всего");
+        var accessHeader = Descendants<TextBlock>(view).First(static t => t.Text == "Права");
+        var headerRight = lastCallHeader.TransformToAncestor(tableScroll).Transform(new(lastCallHeader.ActualWidth, 0)).X;
+        var firstItem = (ListBoxItem)commandList.ItemContainerGenerator.ContainerFromIndex(0);
+        var firstTotalCell = Descendants<TextBlock>(firstItem).First(static t => t.Text == "0");
+        var firstAccessCell = Descendants<TextBlock>(firstItem).First(static t => t.Text == "Все");
+        var totalHeaderX = totalHeader.TransformToAncestor(tableScroll).Transform(new(totalHeader.ActualWidth, 0)).X;
+        var totalCellX = firstTotalCell.TransformToAncestor(tableScroll).Transform(new(firstTotalCell.ActualWidth, 0)).X;
+        var accessHeaderX = accessHeader.TransformToAncestor(tableScroll).Transform(default).X;
+        var accessCellX = firstAccessCell.TransformToAncestor(tableScroll).Transform(default).X;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ScrollViewer.GetCanContentScroll(commandList), Is.False);
+            Assert.That(tableScroll.ExtentWidth, Is.LessThanOrEqualTo(tableScroll.ViewportWidth + 0.5));
+            Assert.That(headerRight, Is.LessThanOrEqualTo(tableScroll.ViewportWidth + 0.5));
+            Assert.That(accessHeaderX, Is.EqualTo(accessCellX).Within(0.5));
+            Assert.That(totalHeaderX, Is.EqualTo(totalCellX).Within(0.5));
+        });
+
+        ApplyScale(1.6);
+        SyncMainWindowFont(host);
+        Arrange(host, new(744, 540));
+
+        var searchPlaceholder = Descendants<TextBlock>(view).First(static t => t.Text == "Найти команду");
+        var searchBox = Descendants<TextBox>(view).First(static tb => AutomationProperties.GetName(tb) == "Поиск команды по имени или описанию");
+        var naturalPlaceholderWidth = searchPlaceholder.DesiredSize.Width - searchPlaceholder.Margin.Left - searchPlaceholder.Margin.Right;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(view.FontSize, Is.GreaterThan(20));
+            Assert.That(searchBox.ActualWidth, Is.GreaterThanOrEqualTo(220));
+            Assert.That(searchPlaceholder.ActualWidth, Is.GreaterThanOrEqualTo(naturalPlaceholderWidth - 0.5));
+        });
+    }
+
     private UserStatisticsPageViewModel CreateUsersPage(int count)
     {
         var settingsManager = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory, "settings.json"));
@@ -309,6 +434,26 @@ public class CompactLayoutTests
         AppScaledSizes.Register(Application.Current);
     }
 
+    private static ContentControl HostWithMainWindowFont(FrameworkElement content)
+    {
+        var host = new ContentControl { Content = content };
+        SyncMainWindowFont(host);
+        return host;
+    }
+
+    private static void SyncMainWindowFont(Control host)
+    {
+        if (Application.Current?.TryFindResource("Font.Sans") is FontFamily fontFamily)
+        {
+            host.FontFamily = fontFamily;
+        }
+
+        if (Application.Current?.TryFindResource("Font.Size.M") is double fontSize)
+        {
+            host.FontSize = fontSize;
+        }
+    }
+
     private static void Arrange(FrameworkElement element, Size size)
     {
         element.Measure(size);
@@ -348,5 +493,21 @@ public class CompactLayoutTests
             => Task.FromResult(new GameCategoryResolution(null, []));
 
         public Task RememberAsync(GameSuggestion suggestion) => Task.CompletedTask;
+    }
+
+    private sealed class StubChatCommand(string canonical) : IChatCommand
+    {
+        public string Canonical => canonical;
+        public IReadOnlyCollection<string> Aliases => [];
+        public string Description => canonical;
+        public PlatformCapabilities RequiredCapabilities => PlatformCapabilities.None;
+        public bool CanExecute(CommandContext context) => true;
+        public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+            => Task.FromResult<OutgoingMessage?>(null);
+    }
+
+    private sealed class StubPrompt : IUnsavedChangesPrompt
+    {
+        public UnsavedChangesDecision Ask(string subject, string action) => UnsavedChangesDecision.Discard;
     }
 }

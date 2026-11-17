@@ -22,7 +22,7 @@
             <Setter Property="VerticalContentAlignment"
                     Value="Center" />
             <Setter Property="Padding"
-                    Value="12,4" />
+                    Value="10,4" />
             <Setter Property="Margin"
                     Value="0" />
             <Setter Property="MinHeight"
@@ -97,7 +97,7 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"
-                                      MinWidth="110" />
+                                      MinWidth="92" />
                     <ColumnDefinition Width="Auto"
                                       SharedSizeGroup="CommandAccess" />
                     <ColumnDefinition Width="Auto"
@@ -107,7 +107,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0"
-                            Margin="0,0,12,0"
+                            Margin="0,0,8,0"
                             VerticalAlignment="Center">
                     <TextBlock Text="{Binding Invocation}"
                                FontFamily="{DynamicResource Font.Mono}"
@@ -146,7 +146,7 @@
                 </StackPanel>
 
                 <TextBlock Grid.Column="1"
-                           Margin="0,0,12,0"
+                           Margin="0,0,8,0"
                            VerticalAlignment="Center"
                            Text="{Binding AccessText}"
                            FontSize="{DynamicResource Font.Size.Caption}"
@@ -170,7 +170,7 @@
 
                 <TextBlock Grid.Column="2"
                            Style="{StaticResource RatingNumber}"
-                           Margin="0,0,16,0"
+                           Margin="0,0,10,0"
                            Text="{Binding TotalCountText}" />
 
                 <StackPanel Grid.Column="3"
@@ -267,24 +267,20 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0"
-              Margin="0,0,0,12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"
-                                  MinWidth="150"
-                                  MaxWidth="360" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-
-            <Grid Grid.Column="0">
+        <WrapPanel Grid.Row="0"
+                   Orientation="Horizontal"
+                   VerticalAlignment="Center"
+                   Margin="0,0,0,6">
+            <Grid Width="260"
+                  MinWidth="220"
+                  Margin="0,0,12,6">
                 <TextBox Style="{StaticResource TextBox.IconField}"
                          Padding="10,0,32,0"
                          Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          AutomationProperties.Name="Поиск команды по имени или описанию" />
 
                 <TextBlock Text="Найти команду"
-                           Margin="43,0,38,0"
+                           Margin="43,0,28,0"
                            VerticalAlignment="Center"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
@@ -306,11 +302,9 @@
                 </Button>
             </Grid>
 
-            <StackPanel Grid.Column="1"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Left"
+            <StackPanel Orientation="Horizontal"
                         VerticalAlignment="Center"
-                        Margin="12,0,0,0">
+                        Margin="0,0,12,6">
                 <RadioButton Style="{StaticResource ToggleButton.Toolbar}"
                              GroupName="CommandsProbePlatform"
                              IsChecked="{Binding IsTwitchProbe, Mode=TwoWay}"
@@ -343,11 +337,12 @@
                 </RadioButton>
             </StackPanel>
 
-            <StackPanel Grid.Column="2"
-                        Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,0,0,6">
                 <TextBlock Text="Ответ по умолчанию"
                            VerticalAlignment="Center"
-                           Margin="16,0,8,0"
+                           Margin="0,0,8,0"
                            Foreground="{DynamicResource Fg.Secondary}" />
 
                 <ComboBox MinWidth="170"
@@ -369,7 +364,7 @@
                                               Height="14" />
                 </Button>
             </StackPanel>
-        </Grid>
+        </WrapPanel>
 
         <StackPanel Grid.Row="1">
             <Border Margin="0,0,0,12"
@@ -399,7 +394,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*" />
                 <ColumnDefinition Width="2*"
-                                  MinWidth="300"
+                                  MinWidth="280"
                                   MaxWidth="380" />
             </Grid.ColumnDefinitions>
 
@@ -416,7 +411,7 @@
             <Border Grid.Column="0"
                     Style="{StaticResource Card}"
                     Padding="0"
-                    Margin="0,0,16,0"
+                    Margin="0,0,12,0"
                     Visibility="{Binding HasCommands, Converter={StaticResource BoolToVisibility}}">
                 <Grid Grid.IsSharedSizeScope="True">
                     <Grid.RowDefinitions>
@@ -454,10 +449,10 @@
                             </Grid.RowDefinitions>
 
                             <Grid Grid.Row="0"
-                                  Margin="12,6,24,6">
+                                  Margin="10,6,23,6">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"
-                                                      MinWidth="110" />
+                                                      MinWidth="92" />
                                     <ColumnDefinition Width="Auto"
                                                       SharedSizeGroup="CommandAccess" />
                                     <ColumnDefinition Width="Auto"
@@ -468,17 +463,17 @@
 
                                 <TextBlock Grid.Column="0"
                                            Style="{StaticResource CommandColumnHeader}"
-                                           Margin="0,0,12,0"
+                                           Margin="0,0,8,0"
                                            Text="Команда" />
 
                                 <TextBlock Grid.Column="1"
                                            Style="{StaticResource CommandColumnHeader}"
-                                           Margin="0,0,12,0"
+                                           Margin="0,0,8,0"
                                            Text="Права" />
 
                                 <TextBlock Grid.Column="2"
                                            Style="{StaticResource CommandColumnHeader}"
-                                           Margin="0,0,16,0"
+                                           Margin="0,0,10,0"
                                            HorizontalAlignment="Right"
                                            Text="Всего" />
 
