@@ -375,7 +375,7 @@ public class YouTubeChatIngestionServiceTests
 
         await bus.PublishAsync(new RawChatMessageReceived(msg, DateTimeOffset.UtcNow), CancellationToken.None);
 
-        var stats = users.GetPartition(StreamingPlatform.YouTube).GetById("UCviewer77");
+        var stats = users.ForPlatform(StreamingPlatform.YouTube).GetById("UCviewer77");
 
         Assert.Multiple(() =>
         {
@@ -385,7 +385,7 @@ public class YouTubeChatIngestionServiceTests
             Assert.That(enqueueResult, Is.EqualTo(ChatEnqueueResult.NotConnected));
             Assert.That(stats, Is.Not.Null);
             Assert.That(stats!.MessageCount, Is.EqualTo(1));
-            Assert.That(users.GetPartition(StreamingPlatform.Twitch).GetById("UCviewer77"), Is.Null);
+            Assert.That(users.ForPlatform(StreamingPlatform.Twitch).GetById("UCviewer77"), Is.Null);
         });
     }
 

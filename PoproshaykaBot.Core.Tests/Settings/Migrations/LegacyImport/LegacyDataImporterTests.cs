@@ -521,4 +521,50 @@ public sealed class LegacyDataImporterTests
             Assert.That(File.Exists(Path.Combine(_target, "chat-history", new string('a', 64) + ".invalid-2026.json")), Is.False);
         }
     }
+
+    [Test]
+    public void Import_OverwriteWithLegacyV1Users_BacksUpAndClearsStaleCatalogForRemigration()
+    {
+        const string LegacyV1Users = """[{"userId":"1","name":"Migrated","messageCount":9}]""";
+        const string ExistingCatalog = """{"schemaVersion":1,"accounts":[{"platform":0,"userId":"old","name":"Stale"}]}""";
+
+        LegacyDataFixture.Write(_source, "users_statistics.json", LegacyV1Users);
+        LegacyDataFixture.Write(_target, "users_statistics.json", "[]");
+        LegacyDataFixture.Write(_target, "user_statistics_catalog.json", ExistingCatalog);
+
+        var result = LegacyDataImporter.Import(_source, _target, overwrite: true, null);
+        var catalogBackups = Directory.GetFiles(_target, "user_statistics_catalog.pre-import-*.json");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Failures, Is.Empty);
+            Assert.That(result.CopiedStatistics, Is.True);
+            Assert.That(result.ExternalWrite.Touches("users_statistics.json"), Is.True);
+            Assert.That(result.ExternalWrite.Touches("user_statistics_catalog.json"), Is.True);
+            Assert.That(File.Exists(Path.Combine(_target, "user_statistics_catalog.json")), Is.False);
+            Assert.That(File.ReadAllText(Path.Combine(_target, "users_statistics.json")), Is.EqualTo(LegacyV1Users));
+            Assert.That(catalogBackups, Has.Length.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void Import_OverwriteWhenSourceCatalogCopyFails_KeepsTargetCatalogIntact()
+    {
+        const string TargetCatalog = """{"schemaVersion":2,"accounts":[{"platform":0,"userId":"kept","name":"Kept"}]}""";
+
+        LegacyDataFixture.Write(_source, "users_statistics.json", """[{"userId":"1","name":"Migrated","messageCount":9}]""");
+        var sourceCatalogPath = Path.Combine(_source, "user_statistics_catalog.json");
+        LegacyDataFixture.Write(_source, "user_statistics_catalog.json", """{"schemaVersion":2,"accounts":[]}""");
+        LegacyDataFixture.Write(_target, "users_statistics.json", "[]");
+        LegacyDataFixture.Write(_target, "user_statistics_catalog.json", TargetCatalog);
+
+        using var lockStream = new FileStream(sourceCatalogPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        var result = LegacyDataImporter.Import(_source, _target, overwrite: true, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Failures.Any(f => f.RelativeTargetPath == "user_statistics_catalog.json"), Is.True);
+            Assert.That(File.ReadAllText(Path.Combine(_target, "user_statistics_catalog.json")), Is.EqualTo(TargetCatalog));
+        }
+    }
 }

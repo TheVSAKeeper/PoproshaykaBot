@@ -125,6 +125,7 @@ public sealed class BroadcastAggregator :
             var channel = string.IsNullOrEmpty(@event.Channel)
                 ? _targetChannelProvider.Current.Login
                 : @event.Channel;
+            var channelId = ResolveChannelId(@event.ChannelId, @event.Stream);
 
             BroadcastEnded? replacedBroadcast = null;
             BroadcastPlatformLeft? replacedPlatform = null;
@@ -137,7 +138,7 @@ public sealed class BroadcastAggregator :
 
                 if (_currentBroadcastId is { } previousBroadcastId
                     && _livePlatforms.TryGetValue(@event.Platform, out var previous)
-                    && (!string.Equals(previous.Channel, channel, StringComparison.OrdinalIgnoreCase)
+                    && (IsDifferentChannel(previous.ChannelId, previous.Channel, channelId, channel)
                         || (previous.Stream?.Id is { Length: > 0 } previousStreamId
                             && @event.Stream?.Id is { Length: > 0 } nextStreamId
                             && !string.Equals(previousStreamId, nextStreamId, StringComparison.Ordinal))))
@@ -152,11 +153,11 @@ public sealed class BroadcastAggregator :
                     if (_livePlatforms.Count == 0)
                     {
                         _currentBroadcastId = null;
-                        replacedBroadcast = new(previousBroadcastId, @event.Platform, previous.Channel, closedAt, @event.IsCatchUp);
+                        replacedBroadcast = new(previousBroadcastId, @event.Platform, previous.Channel, closedAt, @event.IsCatchUp, previous.ChannelId);
                     }
                     else
                     {
-                        replacedPlatform = new(previousBroadcastId, @event.Platform, previous.Channel, closedAt, @event.IsCatchUp);
+                        replacedPlatform = new(previousBroadcastId, @event.Platform, previous.Channel, closedAt, @event.IsCatchUp, previous.ChannelId);
                     }
                 }
             }
@@ -185,11 +186,11 @@ public sealed class BroadcastAggregator :
 
                 if (_livePlatforms.ContainsKey(@event.Platform))
                 {
-                    _livePlatforms[@event.Platform] = new LivePlatformEntry(channel, @event.Stream, startedAt);
+                    _livePlatforms[@event.Platform] = new LivePlatformEntry(channel, channelId, @event.Stream, startedAt);
                     return;
                 }
 
-                _livePlatforms[@event.Platform] = new LivePlatformEntry(channel, @event.Stream, startedAt);
+                _livePlatforms[@event.Platform] = new LivePlatformEntry(channel, channelId, @event.Stream, startedAt);
 
                 if (_currentBroadcastId is null)
                 {
@@ -201,7 +202,8 @@ public sealed class BroadcastAggregator :
                         channel,
                         @event.Stream,
                         startedAt,
-                        @event.IsCatchUp);
+                        @event.IsCatchUp,
+                        channelId);
                 }
                 else
                 {
@@ -211,7 +213,8 @@ public sealed class BroadcastAggregator :
                         channel,
                         @event.Stream,
                         now,
-                        @event.IsCatchUp);
+                        @event.IsCatchUp,
+                        channelId);
                 }
             }
 
@@ -245,9 +248,9 @@ public sealed class BroadcastAggregator :
     public Task HandleAsync(StreamWentOffline @event, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow();
-        var channel = string.IsNullOrEmpty(@event.Channel)
-            ? _targetChannelProvider.Current.Login
-            : @event.Channel;
+        var explicitChannel = string.IsNullOrWhiteSpace(@event.Channel) ? null : @event.Channel.Trim();
+        var explicitChannelId = string.IsNullOrWhiteSpace(@event.ChannelId) ? null : @event.ChannelId.Trim();
+        var channel = explicitChannel ?? _targetChannelProvider.Current.Login;
 
         bool scheduleContinuation;
 
@@ -258,9 +261,18 @@ public sealed class BroadcastAggregator :
                 return Task.CompletedTask;
             }
 
-            if (_livePlatforms.ContainsKey(@event.Platform))
+            if (_livePlatforms.TryGetValue(@event.Platform, out var live))
             {
-                _pendingOffline[@event.Platform] = new PendingOfflineEntry(channel, now, @event.IsCatchUp);
+                if (!MatchesOfflineChannel(live, explicitChannelId, explicitChannel))
+                {
+                    return Task.CompletedTask;
+                }
+
+                _pendingOffline[@event.Platform] = new PendingOfflineEntry(
+                    channel,
+                    explicitChannelId ?? live.ChannelId,
+                    now,
+                    @event.IsCatchUp);
             }
 
             if (@event.IsCatchUp)
@@ -322,7 +334,9 @@ public sealed class BroadcastAggregator :
                 {
                     _pendingOffline.Remove(platform);
 
-                    if (!_livePlatforms.Remove(platform))
+                    if (!_livePlatforms.TryGetValue(platform, out var currentLive)
+                        || !MatchesOfflineChannel(currentLive, pending.ChannelId, pending.Channel)
+                        || !_livePlatforms.Remove(platform))
                     {
                         continue;
                     }
@@ -335,11 +349,11 @@ public sealed class BroadcastAggregator :
                     if (_livePlatforms.Count == 0)
                     {
                         _currentBroadcastId = null;
-                        endedEvent = new BroadcastEnded(broadcastId, platform, pending.Channel, pending.OfflineAt, pending.IsCatchUp);
+                        endedEvent = new BroadcastEnded(broadcastId, platform, pending.Channel, pending.OfflineAt, pending.IsCatchUp, pending.ChannelId);
                     }
                     else
                     {
-                        leftEvents.Add(new BroadcastPlatformLeft(broadcastId, platform, pending.Channel, pending.OfflineAt, pending.IsCatchUp));
+                        leftEvents.Add(new BroadcastPlatformLeft(broadcastId, platform, pending.Channel, pending.OfflineAt, pending.IsCatchUp, pending.ChannelId));
                     }
                 }
 
@@ -399,6 +413,37 @@ public sealed class BroadcastAggregator :
         }
     }
 
+    private static string? ResolveChannelId(string? eventChannelId, StreamInfo? stream)
+    {
+        if (!string.IsNullOrWhiteSpace(eventChannelId))
+        {
+            return eventChannelId.Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(stream?.UserId) ? null : stream.UserId.Trim();
+    }
+
+    private static bool MatchesOfflineChannel(LivePlatformEntry live, string? channelId, string? channel)
+    {
+        if (!string.IsNullOrWhiteSpace(live.ChannelId) && !string.IsNullOrWhiteSpace(channelId))
+        {
+            return string.Equals(live.ChannelId, channelId, StringComparison.Ordinal);
+        }
+
+        return string.IsNullOrWhiteSpace(channel)
+            || string.Equals(live.Channel, channel, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDifferentChannel(string? leftId, string leftChannel, string? rightId, string rightChannel)
+    {
+        if (!string.IsNullOrWhiteSpace(leftId) && !string.IsNullOrWhiteSpace(rightId))
+        {
+            return !string.Equals(leftId, rightId, StringComparison.Ordinal);
+        }
+
+        return !string.Equals(leftChannel, rightChannel, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static DateTimeOffset ResolveStartedAt(StreamInfo? stream, DateTimeOffset fallbackNow)
     {
         return stream?.StartedAt is { } streamStart && streamStart != default
@@ -406,7 +451,7 @@ public sealed class BroadcastAggregator :
             : fallbackNow;
     }
 
-    private sealed record LivePlatformEntry(string Channel, StreamInfo? Stream, DateTimeOffset StartedAt);
+    private sealed record LivePlatformEntry(string Channel, string? ChannelId, StreamInfo? Stream, DateTimeOffset StartedAt);
 
-    private sealed record PendingOfflineEntry(string Channel, DateTimeOffset OfflineAt, bool IsCatchUp);
+    private sealed record PendingOfflineEntry(string Channel, string? ChannelId, DateTimeOffset OfflineAt, bool IsCatchUp);
 }

@@ -602,10 +602,12 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
             return Task.CompletedTask;
         }
 
+        var channelId = string.IsNullOrWhiteSpace(CurrentStream?.UserId) ? null : CurrentStream.UserId;
+
         return newStatus switch
         {
-            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, channel, CurrentStream, isCatchUp), CancellationToken.None),
-            StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, channel, isCatchUp), CancellationToken.None),
+            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, channel, CurrentStream, isCatchUp, channelId), CancellationToken.None),
+            StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, channel, isCatchUp, channelId), CancellationToken.None),
             _ => Task.CompletedTask,
         };
     }
@@ -621,7 +623,8 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
             return Task.CompletedTask;
         }
 
-        return _eventBus.PublishAsync(new StreamMetadataResolved(StreamingPlatform.Twitch, channel, stream), CancellationToken.None);
+        var channelId = string.IsNullOrWhiteSpace(stream.UserId) ? null : stream.UserId;
+        return _eventBus.PublishAsync(new StreamMetadataResolved(StreamingPlatform.Twitch, channel, stream, channelId), CancellationToken.None);
     }
 
     private Task PublishViewerSampleObservedAsync(HelixStreamInfo stream)
@@ -634,6 +637,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         }
 
         var sampledAtUtc = _state.GetSnapshot().ViewerSampledAtUtc ?? _timeProvider.GetUtcNow();
+        var channelId = string.IsNullOrWhiteSpace(stream.UserId) ? null : stream.UserId;
 
         return _eventBus.PublishAsync(
             new ViewerSampleObserved(
@@ -641,7 +645,8 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
                 channel,
                 stream.ViewerCount,
                 sampledAtUtc,
-                string.IsNullOrEmpty(stream.Id) ? null : stream.Id),
+                string.IsNullOrEmpty(stream.Id) ? null : stream.Id,
+                channelId),
             CancellationToken.None);
     }
 

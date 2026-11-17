@@ -65,6 +65,7 @@ public static class LegacyDataImporter
         {
             Directory.CreateDirectory(fullTarget);
             CopyAll(fullSource, fullTarget, overwrite, copied, skipped, failures, logger);
+            ResetStaleUserCatalogAfterLegacyOverwrite(fullSource, fullTarget, overwrite, copied, failures, logger);
         }
 
         var migratedSettingsFiles = new List<string>(LegacySettingsLayoutMigrator.Run(fullTarget, settingsDirectory, logger));
@@ -158,6 +159,61 @@ public static class LegacyDataImporter
                 logger?.LogError(exception, "Импорт данных: не удалось перенести {Source} в {Target}", file.SourcePath, targetPath);
                 failures.Add(new(file.RelativeTargetPath, exception.Message));
             }
+        }
+    }
+
+    private static void ResetStaleUserCatalogAfterLegacyOverwrite(
+        string fullSource,
+        string fullTarget,
+        bool overwrite,
+        List<string> copied,
+        List<LegacyImportFailure> failures,
+        ILogger? logger)
+    {
+        if (!overwrite)
+        {
+            return;
+        }
+
+        var sourceCatalogPath = Path.Combine(fullSource, LegacyDataCatalog.UserStatisticsCatalogFileName);
+        var sourceHasCatalog = File.Exists(sourceCatalogPath);
+        var copiedCatalog = copied.Contains(LegacyDataCatalog.UserStatisticsCatalogFileName, StringComparer.OrdinalIgnoreCase);
+        var failedCatalog = failures.Any(f => string.Equals(
+            LegacyDataCatalog.NormalizeRelativePath(f.RelativeTargetPath),
+            LegacyDataCatalog.UserStatisticsCatalogFileName,
+            StringComparison.OrdinalIgnoreCase));
+        var copiedLegacyUsers = LegacyDataCatalog.GetRelativePaths(LegacyDataCategory.UserStatistics)
+            .Where(path => !string.Equals(path, LegacyDataCatalog.UserStatisticsCatalogFileName, StringComparison.OrdinalIgnoreCase))
+            .Any(path => copied.Any(c => string.Equals(LegacyDataCatalog.NormalizeRelativePath(c), path, StringComparison.OrdinalIgnoreCase)));
+
+        if (sourceHasCatalog || copiedCatalog || failedCatalog || !copiedLegacyUsers)
+        {
+            return;
+        }
+
+        var targetCatalogPath = Path.Combine(fullTarget, LegacyDataCatalog.UserStatisticsCatalogFileName);
+        if (!File.Exists(targetCatalogPath))
+        {
+            return;
+        }
+
+        if (!TryBackup(targetCatalogPath, LegacyDataCatalog.UserStatisticsCatalogFileName, logger))
+        {
+            failures.Add(new(LegacyDataCatalog.UserStatisticsCatalogFileName, "Резервная копия не создана, каталог статистики оставлен без изменений"));
+            logger?.LogError("Импорт данных: не удалось создать резервную копию {File} при импорте v1-статистики", targetCatalogPath);
+            return;
+        }
+
+        try
+        {
+            File.Delete(targetCatalogPath);
+            copied.Add(LegacyDataCatalog.UserStatisticsCatalogFileName);
+            logger?.LogInformation("Импорт данных: прежний каталог {File} снят после перезаписи v1-статистики для повторной миграции", targetCatalogPath);
+        }
+        catch (Exception exception)
+        {
+            logger?.LogError(exception, "Импорт данных: не удалось удалить прежний каталог {File}", targetCatalogPath);
+            failures.Add(new(LegacyDataCatalog.UserStatisticsCatalogFileName, exception.Message));
         }
     }
 

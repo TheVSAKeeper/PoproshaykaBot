@@ -8,4 +8,5 @@ public sealed record ChannelUpdated(
     string Language,
     string GameId,
     string GameName,
-    IReadOnlyList<string> ContentClassificationLabels) : EventBase, IPlatformEvent;
+    IReadOnlyList<string> ContentClassificationLabels,
+    string? ChannelId = null) : EventBase, IPlatformEvent;

@@ -72,6 +72,12 @@ public sealed class SettingsWriteFactTests
 
         yield return Case("polls.json", "PollProfilesManager.Remove", (path, gate) =>
             CreatePollsManager(path, gate).Remove(Guid.NewGuid()));
+
+        yield return Case("channels.json", "ChannelCatalogStore.Save", (path, gate) =>
+            new ChannelCatalogStore(null, path, gate).Save(new()));
+
+        yield return Case("channels.json", "ChannelCatalogStore.Mutate", (path, gate) =>
+            new ChannelCatalogStore(null, path, gate).Mutate(settings => settings.Groups.Add(new() { Name = "Основные" })));
     }
 
     [TestCaseSource(nameof(Writers))]

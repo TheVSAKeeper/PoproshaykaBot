@@ -132,13 +132,13 @@ public sealed class StatisticsLoadOwnershipTests
 
         await saver.SaveNowAsync();
 
-        var savedUsers = await fileStore.LoadUsersAsync(StreamingPlatform.Twitch);
+        var savedCatalog = await fileStore.LoadUserStatisticsCatalogAsync();
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(await File.ReadAllTextAsync(botPath), Is.EqualTo(BotContent),
                 "Статистика бота не загружалась – её файл нельзя переписывать пустым репозиторием");
-            Assert.That(savedUsers.Value!.Single().BonusPoints, Is.EqualTo(15ul),
+            Assert.That(savedCatalog.Value!.UnattributedCounters.Single().BonusPoints, Is.EqualTo(15ul),
                 "Загруженная статистика пользователей обязана сохраняться и до подключения бота");
         }
     }
@@ -193,13 +193,13 @@ public sealed class StatisticsLoadOwnershipTests
 
             await saver.SaveNowAsync();
 
-            var savedUsers = await fileStore.LoadUsersAsync(StreamingPlatform.Twitch);
+            var savedCatalog = await fileStore.LoadUserStatisticsCatalogAsync();
 
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.True,
                     "Свежий профиль без файла – это ноль записей, а не отказ чтения");
-                Assert.That(savedUsers.Value!.Single().Name, Is.EqualTo("Carol"),
+                Assert.That(savedCatalog.Value!.Accounts.Single().Name, Is.EqualTo("Carol"),
                     "Накопленное в первом сеансе обязано дойти до диска");
                 Assert.That(File.Exists(Path.Combine(_directory, BotFileName)), Is.True,
                     "Статистика бота тоже заводится с нуля, а не ждёт файла");
@@ -284,15 +284,26 @@ public sealed class StatisticsLoadOwnershipTests
 
             await saver.SaveNowAsync();
 
-            var savedUsers = await fileStore.LoadUsersAsync(StreamingPlatform.Twitch);
-
-            using (Assert.EnterMultipleScope())
+            if (importsStatistics)
             {
-                Assert.That(savedUsers.Value!.Single().MessageCount, Is.EqualTo(expectedMessageCount),
-                    "Принесённое переносом нельзя терять, а холостой прогон нельзя наказывать потерей сеанса");
-                Assert.That(File.Exists(Path.Combine(_directory, BotFileName)), Is.True,
-                    "Перенос только пользователей не отнимает право записи у статистики бота");
+                var savedUsers = await fileStore.LoadUsersAsync(StreamingPlatform.Twitch);
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(savedUsers.Value!.Single().MessageCount, Is.EqualTo(expectedMessageCount),
+                        "Принесённое переносом нельзя терять, а холостой прогон нельзя наказывать потерей сеанса");
+                    Assert.That(File.Exists(Path.Combine(_directory, LegacyDataCatalog.UserStatisticsCatalogFileName)), Is.False,
+                        "Устаревший каталог снят при перезаписи v1-файлов до следующей миграции");
+                }
             }
+            else
+            {
+                var savedCatalog = await fileStore.LoadUserStatisticsCatalogAsync();
+                Assert.That(savedCatalog.Value!.UnattributedCounters.Single().MessageCount, Is.EqualTo(expectedMessageCount),
+                    "Принесённое переносом нельзя терять, а холостой прогон нельзя наказывать потерей сеанса");
+            }
+
+            Assert.That(File.Exists(Path.Combine(_directory, BotFileName)), Is.True,
+                "Перенос только пользователей не отнимает право записи у статистики бота");
         }
         finally
         {
@@ -407,12 +418,12 @@ public sealed class StatisticsLoadOwnershipTests
             await write;
             await stop;
 
-            var savedUsers = await fileStore.LoadUsersAsync(StreamingPlatform.Twitch);
+            var savedCatalog = await fileStore.LoadUserStatisticsCatalogAsync();
             var savedBot = await fileStore.LoadBotAsync();
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(savedUsers.Value!.Single().MessageCount, Is.EqualTo(101ul),
+                Assert.That(savedCatalog.Value!.UnattributedCounters.Single().MessageCount, Is.EqualTo(101ul),
                     "Остановка, попавшая в окно холостого переноса, обязана увидеть возвращённые флаги, а не уйти по ветке «загрузка не выполнялась»");
                 Assert.That(savedBot.Value!.TotalMessagesProcessed, Is.EqualTo(8ul),
                     "Счётчики бота с последнего тика автосохранения теряются на ближайшем Replace, если их не дописать при остановке");

@@ -53,8 +53,9 @@ public class StartupHydrationTests
         Assert.Multiple(() =>
         {
             Assert.That(preload.IsCompleted, Is.True);
+            Assert.That(loader.IsLoaded, Is.False);
             Assert.That(loader.IsLoadedFor(StreamingPlatform.Twitch), Is.False);
-            Assert.That(loader.IsLoadedFor(StreamingPlatform.YouTube), Is.True);
+            Assert.That(loader.IsLoadedFor(StreamingPlatform.YouTube), Is.False);
             Assert.That(repo.GetAll(), Is.Empty);
         });
     }
@@ -295,15 +296,16 @@ public class StartupHydrationTests
     {
         var repo = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
         var store = new StatisticsFileStore(NullLogger<StatisticsFileStore>.Instance, _directory);
-        var units = UserStatisticsPlatformCatalog.All
-            .Select(descriptor => new PlatformUserStatisticsUnit(
-                descriptor,
-                repo.GetPartition(descriptor.Platform),
+        var unit = new UserStatisticsCatalogPersistenceUnit(
+            repo,
+            store,
+            new LegacyUserStatisticsMigrator(
                 store,
-                NullLogger<PlatformUserStatisticsUnit>.Instance))
-            .ToArray();
+                new KnownChannelIdentityResolver(),
+                NullLogger<LegacyUserStatisticsMigrator>.Instance),
+            NullLogger<UserStatisticsCatalogPersistenceUnit>.Instance);
 
-        return (repo, new UserStatisticsLoader(units));
+        return (repo, new UserStatisticsLoader(unit));
     }
 
     private void WriteUsers(List<UserStatistics> users)

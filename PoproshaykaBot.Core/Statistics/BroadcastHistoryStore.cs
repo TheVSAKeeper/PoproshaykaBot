@@ -453,9 +453,10 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
 
         foreach (var record in finalized)
         {
-            if (projHiddenById.TryGetValue(record.Id, out var isHidden))
+            if ((projHiddenById.TryGetValue(record.Id, out var isHidden) && isHidden)
+                || (record.MergedBroadcastIds?.Any(id => projHiddenById.TryGetValue(id, out var mergedHidden) && mergedHidden) == true))
             {
-                record.IsHidden = isHidden;
+                record.IsHidden = true;
             }
         }
 
@@ -497,18 +498,30 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
             {
                 if (!acceptKnownProjectionChanges || matched.MergedBroadcastIds?.Contains(session.Id) == true)
                 {
+                    if (acceptKnownProjectionChanges && session.IsHidden)
+                    {
+                        projHiddenByMatchedId[matched.Id] = true;
+                    }
+
                     continue;
                 }
 
-                projHiddenByMatchedId[matched.Id] = session.IsHidden;
+                projHiddenByMatchedId[matched.Id] = projHiddenByMatchedId.GetValueOrDefault(matched.Id) || session.IsHidden;
 
-                var twitchIndex = matched.Platforms.FindIndex(static p => p.Platform == StreamingPlatform.Twitch);
+                var twitchIndex = FindMatchingTwitchPlatformIndex(matched, session);
+                if (twitchIndex < 0)
+                {
+                    continue;
+                }
+
                 var existingTwitch = matched.Platforms[twitchIndex];
 
                 if (HasProjectionAdvanced(existingTwitch, session))
                 {
                     var updatedTwitch = BroadcastPlatformRecord.FromTwitchSession(session);
                     updatedTwitch.StreamId ??= existingTwitch.StreamId;
+                    updatedTwitch.ChannelId ??= existingTwitch.ChannelId;
+                    updatedTwitch.ProjectionSessionId ??= existingTwitch.ProjectionSessionId;
                     updatedTwitch.MergedStartedAts = existingTwitch.MergedStartedAts;
                     matched.Platforms[twitchIndex] = updatedTwitch;
                     RecalculateBoundsAndViews(matched);
@@ -625,6 +638,17 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
     {
         try
         {
+            if (!CreatePreMultichannelBackupsOnceLocked())
+            {
+                return false;
+            }
+
+            foreach (var broadcast in _state.Broadcasts)
+            {
+                broadcast.EnsureProjectionSessionIds();
+            }
+
+            _state.SchemaVersion = BroadcastHistoryDocument.CurrentSchemaVersion;
             _state.ProjectionOutOfDate = _projectionDirty;
             var json = JsonSerializer.Serialize(_state, JsonStoreOptions.Default);
             AtomicFile.Save(_broadcastsPath, json, _logger);
@@ -638,6 +662,70 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
                 "BroadcastHistoryStore: не удалось записать источник {FilePath}, данные оставлены в памяти до следующей попытки",
                 _broadcastsPath);
 
+            return false;
+        }
+    }
+
+    private bool CreatePreMultichannelBackupsOnceLocked()
+    {
+        var shouldBackup = _state.SchemaVersion < BroadcastHistoryDocument.CurrentSchemaVersion
+            || _state.Broadcasts.Any(static b =>
+                b.Platforms.Any(static p => !string.IsNullOrWhiteSpace(p.ChannelId))
+                || b.Platforms.GroupBy(static p => p.Platform).Any(static g => g.Count() > 1));
+
+        if (!shouldBackup)
+        {
+            return true;
+        }
+
+        return TryCopyPreMultichannelBackup(_broadcastsPath)
+               && TryCopyPreMultichannelBackup(_projectionPath);
+    }
+
+    private bool TryCopyPreMultichannelBackup(string sourcePath)
+    {
+        if (!File.Exists(sourcePath))
+        {
+            return true;
+        }
+
+        var directory = Path.GetDirectoryName(sourcePath);
+        var fileName = Path.GetFileNameWithoutExtension(sourcePath);
+        var extension = Path.GetExtension(sourcePath);
+        var backupPath = string.IsNullOrEmpty(directory)
+            ? $"{fileName}.pre-multichannel{extension}"
+            : Path.Combine(directory, $"{fileName}.pre-multichannel{extension}");
+
+        if (File.Exists(backupPath))
+        {
+            return true;
+        }
+
+        var tempBackupPath = $"{backupPath}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            File.Copy(sourcePath, tempBackupPath, overwrite: true);
+            File.Move(tempBackupPath, backupPath, overwrite: false);
+            _logger?.LogInformation("BroadcastHistoryStore: создана страховочная копия {BackupPath}", backupPath);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            try
+            {
+                if (File.Exists(tempBackupPath))
+                {
+                    File.Delete(tempBackupPath);
+                }
+            }
+            catch (Exception cleanupException)
+            {
+                _logger?.LogDebug(cleanupException, "BroadcastHistoryStore: не удалось удалить временный файл копии {TempPath}", tempBackupPath);
+            }
+
+            _logger?.LogError(exception,
+                "BroadcastHistoryStore: не удалось создать страховочную копию {BackupPath}, сохранение отложено",
+                backupPath);
             return false;
         }
     }
@@ -682,10 +770,7 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
 
         foreach (var broadcast in _state.Broadcasts)
         {
-            if (broadcast.TryProjectToTwitchSession(out var session))
-            {
-                sessions.Add(session);
-            }
+            sessions.AddRange(broadcast.ProjectToTwitchSessions());
         }
 
         return new() { Sessions = sessions };
@@ -734,7 +819,9 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
     {
         foreach (var broadcast in broadcasts)
         {
-            if ((broadcast.Id == session.Id || broadcast.MergedBroadcastIds?.Contains(session.Id) == true)
+            if ((broadcast.Id == session.Id
+                    || broadcast.MergedBroadcastIds?.Contains(session.Id) == true
+                    || broadcast.Platforms.Exists(p => p.Platform == StreamingPlatform.Twitch && p.ProjectionSessionId == session.Id))
                 && broadcast.Platforms.Exists(static p => p.Platform == StreamingPlatform.Twitch))
             {
                 return broadcast;
@@ -743,17 +830,48 @@ public class BroadcastHistoryStore : IExternalWriteParticipant, IFlushableHistor
 
         foreach (var broadcast in broadcasts)
         {
-            var twitch = broadcast.Platforms.FirstOrDefault(static p => p.Platform == StreamingPlatform.Twitch);
+            var matched = broadcast.Platforms.Exists(p =>
+                p.Platform == StreamingPlatform.Twitch
+                && string.Equals(p.Channel, session.Channel, StringComparison.OrdinalIgnoreCase)
+                && (p.StartedAt == session.StartedAt
+                    || p.MergedStartedAts?.Contains(session.StartedAt) == true));
 
-            if (twitch is not null
-                && string.Equals(twitch.Channel, session.Channel, StringComparison.OrdinalIgnoreCase)
-                && twitch.StartedAt == session.StartedAt)
+            if (matched)
             {
                 return broadcast;
             }
         }
 
         return null;
+    }
+
+    private static int FindMatchingTwitchPlatformIndex(BroadcastRecord broadcast, StreamSessionRecord session)
+    {
+        var byProjectionId = broadcast.Platforms.FindIndex(p =>
+            p.Platform == StreamingPlatform.Twitch && p.ProjectionSessionId == session.Id);
+        if (byProjectionId >= 0)
+        {
+            return byProjectionId;
+        }
+
+        var byChannelAndStart = broadcast.Platforms.FindIndex(p =>
+            p.Platform == StreamingPlatform.Twitch
+            && string.Equals(p.Channel, session.Channel, StringComparison.OrdinalIgnoreCase)
+            && p.StartedAt == session.StartedAt);
+        if (byChannelAndStart >= 0)
+        {
+            return byChannelAndStart;
+        }
+
+        var byChannel = broadcast.Platforms.FindIndex(p =>
+            p.Platform == StreamingPlatform.Twitch
+            && string.Equals(p.Channel, session.Channel, StringComparison.OrdinalIgnoreCase));
+        if (byChannel >= 0)
+        {
+            return byChannel;
+        }
+
+        return broadcast.Platforms.FindIndex(static p => p.Platform == StreamingPlatform.Twitch);
     }
 
     private static bool HasProjectionAdvanced(BroadcastPlatformRecord current, StreamSessionRecord session)

@@ -11,6 +11,7 @@ public static class LegacyImportText
     private static readonly Dictionary<string, string> FileTitles = new(StringComparer.OrdinalIgnoreCase)
     {
         ["settings.json"] = "Основные настройки",
+        ["channels.json"] = "Каналы и группы каналов",
         ["chat.json"] = "Настройки чата",
         ["accounts.json"] = "Данные входа в Twitch",
         ["youtube.json"] = "Настройки YouTube",
@@ -25,6 +26,7 @@ public static class LegacyImportText
         ["recent-categories.json"] = "Недавние категории",
         ["update.json"] = "Настройки обновлений",
         ["ui-preferences.toml"] = "Вид приложения",
+        ["user_statistics_catalog.json"] = "Каталог статистики зрителей",
         ["users_statistics.json"] = "Статистика зрителей",
         ["youtube/users_statistics.json"] = "Статистика зрителей YouTube",
         ["youtube/quota.json"] = "Расход квоты YouTube",

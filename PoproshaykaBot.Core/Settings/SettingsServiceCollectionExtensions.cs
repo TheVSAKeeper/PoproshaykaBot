@@ -29,6 +29,7 @@ public static class SettingsServiceCollectionExtensions
         services.AddSingleton<ObsIntegrationStore>();
         services.AddSingleton<UpdateStore>();
         services.AddSingleton<DebugChannelStore>();
+        services.AddSingleton<ChannelCatalogStore>();
         services.AddSingleton<OnboardingChecklist>();
 
         services.AddSingleton<ISettingsSnapshotContributor>(static provider => new DelegateSettingsSnapshotContributor(() =>
@@ -43,6 +44,7 @@ public static class SettingsServiceCollectionExtensions
             new("BroadcastProfilePlatformsSettings", BroadcastProfilePlatformsStore.Describe(provider.GetRequiredService<BroadcastProfilePlatformsStore>().Load())),
             new("PollsSettings", PollsStore.Describe(provider.GetRequiredService<PollsStore>().Load())),
             new("CommandSettings", CommandSettingsStore.Describe(provider.GetRequiredService<CommandSettingsStore>().Load())),
+            new("ChannelsSettings", ChannelCatalogStore.Describe(provider.GetRequiredService<ChannelCatalogStore>().Load())),
         ]));
 
         services.AddSingleton<ISecretValueProvider>(static provider =>

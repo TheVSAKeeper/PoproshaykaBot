@@ -1,6 +1,7 @@
 ﻿using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 
 namespace PoproshaykaBot.Core.Chat.Handlers;
@@ -10,17 +11,20 @@ public sealed class StatisticsTrackingHandler : IEventHandler<ChatMessageReceive
     private readonly IUserStatisticsRepository _userStatistics;
     private readonly IBotStatisticsRepository _botStatistics;
     private readonly ITargetChannelProvider _targetChannelProvider;
+    private readonly ChannelCatalogStore? _channelCatalogStore;
     private readonly IDisposable _subscription;
 
     public StatisticsTrackingHandler(
         IUserStatisticsRepository userStatistics,
         IBotStatisticsRepository botStatistics,
         ITargetChannelProvider targetChannelProvider,
-        IEventBus eventBus)
+        IEventBus eventBus,
+        ChannelCatalogStore? channelCatalogStore = null)
     {
         _userStatistics = userStatistics;
         _botStatistics = botStatistics;
         _targetChannelProvider = targetChannelProvider;
+        _channelCatalogStore = channelCatalogStore;
         _subscription = eventBus.Subscribe(this);
     }
 
@@ -34,7 +38,16 @@ public sealed class StatisticsTrackingHandler : IEventHandler<ChatMessageReceive
             return Task.CompletedTask;
         }
 
-        _userStatistics.TrackMessage(@event.SenderKey, @event.Username);
+        if (@event.ChannelKey is { } channelKey)
+        {
+            _userStatistics.TrackMessage(channelKey, @event.SenderKey, @event.Username);
+            _channelCatalogStore?.EnsureChannelKnown(channelKey, @event.Channel);
+        }
+        else
+        {
+            _userStatistics.TrackMessage(@event.SenderKey, @event.Username);
+        }
+
         _botStatistics.IncrementMessagesProcessed();
         return Task.CompletedTask;
     }

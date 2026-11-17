@@ -22,7 +22,7 @@ public sealed class StatisticsAutoSaverLoopTests
         _directory = Path.Combine(Path.GetTempPath(), "poproshayka-autosave-loop-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_directory);
 
-        _usersFilePath = Path.Combine(_directory, "users_statistics.json");
+        _usersFilePath = Path.Combine(_directory, "user_statistics_catalog.json");
         _writeBlockerPath = _usersFilePath + ".tmp";
 
         var graph = new StatisticsTestGraph(_directory, autoSaveInterval: TimeSpan.FromMilliseconds(50));

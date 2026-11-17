@@ -134,7 +134,7 @@ public sealed class UserStatisticsRepositoryTests
     public void IncrementBonusPoints_KnownUser_UpdatesAndMarksChanged()
     {
         _repository.TrackMessage(Key("u1"), "Alice");
-        _repository.GetPartition(StreamingPlatform.Twitch).CreateSnapshotAndMarkSaved();
+        _repository.CreateSnapshotAndMarkSaved();
 
         var result = _repository.IncrementBonusPoints(Key("u1"), 5);
 
@@ -200,7 +200,7 @@ public sealed class UserStatisticsRepositoryTests
     public void IncrementBonusPoints_ZeroDelta_DoesNothing()
     {
         _repository.TrackMessage(Key("u1"), "Alice");
-        _repository.GetPartition(StreamingPlatform.Twitch).CreateSnapshotAndMarkSaved();
+        _repository.CreateSnapshotAndMarkSaved();
 
         var result = _repository.IncrementBonusPoints(Key("u1"), 0);
 
@@ -215,15 +215,15 @@ public sealed class UserStatisticsRepositoryTests
     public void CreateSnapshotAndMarkSaved_ResetsHasChanges_AndReturnsClones()
     {
         _repository.TrackMessage(Key("u1"), "Alice");
-        var snapshot = _repository.GetPartition(StreamingPlatform.Twitch).CreateSnapshotAndMarkSaved();
+        var snapshot = _repository.CreateSnapshotAndMarkSaved();
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_repository.HasChanges, Is.False);
-            Assert.That(snapshot, Has.Count.EqualTo(1));
+            Assert.That(snapshot.UnattributedCounters, Has.Count.EqualTo(1));
         }
 
-        snapshot[0].MessageCount = 999;
+        snapshot.UnattributedCounters[0].MessageCount = 999;
         Assert.That(Twitch.GetById("u1")!.MessageCount, Is.EqualTo(1ul));
     }
 
@@ -231,10 +231,9 @@ public sealed class UserStatisticsRepositoryTests
     public void MarkChanged_AfterSnapshot_RestoresFlag()
     {
         _repository.TrackMessage(Key("u1"), "Alice");
-        var partition = _repository.GetPartition(StreamingPlatform.Twitch);
-        partition.CreateSnapshotAndMarkSaved();
+        _repository.CreateSnapshotAndMarkSaved();
 
-        partition.MarkChanged();
+        _repository.MarkChanged();
 
         Assert.That(_repository.HasChanges, Is.True);
     }
@@ -290,9 +289,8 @@ public sealed class UserStatisticsRepositoryTests
         _repository.IncrementBonusPoints(twitchKey, 50);
         _repository.IncrementPenaltyPoints(youtubeKey, 1);
 
-        var twitchPartition = _repository.GetPartition(StreamingPlatform.Twitch);
-        var youtubePartition = _repository.GetPartition(StreamingPlatform.YouTube);
-        twitchPartition.CreateSnapshotAndMarkSaved();
+        _repository.CreateSnapshotAndMarkSaved();
+        _repository.IncrementPenaltyPoints(youtubeKey, 0);
 
         var twitchStats = _repository.ForPlatform(StreamingPlatform.Twitch).GetById("shared-id")!;
         var youtubeStats = _repository.ForPlatform(StreamingPlatform.YouTube).GetById("shared-id")!;
@@ -309,8 +307,7 @@ public sealed class UserStatisticsRepositoryTests
             Assert.That(_repository.ForPlatform(StreamingPlatform.YouTube).GetByName("Alice")!.Platform, Is.EqualTo(StreamingPlatform.YouTube));
             Assert.That(_repository.ForPlatform(StreamingPlatform.Twitch).GetTop(10).Select(static u => u.Points), Is.EqualTo(new[] { 52L }));
             Assert.That(_repository.ForPlatform(StreamingPlatform.YouTube).GetTop(10).Select(static u => u.Points), Is.EqualTo(new[] { 0L }));
-            Assert.That(twitchPartition.HasChanges, Is.False);
-            Assert.That(youtubePartition.HasChanges, Is.True);
+            Assert.That(_repository.HasChanges, Is.False);
             Assert.That(_repository.GetAll(), Has.Count.EqualTo(2));
         }
     }

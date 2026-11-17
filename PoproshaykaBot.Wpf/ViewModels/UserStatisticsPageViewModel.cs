@@ -7,7 +7,9 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Moderation;
 using PoproshaykaBot.Core.Infrastructure.Events.Settings;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Statistics.Linking;
 using PoproshaykaBot.Core.Users;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Wpf.Bootstrap;
@@ -40,10 +42,15 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private readonly UserAvatarProvider _avatars;
     private readonly StatisticsPreload? _preload;
     private readonly IUiDispatcher? _uiDispatcher;
+    private readonly ChannelCatalogStore? _channelCatalog;
+    private readonly IAccountLinkingService? _accountLinking;
     private readonly List<UserStatisticsRowViewModel> _allRows = [];
     private readonly ObservableCollection<UserStatisticsRowViewModel> _rows = [];
+    private readonly ObservableCollection<UserStatisticsSliceOption> _sliceOptions = [];
+    private readonly ObservableCollection<AdjustmentTargetOption> _adjustmentTargetOptions = [];
     private readonly List<IDisposable> _subscriptions = [];
     private int _platformSliceCount;
+    private int _allChannelsCount;
     private bool _isHydrated;
     private bool _isDisposed;
     private bool _summaryUserToggled;
@@ -52,7 +59,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedRow))]
     [NotifyPropertyChangedFor(nameof(SelectedPlaceText))]
+    [NotifyPropertyChangedFor(nameof(CanManageLinks))]
     [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
+    [NotifyCanExecuteChangedFor(nameof(LinkAccountCommand))]
     [NotifyPropertyChangedFor(nameof(RankLadderSteps))]
     [NotifyPropertyChangedFor(nameof(RankLadderToggleText))]
     private UserStatisticsRowViewModel? _selectedRow;
@@ -81,6 +90,12 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     [ObservableProperty]
     private PlatformFilterOption _selectedPlatformFilter = PlatformFilterOption.All;
+
+    [ObservableProperty]
+    private UserStatisticsSliceOption _selectedSliceOption = UserStatisticsSliceOption.All;
+
+    [ObservableProperty]
+    private AdjustmentTargetOption? _selectedAdjustmentTarget;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EmptyActionCommand))]
@@ -157,7 +172,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         UserAvatarProvider avatars,
         IChatPlatformRegistry? platformRegistry = null,
         StatisticsPreload? preload = null,
-        IUiDispatcher? uiDispatcher = null)
+        IUiDispatcher? uiDispatcher = null,
+        ChannelCatalogStore? channelCatalog = null,
+        IAccountLinkingService? accountLinking = null)
     {
         _userStatistics = userStatistics;
         _statisticsAutoSaver = statisticsAutoSaver;
@@ -171,12 +188,22 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         _avatars = avatars;
         _preload = preload;
         _uiDispatcher = uiDispatcher;
+        _channelCatalog = channelCatalog;
+        _accountLinking = accountLinking;
         _isBalanceExpanded = settings.GetBool(SettingsKeys.UserBalanceExpanded, true);
         _isSummaryExpanded = settings.GetBool(SettingsKeys.UserSummaryExpanded, true);
 
         _subscriptions.Add(eventBus.SubscribeOnUi<UserPunished>(_ => Reload()));
         _subscriptions.Add(eventBus.SubscribeOnUi<UserRewarded>(_ => Reload()));
         _subscriptions.Add(eventBus.SubscribeOnUi<RanksSettingsChanged>(_ => Reload()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<AccountLinksChanged>(_ => Reload()));
+
+        if (_channelCatalog is not null)
+        {
+            _channelCatalog.Changed += OnChannelCatalogChanged;
+        }
+
+        RefreshSliceOptions();
 
         if (_preload is null)
         {
@@ -216,6 +243,14 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     public IReadOnlyList<PlatformFilterOption> PlatformOptions => PlatformFilterOption.AllOptions;
 
+    public ObservableCollection<UserStatisticsSliceOption> SliceOptions => _sliceOptions;
+
+    public ObservableCollection<AdjustmentTargetOption> AdjustmentTargetOptions => _adjustmentTargetOptions;
+
+    public bool HasMultipleAdjustmentTargets => _adjustmentTargetOptions.Count > 1;
+
+    public bool CanManageLinks => _accountLinking is not null && SelectedRow is not null;
+
     public bool HasUsers => _rows.Count > 0;
 
     public string EmptyHeading => IsFilterActive ? "Ничего не найдено" : "Статистики пока нет";
@@ -239,7 +274,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     public TableSortIndicator RankSortIndicator => IndicatorFor(UserStatisticsSortKey.Rank);
 
     public string VisibleCountText => IsFilterActive
-        ? UserStatisticsRanking.DescribeVisibleCount(_rows.Count, _allRows.Count)
+        ? UserStatisticsRanking.DescribeVisibleCount(_rows.Count, _allChannelsCount)
         : string.Empty;
 
     public string SelectedPlaceText => SelectedRow is { } row
@@ -335,17 +370,23 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             Reload();
         }
 
-        if (_allRows.All(row => row.Key != key))
+        if (_allRows.All(row => !row.MatchesAccount(key)))
         {
-            return false;
+            if (SelectedSliceOption.Slice.Kind == StatisticsSliceKind.AllChannels
+                || _userStatistics.FindViewerById(StatisticsSlice.All(), key) is null)
+            {
+                return false;
+            }
+
+            ResetFilters();
         }
 
-        if (_rows.All(row => row.Key != key))
+        if (_rows.All(row => !row.MatchesAccount(key)))
         {
             ResetFilters();
         }
 
-        SelectedRow = _rows.FirstOrDefault(row => row.Key == key);
+        SelectedRow = _rows.FirstOrDefault(row => row.MatchesAccount(key));
 
         return SelectedRow is not null;
     }
@@ -388,6 +429,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         {
             _avatars.Request(value.Avatar);
         }
+
+        RebuildAdjustmentTargets(value);
     }
 
     partial void OnFilterTextChanged(string value)
@@ -400,39 +443,73 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     partial void OnSelectedPlatformFilterChanged(PlatformFilterOption value)
     {
-        if (!_suppressFilterRebuild)
+        if (_suppressFilterRebuild)
         {
-            ApplyPlatformSliceAndRebuild();
+            return;
         }
+
+        var nextSlice = value?.Platform is { } platform
+            ? _sliceOptions.FirstOrDefault(o =>
+                o.Slice.Kind == StatisticsSliceKind.Platform && o.Slice.Platform == platform)
+                ?? new UserStatisticsSliceOption(
+                    $"platform:{platform}",
+                    $"Площадка: {value.Label}",
+                    StatisticsSlice.ForPlatform(platform))
+            : _sliceOptions.FirstOrDefault() ?? UserStatisticsSliceOption.All;
+
+        _suppressFilterRebuild = true;
+        try
+        {
+            SelectedSliceOption = nextSlice;
+        }
+        finally
+        {
+            _suppressFilterRebuild = false;
+        }
+
+        Reload();
     }
 
-    private List<UserStatisticsRowViewModel> GetPlatformSlice()
+    partial void OnSelectedSliceOptionChanged(UserStatisticsSliceOption value)
     {
-        var platformFilter = SelectedPlatformFilter?.Platform;
-        return platformFilter is null
-            ? _allRows
-            : _allRows.Where(row => row.Platform == platformFilter).ToList();
+        if (_suppressFilterRebuild || value is null)
+        {
+            return;
+        }
+
+        _suppressFilterRebuild = true;
+        try
+        {
+            SelectedPlatformFilter = value.Slice.Kind == StatisticsSliceKind.Platform && value.Slice.Platform is { } platform
+                ? PlatformFilterOption.AllOptions.FirstOrDefault(o => o.Platform == platform) ?? PlatformFilterOption.All
+                : PlatformFilterOption.All;
+        }
+        finally
+        {
+            _suppressFilterRebuild = false;
+        }
+
+        Reload();
     }
 
-    private void ApplyPlatformSliceAndRebuild()
+    private void ApplySliceSummaryAndRebuild()
     {
-        var slice = GetPlatformSlice();
-        _platformSliceCount = slice.Count;
+        _platformSliceCount = _allRows.Count;
 
         long totalMessages = 0;
         long totalPoints = 0;
         long totalBonus = 0;
         long totalPenalty = 0;
 
-        foreach (var row in slice)
+        foreach (var row in _allRows)
         {
-            totalMessages += (long)row.Source.MessageCount;
+            totalMessages += (long)row.MessageCount;
             totalPoints += row.Points;
-            totalBonus += (long)row.Source.BonusPoints;
-            totalPenalty += (long)row.Source.PenaltyPoints;
+            totalBonus += (long)row.BonusPoints;
+            totalPenalty += (long)row.PenaltyPoints;
         }
 
-        TotalUsers = slice.Count.ToString("N0", UiCulture.Russian);
+        TotalUsers = _allRows.Count.ToString("N0", UiCulture.Russian);
         TotalMessages = totalMessages.ToString("N0", UiCulture.Russian);
         TotalPoints = totalPoints.ToString("N0", UiCulture.Russian);
         TotalBonus = totalBonus > 0 ? string.Create(UiCulture.Russian, $"+{totalBonus:N0}") : "0";
@@ -440,24 +517,23 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         HasTotalBonus = totalBonus > 0;
         HasTotalPenalty = totalPenalty > 0;
 
-        UserStatisticsRanking.AssignPlaces(slice);
-        RebuildView(slice);
+        UserStatisticsRanking.AssignPlaces(_allRows);
+        RebuildView(_allRows);
     }
 
-    private void RebuildView(List<UserStatisticsRowViewModel>? platformSlice = null)
+    private void RebuildView(List<UserStatisticsRowViewModel>? sliceSource = null)
     {
-        var source = platformSlice ?? GetPlatformSlice();
+        var source = sliceSource ?? _allRows;
         var selectedKey = SelectedRow?.Key;
         var trimmed = FilterText.Trim();
         var hasTextFilter = trimmed.Length > 0;
-        var hasPlatformFilter = SelectedPlatformFilter?.Platform is not null;
+        var hasSliceFilter = SelectedSliceOption is not null
+            && SelectedSliceOption.Slice.Kind != StatisticsSliceKind.AllChannels;
         var visible = new List<UserStatisticsRowViewModel>(source.Count);
 
         foreach (var row in source)
         {
-            if (hasTextFilter
-                && !row.Name.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase)
-                && !row.UserId.Contains(trimmed, StringComparison.InvariantCultureIgnoreCase))
+            if (hasTextFilter && !row.MatchesQuery(trimmed))
             {
                 continue;
             }
@@ -467,11 +543,11 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
         _rows.SyncTo(UserStatisticsRanking.Arrange(visible, SortKey, SortDescending));
 
-        SelectedRow = selectedKey is not null
-            ? _rows.FirstOrDefault(row => row.Key == selectedKey)
+        SelectedRow = selectedKey is { } key
+            ? _rows.FirstOrDefault(row => row.MatchesAccount(key))
             : null;
 
-        IsFilterActive = hasTextFilter || hasPlatformFilter;
+        IsFilterActive = hasTextFilter || hasSliceFilter;
         OnPropertyChanged(nameof(HasUsers));
         OnPropertyChanged(nameof(EmptyHeading));
         OnPropertyChanged(nameof(EmptyDescription));
@@ -516,10 +592,11 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     private void ResetFilters()
     {
-        var platformChanged = SelectedPlatformFilter != PlatformFilterOption.All;
+        var sliceChanged = SelectedPlatformFilter != PlatformFilterOption.All
+            || SelectedSliceOption?.Slice.Kind != StatisticsSliceKind.AllChannels;
         var textChanged = FilterText.Length > 0;
 
-        if (!platformChanged && !textChanged)
+        if (!sliceChanged && !textChanged)
         {
             return;
         }
@@ -528,6 +605,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         try
         {
             SelectedPlatformFilter = PlatformFilterOption.All;
+            SelectedSliceOption = _sliceOptions.FirstOrDefault() ?? UserStatisticsSliceOption.All;
             FilterText = string.Empty;
         }
         finally
@@ -535,9 +613,9 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             _suppressFilterRebuild = false;
         }
 
-        if (platformChanged)
+        if (sliceChanged)
         {
-            ApplyPlatformSliceAndRebuild();
+            Reload();
         }
         else
         {
@@ -615,23 +693,44 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         try
         {
             bool updated;
-            var channel = _platformRegistry is not null
-                ? _platformRegistry.GetConfiguredChannel(row.Platform) ?? string.Empty
-                : _channelProvider.Channel;
+            var adjustmentTarget = SelectedAdjustmentTarget;
+            var targetPlatform = adjustmentTarget?.Target.Platform ?? row.Platform;
+            var channel = adjustmentTarget?.Channel
+                ?? (_platformRegistry is not null
+                    ? _platformRegistry.GetConfiguredChannel(targetPlatform) ?? string.Empty
+                    : _channelProvider.Channel);
+            var targetUserKey = adjustmentTarget?.UserKey ?? row.Key;
+            var targetUserName = adjustmentTarget?.UserName ?? row.Name;
 
             if (delta < 0)
             {
                 var amount = (ulong)-delta;
-                var notification = _pointsManagement.GetPunishmentNotification(row.Name, amount);
+                var notification = _pointsManagement.GetPunishmentNotification(targetUserName, amount);
                 _dialogService.Info("Наказание", notification);
-                updated = await _pointsManagement.PunishUserAsync(row.Key, row.Name, amount, channel, AdjustmentSource);
+                updated = adjustmentTarget is not null
+                    ? await _pointsManagement.PunishUserAsync(
+                        adjustmentTarget.Target,
+                        targetUserKey,
+                        targetUserName,
+                        amount,
+                        channel,
+                        AdjustmentSource)
+                    : await _pointsManagement.PunishUserAsync(targetUserKey, targetUserName, amount, channel, AdjustmentSource);
             }
             else
             {
                 var amount = (ulong)delta;
-                var notification = _pointsManagement.GetRewardNotification(row.Name, amount);
+                var notification = _pointsManagement.GetRewardNotification(targetUserName, amount);
                 _dialogService.Info("Поощрение", notification);
-                updated = await _pointsManagement.RewardUserAsync(row.Key, row.Name, amount, channel, AdjustmentSource);
+                updated = adjustmentTarget is not null
+                    ? await _pointsManagement.RewardUserAsync(
+                        adjustmentTarget.Target,
+                        targetUserKey,
+                        targetUserName,
+                        amount,
+                        channel,
+                        AdjustmentSource)
+                    : await _pointsManagement.RewardUserAsync(targetUserKey, targetUserName, amount, channel, AdjustmentSource);
             }
 
             if (!updated)
@@ -752,9 +851,79 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanManageLinks))]
+    private async Task LinkAccountAsync()
+    {
+        if (_accountLinking is null || SelectedRow is not { } row)
+        {
+            return;
+        }
+
+        var excludedKeys = _userStatistics.GetLinkedKeys(row.Key);
+        var knownAccounts = _userStatistics.GetKnownAccounts();
+        var dialog = new LinkAccountDialogViewModel(row.Name, knownAccounts, excludedKeys);
+
+        if (!await _dialogService.ShowAsync(dialog) || dialog.Result is not { } targetKey)
+        {
+            return;
+        }
+
+        var selectedKey = row.Key;
+        var result = await _accountLinking.LinkManualAsync(
+            [selectedKey, targetKey],
+            new(AccountLinkAuthorKind.Streamer, ActorDisplayName: "streamer"));
+
+        if (!result.Succeeded)
+        {
+            _dialogService.Warning("Привязка аккаунтов", DescribeLinkError(result.Status));
+            return;
+        }
+
+        await TrySaveAfterLinkChangeAsync();
+        Reload();
+        TrySelect(selectedKey);
+    }
+
+    [RelayCommand]
+    private async Task UnlinkAccountAsync(UserLinkedAccountRowViewModel? account)
+    {
+        if (account is null || _accountLinking is null || SelectedRow is not { } row || !account.CanUnlink)
+        {
+            return;
+        }
+
+        if (_dialogService is not null
+            && !_dialogService.Confirm(
+                "Отвязка аккаунта",
+                $"Отвязать аккаунт {account.PlatformLabel} ({account.Name})? Накопленные счётчики сохранятся на своих каналах."))
+        {
+            return;
+        }
+
+        var selectedKey = row.Key;
+        var result = await _accountLinking.UnlinkManualAsync(
+            account.Key,
+            new(AccountLinkAuthorKind.Streamer, ActorDisplayName: "streamer"));
+
+        if (!result.Succeeded)
+        {
+            _dialogService?.Warning("Отвязка аккаунта", DescribeLinkError(result.Status));
+            return;
+        }
+
+        await TrySaveAfterLinkChangeAsync();
+        Reload();
+        TrySelect(selectedKey);
+    }
+
     public void Dispose()
     {
         _isDisposed = true;
+
+        if (_channelCatalog is not null)
+        {
+            _channelCatalog.Changed -= OnChannelCatalogChanged;
+        }
 
         foreach (var sub in _subscriptions)
         {
@@ -806,31 +975,285 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     private void Reload()
     {
-        var all = _userStatistics.GetAll();
+        RefreshSliceOptions();
+
+        var activeSlice = SelectedSliceOption?.Slice ?? StatisticsSlice.All();
+        var aggregates = _userStatistics.QuerySlice(activeSlice);
+        _allChannelsCount = activeSlice.Kind == StatisticsSliceKind.AllChannels
+            ? aggregates.Count
+            : _userStatistics.QuerySlice(StatisticsSlice.All()).Count;
 
         _allRows.Clear();
 
         var pointTerm = _userRankService.PointTerm;
         var ranks = _settingsManager.Current.Ranks.Ranks.ToArray();
+        var trackedTwitchUserIds = new List<string>();
 
-        foreach (var user in all)
+        foreach (var aggregate in aggregates)
         {
-            var rank = _userRankService.GetRank(user.Points);
-            var standing = UserRankStanding.Create(user.Points, _userRankService.GetRankDisplay(user.Points), rank, ranks);
-            _allRows.Add(new UserStatisticsRowViewModel(user, standing, pointTerm)
+            var rank = _userRankService.GetRank(aggregate.Points);
+            var standing = UserRankStanding.Create(aggregate.Points, _userRankService.GetRankDisplay(aggregate.Points), rank, ranks);
+
+            var twitchAccount = aggregate.Accounts.FirstOrDefault(static a => a.Key.Platform == StreamingPlatform.Twitch);
+            var avatar = twitchAccount is not null
+                ? _avatars.For(twitchAccount.Key.UserId, twitchAccount.Name)
+                : new UserAvatarViewModel(string.Empty, aggregate.DisplayName);
+
+            if (twitchAccount is not null)
             {
-                Avatar = user.Platform == StreamingPlatform.Twitch
-                    ? _avatars.For(user.UserId, user.Name)
-                    : new UserAvatarViewModel(string.Empty, user.Name),
+                trackedTwitchUserIds.Add(twitchAccount.Key.UserId);
+            }
+
+            _allRows.Add(new UserStatisticsRowViewModel(aggregate, standing, pointTerm, _channelCatalog)
+            {
+                Avatar = avatar,
             });
         }
 
-        _avatars.Track(_allRows.Where(static row => row.Platform == StreamingPlatform.Twitch).Select(static row => row.UserId));
-        ApplyPlatformSliceAndRebuild();
+        _avatars.Track(trackedTwitchUserIds);
+        ApplySliceSummaryAndRebuild();
+        RebuildAdjustmentTargets(SelectedRow);
 
         if (_preload is null || _preload.IsCompleted)
         {
             _isHydrated = true;
         }
     }
+
+    private void OnChannelCatalogChanged(object? sender, EventArgs e)
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (_uiDispatcher is not null)
+        {
+            _ = UiAsync.RunGuardedAsync(async () =>
+            {
+                await _uiDispatcher.InvokeAsync(() =>
+                {
+                    if (!_isDisposed)
+                    {
+                        Reload();
+                    }
+                });
+            }, LogHydrationFailure);
+            return;
+        }
+
+        Reload();
+    }
+
+    private void RefreshSliceOptions()
+    {
+        var previousId = SelectedSliceOption?.Id ?? UserStatisticsSliceOption.All.Id;
+        var nextOptions = new List<UserStatisticsSliceOption>
+        {
+            UserStatisticsSliceOption.All,
+        };
+
+        var knownChannels = new HashSet<ChannelKey>(_userStatistics.GetKnownChannels());
+        var catalogSettings = _channelCatalog?.Load();
+        if (catalogSettings is not null)
+        {
+            foreach (var channel in catalogSettings.Channels)
+            {
+                if (Enum.IsDefined(channel.Platform) && !string.IsNullOrWhiteSpace(channel.ChannelId))
+                {
+                    knownChannels.Add(new ChannelKey(channel.Platform, channel.ChannelId.Trim()));
+                }
+            }
+        }
+
+        foreach (var channel in knownChannels
+            .OrderBy(static c => c.Platform)
+            .ThenBy(c => ResolveChannelLabel(c, catalogSettings), StringComparer.OrdinalIgnoreCase))
+        {
+            var label = $"{PlatformVisuals.GetDisplayName(channel.Platform)} · {ResolveChannelLabel(channel, catalogSettings)}";
+            nextOptions.Add(new(
+                $"channel:{channel.Platform}:{channel.ChannelId}",
+                label,
+                StatisticsSlice.ForChannel(channel)));
+        }
+
+        if (catalogSettings is not null)
+        {
+            foreach (var group in catalogSettings.Groups.OrderBy(static g => g.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(group.Id) || string.IsNullOrWhiteSpace(group.Name))
+                {
+                    continue;
+                }
+
+                nextOptions.Add(new(
+                    $"group:{group.Id}",
+                    $"Группа: {group.Name}",
+                    StatisticsSlice.ForGroup(group.Id, group.Name, ChannelCatalogStore.DeduplicateMembers(group.Channels))));
+            }
+        }
+
+        foreach (var platformOption in PlatformFilterOption.AllOptions)
+        {
+            if (platformOption.Platform is not { } platform)
+            {
+                continue;
+            }
+
+            nextOptions.Add(new(
+                $"platform:{platform}",
+                $"Площадка: {platformOption.Label}",
+                StatisticsSlice.ForPlatform(platform)));
+        }
+
+        foreach (var platform in _userStatistics.GetUnattributedPlatforms())
+        {
+            nextOptions.Add(new(
+                $"unattributed:{platform}",
+                $"{PlatformVisuals.GetDisplayName(platform)} · старые данные без канала",
+                StatisticsSlice.Unattributed(platform)));
+        }
+
+        var wasSuppressed = _suppressFilterRebuild;
+        _suppressFilterRebuild = true;
+        try
+        {
+            _sliceOptions.SyncTo(nextOptions);
+            var matched = _sliceOptions.FirstOrDefault(o => string.Equals(o.Id, previousId, StringComparison.Ordinal))
+                ?? _sliceOptions[0];
+            SelectedSliceOption = matched;
+            SelectedPlatformFilter = matched.Slice.Kind == StatisticsSliceKind.Platform && matched.Slice.Platform is { } selectedPlatform
+                ? PlatformFilterOption.AllOptions.FirstOrDefault(o => o.Platform == selectedPlatform) ?? PlatformFilterOption.All
+                : PlatformFilterOption.All;
+        }
+        finally
+        {
+            _suppressFilterRebuild = wasSuppressed;
+        }
+    }
+
+    private string ResolveChannelLabel(ChannelKey channel, ChannelsSettings? catalogSettings)
+    {
+        var fromCatalog = _channelCatalog?.ResolveDisplayName(channel);
+        if (!string.IsNullOrWhiteSpace(fromCatalog))
+        {
+            return fromCatalog;
+        }
+
+        var fromSettings = catalogSettings?.Channels.FirstOrDefault(c =>
+            c.Platform == channel.Platform && string.Equals(c.ChannelId, channel.ChannelId, StringComparison.Ordinal))?.DisplayName;
+        return string.IsNullOrWhiteSpace(fromSettings) ? channel.ChannelId : fromSettings;
+    }
+
+    private void RebuildAdjustmentTargets(UserStatisticsRowViewModel? row)
+    {
+        var previousTarget = SelectedAdjustmentTarget;
+        var nextTargets = new List<AdjustmentTargetOption>();
+        var candidates = new List<(AdjustmentTargetOption Option, bool IsAttributedChannel, DateTime BreakdownLastSeen, DateTime AccountLastSeen)>();
+
+        if (row is not null)
+        {
+            foreach (var breakdown in row.ChannelBreakdowns)
+            {
+                var targetPlatform = breakdown.Target.Platform;
+                var matchingAccounts = row.Aggregate.Accounts
+                    .Where(a => a.Key.Platform == targetPlatform)
+                    .ToList();
+
+                if (matchingAccounts.Count == 0)
+                {
+                    continue;
+                }
+
+                var configuredChannel = (_platformRegistry is not null
+                    ? _platformRegistry.GetConfiguredChannel(targetPlatform)
+                    : _channelProvider.Channel) ?? string.Empty;
+
+                var channel = breakdown.Target.AsChannelKey?.ChannelId ?? configuredChannel;
+
+                foreach (var account in matchingAccounts)
+                {
+                    var label = matchingAccounts.Count > 1
+                        ? $"{breakdown.Label} · {account.Name}"
+                        : breakdown.Label;
+                    var option = new AdjustmentTargetOption(breakdown.Target, account.Key, account.Name, channel, label);
+                    nextTargets.Add(option);
+                    candidates.Add((
+                        option,
+                        breakdown.Target.Kind == StatisticsCounterTargetKind.Channel,
+                        breakdown.LastSeen,
+                        account.LastSeen));
+                }
+            }
+        }
+
+        _adjustmentTargetOptions.SyncTo(nextTargets);
+        OnPropertyChanged(nameof(HasMultipleAdjustmentTargets));
+
+        if (nextTargets.Count == 0)
+        {
+            SelectedAdjustmentTarget = null;
+            return;
+        }
+
+        SelectedAdjustmentTarget = nextTargets.FirstOrDefault(t =>
+                previousTarget is not null
+                && t.Target == previousTarget.Target
+                && t.UserKey == previousTarget.UserKey)
+            ?? nextTargets.FirstOrDefault(t =>
+                SelectedSliceOption?.Slice.Kind == StatisticsSliceKind.Channel
+                && SelectedSliceOption.Slice.Channel is { } sliceChannel
+                && t.Target.AsChannelKey == sliceChannel)
+            ?? candidates
+                .OrderByDescending(static c => c.IsAttributedChannel)
+                .ThenByDescending(static c => c.BreakdownLastSeen)
+                .ThenByDescending(static c => c.AccountLastSeen)
+                .Select(static c => c.Option)
+                .FirstOrDefault()
+            ?? nextTargets[0];
+    }
+
+    private async Task TrySaveAfterLinkChangeAsync()
+    {
+        if (_statisticsAutoSaver is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _statisticsAutoSaver.SaveNowAsync();
+        }
+        catch (Exception ex)
+        {
+            _dialogService?.Error("Ошибка сохранения", $"Не удалось сохранить статистику: {ex.Message}");
+        }
+    }
+
+    private static string DescribeLinkError(AccountLinkOperationStatus status)
+    {
+        return status switch
+        {
+            AccountLinkOperationStatus.SameAccountRejected => "Нельзя привязать аккаунт к самому себе.",
+            AccountLinkOperationStatus.AlreadyLinkedSameGroup => "Эти аккаунты уже связаны в одной группе.",
+            AccountLinkOperationStatus.NotLinked => "У этого зрителя нет активной группы связей.",
+            AccountLinkOperationStatus.TargetInAnotherGroup => "Один из выбранных аккаунтов уже входит в другую группу.",
+            _ => "Не удалось обновить связь аккаунтов.",
+        };
+    }
 }
+
+public sealed record UserStatisticsSliceOption(
+    string Id,
+    string Label,
+    StatisticsSlice Slice)
+{
+    public static UserStatisticsSliceOption All { get; } = new("all", "Все каналы", StatisticsSlice.All());
+}
+
+public sealed record AdjustmentTargetOption(
+    StatisticsCounterTarget Target,
+    PlatformUserKey UserKey,
+    string UserName,
+    string Channel,
+    string Label);

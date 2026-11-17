@@ -3,7 +3,9 @@ using PoproshaykaBot.Core.Statistics;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class WasThereCommand(BroadcastHistoryStore historyStore) : IChatCommand
+public sealed class WasThereCommand(
+    BroadcastHistoryStore historyStore,
+    IUserStatisticsRepository? userStatistics = null) : IChatCommand
 {
     public string Canonical => "ятамбыл";
     public IReadOnlyCollection<string> Aliases => ["iwasthere", "attended"];
@@ -29,8 +31,9 @@ public sealed class WasThereCommand(BroadcastHistoryStore historyStore) : IChatC
         }
 
         var key = new PlatformUserKey(context.Platform, context.UserId);
+        var keys = userStatistics?.GetLinkedKeys(key) ?? new HashSet<PlatformUserKey> { key };
         var attended = broadcasts
-            .Where(b => b.HasChatter(key))
+            .Where(b => b.HasAnyChatter(keys))
             .OrderByDescending(b => b.StartedAt)
             .ToList();
 

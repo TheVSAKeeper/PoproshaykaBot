@@ -1,7 +1,11 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics.Linking;
 
 namespace PoproshaykaBot.Core.Statistics;
 
@@ -22,23 +26,24 @@ public static class StatisticsServiceCollectionExtensions
         services.AddSingleton<IFlushableHistoryStore>(sp => sp.GetRequiredService<BroadcastHistoryStore>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAppLifetimeComponent, BroadcastHistoryLifetimeComponent>());
 
-        foreach (var descriptor in UserStatisticsPlatformCatalog.All)
-        {
-            var platformDescriptor = descriptor;
-            services.AddKeyedSingleton(
-                platformDescriptor.Platform,
-                (sp, _) => new PlatformUserStatisticsUnit(
-                    platformDescriptor,
-                    sp.GetRequiredService<UserStatisticsRepository>().GetPartition(platformDescriptor.Platform),
-                    sp.GetRequiredService<StatisticsFileStore>(),
-                    sp.GetRequiredService<ILogger<PlatformUserStatisticsUnit>>()));
+        services.AddSingleton(sp => new KnownChannelIdentityResolver(
+            sp.GetService<ChannelCatalogStore>(),
+            sp.GetService<AccountsStore>(),
+            sp.GetService<YouTubeAccountsStore>(),
+            sp.GetService<SettingsManager>(),
+            sp.GetService<YouTubeSettingsStore>()));
 
-            services.AddSingleton(sp => sp.GetRequiredKeyedService<PlatformUserStatisticsUnit>(platformDescriptor.Platform));
-            services.AddSingleton<IPeriodicStatisticsUnit>(
-                sp => sp.GetRequiredKeyedService<PlatformUserStatisticsUnit>(platformDescriptor.Platform));
-            services.AddSingleton<IExternalWriteParticipant>(
-                sp => sp.GetRequiredKeyedService<PlatformUserStatisticsUnit>(platformDescriptor.Platform));
-        }
+        services.AddSingleton(sp => new LegacyUserStatisticsMigrator(
+            sp.GetRequiredService<StatisticsFileStore>(),
+            sp.GetRequiredService<KnownChannelIdentityResolver>(),
+            sp.GetRequiredService<ILogger<LegacyUserStatisticsMigrator>>(),
+            sp.GetService<BroadcastHistoryStore>(),
+            sp.GetService<ActiveBroadcastStore>(),
+            sp.GetService<TimeProvider>()));
+
+        services.AddSingleton<UserStatisticsCatalogPersistenceUnit>();
+        services.AddSingleton<IPeriodicStatisticsUnit>(sp => sp.GetRequiredService<UserStatisticsCatalogPersistenceUnit>());
+        services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<UserStatisticsCatalogPersistenceUnit>());
 
         services.AddSingleton<BotStatisticsPersistenceUnit>();
         services.AddSingleton<IPeriodicStatisticsUnit>(sp => sp.GetRequiredService<BotStatisticsPersistenceUnit>());
@@ -48,7 +53,11 @@ public static class StatisticsServiceCollectionExtensions
         services.AddSingleton<IPeriodicStatisticsUnit>(sp => sp.GetRequiredService<CommandUsagePersistenceUnit>());
         services.AddSingleton<IExternalWriteParticipant>(sp => sp.GetRequiredService<CommandUsagePersistenceUnit>());
 
-        services.AddSingleton(sp => new UserStatisticsLoader(sp.GetServices<PlatformUserStatisticsUnit>()));
+        services.AddSingleton(sp => new UserStatisticsLoader(sp.GetRequiredService<UserStatisticsCatalogPersistenceUnit>()));
+        services.AddSingleton<IAccountLinkingService>(sp => new AccountLinkingService(
+            sp.GetRequiredService<IUserStatisticsRepository>(),
+            sp.GetRequiredService<IEventBus>(),
+            sp.GetService<TimeProvider>()));
         services.AddSingleton<StatisticsAutoSaver>();
         services.AddKeyedSingleton<IHostedComponent>(
             HostingKeys.Shared,

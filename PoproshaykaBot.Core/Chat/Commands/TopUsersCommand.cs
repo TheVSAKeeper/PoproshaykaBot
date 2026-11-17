@@ -1,9 +1,13 @@
-﻿using PoproshaykaBot.Core.Statistics;
+﻿using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Chat.Commands;
 
-public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRankService rankService) : IChatCommand
+public sealed class TopUsersCommand(
+    IUserStatisticsRepository statistics,
+    UserRankService rankService,
+    ChannelCatalogStore? channelCatalog = null) : IChatCommand
 {
     private static readonly HashSet<string> MessagesKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -17,7 +21,7 @@ public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRa
 
     public string Canonical => "топпользователи";
     public IReadOnlyCollection<string> Aliases => ["top"];
-    public string Description => "топ по баллам (аргумент 'сообщения' переключает на топ по сообщениям, число задаёт длину 1–20)";
+    public string Description => "топ по баллам (аргумент 'сообщения' переключает на топ по сообщениям, 'все'/'группа <имя>' задаёт срез, число – 1–20)";
 
     public bool CanExecute(CommandContext context)
     {
@@ -26,10 +30,16 @@ public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRa
 
     public Task<OutgoingMessage?> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
+        var parsed = StatisticsCommandSliceParser.Parse(context, channelCatalog);
+        if (!parsed.Succeeded)
+        {
+            return Task.FromResult<OutgoingMessage?>(OutgoingMessage.Reply(parsed.ErrorMessage!, context.MessageId));
+        }
+
         var count = 5;
         var mode = UserTopMode.Points;
 
-        foreach (var arg in context.Arguments)
+        foreach (var arg in parsed.RemainingArguments)
         {
             if (int.TryParse(arg, out var requestedCount))
             {
@@ -45,7 +55,7 @@ public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRa
             }
         }
 
-        var topUsers = statistics.ForPlatform(context.Platform).GetTop(count, mode);
+        var topUsers = statistics.GetTop(parsed.Slice!, count, mode);
 
         if (topUsers.Count == 0)
         {
@@ -60,7 +70,7 @@ public sealed class TopUsersCommand(IUserStatisticsRepository statistics, UserRa
                     ? $"{FormattingUtils.FormatNumber((long)x.MessageCount)} сообщ."
                     : rankService.FormatPoints(x.Points);
 
-                return $"{i + 1}. {rank.Emoji} {x.Name} ({value})";
+                return $"{i + 1}. {rank.Emoji} {x.DisplayName} ({value})";
             })
             .ToList();
 

@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Platforms;
+using System.Text.Json.Serialization;
 
 namespace PoproshaykaBot.Core.Statistics;
 
@@ -25,7 +26,13 @@ public sealed class ActiveBroadcastPlatform
 
     public string Channel { get; set; } = string.Empty;
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ChannelId { get; set; }
+
     public string? StreamId { get; set; }
+
+    [JsonIgnore]
+    public ChannelKey? ChannelKey => Platforms.ChannelKey.FromId(Platform, ChannelId);
 
     public DateTimeOffset StartedAt { get; set; }
 

@@ -214,14 +214,14 @@ public sealed class CommandUsageStatisticsTests
         users.TrackMessage(new PlatformUserKey(StreamingPlatform.Twitch, "u1"), "alice");
         repository.Track("ранг", "Алиса");
 
-        Directory.CreateDirectory(Path.Combine(_directory, "users_statistics.json"));
+        Directory.CreateDirectory(Path.Combine(_directory, "user_statistics_catalog.json"));
 
         Assert.ThrowsAsync<InvalidOperationException>(async () => await saver.SaveNowAsync());
 
         Assert.That(repository.HasChanges, Is.True,
             "Снимок счётчиков снят, но не записан – право на запись обязано вернуться, иначе счётчики теряются молча.");
 
-        Directory.Delete(Path.Combine(_directory, "users_statistics.json"));
+        Directory.Delete(Path.Combine(_directory, "user_statistics_catalog.json"));
 
         await saver.StopAsync(new Progress<string>(), CancellationToken.None);
 

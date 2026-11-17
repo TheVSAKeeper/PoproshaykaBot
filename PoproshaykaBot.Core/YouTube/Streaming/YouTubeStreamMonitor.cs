@@ -450,7 +450,8 @@ internal sealed class YouTubeStreamMonitor(
                     targetChannelId,
                     sample.ConcurrentViewers.Value,
                     nowUtc,
-                    active.VideoId),
+                    active.VideoId,
+                    targetChannelId),
                 CancellationToken.None).ConfigureAwait(false);
         }
         else
@@ -782,13 +783,13 @@ internal sealed class YouTubeStreamMonitor(
             }
 
             await eventBus.PublishAsync(
-                new StreamWentOnline(StreamingPlatform.YouTube, targetChannelId, _stateMachine.CurrentStream, IsCatchUp: false),
+                new StreamWentOnline(StreamingPlatform.YouTube, targetChannelId, _stateMachine.CurrentStream, IsCatchUp: false, ChannelId: targetChannelId),
                 CancellationToken.None).ConfigureAwait(false);
         }
         else if (transition.SnapshotChanged && _stateMachine.CurrentStream is { } updatedStream)
         {
             await eventBus.PublishAsync(
-                new StreamMetadataResolved(StreamingPlatform.YouTube, targetChannelId, updatedStream),
+                new StreamMetadataResolved(StreamingPlatform.YouTube, targetChannelId, updatedStream, ChannelId: targetChannelId),
                 CancellationToken.None).ConfigureAwait(false);
         }
     }
@@ -813,7 +814,7 @@ internal sealed class YouTubeStreamMonitor(
         if (shouldPublish)
         {
             await eventBus.PublishAsync(
-                new StreamWentOffline(StreamingPlatform.YouTube, targetChannelId, IsCatchUp: isCatchUp),
+                new StreamWentOffline(StreamingPlatform.YouTube, targetChannelId, IsCatchUp: isCatchUp, ChannelId: targetChannelId),
                 CancellationToken.None).ConfigureAwait(false);
         }
     }

@@ -46,6 +46,63 @@ public sealed class StatisticsFileStore
         return Task.Run(() => SaveToFile(data, ResolvePath(relativePath), entityName), cancellationToken);
     }
 
+    public bool FileExists(string relativePath)
+    {
+        return File.Exists(ResolvePath(relativePath));
+    }
+
+    public Task<StatisticsReadResult<UserStatisticsCatalogDocument>> LoadUserStatisticsCatalogAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var filePath = ResolvePath(LegacyDataCatalog.UserStatisticsCatalogFileName);
+        _logger.LogDebug("Загрузка каталога статистики пользователей из файла {FilePath}", filePath);
+
+        if (!File.Exists(filePath))
+        {
+            _logger.LogDebug("Файл каталога статистики пользователей {FilePath} не найден", filePath);
+            return Task.FromResult(StatisticsReadResult<UserStatisticsCatalogDocument>.NoFile);
+        }
+
+        try
+        {
+            var json = File.ReadAllText(filePath, Encoding.UTF8);
+            var data = JsonSerializer.Deserialize<UserStatisticsCatalogDocument>(json, JsonStoreOptions.Default);
+
+            if (data == null)
+            {
+                _logger.LogError("Десериализация каталога статистики пользователей вернула null – файл {FilePath} повреждён", filePath);
+                JsonStoreBackup.CreateBackup(filePath, "invalid", _logger);
+                return Task.FromResult(StatisticsReadResult<UserStatisticsCatalogDocument>.Failure);
+            }
+
+            if (data.SchemaVersion <= 0 || data.SchemaVersion > UserStatisticsCatalogDocument.CurrentSchemaVersion)
+            {
+                _logger.LogError(
+                    "Версия схемы каталога статистики {SchemaVersion} не поддерживается (поддерживается до {MaxVersion}); файл {FilePath} оставлен без изменений",
+                    data.SchemaVersion,
+                    UserStatisticsCatalogDocument.CurrentSchemaVersion,
+                    filePath);
+                return Task.FromResult(StatisticsReadResult<UserStatisticsCatalogDocument>.Failure);
+            }
+
+            return Task.FromResult(StatisticsReadResult<UserStatisticsCatalogDocument>.FromFile(data));
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Ошибка чтения или десериализации каталога статистики пользователей {FilePath}", filePath);
+            JsonStoreBackup.CreateBackup(filePath, "invalid", _logger);
+            return Task.FromResult(StatisticsReadResult<UserStatisticsCatalogDocument>.Failure);
+        }
+    }
+
+    public Task SaveUserStatisticsCatalogAsync(
+        UserStatisticsCatalogDocument snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        return SaveAsync(LegacyDataCatalog.UserStatisticsCatalogFileName, "каталога статистики пользователей", snapshot, cancellationToken);
+    }
+
     public async Task<StatisticsReadResult<List<UserStatistics>>> LoadUsersAsync(
         StreamingPlatform platform,
         CancellationToken cancellationToken = default)

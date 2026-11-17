@@ -123,10 +123,11 @@ public sealed class ChannelUpdateSubscriber(
         var gameId = evt.TryGetProperty("category_id", out var gameIdProp) ? gameIdProp.GetString() ?? string.Empty : string.Empty;
         var gameName = evt.TryGetProperty("category_name", out var gameNameProp) ? gameNameProp.GetString() ?? string.Empty : string.Empty;
         var labels = ParseStringArray(evt, "content_classification_labels");
+        var broadcasterId = evt.TryGetProperty("broadcaster_user_id", out var broadcasterProp) ? broadcasterProp.GetString() : null;
 
         try
         {
-            await eventBus.PublishAsync(new ChannelUpdated(StreamingPlatform.Twitch, title, language, gameId, gameName, labels), cancellationToken);
+            await eventBus.PublishAsync(new ChannelUpdated(StreamingPlatform.Twitch, title, language, gameId, gameName, labels, broadcasterId), cancellationToken);
         }
         catch (Exception ex)
         {
