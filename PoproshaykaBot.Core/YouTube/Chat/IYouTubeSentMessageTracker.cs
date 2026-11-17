@@ -2,9 +2,9 @@
 
 public interface IYouTubeSentMessageTracker
 {
-    bool Contains(string messageId);
+    bool Contains(string messageId, string? liveChatId = null);
 
-    void TrackSent(string messageId);
+    void TrackSent(string messageId, string? liveChatId = null);
 
     YouTubeInFlightSendScope BeginInFlightSend(string liveChatId);
 
@@ -77,9 +77,9 @@ internal sealed class NullYouTubeSentMessageTracker : IYouTubeSentMessageTracker
     {
     }
 
-    public bool Contains(string messageId) => false;
+    public bool Contains(string messageId, string? liveChatId = null) => false;
 
-    public void TrackSent(string messageId)
+    public void TrackSent(string messageId, string? liveChatId = null)
     {
     }
 

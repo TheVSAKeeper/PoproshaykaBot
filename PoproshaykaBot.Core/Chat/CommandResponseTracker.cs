@@ -17,12 +17,12 @@ public sealed class CommandResponseTracker(TimeProvider timeProvider)
         Expect(StreamingPlatform.Twitch, messageId, mark);
     }
 
-    public void Expect(StreamingPlatform platform, string messageId, CommandResponseMark mark)
+    public void Expect(StreamingPlatform platform, string messageId, CommandResponseMark mark, ChannelKey? channel = null, string? chatId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentNullException.ThrowIfNull(mark);
 
-        var key = new MessageKey(platform, messageId);
+        var key = new MessageKey(platform, channel, chatId, messageId);
         var now = timeProvider.GetUtcNow();
 
         lock (_lock)
@@ -50,14 +50,14 @@ public sealed class CommandResponseTracker(TimeProvider timeProvider)
         return TryConsume(StreamingPlatform.Twitch, messageId);
     }
 
-    public CommandResponseMark? TryConsume(StreamingPlatform platform, string messageId)
+    public CommandResponseMark? TryConsume(StreamingPlatform platform, string messageId, ChannelKey? channel = null, string? chatId = null)
     {
         if (string.IsNullOrWhiteSpace(messageId))
         {
             return null;
         }
 
-        var key = new MessageKey(platform, messageId);
+        var key = new MessageKey(platform, channel, chatId, messageId);
         var now = timeProvider.GetUtcNow();
 
         lock (_lock)
@@ -113,7 +113,7 @@ public sealed class CommandResponseTracker(TimeProvider timeProvider)
         }
     }
 
-    private readonly record struct MessageKey(StreamingPlatform Platform, string MessageId);
+    private readonly record struct MessageKey(StreamingPlatform Platform, ChannelKey? Channel, string? ChatId, string MessageId);
 
     private sealed record Entry(MessageKey Key, CommandResponseMark Mark, DateTimeOffset ExpiresAt);
 }

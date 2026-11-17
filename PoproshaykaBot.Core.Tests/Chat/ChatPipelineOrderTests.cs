@@ -42,8 +42,9 @@ public sealed class ChatPipelineOrderTests
         }
     }
 
-    [Test]
-    public async Task Inbound_ChatMessageReceived_PublishesBefore_CommandExecution_Completes_And_Before_OverlayResponse()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Inbound_ChatMessageReceived_Publishes_Before_Command_Response_And_Closed_Origin_Cannot_Reply(bool switchWhileRunning)
     {
         var time = new TestTimeProvider
         {
@@ -106,6 +107,7 @@ public sealed class ChatPipelineOrderTests
             bus,
             NullLogger<ChatPipelineHandler>.Instance);
 
+        var origin = new ChatOrigin(new(StreamingPlatform.Twitch, "1"), "1");
         var raw = new RawChatMessageReceived(new(StreamingPlatform.Twitch,
                 "test-channel",
                 "incoming-1",
@@ -119,7 +121,9 @@ public sealed class ChatPipelineOrderTests
                 false,
                 false,
                 false,
-                false),
+                false,
+                ChannelId: "1",
+                Origin: origin),
             DateTimeOffset.UtcNow);
 
         var handleTask = handler.HandleAsync(raw, CancellationToken.None);
@@ -129,9 +133,23 @@ public sealed class ChatPipelineOrderTests
 
         Assert.That(collector.Snapshot(), Has.Count.EqualTo(1), "Пока команда выполняется, опубликован только входящий ChatMessageReceived");
         Assert.That(collector.Snapshot()[0].IsBot, Is.False);
+        Assert.That(collector.Snapshot()[0].ChannelKey, Is.EqualTo(origin.Channel));
+
+        if (switchWhileRunning)
+        {
+            origin.Close();
+        }
 
         command.Release.SetResult();
         await handleTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        if (switchWhileRunning)
+        {
+            await handler.HandleAsync(raw with { Message = raw.Message with { Id = "late" } }, CancellationToken.None);
+            Assert.That(collector.Snapshot(), Has.Count.EqualTo(1));
+            return;
+        }
+
         await collector.FirstBotMessage.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         var snapshot = collector.Snapshot();
@@ -141,9 +159,33 @@ public sealed class ChatPipelineOrderTests
             Assert.That(snapshot[0].IsBot, Is.False);
             Assert.That(snapshot[0].Text, Is.EqualTo("!ранг"));
             Assert.That(snapshot[1].IsBot, Is.True);
+            Assert.That(snapshot[1].Origin, Is.SameAs(origin));
             Assert.That(snapshot[1].Text, Is.EqualTo("ответ команды"));
             Assert.That(snapshot[1].CommandResponse, Is.EqualTo(new CommandResponseMark("ранг", CommandResponseTarget.Overlay)));
         });
+    }
+
+    [Test]
+    public void Audience_Follows_Channel_And_Ignores_The_Closed_Origin()
+    {
+        var settings = Substitute.For<SettingsManager>(NullLogger<SettingsManager>.Instance, null, null);
+        var audience = new AudienceTracker(settings);
+        var first = new ChatOrigin(new(StreamingPlatform.Twitch, "1"), "1");
+        var next = new ChatOrigin(new(StreamingPlatform.Twitch, "2"), "2");
+        var youtube = new ChatOrigin(new(StreamingPlatform.YouTube, "1"), "chat");
+
+        audience.ForIncomingMessage(first.Channel.Platform, first.Channel, first)!.OnUserMessage("viewer-1", "First");
+        audience.ForIncomingMessage(youtube.Channel.Platform, youtube.Channel, youtube)!.OnUserMessage("viewer-1", "YouTube");
+        first.Close();
+        audience.ForIncomingMessage(next.Channel.Platform, next.Channel, next)!.OnUserMessage("viewer-2", "Next");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(audience.ForIncomingMessage(first.Channel.Platform, first.Channel, first), Is.Null);
+            Assert.That(audience.ForPlatform(StreamingPlatform.Twitch, first.Channel).ActiveUserCount, Is.Zero);
+            Assert.That(audience.ForPlatform(StreamingPlatform.Twitch, next.Channel).ActiveUserCount, Is.EqualTo(1));
+            Assert.That(audience.ForPlatform(StreamingPlatform.YouTube, youtube.Channel).ActiveUserCount, Is.EqualTo(1));
+        }
     }
 
     private sealed class BlockingCommand : IChatCommand

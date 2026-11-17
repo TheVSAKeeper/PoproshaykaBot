@@ -174,7 +174,7 @@ public class YouTubeSharedAccountEchoTests
         Assert.Multiple(() =>
         {
             Assert.That(publishedEcho.Message.IsBot, Is.True);
-            Assert.That(responseTracker.TryConsume(StreamingPlatform.YouTube, "echo-early-1"), Is.EqualTo(mark));
+            Assert.That(responseTracker.TryConsume(StreamingPlatform.YouTube, "echo-early-1", publishedEcho.ChannelKey, publishedEcho.Message.ChatSessionId), Is.EqualTo(mark));
         });
     }
 

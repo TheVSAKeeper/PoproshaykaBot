@@ -17,7 +17,10 @@ public sealed record ChatMessageReceived(
     ChatMessageData HistoryEntry,
     bool IsBot = false,
     CommandResponseMark? CommandResponse = null,
-    bool IsReplacement = false) : EventBase, IPlatformEvent
+    bool IsReplacement = false,
+    ChatOrigin? Origin = null,
+    bool? RecordsUserData = null) : EventBase, IPlatformEvent
 {
     public PlatformUserKey SenderKey => new(Platform, UserId);
+    public ChannelKey? ChannelKey => Origin?.Channel ?? Platforms.ChannelKey.FromId(Platform, HistoryEntry.ChannelId);
 }

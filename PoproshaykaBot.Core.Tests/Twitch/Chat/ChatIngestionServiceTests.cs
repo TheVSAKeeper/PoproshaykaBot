@@ -9,6 +9,7 @@ using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
 using System.Net;
+using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Tests.Twitch.Chat;
 
@@ -78,6 +79,46 @@ public sealed class ChatIngestionServiceTests
     private InMemoryEventBus _eventBus = null!;
     private TestTimeProvider _timeProvider = null!;
     private ChatIngestionService _service = null!;
+
+    [Test]
+    public async Task Reconnect_Invalidates_Origin_And_Rejects_Notification_From_Previous_Subscription()
+    {
+        var messages = new List<RawChatMessageReceived>();
+        using var subscription = _eventBus.Subscribe<RawChatMessageReceived>(messages.Add);
+        using var document = JsonDocument.Parse($$$"""
+            {"event": {
+                "broadcaster_user_login": "renamed",
+                "broadcaster_user_id": "{{{BroadcasterId}}}",
+                "message_id": "msg-1",
+                "chatter_user_id": "viewer",
+                "message": {"text": "hello"}
+            }}
+            """);
+        var oldNotification = new EventSubNotificationArgs("channel.chat.message", "1", "evt-1", _timeProvider.GetUtcNow().UtcDateTime, document.RootElement, "sub-id");
+
+        _eventSubClient.SessionId.Returns("session-1");
+        await _service.StartAsync(NullProgress, CancellationToken.None);
+        _eventSubClient.OnNotification += Raise.Event<EventSubAsyncHandler<EventSubNotificationArgs>>(oldNotification, CancellationToken.None);
+        Assert.That(messages, Has.Count.EqualTo(1));
+        var firstOrigin = messages[0].Message.Origin!;
+        Assert.That(firstOrigin.Channel.ChannelId, Is.EqualTo(BroadcasterId));
+
+        _eventSubClient.OnDisconnected += Raise.Event<EventSubAsyncHandler<EventSubDisconnectedArgs>>(new EventSubDisconnectedArgs("reconnect"), CancellationToken.None);
+        _helix.CreateEventSubSubscriptionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("new-sub");
+        _eventSubClient.SessionId.Returns("session-2");
+        _eventSubClient.OnSessionWelcome += Raise.Event<EventSubAsyncHandler<EventSubSessionWelcomeArgs>>(new EventSubSessionWelcomeArgs("session-2", 30), CancellationToken.None);
+        _eventSubClient.OnNotification += Raise.Event<EventSubAsyncHandler<EventSubNotificationArgs>>(oldNotification, CancellationToken.None);
+        _eventSubClient.OnNotification += Raise.Event<EventSubAsyncHandler<EventSubNotificationArgs>>(oldNotification with { SubscriptionId = "new-sub" }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(firstOrigin.IsCurrent, Is.False);
+            Assert.That(messages, Has.Count.EqualTo(2));
+            Assert.That(messages[1].Message.Origin, Is.Not.SameAs(firstOrigin));
+            Assert.That(messages[1].ChannelKey, Is.EqualTo(firstOrigin.Channel));
+        }
+    }
 
     [Test]
     public async Task Приём_чата_сообщает_о_каждом_подключении_и_разрыве_ровно_один_раз()

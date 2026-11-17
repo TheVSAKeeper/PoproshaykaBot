@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
@@ -29,6 +30,7 @@ public sealed class ChatIngestionService(
     private readonly EventSubSubscriptionRetry _retry = new(helix, eventSubClient, timeProvider, logger);
     private bool _subscribed;
     private long _generation;
+    private ChatOrigin? _origin;
     private IReadOnlyList<string> _subscriptionIds = [];
     private long _joinedAtUtcTicks;
     private long _lastMessageAtUtcTicks;
@@ -78,6 +80,11 @@ public sealed class ChatIngestionService(
         eventSubClient.OnDisconnected -= HandleDisconnectedAsync;
         eventSubClient.OnRevocation -= HandleRevocationAsync;
         _subscribed = false;
+
+        lock (_joinLock)
+        {
+            _origin?.Close();
+        }
 
         logger.LogInformation("ChatIngestionService: отписка от EventSub");
 
@@ -142,10 +149,10 @@ public sealed class ChatIngestionService(
                         "1",
                         condition,
                         sessionId,
-                        async retried => await JoinAsync(generation, retried),
+                        async retried => await JoinAsync(generation, broadcasterId, retried),
                         ct);
 
-                    if (!result.IsSubscribed || !await JoinAsync(generation, result))
+                    if (!result.IsSubscribed || !await JoinAsync(generation, broadcasterId, result))
                     {
                         return;
                     }
@@ -185,14 +192,30 @@ public sealed class ChatIngestionService(
             return;
         }
 
-        Interlocked.Exchange(ref _lastMessageAtUtcTicks, timeProvider.GetUtcNow().UtcTicks);
+        ChatOrigin? origin;
+
+        lock (_joinLock)
+        {
+            origin = _origin;
+            if (origin is null || (args.SubscriptionId is { } subscriptionId
+                && !_subscriptionIds.Contains(subscriptionId, StringComparer.Ordinal)))
+            {
+                return;
+            }
+        }
 
         try
         {
             var botId = await botUserIdProvider.GetAsync(ct);
             var chatMessage = EventSubChatMessageMapper.Map(args.Payload, botId);
+            if (!origin.IsCurrent || !string.Equals(chatMessage.ChannelId, origin.Channel.ChannelId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref _lastMessageAtUtcTicks, timeProvider.GetUtcNow().UtcTicks);
             var timestamp = new DateTimeOffset(args.MessageTimestamp, TimeSpan.Zero);
-            await eventBus.PublishAsync(new RawChatMessageReceived(chatMessage, timestamp), ct);
+            await eventBus.PublishAsync(new RawChatMessageReceived(chatMessage with { Origin = origin }, timestamp), ct);
         }
         catch (Exception ex)
         {
@@ -236,9 +259,9 @@ public sealed class ChatIngestionService(
         await SubscribeAsync(generation, sessionId, ct);
     }
 
-    private async Task<bool> JoinAsync(long generation, EventSubSubscribeResult result)
+    private async Task<bool> JoinAsync(long generation, string broadcasterId, EventSubSubscribeResult result)
     {
-        await MarkJoinedAsync(generation, result.SubscriptionIds, out var current);
+        await MarkJoinedAsync(generation, broadcasterId, result.SubscriptionIds, out var current);
 
         if (current)
         {
@@ -267,7 +290,7 @@ public sealed class ChatIngestionService(
         return false;
     }
 
-    private Task MarkJoinedAsync(long generation, IReadOnlyList<string> subscriptionIds, out bool current)
+    private Task MarkJoinedAsync(long generation, string broadcasterId, IReadOnlyList<string> subscriptionIds, out bool current)
     {
         var now = timeProvider.GetUtcNow();
 
@@ -280,6 +303,7 @@ public sealed class ChatIngestionService(
             }
 
             _subscriptionIds = subscriptionIds;
+            _origin ??= new(new(StreamingPlatform.Twitch, broadcasterId), broadcasterId);
 
             if (Interlocked.Exchange(ref _joinedAtUtcTicks, now.UtcTicks) != 0)
             {
@@ -304,6 +328,8 @@ public sealed class ChatIngestionService(
             generation = ++_generation;
             subscriptionIds = _subscriptionIds;
             _subscriptionIds = [];
+            _origin?.Close();
+            _origin = null;
             previous = Interlocked.Exchange(ref _joinedAtUtcTicks, 0);
         }
 

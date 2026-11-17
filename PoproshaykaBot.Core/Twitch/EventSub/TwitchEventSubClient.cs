@@ -430,8 +430,15 @@ public sealed class TwitchEventSubClient(ILogger<TwitchEventSubClient> logger) :
     {
         var subscriptionType = message.Metadata.SubscriptionType ?? string.Empty;
         var subscriptionVersion = message.Metadata.SubscriptionVersion ?? "1";
+        var subscriptionId = message.Payload.ValueKind == JsonValueKind.Object
+            && message.Payload.TryGetProperty("subscription", out var subscription)
+            && subscription.ValueKind == JsonValueKind.Object
+            && subscription.TryGetProperty("id", out var id)
+            && id.ValueKind == JsonValueKind.String
+                ? id.GetString()
+                : null;
         await SafeRaiseAsync(OnNotification,
-            new(subscriptionType, subscriptionVersion, message.Metadata.MessageId, message.Metadata.MessageTimestamp, message.Payload),
+            new(subscriptionType, subscriptionVersion, message.Metadata.MessageId, message.Metadata.MessageTimestamp, message.Payload, subscriptionId),
             cancellationToken);
     }
 

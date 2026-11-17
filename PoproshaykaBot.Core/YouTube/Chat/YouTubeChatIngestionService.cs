@@ -83,6 +83,9 @@ internal sealed class YouTubeChatIngestionService(
     private YouTubeChatIssue _issue;
     private string? _channel;
     private string? _liveChatId;
+    private ChatOrigin? _origin;
+    private YouTubeBroadcastSummary? _originBroadcast;
+    private string? _cursorChannelId;
     private YouTubeBroadcastSummary? _activeStreamBroadcast;
     private DateTimeOffset? _connectedSince;
     private DateTimeOffset? _lastBatchAt;
@@ -190,6 +193,7 @@ internal sealed class YouTubeChatIngestionService(
             unsubscribeSettings = _settingsSubscribed;
             _settingsSubscribed = false;
             _isRunning = false;
+            CloseOrigin();
             _state = ConnectionState.Disconnected;
             _transport = YouTubeChatTransport.None;
             _issue = YouTubeChatIssue.None;
@@ -262,6 +266,7 @@ internal sealed class YouTubeChatIngestionService(
 
             _disposed = true;
             _isRunning = false;
+            CloseOrigin();
             runCts = _runCts;
             _runCts = null;
             waitCts = _waitCts;
@@ -345,6 +350,7 @@ internal sealed class YouTubeChatIngestionService(
         var broadcast = streamMonitor.CurrentBroadcast;
 
         if (broadcast is null
+            || string.IsNullOrWhiteSpace(broadcast.ChannelId)
             || (string.IsNullOrWhiteSpace(broadcast.LiveChatId) && string.IsNullOrWhiteSpace(broadcast.VideoId)))
         {
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
@@ -377,9 +383,7 @@ internal sealed class YouTubeChatIngestionService(
             botChannelId = accountsStore.Load(PlatformAuthRole.Bot).ChannelId;
         }
 
-        var broadcasterChannelId = string.IsNullOrWhiteSpace(session?.TargetChannelId)
-            ? broadcast.ChannelId
-            : session.TargetChannelId;
+        var broadcasterChannelId = broadcast.ChannelId;
 
         var isSharedAccount = !string.IsNullOrWhiteSpace(botChannelId)
             && !string.IsNullOrWhiteSpace(broadcasterChannelId)
@@ -400,11 +404,13 @@ internal sealed class YouTubeChatIngestionService(
         lock (_sync)
         {
             switchedChat = _cursor is not null
-                && !string.Equals(_cursor.LiveChatId, broadcastKey, StringComparison.Ordinal);
+                && (!string.Equals(_cursor.LiveChatId, broadcastKey, StringComparison.Ordinal)
+                    || !string.Equals(_cursorChannelId, broadcasterChannelId, StringComparison.Ordinal));
 
             if (_cursor is null || switchedChat)
             {
                 _cursor = new(broadcastKey, timeProvider.GetUtcNow());
+                _cursorChannelId = broadcasterChannelId;
                 _connectedSince = null;
                 _consecutiveRapidCloses = 0;
             }
@@ -663,10 +669,11 @@ internal sealed class YouTubeChatIngestionService(
             : chatReader.ReadBatchesAsync(target, candidateCursorToken, maxBatches, streamCt);
 
         var transitionCommitted = false;
+        var origin = GetOrigin(broadcast, cursor.LiveChatId);
 
         await foreach (var batch in batches.ConfigureAwait(false))
         {
-            if (!IsBroadcastCurrent(broadcast))
+            if (!origin.IsCurrent || !IsBroadcastCurrent(broadcast))
             {
                 await ResetInactiveStateAsync(loopCt).ConfigureAwait(false);
                 return new(TimeSpan.Zero, RefreshSnapshot: false);
@@ -694,7 +701,7 @@ internal sealed class YouTubeChatIngestionService(
                 _reconnectAttempt = 0;
             }
 
-            var batchOutcome = await ProcessBatchAsync(broadcast, cursor, batch, channelLabel, loopCt).ConfigureAwait(false);
+            var batchOutcome = await ProcessBatchAsync(broadcast, cursor, batch, channelLabel, origin, loopCt).ConfigureAwait(false);
 
             if (batchOutcome.AbortedByBroadcastChange)
             {
@@ -864,9 +871,10 @@ internal sealed class YouTubeChatIngestionService(
         YouTubeChatSessionCursor cursor,
         YouTubeLiveChatBatch batch,
         string channelLabel,
+        ChatOrigin origin,
         CancellationToken ct)
     {
-        if (!IsBroadcastCurrent(broadcast))
+        if (!origin.IsCurrent || !IsBroadcastCurrent(broadcast))
         {
             return new(SawChatEnded: false, AbortedByBroadcastChange: true);
         }
@@ -881,9 +889,7 @@ internal sealed class YouTubeChatIngestionService(
 
         var session = sessionContext.Current;
         var botChannelId = session?.BotChannelId;
-        var broadcasterChannelId = string.IsNullOrWhiteSpace(session?.TargetChannelId)
-            ? broadcast.ChannelId
-            : session.TargetChannelId;
+        var broadcasterChannelId = origin.Channel.ChannelId;
 
         if (string.IsNullOrWhiteSpace(botChannelId))
         {
@@ -891,10 +897,7 @@ internal sealed class YouTubeChatIngestionService(
         }
 
         var sawChatEnded = false;
-        var historyScope = ChatHistoryScope.ForYouTube(
-            string.IsNullOrWhiteSpace(broadcasterChannelId) ? channelLabel : broadcasterChannelId,
-            cursor.LiveChatId,
-            channelLabel);
+        var historyScope = ChatHistoryScope.ForYouTube(broadcasterChannelId, cursor.LiveChatId, channelLabel);
         List<(ChatMessage Message, DateTimeOffset Timestamp)> historicalMessages = [];
         List<ChatModerationAction> historicalModerations = [];
 
@@ -938,7 +941,7 @@ internal sealed class YouTubeChatIngestionService(
             cursor.MarkSeen(item.Id);
         }
 
-        if (IsBroadcastCurrent(broadcast))
+        if (origin.IsCurrent && IsBroadcastCurrent(broadcast))
         {
             if (historicalMessages.Count > 0)
             {
@@ -957,7 +960,7 @@ internal sealed class YouTubeChatIngestionService(
 
         foreach (var item in batchResult.LiveItems)
         {
-            if (!IsBroadcastCurrent(broadcast))
+            if (!origin.IsCurrent || !IsBroadcastCurrent(broadcast))
             {
                 DropHeldCandidatesForChat(cursor.LiveChatId);
                 return new(sawChatEnded, AbortedByBroadcastChange: true);
@@ -988,6 +991,7 @@ internal sealed class YouTubeChatIngestionService(
                         botChannelId,
                         broadcasterChannelId,
                         replacement.PublishedAtUtc ?? messageTimestampUtc,
+                        origin,
                         ct,
                         isReplacement: true).ConfigureAwait(false);
                 }
@@ -1004,6 +1008,7 @@ internal sealed class YouTubeChatIngestionService(
                     broadcasterChannelId,
                     messageTimestampUtc,
                     nowUtc,
+                    origin,
                     ct,
                     out var overflowCandidate))
             {
@@ -1016,6 +1021,7 @@ internal sealed class YouTubeChatIngestionService(
                         overflowCandidate.BotChannelId,
                         overflowCandidate.BroadcasterChannelId,
                         overflowCandidate.MessageTimestampUtc,
+                        overflowCandidate.Origin,
                         ct).ConfigureAwait(false);
                 }
 
@@ -1030,6 +1036,7 @@ internal sealed class YouTubeChatIngestionService(
                 botChannelId,
                 broadcasterChannelId,
                 messageTimestampUtc,
+                origin,
                 ct).ConfigureAwait(false);
 
             cursor.MarkSeen(item.Id);
@@ -1136,6 +1143,7 @@ internal sealed class YouTubeChatIngestionService(
 
         lock (_sync)
         {
+            CloseOrigin();
             if (!_ingestionPublished)
             {
                 inFlightStop = _pendingIngestionStopTask;
@@ -1228,6 +1236,11 @@ internal sealed class YouTubeChatIngestionService(
 
         lock (_sync)
         {
+            if (!BroadcastMatches(_originBroadcast, @event.ActiveBroadcast))
+            {
+                CloseOrigin();
+            }
+
             var activeChanged = !BroadcastMatches(_activeStreamBroadcast, @event.ActiveBroadcast);
 
             if (_activeStreamCts is not null && activeChanged)
@@ -1313,6 +1326,28 @@ internal sealed class YouTubeChatIngestionService(
     private bool IsBroadcastCurrent(YouTubeBroadcastSummary broadcast)
     {
         return BroadcastMatches(streamMonitor.CurrentBroadcast, broadcast);
+    }
+
+    private ChatOrigin GetOrigin(YouTubeBroadcastSummary broadcast, string chatId)
+    {
+        lock (_sync)
+        {
+            if (_origin is null || !BroadcastMatches(_originBroadcast, broadcast))
+            {
+                CloseOrigin();
+                _origin = new(new(StreamingPlatform.YouTube, broadcast.ChannelId), chatId);
+                _originBroadcast = broadcast;
+            }
+
+            return _origin;
+        }
+    }
+
+    private void CloseOrigin()
+    {
+        _origin?.Close();
+        _origin = null;
+        _originBroadcast = null;
     }
 
     private bool IsBroadcastCurrent(string liveChatId)
@@ -1429,6 +1464,7 @@ internal sealed class YouTubeChatIngestionService(
         string? broadcasterChannelId,
         DateTimeOffset messageTimestampUtc,
         DateTimeOffset nowUtc,
+        ChatOrigin origin,
         CancellationToken ct,
         out HeldEchoCandidate? overflowCandidate)
     {
@@ -1444,7 +1480,7 @@ internal sealed class YouTubeChatIngestionService(
         var isSharedAccount = string.Equals(botChannelId, broadcasterChannelId, StringComparison.Ordinal)
             || item.Author.IsChatOwner;
 
-        if (!isSharedAccount || _sentMessageTracker.Contains(item.Id))
+        if (!isSharedAccount || _sentMessageTracker.Contains(item.Id, liveChatId))
         {
             return false;
         }
@@ -1473,7 +1509,8 @@ internal sealed class YouTubeChatIngestionService(
                 broadcasterChannelId,
                 watermarkSeq,
                 messageTimestampUtc,
-                nowUtc + MaxEchoHoldDuration));
+                nowUtc + MaxEchoHoldDuration,
+                origin));
 
             EnsureHoldDrainRunningLocked(ct);
             return true;
@@ -1531,7 +1568,7 @@ internal sealed class YouTubeChatIngestionService(
                     continue;
                 }
 
-                if (head.WatermarkSeq > 0 && !_sentMessageTracker.Contains(head.Item.Id))
+                if (head.WatermarkSeq > 0 && !_sentMessageTracker.Contains(head.Item.Id, head.LiveChatId))
                 {
                     var remaining = head.ExpiresAtUtc - timeProvider.GetUtcNow();
 
@@ -1566,6 +1603,7 @@ internal sealed class YouTubeChatIngestionService(
                         released.BotChannelId,
                         released.BroadcasterChannelId,
                         released.MessageTimestampUtc,
+                        released.Origin,
                         holdCt).ConfigureAwait(false);
                 }
             }
@@ -1657,14 +1695,20 @@ internal sealed class YouTubeChatIngestionService(
         string? botChannelId,
         string? broadcasterChannelId,
         DateTimeOffset timestamp,
+        ChatOrigin origin,
         CancellationToken ct,
         bool isReplacement = false)
     {
+        if (!origin.IsCurrent)
+        {
+            return;
+        }
+
         var mapped = mapper.Map(item, channelLabel, botChannelId, broadcasterChannelId, liveChatId);
 
         if (mapped.Kind == YouTubeChatMapKind.ChatMessage && mapped.Message is not null)
         {
-            await eventBus.PublishAsync(new RawChatMessageReceived(mapped.Message, timestamp, isReplacement), ct).ConfigureAwait(false);
+            await eventBus.PublishAsync(new RawChatMessageReceived(mapped.Message with { Origin = origin }, timestamp, isReplacement), ct).ConfigureAwait(false);
 
             lock (_sync)
             {
@@ -1715,7 +1759,8 @@ internal sealed class YouTubeChatIngestionService(
         string? BroadcasterChannelId,
         long WatermarkSeq,
         DateTimeOffset MessageTimestampUtc,
-        DateTimeOffset ExpiresAtUtc);
+        DateTimeOffset ExpiresAtUtc,
+        ChatOrigin Origin);
 
     private readonly record struct BatchProcessOutcome(bool SawChatEnded, bool AbortedByBroadcastChange);
 

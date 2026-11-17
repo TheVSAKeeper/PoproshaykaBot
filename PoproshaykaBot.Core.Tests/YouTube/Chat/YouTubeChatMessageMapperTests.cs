@@ -108,9 +108,9 @@ public class YouTubeChatMessageMapperTests
     {
         private readonly HashSet<string> _ids = new(StringComparer.Ordinal);
 
-        public bool Contains(string messageId) => _ids.Contains(messageId);
+        public bool Contains(string messageId, string? liveChatId = null) => _ids.Contains(messageId);
 
-        public void TrackSent(string messageId) => _ids.Add(messageId);
+        public void TrackSent(string messageId, string? liveChatId = null) => _ids.Add(messageId);
 
         public YouTubeInFlightSendScope BeginInFlightSend(string liveChatId) => new();
 
