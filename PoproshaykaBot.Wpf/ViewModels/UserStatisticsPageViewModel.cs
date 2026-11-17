@@ -114,6 +114,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     [NotifyCanExecuteChangedFor(nameof(ApplyAdjustmentCommand))]
     private bool _isBusy;
 
+    private bool _suppressFilterRebuild;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SummaryLine))]
     private string _totalUsers = "0";
@@ -340,8 +342,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
         if (_rows.All(row => row.Key != key))
         {
-            SelectedPlatformFilter = PlatformFilterOption.All;
-            FilterText = string.Empty;
+            ResetFilters();
         }
 
         SelectedRow = _rows.FirstOrDefault(row => row.Key == key);
@@ -391,12 +392,18 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
 
     partial void OnFilterTextChanged(string value)
     {
-        RebuildView();
+        if (!_suppressFilterRebuild)
+        {
+            RebuildView();
+        }
     }
 
     partial void OnSelectedPlatformFilterChanged(PlatformFilterOption value)
     {
-        ApplyPlatformSliceAndRebuild();
+        if (!_suppressFilterRebuild)
+        {
+            ApplyPlatformSliceAndRebuild();
+        }
     }
 
     private List<UserStatisticsRowViewModel> GetPlatformSlice()
@@ -458,7 +465,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
             visible.Add(row);
         }
 
-        _rows.SyncTo(UserStatisticsRanking.Arrange(visible, SortKey, SortDescending).ToList());
+        _rows.SyncTo(UserStatisticsRanking.Arrange(visible, SortKey, SortDescending));
 
         SelectedRow = selectedKey is not null
             ? _rows.FirstOrDefault(row => row.Key == selectedKey)
@@ -505,10 +512,37 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     }
 
     [RelayCommand]
-    private void ClearFilter()
+    private void ClearFilter() => ResetFilters();
+
+    private void ResetFilters()
     {
-        FilterText = string.Empty;
-        SelectedPlatformFilter = PlatformFilterOption.All;
+        var platformChanged = SelectedPlatformFilter != PlatformFilterOption.All;
+        var textChanged = FilterText.Length > 0;
+
+        if (!platformChanged && !textChanged)
+        {
+            return;
+        }
+
+        _suppressFilterRebuild = true;
+        try
+        {
+            SelectedPlatformFilter = PlatformFilterOption.All;
+            FilterText = string.Empty;
+        }
+        finally
+        {
+            _suppressFilterRebuild = false;
+        }
+
+        if (platformChanged)
+        {
+            ApplyPlatformSliceAndRebuild();
+        }
+        else
+        {
+            RebuildView();
+        }
     }
 
     [RelayCommand]

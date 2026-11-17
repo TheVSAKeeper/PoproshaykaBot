@@ -16,6 +16,7 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
     private readonly List<(string Key, FrameworkElement Element)> _blocks = [];
 
     private SettingsSectionList? _sections;
+    private string? _blocksSectionKey;
 
     public SettingsPageView()
     {
@@ -29,6 +30,11 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
     private static void Collect(DependencyObject root, List<(string Key, FrameworkElement Element)> blocks)
     {
+        if (root is UIElement { Visibility: not Visibility.Visible })
+        {
+            return;
+        }
+
         if (root is FrameworkElement element && SettingsBlock.GetKey(element) is { Length: > 0 } key)
         {
             blocks.Add((key, element));
@@ -50,13 +56,13 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         DetachSections();
-        _blocks.Clear();
+        ClearBlocksCache();
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         DetachSections();
-        _blocks.Clear();
+        ClearBlocksCache();
 
         if (IsLoaded)
         {
@@ -68,8 +74,14 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
     {
         if (SectionsHost.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
         {
-            _blocks.Clear();
+            ClearBlocksCache();
         }
+    }
+
+    private void ClearBlocksCache()
+    {
+        _blocks.Clear();
+        _blocksSectionKey = null;
     }
 
     private void AttachSections()
@@ -105,7 +117,7 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
     {
         if (string.Equals(e.PropertyName, nameof(SettingsSectionList.Selected), StringComparison.Ordinal))
         {
-            _blocks.Clear();
+            ClearBlocksCache();
             SectionScroll.ScrollToVerticalOffset(0);
         }
     }
@@ -149,7 +161,14 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
     private IReadOnlyList<(string Key, FrameworkElement Element)> Blocks()
     {
-        if (_blocks.Count == 0)
+        var selectedKey = (DataContext as SettingsPageViewModel)?.Sections.Selected?.Key;
+        if (!string.Equals(_blocksSectionKey, selectedKey, StringComparison.Ordinal))
+        {
+            _blocks.Clear();
+            _blocksSectionKey = selectedKey;
+        }
+
+        if (_blocks.Count == 0 && selectedKey is not null)
         {
             Collect(SectionScroll, _blocks);
         }

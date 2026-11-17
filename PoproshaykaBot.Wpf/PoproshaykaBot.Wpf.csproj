@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <AssemblyMetadata Include="GitHubRepository" Value="$(GitHubRepository)" />
+    <InternalsVisibleTo Include="PoproshaykaBot.Wpf.Tests" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(PortableMode)' == 'true'">

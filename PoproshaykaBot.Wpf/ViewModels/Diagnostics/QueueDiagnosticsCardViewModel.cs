@@ -11,6 +11,29 @@ public sealed class QueueDiagnosticsCardViewModel(DiagnosticsSnapshotPublisher p
 
     private const int ErrorTextMax = 160;
 
+    private static readonly DiagnosticsCardContent EmptyQueueContent = new(
+        DiagnosticsCardState.Unknown,
+        [
+            new("Очередь чата", "нет данных")
+            {
+                Hint = "Ни очередь отправки, ни таймеры не ответили на опрос",
+            },
+        ]);
+
+    private static readonly DiagnosticsCardRow[] NoChatQueueRows =
+    [
+        new("Очередь чата", "нет данных"),
+    ];
+
+    private readonly Dictionary<ScheduledJob, CachedJobRows> _cachedJobs = [];
+    private readonly List<ScheduledJob> _cachedJobOrder = [];
+    private bool _hasCachedQueue;
+    private ChatQueueStatus? _cachedQueue;
+    private (int Kind, long Value) _cachedQueueSentBucket;
+    private DiagnosticsCardState _cachedQueueState;
+    private DiagnosticsCardRow[]? _cachedQueueRows;
+    private DiagnosticsCardContent? _cachedContent;
+
     public override string Title => "Очередь и таймеры";
 
     protected override DiagnosticsCardContent Build(DiagnosticsSnapshot snapshot)
@@ -19,105 +42,222 @@ public sealed class QueueDiagnosticsCardViewModel(DiagnosticsSnapshotPublisher p
 
         if (snapshot.ChatQueue is null && snapshot.Jobs.Count == 0)
         {
-            return new(DiagnosticsCardState.Unknown,
-            [
-                new("Очередь чата", "нет данных")
-                {
-                    Hint = "Ни очередь отправки, ни таймеры не ответили на опрос",
-                },
-            ]);
+            _hasCachedQueue = false;
+            _cachedQueue = null;
+            _cachedQueueRows = null;
+            _cachedJobs.Clear();
+            _cachedJobOrder.Clear();
+            _cachedContent = null;
+
+            return EmptyQueueContent;
         }
 
-        var rows = new List<DiagnosticsCardRow>();
-        var state = AppendQueue(rows, snapshot);
+        var (state, queueRows, queueChanged) = ResolveQueue(snapshot.ChatQueue, snapshot.CapturedAt);
+        var jobsChanged = snapshot.Jobs.Count != _cachedJobOrder.Count;
+        var hasError = false;
 
-        foreach (var job in snapshot.Jobs)
+        for (var index = 0; index < snapshot.Jobs.Count; index++)
         {
-            AppendJob(rows, job, snapshot.CapturedAt);
+            var job = snapshot.Jobs[index];
+            if (ResolveJob(job, snapshot.CapturedAt)
+                || index >= _cachedJobOrder.Count
+                || _cachedJobOrder[index] != job.Job)
+            {
+                jobsChanged = true;
+            }
 
             if (job.LastError is not null)
             {
-                state = DiagnosticsCardState.Error;
+                hasError = true;
             }
         }
 
-        return new(state, rows);
-    }
-
-    private static DiagnosticsCardState AppendQueue(List<DiagnosticsCardRow> rows, DiagnosticsSnapshot snapshot)
-    {
-        if (snapshot.ChatQueue is not { } queue)
+        if (hasError)
         {
-            rows.Add(new("Очередь чата", "нет данных"));
-
-            return DiagnosticsCardState.Unknown;
+            state = DiagnosticsCardState.Error;
         }
 
-        var share = DiagnosticsFormat.Share(queue.Length, queue.Capacity);
-
-        rows.Add(new("Очередь чата", $"{DiagnosticsFormat.Number(queue.Length)} из {DiagnosticsFormat.Number(queue.Capacity)}")
+        if (!queueChanged && !jobsChanged && _cachedContent is { } cached && cached.State == state)
         {
-            Hint = share is { } value
-                ? $"{DiagnosticsFormat.Percent(value)} ёмкости; на полной очереди отправка ждёт места"
-                : "Ёмкость очереди неизвестна",
-            Fill = share,
-        });
+            return cached;
+        }
 
-        rows.Add(new("Отправлено", DiagnosticsFormat.Number(queue.SentCount)));
+        var rows = new List<DiagnosticsCardRow>(queueRows.Length + (snapshot.Jobs.Count * 2));
+        rows.AddRange(queueRows);
+        _cachedJobOrder.Clear();
 
-        rows.Add(new("Сбоев отправки", DiagnosticsFormat.Number(queue.FailedCount))
+        foreach (var job in snapshot.Jobs)
         {
-            Hint = "Сообщения, которые Twitch не принял; подробности – в журнале",
-        });
+            _cachedJobOrder.Add(job.Job);
+            var entry = _cachedJobs[job.Job];
+            rows.Add(entry.MainRow);
+            if (entry.ErrorRow is { } errorRow)
+            {
+                rows.Add(errorRow);
+            }
+        }
 
-        rows.Add(new("Последняя отправка", DiagnosticsFormat.Ago(queue.LastSentAt, snapshot.CapturedAt))
+        if (_cachedJobs.Count > _cachedJobOrder.Count)
         {
-            Hint = DiagnosticsFormat.Moment(queue.LastSentAt),
-        });
+            foreach (var key in _cachedJobs.Keys.Where(key => !_cachedJobOrder.Contains(key)).ToArray())
+            {
+                _cachedJobs.Remove(key);
+            }
+        }
 
-        return share >= WarningShare || queue.FailedCount > 0
-            ? DiagnosticsCardState.Warning
-            : DiagnosticsCardState.Ok;
+        var content = new DiagnosticsCardContent(state, rows);
+        _cachedContent = content;
+        return content;
     }
 
-    private static void AppendJob(List<DiagnosticsCardRow> rows, ScheduledJobStatus job, DateTimeOffset now)
+    private (DiagnosticsCardState State, DiagnosticsCardRow[] Rows, bool Changed) ResolveQueue(ChatQueueStatus? queueStatus, DateTimeOffset now)
     {
-        var name = Describe(job.Job);
+        var sentBucket = queueStatus is not null
+            ? DiagnosticsFormat.GetAgoBucket(queueStatus.LastSentAt, now)
+            : (0, 0L);
 
-        rows.Add(new(name, DiagnosticsFormat.Until(job.NextRunAt, now))
+        if (_hasCachedQueue
+            && _cachedQueueRows is not null
+            && Equals(_cachedQueue, queueStatus)
+            && _cachedQueueSentBucket == sentBucket)
         {
-            Hint = Schedule(job, now),
-        });
+            return (_cachedQueueState, _cachedQueueRows, false);
+        }
 
+        DiagnosticsCardState state;
+        DiagnosticsCardRow[] rows;
+
+        if (queueStatus is not { } queue)
+        {
+            state = DiagnosticsCardState.Unknown;
+            rows = NoChatQueueRows;
+        }
+        else
+        {
+            var share = DiagnosticsFormat.Share(queue.Length, queue.Capacity);
+            rows =
+            [
+                new("Очередь чата", $"{DiagnosticsFormat.Number(queue.Length)} из {DiagnosticsFormat.Number(queue.Capacity)}")
+                {
+                    Hint = share is { } value
+                        ? $"{DiagnosticsFormat.Percent(value)} ёмкости; на полной очереди отправка ждёт места"
+                        : "Ёмкость очереди неизвестна",
+                    Fill = share,
+                },
+                new("Отправлено", DiagnosticsFormat.Number(queue.SentCount)),
+                new("Сбоев отправки", DiagnosticsFormat.Number(queue.FailedCount))
+                {
+                    Hint = "Сообщения, которые Twitch не принял; подробности – в журнале",
+                },
+                new("Последняя отправка", DiagnosticsFormat.Ago(queue.LastSentAt, now))
+                {
+                    Hint = DiagnosticsFormat.Moment(queue.LastSentAt),
+                },
+            ];
+
+            state = share >= WarningShare || queue.FailedCount > 0
+                ? DiagnosticsCardState.Warning
+                : DiagnosticsCardState.Ok;
+        }
+
+        _hasCachedQueue = true;
+        _cachedQueue = queueStatus;
+        _cachedQueueSentBucket = sentBucket;
+        _cachedQueueState = state;
+        _cachedQueueRows = rows;
+
+        return (state, rows, true);
+    }
+
+    private bool ResolveJob(ScheduledJobStatus job, DateTimeOffset now)
+    {
+        var untilBucket = DiagnosticsFormat.GetUntilBucket(job.NextRunAt, now);
+        var agoBucket = DiagnosticsFormat.GetAgoBucket(job.LastRunAt, now);
+
+        if (_cachedJobs.TryGetValue(job.Job, out var cached)
+            && cached.NextRunAt == job.NextRunAt
+            && cached.Interval == job.Interval
+            && cached.LastRunAt == job.LastRunAt
+            && cached.AgoBucket == agoBucket
+            && cached.UntilBucket == untilBucket
+            && string.Equals(cached.LastError, job.LastError, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var scheduleHint = cached is not null
+            && cached.NextRunAt == job.NextRunAt
+            && cached.Interval == job.Interval
+            && cached.LastRunAt == job.LastRunAt
+            && cached.AgoBucket == agoBucket
+            ? cached.ScheduleHint
+            : Schedule(job, now);
+
+        var name = Describe(job.Job);
+        var mainRow = cached is not null
+            && cached.NextRunAt == job.NextRunAt
+            && cached.UntilBucket == untilBucket
+            && ReferenceEquals(cached.ScheduleHint, scheduleHint)
+            ? cached.MainRow
+            : new DiagnosticsCardRow(name, DiagnosticsFormat.Until(job.NextRunAt, now))
+            {
+                Hint = scheduleHint,
+            };
+
+        DiagnosticsCardRow? errorRow;
         if (job.LastError is not { } error)
         {
-            return;
+            errorRow = null;
+        }
+        else if (cached?.ErrorRow is not null && string.Equals(cached.LastError, error, StringComparison.Ordinal))
+        {
+            errorRow = cached.ErrorRow;
+        }
+        else
+        {
+            errorRow = new($"{name}: ошибка", Shorten(error))
+            {
+                Hint = error,
+            };
         }
 
-        rows.Add(new($"{name}: ошибка", Shorten(error))
-        {
-            Hint = error,
-        });
+        _cachedJobs[job.Job] = new(
+            job.NextRunAt,
+            job.Interval,
+            job.LastRunAt,
+            job.LastError,
+            untilBucket,
+            agoBucket,
+            scheduleHint,
+            mainRow,
+            errorRow);
+
+        return true;
     }
 
     private static string Schedule(ScheduledJobStatus job, DateTimeOffset now)
     {
-        var parts = new List<string>();
+        var lastRun = $"последний запуск {DiagnosticsFormat.Ago(job.LastRunAt, now)}";
 
-        if (job.NextRunAt is not null)
+        return (job.NextRunAt, job.Interval) switch
         {
-            parts.Add($"в {DiagnosticsFormat.Moment(job.NextRunAt)}");
-        }
-
-        if (job.Interval is { } interval)
-        {
-            parts.Add($"интервал {DiagnosticsFormat.Duration(interval)}");
-        }
-
-        parts.Add($"последний запуск {DiagnosticsFormat.Ago(job.LastRunAt, now)}");
-
-        return string.Join(", ", parts);
+            (not null, { } interval) => $"в {DiagnosticsFormat.Moment(job.NextRunAt)}, интервал {DiagnosticsFormat.Duration(interval)}, {lastRun}",
+            (not null, null) => $"в {DiagnosticsFormat.Moment(job.NextRunAt)}, {lastRun}",
+            (null, { } interval) => $"интервал {DiagnosticsFormat.Duration(interval)}, {lastRun}",
+            _ => lastRun,
+        };
     }
+
+    private sealed record CachedJobRows(
+        DateTimeOffset? NextRunAt,
+        TimeSpan? Interval,
+        DateTimeOffset? LastRunAt,
+        string? LastError,
+        (int Kind, long Value) UntilBucket,
+        (int Kind, long Value) AgoBucket,
+        string ScheduleHint,
+        DiagnosticsCardRow MainRow,
+        DiagnosticsCardRow? ErrorRow);
 
     private static string Shorten(string error)
     {

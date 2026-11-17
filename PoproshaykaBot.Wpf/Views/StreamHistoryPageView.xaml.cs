@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 
@@ -173,6 +174,61 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         Grid.SetColumnSpan(element, columnSpan);
     }
 
+    private static void DetachSessionList(ListBox list)
+    {
+        if (BindingOperations.GetBindingBase(list, Selector.SelectedItemProperty) is not null)
+        {
+            BindingOperations.ClearBinding(list, Selector.SelectedItemProperty);
+        }
+
+        if (BindingOperations.GetBindingBase(list, ItemsControl.ItemsSourceProperty) is not null
+            || list.ItemsSource is not null)
+        {
+            BindingOperations.ClearBinding(list, ItemsControl.ItemsSourceProperty);
+            list.ItemsSource = null;
+        }
+    }
+
+    private static void AttachSessionList(ListBox list)
+    {
+        if (BindingOperations.GetBindingBase(list, ItemsControl.ItemsSourceProperty) is null)
+        {
+            list.SetBinding(ItemsControl.ItemsSourceProperty, new Binding(nameof(StreamHistoryPageViewModel.SortedSessions))
+            {
+                Mode = BindingMode.OneWay,
+            });
+        }
+
+        if (BindingOperations.GetBindingBase(list, Selector.SelectedItemProperty) is null)
+        {
+            list.SetBinding(Selector.SelectedItemProperty, new Binding(nameof(StreamHistoryPageViewModel.SelectedRow))
+            {
+                Mode = BindingMode.TwoWay,
+            });
+        }
+    }
+
+    private void SyncSessionLists(StreamHistoryPageViewModel? viewModel)
+    {
+        if (viewModel is null)
+        {
+            DetachSessionList(SessionCards);
+            DetachSessionList(SessionsList);
+            return;
+        }
+
+        if (viewModel.IsCardsView)
+        {
+            DetachSessionList(SessionsList);
+            AttachSessionList(SessionCards);
+        }
+        else
+        {
+            DetachSessionList(SessionCards);
+            AttachSessionList(SessionsList);
+        }
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         FontScaleManager.Changed -= OnFontScaleChanged;
@@ -185,6 +241,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            SyncSessionLists(_viewModel);
 
             ScrollToSelection(_viewModel);
         }
@@ -735,6 +792,7 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         }
 
         _viewModel = e.NewValue as StreamHistoryPageViewModel;
+        SyncSessionLists(_viewModel);
 
         if (_viewModel is not null)
         {
@@ -751,6 +809,11 @@ public partial class StreamHistoryPageView : UserControl, IView<StreamHistoryPag
         if (sender is not StreamHistoryPageViewModel viewModel)
         {
             return;
+        }
+
+        if (e.PropertyName == nameof(StreamHistoryPageViewModel.IsCardsView))
+        {
+            SyncSessionLists(viewModel);
         }
 
         if (e.PropertyName == nameof(StreamHistoryPageViewModel.IsCardsView)
