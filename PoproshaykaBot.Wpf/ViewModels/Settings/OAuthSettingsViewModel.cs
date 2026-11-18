@@ -71,7 +71,7 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
     public PlatformOAuthAccountViewModel Broadcaster { get; }
 
     public string ChannelHintText => string.IsNullOrWhiteSpace(Channel)
-        ? "Канал не задан – заполните его в разделе «Основные», блок «Канал и аккаунт», иначе авторизация стримера не пройдёт."
+        ? "Подключите свой канал или добавьте его в карточке «Каналы»."
         : $"Канал: {Channel}";
 
     public StatusSeverity ChannelHintSeverity => string.IsNullOrWhiteSpace(Channel)
@@ -80,13 +80,18 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
 
     public void Load(AppSettings settings, TwitchAccountSettings botDraft, TwitchAccountSettings broadcasterDraft)
     {
+        LoadApplication(settings);
+        Bot.Load(botDraft);
+        Broadcaster.Load(broadcasterDraft);
+    }
+
+    public void LoadApplication(AppSettings settings)
+    {
         ClientId = settings.Twitch.ClientId;
         ClientSecret = settings.Twitch.ClientSecret;
         RedirectUri = settings.Twitch.RedirectUri;
         Channel = settings.Twitch.Channel;
 
-        Bot.Load(botDraft);
-        Broadcaster.Load(broadcasterDraft);
     }
 
     public void SaveTo(AppSettings settings, TwitchAccountSettings botTarget, TwitchAccountSettings broadcasterTarget)
@@ -95,12 +100,16 @@ public sealed partial class OAuthSettingsViewModel : ObservableValidator, IDispo
         ArgumentNullException.ThrowIfNull(botTarget);
         ArgumentNullException.ThrowIfNull(broadcasterTarget);
 
+        SaveApplication(settings);
+        Bot.SaveTo(botTarget);
+        Broadcaster.SaveTo(broadcasterTarget);
+    }
+
+    public void SaveApplication(AppSettings settings)
+    {
         settings.Twitch.ClientId = ClientId.Trim();
         settings.Twitch.ClientSecret = ClientSecret.Trim();
         settings.Twitch.RedirectUri = RedirectUri.Trim();
-
-        Bot.SaveTo(botTarget);
-        Broadcaster.SaveTo(broadcasterTarget);
     }
 
     public void RefreshChannel(string? channel)

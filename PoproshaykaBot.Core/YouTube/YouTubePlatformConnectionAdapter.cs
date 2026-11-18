@@ -6,6 +6,7 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.YouTube.Auth;
 
 namespace PoproshaykaBot.Core.YouTube;
 
@@ -31,7 +32,7 @@ internal sealed class YouTubePlatformConnectionAdapter(
     {
         progress.Report("Проверка токена бота YouTube...");
 
-        var activeEntry = ResolveActiveCatalogEntry();
+        var activeEntry = channelCatalogStore?.GetActiveChannel(StreamingPlatform.YouTube);
         var botContextId = AuthContextIds.Normalize(activeEntry?.BotContextId);
         var broadcasterContextId = AuthContextIds.Normalize(activeEntry?.BroadcasterContextId);
 
@@ -49,12 +50,7 @@ internal sealed class YouTubePlatformConnectionAdapter(
         var settings = settingsStore.Load();
         var broadcaster = accountsStore.Load(PlatformAuthRole.Broadcaster, broadcasterContextId);
         var bot = accountsStore.Load(PlatformAuthRole.Bot, botContextId);
-        if (!string.IsNullOrWhiteSpace(activeEntry?.BotVerifiedSubjectId)
-            && !string.IsNullOrWhiteSpace(bot.ChannelId)
-            && !string.Equals(bot.ChannelId, activeEntry.BotVerifiedSubjectId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"Контекст бота ({botContextId}) перепривязан к другому каналу YouTube – требуется повторная проверка доступа.");
-        }
+        VerifyBotAssignment(activeEntry, bot, botContextId);
 
         var channelLabel = activeEntry is not null
             ? ResolveCatalogLabel(activeEntry)
@@ -112,12 +108,7 @@ internal sealed class YouTubePlatformConnectionAdapter(
         }
 
         var bot = accountsStore.Load(PlatformAuthRole.Bot, botContextId);
-        if (!string.IsNullOrWhiteSpace(target.Channel.BotVerifiedSubjectId)
-            && !string.IsNullOrWhiteSpace(bot.ChannelId)
-            && !string.Equals(bot.ChannelId, target.Channel.BotVerifiedSubjectId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"Контекст бота ({botContextId}) перепривязан к другому каналу YouTube – требуется повторная проверка доступа.");
-        }
+        VerifyBotAssignment(target.Channel, bot, botContextId);
 
         var botChannelId = string.IsNullOrWhiteSpace(bot.ChannelId) ? null : bot.ChannelId.Trim();
         var botChannelTitle = string.IsNullOrWhiteSpace(bot.ChannelTitle) ? null : bot.ChannelTitle.Trim();
@@ -143,30 +134,22 @@ internal sealed class YouTubePlatformConnectionAdapter(
         return channelLabel;
     }
 
-    private ChannelCatalogEntry? ResolveActiveCatalogEntry()
+    private static void VerifyBotAssignment(ChannelCatalogEntry? entry, YouTubeAccountSettings bot, string contextId)
     {
-        if (channelCatalogStore is null)
+        if (entry is null)
         {
-            return null;
+            return;
         }
 
-        var configured = channelCatalogStore.GetConfiguredChannels(StreamingPlatform.YouTube);
-        if (configured.Count == 0)
+        if (entry.GetAccountAssignment(PlatformAuthRole.Bot) is not { IsVerified: true } assignment)
         {
-            return null;
+            throw new InvalidOperationException("Подтвердите доступ аккаунта бота к каналу YouTube в настройках площадки.");
         }
 
-        var routing = channelCatalogStore.GetPlatformSettings(StreamingPlatform.YouTube);
-        if (!string.IsNullOrWhiteSpace(routing.ActiveChannelId))
+        if (!string.Equals(bot.ChannelId, assignment.Account.AccountId, StringComparison.Ordinal))
         {
-            var match = configured.FirstOrDefault(c => string.Equals(c.ChannelId, routing.ActiveChannelId, StringComparison.Ordinal));
-            if (match is not null)
-            {
-                return match;
-            }
+            throw new InvalidOperationException($"Контекст бота ({contextId}) перепривязан к другому каналу YouTube – требуется повторная проверка доступа.");
         }
-
-        return configured[0];
     }
 
     private static string ResolveCatalogLabel(ChannelCatalogEntry entry)

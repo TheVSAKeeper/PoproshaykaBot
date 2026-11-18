@@ -1,6 +1,7 @@
 ﻿using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
 using PoproshaykaBot.Core.YouTube.Auth;
@@ -9,6 +10,8 @@ namespace PoproshaykaBot.Core.Settings.Stores;
 
 public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccountsStore.YouTubeAccountsFileDto, YouTubeAccountSettings>
 {
+    protected override StreamingPlatform Platform => StreamingPlatform.YouTube;
+
     public YouTubeAccountsStore(
         ILogger<YouTubeAccountsStore>? logger = null,
         string? filePath = null,

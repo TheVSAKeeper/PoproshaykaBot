@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 namespace PoproshaykaBot.Wpf.Bootstrap;
@@ -197,6 +198,24 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1201, Level = LogLevel.Warning, Message = "Некорректный RedirectUri '{RedirectUri}' – порт HTTP сервера не обновлён")]
     public static partial void SettingsRedirectUriInvalid(this ILogger logger, string redirectUri);
+
+    [LoggerMessage(EventId = 1213, Level = LogLevel.Information, Message = "Запрошен вход на площадку {Platform} для роли {Role}")]
+    public static partial void ChannelAuthorizationStarted(this ILogger logger, StreamingPlatform platform, PlatformAuthRole role);
+
+    [LoggerMessage(EventId = 1214, Level = LogLevel.Information, Message = "Вход на площадку {Platform} для роли {Role} не завершён")]
+    public static partial void ChannelAuthorizationIncomplete(this ILogger logger, StreamingPlatform platform, PlatformAuthRole role);
+
+    [LoggerMessage(EventId = 1215, Level = LogLevel.Warning, Message = "Сбой входа на площадку {Platform} для роли {Role} ({ErrorType})")]
+    public static partial void ChannelAuthorizationFailed(this ILogger logger, StreamingPlatform platform, PlatformAuthRole role, string errorType);
+
+    [LoggerMessage(EventId = 1216, Level = LogLevel.Information, Message = "Запрошена проверка роли {Role} на канале {ChannelId} площадки {Platform}")]
+    public static partial void ChannelRoleVerificationStarted(this ILogger logger, PlatformAuthRole role, string channelId, StreamingPlatform platform);
+
+    [LoggerMessage(EventId = 1217, Level = LogLevel.Warning, Message = "Сбой проверки роли {Role} на канале {ChannelId} площадки {Platform} ({ErrorType})")]
+    public static partial void ChannelRoleVerificationFailed(this ILogger logger, PlatformAuthRole role, string channelId, StreamingPlatform platform, string errorType);
+
+    [LoggerMessage(EventId = 1218, Level = LogLevel.Information, Message = "Доступ роли {Role} к каналу {ChannelId} площадки {Platform} не подтверждён")]
+    public static partial void ChannelRoleVerificationDenied(this ILogger logger, PlatformAuthRole role, string channelId, StreamingPlatform platform);
 
     [LoggerMessage(EventId = 1202, Level = LogLevel.Information, Message = "Порт HTTP сервера обновлён с {OldPort} на {NewPort} в соответствии с RedirectUri")]
     public static partial void SettingsHttpPortUpdated(this ILogger logger, int oldPort, int newPort);

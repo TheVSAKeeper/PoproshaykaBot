@@ -48,9 +48,8 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
             SectionKey,
             "Основные",
             PackIconLucideKind.Settings2,
-            "канал twitch аккаунт отображения чата лимиты ограничения отправки задержка приветствие сообщения шаблоны текст",
+            "лимиты ограничения отправки задержка приветствие сообщения шаблоны текст",
             [
-                new SettingsSubsection("channel", "Канал и аккаунт"),
                 new SettingsSubsection("limits", "Ограничения отправки"),
                 new SettingsSubsection("messages", "Шаблоны сообщений"),
             ]);
@@ -62,8 +61,8 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
         [
             new(
                 "basic/channel",
-                "Канал и аккаунт",
-                "Канал Twitch и аккаунт, от имени которого бот показывает чат.",
+                "Отображение чата Twitch",
+                null,
                 _basic),
             new(
                 "basic/limits",
@@ -130,6 +129,7 @@ public sealed class BasicSettingsSectionContributor : ISettingsSectionContributo
         _prevChatDisplayAccount = _settingsManager.Current.Twitch.ChatDisplayAccount;
 
         _basic.SaveSettings(targetSettings.Twitch);
+        targetSettings.Twitch.Channel = _settingsManager.Current.Twitch.Channel;
         _rateLimiting.SaveSettings(targetSettings.Twitch);
         _messages.SaveSettings(targetSettings.Twitch.Messages);
     }

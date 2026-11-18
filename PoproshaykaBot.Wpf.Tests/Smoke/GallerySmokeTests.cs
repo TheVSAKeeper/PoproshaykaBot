@@ -1,5 +1,7 @@
 ﻿using KeepShell.Automation;
 using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings.Stores;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -27,6 +29,33 @@ public class GallerySmokeTests
     public void TearDown()
     {
         GalleryTestProfile.Delete(_baseDirectory);
+    }
+
+    [TestCase("channels/catalog")]
+    [TestCase("platforms/youtube")]
+    [TestCase("platforms/multistream")]
+    public void Gallery_ShouldRenderPlatformSettings(string settingsSection)
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_baseDirectory, "settings", "channels.json"));
+        catalog.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = StreamingPlatform.Twitch, ChannelId = "10", DisplayName = "Канал Twitch", IsConfigured = true },
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_gallery", DisplayName = "Канал YouTube", IsConfigured = true },
+            ],
+        });
+
+        File.WriteAllText(
+            Path.Combine(_baseDirectory, "settings", "ui-preferences.toml"),
+            $"[ui.settings]\nsection = \"{settingsSection}\"\n");
+
+        var (exitCode, output) = RunGallery(SectionKeys.Settings, $"{AppThemes.LightKey},{AppThemes.DarkKey}");
+
+        Assert.That(exitCode, Is.Zero, $"Раздел {settingsSection} должен открыться в WPF.{Environment.NewLine}{output}");
+        Assert.That(ReadFrame("settings-light.png"), Is.Not.Empty);
+        Assert.That(ReadFrame("settings-dark.png"), Is.Not.Empty);
+        AssertNoBindingErrors();
     }
 
     [Test]

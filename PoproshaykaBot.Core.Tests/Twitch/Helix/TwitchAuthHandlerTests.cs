@@ -1,7 +1,10 @@
 ﻿using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
 using System.Net;
 
@@ -53,6 +56,56 @@ public sealed class TwitchAuthHandlerTests
     private ITwitchOAuthService _oauthService = null!;
     private SettingsManager _settingsManager = null!;
     private AppSettings _settings = null!;
+
+    [Test]
+    public async Task Broadcaster_uses_the_active_catalog_context_and_explicit_contexts_take_precedence()
+    {
+        const PlatformAuthRole Role = PlatformAuthRole.Broadcaster;
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_tempDir, "channels.json"));
+        var target = Substitute.For<ITargetChannelProvider>();
+        target.Current.Returns(new TargetChannelState("legacy", "legacy", false, true, true));
+        var channels = new PlatformChannelRegistry();
+        var authorization = new TwitchChannelAuthorization(_accountsStore, catalog, channels, target);
+
+        var a = new ChannelCatalogEntry
+        {
+            Platform = StreamingPlatform.Twitch, ChannelId = "10", IsConfigured = true,
+            BroadcasterContextId = "owner-a", BroadcasterAccountId = "10", BroadcasterVerifiedSubjectId = "10",
+        };
+        var b = new ChannelCatalogEntry
+        {
+            Platform = a.Platform, ChannelId = "20", IsConfigured = true,
+            BroadcasterContextId = "owner-b", BroadcasterAccountId = "20", BroadcasterVerifiedSubjectId = "20",
+        };
+        _accountsStore.UpsertContext(Role, "owner-a", "A", new() { UserId = "10", AccessToken = "token-a" });
+        _accountsStore.UpsertContext(Role, "owner-b", "B", new() { UserId = "20", AccessToken = "token-b" });
+        _accountsStore.Mutate(Role, account => account.AccessToken = "legacy-token");
+        _oauthService.GetAccessTokenAsync(Role, "owner-a", Arg.Any<CancellationToken>()).Returns("token-a");
+        _oauthService.GetAccessTokenAsync(Role, "owner-b", Arg.Any<CancellationToken>()).Returns("token-b");
+        _oauthService.GetAccessTokenAsync(Role, Arg.Any<CancellationToken>()).Returns("legacy-token");
+        catalog.Save(new() { Channels = [a, b], Platforms = [new() { Platform = a.Platform, ActiveChannelId = a.ChannelId }] });
+
+        var stub = new StubHttpMessageHandler { Responder = _ => new(HttpStatusCode.OK) };
+        using var client = new HttpClient(new BroadcasterTwitchAuthHandler(_oauthService, _settingsManager, _accountsStore,
+            NullLogger<BroadcasterTwitchAuthHandler>.Instance, authorization) { InnerHandler = stub })
+        {
+            BaseAddress = new("https://api.twitch.tv/"),
+        };
+
+        using var first = await client.GetAsync("helix/polls");
+        channels.SetBinding(new(b.Key, "B", "default", "owner-b", 1));
+        using var second = await client.GetAsync("helix/polls");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "helix/polls");
+        request.Options.Set(PlatformAuthRequestOptions.ContextIdKey, "default");
+        using var explicitDefault = await client.SendAsync(request);
+        catalog.Mutate(settings => settings.Channels.Single(entry => entry.ChannelId == b.ChannelId).BroadcasterVerifiedSubjectId = null);
+
+        Assert.ThrowsAsync<TwitchAuthorizationMissingException>(async () => await client.GetAsync("helix/polls"));
+        catalog.Mutate(settings => settings.Channels.Single(entry => entry.ChannelId == b.ChannelId).BroadcasterAccountId = null);
+        Assert.ThrowsAsync<TwitchAuthorizationMissingException>(async () => await client.GetAsync("helix/polls"));
+        Assert.That(stub.Requests.Select(item => item.Headers.Authorization?.Parameter),
+            Is.EqualTo(new[] { "token-a", "token-b", "legacy-token" }));
+    }
 
     private (HttpClient client, StubHttpMessageHandler stub) BuildPipeline()
     {

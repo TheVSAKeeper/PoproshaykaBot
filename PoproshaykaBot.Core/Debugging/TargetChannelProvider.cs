@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 
@@ -10,7 +11,8 @@ public sealed class TargetChannelProvider(
     DebugChannelStore debugChannelStore,
     DebugChannelOverride commandLine,
     ILogger<TargetChannelProvider>? logger = null,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    ChannelCatalogStore? channelCatalog = null)
     : ITargetChannelProvider
 {
     private enum TargetChannelSource
@@ -87,7 +89,10 @@ public sealed class TargetChannelProvider(
 
     private (TargetChannelState State, string? Rejected, TargetChannelSource Source) Resolve()
     {
-        var own = settingsManager.Current.Twitch.Channel ?? string.Empty;
+        var active = channelCatalog?.GetActiveChannel(StreamingPlatform.Twitch);
+        var own = active is null
+            ? settingsManager.Current.Twitch.Channel ?? string.Empty
+            : Twitch.TwitchPlatformConnectionAdapter.ResolveChannelLabel(active);
         var isolated = AppPaths.IsBaseDirectoryOverridden;
 
         if (commandLine.Channel is { Length: > 0 } fromCommandLine)

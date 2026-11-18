@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Platforms;
 using System.Text.Json.Serialization;
+using PoproshaykaBot.Core.Platforms.Auth;
 
 namespace PoproshaykaBot.Core.Settings;
 
@@ -27,8 +28,10 @@ public sealed class ChannelCatalogEntry
     public List<string> KnownAliases { get; set; } = [];
     public bool IsConfigured { get; set; }
     public bool MonitoringEnabled { get; set; }
+    public string? BroadcasterAccountId { get; set; }
     public string? BroadcasterContextId { get; set; }
     public string? BroadcasterVerifiedSubjectId { get; set; }
+    public string? BotAccountId { get; set; }
     public string? BotContextId { get; set; }
     public string? BotVerifiedSubjectId { get; set; }
 
@@ -37,6 +40,22 @@ public sealed class ChannelCatalogEntry
 
     [JsonIgnore]
     public ChannelKey Key => new(Platform, ChannelId);
+
+    public ChannelAccountAssignment? GetAccountAssignment(PlatformAuthRole role)
+    {
+        var (accountId, contextId, verifiedId) = role switch
+        {
+            PlatformAuthRole.Broadcaster => (BroadcasterAccountId, BroadcasterContextId, BroadcasterVerifiedSubjectId),
+            PlatformAuthRole.Bot => (BotAccountId, BotContextId, BotVerifiedSubjectId),
+            _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
+        };
+
+        var id = string.IsNullOrWhiteSpace(accountId) ? verifiedId?.Trim() : accountId.Trim();
+        return string.IsNullOrWhiteSpace(id)
+            ? null
+            : new(Key, role, new(Platform, id), AuthContextIds.Normalize(contextId),
+                string.Equals(id, verifiedId?.Trim(), StringComparison.Ordinal));
+    }
 }
 
 public sealed class PlatformChannelRoutingSettings

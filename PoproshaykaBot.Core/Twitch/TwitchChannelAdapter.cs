@@ -50,13 +50,15 @@ internal sealed class TwitchChannelAdapter(
         using var _ = PlatformAuthRequestOptions.UseContext(contextId);
 
         UserInfo? user = null;
-        if (authService.HasUsableAccessToken(PlatformAuthRole.Bot, contextId))
+        if (!string.IsNullOrWhiteSpace(await authService.GetAccessTokenAsync(PlatformAuthRole.Bot, contextId,
+                forceRefresh: false, cancellationToken).ConfigureAwait(false)))
         {
-            user = await botHelix.GetUserByLoginAsync(login, cancellationToken).ConfigureAwait(false);
+            user = await ResolveUserAsync(botHelix, login, cancellationToken).ConfigureAwait(false);
         }
-        else if (authService.HasUsableAccessToken(PlatformAuthRole.Broadcaster, contextId))
+        else if (!string.IsNullOrWhiteSpace(await authService.GetAccessTokenAsync(PlatformAuthRole.Broadcaster, contextId,
+                     forceRefresh: false, cancellationToken).ConfigureAwait(false)))
         {
-            user = await broadcasterHelix.GetUserByLoginAsync(login, cancellationToken).ConfigureAwait(false);
+            user = await ResolveUserAsync(broadcasterHelix, login, cancellationToken).ConfigureAwait(false);
         }
 
         if (user is null)
@@ -69,6 +71,17 @@ internal sealed class TwitchChannelAdapter(
             string.IsNullOrWhiteSpace(user.DisplayName) ? user.Login : user.DisplayName,
             user.Login,
             $"https://twitch.tv/{user.Login}");
+    }
+
+    private static async Task<UserInfo?> ResolveUserAsync(ITwitchHelixClient helix, string input, CancellationToken cancellationToken)
+    {
+        if (!input.All(char.IsAsciiDigit))
+        {
+            return await helix.GetUserByLoginAsync(input, cancellationToken).ConfigureAwait(false);
+        }
+
+        var users = await helix.GetUsersByIdsAsync([input], cancellationToken).ConfigureAwait(false);
+        return users.Count == 0 ? null : users[0];
     }
 
     public async Task<ChannelAccessVerification> VerifyChannelAccessAsync(

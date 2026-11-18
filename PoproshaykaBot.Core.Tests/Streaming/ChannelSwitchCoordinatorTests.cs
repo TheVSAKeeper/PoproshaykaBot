@@ -142,6 +142,28 @@ public sealed class ChannelSwitchCoordinatorTests
     }
 
     [Test]
+    public async Task Manual_switch_from_settings_preserves_the_saved_next_channel()
+    {
+        const string NextId = "UC_C";
+        _catalog.Mutate(settings =>
+        {
+            settings.Channels.Add(new() { Platform = StreamingPlatform.YouTube, ChannelId = NextId, IsConfigured = true });
+            settings.Platforms.Single(platform => platform.Platform == StreamingPlatform.YouTube).PreselectedNextChannelId = NextId;
+        });
+        _adapter.Probes[ChanB] = new(false, false, null);
+
+        var result = await _coordinator.SwitchActiveChannelAsync(StreamingPlatform.YouTube, ChanB, preservePreselectedNext: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Succeeded, Is.True);
+            var routing = _catalog.GetPlatformSettings(StreamingPlatform.YouTube);
+            Assert.That(routing.ActiveChannelId, Is.EqualTo(ChanB.ChannelId));
+            Assert.That(routing.PreselectedNextChannelId, Is.EqualTo(NextId));
+        });
+    }
+
+    [Test]
     public async Task PreselectedNext_switches_on_online_transition_or_immediate_arm_and_clears_target()
     {
         await _coordinator.SetSwitchModeAsync(StreamingPlatform.YouTube, ChannelSwitchMode.PreselectedNext);

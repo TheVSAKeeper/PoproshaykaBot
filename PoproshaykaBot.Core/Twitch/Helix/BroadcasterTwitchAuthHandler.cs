@@ -10,13 +10,14 @@ public sealed class BroadcasterTwitchAuthHandler(
     ITwitchOAuthService oauthService,
     SettingsManager settingsManager,
     AccountsStore accountsStore,
-    ILogger<BroadcasterTwitchAuthHandler> logger)
-    : TwitchAuthHandlerBase(oauthService, settingsManager, accountsStore, logger)
+    ILogger<BroadcasterTwitchAuthHandler> logger,
+    TwitchChannelAuthorization? channelAuthorization = null)
+    : TwitchAuthHandlerBase(oauthService, settingsManager, accountsStore, logger, channelAuthorization)
 {
     protected override PlatformAuthRole Role => PlatformAuthRole.Broadcaster;
 
     protected override string MissingTokenHint =>
-        "Авторизуйте стримера в настройках Twitch (вкладка «Стример»).";
+        "Авторизуйте стримера в карточке канала на вкладке Twitch.";
 
     protected override Task<string?> GetTokenAsync(ITwitchOAuthService oauthService, CancellationToken cancellationToken)
     {

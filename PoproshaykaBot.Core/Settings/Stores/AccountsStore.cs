@@ -1,6 +1,7 @@
 ﻿using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
@@ -9,6 +10,8 @@ namespace PoproshaykaBot.Core.Settings.Stores;
 
 public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.AccountsFileDto, TwitchAccountSettings>
 {
+    protected override StreamingPlatform Platform => StreamingPlatform.Twitch;
+
     public AccountsStore(
         ILogger<AccountsStore>? logger = null,
         string? filePath = null,

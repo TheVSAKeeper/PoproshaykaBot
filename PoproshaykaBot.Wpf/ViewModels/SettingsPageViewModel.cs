@@ -24,6 +24,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
     private readonly ILogger<SettingsPageViewModel> _logger;
     private readonly IDialogService _dialogService;
     private readonly ISettingsStore _uiSettings;
+    private readonly ChannelCatalogSettingsSectionViewModel? _channelCatalog;
 
     private readonly List<IDisposable> _dirtySubscriptions = [];
     private SettingsSessionState _session = new() { Settings = new() };
@@ -44,7 +45,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         IEventBus eventBus,
         ILogger<SettingsPageViewModel> logger,
         IDialogService dialogService,
-        ISettingsStore uiSettings)
+        ISettingsStore uiSettings,
+        BroadcastProfilesSettingsSectionViewModel? broadcastProfiles = null)
     {
         ArgumentNullException.ThrowIfNull(contributors);
         ArgumentNullException.ThrowIfNull(settingsManager);
@@ -65,12 +67,19 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         _dialogService = dialogService;
         _uiSettings = uiSettings;
 
-        Sections = new([.. _contributors.Select(c => c.CreateSection())]);
-        SectionPresentations = [.. _contributors.Select(c =>
-            new SettingsSectionPresentation(Sections[c.SectionKey]!, c.GetBlocks(), c.IsFullWidth))];
+        var presentations = _contributors.Select(c =>
+            new SettingsSectionPresentation(c.CreateSection(), c.GetBlocks(), c.IsFullWidth)).ToArray();
+        var contents = presentations.SelectMany(page => page.Blocks).Select(block => block.Content).ToArray();
+        _channelCatalog = contents.OfType<ChannelCatalogSettingsSectionViewModel>().FirstOrDefault();
+        _channelCatalog?.SetCredentialDrafts(
+            contents.OfType<OAuthSettingsViewModel>().FirstOrDefault(),
+            contents.OfType<YouTubeSettingsSectionViewModel>().FirstOrDefault());
+        SectionPresentations = PlatformSettingsPages.Create(presentations, broadcastProfiles);
+        Sections = new([.. SectionPresentations.Select(p => p.Section).Distinct()]);
 
         _rememberedSection = uiSettings.GetStringValue(SettingsKeys.SettingsSection) ?? string.Empty;
-        Sections.Restore(_rememberedSection);
+        Sections.Restore(PlatformSettingsPages.RestorePath(_rememberedSection));
+        SelectChannelPlatform();
         Sections.PropertyChanged += OnSectionsPropertyChanged;
 
         OnEnter();
@@ -189,8 +198,16 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
 
     private void OnSectionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(SettingsSectionList.NoMatches)
+            && Sections.Selected is { Key: PlatformSettingsPages.SectionKey } platforms
+            && PlatformSettingsPages.FindSearchGroup(Sections.Query) is { } group)
+        {
+            Sections.SelectedChild = platforms.FindChild(group) ?? Sections.SelectedChild;
+        }
+
         if (string.Equals(e.PropertyName, nameof(SettingsSectionList.SelectedPath), StringComparison.Ordinal))
         {
+            SelectChannelPlatform();
             RememberSelection();
             return;
         }
@@ -200,6 +217,24 @@ public sealed partial class SettingsPageViewModel : ObservableObject, IPageHeade
         {
             OnPropertyChanged(nameof(HasDraft));
             RunSelectedSectionEntryChecks();
+        }
+    }
+
+    private void SelectChannelPlatform()
+    {
+        if (_channelCatalog is not null && Sections.Selected?.Key == PlatformSettingsPages.SectionKey
+            && PlatformSettingsPages.GetPlatform(Sections.SelectedChild) is { } platform)
+        {
+            _channelCatalog.SelectedPlatform = platform;
+        }
+    }
+
+    public void OpenPlatformSettings()
+    {
+        if (Sections.Selected?.Key != PlatformSettingsPages.SectionKey)
+        {
+            Sections.Filter(string.Empty);
+            Sections.Restore(PlatformSettingsPages.SectionKey);
         }
     }
 

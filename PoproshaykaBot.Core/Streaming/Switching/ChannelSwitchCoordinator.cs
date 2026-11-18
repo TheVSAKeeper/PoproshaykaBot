@@ -43,6 +43,12 @@ public interface IChannelSwitchCoordinator
         ChannelKey targetChannel,
         CancellationToken cancellationToken = default);
 
+    Task<ChannelSwitchResult> SwitchActiveChannelAsync(
+        StreamingPlatform platform,
+        ChannelKey targetChannel,
+        bool preservePreselectedNext,
+        CancellationToken cancellationToken = default);
+
     Task<ChannelSwitchResult?> SetPreselectedNextAsync(
         StreamingPlatform platform,
         ChannelKey? targetChannel,
@@ -164,9 +170,18 @@ public sealed class ChannelSwitchCoordinator :
         return list;
     }
 
+    public Task<ChannelSwitchResult> SwitchActiveChannelAsync(
+        StreamingPlatform platform,
+        ChannelKey targetChannel,
+        CancellationToken cancellationToken = default)
+    {
+        return SwitchActiveChannelAsync(platform, targetChannel, preservePreselectedNext: false, cancellationToken);
+    }
+
     public async Task<ChannelSwitchResult> SwitchActiveChannelAsync(
         StreamingPlatform platform,
         ChannelKey targetChannel,
+        bool preservePreselectedNext,
         CancellationToken cancellationToken = default)
     {
         if (IsBlockedByDebugSession(platform))
@@ -228,7 +243,7 @@ public sealed class ChannelSwitchCoordinator :
                 currentActiveKey,
                 entryB,
                 confirmedStreamB,
-                clearPreselected: true,
+                clearPreselected: !preservePreselectedNext,
                 ChannelSwitchMode.Manual,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -876,6 +891,11 @@ public sealed class ChannelSwitchCoordinator :
         ChannelCatalogEntry entryB,
         CancellationToken cancellationToken)
     {
+        if (entryB.GetAccountAssignment(PlatformAuthRole.Bot) is { IsVerified: false })
+        {
+            return $"Подтвердите доступ аккаунта бота к каналу «{ResolveDisplayName(entryB)}».";
+        }
+
         if (!_authRegistry.TryGet(platform, out var authService))
         {
             return null;

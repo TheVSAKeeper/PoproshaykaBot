@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 
@@ -15,7 +16,8 @@ public sealed class TwitchChatPlatform(
     PlatformChannelRegistry channels,
     AccountsStore accountsStore,
     ILogger<TwitchChatPlatform>? logger = null,
-    ITargetChannelProvider? targetChannelProvider = null) : IChatPlatform
+    ITargetChannelProvider? targetChannelProvider = null,
+    TwitchChannelAuthorization? authorization = null) : IChatPlatform
 {
     private const string BotFallbackDisplayName = "PoproshaykaBot";
 
@@ -44,9 +46,9 @@ public sealed class TwitchChatPlatform(
     {
         get
         {
-            var bot = accountsStore.LoadBot();
+            var bot = authorization is null ? accountsStore.LoadBot() : authorization.GetAccount(PlatformAuthRole.Bot);
 
-            if (string.IsNullOrWhiteSpace(bot.UserId) && string.IsNullOrWhiteSpace(bot.Login))
+            if (bot is null || (string.IsNullOrWhiteSpace(bot.UserId) && string.IsNullOrWhiteSpace(bot.Login)))
             {
                 logger?.LogDebug("Учётная запись бота Twitch ещё не содержит идентификатора и логина");
                 return null;

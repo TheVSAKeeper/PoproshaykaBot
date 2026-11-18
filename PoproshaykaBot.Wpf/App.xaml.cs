@@ -72,6 +72,7 @@ public partial class App : Application
     private GalleryArguments? _galleryArguments;
     private bool _appLifetimeStarted;
     private AppExitReason _exitReason = AppExitReason.None;
+    private string? _startupErrorDetails;
 
     internal static bool IsFatalShutdown => Volatile.Read(ref _fatalErrorHandled) == 1;
 
@@ -280,7 +281,7 @@ public partial class App : Application
 
             if (!IsHeadless)
             {
-                StyledMessageBox.Show(ex.ToString(), $"{AppInfo.Name} – ошибка запуска", MessageBoxButton.OK, MessageBoxImage.Error);
+                _startupErrorDetails = ex.ToString();
             }
 
             Shutdown(1);
@@ -322,6 +323,11 @@ public partial class App : Application
             {
                 HostLog.Warning("Ошибок привязки данных за прогон: {BindingErrorCount}", bindingErrors.Count);
             }
+        }
+
+        if (IsFatalShutdown && !IsHeadless)
+        {
+            ShowFatalErrorNotice();
         }
 
         HostLog.Information("Завершение работы приложения ({Reason}), код выхода {ExitCode}", _exitReason, e.ApplicationExitCode);
@@ -522,6 +528,8 @@ public partial class App : Application
         services.AddTransient<RanksSettingsSectionViewModel>();
         services.AddTransient<ChannelCatalogSettingsSectionViewModel>();
         services.AddTransient<ChannelGroupsSettingsSectionViewModel>();
+        services.AddSingleton(provider => new BroadcastProfilesSettingsSectionViewModel(
+            provider.GetServices<DashboardTileViewModel>().OfType<BroadcastProfilesTileViewModel>().Single()));
         services.AddTransient<DebugChannelSectionViewModel>();
         services.AddSingleton<McpSettingsSectionViewModel>();
         services.AddTransient<AppearanceSettingsSectionViewModel>();
@@ -613,20 +621,19 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs args)
     {
-        HostLog.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
         args.Handled = true;
-        _exitReason = AppExitReason.Failed;
 
         if (Interlocked.Exchange(ref _fatalErrorHandled, 1) == 1)
         {
             return;
         }
 
+        _exitReason = AppExitReason.Failed;
+        HostLog.Fatal(args.Exception, "Необработанное исключение в UI-потоке");
+
         // TODO: после фатальной ошибки хост только закрывается – передачу мьютекса новому процессу
         //  уже умеет LaunchReplacement (--restart-after), но падение на старте зациклило бы перезапуск –
         //  заводить вместе со счётчиком падений подряд
-        ShowFatalErrorNotice();
-
         try
         {
             Shutdown(1);
@@ -639,31 +646,16 @@ public partial class App : Application
 
     private void ShowFatalErrorNotice()
     {
-        if (IsHeadless)
-        {
-            return;
-        }
-
-        var logsDirectory = _loggingOptions?.LogsDirectory ?? AppPaths.Combine("logs");
-        var caption = $"{AppInfo.Name} – критическая ошибка";
-        var message = $"Произошла непредвиденная ошибка, приложение будет закрыто.\n\nПодробности – в журнале: {logsDirectory}";
-
         try
         {
-            StyledMessageBox.Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Error);
+            var caption = _startupErrorDetails is null ? $"{AppInfo.Name} – критическая ошибка" : $"{AppInfo.Name} – ошибка запуска";
+            var message = _startupErrorDetails
+                ?? $"Произошла непредвиденная ошибка.\n\nПодробности – в журнале: {_loggingOptions?.LogsDirectory ?? AppPaths.Combine("logs")}";
+            MessageBox.Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Error);
         }
-        catch (Exception styledFailure)
+        catch (Exception notificationFailure)
         {
-            HostLog.Error(styledFailure, "Не удалось показать сообщение о фатальной ошибке средствами каркаса");
-
-            try
-            {
-                MessageBox.Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            catch (Exception fallbackFailure)
-            {
-                HostLog.Error(fallbackFailure, "Не удалось показать системное сообщение о фатальной ошибке");
-            }
+            HostLog.Error(notificationFailure, "Не удалось показать системное сообщение о фатальной ошибке");
         }
     }
 }

@@ -1,9 +1,15 @@
 ﻿using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Twitch;
 
 namespace PoproshaykaBot.Core.Settings.Onboarding;
 
-public sealed class OnboardingChecklist(SettingsManager settingsManager, AccountsStore accountsStore)
+public sealed class OnboardingChecklist(
+    SettingsManager settingsManager,
+    AccountsStore accountsStore,
+    ChannelCatalogStore? channelCatalog = null,
+    TwitchChannelAuthorization? authorization = null)
 {
     public bool IsComplete => GetMissingItems().Count == 0;
 
@@ -19,21 +25,28 @@ public sealed class OnboardingChecklist(SettingsManager settingsManager, Account
             missing.Add("Client ID/Secret");
         }
 
-        if (string.IsNullOrWhiteSpace(twitch.Channel))
+        if (channelCatalog?.GetActiveChannel(StreamingPlatform.Twitch) is null && string.IsNullOrWhiteSpace(twitch.Channel))
         {
             missing.Add("канал");
         }
 
-        if (string.IsNullOrWhiteSpace(accountsStore.Load(PlatformAuthRole.Bot).AccessToken))
+        if (!HasAuthorization(PlatformAuthRole.Bot))
         {
             missing.Add("авторизация бота");
         }
 
-        if (string.IsNullOrWhiteSpace(accountsStore.Load(PlatformAuthRole.Broadcaster).AccessToken))
+        if (!HasAuthorization(PlatformAuthRole.Broadcaster))
         {
             missing.Add("авторизация стримера");
         }
 
         return missing;
+    }
+
+    private bool HasAuthorization(PlatformAuthRole role)
+    {
+        var account = authorization is null ? accountsStore.Load(role) : authorization.GetAccount(role);
+        return account is not null
+            && (!string.IsNullOrWhiteSpace(account.AccessToken) || !string.IsNullOrWhiteSpace(account.RefreshToken));
     }
 }

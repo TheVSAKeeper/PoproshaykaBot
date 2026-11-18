@@ -53,8 +53,8 @@ public sealed class ChannelsSettingsSectionContributor : ISettingsSectionContrib
         [
             new(
                 "channels/catalog",
-                "Каталог каналов и переключение",
-                "Настроенные каналы по площадкам, фоновый мониторинг, привязка аккаунтов и режим переключения.",
+                "Каналы",
+                null,
                 _catalogViewModel),
             new(
                 "channels/groups",
@@ -103,7 +103,7 @@ public sealed class ChannelsSettingsSectionContributor : ISettingsSectionContrib
     {
         return _groupsEdited && _groupsViewModel.HasErrors
             ? "Укажите название для каждой группы каналов перед сохранением."
-            : null;
+            : _catalogEdited ? _catalogViewModel.ValidateAssignments() : null;
     }
 
     public void BeginSave(AppSettings targetSettings)
@@ -139,7 +139,8 @@ public sealed class ChannelsSettingsSectionContributor : ISettingsSectionContrib
             {
                 foreach (var (platform, targetKey) in pendingSwitches)
                 {
-                    await _switchCoordinator.SwitchActiveChannelAsync(platform, targetKey, CancellationToken.None).ConfigureAwait(false);
+                    await _switchCoordinator.SwitchActiveChannelAsync(platform, targetKey,
+                        preservePreselectedNext: true, CancellationToken.None).ConfigureAwait(false);
                 }
             }
         }

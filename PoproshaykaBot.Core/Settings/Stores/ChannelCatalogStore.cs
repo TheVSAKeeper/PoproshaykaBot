@@ -88,6 +88,14 @@ public sealed class ChannelCatalogStore
             .ToArray();
     }
 
+    public ChannelCatalogEntry? GetActiveChannel(StreamingPlatform platform)
+    {
+        var settings = Normalize(_store.Load());
+        var activeId = settings.Platforms.FirstOrDefault(p => p.Platform == platform)?.ActiveChannelId;
+        var configured = settings.Channels.Where(c => c.Platform == platform && c.IsConfigured);
+        return configured.FirstOrDefault(c => c.ChannelId == activeId) ?? configured.FirstOrDefault();
+    }
+
     public ChannelCatalogEntry? FindEntry(ChannelKey key)
     {
         if (!key.IsValid)
@@ -241,6 +249,11 @@ public sealed class ChannelCatalogStore
                 existing.IsConfigured |= entry.IsConfigured;
                 existing.MonitoringEnabled |= entry.MonitoringEnabled;
 
+                if (!string.IsNullOrWhiteSpace(entry.BroadcasterAccountId))
+                {
+                    existing.BroadcasterAccountId = entry.BroadcasterAccountId.Trim();
+                }
+
                 if (!string.IsNullOrWhiteSpace(entry.BroadcasterContextId))
                 {
                     existing.BroadcasterContextId = entry.BroadcasterContextId.Trim();
@@ -254,6 +267,11 @@ public sealed class ChannelCatalogStore
                 if (!string.IsNullOrWhiteSpace(entry.BotContextId))
                 {
                     existing.BotContextId = entry.BotContextId.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.BotAccountId))
+                {
+                    existing.BotAccountId = entry.BotAccountId.Trim();
                 }
 
                 if (!string.IsNullOrWhiteSpace(entry.BotVerifiedSubjectId))
@@ -299,8 +317,10 @@ public sealed class ChannelCatalogStore
                     IsConfigured = entry.IsConfigured,
                     MonitoringEnabled = entry.MonitoringEnabled,
                     BroadcasterContextId = NormalizeOptional(entry.BroadcasterContextId),
+                    BroadcasterAccountId = NormalizeOptional(entry.BroadcasterAccountId),
                     BroadcasterVerifiedSubjectId = NormalizeOptional(entry.BroadcasterVerifiedSubjectId),
                     BotContextId = NormalizeOptional(entry.BotContextId),
+                    BotAccountId = NormalizeOptional(entry.BotAccountId),
                     BotVerifiedSubjectId = NormalizeOptional(entry.BotVerifiedSubjectId),
                     Parameters = parameters,
                 };

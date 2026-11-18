@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 
@@ -8,7 +10,8 @@ namespace PoproshaykaBot.Core.Chat;
 public sealed class TwitchChatMessenger(
     ChatSender chatSender,
     AccountsStore accountsStore,
-    ILogger<TwitchChatMessenger> logger) : IPlatformMessenger
+    ILogger<TwitchChatMessenger> logger,
+    TwitchChannelAuthorization? authorization = null) : IPlatformMessenger
 {
     private int _whisperScopeMissingReported;
 
@@ -41,7 +44,8 @@ public sealed class TwitchChatMessenger(
         ChatSendCategory category = ChatSendCategory.None,
         ChatOrigin? origin = null)
     {
-        if (TwitchScopes.IsGranted(accountsStore.LoadBot(), TwitchScopes.UserManageWhispers))
+        var bot = authorization is null ? accountsStore.LoadBot() : authorization.GetAccount(PlatformAuthRole.Bot);
+        if (bot is not null && TwitchScopes.IsGranted(bot, TwitchScopes.UserManageWhispers))
         {
             Volatile.Write(ref _whisperScopeMissingReported, 0);
             _ = chatSender.EnqueueWhisperAsync(text, toUserId, fallbackReplyToMessageId, commandResponse, CancellationToken.None, origin);

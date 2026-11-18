@@ -34,14 +34,9 @@ public sealed class StreamSettingsSectionContributor : ISettingsSectionContribut
     {
         return new(
             SectionKey,
-            "Трансляция",
+            "Опросы",
             PackIconLucideKind.Radio,
-            "автоматический режим рассылка eventsub автозапуск бота остановка опросы голосование категория название",
-            [
-                new SettingsSubsection("auto", "Автоматический режим"),
-                new SettingsSubsection("lifecycle", "Автозапуск бота"),
-                new SettingsSubsection("polls", "Опросы"),
-            ]);
+            "голосование заготовки правила запуска");
     }
 
     public IReadOnlyList<SettingsSectionBlockDescriptor> GetBlocks()
