@@ -29,7 +29,7 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0">
-                        <TextBlock Text="{Binding Section.Title, Mode=OneTime}"
+                        <TextBlock Text="{Binding Title, Mode=OneTime}"
                                    Style="{StaticResource Setting.SectionTitle}" />
 
                         <ItemsControl ItemsSource="{Binding Blocks, Mode=OneTime}"
@@ -140,7 +140,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <keepshell:SettingsRail Sections="{Binding Sections}" />
+            <keepshell:SettingsRail x:Name="SectionRail" Sections="{Binding Sections}" />
 
             <ScrollViewer x:Name="SectionScroll"
                           Grid.Column="1"
@@ -162,7 +162,14 @@
                     <ItemsControl.ItemContainerStyle>
                         <Style TargetType="ContentPresenter">
                             <Setter Property="Visibility"
-                                    Value="{Binding Content.Section.IsSelected, RelativeSource={RelativeSource Self}, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
+                                    Value="{Binding Content.Group.IsSelected, RelativeSource={RelativeSource Self}, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Content.Group, RelativeSource={RelativeSource Self}}"
+                                             Value="{x:Null}">
+                                    <Setter Property="Visibility"
+                                            Value="{Binding Content.Section.IsSelected, RelativeSource={RelativeSource Self}, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
+                                </DataTrigger>
+                            </Style.Triggers>
                         </Style>
                     </ItemsControl.ItemContainerStyle>
                 </ItemsControl>

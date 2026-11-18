@@ -15,9 +15,8 @@ public sealed class TwitchConnectionSettingsContributor : ISettingsSectionContri
     private readonly AccountsStore _accountsStore;
     private readonly SettingsManager _settingsManager;
     private readonly ILogger<TwitchConnectionSettingsContributor> _logger;
+    private readonly ChannelCatalogStore? _catalog;
 
-    private TwitchAccountSettings _botDraft = new();
-    private TwitchAccountSettings _broadcasterDraft = new();
     private PlatformCredentialSnapshot _previousCredentials;
     private int _prevPort;
 
@@ -25,7 +24,8 @@ public sealed class TwitchConnectionSettingsContributor : ISettingsSectionContri
         OAuthSettingsViewModel oauth,
         AccountsStore accountsStore,
         SettingsManager settingsManager,
-        ILogger<TwitchConnectionSettingsContributor> logger)
+        ILogger<TwitchConnectionSettingsContributor> logger,
+        ChannelCatalogStore? catalog = null)
     {
         ArgumentNullException.ThrowIfNull(oauth);
         ArgumentNullException.ThrowIfNull(accountsStore);
@@ -36,6 +36,7 @@ public sealed class TwitchConnectionSettingsContributor : ISettingsSectionContri
         _accountsStore = accountsStore;
         _settingsManager = settingsManager;
         _logger = logger;
+        _catalog = catalog;
     }
 
     public int Order => 1;
@@ -82,10 +83,8 @@ public sealed class TwitchConnectionSettingsContributor : ISettingsSectionContri
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        _botDraft = JsonStoreClone.DeepClone(_accountsStore.LoadBot());
-        _broadcasterDraft = JsonStoreClone.DeepClone(_accountsStore.LoadBroadcaster());
-        _oauth.Load(session.Settings, _botDraft, _broadcasterDraft);
-        _oauth.RefreshChannel(session.TwitchChannel);
+        _oauth.LoadApplication(session.Settings);
+        _oauth.RefreshChannel(_catalog?.GetActiveChannel(StreamingPlatform.Twitch)?.DisplayName ?? session.TwitchChannel);
     }
 
     public IDisposable SubscribeDirty(SettingsSessionState session, Action markDirty, Action notifyChangesState)
@@ -110,18 +109,10 @@ public sealed class TwitchConnectionSettingsContributor : ISettingsSectionContri
         ArgumentNullException.ThrowIfNull(targetSettings);
 
         var currentSettings = _settingsManager.Current.Twitch;
-        var currentBot = _accountsStore.LoadBot();
-        var currentBroadcaster = _accountsStore.LoadBroadcaster();
-        _previousCredentials = new(
-            currentSettings.ClientId,
-            currentSettings.ClientSecret,
-            currentBot.AccessToken,
-            currentBot.RefreshToken,
-            currentBroadcaster.AccessToken,
-            currentBroadcaster.RefreshToken);
+        _previousCredentials = new(currentSettings.ClientId, currentSettings.ClientSecret);
         _prevPort = currentSettings.HttpServerPort;
 
-        _oauth.SaveTo(targetSettings, _botDraft, _broadcasterDraft);
+        _oauth.SaveApplication(targetSettings);
         ReconcileHttpServerPort(targetSettings);
     }
 
@@ -129,19 +120,13 @@ public sealed class TwitchConnectionSettingsContributor : ISettingsSectionContri
     {
         ArgumentNullException.ThrowIfNull(targetSettings);
 
-        var written = _accountsStore.SaveAll(_botDraft, _broadcasterDraft);
         var events = _previousCredentials.CollectAuthorizationRefreshes(
             StreamingPlatform.Twitch,
-            new(
-                targetSettings.Twitch.ClientId,
-                targetSettings.Twitch.ClientSecret,
-                _botDraft.AccessToken,
-                _botDraft.RefreshToken,
-                _broadcasterDraft.AccessToken,
-                _broadcasterDraft.RefreshToken));
+            new(targetSettings.Twitch.ClientId, targetSettings.Twitch.ClientSecret),
+            _accountsStore.ListContexts);
 
         var portChanged = targetSettings.Twitch.HttpServerPort != _prevPort;
-        return Task.FromResult(new SettingsSectionSaveOutcome(written, events, portChanged));
+        return Task.FromResult(new SettingsSectionSaveOutcome(true, events, portChanged));
     }
 
     public void Dispose()

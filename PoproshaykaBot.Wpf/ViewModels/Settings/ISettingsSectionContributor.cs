@@ -20,7 +20,8 @@ public sealed record SettingsSectionBlockDescriptor(
 public sealed record SettingsSectionPresentation(
     SettingsSection Section,
     IReadOnlyList<SettingsSectionBlockDescriptor> Blocks,
-    bool IsFullWidth) : INotifyPropertyChanged
+    bool IsFullWidth,
+    SettingsSubsection? Group = null) : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged
     {
@@ -29,6 +30,8 @@ public sealed record SettingsSectionPresentation(
     }
 
     public bool HasMultipleBlocks => Blocks.Count > 1 || Section.Children.Count > 0;
+
+    public string Title => Group?.Title ?? Section.Title;
 }
 
 public sealed record SettingsSectionEvent(

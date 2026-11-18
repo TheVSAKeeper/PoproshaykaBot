@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -18,10 +19,13 @@ public class PollsAvailabilityService(
     IBroadcasterIdProvider broadcasterIdProvider,
     ITargetChannelProvider targetChannelProvider,
     AccountsStore accountsStore,
-    ILogger<PollsAvailabilityService>? logger = null)
+    ILogger<PollsAvailabilityService>? logger = null,
+    TwitchChannelAuthorization? authorization = null)
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
-    private PollsAvailability? _cached;
+    private AvailabilitySnapshot? _cached;
+
+    private sealed record AvailabilitySnapshot(string Channel, bool HasBroadcasterAuth, PollsAvailability Value);
 
     public virtual async Task<PollsAvailability> GetAsync(CancellationToken cancellationToken)
     {
@@ -33,22 +37,29 @@ public class PollsAvailabilityService(
             return PollsAvailability.ForeignChannel;
         }
 
-        if (_cached is not null)
+        var broadcasterAccount = authorization is null
+            ? accountsStore.LoadBroadcaster()
+            : authorization.GetAccount(PlatformAuthRole.Broadcaster);
+        var hasBroadcasterAuth = broadcasterAccount is not null
+            && (!string.IsNullOrWhiteSpace(broadcasterAccount.AccessToken)
+                || !string.IsNullOrWhiteSpace(broadcasterAccount.RefreshToken));
+        if (ReadCached(target.Login, hasBroadcasterAuth) is { } cached)
         {
-            return _cached;
+            return cached;
         }
 
         await _lock.WaitAsync(cancellationToken);
 
         try
         {
-            if (_cached is not null)
+            if (ReadCached(target.Login, hasBroadcasterAuth) is { } refreshed)
             {
-                return _cached;
+                return refreshed;
             }
 
-            _cached = await ComputeAsync(cancellationToken);
-            return _cached;
+            var result = await ComputeAsync(hasBroadcasterAuth, cancellationToken);
+            _cached = new(target.Login, hasBroadcasterAuth, result);
+            return result;
         }
         finally
         {
@@ -61,11 +72,16 @@ public class PollsAvailabilityService(
         _cached = null;
     }
 
-    private async Task<PollsAvailability> ComputeAsync(CancellationToken cancellationToken)
+    private PollsAvailability? ReadCached(string channel, bool hasBroadcasterAuth) =>
+        _cached is { } cached && cached.Channel == channel && cached.HasBroadcasterAuth == hasBroadcasterAuth
+            ? cached.Value
+            : null;
+
+    private async Task<PollsAvailability> ComputeAsync(bool hasBroadcasterAuth, CancellationToken cancellationToken)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(accountsStore.LoadBroadcaster().AccessToken))
+            if (!hasBroadcasterAuth)
             {
                 logger?.LogInformation("PollsAvailability: токен стримера отсутствует – голосования недоступны");
                 return PollsAvailability.NoBroadcasterToken;

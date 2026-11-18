@@ -10,13 +10,14 @@ public sealed class BotTwitchAuthHandler(
     ITwitchOAuthService oauthService,
     SettingsManager settingsManager,
     AccountsStore accountsStore,
-    ILogger<BotTwitchAuthHandler> logger)
-    : TwitchAuthHandlerBase(oauthService, settingsManager, accountsStore, logger)
+    ILogger<BotTwitchAuthHandler> logger,
+    TwitchChannelAuthorization? channelAuthorization = null)
+    : TwitchAuthHandlerBase(oauthService, settingsManager, accountsStore, logger, channelAuthorization)
 {
     protected override PlatformAuthRole Role => PlatformAuthRole.Bot;
 
     protected override string MissingTokenHint =>
-        "Авторизуйте бота в настройках Twitch (вкладка «Бот»).";
+        "Авторизуйте бота в карточке канала на вкладке Twitch.";
 
     protected override Task<string?> GetTokenAsync(ITwitchOAuthService oauthService, CancellationToken cancellationToken)
     {

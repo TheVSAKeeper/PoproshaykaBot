@@ -244,6 +244,22 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private void OpenPlatformSettings()
+    {
+        if (!ReferenceEquals(_current, _settingsSection)
+            && !TryLeaveDirtyPage(_settingsSection, _settingsPage.OpenPlatformSettings))
+        {
+            return;
+        }
+
+        NavigateToSettings();
+        if (ReferenceEquals(_current, _settingsSection))
+        {
+            _settingsPage.OpenPlatformSettings();
+        }
+    }
+
+    [RelayCommand]
     private void NavigateToStatistics()
     {
         Selected = _statisticsSection;
@@ -428,7 +444,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         return true;
     }
 
-    private bool TryLeaveDirtyPage(NavigationItem? target)
+    private bool TryLeaveDirtyPage(NavigationItem? target, Action? afterNavigation = null)
     {
         if (_current is not { } section || DirtyPageOf(section) is not { } page)
         {
@@ -439,7 +455,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         {
             case UnsavedChangesDecision.Save:
                 ReturnToPage(section);
-                _ = SaveThenNavigateAsync(page, target);
+                _ = SaveThenNavigateAsync(page, target, afterNavigation);
                 return false;
 
             case UnsavedChangesDecision.Discard:
@@ -466,7 +482,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         }
     }
 
-    private async Task SaveThenNavigateAsync(IUnsavedChangesPage page, NavigationItem? target)
+    private async Task SaveThenNavigateAsync(IUnsavedChangesPage page, NavigationItem? target, Action? afterNavigation)
     {
         await page.TrySaveUnsavedChangesAsync();
 
@@ -476,6 +492,10 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         }
 
         Selected = target;
+        if (ReferenceEquals(_current, target))
+        {
+            afterNavigation?.Invoke();
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanToggleConnect))]

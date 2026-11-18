@@ -40,7 +40,8 @@ public sealed class PollEventSubscriberTests
             _broadcasterIdProvider,
             new FakeTargetChannelProvider(),
             new AccountsStore(),
-            NullLogger<PollsAvailabilityService>.Instance);
+            NullLogger<PollsAvailabilityService>.Instance,
+            null);
 
         _availability.GetAsync(Arg.Any<CancellationToken>()).Returns(PollsAvailability.Available);
 

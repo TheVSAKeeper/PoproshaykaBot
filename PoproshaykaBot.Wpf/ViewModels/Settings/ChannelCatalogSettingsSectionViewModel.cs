@@ -2,6 +2,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.Services.Platform;
+using KeepShell.ViewModels;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
@@ -10,17 +12,15 @@ using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Wpf.Bootstrap;
+using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
 
 public sealed record ChannelSwitchModeOption(ChannelSwitchMode Mode, string DisplayName);
 
-public sealed record AuthContextOption(string ContextId, string DisplayName);
-
 public sealed record PreselectedNextChannelOption(string? ChannelId, string DisplayName);
-
-public sealed record AuthContextRoleOption(PlatformAuthRole Role, string DisplayName);
 
 public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableObject
 {
@@ -33,6 +33,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
     private readonly IShellLauncher? _shellLauncher;
     private readonly TimeProvider _timeProvider;
+    private readonly IEmbeddedTwitchAuthDialog? _embeddedTwitchAuth;
+    private readonly ILogger<ChannelCatalogSettingsSectionViewModel>? _logger;
     private readonly Dictionary<StreamingPlatform, IPlatformChannelAdapter> _adapters;
     private readonly List<ChannelCatalogItemViewModel> _allChannels = [];
     private readonly Dictionary<StreamingPlatform, ChannelSwitchMode> _switchModes = [];
@@ -41,30 +43,30 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     private readonly Dictionary<StreamingPlatform, string?> _initialPreselectedNext = [];
     private readonly Dictionary<StreamingPlatform, string?> _draftPreselectedNext = [];
     private bool _suppressUpdates;
+    private int _draftGeneration;
+    private OAuthSettingsViewModel? _twitchCredentials;
+    private YouTubeSettingsSectionViewModel? _youtubeCredentials;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedSwitchModeOption))]
     [NotifyPropertyChangedFor(nameof(IsPreselectedNextMode))]
     [NotifyPropertyChangedFor(nameof(SelectedPreselectedNextOption))]
-    [NotifyPropertyChangedFor(nameof(CanAuthorizeAdditionalContext))]
+    [NotifyCanExecuteChangedFor(nameof(AuthorizeOwnChannelCommand))]
     [NotifyPropertyChangedFor(nameof(HasChannels))]
     private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
 
     [ObservableProperty]
-    private PlatformAuthRole _newContextRole = PlatformAuthRole.Broadcaster;
-
-    [ObservableProperty]
-    private string _newContextLabel = string.Empty;
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(AuthorizeNewContextCommand))]
-    private bool _isAuthorizingContext;
+    [NotifyCanExecuteChangedFor(nameof(AuthorizeOwnChannelCommand))]
+    private bool _isAuthorizingAccount;
 
     [ObservableProperty]
     private string _newChannelInput = string.Empty;
 
     [ObservableProperty]
-    private string _statusNotice = string.Empty;
+    private string? _statusNotice;
+
+    [ObservableProperty]
+    private StatusSeverity _statusNoticeSeverity;
 
     [ObservableProperty]
     private ChannelCatalogItemViewModel? _selectedChannel;
@@ -79,7 +81,9 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         SettingsManager? settingsManager = null,
         YouTubeSettingsStore? youtubeSettingsStore = null,
         IShellLauncher? shellLauncher = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IEmbeddedTwitchAuthDialog? embeddedTwitchAuth = null,
+        ILogger<ChannelCatalogSettingsSectionViewModel>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         _catalogStore = catalogStore;
@@ -91,11 +95,9 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         _youtubeSettingsStore = youtubeSettingsStore;
         _shellLauncher = shellLauncher;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _embeddedTwitchAuth = embeddedTwitchAuth;
+        _logger = logger;
         _adapters = (adapters ?? []).ToDictionary(static a => a.Platform);
-
-        PlatformOptions = PlatformVisuals.OrderedPlatforms
-            .Select(static p => new PlatformFilterOption(p, PlatformVisuals.GetDisplayName(p)))
-            .ToArray();
 
         SwitchModeOptions =
         [
@@ -104,31 +106,24 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             new(ChannelSwitchMode.AutoDiscover, "Автопоиск старта на наблюдаемых каналах"),
         ];
 
-        AuthRoleOptions =
-        [
-            new(PlatformAuthRole.Broadcaster, "Ведущий"),
-            new(PlatformAuthRole.Bot, "Бот"),
-        ];
     }
 
     public event EventHandler? Edited;
 
-    public IReadOnlyList<PlatformFilterOption> PlatformOptions { get; }
+    internal void SetCredentialDrafts(OAuthSettingsViewModel? twitch, YouTubeSettingsSectionViewModel? youtube)
+    {
+        _twitchCredentials = twitch;
+        _youtubeCredentials = youtube;
+    }
 
     public IReadOnlyList<ChannelSwitchModeOption> SwitchModeOptions { get; }
 
-    public IReadOnlyList<AuthContextRoleOption> AuthRoleOptions { get; }
-
-    public bool CanAuthorizeAdditionalContext =>
+    private bool CanAuthorizeAccount(StreamingPlatform platform) =>
         _shellLauncher is not null
-        && ((SelectedPlatform == StreamingPlatform.Twitch && _twitchOAuth is not null && _twitchAccountsStore is not null && _settingsManager is not null)
-            || (SelectedPlatform == StreamingPlatform.YouTube && _youtubeOAuth is not null && _youtubeAccountsStore is not null && _youtubeSettingsStore is not null));
+        && ((platform == StreamingPlatform.Twitch && _twitchOAuth is not null && _twitchAccountsStore is not null && _settingsManager is not null)
+            || (platform == StreamingPlatform.YouTube && _youtubeOAuth is not null && _youtubeAccountsStore is not null && _youtubeSettingsStore is not null));
 
     public ObservableCollection<ChannelCatalogItemViewModel> VisibleChannels { get; } = [];
-
-    public ObservableCollection<AuthContextOption> BroadcasterContextOptions { get; } = [];
-
-    public ObservableCollection<AuthContextOption> BotContextOptions { get; } = [];
 
     public ObservableCollection<PreselectedNextChannelOption> PreselectedNextOptions { get; } = [];
 
@@ -146,7 +141,12 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
         set
         {
-            var nextId = value?.ChannelId;
+            if (value is null)
+            {
+                return;
+            }
+
+            var nextId = value.ChannelId;
             if (string.Equals(_draftPreselectedNext.GetValueOrDefault(SelectedPlatform), nextId, StringComparison.Ordinal))
             {
                 return;
@@ -188,6 +188,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
     public void Load()
     {
+        _draftGeneration++;
         _suppressUpdates = true;
         try
         {
@@ -197,7 +198,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             _draftActiveChannels.Clear();
             _initialPreselectedNext.Clear();
             _draftPreselectedNext.Clear();
-            StatusNotice = string.Empty;
+            StatusNotice = null;
 
             var settings = _catalogStore.Load();
             foreach (var platform in PlatformVisuals.OrderedPlatforms)
@@ -218,6 +219,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
                     isActive,
                     NotifyEdited,
                     VerifyAccessAsync,
+                    AuthorizeRoleAsync,
                     SetActiveInDraft,
                     RemoveChannel));
             }
@@ -339,86 +341,224 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         return changes;
     }
 
+    public string? ValidateAssignments()
+    {
+        foreach (var channel in _allChannels)
+        {
+            var pending = channel.Roles.FirstOrDefault(role => role.NeedsVerification);
+            if (pending is not null)
+            {
+                return $"Проверьте доступ аккаунта «{pending.Title}» на канале «{channel.DisplayName}» ({PlatformVisuals.GetDisplayName(channel.Platform)}).";
+            }
+        }
+
+        return null;
+    }
+
     partial void OnSelectedPlatformChanged(StreamingPlatform value)
     {
         RefreshPlatformView();
     }
 
-    [RelayCommand(CanExecute = nameof(CanAuthorizeContextExecute))]
-    private async Task AuthorizeNewContextAsync()
+    private bool CanAuthorizeOwnChannel() => !IsAuthorizingAccount && CanAuthorizeAccount(SelectedPlatform);
+
+    [RelayCommand(CanExecute = nameof(CanAuthorizeOwnChannel))]
+    private async Task AuthorizeOwnChannelAsync()
     {
         var platform = SelectedPlatform;
-        var role = NewContextRole;
-        var customLabel = NewContextLabel.Trim();
-        var launcher = _shellLauncher;
-        if (launcher is null)
+        var draft = _draftGeneration;
+        StatusNotice = null;
+        var account = await AuthorizeAccountAsync(platform, PlatformAuthRole.Broadcaster, SetNotice);
+        if (account is null || draft != _draftGeneration)
         {
             return;
         }
 
-        IsAuthorizingContext = true;
-        StatusNotice = string.Empty;
+        var item = AddOrSelectChannel(account.OwnChannel);
+        var role = item.Roles[0];
+        role.Assign(account.OwnChannel.Channel.ChannelId, account.ContextId);
+        await VerifyAccessAsync(item, role);
+    }
+
+    private async Task AuthorizeRoleAsync(ChannelCatalogItemViewModel item, ChannelAccountRoleViewModel role)
+    {
+        var selectedAccountId = role.AccountId;
+        var selectedContextId = role.ContextId;
+        var account = await AuthorizeAccountAsync(item.Platform, role.Role, role.SetStatus);
+        if (account is null || !_allChannels.Contains(item)
+            || selectedAccountId != role.AccountId || selectedContextId != role.ContextId)
+        {
+            return;
+        }
+
+        role.Assign(account.OwnChannel.Channel.ChannelId, account.ContextId);
+        await VerifyAccessAsync(item, role);
+    }
+
+    private async Task<AuthorizedAccount?> AuthorizeAccountAsync(StreamingPlatform platform, PlatformAuthRole role, Action<string, StatusSeverity> report)
+    {
+        if (IsAuthorizingAccount)
+        {
+            report("Дождитесь завершения текущего входа.", StatusSeverity.Info);
+            return null;
+        }
+
+        IsAuthorizingAccount = true;
+        report("Ожидаем вход на площадке…", StatusSeverity.Info);
+        _logger?.ChannelAuthorizationStarted(platform, role);
         try
         {
-            if (platform == StreamingPlatform.Twitch && _twitchOAuth is not null && _twitchAccountsStore is not null && _settingsManager is not null)
+            var account = platform switch
             {
-                var twitchSettings = _settingsManager.Current.Twitch;
-                string[] scopes = role == PlatformAuthRole.Bot
-                    ? [.. TwitchScopes.BotRequired, .. TwitchScopes.BotOptional]
-                    : [.. TwitchScopes.BroadcasterRequired];
-                var flow = await _twitchOAuth.StartOAuthFlowToDraftAsync(
-                    role,
-                    twitchSettings.ClientId,
-                    twitchSettings.ClientSecret,
-                    scopes,
-                    twitchSettings.RedirectUri,
-                    url => launcher.Open(url)).ConfigureAwait(true);
-
-                var contextId = $"tw-{role.ToString().ToLowerInvariant()}-{flow.UserId}";
-                var label = string.IsNullOrWhiteSpace(customLabel) ? flow.Login : customLabel;
-                var account = new TwitchAccountSettings();
-                flow.ApplyTo(account, _timeProvider.GetUtcNow());
-                _twitchAccountsStore.UpsertContext(role, contextId, label, account);
-                NewContextLabel = string.Empty;
-                ReloadContextOptions(platform);
-                StatusNotice = $"Добавлен контекст Twitch ({label}).";
-            }
-            else if (platform == StreamingPlatform.YouTube && _youtubeOAuth is not null && _youtubeAccountsStore is not null && _youtubeSettingsStore is not null)
+                StreamingPlatform.Twitch => await AuthorizeTwitchAsync(role, report),
+                StreamingPlatform.YouTube => await AuthorizeYouTubeAsync(role, report),
+                _ => null,
+            };
+            if (account is null)
             {
-                var ytSettings = _youtubeSettingsStore.Load();
-                var clientSecret = _youtubeAccountsStore.LoadClientSecret();
-                string[] scopes = [.. YouTubeScopes.RequiredFor(role)];
-                var flow = await _youtubeOAuth.StartOAuthFlowToDraftAsync(
-                    role,
-                    ytSettings.ClientId,
-                    clientSecret,
-                    scopes,
-                    url => launcher.Open(url)).ConfigureAwait(true);
-
-                var suffix = string.IsNullOrWhiteSpace(flow.ChannelId) ? Guid.NewGuid().ToString("N")[..8] : flow.ChannelId;
-                var contextId = $"yt-{role.ToString().ToLowerInvariant()}-{suffix}";
-                var label = string.IsNullOrWhiteSpace(customLabel)
-                    ? (string.IsNullOrWhiteSpace(flow.ChannelTitle) ? contextId : flow.ChannelTitle)
-                    : customLabel;
-                var account = new YouTubeAccountSettings();
-                flow.ApplyTo(account, _timeProvider.GetUtcNow());
-                _youtubeAccountsStore.UpsertContext(role, contextId, label, account);
-                NewContextLabel = string.Empty;
-                ReloadContextOptions(platform);
-                StatusNotice = $"Добавлен контекст YouTube ({label}).";
+                _logger?.ChannelAuthorizationIncomplete(platform, role);
             }
+            else
+            {
+                RefreshAccountOptions(platform);
+            }
+            return account;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
         {
-            StatusNotice = $"Не удалось авторизовать дополнительный контекст: {StreamingErrorMessages.SafeMessage(ex)}";
+            report("Вход отменён.", StatusSeverity.Info);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            _logger?.ChannelAuthorizationFailed(platform, role, exception.GetType().Name);
+            report($"Не удалось подключить аккаунт. {StreamingErrorMessages.SafeMessage(exception)}", StatusSeverity.Error);
+            return null;
         }
         finally
         {
-            IsAuthorizingContext = false;
+            IsAuthorizingAccount = false;
         }
     }
 
-    private bool CanAuthorizeContextExecute() => !IsAuthorizingContext && CanAuthorizeAdditionalContext;
+    private async Task<AuthorizedAccount?> AuthorizeTwitchAsync(PlatformAuthRole role, Action<string, StatusSeverity> report)
+    {
+        if (_settingsManager is null || _twitchOAuth is null || _twitchAccountsStore is null || _shellLauncher is null)
+        {
+            return null;
+        }
+
+        var settings = _settingsManager.Current.Twitch;
+        if (_twitchCredentials is { } twitch
+            && (twitch.ClientId.Trim() != settings.ClientId || twitch.ClientSecret.Trim() != settings.ClientSecret
+                || twitch.RedirectUri.Trim() != settings.RedirectUri))
+        {
+            report("Сначала сохраните новые реквизиты в блоке «Приложение Twitch», затем повторите вход.", StatusSeverity.Warning);
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(settings.ClientSecret))
+        {
+            report("Заполните и сохраните ключи в блоке «Приложение Twitch».", StatusSeverity.Warning);
+            return null;
+        }
+
+        string[] scopes = role == PlatformAuthRole.Bot
+            ? [.. TwitchScopes.BotRequired, .. TwitchScopes.BotOptional]
+            : [.. TwitchScopes.BroadcasterRequired];
+        OAuthFlowResult? flow = null;
+        if (_embeddedTwitchAuth is not null)
+        {
+            var embedded = await _embeddedTwitchAuth.AuthorizeAsync(new(role, settings.ClientId, settings.ClientSecret,
+                scopes, settings.RedirectUri, CheckBroadcasterChannel: false));
+            if (embedded.Outcome is EmbeddedTwitchAuthOutcome.Canceled or EmbeddedTwitchAuthOutcome.Failed)
+            {
+                report(embedded.Message, embedded.Outcome == EmbeddedTwitchAuthOutcome.Failed ? StatusSeverity.Error : StatusSeverity.Info);
+                return null;
+            }
+
+            flow = embedded.Flow;
+        }
+
+        flow ??= await _twitchOAuth.StartOAuthFlowToDraftAsync(role, settings.ClientId, settings.ClientSecret, scopes,
+            settings.RedirectUri, url => _shellLauncher.Open(url), checkBroadcasterChannel: false);
+        if (string.IsNullOrWhiteSpace(flow.UserId))
+        {
+            report("Twitch не сообщил ID аккаунта.", StatusSeverity.Error);
+            return null;
+        }
+
+        var id = flow.UserId.Trim();
+        var contextId = FindGrant(StreamingPlatform.Twitch, role, id) ?? $"tw-{role.ToString().ToLowerInvariant()}-{id}";
+        var account = new TwitchAccountSettings();
+        flow.ApplyTo(account, _timeProvider.GetUtcNow());
+        var key = new ChannelKey(StreamingPlatform.Twitch, id);
+        return CompleteAuthorization(_twitchAccountsStore.UpsertContext(role, contextId, flow.Login, account),
+            contextId, new(key, flow.Login, flow.Login, $"https://twitch.tv/{flow.Login}"), report);
+    }
+
+    private async Task<AuthorizedAccount?> AuthorizeYouTubeAsync(PlatformAuthRole role, Action<string, StatusSeverity> report)
+    {
+        if (_youtubeSettingsStore is null || _youtubeOAuth is null || _youtubeAccountsStore is null || _shellLauncher is null)
+        {
+            return null;
+        }
+
+        var settings = _youtubeSettingsStore.Load();
+        var secret = _youtubeAccountsStore.LoadClientSecret();
+        if (_youtubeCredentials is { } youtube
+            && (youtube.ClientId.Trim() != settings.ClientId || youtube.ClientSecret.Trim() != secret))
+        {
+            report("Сначала сохраните новые реквизиты в блоке «Google-проект», затем повторите вход.", StatusSeverity.Warning);
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.ClientId) || string.IsNullOrWhiteSpace(secret))
+        {
+            report("Заполните и сохраните ключи в блоке «Google-проект».", StatusSeverity.Warning);
+            return null;
+        }
+
+        var flow = await _youtubeOAuth.StartOAuthFlowToDraftAsync(role, settings.ClientId, secret,
+            YouTubeScopes.RequiredFor(role).ToArray(), url => _shellLauncher.Open(url));
+        if (string.IsNullOrWhiteSpace(flow.ChannelId))
+        {
+            report("YouTube не сообщил ID авторизованного канала.", StatusSeverity.Error);
+            return null;
+        }
+
+        var id = flow.ChannelId.Trim();
+        var name = string.IsNullOrWhiteSpace(flow.ChannelTitle) ? id : flow.ChannelTitle;
+        var contextId = FindGrant(StreamingPlatform.YouTube, role, id) ?? $"yt-{role.ToString().ToLowerInvariant()}-{id}";
+        var account = new YouTubeAccountSettings();
+        flow.ApplyTo(account, _timeProvider.GetUtcNow());
+        return CompleteAuthorization(_youtubeAccountsStore.UpsertContext(role, contextId, name, account),
+            contextId, new(new(StreamingPlatform.YouTube, id), name, id, $"https://youtube.com/channel/{id}"), report);
+    }
+
+    private static AuthorizedAccount? CompleteAuthorization(bool written, string contextId, ResolvedChannelIdentity ownChannel, Action<string, StatusSeverity> report)
+    {
+        if (!written)
+        {
+            report("Аккаунт действует до перезапуска. Записать авторизацию в файл не удалось.", StatusSeverity.Warning);
+            return null;
+        }
+
+        report($"Аккаунт «{ownChannel.DisplayName}» подключён.", StatusSeverity.Success);
+        return new(contextId, ownChannel);
+    }
+
+    private void SetNotice(string message, StatusSeverity severity)
+    {
+        StatusNoticeSeverity = severity;
+        StatusNotice = message;
+    }
+
+    private string? FindGrant(StreamingPlatform platform, PlatformAuthRole role, string accountId) => ListAccounts(platform)
+        .FirstOrDefault(account => account.Key.AccountId == accountId)?.Authorizations
+        .FirstOrDefault(grant => grant.Role == role && !grant.IsDefault)?.ContextId;
+
+    private sealed record AuthorizedAccount(string ContextId, ResolvedChannelIdentity OwnChannel);
 
     [RelayCommand]
     private async Task AddChannelAsync()
@@ -430,60 +570,84 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
 
         var targetPlatform = SelectedPlatform;
-        StatusNotice = string.Empty;
-        ResolvedChannelIdentity? resolved = null;
-        if (_adapters.TryGetValue(targetPlatform, out var adapter))
+        var draft = _draftGeneration;
+        StatusNotice = null;
+        if (!_adapters.TryGetValue(targetPlatform, out var adapter))
         {
-            try
-            {
-                resolved = await adapter.ResolveChannelIdentityAsync(input, AuthContextIds.Default, CancellationToken.None).ConfigureAwait(true);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                StatusNotice = $"Не удалось разрешить канал: {StreamingErrorMessages.SafeMessage(ex)}";
-                return;
-            }
-
-            if (resolved is null)
-            {
-                StatusNotice = "Не удалось определить идентификатор канала. Проверьте ввод и авторизацию площадки.";
-                return;
-            }
+            SetNotice("Адаптер площадки не зарегистрирован.", StatusSeverity.Error);
+            return;
         }
 
-        var channelId = resolved?.Channel.ChannelId ?? input;
-        var displayName = resolved?.DisplayName ?? input;
-        var handle = resolved?.Handle ?? input;
-        var url = resolved?.ChannelUrl ?? string.Empty;
+        ResolvedChannelIdentity? resolved;
+        try
+        {
+            var contextId = ListAccounts(targetPlatform).SelectMany(account => account.Authorizations)
+                .FirstOrDefault(grant => grant.HasToken
+                    && (targetPlatform != StreamingPlatform.YouTube || grant.Role == PlatformAuthRole.Broadcaster))?.ContextId;
+            resolved = await adapter.ResolveChannelIdentityAsync(input, contextId, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (draft == _draftGeneration && SelectedPlatform == targetPlatform)
+            {
+                SetNotice($"Не удалось определить канал. {StreamingErrorMessages.SafeMessage(ex)}", StatusSeverity.Error);
+            }
+            return;
+        }
 
-        var existing = _allChannels.FirstOrDefault(c =>
-            c.Platform == targetPlatform && string.Equals(c.ChannelId, channelId, StringComparison.Ordinal));
+        if (draft != _draftGeneration)
+        {
+            return;
+        }
+
+        if (resolved is null || !resolved.Channel.IsValid || resolved.Channel.Platform != targetPlatform)
+        {
+            if (SelectedPlatform == targetPlatform)
+            {
+                SetNotice("Не удалось определить идентификатор канала. Проверьте ввод и авторизацию площадки.", StatusSeverity.Error);
+            }
+            return;
+        }
+
+        AddOrSelectChannel(resolved);
+        if (targetPlatform == SelectedPlatform && NewChannelInput.Trim() == input)
+        {
+            NewChannelInput = string.Empty;
+        }
+    }
+
+    private ChannelCatalogItemViewModel AddOrSelectChannel(ResolvedChannelIdentity channel)
+    {
+        var (platform, channelId) = (channel.Channel.Platform, channel.Channel.ChannelId);
+        var existing = _allChannels.FirstOrDefault(candidate => candidate.Platform == platform && candidate.ChannelId == channelId);
         if (existing is not null)
         {
-            SelectedChannel = existing;
-            StatusNotice = $"Канал «{existing.DisplayName}» уже добавлен.";
-            NewChannelInput = string.Empty;
-            return;
+            if (SelectedPlatform == platform)
+            {
+                SelectedChannel = existing;
+                SetNotice($"Канал «{existing.DisplayName}» уже добавлен.", StatusSeverity.Info);
+            }
+            return existing;
         }
 
         var entry = new ChannelCatalogEntry
         {
-            Platform = targetPlatform,
+            Platform = platform,
             ChannelId = channelId,
-            DisplayName = displayName,
-            Handle = handle,
-            ChannelUrl = url,
-            KnownAliases = [displayName],
+            DisplayName = channel.DisplayName,
+            Handle = channel.Handle,
+            ChannelUrl = channel.ChannelUrl,
+            KnownAliases = [channel.DisplayName],
             IsConfigured = true,
             MonitoringEnabled = true,
             BroadcasterContextId = AuthContextIds.Default,
             BotContextId = AuthContextIds.Default,
         };
 
-        var isFirstForPlatform = !_allChannels.Any(c => c.Platform == targetPlatform);
+        var isFirstForPlatform = !_allChannels.Any(c => c.Platform == platform);
         if (isFirstForPlatform)
         {
-            _draftActiveChannels[targetPlatform] = channelId;
+            _draftActiveChannels[platform] = channelId;
         }
 
         var vm = new ChannelCatalogItemViewModel(
@@ -491,35 +655,59 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             isFirstForPlatform,
             NotifyEdited,
             VerifyAccessAsync,
+            AuthorizeRoleAsync,
             SetActiveInDraft,
             RemoveChannel);
         _allChannels.Add(vm);
-        NewChannelInput = string.Empty;
-        RefreshPlatformView();
-        SelectedChannel = vm;
+        if (SelectedPlatform == platform)
+        {
+            RefreshPlatformView();
+            SelectedChannel = vm;
+        }
+        else
+        {
+            RefreshAccountOptions(platform);
+        }
         NotifyEdited();
+        return vm;
     }
 
-    private async Task VerifyAccessAsync(ChannelCatalogItemViewModel item, PlatformAuthRole role)
+    private async Task VerifyAccessAsync(ChannelCatalogItemViewModel item, ChannelAccountRoleViewModel role)
     {
         if (!_adapters.TryGetValue(item.Platform, out var adapter))
         {
-            item.SetVerificationResult(role, false, "Адаптер площадки не зарегистрирован.");
+            role.SetStatus("Адаптер площадки не зарегистрирован.", StatusSeverity.Error);
             return;
         }
 
-        var requestedContextId = role == PlatformAuthRole.Broadcaster ? item.BroadcasterContextId : item.BotContextId;
-        var result = await adapter.VerifyChannelAccessAsync(new(item.Platform, item.ChannelId), role, requestedContextId, CancellationToken.None).ConfigureAwait(true);
-        var currentContextId = role == PlatformAuthRole.Broadcaster ? item.BroadcasterContextId : item.BotContextId;
-        if (!string.Equals(requestedContextId, currentContextId, StringComparison.Ordinal))
+        var contextId = role.ContextId;
+        var accountId = role.AccountId;
+        role.SetStatus("Проверяем доступ…", StatusSeverity.Info);
+        _logger?.ChannelRoleVerificationStarted(role.Role, item.ChannelId, item.Platform);
+        ChannelAccessVerification result;
+        try
         {
-            return;
+            result = await adapter.VerifyChannelAccessAsync(new(item.Platform, item.ChannelId), role.Role, contextId, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            result = new(false, null, "Проверка отменена.");
+        }
+        catch (Exception exception)
+        {
+            _logger?.ChannelRoleVerificationFailed(role.Role, item.ChannelId, item.Platform, exception.GetType().Name);
+            result = new(false, null, StreamingErrorMessages.SafeMessage(exception));
         }
 
-        item.SetVerificationResult(role, result.IsAllowed, result.IsAllowed ? "Доступ подтверждён" : (result.FailureReason ?? "Нет доступа"), result.SubjectId);
-        if (result.IsAllowed)
+        if (_allChannels.Contains(item) && contextId == role.ContextId && accountId == role.AccountId)
         {
-            NotifyEdited();
+            if (!result.IsAllowed || string.IsNullOrWhiteSpace(result.SubjectId)
+                || (accountId is not null && accountId != result.SubjectId))
+            {
+                _logger?.ChannelRoleVerificationDenied(role.Role, item.ChannelId, item.Platform);
+            }
+
+            role.SetVerification(result);
         }
     }
 
@@ -559,7 +747,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             VisibleChannels.Add(item);
         }
 
-        ReloadContextOptions(SelectedPlatform);
+        RefreshAccountOptions(SelectedPlatform);
         ReloadPreselectedNextOptions(SelectedPlatform);
         SelectedChannel = VisibleChannels.FirstOrDefault();
         OnPropertyChanged(nameof(HasChannels));
@@ -578,35 +766,23 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
     }
 
-    private void ReloadContextOptions(StreamingPlatform platform)
+    private IReadOnlyList<PlatformAccount> ListAccounts(StreamingPlatform platform) => platform switch
     {
-        BroadcasterContextOptions.Clear();
-        BotContextOptions.Clear();
+        StreamingPlatform.Twitch => _twitchAccountsStore?.ListAccounts() ?? [],
+        StreamingPlatform.YouTube => _youtubeAccountsStore?.ListAccounts() ?? [],
+        _ => [],
+    };
 
-        IReadOnlyList<AuthContextSummary> broadcasterContexts = platform switch
+    private void RefreshAccountOptions(StreamingPlatform platform)
+    {
+        var accounts = ListAccounts(platform);
+        var canAuthorize = CanAuthorizeAccount(platform);
+        foreach (var item in _allChannels.Where(item => item.Platform == platform))
         {
-            StreamingPlatform.Twitch when _twitchAccountsStore is not null => _twitchAccountsStore.ListContexts(PlatformAuthRole.Broadcaster),
-            StreamingPlatform.YouTube when _youtubeAccountsStore is not null => _youtubeAccountsStore.ListContexts(PlatformAuthRole.Broadcaster),
-            _ => [new(AuthContextIds.Default, PlatformAuthRole.Broadcaster, "Основной", null, null, false, true)],
-        };
-
-        IReadOnlyList<AuthContextSummary> botContexts = platform switch
-        {
-            StreamingPlatform.Twitch when _twitchAccountsStore is not null => _twitchAccountsStore.ListContexts(PlatformAuthRole.Bot),
-            StreamingPlatform.YouTube when _youtubeAccountsStore is not null => _youtubeAccountsStore.ListContexts(PlatformAuthRole.Bot),
-            _ => [new(AuthContextIds.Default, PlatformAuthRole.Bot, "Основной", null, null, false, true)],
-        };
-
-        foreach (var ctx in broadcasterContexts)
-        {
-            var title = string.IsNullOrWhiteSpace(ctx.DisplayLabel) ? ctx.Label : $"{ctx.Label} ({ctx.DisplayLabel})";
-            BroadcasterContextOptions.Add(new(ctx.ContextId, title));
-        }
-
-        foreach (var ctx in botContexts)
-        {
-            var title = string.IsNullOrWhiteSpace(ctx.DisplayLabel) ? ctx.Label : $"{ctx.Label} ({ctx.DisplayLabel})";
-            BotContextOptions.Add(new(ctx.ContextId, title));
+            foreach (var role in item.Roles)
+            {
+                role.RefreshAccounts(accounts, canAuthorize);
+            }
         }
     }
 
@@ -622,15 +798,11 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 public sealed partial class ChannelCatalogItemViewModel : ObservableObject
 {
     private readonly Action _onEdited;
-    private readonly Func<ChannelCatalogItemViewModel, PlatformAuthRole, Task> _verifyAsync;
     private readonly Action<ChannelCatalogItemViewModel> _setActive;
     private readonly Action<ChannelCatalogItemViewModel> _remove;
     private readonly List<string> _aliases;
     private readonly Dictionary<string, string> _parameters;
     private readonly string _channelUrl;
-    private string? _broadcasterVerifiedSubjectId;
-    private string? _botVerifiedSubjectId;
-    private bool _suppressNotify;
 
     [ObservableProperty]
     private string _displayName;
@@ -642,25 +814,14 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
     private bool _monitoringEnabled;
 
     [ObservableProperty]
-    private string _broadcasterContextId;
-
-    [ObservableProperty]
-    private string _botContextId;
-
-    [ObservableProperty]
     private bool _isActive;
-
-    [ObservableProperty]
-    private string _broadcasterVerificationStatus;
-
-    [ObservableProperty]
-    private string _botVerificationStatus;
 
     public ChannelCatalogItemViewModel(
         ChannelCatalogEntry entry,
         bool isActive,
         Action onEdited,
-        Func<ChannelCatalogItemViewModel, PlatformAuthRole, Task> verifyAsync,
+        Func<ChannelCatalogItemViewModel, ChannelAccountRoleViewModel, Task> verifyAsync,
+        Func<ChannelCatalogItemViewModel, ChannelAccountRoleViewModel, Task> authorizeAsync,
         Action<ChannelCatalogItemViewModel> setActive,
         Action<ChannelCatalogItemViewModel> remove)
     {
@@ -669,46 +830,30 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
         _channelUrl = entry.ChannelUrl;
         _aliases = [.. entry.KnownAliases];
         _parameters = new(entry.Parameters, StringComparer.Ordinal);
-        _broadcasterVerifiedSubjectId = entry.BroadcasterVerifiedSubjectId;
-        _botVerifiedSubjectId = entry.BotVerifiedSubjectId;
         _onEdited = onEdited;
-        _verifyAsync = verifyAsync;
         _setActive = setActive;
         _remove = remove;
 
-        _suppressNotify = true;
         _displayName = string.IsNullOrWhiteSpace(entry.DisplayName) ? entry.ChannelId : entry.DisplayName;
         _handle = entry.Handle;
         _monitoringEnabled = entry.MonitoringEnabled;
-        _broadcasterContextId = AuthContextIds.Normalize(entry.BroadcasterContextId);
-        _botContextId = AuthContextIds.Normalize(entry.BotContextId);
         _isActive = isActive;
-        _broadcasterVerificationStatus = string.IsNullOrWhiteSpace(_broadcasterVerifiedSubjectId) ? "Не проверен" : "Проверен";
-        _botVerificationStatus = string.IsNullOrWhiteSpace(_botVerifiedSubjectId) ? "Не проверен" : "Проверен";
-        _suppressNotify = false;
+        Roles =
+        [
+            new(entry, PlatformAuthRole.Broadcaster, onEdited, role => verifyAsync(this, role), role => authorizeAsync(this, role)),
+            new(entry, PlatformAuthRole.Bot, onEdited, role => verifyAsync(this, role), role => authorizeAsync(this, role)),
+        ];
     }
 
     public StreamingPlatform Platform { get; }
 
     public string ChannelId { get; }
 
-    public void SetVerificationResult(PlatformAuthRole role, bool allowed, string statusText, string? subjectId = null)
-    {
-        if (role == PlatformAuthRole.Broadcaster)
-        {
-            _broadcasterVerifiedSubjectId = allowed ? subjectId : null;
-            BroadcasterVerificationStatus = statusText;
-        }
-        else
-        {
-            _botVerifiedSubjectId = allowed ? subjectId : null;
-            BotVerificationStatus = statusText;
-        }
-    }
+    public IReadOnlyList<ChannelAccountRoleViewModel> Roles { get; }
 
     public ChannelCatalogEntry ToEntry()
     {
-        return new()
+        var entry = new ChannelCatalogEntry
         {
             Platform = Platform,
             ChannelId = ChannelId,
@@ -718,37 +863,18 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
             KnownAliases = [.. _aliases],
             IsConfigured = true,
             MonitoringEnabled = MonitoringEnabled,
-            BroadcasterContextId = AuthContextIds.Normalize(BroadcasterContextId),
-            BroadcasterVerifiedSubjectId = _broadcasterVerifiedSubjectId,
-            BotContextId = AuthContextIds.Normalize(BotContextId),
-            BotVerifiedSubjectId = _botVerifiedSubjectId,
             Parameters = new(_parameters, StringComparer.Ordinal),
         };
+        foreach (var role in Roles)
+        {
+            role.ApplyTo(entry);
+        }
+        return entry;
     }
 
-    partial void OnDisplayNameChanged(string value) => NotifyEdited();
-    partial void OnHandleChanged(string value) => NotifyEdited();
-    partial void OnMonitoringEnabledChanged(bool value) => NotifyEdited();
-
-    partial void OnBroadcasterContextIdChanged(string value)
-    {
-        _broadcasterVerifiedSubjectId = null;
-        BroadcasterVerificationStatus = "Требуется проверка";
-        NotifyEdited();
-    }
-
-    partial void OnBotContextIdChanged(string value)
-    {
-        _botVerifiedSubjectId = null;
-        BotVerificationStatus = "Требуется проверка";
-        NotifyEdited();
-    }
-
-    [RelayCommand]
-    private Task VerifyBroadcasterAsync() => _verifyAsync(this, PlatformAuthRole.Broadcaster);
-
-    [RelayCommand]
-    private Task VerifyBotAsync() => _verifyAsync(this, PlatformAuthRole.Bot);
+    partial void OnDisplayNameChanged(string value) => _onEdited();
+    partial void OnHandleChanged(string value) => _onEdited();
+    partial void OnMonitoringEnabledChanged(bool value) => _onEdited();
 
     [RelayCommand]
     private void MakeActive() => _setActive(this);
@@ -756,11 +882,4 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
     [RelayCommand]
     private void Remove() => _remove(this);
 
-    private void NotifyEdited()
-    {
-        if (!_suppressNotify)
-        {
-            _onEdited();
-        }
-    }
 }

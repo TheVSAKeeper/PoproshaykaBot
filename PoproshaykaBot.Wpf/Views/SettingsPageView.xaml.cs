@@ -1,4 +1,6 @@
 ﻿using PoproshaykaBot.Wpf.ViewModels;
+using KeepShell.Views.Controls;
+using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.Views.Settings;
 using System.ComponentModel;
 using System.Windows;
@@ -115,7 +117,14 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
     private void OnSectionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (string.Equals(e.PropertyName, nameof(SettingsSectionList.Selected), StringComparison.Ordinal))
+        if (e.PropertyName == nameof(SettingsSectionList.NoMatches) && _sections is { } sections
+            && !string.Equals(SectionRail.SearchText, sections.Query, StringComparison.Ordinal))
+        {
+            SectionRail.SetCurrentValue(SettingsRail.SearchTextProperty, sections.Query);
+        }
+
+        if (e.PropertyName == nameof(SettingsSectionList.Selected)
+            || e.PropertyName == nameof(SettingsSectionList.SelectedChild) && _sections?.Selected?.Key == PlatformSettingsPages.SectionKey)
         {
             ClearBlocksCache();
             SectionScroll.ScrollToVerticalOffset(0);
@@ -129,7 +138,7 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
     private void ScrollToBlock(SettingsSubsection child)
     {
-        if (_sections?.Selected is not { } section)
+        if (_sections?.Selected is not { } section || section.Key == PlatformSettingsPages.SectionKey)
         {
             return;
         }
@@ -178,7 +187,7 @@ public partial class SettingsPageView : UserControl, IView<SettingsPageViewModel
 
     private void SectionScroll_OnScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (_sections is not { Selected: { Children.Count: > 0 } section })
+        if (_sections is not { Selected: { Children.Count: > 0 } section } || section.Key == PlatformSettingsPages.SectionKey)
         {
             return;
         }

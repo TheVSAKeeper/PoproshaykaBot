@@ -76,6 +76,8 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
 
     public PlatformOAuthAccountViewModel Broadcaster { get; }
 
+    public bool ShowLegacyChannelField { get; set; } = true;
+
     public YouTubeQuotaStatusViewModel QuotaStatus { get; }
 
     public bool HasQuotaBudgetError => !TryParsePositiveQuotaBudget(DailyQuotaBudgetText, out _);
@@ -87,13 +89,11 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
     public void Load(
         YouTubeSettings settings,
         string clientSecret,
-        YouTubeAccountSettings bot,
-        YouTubeAccountSettings broadcaster)
+        YouTubeAccountSettings? bot = null,
+        YouTubeAccountSettings? broadcaster = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(clientSecret);
-        ArgumentNullException.ThrowIfNull(bot);
-        ArgumentNullException.ThrowIfNull(broadcaster);
 
         _suppressUpdates = true;
         try
@@ -107,8 +107,15 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
                 ? settings.DailyQuotaBudget.ToString(CultureInfo.InvariantCulture)
                 : YouTubeSettings.DefaultDailyQuotaBudget.ToString(CultureInfo.InvariantCulture);
 
-            Bot.Load(bot);
-            Broadcaster.Load(broadcaster);
+            if (bot is not null)
+            {
+                Bot.Load(bot);
+            }
+
+            if (broadcaster is not null)
+            {
+                Broadcaster.Load(broadcaster);
+            }
             QuotaStatus.Refresh();
         }
         finally
@@ -132,6 +139,13 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
         ArgumentNullException.ThrowIfNull(botTarget);
         ArgumentNullException.ThrowIfNull(broadcasterTarget);
 
+        SaveApplication(settings, out clientSecret);
+        Bot.SaveTo(botTarget);
+        Broadcaster.SaveTo(broadcasterTarget);
+    }
+
+    public void SaveApplication(YouTubeSettings settings, out string clientSecret)
+    {
         settings.Enabled = Enabled;
         settings.ProjectId = ProjectId.Trim();
         settings.ClientId = ClientId.Trim();
@@ -141,8 +155,6 @@ public sealed partial class YouTubeSettingsSectionViewModel : ObservableObject, 
             : YouTubeSettings.DefaultDailyQuotaBudget;
 
         clientSecret = ClientSecret.Trim();
-        Bot.SaveTo(botTarget);
-        Broadcaster.SaveTo(broadcasterTarget);
     }
 
     public void Dispose()

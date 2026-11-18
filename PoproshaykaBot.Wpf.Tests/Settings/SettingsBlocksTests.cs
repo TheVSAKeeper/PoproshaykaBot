@@ -82,7 +82,8 @@ public class SettingsBlocksTests
     public void Каждому_подпункту_рейла_отвечает_якорь_блока_в_разметке()
     {
         using var pageVm = CreateFullPageViewModel();
-        var expected = pageVm.Sections.Items
+        var scrollSections = pageVm.Sections.Items.Where(section => section.Key != "platforms").ToArray();
+        var expected = scrollSections
             .SelectMany(section => section.Children.Select(child => $"{section.Key}/{child.Key}"))
             .ToArray();
 
@@ -92,7 +93,7 @@ public class SettingsBlocksTests
         };
 
         var anchors = new List<string>();
-        foreach (var section in pageVm.Sections.Items)
+        foreach (var section in scrollSections)
         {
             pageVm.Sections.Selected = section;
             Render(view);
@@ -104,6 +105,31 @@ public class SettingsBlocksTests
             Assert.That(anchors, Is.EquivalentTo(expected),
                 "Ключи блоков разметки разошлись с подпунктами рейла: прокрутка к блоку и подсветка подпункта молча перестают работать.");
             Assert.That(pageVm.SectionPresentations.Single(p => p.Section.Key == "dashboard").IsFullWidth, Is.True);
+        });
+    }
+
+    [TestCase("twitch", PoproshaykaBot.Core.Platforms.StreamingPlatform.Twitch)]
+    [TestCase("youtube", PoproshaykaBot.Core.Platforms.StreamingPlatform.YouTube)]
+    public void Выбор_площадки_открывает_её_настройки_и_каналы(string groupKey, PoproshaykaBot.Core.Platforms.StreamingPlatform platform)
+    {
+        using var pageVm = CreateFullPageViewModel();
+        var view = new SettingsPageView { DataContext = pageVm };
+        var section = pageVm.Sections["platforms"];
+        pageVm.Sections.SelectChildCommand.Execute(section.FindChild(groupKey));
+        Render(view);
+
+        var host = (ItemsControl)view.FindName("SectionsHost");
+        var visible = Enumerable.Range(0, pageVm.SectionPresentations.Count)
+            .Where(index => ((ContentPresenter)host.ItemContainerGenerator.ContainerFromIndex(index)).Visibility == Visibility.Visible)
+            .Select(index => pageVm.SectionPresentations[index])
+            .Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(visible.Group, Is.SameAs(section.FindChild(groupKey)));
+            Assert.That(pageVm.GetSectionContent<ChannelCatalogSettingsSectionViewModel>().SelectedPlatform, Is.EqualTo(platform));
+            Assert.That(visible.Blocks.Select(block => block.Key), Does.Contain("channels/catalog"));
+            Assert.That(pageVm.Sections.Items.Select(item => item.Key), Has.None.Matches<string>(key => key is "oauth" or "youtube" or "channels"));
         });
     }
 

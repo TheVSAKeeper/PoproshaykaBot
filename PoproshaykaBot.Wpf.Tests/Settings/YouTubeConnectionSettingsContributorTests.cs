@@ -74,21 +74,18 @@ public sealed class YouTubeConnectionSettingsContributorTests
     }
 
     [Test]
-    public async Task Changing_single_role_token_publishes_only_that_role_event()
+    public async Task Saving_application_settings_does_not_replace_a_refreshed_bot_token()
     {
-        var (contributor, vm, _, _) = CreateFixture();
+        var (contributor, vm, _, accountsStore) = CreateFixture();
         LoadInitial(contributor);
 
-        vm.Bot.AccessTokenValue = "updated-bot-token";
+        accountsStore.Mutate(PlatformAuthRole.Bot, account => account.AccessToken = "updated-bot-token");
+        vm.ProjectId = "new-project";
         contributor.BeginSave(new AppSettings());
         var outcome = await contributor.SaveAsync(new AppSettings(), appSettingsWritten: true);
 
-        var events = outcome.EventsOfType<PoproshaykaBot.Core.Platforms.Auth.PlatformAuthorizationRefreshed>()
-            .ToArray();
-
-        Assert.That(events, Has.Length.EqualTo(1));
-        Assert.That(events[0].Platform, Is.EqualTo(StreamingPlatform.YouTube));
-        Assert.That(events[0].Role, Is.EqualTo(PlatformAuthRole.Bot));
+        Assert.That(accountsStore.LoadBot().AccessToken, Is.EqualTo("updated-bot-token"));
+        Assert.That(outcome.Events, Is.Empty);
     }
 
     [Test]
@@ -119,21 +116,20 @@ public sealed class YouTubeConnectionSettingsContributorTests
     }
 
     [Test]
-    public async Task Changing_refresh_token_alone_publishes_authorization_refreshed()
+    public async Task Saving_client_secret_preserves_a_token_cleared_after_the_draft_was_loaded()
     {
         var (contributor, vm, _, accountsStore) = CreateFixture();
-        accountsStore.SaveAll("initial-secret", new YouTubeAccountSettings(), new YouTubeAccountSettings());
         LoadInitial(contributor);
 
-        vm.Broadcaster.RefreshTokenValue = "new-refresh-token";
+        vm.ClientSecret = "changed-secret";
         contributor.BeginSave(new AppSettings());
+        accountsStore.Mutate(PlatformAuthRole.Broadcaster, account => account.AccessToken = string.Empty);
         var outcome = await contributor.SaveAsync(new AppSettings(), appSettingsWritten: true);
 
-        var events = outcome.EventsOfType<PlatformAuthorizationRefreshed>().ToArray();
-
-        Assert.That(events, Has.Length.EqualTo(1));
-        Assert.That(events[0].Platform, Is.EqualTo(StreamingPlatform.YouTube));
-        Assert.That(events[0].Role, Is.EqualTo(PlatformAuthRole.Broadcaster));
+        Assert.That(accountsStore.LoadBroadcaster().AccessToken, Is.Empty);
+        Assert.That(accountsStore.LoadClientSecret(), Is.EqualTo("changed-secret"));
+        Assert.That(outcome.EventsOfType<PlatformAuthorizationRefreshed>().Select(e => e.Role),
+            Is.EquivalentTo([PlatformAuthRole.Bot, PlatformAuthRole.Broadcaster]));
     }
 
     [Test]

@@ -37,7 +37,7 @@ internal sealed class TwitchPlatformConnectionAdapter(
         var target = targetChannelProvider.Current;
 
         var activeEntry = !target.IsDebugSession
-            ? ResolveActiveCatalogEntry()
+            ? channelCatalogStore?.GetActiveChannel(StreamingPlatform.Twitch)
             : null;
 
         var botContextId = AuthContextIds.Normalize(activeEntry?.BotContextId);
@@ -57,7 +57,7 @@ internal sealed class TwitchPlatformConnectionAdapter(
 
         if (activeEntry is not null && channelRegistry is not null)
         {
-            var label = ResolveChannelLabel(activeEntry, target.Login);
+            var label = ResolveChannelLabel(activeEntry);
             targetChannelProvider.SetSessionLogin(label);
             channelRegistry.SetBinding(new(
                 activeEntry.Key,
@@ -114,7 +114,7 @@ internal sealed class TwitchPlatformConnectionAdapter(
         VerifyBotIdentity(target.Channel, botContextId);
 
         var previousBotContextId = channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.BotContextId;
-        var label = ResolveChannelLabel(target.Channel, targetChannelProvider.Current.Login);
+        var label = ResolveChannelLabel(target.Channel);
 
         targetChannelProvider.SetSessionLogin(label);
         channelRegistry?.SetBinding(new(
@@ -144,46 +144,29 @@ internal sealed class TwitchPlatformConnectionAdapter(
 
     private void VerifyBotIdentity(ChannelCatalogEntry? entry, string botContextId)
     {
-        if (entry is null || accountsStore is null || string.IsNullOrWhiteSpace(entry.BotVerifiedSubjectId))
+        if (entry is null)
+        {
+            return;
+        }
+
+        if (entry.GetAccountAssignment(PlatformAuthRole.Bot) is not { IsVerified: true } assignment)
+        {
+            throw new InvalidOperationException("Подтвердите доступ аккаунта бота к каналу Twitch в настройках площадки.");
+        }
+
+        if (accountsStore is null)
         {
             return;
         }
 
         var account = accountsStore.Load(PlatformAuthRole.Bot, botContextId);
-        if (!string.IsNullOrWhiteSpace(account.UserId)
-            && !string.Equals(account.UserId, entry.BotVerifiedSubjectId, StringComparison.Ordinal))
+        if (!string.Equals(account.UserId, assignment.Account.AccountId, StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Контекст бота ({botContextId}) перепривязан к другому аккаунту Twitch – требуется повторная проверка доступа.");
         }
     }
 
-    private ChannelCatalogEntry? ResolveActiveCatalogEntry()
-    {
-        if (channelCatalogStore is null)
-        {
-            return null;
-        }
-
-        var configured = channelCatalogStore.GetConfiguredChannels(StreamingPlatform.Twitch);
-        if (configured.Count == 0)
-        {
-            return null;
-        }
-
-        var routing = channelCatalogStore.GetPlatformSettings(StreamingPlatform.Twitch);
-        if (!string.IsNullOrWhiteSpace(routing.ActiveChannelId))
-        {
-            var match = configured.FirstOrDefault(c => string.Equals(c.ChannelId, routing.ActiveChannelId, StringComparison.Ordinal));
-            if (match is not null)
-            {
-                return match;
-            }
-        }
-
-        return configured[0];
-    }
-
-    private static string ResolveChannelLabel(ChannelCatalogEntry entry, string fallback)
+    internal static string ResolveChannelLabel(ChannelCatalogEntry entry)
     {
         if (!string.IsNullOrWhiteSpace(entry.Handle))
         {
@@ -195,6 +178,6 @@ internal sealed class TwitchPlatformConnectionAdapter(
             return entry.DisplayName;
         }
 
-        return string.IsNullOrWhiteSpace(fallback) ? entry.ChannelId : fallback;
+        return entry.ChannelId;
     }
 }

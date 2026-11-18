@@ -1035,6 +1035,12 @@ internal sealed class YouTubeStreamMonitor(
 
     private static string? CheckContextOwnershipMismatch(YouTubeChannelSlot slot, Auth.YouTubeAccountSettings? account)
     {
+        var assignment = slot.Entry.GetAccountAssignment(PlatformAuthRole.Broadcaster);
+        if (assignment is { IsVerified: false })
+        {
+            return "доступ аккаунта ведущего к каналу YouTube не подтверждён";
+        }
+
         if (account is null)
         {
             return null;
@@ -1046,8 +1052,8 @@ internal sealed class YouTubeStreamMonitor(
             return "выбранный аккаунт ведущего принадлежит другому каналу YouTube";
         }
 
-        if (!string.IsNullOrWhiteSpace(slot.Entry.BroadcasterVerifiedSubjectId)
-            && !string.Equals(slot.Entry.BroadcasterVerifiedSubjectId, account.ChannelId, StringComparison.Ordinal))
+        if (assignment is not null
+            && !string.Equals(assignment.Account.AccountId, account.ChannelId, StringComparison.Ordinal))
         {
             return "авторизация ведущего изменилась – требуется повторная проверка доступа";
         }

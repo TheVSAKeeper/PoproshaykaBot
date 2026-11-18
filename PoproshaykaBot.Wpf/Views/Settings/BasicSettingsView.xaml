@@ -2,7 +2,6 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Settings"
-             xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -20,23 +19,6 @@
     </UserControl.Resources>
 
     <StackPanel>
-        <DockPanel Margin="0,0,0,8">
-            <TextBlock Text="Канал"
-                       Style="{StaticResource Setting.RowLabel}" />
-            <StackPanel Orientation="Horizontal">
-                <TextBox Style="{StaticResource TextBox.Form}"
-                         Width="{DynamicResource Setting.ShortFieldWidth}"
-                         AutomationProperties.Name="Канал Twitch"
-                         Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         keepshell:PlaceholderBehavior.Placeholder="{Binding ChannelPlaceholder}" />
-                <Button Content="Сброс"
-                        Style="{StaticResource Button.Ghost}"
-                        Command="{Binding ResetChannelCommand}"
-                        VerticalAlignment="Center"
-                        Margin="8,0,0,0" />
-            </StackPanel>
-        </DockPanel>
-
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Аккаунт отображения"
                        Style="{StaticResource Setting.RowLabel}" />
@@ -59,7 +41,7 @@
                                       VerticalAlignment="Top"
                                       Margin="0,2,6,0"
                                       Foreground="{DynamicResource Fg.Muted}" />
-            <TextBlock Text="Канал – название канала Twitch, к чату которого подключается бот. Аккаунт отображения определяет, от чьего имени бот показывает сообщения в оверлее."
+            <TextBlock Text="Эта настройка определяет, от чьего имени показываются сообщения в оверлее."
                        Style="{StaticResource TextBlock.Subtle}"
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource Fg.Muted}" />

@@ -15,8 +15,6 @@ public sealed class YouTubeConnectionSettingsContributor : ISettingsSectionContr
 
     private YouTubeSettings _settingsDraft = new();
     private string _clientSecretDraft = string.Empty;
-    private YouTubeAccountSettings _botDraft = new();
-    private YouTubeAccountSettings _broadcasterDraft = new();
     private PlatformCredentialSnapshot _previousCredentials;
 
     public YouTubeConnectionSettingsContributor(
@@ -29,6 +27,7 @@ public sealed class YouTubeConnectionSettingsContributor : ISettingsSectionContr
         ArgumentNullException.ThrowIfNull(accountsStore);
 
         _youTube = youTube;
+        _youTube.ShowLegacyChannelField = false;
         _settingsStore = settingsStore;
         _accountsStore = accountsStore;
     }
@@ -79,10 +78,7 @@ public sealed class YouTubeConnectionSettingsContributor : ISettingsSectionContr
 
         _settingsDraft = JsonStoreClone.DeepClone(_settingsStore.Load());
         _clientSecretDraft = _accountsStore.LoadClientSecret();
-        _botDraft = JsonStoreClone.DeepClone(_accountsStore.LoadBot());
-        _broadcasterDraft = JsonStoreClone.DeepClone(_accountsStore.LoadBroadcaster());
-
-        _youTube.Load(_settingsDraft, _clientSecretDraft, _botDraft, _broadcasterDraft);
+        _youTube.Load(_settingsDraft, _clientSecretDraft);
     }
 
     public IDisposable SubscribeDirty(SettingsSessionState session, Action markDirty, Action notifyChangesState)
@@ -107,33 +103,25 @@ public sealed class YouTubeConnectionSettingsContributor : ISettingsSectionContr
 
     public void BeginSave(AppSettings targetSettings)
     {
-        var currentBot = _accountsStore.LoadBot();
-        var currentBroadcaster = _accountsStore.LoadBroadcaster();
-        _previousCredentials = new(
-            _settingsStore.Load().ClientId,
-            _accountsStore.LoadClientSecret(),
-            currentBot.AccessToken,
-            currentBot.RefreshToken,
-            currentBroadcaster.AccessToken,
-            currentBroadcaster.RefreshToken);
+        var currentSettings = _settingsStore.Load();
+        _previousCredentials = new(currentSettings.ClientId, _accountsStore.LoadClientSecret());
 
-        _youTube.SaveTo(_settingsDraft, out _clientSecretDraft, _botDraft, _broadcasterDraft);
+        _youTube.SaveApplication(_settingsDraft, out _clientSecretDraft);
+        _settingsDraft.Channel = currentSettings.Channel;
     }
 
     public Task<SettingsSectionSaveOutcome> SaveAsync(AppSettings targetSettings, bool appSettingsWritten)
     {
         var written = _settingsStore.Save(_settingsDraft);
-        written &= _accountsStore.SaveAll(_clientSecretDraft, _botDraft, _broadcasterDraft);
+        if (!string.Equals(_previousCredentials.ClientSecret, _clientSecretDraft, StringComparison.Ordinal))
+        {
+            written &= _accountsStore.SaveClientSecret(_clientSecretDraft);
+        }
 
         var events = _previousCredentials.CollectAuthorizationRefreshes(
             StreamingPlatform.YouTube,
-            new(
-                _settingsDraft.ClientId,
-                _clientSecretDraft,
-                _botDraft.AccessToken,
-                _botDraft.RefreshToken,
-                _broadcasterDraft.AccessToken,
-                _broadcasterDraft.RefreshToken));
+            new(_settingsDraft.ClientId, _clientSecretDraft),
+            _accountsStore.ListContexts);
 
         return Task.FromResult(new SettingsSectionSaveOutcome(written, events));
     }

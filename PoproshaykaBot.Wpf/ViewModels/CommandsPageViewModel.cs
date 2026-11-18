@@ -4,9 +4,11 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -18,7 +20,7 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeader, IPageRefresh, IUnsavedChangesPage
 {
-    private const string WhisperReauthorizationNotice = "Шёпот необязателен. Пока у бота нет разрешения на личные сообщения, он отвечает на такие команды в общем чате – ответом на сообщение зрителя. Чтобы включить шёпот, откройте в настройках раздел «Авторизация». Добавьте user:manage:whispers в права бота и авторизуйте бота заново.";
+    private const string WhisperReauthorizationNotice = "Пока у бота нет разрешения на личные сообщения, он отвечает в общем чате. Чтобы включить шёпот, откройте «Настройки → Площадки → Twitch» и войдите заново в строке «Бот» нужного канала.";
 
     private const string NotWrittenNotice = "Параметры применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните параметры ещё раз.";
 
@@ -27,6 +29,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     private readonly CommandUsageRepository _usageRepository;
     private readonly IUnsavedChangesPrompt _unsavedChangesPrompt;
     private readonly AccountsStore _accountsStore;
+    private readonly TwitchChannelAuthorization? _authorization;
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly ILogger<CommandsPageViewModel> _logger;
     private readonly List<CommandRowViewModel> _allRows = [];
@@ -86,11 +89,13 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         IUnsavedChangesPrompt unsavedChangesPrompt,
         AccountsStore accountsStore,
         ILogger<CommandsPageViewModel> logger,
-        IChatPlatformRegistry? platformRegistry = null)
+        IChatPlatformRegistry? platformRegistry = null,
+        TwitchChannelAuthorization? authorization = null)
     {
         ArgumentNullException.ThrowIfNull(processor);
 
         _accountsStore = accountsStore;
+        _authorization = authorization;
         _settingsStore = settingsStore;
         _settingsManager = settingsManager;
         _usageRepository = usageRepository;
@@ -592,7 +597,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
         var whispers = _allRows.Any(row => row.EffectiveTarget.WhispersToCaller());
 
-        WhisperNotice = whispers && !TwitchScopes.IsGranted(_accountsStore.LoadBot(), TwitchScopes.UserManageWhispers)
+        var bot = _authorization is null ? _accountsStore.LoadBot() : _authorization.GetAccount(PlatformAuthRole.Bot);
+        WhisperNotice = whispers && (bot is null || !TwitchScopes.IsGranted(bot, TwitchScopes.UserManageWhispers))
             ? WhisperReauthorizationNotice
             : null;
     }

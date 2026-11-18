@@ -17,6 +17,7 @@ public static class TwitchServiceCollectionExtensions
         services.AddPlatformAuthRegistry();
         services.AddTransient<BotTwitchAuthHandler>();
         services.AddTransient<BroadcasterTwitchAuthHandler>();
+        services.AddSingleton<TwitchChannelAuthorization>();
 
         services.AddHttpClient(TwitchEndpoints.HelixBotClient, client =>
             {

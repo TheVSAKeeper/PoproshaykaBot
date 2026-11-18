@@ -10,7 +10,8 @@ public abstract class TwitchAuthHandlerBase(
     ITwitchOAuthService oauthService,
     SettingsManager settingsManager,
     AccountsStore accountsStore,
-    ILogger logger)
+    ILogger logger,
+    TwitchChannelAuthorization? channelAuthorization = null)
     : DelegatingHandler
 {
     public static readonly HttpRequestOptionsKey<bool> KeepTokenOnUnauthorized = new("poproshayka.keep-token-on-401");
@@ -24,6 +25,14 @@ public abstract class TwitchAuthHandlerBase(
         CancellationToken cancellationToken)
     {
         var contextId = PlatformAuthRequestOptions.ResolveContextId(request);
+        if (channelAuthorization is not null
+            && PlatformAuthRequestOptions.CurrentContextId is null
+            && !request.Options.TryGetValue(PlatformAuthRequestOptions.ContextIdKey, out _)
+            && !channelAuthorization.TryGetAccount(Role, out contextId, out _))
+        {
+            throw new TwitchAuthorizationMissingException($"Подтвердите доступ аккаунта к каналу Twitch. {MissingTokenHint}");
+        }
+
         var token = await GetTokenAsync(oauthService, contextId, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(token))

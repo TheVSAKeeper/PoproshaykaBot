@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Reflection;
 using KeepShell.Services.Platform;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,6 +15,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Streaming.Switching;
+using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -41,6 +43,127 @@ public sealed class Stage3MultiChannelWpfTests
         {
             Directory.Delete(_root, recursive: true);
         }
+    }
+
+    [Test]
+    public async Task Signing_in_from_a_channel_role_saves_the_grant_and_verifies_that_assignment()
+    {
+        var accounts = new AccountsStore(filePath: Path.Combine(_root, "accounts.json"));
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
+        var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_root, "settings.json"));
+        settings.Mutate(s =>
+        {
+            s.Twitch.ClientId = "test-client";
+            s.Twitch.ClientSecret = "test-secret";
+        });
+        var channel = new ChannelKey(StreamingPlatform.Twitch, "10");
+        catalog.Save(new() { Channels = [new() { Platform = channel.Platform, ChannelId = channel.ChannelId, IsConfigured = true }] });
+        var auth = new TestEmbeddedAuth();
+        var adapter = new NullResolveAdapter(StreamingPlatform.Twitch, (key, role, context) =>
+        {
+            Assert.That((key, role, context), Is.EqualTo((channel, PlatformAuthRole.Bot, "tw-bot-90")));
+            return new(true, "90");
+        });
+
+        var editor = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter], twitchAccountsStore: accounts,
+            twitchOAuth: DispatchProxy.Create<ITwitchOAuthService, InertProxy>(), settingsManager: settings,
+            shellLauncher: new NoOpLauncher(), embeddedTwitchAuth: auth);
+        editor.Load();
+        var bot = editor.VisibleChannels.Single().Roles.Single(role => role.Role == PlatformAuthRole.Bot);
+        await bot.AuthorizeCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(bot.AccountId, Is.EqualTo("90"));
+            Assert.That(bot.Status, Is.EqualTo("Доступ подтверждён"));
+            Assert.That(editor.ValidateAssignments(), Is.Null);
+            Assert.That(accounts.ListAccounts().Single().Key.AccountId, Is.EqualTo("90"));
+            Assert.That(editor.VisibleChannels.Single().ToEntry().GetAccountAssignment(PlatformAuthRole.Broadcaster), Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task An_unresolved_channel_is_not_added_and_a_default_account_is_not_implicitly_assigned()
+    {
+        var accounts = new AccountsStore(filePath: Path.Combine(_root, "accounts.json"));
+        accounts.Mutate(PlatformAuthRole.Bot, account =>
+        {
+            account.UserId = "90";
+            account.Login = "thebot";
+            account.AccessToken = "test-token";
+        });
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
+        catalog.Save(new() { Channels = [new() { Platform = StreamingPlatform.Twitch, ChannelId = "10", IsConfigured = true }] });
+        var editor = new ChannelCatalogSettingsSectionViewModel(catalog, twitchAccountsStore: accounts);
+        editor.Load();
+        editor.NewChannelInput = "https://twitch.tv/unresolved";
+
+        await editor.AddChannelCommand.ExecuteAsync(null);
+        var role = editor.VisibleChannels.Single().Roles.Single(value => value.Role == PlatformAuthRole.Bot);
+        Assert.That(role.SelectedAccount, Is.Null);
+        Assert.That(editor.StatusNoticeSeverity, Is.EqualTo(StatusSeverity.Error));
+        role.SelectedAccount = role.Accounts.Single();
+        Assert.That(editor.ValidateAssignments(), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task One_account_can_be_verified_for_two_channels_and_survives_reloading_the_profile()
+    {
+        var accountsPath = Path.Combine(_root, "accounts.json");
+        var channelsPath = Path.Combine(_root, "channels.json");
+        var accounts = new AccountsStore(filePath: accountsPath);
+        accounts.UpsertContext(PlatformAuthRole.Bot, "shared-bot", "Бот", new() { UserId = "90", Login = "shared", AccessToken = "test-bot" });
+        accounts.UpsertContext(PlatformAuthRole.Broadcaster, "same-user", "Стример", new() { UserId = "90", Login = "shared", AccessToken = "test-owner" });
+
+        var catalog = new ChannelCatalogStore(filePath: channelsPath);
+        catalog.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = StreamingPlatform.Twitch, ChannelId = "10", DisplayName = "Канал A", IsConfigured = true, BotContextId = "shared-bot", BotVerifiedSubjectId = "90" },
+                new() { Platform = StreamingPlatform.Twitch, ChannelId = "20", DisplayName = "Канал B", IsConfigured = true },
+            ],
+        });
+        var secondKey = new ChannelKey(StreamingPlatform.Twitch, "20");
+        var subject = new Queue<string>(["other-id", "90"]);
+        var adapter = new NullResolveAdapter(StreamingPlatform.Twitch, (key, role, context) =>
+        {
+            Assert.That((key, role, context), Is.EqualTo((secondKey, PlatformAuthRole.Bot, "shared-bot")));
+            return new(true, subject.Dequeue());
+        });
+
+        var editor = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter], twitchAccountsStore: accounts);
+        editor.Load();
+        var platformAccount = accounts.ListAccounts().Single();
+        var firstRole = editor.VisibleChannels.Single(c => c.ChannelId == "10").Roles.Single(role => role.Role == PlatformAuthRole.Bot);
+        var secondRole = editor.VisibleChannels.Single(c => c.ChannelId == "20").Roles.Single(role => role.Role == PlatformAuthRole.Bot);
+        secondRole.SelectedAccount = secondRole.Accounts.Single();
+        await secondRole.VerifyCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(platformAccount.Key, Is.EqualTo(new PlatformAccountKey(StreamingPlatform.Twitch, "90")));
+            Assert.That(platformAccount.Authorizations, Has.Count.EqualTo(2));
+            Assert.That(firstRole.SelectedAccount?.AccountId, Is.EqualTo("90"));
+            Assert.That(firstRole.Status, Is.EqualTo("Доступ подтверждён"));
+            Assert.That(secondRole.Status, Does.Contain("не подтвердила"));
+            Assert.That(editor.ValidateAssignments(), Does.Contain("Канал B"));
+        });
+
+        await secondRole.VerifyCommand.ExecuteAsync(null);
+        Assert.That(editor.ValidateAssignments(), Is.Null);
+        var settings = catalog.Load();
+        editor.ApplyTo(settings);
+        Assert.That(catalog.Save(settings), Is.True);
+
+        var reopened = new ChannelCatalogStore(filePath: channelsPath);
+        var bindings = reopened.Load().Channels.Select(channel => channel.GetAccountAssignment(PlatformAuthRole.Bot)).ToArray();
+        Assert.Multiple(() =>
+        {
+            Assert.That(bindings.Select(binding => binding?.Account), Is.EqualTo(new[] { platformAccount.Key, platformAccount.Key }));
+            Assert.That(bindings.Select(binding => binding?.IsVerified), Is.All.True);
+            Assert.That(new AccountsStore(filePath: accountsPath).Load(PlatformAuthRole.Bot, "shared-bot").AccessToken, Is.EqualTo("test-bot"));
+        });
     }
 
     [Test]
@@ -135,16 +258,33 @@ public sealed class Stage3MultiChannelWpfTests
         Assert.That(target.Platforms[0].PreselectedNextChannelId, Is.Null);
     }
 
-    private sealed class NullResolveAdapter(StreamingPlatform platform) : IPlatformChannelAdapter
+    private sealed class NullResolveAdapter(
+        StreamingPlatform platform,
+        Func<ChannelKey, PlatformAuthRole, string, ChannelAccessVerification>? verify = null) : IPlatformChannelAdapter
     {
         public StreamingPlatform Platform => platform;
         public PlatformCapabilities Capabilities => PlatformCapabilities.BackgroundStreamMonitoring;
         public Task<ResolvedChannelIdentity?> ResolveChannelIdentityAsync(string rawInput, string? preferredContextId, CancellationToken cancellationToken)
             => Task.FromResult<ResolvedChannelIdentity?>(null);
         public Task<ChannelAccessVerification> VerifyChannelAccessAsync(ChannelKey channel, PlatformAuthRole role, string contextId, CancellationToken cancellationToken)
-            => Task.FromResult(new ChannelAccessVerification(true, "sub"));
+            => Task.FromResult(verify?.Invoke(channel, role, contextId) ?? new(true, "sub"));
         public Task<ChannelLiveProbeResult> ProbeChannelLiveAsync(ChannelCatalogEntry channel, CancellationToken cancellationToken)
             => Task.FromResult(new ChannelLiveProbeResult(false, true, null));
+    }
+
+    private sealed class TestEmbeddedAuth : IEmbeddedTwitchAuthDialog
+    {
+        public Task<EmbeddedTwitchAuthResult> AuthorizeAsync(EmbeddedTwitchAuthRequest request)
+        {
+            Assert.That((request.Role, request.CheckBroadcasterChannel), Is.EqualTo((PlatformAuthRole.Bot, false)));
+            var flow = new OAuthFlowResult("fake-token", "fake-refresh", [], "somebot", "90", 3600);
+            return Task.FromResult(EmbeddedTwitchAuthResult.Completed(flow));
+        }
+    }
+
+    public class InertProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => throw new NotSupportedException(targetMethod?.Name);
     }
 
     [Test]
@@ -304,7 +444,14 @@ public sealed class Stage3MultiChannelWpfTests
         public AutoDiscoverPrompt? GetActivePrompt(StreamingPlatform platform) => null;
         public IReadOnlyList<AutoDiscoverPrompt> GetActivePrompts() => [];
 
-        public Task<ChannelSwitchResult> SwitchActiveChannelAsync(StreamingPlatform platform, ChannelKey targetChannel, CancellationToken cancellationToken = default)
+        public Task<ChannelSwitchResult> SwitchActiveChannelAsync(StreamingPlatform platform, ChannelKey targetChannel,
+            bool preservePreselectedNext, CancellationToken cancellationToken = default)
+        {
+            return SwitchActiveChannelAsync(platform, targetChannel, cancellationToken);
+        }
+
+        public Task<ChannelSwitchResult> SwitchActiveChannelAsync(StreamingPlatform platform, ChannelKey targetChannel,
+            CancellationToken cancellationToken = default)
             => Task.FromResult(new ChannelSwitchResult(ChannelSwitchOutcome.Switched, targetChannel));
 
         public Task<ChannelSwitchResult?> SetPreselectedNextAsync(StreamingPlatform platform, ChannelKey? targetChannel, CancellationToken cancellationToken = default)

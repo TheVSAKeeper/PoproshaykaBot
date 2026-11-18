@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Helix;
 
 namespace PoproshaykaBot.Core.Twitch;
@@ -11,7 +12,8 @@ public sealed class BroadcasterIdProvider(
     ITwitchHelixClient helix,
     ITargetChannelProvider targetChannelProvider,
     ILogger<BroadcasterIdProvider> logger,
-    PlatformChannelRegistry? channelRegistry = null)
+    PlatformChannelRegistry? channelRegistry = null,
+    ChannelCatalogStore? channelCatalog = null)
     : IBroadcasterIdProvider
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -23,10 +25,10 @@ public sealed class BroadcasterIdProvider(
     {
         var current = targetChannelProvider.Current;
         if (!current.IsDebugSession
-            && channelRegistry?.GetBinding(StreamingPlatform.Twitch) is { } binding
-            && !string.IsNullOrWhiteSpace(binding.Key.ChannelId))
+            && (channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.Key.ChannelId
+                ?? channelCatalog?.GetActiveChannel(StreamingPlatform.Twitch)?.ChannelId) is { Length: > 0 } id)
         {
-            return binding.Key.ChannelId;
+            return id;
         }
 
         var channel = current.Login;

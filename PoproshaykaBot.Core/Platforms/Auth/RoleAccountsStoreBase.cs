@@ -74,7 +74,28 @@ public abstract class RoleAccountsStoreBase<TFile, TAccount>
     public IReadOnlyList<AuthContextSummary> ListContexts(PlatformAuthRole role)
     {
         PlatformAuthRoles.EnsureActive(role);
+        return ListContexts(_store.Load(), role);
+    }
+
+    public IReadOnlyList<PlatformAccount> ListAccounts()
+    {
         var state = _store.Load();
+        return ListContexts(state, PlatformAuthRole.Broadcaster)
+            .Concat(ListContexts(state, PlatformAuthRole.Bot))
+            .Where(context => !string.IsNullOrWhiteSpace(context.SubjectId))
+            .GroupBy(context => context.SubjectId!.Trim(), StringComparer.Ordinal)
+            .Select(group => new PlatformAccount(
+                new(Platform, group.Key),
+                group.Select(context => context.DisplayLabel).FirstOrDefault(label => !string.IsNullOrWhiteSpace(label))
+                    ?? group.Key,
+                group.ToArray()))
+            .ToArray();
+    }
+
+    protected abstract StreamingPlatform Platform { get; }
+
+    private IReadOnlyList<AuthContextSummary> ListContexts(TFile state, PlatformAuthRole role)
+    {
         var defaultAccount = TakeAccount(state, role, null);
         var result = new List<AuthContextSummary>
         {
