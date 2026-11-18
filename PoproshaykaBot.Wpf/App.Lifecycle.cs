@@ -128,15 +128,14 @@ public partial class App
         StartupReport.LogConfiguration(loggerFactory.CreateLogger(nameof(StartupReport)), serviceProvider);
     }
 
-    private static List<StreamMonitoringHost> StartStreamMonitoring(IEnumerable<StreamMonitoringHost> hosts)
+    internal static async Task StartStreamMonitoringAsync(
+        IEnumerable<StreamMonitoringHost> hosts, ICollection<StreamMonitoringHost> started)
     {
-        var started = new List<StreamMonitoringHost>();
-
         foreach (var host in hosts)
         {
             try
             {
-                host.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+                await host.StartAsync(CancellationToken.None);
                 started.Add(host);
                 HostLog.Information("Стрим-мониторинг площадки {Platform} запущен независимо от подключения бота", host.Platform);
             }
@@ -147,27 +146,25 @@ public partial class App
                 if (host.IsRunning)
                 {
                     using var rollbackCts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
-                    StopStreamMonitoringHost(host, rollbackCts.Token);
+                    await StopStreamMonitoringHostAsync(host, rollbackCts.Token);
                 }
             }
         }
-
-        return started;
     }
 
     private static void StopStreamMonitoring(IReadOnlyList<StreamMonitoringHost> hosts, CancellationToken cancellationToken)
     {
         for (var i = hosts.Count - 1; i >= 0; i--)
         {
-            StopStreamMonitoringHost(hosts[i], cancellationToken);
+            StopStreamMonitoringHostAsync(hosts[i], cancellationToken).GetAwaiter().GetResult();
         }
     }
 
-    private static void StopStreamMonitoringHost(StreamMonitoringHost host, CancellationToken cancellationToken)
+    private static async Task StopStreamMonitoringHostAsync(StreamMonitoringHost host, CancellationToken cancellationToken)
     {
         try
         {
-            host.StopAsync(cancellationToken).GetAwaiter().GetResult();
+            await host.StopAsync(cancellationToken);
         }
         catch (OperationCanceledException exception)
         {
@@ -179,21 +176,21 @@ public partial class App
         }
     }
 
-    private static bool StartAppLifetime(AppLifetime appLifetime)
+    internal static async Task StartAppLifetimeAsync(AppLifetime appLifetime)
     {
         try
         {
-            appLifetime.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-            return true;
+            await appLifetime.StartAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {
             HostLog.Error(ex, "Ошибка запуска фоновых компонентов приложения");
-            return false;
+            using var rollbackCts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+            await StopAppLifetimeAsync(appLifetime, rollbackCts.Token);
         }
     }
 
-    private static bool StartHttpServerIfNeeded(SettingsManager settingsManager, KestrelHttpServer kestrelServer)
+    private static async Task<bool> StartHttpServerIfNeededAsync(SettingsManager settingsManager, KestrelHttpServer kestrelServer)
     {
         using var loggerFactory = new SerilogLoggerFactory(Log.Logger);
         var reconcile = HttpServerPortReconciler.Reconcile(settingsManager, loggerFactory.CreateLogger(nameof(HttpServerPortReconciler)));
@@ -212,7 +209,7 @@ public partial class App
 
         try
         {
-            kestrelServer.StartAsync().GetAwaiter().GetResult();
+            await kestrelServer.StartAsync();
             HostLog.Information("HTTP сервер успешно запущен");
             return true;
         }
@@ -239,11 +236,11 @@ public partial class App
         }
     }
 
-    private static void StopAppLifetime(AppLifetime appLifetime, CancellationToken cancellationToken)
+    private static async Task StopAppLifetimeAsync(AppLifetime appLifetime, CancellationToken cancellationToken)
     {
         try
         {
-            appLifetime.StopAsync(cancellationToken).GetAwaiter().GetResult();
+            await appLifetime.StopAsync(cancellationToken);
         }
         catch (OperationCanceledException exception)
         {

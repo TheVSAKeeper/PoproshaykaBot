@@ -234,6 +234,34 @@ public sealed class ChatCommandProcessorTests
         });
     }
 
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public async Task Настройка_площадки_меняет_вызов_команды_и_помощь(bool generalEnabled, bool youtubeEnabled)
+    {
+        var command = new FakeCommand("донат");
+        var processor = CreateProcessor(command);
+        processor.Register(new HelpCommand(processor.GetAvailableCommands, processor.Prefix));
+
+        _settingsStore.Mutate(settings => settings.Commands[command.Canonical] = new() { Enabled = generalEnabled });
+        var inherited = await processor.TryProcessAsync("!донат", CreateContext(platform: StreamingPlatform.YouTube), CancellationToken.None);
+        Assert.That(inherited.Response is not null, Is.EqualTo(generalEnabled));
+
+        _settingsStore.Mutate(settings => settings.Commands[command.Canonical].SetPlatformEnabled(StreamingPlatform.YouTube, youtubeEnabled));
+
+        foreach (var (platform, enabled) in new[] { (StreamingPlatform.Twitch, generalEnabled), (StreamingPlatform.YouTube, youtubeEnabled) })
+        {
+            var context = CreateContext(platform: platform);
+            var result = await processor.TryProcessAsync("!донат", context, CancellationToken.None);
+            var help = await processor.TryProcessAsync("!помощь", context, CancellationToken.None);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.Response is not null, Is.EqualTo(enabled));
+                Assert.That(help.Response!.Text.Contains("!донат", StringComparison.Ordinal), Is.EqualTo(enabled));
+            });
+        }
+    }
+
     [TestCase("!", "!помощь ранг")]
     [TestCase("!", "!помощь !ранг")]
     [TestCase("?", "?помощь ранг")]
@@ -418,11 +446,12 @@ public sealed class ChatCommandProcessorTests
         });
     }
 
-    private static CommandContext CreateContext(bool isBroadcaster = false, bool isModerator = false)
+    private static CommandContext CreateContext(bool isBroadcaster = false, bool isModerator = false,
+        StreamingPlatform platform = StreamingPlatform.Twitch)
     {
         return new()
         {
-            Platform = StreamingPlatform.Twitch,
+            Platform = platform,
             Channel = "test-channel",
             MessageId = "msg-1",
             UserId = "u1",

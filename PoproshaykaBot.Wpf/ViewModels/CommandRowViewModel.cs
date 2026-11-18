@@ -11,6 +11,7 @@ public sealed partial class CommandRowViewModel : ObservableObject
 {
     private bool _applying;
     private StreamingPlatform _probePlatform = StreamingPlatform.Twitch;
+    private bool? _platformEnabled;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsClosedByCode))]
@@ -25,6 +26,7 @@ public sealed partial class CommandRowViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Summary))]
+    [NotifyPropertyChangedFor(nameof(IsEnabledInScope))]
     private bool _isEnabled = true;
 
     [ObservableProperty]
@@ -221,7 +223,7 @@ public sealed partial class CommandRowViewModel : ObservableObject
     {
         get
         {
-            var state = IsEnabled ? "включена" : "выключена";
+            var state = IsEnabledInScope ? "включена" : "выключена";
 
             return $"{Invocation}, {state}, права {AccessText.ToLower(UiCulture.Russian)}, "
                 + $"ответ {EffectiveTargetText.ToLower(UiCulture.Russian)}, вызовов {TotalCountText}";
@@ -234,7 +236,20 @@ public sealed partial class CommandRowViewModel : ObservableObject
 
     public string AccessAutomationName => $"Права на команду {Invocation}";
 
-    public void ApplySettings(CommandSettings settings)
+    public bool? PlatformEnabled => _platformEnabled;
+
+    public bool IsEnabledInScope => PlatformEnabled ?? IsEnabled;
+
+    public void ApplyPlatformEnablement(bool? enabled)
+    {
+        if (SetProperty(ref _platformEnabled, enabled, nameof(PlatformEnabled)))
+        {
+            OnPropertyChanged(nameof(IsEnabledInScope));
+            OnPropertyChanged(nameof(Summary));
+        }
+    }
+
+    public void ApplySettings(CommandSettings settings, StreamingPlatform? platform = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -243,6 +258,7 @@ public sealed partial class CommandRowViewModel : ObservableObject
         try
         {
             IsEnabled = settings.IsEnabled(Canonical);
+            ApplyPlatformEnablement(platform is { } id ? settings.ReadPlatformEnabled(Canonical, id) : null);
             TargetOption = CommandResponseTargetOption.ForCommandTarget(ReadOverride(settings));
             AccessOption = CommandAccessOption.For(settings.ReadAccess(Canonical));
             EffectiveTarget = settings.ResolveResponseTarget(Canonical);

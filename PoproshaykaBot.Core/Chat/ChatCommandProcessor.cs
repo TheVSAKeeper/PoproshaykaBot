@@ -78,7 +78,7 @@ public sealed class ChatCommandProcessor
         var settings = _commandSettingsStore.Load();
 
         return GetAllCommands()
-            .Where(command => settings.IsEnabled(command.Canonical)
+            .Where(command => settings.IsEnabled(command.Canonical, platform)
                               && HasRequiredCapabilities(platform, command))
             .ToList();
     }
@@ -116,7 +116,7 @@ public sealed class ChatCommandProcessor
 
         var settings = _commandSettingsStore.Load();
 
-        if (!settings.IsEnabled(command.Canonical))
+        if (!settings.IsEnabled(command.Canonical, context.Platform))
         {
             _logger.LogDebug("Команда {Canonical} выключена в настройках, сообщение от {Username} пропущено",
                 command.Canonical,

@@ -2,6 +2,7 @@
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
@@ -431,8 +432,9 @@ public class CommandRowTests
         });
     }
 
-    [Test]
-    public void Негодный_параметр_не_сохраняется_и_называет_поле()
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Негодный_параметр_не_сохраняется_и_называет_поле(bool selectYouTube)
     {
         var settingsManager = CreateSettingsManager();
         var page = CreatePage("!", Path.Combine(_root, "commands.json"), settingsManager, new TrumpCommand(settingsManager, new NoNetwork()));
@@ -441,6 +443,12 @@ public class CommandRowTests
 
         var price = page.Parameters!.Items.Single(item => item.Label.StartsWith("Цена", StringComparison.Ordinal));
         price.Text = "0";
+
+        if (selectYouTube)
+        {
+            page.CommandScope = page.CommandScopes.Single(scope => scope.Platform == StreamingPlatform.YouTube);
+            Assert.That(page.ParametersHeading, Does.EndWith("общие для площадок"));
+        }
 
         page.SaveParametersCommand.Execute(null);
 

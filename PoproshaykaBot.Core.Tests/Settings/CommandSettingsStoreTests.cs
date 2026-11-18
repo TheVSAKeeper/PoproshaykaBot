@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Platforms;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
@@ -75,6 +76,21 @@ public sealed class CommandSettingsStoreTests
 
     private string _root = null!;
     private string _path = null!;
+
+    [Test]
+    public void Неизвестная_площадка_сохраняется_при_изменении_известной()
+    {
+        File.WriteAllText(_path, """{"commands":{"донат":{"enabledByPlatform":{"youTube":false,"FuturePlatform":true}}}}""");
+        var store = new CommandSettingsStore(null, _path);
+
+        Assert.That(store.Load().IsEnabled("донат", StreamingPlatform.YouTube), Is.False);
+        store.Mutate(settings => settings.Commands["донат"].SetPlatformEnabled(StreamingPlatform.YouTube, null));
+
+        var restored = new CommandSettingsStore(null, _path).Load();
+        Assert.That(restored.IsEnabled("донат", StreamingPlatform.YouTube), Is.True);
+        Assert.That(restored.Commands["донат"].EnabledByPlatform, Is.EquivalentTo(new Dictionary<string, bool> { ["FuturePlatform"] = true }));
+        Assert.That(Directory.GetFiles(_root, "*invalid*"), Is.Empty);
+    }
 
     [Test]
     public void Свежий_профиль_отвечает_чат_и_оверлей_для_любой_команды()

@@ -26,4 +26,6 @@ public interface IChatPlatform
     string? ConfiguredChannel => null;
 
     string? BuildStreamUrl(StreamInfo? stream = null) => null;
+
+    string? BuildNativeChatUrl(StreamInfo stream) => null;
 }

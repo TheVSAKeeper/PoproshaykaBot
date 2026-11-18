@@ -253,22 +253,40 @@ public sealed class Stage8Layer3Tests
 
         Assert.Multiple(() =>
         {
-            Assert.That(page.IsTwitchProbe, Is.True);
+            Assert.That(page.IsPlatformScope, Is.False);
             Assert.That(titleRow.IsClosedByCode, Is.False);
             Assert.That(helpRow.IsClosedByCode, Is.False);
             Assert.That(page.WhisperNotice, Is.Not.Null);
         });
 
-        page.IsYouTubeProbe = true;
+        page.CommandScope = page.CommandScopes.Single(scope => scope.Platform == StreamingPlatform.YouTube);
 
         Assert.Multiple(() =>
         {
-            Assert.That(page.ProbePlatform, Is.EqualTo(StreamingPlatform.YouTube));
+            Assert.That(page.CommandScope.Platform, Is.EqualTo(StreamingPlatform.YouTube));
             Assert.That(titleRow.IsClosedByCode, Is.True);
             Assert.That(titleRow.AccessText, Contains.Substring("YouTube"));
             Assert.That(helpRow.IsClosedByCode, Is.False);
             Assert.That(page.WhisperNotice, Is.Null);
         });
+
+        Assert.That(page.TrySelect("title"), Is.True);
+        Assert.That(page.CanSetPlatformEnablement, Is.False);
+
+        Assert.That(page.TrySelect("помощь"), Is.True);
+        Assert.That(page.SelectedPlatformEnablement.Enabled, Is.Null);
+        page.SelectedPlatformEnablement = page.PlatformEnablementOptions.Single(option => option.Enabled == false);
+        Assert.That(new CommandSettingsStore(null, Path.Combine(_root, "commands.json"))
+            .Load().IsEnabled("помощь", StreamingPlatform.YouTube), Is.False);
+        Assert.That(cmdStore.Load().IsEnabled("помощь", StreamingPlatform.Twitch), Is.True);
+        Assert.That(helpRow.IsEnabled, Is.True);
+        Assert.That(helpRow.IsEnabledInScope, Is.False);
+        Assert.That(helpRow.Summary, Does.StartWith("!помощь, выключена"));
+        Assert.That(page.SummaryLine, Does.StartWith("Включено 1 из 2"));
+
+        page.SelectedPlatformEnablement = page.PlatformEnablementOptions.Single(option => option.Enabled is null);
+        Assert.That(cmdStore.Load().Commands.ContainsKey("помощь"), Is.False);
+        Assert.That(helpRow.IsEnabledInScope, Is.True);
     }
 
     private static BroadcastRecord CreateRecord(DateTimeOffset started, params StreamingPlatform[] platforms)

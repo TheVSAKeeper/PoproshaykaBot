@@ -20,9 +20,18 @@ public sealed class CommandSettings
     [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
     public Dictionary<string, CommandOverride> Commands { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public bool IsEnabled(string canonical)
+    public bool IsEnabled(string canonical, Platforms.StreamingPlatform? platform = null)
     {
-        return !TryGetOverride(canonical, out var commandOverride) || commandOverride.Enabled;
+        return (platform is { } id ? ReadPlatformEnabled(canonical, id) : null)
+               ?? (!TryGetOverride(canonical, out var commandOverride) || commandOverride.Enabled);
+    }
+
+    public bool? ReadPlatformEnabled(string canonical, Platforms.StreamingPlatform platform)
+    {
+        return TryGetOverride(canonical, out var commandOverride)
+               && commandOverride.EnabledByPlatform?.TryGetValue(platform.ToString(), out var enabled) == true
+            ? enabled
+            : null;
     }
 
     public CommandResponseTarget ResolveResponseTarget(string canonical)

@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
-             xmlns:platformControls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -119,7 +118,7 @@
                                 <Setter Property="Foreground"
                                         Value="{DynamicResource Fg.Primary}" />
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsEnabled}"
+                                    <DataTrigger Binding="{Binding IsEnabledInScope}"
                                                  Value="False">
                                         <Setter Property="Foreground"
                                                 Value="{DynamicResource Fg.Secondary}" />
@@ -301,41 +300,6 @@
                                               Height="14" />
                 </Button>
             </Grid>
-
-            <StackPanel Orientation="Horizontal"
-                        VerticalAlignment="Center"
-                        Margin="0,0,12,6">
-                <RadioButton Style="{StaticResource ToggleButton.Toolbar}"
-                             GroupName="CommandsProbePlatform"
-                             IsChecked="{Binding IsTwitchProbe, Mode=TwoWay}"
-                             AutomationProperties.Name="Проверка прав для Twitch">
-                    <StackPanel Orientation="Horizontal">
-                        <platformControls:PlatformIconView Platform="Twitch"
-                                                           Width="12"
-                                                           Height="12"
-                                                           Margin="0,0,6,0"
-                                                           VerticalAlignment="Center" />
-                        <TextBlock Text="Twitch"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </RadioButton>
-
-                <RadioButton Style="{StaticResource ToggleButton.Toolbar}"
-                             GroupName="CommandsProbePlatform"
-                             Margin="4,0,0,0"
-                             IsChecked="{Binding IsYouTubeProbe, Mode=TwoWay}"
-                             AutomationProperties.Name="Проверка прав для YouTube">
-                    <StackPanel Orientation="Horizontal">
-                        <platformControls:PlatformIconView Platform="YouTube"
-                                                           Width="12"
-                                                           Height="12"
-                                                           Margin="0,0,6,0"
-                                                           VerticalAlignment="Center" />
-                        <TextBlock Text="YouTube"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </RadioButton>
-            </StackPanel>
 
             <StackPanel Orientation="Horizontal"
                         VerticalAlignment="Center"
@@ -533,66 +497,93 @@
                                        Margin="0,8,0,0"
                                        AutomationProperties.Name="Описание выделенной команды" />
 
-                            <CheckBox Margin="0,16,0,0"
-                                      Style="{StaticResource CheckBox.Default}"
-                                      Content="Команда включена"
-                                      IsChecked="{Binding SelectedRow.IsEnabled, Mode=TwoWay}"
-                                      AutomationProperties.Name="{Binding SelectedRow.EnabledAutomationName}" />
-
                             <TextBlock Style="{StaticResource InspectorSectionHeader}"
-                                       Text="Права" />
+                                       Text="Настройки команды" />
 
                             <ComboBox Style="{StaticResource ComboBox.Form}"
-                                      ItemsSource="{Binding AccessOptions}"
-                                      SelectedItem="{Binding SelectedRow.AccessOption, Mode=TwoWay}"
-                                      DisplayMemberPath="Title"
-                                      AutomationProperties.Name="{Binding SelectedRow.AccessAutomationName}"
-                                      ToolTip="{Binding SelectedRow.AccessOption.Hint}" />
+                                      ItemsSource="{Binding CommandScopes}"
+                                      SelectedItem="{Binding CommandScope, Mode=TwoWay}"
+                                      DisplayMemberPath="Label"
+                                      AutomationProperties.Name="Площадка для настроек команды" />
 
-                            <TextBlock Style="{StaticResource StatLabel}"
-                                       Margin="0,6,0,0"
-                                       TextWrapping="Wrap">
-                                <Run Text="В коде команды:" />
-                                <Run Text="{Binding SelectedRow.CodeAccessText, Mode=OneWay}" />
-                                <Run Text="·" />
-                                <Run Text="сейчас:" />
-                                <Run Text="{Binding SelectedRow.AccessText, Mode=OneWay}" />
-                            </TextBlock>
+                            <StackPanel Visibility="{Binding IsPlatformScope, Converter={StaticResource BoolToVisibility}}">
+                                <ComboBox Margin="0,8,0,0"
+                                          Style="{StaticResource ComboBox.Form}"
+                                          ItemsSource="{Binding PlatformEnablementOptions}"
+                                          SelectedItem="{Binding SelectedPlatformEnablement, Mode=TwoWay}"
+                                          DisplayMemberPath="Title"
+                                          IsEnabled="{Binding CanSetPlatformEnablement}"
+                                          AutomationProperties.Name="Включение команды на площадке" />
 
-                            <TextBlock Text="{Binding SelectedRow.AccessHint}"
-                                       Style="{StaticResource StatLabel}"
-                                       Margin="0,4,0,0"
-                                       TextWrapping="Wrap" />
-
-                            <Border Margin="0,8,0,0"
-                                    Padding="10,6"
-                                    CornerRadius="{DynamicResource Radius.M}"
-                                    Background="{DynamicResource State.WarningSoft}"
-                                    Visibility="{Binding SelectedRow.AccessConflictNote, Converter={StaticResource NullToVisibility}}">
-                                <TextBlock Text="{Binding SelectedRow.AccessConflictNote}"
-                                           FontSize="{DynamicResource Font.Size.Caption}"
-                                           Foreground="{DynamicResource State.WarningText}"
+                                <TextBlock Text="{Binding PlatformEnablementStatus}"
+                                           Style="{StaticResource StatLabel}"
+                                           Margin="0,6,0,0"
                                            TextWrapping="Wrap" />
-                            </Border>
+                            </StackPanel>
 
-                            <TextBlock Style="{StaticResource InspectorSectionHeader}"
-                                       Text="Цель ответа" />
+                            <StackPanel Visibility="{Binding IsPlatformScope, Converter={StaticResource InverseBoolToVisibility}}">
+                                <CheckBox Margin="0,16,0,0"
+                                          Style="{StaticResource CheckBox.Default}"
+                                          Content="Команда включена"
+                                          IsChecked="{Binding SelectedRow.IsEnabled, Mode=TwoWay}"
+                                          AutomationProperties.Name="{Binding SelectedRow.EnabledAutomationName}" />
 
-                            <ComboBox Style="{StaticResource ComboBox.Form}"
-                                      ItemsSource="{Binding CommandTargetOptions}"
-                                      SelectedItem="{Binding SelectedRow.TargetOption, Mode=TwoWay}"
-                                      DisplayMemberPath="Title"
-                                      AutomationProperties.Name="{Binding SelectedRow.TargetAutomationName}"
-                                      ToolTip="{Binding SelectedRow.TargetTooltip}" />
+                                <TextBlock Style="{StaticResource InspectorSectionHeader}"
+                                           Text="Права" />
 
-                            <TextBlock Text="{Binding SelectedRow.TargetSummary}"
-                                       Style="{StaticResource StatLabel}"
-                                       Margin="0,6,0,0"
-                                       TextWrapping="Wrap" />
+                                <ComboBox Style="{StaticResource ComboBox.Form}"
+                                          ItemsSource="{Binding AccessOptions}"
+                                          SelectedItem="{Binding SelectedRow.AccessOption, Mode=TwoWay}"
+                                          DisplayMemberPath="Title"
+                                          AutomationProperties.Name="{Binding SelectedRow.AccessAutomationName}"
+                                          ToolTip="{Binding SelectedRow.AccessOption.Hint}" />
+
+                                <TextBlock Style="{StaticResource StatLabel}"
+                                           Margin="0,6,0,0"
+                                           TextWrapping="Wrap">
+                                    <Run Text="В коде команды:" />
+                                    <Run Text="{Binding SelectedRow.CodeAccessText, Mode=OneWay}" />
+                                    <Run Text="·" />
+                                    <Run Text="сейчас:" />
+                                    <Run Text="{Binding SelectedRow.AccessText, Mode=OneWay}" />
+                                </TextBlock>
+
+                                <TextBlock Text="{Binding SelectedRow.AccessHint}"
+                                           Style="{StaticResource StatLabel}"
+                                           Margin="0,4,0,0"
+                                           TextWrapping="Wrap" />
+
+                                <Border Margin="0,8,0,0"
+                                        Padding="10,6"
+                                        CornerRadius="{DynamicResource Radius.M}"
+                                        Background="{DynamicResource State.WarningSoft}"
+                                        Visibility="{Binding SelectedRow.AccessConflictNote, Converter={StaticResource NullToVisibility}}">
+                                    <TextBlock Text="{Binding SelectedRow.AccessConflictNote}"
+                                               FontSize="{DynamicResource Font.Size.Caption}"
+                                               Foreground="{DynamicResource State.WarningText}"
+                                               TextWrapping="Wrap" />
+                                </Border>
+
+                                <TextBlock Style="{StaticResource InspectorSectionHeader}"
+                                           Text="Цель ответа" />
+
+                                <ComboBox Style="{StaticResource ComboBox.Form}"
+                                          ItemsSource="{Binding CommandTargetOptions}"
+                                          SelectedItem="{Binding SelectedRow.TargetOption, Mode=TwoWay}"
+                                          DisplayMemberPath="Title"
+                                          AutomationProperties.Name="{Binding SelectedRow.TargetAutomationName}"
+                                          ToolTip="{Binding SelectedRow.TargetTooltip}" />
+
+                                <TextBlock Text="{Binding SelectedRow.TargetSummary}"
+                                           Style="{StaticResource StatLabel}"
+                                           Margin="0,6,0,0"
+                                           TextWrapping="Wrap" />
+
+                            </StackPanel>
 
                             <StackPanel Visibility="{Binding HasParameters, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Style="{StaticResource InspectorSectionHeader}"
-                                           Text="{Binding Parameters.Heading}" />
+                                           Text="{Binding ParametersHeading}" />
 
                                 <ItemsControl ItemsSource="{Binding Parameters.Items}"
                                               ItemTemplate="{StaticResource CommandParameterTemplate}" />
