@@ -84,8 +84,11 @@ public static class YouTubeServiceCollectionExtensions
         services.AddSingleton<IYouTubeLiveBroadcastClient, YouTubeLiveBroadcastClient>();
         services.TryAddSingleton<IYouTubeBroadcastSelectionStore, InMemoryYouTubeBroadcastSelectionStore>();
         services.AddSingleton<YouTubeStreamMonitor>();
+        services.AddSingleton<IPlatformChannelMonitor>(
+            static provider => provider.GetRequiredService<YouTubeStreamMonitor>());
         services.AddSingleton<IYouTubeActiveBroadcastSource>(
             static provider => provider.GetRequiredService<YouTubeStreamMonitor>());
+        services.AddSingleton<IPlatformChannelAdapter, YouTubeChannelAdapter>();
         services.AddKeyedSingleton<IStreamStatus>(
             StreamingPlatform.YouTube,
             static (provider, _) => provider.GetRequiredService<YouTubeStreamMonitor>());
@@ -161,8 +164,8 @@ public static class YouTubeServiceCollectionExtensions
             services.AddSingleton<ISecretValueProvider>(provider =>
                 new DelegateSecretValueProvider($"токены YouTube роли {role}", () =>
                 {
-                    var account = provider.GetRequiredService<YouTubeAccountsStore>().Load(role);
-                    return [account.AccessToken, account.RefreshToken];
+                    var accounts = provider.GetRequiredService<YouTubeAccountsStore>().GetAllAccounts(role);
+                    return accounts.SelectMany(static account => new[] { account.AccessToken, account.RefreshToken }).ToArray();
                 }));
         }
 

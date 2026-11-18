@@ -41,12 +41,17 @@ public sealed class OAuthTokenRefresher : IDisposable
             eventBus,
             logger);
 
-        _inner = new(accountsStore.Load, strategy, eventBus, timeProvider);
+        _inner = new((role, contextId) => accountsStore.Load(role, contextId), strategy, eventBus, timeProvider);
     }
 
     public bool HasUsableAccessToken(PlatformAuthRole role)
     {
         return _inner.HasUsableAccessToken(role);
+    }
+
+    public bool HasUsableAccessToken(PlatformAuthRole role, string? contextId)
+    {
+        return _inner.HasUsableAccessToken(role, contextId);
     }
 
     public ValueTask<string?> GetAccessTokenAsync(
@@ -57,8 +62,28 @@ public sealed class OAuthTokenRefresher : IDisposable
         return _inner.GetAccessTokenAsync(role, forceRefresh, ct);
     }
 
+    public ValueTask<string?> GetAccessTokenAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        bool forceRefresh = false,
+        CancellationToken ct = default)
+    {
+        return _inner.GetAccessTokenAsync(role, contextId, forceRefresh, ct);
+    }
+
     public Task<string> RefreshTokenAsync(
         PlatformAuthRole role,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        return RefreshTokenAsync(role, null, clientId, clientSecret, refreshToken, ct);
+    }
+
+    public Task<string> RefreshTokenAsync(
+        PlatformAuthRole role,
+        string? contextId,
         string clientId,
         string clientSecret,
         string refreshToken,
@@ -69,12 +94,17 @@ public sealed class OAuthTokenRefresher : IDisposable
             throw new ArgumentException("Refresh token не может быть пустым", nameof(refreshToken));
         }
 
-        return _inner.RefreshTokenAsync(role, clientId, clientSecret, refreshToken, ct);
+        return _inner.RefreshTokenAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
     }
 
     public void ResetRetryState(PlatformAuthRole role)
     {
         _inner.ResetRetryState(role);
+    }
+
+    public void ResetRetryState(PlatformAuthRole role, string? contextId)
+    {
+        _inner.ResetRetryState(role, contextId);
     }
 
     public void Dispose()
@@ -113,10 +143,16 @@ public sealed class OAuthTokenRefresher : IDisposable
             return TwitchScopes.SetEquals(account.StoredScopes, account.Scopes);
         }
 
-        public async Task HandleScopeMismatchAsync(PlatformAuthRole role, TwitchAccountSettings accountSnapshot, CancellationToken ct)
+        public Task HandleScopeMismatchAsync(PlatformAuthRole role, TwitchAccountSettings accountSnapshot, CancellationToken ct)
         {
-            logger.LogWarning("Scope set роли {Role} изменился – требуется повторная авторизация. Старые: [{Old}]. Новые: [{New}]",
+            return HandleScopeMismatchAsync(role, AuthContextIds.Default, accountSnapshot, ct);
+        }
+
+        public async Task HandleScopeMismatchAsync(PlatformAuthRole role, string contextId, TwitchAccountSettings accountSnapshot, CancellationToken ct)
+        {
+            logger.LogWarning("Scope set роли {Role} (контекст {ContextId}) изменился – требуется повторная авторизация. Старые: [{Old}]. Новые: [{New}]",
                 role,
+                contextId,
                 string.Join(" ", accountSnapshot.StoredScopes),
                 string.Join(" ", accountSnapshot.Scopes));
 
@@ -136,8 +172,8 @@ public sealed class OAuthTokenRefresher : IDisposable
                 logger.LogError(ex, "Не удалось опубликовать BotConnectionStatusUpdated при scope mismatch (роль {Role})", role);
             }
 
-            accountsStore.Mutate(role, OAuthRoleHelpers.ClearAccountInPlace);
-            logger.LogInformation("Учётные данные роли {Role} очищены из-за расхождения scope – ожидается повторная авторизация", role);
+            accountsStore.Mutate(role, contextId, OAuthRoleHelpers.ClearAccountInPlace);
+            logger.LogInformation("Учётные данные роли {Role} (контекст {ContextId}) очищены из-за расхождения scope – ожидается повторная авторизация", role, contextId);
         }
 
         public bool TryReadBackgroundCredentials(out string clientId, out string clientSecret)
@@ -148,8 +184,19 @@ public sealed class OAuthTokenRefresher : IDisposable
             return true;
         }
 
+        public Task<string> RefreshAndSaveAsync(
+            PlatformAuthRole role,
+            string clientId,
+            string clientSecret,
+            string refreshToken,
+            CancellationToken ct)
+        {
+            return RefreshAndSaveAsync(role, AuthContextIds.Default, clientId, clientSecret, refreshToken, ct);
+        }
+
         public async Task<string> RefreshAndSaveAsync(
             PlatformAuthRole role,
+            string contextId,
             string clientId,
             string clientSecret,
             string refreshToken,
@@ -173,9 +220,16 @@ public sealed class OAuthTokenRefresher : IDisposable
                 throw new InvalidOperationException("Twitch вернул токен, но Validate-эндпойнт его не подтвердил.");
             }
 
-            OAuthRoleHelpers.VerifyLoginMatchesRole(role, validation, settingsManager, logger);
+            OAuthRoleHelpers.VerifyLoginMatchesRole(
+                role,
+                validation,
+                settingsManager,
+                logger,
+                checkBroadcasterChannel: AuthContextIds.IsDefault(contextId));
 
-            accountWriter.UpdateSettings(role,
+            accountWriter.UpdateSettings(
+                role,
+                contextId,
                 tokenResponse.AccessToken,
                 tokenResponse.RefreshToken,
                 tokenResponse.Scope,
@@ -183,8 +237,9 @@ public sealed class OAuthTokenRefresher : IDisposable
                 validation.UserId,
                 tokenResponse.ExpiresIn);
 
-            logger.LogInformation("Refresh для роли {Role} выполнен успешно (login={Login}, expiresIn={ExpiresIn}s, scopes={ScopeCount})",
+            logger.LogInformation("Refresh для роли {Role} (контекст {ContextId}) выполнен успешно (login={Login}, expiresIn={ExpiresIn}s, scopes={ScopeCount})",
                 role,
+                contextId,
                 validation.Login,
                 tokenResponse.ExpiresIn,
                 tokenResponse.Scope?.Count ?? 0);
@@ -205,9 +260,15 @@ public sealed class OAuthTokenRefresher : IDisposable
 
         public Task OnRefreshTokenRejectedAsync(PlatformAuthRole role, Exception exception, CancellationToken ct)
         {
+            return OnRefreshTokenRejectedAsync(role, AuthContextIds.Default, exception, ct);
+        }
+
+        public Task OnRefreshTokenRejectedAsync(PlatformAuthRole role, string contextId, Exception exception, CancellationToken ct)
+        {
             var rejected = (OAuthRefreshRejectedException)exception;
-            logger.LogWarning("Refresh-токен роли {Role} отвергнут Twitch (HTTP {Status}, code={ErrorCode}) – токены сброшены, требуется повторная авторизация",
+            logger.LogWarning("Refresh-токен роли {Role} (контекст {ContextId}) отвергнут Twitch (HTTP {Status}, code={ErrorCode}) – токены сброшены, требуется повторная авторизация",
                 role,
+                contextId,
                 rejected.HttpStatus,
                 rejected.ErrorCode ?? "–");
 
@@ -215,7 +276,7 @@ public sealed class OAuthTokenRefresher : IDisposable
             statusReporter.Report(role, msg);
             _ = eventBus.PublishAsync(new BotConnectionStatusUpdated(msg), ct);
 
-            accountsStore.Mutate(role, OAuthRoleHelpers.ClearAccountInPlace);
+            accountsStore.Mutate(role, contextId, OAuthRoleHelpers.ClearAccountInPlace);
             return Task.CompletedTask;
         }
 

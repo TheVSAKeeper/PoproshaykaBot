@@ -1,4 +1,5 @@
-﻿using PoproshaykaBot.Core.Infrastructure.Events;
+﻿using System.Collections.Concurrent;
+using PoproshaykaBot.Core.Infrastructure.Events;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -7,18 +8,31 @@ namespace PoproshaykaBot.Core.Platforms.Auth;
 public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
     where TAccount : class, IRoleAccountSettings
 {
-    private readonly Func<PlatformAuthRole, TAccount> _loadAccount;
+    private readonly Func<PlatformAuthRole, string?, TAccount> _loadAccount;
     private readonly IOAuthTokenRefreshStrategy<TAccount> _strategy;
     private readonly TimeProvider _timeProvider;
     private readonly IDisposable _refreshEventSubscription;
-    private readonly SemaphoreSlim _botRefreshLock = new(1, 1);
-    private readonly SemaphoreSlim _broadcasterRefreshLock = new(1, 1);
+    private readonly ConcurrentDictionary<(PlatformAuthRole Role, string ContextId), SemaphoreSlim> _refreshLocks = new();
     private readonly Lock _stateSync = new();
-    private readonly Dictionary<PlatformAuthRole, RetryState> _retryStates = new();
+    private readonly Dictionary<(PlatformAuthRole Role, string ContextId), RetryState> _retryStates = new();
     private bool _disposed;
 
     public OAuthRoleTokenRefresher(
         Func<PlatformAuthRole, TAccount> loadAccount,
+        IOAuthTokenRefreshStrategy<TAccount> strategy,
+        IEventBus eventBus,
+        TimeProvider timeProvider)
+        : this(
+            (role, _) => loadAccount(role),
+            strategy,
+            eventBus,
+            timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(loadAccount);
+    }
+
+    public OAuthRoleTokenRefresher(
+        Func<PlatformAuthRole, string?, TAccount> loadAccount,
         IOAuthTokenRefreshStrategy<TAccount> strategy,
         IEventBus eventBus,
         TimeProvider timeProvider)
@@ -37,29 +51,45 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
             if (@event.Platform == _strategy.Platform
                 && @event.Role is PlatformAuthRole.Bot or PlatformAuthRole.Broadcaster)
             {
-                ResetRetryState(@event.Role);
+                ResetRetryState(@event.Role, @event.ContextId);
             }
         });
     }
 
     public bool HasUsableAccessToken(PlatformAuthRole role)
     {
-        PlatformAuthRoles.EnsureActive(role);
-        return HasUsableAccessToken(role, _loadAccount(role));
+        return HasUsableAccessToken(role, (string?)null);
     }
 
-    public async ValueTask<string?> GetAccessTokenAsync(
+    public bool HasUsableAccessToken(PlatformAuthRole role, string? contextId)
+    {
+        PlatformAuthRoles.EnsureActive(role);
+        var normalized = AuthContextIds.Normalize(contextId);
+        return HasUsableAccessToken(role, _loadAccount(role, normalized));
+    }
+
+    public ValueTask<string?> GetAccessTokenAsync(
         PlatformAuthRole role,
         bool forceRefresh = false,
         CancellationToken ct = default)
     {
-        PlatformAuthRoles.EnsureActive(role);
+        return GetAccessTokenAsync(role, null, forceRefresh, ct);
+    }
 
-        var account = _loadAccount(role);
+    public async ValueTask<string?> GetAccessTokenAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        bool forceRefresh = false,
+        CancellationToken ct = default)
+    {
+        PlatformAuthRoles.EnsureActive(role);
+        var normalized = AuthContextIds.Normalize(contextId);
+
+        var account = _loadAccount(role, normalized);
 
         if (HasScopeMismatch(role, account))
         {
-            await _strategy.HandleScopeMismatchAsync(role, account, ct);
+            await _strategy.HandleScopeMismatchAsync(role, normalized, account, ct);
             return null;
         }
 
@@ -79,16 +109,16 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         }
 
         var preLockAccessToken = account.AccessToken;
-        var refreshLock = GetLockForRole(role);
+        var refreshLock = GetLockForKey(role, normalized);
         await refreshLock.WaitAsync(ct);
 
         try
         {
-            account = _loadAccount(role);
+            account = _loadAccount(role, normalized);
 
             if (HasScopeMismatch(role, account))
             {
-                await _strategy.HandleScopeMismatchAsync(role, account, ct);
+                await _strategy.HandleScopeMismatchAsync(role, normalized, account, ct);
                 return null;
             }
 
@@ -117,14 +147,14 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
             }
 
             var fingerprint = ComputeCredentialFingerprint(clientId, clientSecret, account.RefreshToken, account.AccessToken);
-            if (IsInBackoffOrCooldown(role, fingerprint))
+            if (IsInBackoffOrCooldown((role, normalized), fingerprint))
             {
                 return null;
             }
 
             try
             {
-                return await ExecuteRefreshAsync(role, clientId, clientSecret, account.RefreshToken, fingerprint, ct);
+                return await ExecuteRefreshAsync(role, normalized, clientId, clientSecret, account.RefreshToken, fingerprint, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -141,8 +171,19 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         }
     }
 
+    public Task<string> RefreshTokenAsync(
+        PlatformAuthRole role,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        return RefreshTokenAsync(role, null, clientId, clientSecret, refreshToken, ct);
+    }
+
     public async Task<string> RefreshTokenAsync(
         PlatformAuthRole role,
+        string? contextId,
         string clientId,
         string clientSecret,
         string refreshToken,
@@ -152,14 +193,15 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
 
-        var refreshLock = GetLockForRole(role);
+        var normalized = AuthContextIds.Normalize(contextId);
+        var refreshLock = GetLockForKey(role, normalized);
         await refreshLock.WaitAsync(ct);
 
         try
         {
-            var currentAccount = _loadAccount(role);
+            var currentAccount = _loadAccount(role, normalized);
             var fingerprint = ComputeCredentialFingerprint(clientId, clientSecret, refreshToken, currentAccount.AccessToken);
-            return await ExecuteRefreshAsync(role, clientId, clientSecret, refreshToken, fingerprint, ct);
+            return await ExecuteRefreshAsync(role, normalized, clientId, clientSecret, refreshToken, fingerprint, ct);
         }
         finally
         {
@@ -169,11 +211,17 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
 
     public void ResetRetryState(PlatformAuthRole role)
     {
+        ResetRetryState(role, null);
+    }
+
+    public void ResetRetryState(PlatformAuthRole role, string? contextId)
+    {
         PlatformAuthRoles.EnsureActive(role);
+        var normalized = AuthContextIds.Normalize(contextId);
 
         lock (_stateSync)
         {
-            _retryStates.Remove(role);
+            _retryStates.Remove((role, normalized));
         }
     }
 
@@ -186,8 +234,12 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
 
         _disposed = true;
         _refreshEventSubscription.Dispose();
-        _botRefreshLock.Dispose();
-        _broadcasterRefreshLock.Dispose();
+        foreach (var semaphore in _refreshLocks.Values)
+        {
+            semaphore.Dispose();
+        }
+
+        _refreshLocks.Clear();
     }
 
     private bool HasScopeMismatch(PlatformAuthRole role, TAccount account)
@@ -217,6 +269,7 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
 
     private async Task<string> ExecuteRefreshAsync(
         PlatformAuthRole role,
+        string contextId,
         string clientId,
         string clientSecret,
         string refreshToken,
@@ -225,8 +278,8 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
     {
         try
         {
-            var accessToken = await _strategy.RefreshAndSaveAsync(role, clientId, clientSecret, refreshToken, ct);
-            ResetRetryState(role);
+            var accessToken = await _strategy.RefreshAndSaveAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+            ResetRetryState(role, contextId);
             return accessToken;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -239,15 +292,15 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
             switch (kind)
             {
                 case OAuthRefreshFailureKind.RefreshTokenRejected:
-                    await _strategy.OnRefreshTokenRejectedAsync(role, exception, ct);
-                    ResetRetryState(role);
+                    await _strategy.OnRefreshTokenRejectedAsync(role, contextId, exception, ct);
+                    ResetRetryState(role, contextId);
                     break;
                 case OAuthRefreshFailureKind.CredentialsRejected:
-                    var pausedUntil = RecordFailure(role, fingerprint, _strategy.CredentialsRejectedCooldown, fixedDelay: true);
+                    var pausedUntil = RecordFailure((role, contextId), fingerprint, _strategy.CredentialsRejectedCooldown, fixedDelay: true);
                     _strategy.OnCredentialsRejected(role, exception, pausedUntil);
                     break;
                 case OAuthRefreshFailureKind.Transient:
-                    var nextAttempt = RecordFailure(role, fingerprint, _strategy.BaseTransientRetryDelay, fixedDelay: false);
+                    var nextAttempt = RecordFailure((role, contextId), fingerprint, _strategy.BaseTransientRetryDelay, fixedDelay: false);
                     _strategy.OnTransientFailure(role, exception, nextAttempt);
                     break;
             }
@@ -256,21 +309,21 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         }
     }
 
-    private bool IsInBackoffOrCooldown(PlatformAuthRole role, string fingerprint)
+    private bool IsInBackoffOrCooldown((PlatformAuthRole Role, string ContextId) key, string fingerprint)
     {
         var now = _timeProvider.GetUtcNow();
         RetryState? deferredState = null;
 
         lock (_stateSync)
         {
-            if (!_retryStates.TryGetValue(role, out var state))
+            if (!_retryStates.TryGetValue(key, out var state))
             {
                 return false;
             }
 
             if (!string.Equals(state.Fingerprint, fingerprint, StringComparison.Ordinal))
             {
-                _retryStates.Remove(role);
+                _retryStates.Remove(key);
                 return false;
             }
 
@@ -282,20 +335,20 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
 
         if (deferredState is { } deferred)
         {
-            _strategy.OnRetryDeferred(role, deferred.BlockedUntilUtc, deferred.Failures);
+            _strategy.OnRetryDeferred(key.Role, deferred.BlockedUntilUtc, deferred.Failures);
             return true;
         }
 
         return false;
     }
 
-    private DateTimeOffset RecordFailure(PlatformAuthRole role, string fingerprint, TimeSpan delay, bool fixedDelay)
+    private DateTimeOffset RecordFailure((PlatformAuthRole Role, string ContextId) key, string fingerprint, TimeSpan delay, bool fixedDelay)
     {
         var now = _timeProvider.GetUtcNow();
 
         lock (_stateSync)
         {
-            var failures = _retryStates.TryGetValue(role, out var state)
+            var failures = _retryStates.TryGetValue(key, out var state)
                 && string.Equals(state.Fingerprint, fingerprint, StringComparison.Ordinal)
                 ? state.Failures + 1
                 : 1;
@@ -305,7 +358,7 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
                 : CalculateExponentialDelay(failures);
 
             var blockedUntil = now + effectiveDelay;
-            _retryStates[role] = new(failures, blockedUntil, fingerprint);
+            _retryStates[key] = new(failures, blockedUntil, fingerprint);
             return blockedUntil;
         }
     }
@@ -318,14 +371,9 @@ public sealed class OAuthRoleTokenRefresher<TAccount> : IDisposable
         return TimeSpan.FromSeconds(clampedSeconds);
     }
 
-    private SemaphoreSlim GetLockForRole(PlatformAuthRole role)
+    private SemaphoreSlim GetLockForKey(PlatformAuthRole role, string contextId)
     {
-        return role switch
-        {
-            PlatformAuthRole.Bot => _botRefreshLock,
-            PlatformAuthRole.Broadcaster => _broadcasterRefreshLock,
-            _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
-        };
+        return _refreshLocks.GetOrAdd((role, contextId), static _ => new SemaphoreSlim(1, 1));
     }
 
     private static string ComputeCredentialFingerprint(

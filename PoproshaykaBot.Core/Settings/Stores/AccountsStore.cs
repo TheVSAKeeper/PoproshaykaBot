@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -23,10 +24,11 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
         {
             var state = LoadFile();
 
-            logger.LogDebug("AccountsStore инициализирован из {FilePath} (bot.login={BotLogin}, broadcaster.login={BroadcasterLogin})",
+            logger.LogDebug("AccountsStore инициализирован из {FilePath} (bot.login={BotLogin}, broadcaster.login={BroadcasterLogin}, contexts={ContextCount})",
                 FilePath,
                 string.IsNullOrEmpty(state.BotAccount?.Login) ? "–" : state.BotAccount.Login,
-                string.IsNullOrEmpty(state.BroadcasterAccount?.Login) ? "–" : state.BroadcasterAccount.Login);
+                string.IsNullOrEmpty(state.BroadcasterAccount?.Login) ? "–" : state.BroadcasterAccount.Login,
+                state.Contexts?.Count ?? 0);
         }
     }
 
@@ -39,10 +41,10 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
         ArgumentNullException.ThrowIfNull(bot);
         ArgumentNullException.ThrowIfNull(broadcaster);
 
-        var written = SaveFile(new()
+        var written = MutateFile(state =>
         {
-            BotAccount = bot,
-            BroadcasterAccount = broadcaster,
+            state.BotAccount = bot;
+            state.BroadcasterAccount = broadcaster;
         });
 
         if (written)
@@ -70,6 +72,31 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
         {
             state.BroadcasterAccount = account;
         }
+    }
+
+    protected override List<NamedRoleAccount<TwitchAccountSettings>> GetContexts(AccountsFileDto state)
+    {
+        state.Contexts ??= [];
+        return state.Contexts;
+    }
+
+    protected override void ClearContextsIfEmpty(AccountsFileDto state)
+    {
+        if (state.Contexts is { Count: 0 })
+        {
+            state.Contexts = null;
+        }
+    }
+
+    protected override string? GetSubjectId(TwitchAccountSettings account) => account.UserId;
+
+    protected override string? GetDisplayLabel(TwitchAccountSettings account) => account.Login;
+
+    protected override void CopyAccountFields(TwitchAccountSettings source, TwitchAccountSettings target)
+    {
+        base.CopyAccountFields(source, target);
+        target.Login = source.Login;
+        target.UserId = source.UserId;
     }
 
     protected override void OnRoleMutated(PlatformAuthRole role, bool written)
@@ -103,7 +130,7 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
     private static string DescribeAccounts(AccountsFileDto state)
     {
         return $"бот – {Describe(state.BotAccount ?? new())}; "
-            + $"вещатель – {Describe(state.BroadcasterAccount ?? new())}";
+            + $"вещатель – {Describe(state.BroadcasterAccount ?? new())}; доп. контекстов {state.Contexts?.Count ?? 0}";
     }
 
     public sealed class AccountsFileDto
@@ -111,5 +138,8 @@ public sealed class AccountsStore : RoleAccountsStoreBase<AccountsStore.Accounts
         public TwitchAccountSettings? BotAccount { get; set; }
 
         public TwitchAccountSettings? BroadcasterAccount { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<NamedRoleAccount<TwitchAccountSettings>>? Contexts { get; set; }
     }
 }

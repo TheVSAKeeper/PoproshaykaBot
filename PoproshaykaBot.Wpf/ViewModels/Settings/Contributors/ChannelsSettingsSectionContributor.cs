@@ -1,0 +1,149 @@
+﻿using MahApps.Metro.IconPacks;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming.Switching;
+
+namespace PoproshaykaBot.Wpf.ViewModels.Settings.Contributors;
+
+public sealed class ChannelsSettingsSectionContributor : ISettingsSectionContributor
+{
+    private readonly ChannelCatalogSettingsSectionViewModel _catalogViewModel;
+    private readonly ChannelGroupsSettingsSectionViewModel _groupsViewModel;
+    private readonly ChannelCatalogStore _catalogStore;
+    private readonly IChannelSwitchCoordinator? _switchCoordinator;
+    private bool _catalogEdited;
+    private bool _groupsEdited;
+
+    public ChannelsSettingsSectionContributor(
+        ChannelCatalogSettingsSectionViewModel catalogViewModel,
+        ChannelGroupsSettingsSectionViewModel groupsViewModel,
+        ChannelCatalogStore catalogStore,
+        IChannelSwitchCoordinator? switchCoordinator = null)
+    {
+        ArgumentNullException.ThrowIfNull(catalogViewModel);
+        ArgumentNullException.ThrowIfNull(groupsViewModel);
+        ArgumentNullException.ThrowIfNull(catalogStore);
+
+        _catalogViewModel = catalogViewModel;
+        _groupsViewModel = groupsViewModel;
+        _catalogStore = catalogStore;
+        _switchCoordinator = switchCoordinator;
+    }
+
+    public int Order => 7;
+
+    public string SectionKey => "channels";
+
+    public SettingsSection CreateSection()
+    {
+        return new(
+            SectionKey,
+            "Каналы и группы",
+            PackIconLucideKind.Layers,
+            "каналы группы каталог переключение мониторинг авторизация рейтинг топ статистика",
+            [
+                new SettingsSubsection("catalog", "Каталог каналов и переключение"),
+                new SettingsSubsection("groups", "Группы каналов"),
+            ]);
+    }
+
+    public IReadOnlyList<SettingsSectionBlockDescriptor> GetBlocks()
+    {
+        return
+        [
+            new(
+                "channels/catalog",
+                "Каталог каналов и переключение",
+                "Настроенные каналы по площадкам, фоновый мониторинг, привязка аккаунтов и режим переключения.",
+                _catalogViewModel),
+            new(
+                "channels/groups",
+                "Группы каналов",
+                "Объединения каналов для срезов рейтинга в чате (!топ, !ранг) и на странице «Пользователи».",
+                _groupsViewModel),
+        ];
+    }
+
+    public void Load(SettingsSessionState session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        _catalogViewModel.Load();
+        _groupsViewModel.Load();
+        _catalogEdited = false;
+        _groupsEdited = false;
+    }
+
+    public IDisposable SubscribeDirty(SettingsSessionState session, Action markDirty, Action notifyChangesState)
+    {
+        ArgumentNullException.ThrowIfNull(markDirty);
+
+        void OnCatalogEdited(object? sender, EventArgs e)
+        {
+            _catalogEdited = true;
+            markDirty();
+        }
+
+        void OnGroupsEdited(object? sender, EventArgs e)
+        {
+            _groupsEdited = true;
+            markDirty();
+        }
+
+        _catalogViewModel.Edited += OnCatalogEdited;
+        _groupsViewModel.Edited += OnGroupsEdited;
+
+        var subscription = new CompositeSettingsSubscription();
+        subscription.Add(() => _catalogViewModel.Edited -= OnCatalogEdited);
+        subscription.Add(() => _groupsViewModel.Edited -= OnGroupsEdited);
+        return subscription;
+    }
+
+    public string? ValidateBeforeSave()
+    {
+        return _groupsEdited && _groupsViewModel.HasErrors
+            ? "Укажите название для каждой группы каналов перед сохранением."
+            : null;
+    }
+
+    public void BeginSave(AppSettings targetSettings)
+    {
+    }
+
+    public async Task<SettingsSectionSaveOutcome> SaveAsync(AppSettings targetSettings, bool appSettingsWritten)
+    {
+        if (!_catalogEdited && !_groupsEdited)
+        {
+            return SettingsSectionSaveOutcome.Clean;
+        }
+
+        var pendingSwitches = _catalogEdited ? _catalogViewModel.GetPendingActiveChanges() : [];
+        var next = _catalogStore.Load();
+        if (_catalogEdited)
+        {
+            _catalogViewModel.ApplyTo(next);
+        }
+
+        if (_groupsEdited)
+        {
+            _groupsViewModel.ApplyTo(next);
+        }
+
+        var written = _catalogStore.Save(next);
+        if (written)
+        {
+            _catalogEdited = false;
+            _groupsEdited = false;
+
+            if (_switchCoordinator is not null)
+            {
+                foreach (var (platform, targetKey) in pendingSwitches)
+                {
+                    await _switchCoordinator.SwitchActiveChannelAsync(platform, targetKey, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+        }
+
+        return SettingsSectionSaveOutcome.FromWrite(written);
+    }
+}

@@ -4,7 +4,10 @@ using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Twitch;
 
@@ -12,7 +15,11 @@ internal sealed class TwitchPlatformConnectionAdapter(
     ITwitchOAuthService tokenService,
     ITargetChannelProvider targetChannelProvider,
     [FromKeyedServices(StreamingPlatform.Twitch)] PlatformHost platformHost,
-    ILogger<TwitchPlatformConnectionAdapter> logger)
+    ILogger<TwitchPlatformConnectionAdapter> logger,
+    ChannelCatalogStore? channelCatalogStore = null,
+    PlatformChannelRegistry? channelRegistry = null,
+    ChatIngestionService? chatIngestionService = null,
+    AccountsStore? accountsStore = null)
     : IPlatformConnectionAdapter
 {
     public StreamingPlatform Platform => StreamingPlatform.Twitch;
@@ -26,18 +33,42 @@ internal sealed class TwitchPlatformConnectionAdapter(
         progress.Report("Получение токена доступа...");
         logger.LogDebug("Запрос токена доступа Twitch");
 
-        var accessToken = await tokenService.GetAccessTokenAsync(PlatformAuthRole.Bot, cancellationToken).ConfigureAwait(false);
+        targetChannelProvider.BeginSession();
+        var target = targetChannelProvider.Current;
+
+        var activeEntry = !target.IsDebugSession
+            ? ResolveActiveCatalogEntry()
+            : null;
+
+        var botContextId = AuthContextIds.Normalize(activeEntry?.BotContextId);
+        var accessToken = AuthContextIds.IsDefault(botContextId)
+            ? await tokenService.GetAccessTokenAsync(PlatformAuthRole.Bot, cancellationToken).ConfigureAwait(false)
+            : await tokenService.GetAccessTokenAsync(PlatformAuthRole.Bot, botContextId, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(accessToken))
         {
+            targetChannelProvider.EndSession();
             logger.LogError("Не удалось получить токен доступа (токен пуст или null)");
             throw new InvalidOperationException("Токен бота отсутствует или недействителен. Авторизуйте бота в настройках Twitch (вкладка «Бот»).");
         }
 
+        VerifyBotIdentity(activeEntry, botContextId);
+
+        if (activeEntry is not null && channelRegistry is not null)
+        {
+            var label = ResolveChannelLabel(activeEntry, target.Login);
+            targetChannelProvider.SetSessionLogin(label);
+            channelRegistry.SetBinding(new(
+                activeEntry.Key,
+                label,
+                botContextId,
+                AuthContextIds.Normalize(activeEntry.BroadcasterContextId),
+                Generation: 0));
+            target = targetChannelProvider.Current;
+        }
+
         progress.Report("Запуск компонентов бота...");
-        targetChannelProvider.BeginSession();
-        var target = targetChannelProvider.Current;
 
         if (target.IsDebugSession)
         {
@@ -53,5 +84,117 @@ internal sealed class TwitchPlatformConnectionAdapter(
     public void EndSession()
     {
         targetChannelProvider.EndSession();
+        channelRegistry?.Clear(StreamingPlatform.Twitch);
+    }
+
+    public async Task<string> RetargetSessionAsync(
+        PlatformChatSessionTarget target,
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (targetChannelProvider.Current.IsDebugSession)
+        {
+            return targetChannelProvider.Current.Login;
+        }
+
+        var botContextId = AuthContextIds.Normalize(target.Channel.BotContextId);
+        var broadcasterContextId = AuthContextIds.Normalize(target.Channel.BroadcasterContextId);
+        var accessToken = AuthContextIds.IsDefault(botContextId)
+            ? await tokenService.GetAccessTokenAsync(PlatformAuthRole.Bot, cancellationToken).ConfigureAwait(false)
+            : await tokenService.GetAccessTokenAsync(PlatformAuthRole.Bot, botContextId, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            throw new InvalidOperationException("Токен бота Twitch для целевого канала отсутствует или недействителен.");
+        }
+
+        VerifyBotIdentity(target.Channel, botContextId);
+
+        var previousBotContextId = channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.BotContextId;
+        var label = ResolveChannelLabel(target.Channel, targetChannelProvider.Current.Login);
+
+        targetChannelProvider.SetSessionLogin(label);
+        channelRegistry?.SetBinding(new(
+            target.Channel.Key,
+            label,
+            botContextId,
+            broadcasterContextId,
+            target.SwitchGeneration));
+
+        var botContextChanged = !string.IsNullOrEmpty(previousBotContextId)
+            && !string.Equals(previousBotContextId, botContextId, StringComparison.Ordinal);
+
+        if (botContextChanged && platformHost.IsRunning)
+        {
+            await platformHost.StopAsync(progress, cancellationToken).ConfigureAwait(false);
+            using var _ = PlatformAuthRequestOptions.UseContext(botContextId);
+            await platformHost.StartAsync(progress, cancellationToken).ConfigureAwait(false);
+        }
+        else if (chatIngestionService is not null)
+        {
+            await chatIngestionService.RetargetChannelAsync(target.Channel.Key, botContextId, cancellationToken).ConfigureAwait(false);
+        }
+
+        logger.LogInformation("Перенацеливание чата Twitch на канал {Channel} ({ChannelId})", label, target.Channel.ChannelId);
+        return label;
+    }
+
+    private void VerifyBotIdentity(ChannelCatalogEntry? entry, string botContextId)
+    {
+        if (entry is null || accountsStore is null || string.IsNullOrWhiteSpace(entry.BotVerifiedSubjectId))
+        {
+            return;
+        }
+
+        var account = accountsStore.Load(PlatformAuthRole.Bot, botContextId);
+        if (!string.IsNullOrWhiteSpace(account.UserId)
+            && !string.Equals(account.UserId, entry.BotVerifiedSubjectId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Контекст бота ({botContextId}) перепривязан к другому аккаунту Twitch – требуется повторная проверка доступа.");
+        }
+    }
+
+    private ChannelCatalogEntry? ResolveActiveCatalogEntry()
+    {
+        if (channelCatalogStore is null)
+        {
+            return null;
+        }
+
+        var configured = channelCatalogStore.GetConfiguredChannels(StreamingPlatform.Twitch);
+        if (configured.Count == 0)
+        {
+            return null;
+        }
+
+        var routing = channelCatalogStore.GetPlatformSettings(StreamingPlatform.Twitch);
+        if (!string.IsNullOrWhiteSpace(routing.ActiveChannelId))
+        {
+            var match = configured.FirstOrDefault(c => string.Equals(c.ChannelId, routing.ActiveChannelId, StringComparison.Ordinal));
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return configured[0];
+    }
+
+    private static string ResolveChannelLabel(ChannelCatalogEntry entry, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Handle))
+        {
+            return entry.Handle.TrimStart('@');
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.DisplayName))
+        {
+            return entry.DisplayName;
+        }
+
+        return string.IsNullOrWhiteSpace(fallback) ? entry.ChannelId : fallback;
     }
 }

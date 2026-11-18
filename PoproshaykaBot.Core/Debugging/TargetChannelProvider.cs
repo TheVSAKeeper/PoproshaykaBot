@@ -69,6 +69,22 @@ public sealed class TargetChannelProvider(
         }
     }
 
+    public void SetSessionLogin(string login)
+    {
+        if (string.IsNullOrWhiteSpace(login))
+        {
+            return;
+        }
+
+        lock (_syncLock)
+        {
+            if (_session is { IsDebugSession: false } current)
+            {
+                _session = current with { Login = login.Trim() };
+            }
+        }
+    }
+
     private (TargetChannelState State, string? Rejected, TargetChannelSource Source) Resolve()
     {
         var own = settingsManager.Current.Twitch.Channel ?? string.Empty;

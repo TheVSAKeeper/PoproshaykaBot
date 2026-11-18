@@ -124,7 +124,7 @@ public sealed class StreamStatusWatchdog : IStreamHostedComponent, IAsyncDisposa
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                if (_streamStatus.CurrentStatus != StreamStatus.Online)
+                if (_streamStatus.CurrentStatus != StreamStatus.Online && !_streamStatus.RequiresBackgroundPoll)
                 {
                     continue;
                 }

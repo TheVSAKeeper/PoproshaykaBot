@@ -57,6 +57,11 @@ public sealed class YouTubeOAuthService(
         return await tokenRefresher.GetAccessTokenAsync(role, forceRefresh: false, ct);
     }
 
+    public async Task<string?> GetAccessTokenAsync(PlatformAuthRole role, string? contextId, CancellationToken ct = default)
+    {
+        return await tokenRefresher.GetAccessTokenAsync(role, contextId, forceRefresh: false, ct);
+    }
+
     ValueTask<string?> IPlatformAuthService.GetAccessTokenAsync(
         PlatformAuthRole role,
         bool forceRefresh,
@@ -65,9 +70,23 @@ public sealed class YouTubeOAuthService(
         return tokenRefresher.GetAccessTokenAsync(role, forceRefresh, ct);
     }
 
+    ValueTask<string?> IPlatformAuthService.GetAccessTokenAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        bool forceRefresh,
+        CancellationToken ct)
+    {
+        return tokenRefresher.GetAccessTokenAsync(role, contextId, forceRefresh, ct);
+    }
+
     public bool HasUsableAccessToken(PlatformAuthRole role)
     {
         return tokenRefresher.HasUsableAccessToken(role);
+    }
+
+    public bool HasUsableAccessToken(PlatformAuthRole role, string? contextId)
+    {
+        return tokenRefresher.HasUsableAccessToken(role, contextId);
     }
 
     public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken)
@@ -75,9 +94,19 @@ public sealed class YouTubeOAuthService(
         return accountWriter.TryClearAccessToken(role, expectedToken);
     }
 
+    public bool TryClearAccessToken(PlatformAuthRole role, string? contextId, string expectedToken)
+    {
+        return accountWriter.TryClearAccessToken(role, contextId, expectedToken);
+    }
+
     public void ResetRetryState(PlatformAuthRole role)
     {
         tokenRefresher.ResetRetryState(role);
+    }
+
+    public void ResetRetryState(PlatformAuthRole role, string? contextId)
+    {
+        tokenRefresher.ResetRetryState(role, contextId);
     }
 
     public void ClearAccount(PlatformAuthRole role, bool publishAuthorizationRefreshed = false)

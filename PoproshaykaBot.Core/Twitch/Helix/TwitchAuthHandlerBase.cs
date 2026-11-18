@@ -23,11 +23,12 @@ public abstract class TwitchAuthHandlerBase(
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        var token = await GetTokenAsync(oauthService, cancellationToken);
+        var contextId = PlatformAuthRequestOptions.ResolveContextId(request);
+        var token = await GetTokenAsync(oauthService, contextId, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(token))
         {
-            throw new TwitchAuthorizationMissingException($"Токен Twitch для роли {Role} отсутствует или недействителен. {MissingTokenHint}");
+            throw new TwitchAuthorizationMissingException($"Токен Twitch для роли {Role} (контекст {contextId}) отсутствует или недействителен. {MissingTokenHint}");
         }
 
         request.Headers.Authorization = new("Bearer", token);
@@ -42,28 +43,41 @@ public abstract class TwitchAuthHandlerBase(
 
         if (request.Options.TryGetValue(KeepTokenOnUnauthorized, out var keepToken) && keepToken)
         {
-            logger.LogDebug("Helix запрос {Method} {Path} (роль {Role}) вернул 401 – отказ относится к самой операции, токен не очищается",
+            logger.LogDebug("Helix запрос {Method} {Path} (роль {Role}, контекст {ContextId}) вернул 401 – отказ относится к самой операции, токен не очищается",
                 request.Method,
                 request.RequestUri?.AbsolutePath,
-                Role);
+                Role,
+                contextId);
 
             return response;
         }
 
-        logger.LogWarning("Helix запрос {Method} {Path} (роль {Role}) вернул 401 – пробуем очистить сохранённый токен",
+        logger.LogWarning("Helix запрос {Method} {Path} (роль {Role}, контекст {ContextId}) вернул 401 – пробуем очистить сохранённый токен",
             request.Method,
             request.RequestUri?.AbsolutePath,
-            Role);
+            Role,
+            contextId);
 
-        var cleared = accountsStore.TryClearAccessToken(Role, token);
+        var cleared = accountsStore.TryClearAccessToken(Role, contextId, token);
 
         if (!cleared)
         {
-            logger.LogDebug("Helix 401 (роль {Role}): токен в хранилище уже сменился, оставляем без изменений",
-                Role);
+            logger.LogDebug("Helix 401 (роль {Role}, контекст {ContextId}): токен в хранилище уже сменился, оставляем без изменений",
+                Role,
+                contextId);
         }
 
         return response;
+    }
+
+    protected virtual Task<string?> GetTokenAsync(
+        ITwitchOAuthService oauthService,
+        string contextId,
+        CancellationToken cancellationToken)
+    {
+        return AuthContextIds.IsDefault(contextId)
+            ? GetTokenAsync(oauthService, cancellationToken)
+            : oauthService.GetAccessTokenAsync(Role, contextId, cancellationToken);
     }
 
     protected abstract Task<string?> GetTokenAsync(ITwitchOAuthService oauthService, CancellationToken cancellationToken);

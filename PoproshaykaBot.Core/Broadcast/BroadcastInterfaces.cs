@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 
@@ -13,6 +14,21 @@ public interface IBroadcastState
     IReadOnlySet<StreamingPlatform> LivePlatforms { get; }
 
     bool IsPlatformLive(StreamingPlatform platform);
+}
+
+public interface IBroadcastChannelLifecycle
+{
+    Task LeaveActiveChannelAsync(
+        StreamingPlatform platform,
+        ChannelKey? expectedChannel,
+        CancellationToken cancellationToken = default);
+
+    Task ReplaceActiveChannelAsync(
+        StreamingPlatform platform,
+        ChannelKey? fromChannel,
+        ChannelCatalogEntry toChannel,
+        StreamInfo? confirmedStream,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IBroadcastOfflineStopCoordinator

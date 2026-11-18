@@ -42,12 +42,17 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
             eventBus,
             logger);
 
-        _inner = new(accountsStore.Load, strategy, eventBus, timeProvider);
+        _inner = new((role, contextId) => accountsStore.Load(role, contextId), strategy, eventBus, timeProvider);
     }
 
     public bool HasUsableAccessToken(PlatformAuthRole role)
     {
         return _inner.HasUsableAccessToken(role);
+    }
+
+    public bool HasUsableAccessToken(PlatformAuthRole role, string? contextId)
+    {
+        return _inner.HasUsableAccessToken(role, contextId);
     }
 
     public ValueTask<string?> GetAccessTokenAsync(
@@ -56,6 +61,15 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
         CancellationToken ct = default)
     {
         return _inner.GetAccessTokenAsync(role, forceRefresh, ct);
+    }
+
+    public ValueTask<string?> GetAccessTokenAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        bool forceRefresh = false,
+        CancellationToken ct = default)
+    {
+        return _inner.GetAccessTokenAsync(role, contextId, forceRefresh, ct);
     }
 
     public Task<string> RefreshTokenAsync(
@@ -68,9 +82,25 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
         return _inner.RefreshTokenAsync(role, clientId, clientSecret, refreshToken, ct);
     }
 
+    public Task<string> RefreshTokenAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct = default)
+    {
+        return _inner.RefreshTokenAsync(role, contextId, clientId, clientSecret, refreshToken, ct);
+    }
+
     public void ResetRetryState(PlatformAuthRole role)
     {
         _inner.ResetRetryState(role);
+    }
+
+    public void ResetRetryState(PlatformAuthRole role, string? contextId)
+    {
+        _inner.ResetRetryState(role, contextId);
     }
 
     public void Dispose()
@@ -108,11 +138,17 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
                 && YouTubeScopes.RequiredFor(role).All(required => YouTubeScopes.IsGranted(account, required));
         }
 
-        public async Task HandleScopeMismatchAsync(PlatformAuthRole role, YouTubeAccountSettings accountSnapshot, CancellationToken ct)
+        public Task HandleScopeMismatchAsync(PlatformAuthRole role, YouTubeAccountSettings accountSnapshot, CancellationToken ct)
+        {
+            return HandleScopeMismatchAsync(role, AuthContextIds.Default, accountSnapshot, ct);
+        }
+
+        public async Task HandleScopeMismatchAsync(PlatformAuthRole role, string contextId, YouTubeAccountSettings accountSnapshot, CancellationToken ct)
         {
             logger.LogWarning(
-                "Scope set YouTube роли {Role} изменился или не содержит обязательных прав – требуется повторная авторизация. Выдано: [{Old}]. Ожидается: [{New}]",
+                "Scope set YouTube роли {Role} (контекст {ContextId}) изменился или не содержит обязательных прав – требуется повторная авторизация. Выдано: [{Old}]. Ожидается: [{New}]",
                 role,
+                contextId,
                 string.Join(" ", accountSnapshot.StoredScopes),
                 string.Join(" ", accountSnapshot.Scopes));
 
@@ -132,7 +168,7 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
                 logger.LogError(ex, "Не удалось опубликовать BotConnectionStatusUpdated при YouTube scope mismatch (роль {Role})", role);
             }
 
-            accountWriter.ClearAccount(role, publishAuthorizationRefreshed: true);
+            accountWriter.ClearAccount(role, contextId, publishAuthorizationRefreshed: true);
         }
 
         public bool TryReadBackgroundCredentials(out string clientId, out string clientSecret)
@@ -148,8 +184,19 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
             return true;
         }
 
+        public Task<string> RefreshAndSaveAsync(
+            PlatformAuthRole role,
+            string clientId,
+            string clientSecret,
+            string refreshToken,
+            CancellationToken ct)
+        {
+            return RefreshAndSaveAsync(role, AuthContextIds.Default, clientId, clientSecret, refreshToken, ct);
+        }
+
         public async Task<string> RefreshAndSaveAsync(
             PlatformAuthRole role,
+            string contextId,
             string clientId,
             string clientSecret,
             string refreshToken,
@@ -159,6 +206,7 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
 
             accountWriter.ApplyRefreshResult(
                 role,
+                contextId,
                 token.AccessToken,
                 token.RefreshToken,
                 token.Scopes,
@@ -182,12 +230,18 @@ public sealed class YouTubeOAuthTokenRefresher : IDisposable
 
         public Task OnRefreshTokenRejectedAsync(PlatformAuthRole role, Exception exception, CancellationToken ct)
         {
+            return OnRefreshTokenRejectedAsync(role, AuthContextIds.Default, exception, ct);
+        }
+
+        public Task OnRefreshTokenRejectedAsync(PlatformAuthRole role, string contextId, Exception exception, CancellationToken ct)
+        {
             logger.LogWarning(
                 exception,
-                "Google отозвал refresh-токен YouTube роли {Role} (invalid_grant) – сохранённая авторизация очищается.",
-                role);
+                "Google отозвал refresh-токен YouTube роли {Role} (контекст {ContextId}, invalid_grant) – сохранённая авторизация очищается.",
+                role,
+                contextId);
 
-            accountWriter.ClearAccount(role, publishAuthorizationRefreshed: true);
+            accountWriter.ClearAccount(role, contextId, publishAuthorizationRefreshed: true);
             return Task.CompletedTask;
         }
 

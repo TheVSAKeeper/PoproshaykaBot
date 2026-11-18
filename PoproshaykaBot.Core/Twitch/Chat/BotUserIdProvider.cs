@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch.Helix;
 
 namespace PoproshaykaBot.Core.Twitch.Chat;
@@ -13,8 +14,7 @@ public sealed class BotUserIdProvider : IBotUserIdProvider, IDisposable
     private readonly ILogger<BotUserIdProvider> _logger;
     private readonly IDisposable _lifecycleSubscription;
     private readonly SemaphoreSlim _lock = new(1, 1);
-
-    private UserInfo? _cachedUser;
+    private readonly Dictionary<string, UserInfo> _cachedByContext = new(StringComparer.Ordinal);
     private long _generation;
 
     public BotUserIdProvider(
@@ -36,13 +36,12 @@ public sealed class BotUserIdProvider : IBotUserIdProvider, IDisposable
 
     public async Task<UserInfo?> GetUserAsync(CancellationToken cancellationToken)
     {
+        var contextId = AuthContextIds.Normalize(PlatformAuthRequestOptions.CurrentContextId);
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            var cached = Volatile.Read(ref _cachedUser);
-
-            if (cached != null)
+            if (_cachedByContext.TryGetValue(contextId, out var cached))
             {
                 return cached;
             }
@@ -52,16 +51,16 @@ public sealed class BotUserIdProvider : IBotUserIdProvider, IDisposable
 
             if (user == null)
             {
-                _logger.LogWarning("Bot user не получен через /users – ответ пустой");
+                _logger.LogWarning("Bot user не получен через /users (контекст {ContextId}) – ответ пустой", contextId);
                 return null;
             }
 
             if (Interlocked.Read(ref _generation) == generation)
             {
-                Volatile.Write(ref _cachedUser, user);
+                _cachedByContext[contextId] = user;
             }
 
-            _logger.LogInformation("Bot user получен через токен: {UserId} ({Login})", user.Id, user.Login);
+            _logger.LogInformation("Bot user получен через токен (контекст {ContextId}): {UserId} ({Login})", contextId, user.Id, user.Login);
             return user;
         }
         finally
@@ -84,7 +83,17 @@ public sealed class BotUserIdProvider : IBotUserIdProvider, IDisposable
             or BotLifecyclePhase.Failed)
         {
             Interlocked.Increment(ref _generation);
-            Volatile.Write(ref _cachedUser, null);
+            if (_lock.Wait(0))
+            {
+                try
+                {
+                    _cachedByContext.Clear();
+                }
+                finally
+                {
+                    _lock.Release();
+                }
+            }
         }
     }
 }

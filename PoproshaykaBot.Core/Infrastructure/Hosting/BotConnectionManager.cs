@@ -169,6 +169,87 @@ public sealed class BotConnectionManager : IBotConnectionController, IAsyncDispo
         }
     }
 
+    public bool IsPlatformConnected(StreamingPlatform platform)
+    {
+        lock (_stateLock)
+        {
+            return _slots.TryGetValue(platform, out var slot)
+                && slot.HasActiveSession
+                && slot.Phase == BotLifecyclePhase.Connected;
+        }
+    }
+
+    public async Task<string?> RetargetPlatformAsync(
+        StreamingPlatform platform,
+        PlatformChatSessionTarget target,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (!_slots.TryGetValue(platform, out var slot))
+        {
+            return null;
+        }
+
+        lock (_stateLock)
+        {
+            if (!slot.HasActiveSession)
+            {
+                return null;
+            }
+        }
+
+        var progress = new Progress<string>(ReportProgress);
+        var channel = await slot.Adapter.RetargetSessionAsync(target, progress, cancellationToken).ConfigureAwait(false);
+        await _eventBus.PublishAsync(new BotJoinedChannel(platform, channel), cancellationToken).ConfigureAwait(false);
+        return channel;
+    }
+
+    public async Task MarkPlatformSwitchFailedAsync(StreamingPlatform platform, Exception error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+
+        if (!_slots.TryGetValue(platform, out var slot))
+        {
+            return;
+        }
+
+        var progress = new Progress<string>(ReportProgress);
+        var hadSession = false;
+
+        lock (_stateLock)
+        {
+            hadSession = slot.HasActiveSession;
+        }
+
+        if (hadSession)
+        {
+            if (slot.Adapter.Host.IsRunning)
+            {
+                await RollbackHostAsync(slot.Adapter.Host, progress).ConfigureAwait(false);
+            }
+
+            await ReleaseSharedHostAsync(progress, ForcedStopTimeout).ConfigureAwait(false);
+        }
+
+        _chatPipelineHandler?.Reset(platform);
+        slot.Adapter.EndSession();
+
+        PhaseTransition transition;
+        lock (_stateLock)
+        {
+            slot.HasActiveSession = false;
+            slot.IsConnecting = false;
+            transition = TransitionSlotLocked(
+                slot,
+                BotLifecyclePhase.Failed,
+                error,
+                "нет активного чата после ошибки переключения");
+        }
+
+        PublishTransitionFireAndForget(transition);
+    }
+
     public BotLifecyclePhase GetPhase(StreamingPlatform platform)
     {
         lock (_stateLock)

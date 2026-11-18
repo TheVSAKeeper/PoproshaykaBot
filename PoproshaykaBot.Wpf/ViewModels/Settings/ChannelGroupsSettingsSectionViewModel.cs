@@ -69,6 +69,14 @@ public sealed partial class ChannelGroupsSettingsSectionViewModel : ObservableOb
     public ChannelsSettings BuildSettings()
     {
         var current = _catalogStore.Load();
+        ApplyTo(current);
+        return current;
+    }
+
+    public void ApplyTo(ChannelsSettings target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
         var groups = new List<ChannelGroupDefinition>(Groups.Count);
 
         foreach (var group in Groups)
@@ -93,11 +101,7 @@ public sealed partial class ChannelGroupsSettingsSectionViewModel : ObservableOb
             });
         }
 
-        return new()
-        {
-            Channels = [.. current.Channels],
-            Groups = groups,
-        };
+        target.Groups = groups;
     }
 
     public bool HasErrors => Groups.Any(static g => string.IsNullOrWhiteSpace(g.Name));

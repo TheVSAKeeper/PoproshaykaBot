@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Infrastructure.Diagnostics;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -48,10 +49,14 @@ public static class TwitchServiceCollectionExtensions
         services.AddSingleton<TwitchOAuthService>();
         services.AddSingleton<ITwitchOAuthService>(static provider => provider.GetRequiredService<TwitchOAuthService>());
         services.AddSingleton<IPlatformAuthService>(static provider => provider.GetRequiredService<TwitchOAuthService>());
+        services.AddKeyedSingleton<IPlatformAuthService>(
+            StreamingPlatform.Twitch,
+            static (provider, _) => provider.GetRequiredService<TwitchOAuthService>());
         services.AddSingleton<IClientCredentialsValidator, ClientCredentialsValidator>();
 
         services.AddSingleton<IBroadcasterIdProvider, BroadcasterIdProvider>();
         services.AddSingleton<IOnboardingChannelValidator, OnboardingChannelValidator>();
+        services.AddSingleton<IPlatformChannelAdapter, TwitchChannelAdapter>();
 
         services.AddSingleton<ISettingsSnapshotContributor>(static provider => new DelegateSettingsSnapshotContributor(() =>
         {
@@ -68,8 +73,8 @@ public static class TwitchServiceCollectionExtensions
             services.AddSingleton<ISecretValueProvider>(provider =>
                 new DelegateSecretValueProvider($"токены роли {role}", () =>
                 {
-                    var account = provider.GetRequiredService<AccountsStore>().Load(role);
-                    return [account.AccessToken, account.RefreshToken];
+                    var accounts = provider.GetRequiredService<AccountsStore>().GetAllAccounts(role);
+                    return accounts.SelectMany(static account => new[] { account.AccessToken, account.RefreshToken }).ToArray();
                 }));
         }
 

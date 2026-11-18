@@ -1,4 +1,5 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.Logging;
@@ -6,13 +7,17 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Streaming.Switching;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
+
+public sealed record StreamChannelOption(ChannelKey Channel, string DisplayName, bool IsOnline);
 
 public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, IDisposable
 {
@@ -22,12 +27,17 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private readonly List<IDisposable> _subs = [];
     private readonly IUiDispatcher _uiDispatcher;
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
+    private readonly ChannelCatalogStore? _catalogStore;
+    private readonly IChannelSwitchCoordinator? _switchCoordinator;
+    private readonly Dictionary<StreamingPlatform, IPlatformChannelMonitor> _monitorsByPlatform = [];
+    private readonly Dictionary<ChannelKey, ChannelMonitoringSnapshot> _monitoringSnapshots = [];
     private readonly IUiTimer _refreshTimer;
     private readonly IShellLauncher _shellLauncher;
     private readonly ToolbarItemViewModel _switchPlatformToolbarItem;
     private ToolbarItemViewModel _openChannelToolbarItem;
     private bool _refreshTimerRunning;
     private bool _hasMultipleYouTubeBroadcasts;
+    private bool _updatingChannelSelection;
     private StreamInfo? _currentStreamInfo;
 
     [ObservableProperty]
@@ -36,6 +46,30 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
 
     [ObservableProperty]
     private bool _hasMultiplePlatforms;
+
+    [ObservableProperty]
+    private bool _hasMultipleChannels;
+
+    [ObservableProperty]
+    private string _activeChannelDisplayName = string.Empty;
+
+    [ObservableProperty]
+    private StreamChannelOption? _selectedChannelOption;
+
+    [ObservableProperty]
+    private bool _isSwitchingChannel;
+
+    [ObservableProperty]
+    private string _preselectedNextText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasPreselectedNext;
+
+    [ObservableProperty]
+    private string _monitoringIssueText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasMonitoringIssue;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMultipleBroadcastsNotice))]
@@ -68,8 +102,11 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         ILogger<StreamInfoTileViewModel> logger,
         IUiDispatcher uiDispatcher,
         IShellLauncher shellLauncher,
-        YouTubeSettingsStore? youtubeSettingsStore = null)
-        : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 280, minHeight: 194)
+        YouTubeSettingsStore? youtubeSettingsStore = null,
+        ChannelCatalogStore? catalogStore = null,
+        IChannelSwitchCoordinator? switchCoordinator = null,
+        IEnumerable<IPlatformChannelMonitor>? channelMonitors = null)
+        : base("stream-info", "Информация о стриме", maxWidth: 420, maxHeight: 320, minHeight: 194)
     {
         ArgumentNullException.ThrowIfNull(platformRegistry);
         ArgumentNullException.ThrowIfNull(bus);
@@ -82,7 +119,17 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _logger = logger;
         _uiDispatcher = uiDispatcher;
         _youtubeSettingsStore = youtubeSettingsStore;
+        _catalogStore = catalogStore;
+        _switchCoordinator = switchCoordinator;
         _shellLauncher = shellLauncher;
+
+        if (channelMonitors is not null)
+        {
+            foreach (var monitor in channelMonitors)
+            {
+                _monitorsByPlatform[monitor.Platform] = monitor;
+            }
+        }
 
         _refreshTimer = uiDispatcher.CreateAsyncTimer(
             TimeSpan.FromSeconds(30),
@@ -119,13 +166,45 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         _subs.Add(bus.SubscribeOnUi<PlatformConnectionChanged>(_ => OnPlatformStateChanged()));
         _subs.Add(bus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(OnYouTubeActiveBroadcastChanged));
         _subs.Add(bus.SubscribeOnUi<YouTubeMultipleBroadcastsDetected>(OnYouTubeMultipleBroadcastsDetected));
+        _subs.Add(bus.SubscribeOnUi<ActiveChannelChanged>(_ => OnPlatformStateChanged()));
+        _subs.Add(bus.SubscribeOnUi<ChannelMonitoringStateChanged>(OnChannelMonitoringStateChanged));
 
         if (_youtubeSettingsStore is not null)
         {
             _youtubeSettingsStore.Changed += OnYouTubeSettingsChanged;
         }
 
+        if (_catalogStore is not null)
+        {
+            _catalogStore.Changed += OnCatalogChanged;
+        }
+
         ApplyCurrentStatus();
+    }
+
+    public ObservableCollection<StreamChannelOption> ConfiguredChannels { get; } = [];
+
+    public bool CanSwitchChannel => _switchCoordinator is not null && !IsSwitchingChannel;
+
+    partial void OnIsSwitchingChannelChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanSwitchChannel));
+    }
+
+    partial void OnSelectedChannelOptionChanged(StreamChannelOption? value)
+    {
+        if (_updatingChannelSelection || value is null || _switchCoordinator is null || IsSwitchingChannel)
+        {
+            return;
+        }
+
+        var routing = _catalogStore?.GetPlatformSettings(SelectedPlatform);
+        if (routing is not null && string.Equals(routing.ActiveChannelId, value.Channel.ChannelId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = SwitchToChannelAsync(value);
     }
 
     public override PackIconLucideKind Icon => PackIconLucideKind.Radio;
@@ -196,6 +275,51 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
     private void OnYouTubeSettingsChanged()
     {
         _uiDispatcher.Invoke(OnPlatformStateChanged);
+    }
+
+    private void OnCatalogChanged(object? sender, EventArgs e)
+    {
+        _uiDispatcher.Invoke(OnPlatformStateChanged);
+    }
+
+    private void OnChannelMonitoringStateChanged(ChannelMonitoringStateChanged evt)
+    {
+        _monitoringSnapshots[evt.Channel] = evt.Snapshot;
+        if (evt.Platform == SelectedPlatform)
+        {
+            RefreshMultiChannelState();
+        }
+    }
+
+    private async Task SwitchToChannelAsync(StreamChannelOption option)
+    {
+        if (_switchCoordinator is null)
+        {
+            return;
+        }
+
+        IsSwitchingChannel = true;
+        try
+        {
+            var result = await _switchCoordinator.SwitchActiveChannelAsync(SelectedPlatform, option.Channel).ConfigureAwait(true);
+            if (result.Succeeded)
+            {
+                _logger.ChannelSwitchedByUser(SelectedPlatformName, option.DisplayName);
+            }
+            else
+            {
+                _logger.ChannelSwitchOperationFailed(null, SelectedPlatformName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.ChannelSwitchOperationFailed(ex, SelectedPlatformName);
+        }
+        finally
+        {
+            IsSwitchingChannel = false;
+            ApplyCurrentStatus();
+        }
     }
 
     private void OnYouTubeActiveBroadcastChanged(YouTubeActiveBroadcastChanged activeChanged)
@@ -286,7 +410,99 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         }
 
         OnPropertyChanged(nameof(HasMultipleBroadcastsNotice));
+        RefreshMultiChannelState();
         UpdateTimer();
+    }
+
+    private void RefreshMultiChannelState()
+    {
+        var snapshots = new Dictionary<ChannelKey, ChannelMonitoringSnapshot>();
+        foreach (var pair in _monitoringSnapshots)
+        {
+            if (pair.Key.Platform == SelectedPlatform)
+            {
+                snapshots[pair.Key] = pair.Value;
+            }
+        }
+
+        if (_monitorsByPlatform.TryGetValue(SelectedPlatform, out var monitor))
+        {
+            foreach (var snapshot in monitor.GetSnapshots())
+            {
+                snapshots[snapshot.Channel] = snapshot;
+            }
+        }
+
+        var issues = snapshots.Values
+            .Where(static s => s.Availability is ChannelMonitoringAvailability.Unavailable or ChannelMonitoringAvailability.Degraded)
+            .Select(static s => string.IsNullOrWhiteSpace(s.Detail)
+                ? s.ChannelDisplayName
+                : $"{s.ChannelDisplayName}: {s.Detail}")
+            .ToArray();
+
+        if (issues.Length > 0)
+        {
+            HasMonitoringIssue = true;
+            MonitoringIssueText = $"Мониторинг ограничен: {string.Join("; ", issues)}";
+        }
+        else
+        {
+            HasMonitoringIssue = false;
+            MonitoringIssueText = string.Empty;
+        }
+
+        _updatingChannelSelection = true;
+        try
+        {
+            ConfiguredChannels.Clear();
+            if (_catalogStore is null)
+            {
+                HasMultipleChannels = false;
+                ActiveChannelDisplayName = _platformRegistry.GetConfiguredChannel(SelectedPlatform) ?? string.Empty;
+                SelectedChannelOption = null;
+                HasPreselectedNext = false;
+                PreselectedNextText = string.Empty;
+                return;
+            }
+
+            var configured = _catalogStore.GetConfiguredChannels(SelectedPlatform);
+            var routing = _catalogStore.GetPlatformSettings(SelectedPlatform);
+
+            foreach (var entry in configured)
+            {
+                var online = snapshots.TryGetValue(entry.Key, out var snapshot) && snapshot.Status == StreamStatus.Online;
+                ConfiguredChannels.Add(new StreamChannelOption(entry.Key, entry.DisplayName, online));
+            }
+
+            HasMultipleChannels = ConfiguredChannels.Count > 1;
+            var activeKey = !string.IsNullOrWhiteSpace(routing.ActiveChannelId)
+                ? new ChannelKey(SelectedPlatform, routing.ActiveChannelId)
+                : default;
+            var activeOption = activeKey.IsValid
+                ? ConfiguredChannels.FirstOrDefault(o => o.Channel == activeKey)
+                : null;
+            ActiveChannelDisplayName = activeOption?.DisplayName
+                ?? _platformRegistry.GetConfiguredChannel(SelectedPlatform)
+                ?? string.Empty;
+            SelectedChannelOption = activeOption ?? ConfiguredChannels.FirstOrDefault();
+
+            if (routing.SwitchMode == ChannelSwitchMode.PreselectedNext && !string.IsNullOrWhiteSpace(routing.PreselectedNextChannelId))
+            {
+                var nextKey = new ChannelKey(SelectedPlatform, routing.PreselectedNextChannelId);
+                var nextEntry = _catalogStore.FindEntry(nextKey);
+                HasPreselectedNext = nextEntry is not null;
+                PreselectedNextText = nextEntry is not null ? $"Следующий канал: {nextEntry.DisplayName}" : string.Empty;
+            }
+            else
+            {
+                HasPreselectedNext = false;
+                PreselectedNextText = string.Empty;
+            }
+        }
+        finally
+        {
+            _updatingChannelSelection = false;
+        }
     }
 
     private void UpdateOpenChannelToolTip(string expectedToolTip)
@@ -347,6 +563,11 @@ public sealed partial class StreamInfoTileViewModel : DashboardTileViewModel, ID
         if (_youtubeSettingsStore is not null)
         {
             _youtubeSettingsStore.Changed -= OnYouTubeSettingsChanged;
+        }
+
+        if (_catalogStore is not null)
+        {
+            _catalogStore.Changed -= OnCatalogChanged;
         }
 
         _refreshTimer.Stop();

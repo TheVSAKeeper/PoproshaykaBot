@@ -33,8 +33,14 @@ internal sealed class YouTubeLiveBroadcastClient(
         return string.IsNullOrWhiteSpace(channelId) ? null : channelId.Trim();
     }
 
-    public async Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(CancellationToken cancellationToken)
+    public Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(CancellationToken cancellationToken)
     {
+        return ListActiveBroadcastsAsync(null, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(string? contextId, CancellationToken cancellationToken)
+    {
+        using var _ = PlatformAuthRequestOptions.UseContext(contextId);
         var results = new List<YouTubeBroadcastSummary>();
         string? pageToken = null;
 
@@ -79,9 +85,15 @@ internal sealed class YouTubeLiveBroadcastClient(
         return results;
     }
 
-    public async Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, CancellationToken cancellationToken)
+    public Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, CancellationToken cancellationToken)
+    {
+        return GetVideoLiveSampleAsync(videoId, null, cancellationToken);
+    }
+
+    public async Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, string? contextId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoId);
+        using var _ = PlatformAuthRequestOptions.UseContext(contextId);
 
         var uri = $"youtube/v3/videos?part=snippet,liveStreamingDetails&id={Uri.EscapeDataString(videoId)}";
         var json = await SendBroadcasterGetAsync(uri, "videos.list", cancellationToken).ConfigureAwait(false);

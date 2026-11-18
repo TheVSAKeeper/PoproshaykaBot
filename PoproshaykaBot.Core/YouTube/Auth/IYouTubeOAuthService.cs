@@ -31,7 +31,17 @@ public interface IYouTubeOAuthService
 
     Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default);
 
+    Task<string?> GetAccessTokenAsync(PlatformAuthRole role, string? contextId, CancellationToken ct = default)
+    {
+        return GetAccessTokenAsync(role, ct);
+    }
+
     bool TryClearAccessToken(PlatformAuthRole role, string expectedToken);
+
+    bool TryClearAccessToken(PlatformAuthRole role, string? contextId, string expectedToken)
+    {
+        return TryClearAccessToken(role, expectedToken);
+    }
 
     void ClearAccount(PlatformAuthRole role, bool publishAuthorizationRefreshed = false);
 }

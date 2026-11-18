@@ -7,6 +7,7 @@ using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.YouTube.Client;
@@ -23,8 +24,11 @@ internal sealed class YouTubeStreamMonitor(
     IYouTubeQuotaGovernor quotaGovernor,
     IEventBus eventBus,
     TimeProvider timeProvider,
-    ILogger<YouTubeStreamMonitor> logger)
-    : IStreamStatus, IStreamHostedComponent, IYouTubeActiveBroadcastSource, IYouTubeMonitorDiagnostics, IDisposable
+    ILogger<YouTubeStreamMonitor> logger,
+    ChannelCatalogStore? channelCatalogStore = null,
+    YouTubeAccountsStore? accountsStore = null,
+    PlatformChannelRegistry? channelRegistry = null)
+    : IStreamStatus, IPlatformChannelMonitor, IYouTubeActiveBroadcastSource, IYouTubeMonitorDiagnostics, IDisposable
 {
     private static readonly TimeSpan DisabledCheckInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan OfflinePollInterval = TimeSpan.FromSeconds(90);
@@ -41,11 +45,14 @@ internal sealed class YouTubeStreamMonitor(
     private readonly StreamStateMachine _stateMachine = new(timeProvider);
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly Lock _sync = new();
+    private readonly Dictionary<string, YouTubeChannelSlot> _slots = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> _lastDiscoveryByContext = new(StringComparer.Ordinal);
 
     private CancellationTokenSource? _runCts;
     private CancellationTokenSource? _waitCts;
     private Task? _loopTask;
     private IDisposable? _authSubscription;
+    private IDisposable? _activeChannelSubscription;
 
     private bool _enabled;
     private YouTubeMonitorIssue _issue;
@@ -64,6 +71,8 @@ internal sealed class YouTubeStreamMonitor(
     private bool _disposed;
     private StreamMonitoringStatus? _lastMonitoringStatus;
     private string? _lastMonitoringDetail;
+
+    public StreamingPlatform Platform => StreamingPlatform.YouTube;
 
     public string Name => "Мониторинг эфиров YouTube";
 
@@ -84,7 +93,103 @@ internal sealed class YouTubeStreamMonitor(
         }
     }
 
+    public YouTubeBroadcastSummary? GetActiveBroadcast(ChannelKey channel)
+    {
+        if (channel.Platform != StreamingPlatform.YouTube)
+        {
+            return null;
+        }
+
+        lock (_sync)
+        {
+            if (_slots.TryGetValue(channel.ChannelId, out var slot))
+            {
+                return slot.ActiveBroadcast;
+            }
+
+            if (string.Equals(_targetChannelId, channel.ChannelId, StringComparison.Ordinal))
+            {
+                return _activeBroadcast;
+            }
+        }
+
+        return null;
+    }
+
     public StreamStatusSnapshot GetSnapshot() => _stateMachine.GetSnapshot();
+
+    public ChannelMonitoringSnapshot GetSnapshot(ChannelKey channel)
+    {
+        if (channel.Platform != StreamingPlatform.YouTube)
+        {
+            return new(channel, channel.ChannelId, ChannelMonitoringAvailability.Unavailable, MonitoringUnavailableReason.NotSupportedByPlatform, "Неверный тип площадки", StreamStatus.Unknown, null, null, false);
+        }
+
+        lock (_sync)
+        {
+            if (_slots.TryGetValue(channel.ChannelId, out var slot))
+            {
+                return slot.ToMonitoringSnapshot();
+            }
+
+            if (string.Equals(_targetChannelId, channel.ChannelId, StringComparison.Ordinal))
+            {
+                return new(
+                    channel,
+                    channel.ChannelId,
+                    _issue == YouTubeMonitorIssue.None ? ChannelMonitoringAvailability.Active : ChannelMonitoringAvailability.Unavailable,
+                    MapIssueToReason(_issue),
+                    null,
+                    _stateMachine.CurrentStatus,
+                    _stateMachine.CurrentStream,
+                    _lastPollAt,
+                    _initialStatusResolved);
+            }
+        }
+
+        var entry = channelCatalogStore?.FindEntry(channel);
+        return new(
+            channel,
+            entry is { DisplayName.Length: > 0 } ? entry.DisplayName : channel.ChannelId,
+            entry is { MonitoringEnabled: true } ? ChannelMonitoringAvailability.Unavailable : ChannelMonitoringAvailability.Disabled,
+            entry is { MonitoringEnabled: true } ? MonitoringUnavailableReason.TransportDisconnected : MonitoringUnavailableReason.MonitoringDisabled,
+            entry is { MonitoringEnabled: true } ? "Мониторинг не запущен" : "Мониторинг канала выключен",
+            StreamStatus.Unknown,
+            null,
+            null,
+            false);
+    }
+
+    public IReadOnlyList<ChannelMonitoringSnapshot> GetSnapshots()
+    {
+        lock (_sync)
+        {
+            if (_slots.Count > 0)
+            {
+                return _slots.Values.Select(static s => s.ToMonitoringSnapshot()).ToArray();
+            }
+
+            if (!string.IsNullOrWhiteSpace(_targetChannelId))
+            {
+                var channel = new ChannelKey(StreamingPlatform.YouTube, _targetChannelId);
+                return
+                [
+                    new(
+                        channel,
+                        _targetChannelId,
+                        _issue == YouTubeMonitorIssue.None ? ChannelMonitoringAvailability.Active : ChannelMonitoringAvailability.Unavailable,
+                        MapIssueToReason(_issue),
+                        null,
+                        _stateMachine.CurrentStatus,
+                        _stateMachine.CurrentStream,
+                        _lastPollAt,
+                        _initialStatusResolved),
+                ];
+            }
+
+            return [];
+        }
+    }
 
     public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
@@ -98,12 +203,19 @@ internal sealed class YouTubeStreamMonitor(
             _runCts = new();
             _wakePending = false;
             _authSubscription ??= eventBus.Subscribe<PlatformAuthorizationRefreshed>(OnAuthorizationRefreshed);
+            _activeChannelSubscription ??= eventBus.Subscribe<ActiveChannelChanged>(OnActiveChannelChanged);
             if (!_wakeSubscriptionsAttached)
             {
                 settingsStore.Changed += Wake;
                 selectionStore.SelectionChanged += Wake;
+                if (channelCatalogStore is not null)
+                {
+                    channelCatalogStore.Changed += Wake;
+                }
+
                 _wakeSubscriptionsAttached = true;
             }
+
             _loopTask = RunLoopAsync(_runCts.Token);
         }
 
@@ -115,6 +227,7 @@ internal sealed class YouTubeStreamMonitor(
         CancellationTokenSource? runCts;
         Task? loopTask;
         IDisposable? authSub;
+        IDisposable? activeChannelSub;
         var detachWake = false;
 
         lock (_sync)
@@ -125,6 +238,8 @@ internal sealed class YouTubeStreamMonitor(
             _loopTask = null;
             authSub = _authSubscription;
             _authSubscription = null;
+            activeChannelSub = _activeChannelSubscription;
+            _activeChannelSubscription = null;
             if (_wakeSubscriptionsAttached)
             {
                 _wakeSubscriptionsAttached = false;
@@ -136,9 +251,14 @@ internal sealed class YouTubeStreamMonitor(
         {
             settingsStore.Changed -= Wake;
             selectionStore.SelectionChanged -= Wake;
+            if (channelCatalogStore is not null)
+            {
+                channelCatalogStore.Changed -= Wake;
+            }
         }
 
         authSub?.Dispose();
+        activeChannelSub?.Dispose();
 
         if (runCts is not null)
         {
@@ -163,6 +283,11 @@ internal sealed class YouTubeStreamMonitor(
     public Task RefreshLiveSnapshotAsync()
     {
         return RefreshLiveSnapshotAsync(CancellationToken.None);
+    }
+
+    public Task RefreshAsync(ChannelKey? channel = null, CancellationToken cancellationToken = default)
+    {
+        return RefreshLiveSnapshotAsync(cancellationToken);
     }
 
     public async Task RefreshLiveSnapshotAsync(CancellationToken cancellationToken)
@@ -209,6 +334,7 @@ internal sealed class YouTubeStreamMonitor(
         CancellationTokenSource? runCts;
         CancellationTokenSource? waitCts;
         IDisposable? authSub;
+        IDisposable? activeChannelSub;
         var detachWake = false;
 
         lock (_sync)
@@ -224,6 +350,8 @@ internal sealed class YouTubeStreamMonitor(
             waitCts = _waitCts;
             authSub = _authSubscription;
             _authSubscription = null;
+            activeChannelSub = _activeChannelSubscription;
+            _activeChannelSubscription = null;
             if (_wakeSubscriptionsAttached)
             {
                 _wakeSubscriptionsAttached = false;
@@ -235,9 +363,14 @@ internal sealed class YouTubeStreamMonitor(
         {
             settingsStore.Changed -= Wake;
             selectionStore.SelectionChanged -= Wake;
+            if (channelCatalogStore is not null)
+            {
+                channelCatalogStore.Changed -= Wake;
+            }
         }
 
         authSub?.Dispose();
+        activeChannelSub?.Dispose();
         try { runCts?.Cancel(); } catch (ObjectDisposedException) { }
         try { waitCts?.Cancel(); } catch (ObjectDisposedException) { }
     }
@@ -302,6 +435,17 @@ internal sealed class YouTubeStreamMonitor(
             _enabled = true;
         }
 
+        var monitoredEntries = channelCatalogStore?.GetMonitoredChannels(StreamingPlatform.YouTube) ?? [];
+        if (monitoredEntries.Count > 0)
+        {
+            return await PollMultiChannelAsync(settings, monitoredEntries, ct).ConfigureAwait(false);
+        }
+
+        lock (_sync)
+        {
+            _slots.Clear();
+        }
+
         var accessToken = await authService.GetAccessTokenAsync(PlatformAuthRole.Broadcaster, forceRefresh: false, ct)
             .ConfigureAwait(false);
 
@@ -363,6 +507,620 @@ internal sealed class YouTubeStreamMonitor(
                 "повтор после ошибки API").ConfigureAwait(false);
             return retryDelay;
         }
+    }
+
+    private async Task<TimeSpan> PollMultiChannelAsync(
+        YouTubeSettings settings,
+        IReadOnlyList<ChannelCatalogEntry> entries,
+        CancellationToken ct)
+    {
+        var routing = channelCatalogStore!.GetPlatformSettings(StreamingPlatform.YouTube);
+        var activeChannelId = channelRegistry?.GetBinding(StreamingPlatform.YouTube)?.Key.ChannelId
+            ?? routing.ActiveChannelId
+            ?? entries[0].ChannelId;
+
+        var wantedIds = new HashSet<string>(entries.Select(static e => e.ChannelId), StringComparer.Ordinal);
+        lock (_sync)
+        {
+            _targetChannelId = activeChannelId;
+            foreach (var existingId in _slots.Keys.ToArray())
+            {
+                if (!wantedIds.Contains(existingId))
+                {
+                    _slots.Remove(existingId);
+                }
+            }
+
+            foreach (var entry in entries)
+            {
+                var slot = GetOrCreateSlotLocked(entry);
+                slot.UpdateMetadata(entry);
+            }
+        }
+
+        var contextGroups = entries
+            .GroupBy(static e => AuthContextIds.Normalize(e.BroadcasterContextId), StringComparer.Ordinal)
+            .ToArray();
+
+        var validContexts = new List<(string ContextId, List<YouTubeChannelSlot> Slots)>();
+        var anyUnavailable = false;
+        var anyActiveHealthy = false;
+        string? firstUnavailableDetail = null;
+
+        foreach (var group in contextGroups)
+        {
+            var contextId = group.Key;
+            var groupSlots = group.Select(e => GetSlot(e.ChannelId)!).ToList();
+            var token = AuthContextIds.IsDefault(contextId)
+                ? await authService.GetAccessTokenAsync(PlatformAuthRole.Broadcaster, forceRefresh: false, ct).ConfigureAwait(false)
+                : await authService.GetAccessTokenAsync(PlatformAuthRole.Broadcaster, contextId, forceRefresh: false, ct).ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                anyUnavailable = true;
+                firstUnavailableDetail ??= $"нет авторизации ведущего ({contextId})";
+                foreach (var slot in groupSlots)
+                {
+                    await MarkSlotUnavailableAsync(
+                        slot,
+                        MonitoringUnavailableReason.MissingBroadcasterAuth,
+                        "нет авторизации ведущего для канала",
+                        isActive: string.Equals(slot.ChannelId, activeChannelId, StringComparison.Ordinal)).ConfigureAwait(false);
+                }
+
+                continue;
+            }
+
+            var account = accountsStore?.Load(PlatformAuthRole.Broadcaster, contextId);
+            var verifiedSlots = new List<YouTubeChannelSlot>();
+            foreach (var slot in groupSlots)
+            {
+                var unverifiedReason = CheckContextOwnershipMismatch(slot, account);
+                if (unverifiedReason is not null)
+                {
+                    anyUnavailable = true;
+                    firstUnavailableDetail ??= unverifiedReason;
+                    await MarkSlotUnavailableAsync(
+                        slot,
+                        MonitoringUnavailableReason.AccessUnverified,
+                        unverifiedReason,
+                        isActive: string.Equals(slot.ChannelId, activeChannelId, StringComparison.Ordinal)).ConfigureAwait(false);
+                    continue;
+                }
+
+                verifiedSlots.Add(slot);
+            }
+
+            if (verifiedSlots.Count > 0)
+            {
+                validContexts.Add((contextId, verifiedSlots));
+            }
+        }
+
+        if (validContexts.Count == 0)
+        {
+            await PublishMonitoringStatusIfChangedAsync(
+                StreamMonitoringStatus.Failed,
+                firstUnavailableDetail ?? "нет авторизации стримера").ConfigureAwait(false);
+            return DisabledCheckInterval;
+        }
+
+        var offlineInterval = ComputeEffectiveOfflineInterval(validContexts.Count, settings.DailyQuotaBudget);
+        var nextDelay = offlineInterval;
+        var quotaHit = false;
+        Exception? lastTransientError = null;
+
+        foreach (var (contextId, contextSlots) in validContexts)
+        {
+            try
+            {
+                var now = timeProvider.GetUtcNow();
+                var currentActiveId = ResolveActiveChannelId(routing, entries);
+                var activeSlot = contextSlots.FirstOrDefault(s => string.Equals(s.ChannelId, currentActiveId, StringComparison.Ordinal));
+                var hasBackground = contextSlots.Any(s => !string.Equals(s.ChannelId, currentActiveId, StringComparison.Ordinal));
+                var backgroundDue = hasBackground
+                    && (!_lastDiscoveryByContext.TryGetValue(contextId, out var lastDiscoveryAt) || now - lastDiscoveryAt >= offlineInterval);
+                var activeNeedsDiscovery = activeSlot is not null
+                    && (activeSlot.ActiveBroadcast is null
+                        || !string.Equals(
+                            activeSlot.ActiveSelectionVideoId,
+                            NormalizeSelectedVideoId(selectionStore.GetSelectedVideoId(activeSlot.ChannelId)),
+                            StringComparison.Ordinal));
+                var needsDiscovery = backgroundDue || activeNeedsDiscovery;
+
+                IReadOnlyList<YouTubeBroadcastSummary> broadcasts = [];
+                if (needsDiscovery)
+                {
+                    broadcasts = await broadcastClient.ListActiveBroadcastsAsync(contextId, ct).ConfigureAwait(false);
+                    _lastDiscoveryByContext[contextId] = timeProvider.GetUtcNow();
+                }
+
+                currentActiveId = ResolveActiveChannelId(routing, entries);
+                lock (_sync)
+                {
+                    _targetChannelId = currentActiveId;
+                }
+
+                foreach (var slot in contextSlots)
+                {
+                    var isActive = string.Equals(slot.ChannelId, currentActiveId, StringComparison.Ordinal);
+                    if (!needsDiscovery)
+                    {
+                        if (isActive && slot.ActiveBroadcast is { } currentActive)
+                        {
+                            var delay = await PollSlotActiveVideoSampleAsync(slot, currentActive, contextId, isActive: true, ct).ConfigureAwait(false);
+                            if (delay < nextDelay)
+                            {
+                                nextDelay = delay;
+                            }
+
+                            anyActiveHealthy = true;
+                        }
+
+                        continue;
+                    }
+
+                    var matches = broadcasts
+                        .Where(b => string.Equals(b.ChannelId, slot.ChannelId, StringComparison.Ordinal))
+                        .ToArray();
+
+                    await ProcessSlotDiscoveryAsync(slot, matches, contextId, isActive, ct).ConfigureAwait(false);
+                    if (isActive)
+                    {
+                        anyActiveHealthy = true;
+                        if (slot.StateMachine.CurrentStatus == StreamStatus.Online && OnlinePollInterval < nextDelay)
+                        {
+                            nextDelay = OnlinePollInterval;
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (YouTubeApiException ex) when (ex.Kind is YouTubeApiErrorKind.QuotaExceeded or YouTubeApiErrorKind.LocalQuotaBudgetReached)
+            {
+                quotaHit = true;
+                var quotaDelay = await HandleQuotaExceededMultiChannelAsync(ex.Kind == YouTubeApiErrorKind.QuotaExceeded, activeChannelId, ct).ConfigureAwait(false);
+                return quotaDelay;
+            }
+            catch (YouTubeApiException ex) when (ex.Kind == YouTubeApiErrorKind.Unauthorized)
+            {
+                anyUnavailable = true;
+                firstUnavailableDetail ??= "нет авторизации ведущего";
+                foreach (var slot in contextSlots)
+                {
+                    await MarkSlotUnavailableAsync(
+                        slot,
+                        MonitoringUnavailableReason.MissingBroadcasterAuth,
+                        "токен ведущего отклонён",
+                        isActive: string.Equals(slot.ChannelId, activeChannelId, StringComparison.Ordinal)).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is YouTubeApiException or HttpRequestException)
+            {
+                lastTransientError = ex;
+                var retryDelay = HandleTransientFailure(ex, YouTubeMonitorIssue.TransientError);
+                if (retryDelay < nextDelay)
+                {
+                    nextDelay = retryDelay;
+                }
+            }
+        }
+
+        if (!quotaHit)
+        {
+            if (lastTransientError is not null && !anyActiveHealthy)
+            {
+                await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Reconnecting, "повтор после ошибки API").ConfigureAwait(false);
+            }
+            else if (anyUnavailable)
+            {
+                await PublishMonitoringStatusIfChangedAsync(
+                    anyActiveHealthy ? StreamMonitoringStatus.Connected : StreamMonitoringStatus.Failed,
+                    anyActiveHealthy ? null : firstUnavailableDetail).ConfigureAwait(false);
+            }
+            else
+            {
+                await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Connected, null).ConfigureAwait(false);
+            }
+        }
+
+        return nextDelay;
+    }
+
+    private async Task ProcessSlotDiscoveryAsync(
+        YouTubeChannelSlot slot,
+        YouTubeBroadcastSummary[] matches,
+        string contextId,
+        bool isActive,
+        CancellationToken ct)
+    {
+        var previousSnapshot = slot.ToMonitoringSnapshot();
+        var nowUtc = timeProvider.GetUtcNow();
+        slot.LastPollAt = nowUtc;
+
+        lock (_sync)
+        {
+            _lastPollAt = nowUtc;
+            _consecutiveFailures = 0;
+        }
+
+        if (matches.Length == 0)
+        {
+            var transition = slot.StateMachine.ApplyOffline();
+            var previousActive = slot.ActiveBroadcast;
+            slot.ActiveBroadcast = null;
+            slot.ActiveSelectionVideoId = null;
+            slot.ActiveCandidates = [];
+            slot.Availability = ChannelMonitoringAvailability.Active;
+            slot.Reason = MonitoringUnavailableReason.None;
+            slot.Detail = null;
+            var isBaseline = !slot.BaselinePublished;
+            slot.BaselinePublished = true;
+
+            if (isActive)
+            {
+                var activeTransition = _stateMachine.ApplyOffline();
+                lock (_sync)
+                {
+                    _activeBroadcast = null;
+                    _activeSelectionVideoId = null;
+                    _activeCandidates = [];
+                    _issue = YouTubeMonitorIssue.None;
+                    _lastLoggedMultiSetKey = null;
+                }
+
+                if (previousActive is not null)
+                {
+                    await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None).ConfigureAwait(false);
+                }
+
+                await PublishOfflineIfNeededAsync(activeTransition, slot.ChannelId).ConfigureAwait(false);
+            }
+
+            if (transition.Transitioned || isBaseline || previousSnapshot.Availability != ChannelMonitoringAvailability.Active)
+            {
+                await PublishSlotObservedAsync(previousSnapshot, slot.ToMonitoringSnapshot(isBaseline), isCatchUp: isBaseline).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        var selectedVideoId = NormalizeSelectedVideoId(selectionStore.GetSelectedVideoId(slot.ChannelId));
+        var selected = SelectBroadcast(selectedVideoId, matches);
+
+        if (selected is null)
+        {
+            slot.StateMachine.ResetToUnknown();
+            var previousActive = slot.ActiveBroadcast;
+            slot.ActiveBroadcast = null;
+            slot.ActiveSelectionVideoId = null;
+            slot.ActiveCandidates = matches;
+            slot.Availability = ChannelMonitoringAvailability.Degraded;
+            slot.Reason = MonitoringUnavailableReason.MultipleActiveBroadcasts;
+            slot.Detail = "несколько активных эфиров";
+
+            if (isActive)
+            {
+                await HandleAmbiguousBroadcastsAsync(slot.ChannelId, matches, previousActive).ConfigureAwait(false);
+            }
+
+            await PublishSlotStateChangedAsync(slot).ConfigureAwait(false);
+            return;
+        }
+
+        slot.ActiveBroadcast = selected;
+        slot.ActiveSelectionVideoId = selectedVideoId;
+        slot.ActiveCandidates = matches;
+        slot.Availability = ChannelMonitoringAvailability.Active;
+        slot.Reason = MonitoringUnavailableReason.None;
+        slot.Detail = null;
+
+        var streamInfo = BuildStreamInfo(selected, slot.ChannelId, selected.Title, selected.StartedAtUtc.UtcDateTime, 0);
+        var slotTransition = slot.StateMachine.ApplyOnlineWithoutViewerSample(streamInfo);
+        var isInitial = !slot.BaselinePublished;
+        slot.BaselinePublished = true;
+
+        if (isActive)
+        {
+            await ActivateBroadcastAsync(slot.ChannelId, selected, matches, _activeBroadcast, selectedVideoId).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(selected.VideoId))
+            {
+                _ = await PollSlotActiveVideoSampleAsync(slot, selected, contextId, isActive: true, ct).ConfigureAwait(false);
+            }
+        }
+
+        if (slotTransition.Transitioned || slotTransition.SnapshotChanged || isInitial || previousSnapshot.Availability != ChannelMonitoringAvailability.Active)
+        {
+            await PublishSlotObservedAsync(previousSnapshot, slot.ToMonitoringSnapshot(isInitial), isCatchUp: isInitial).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<TimeSpan> PollSlotActiveVideoSampleAsync(
+        YouTubeChannelSlot slot,
+        YouTubeBroadcastSummary active,
+        string contextId,
+        bool isActive,
+        CancellationToken ct)
+    {
+        var previousSnapshot = slot.ToMonitoringSnapshot();
+        var sample = await broadcastClient.GetVideoLiveSampleAsync(active.VideoId, contextId, ct).ConfigureAwait(false);
+        var nowUtc = timeProvider.GetUtcNow();
+        slot.LastPollAt = nowUtc;
+
+        lock (_sync)
+        {
+            _lastPollAt = nowUtc;
+            _consecutiveFailures = 0;
+        }
+
+        if (sample is null || sample.ActualEndTimeUtc is not null)
+        {
+            var slotTransition = slot.StateMachine.ApplyOffline();
+            slot.ActiveBroadcast = null;
+            slot.ActiveSelectionVideoId = null;
+            slot.ActiveCandidates = [];
+            slot.Availability = ChannelMonitoringAvailability.Active;
+            slot.Reason = MonitoringUnavailableReason.None;
+            slot.Detail = null;
+            slot.BaselinePublished = true;
+
+            if (isActive)
+            {
+                var activeTransition = _stateMachine.ApplyOffline();
+                lock (_sync)
+                {
+                    _activeBroadcast = null;
+                    _activeSelectionVideoId = null;
+                    _activeCandidates = [];
+                    _issue = YouTubeMonitorIssue.None;
+                    _lastLoggedMultiSetKey = null;
+                }
+
+                await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None).ConfigureAwait(false);
+                await PublishOfflineIfNeededAsync(activeTransition, slot.ChannelId).ConfigureAwait(false);
+            }
+
+            if (slotTransition.Transitioned)
+            {
+                await PublishSlotObservedAsync(previousSnapshot, slot.ToMonitoringSnapshot(), isCatchUp: false).ConfigureAwait(false);
+            }
+
+            return OfflinePollInterval;
+        }
+
+        var startedAtUtc = (sample.ActualStartTimeUtc ?? active.StartedAtUtc).UtcDateTime;
+        var title = string.IsNullOrWhiteSpace(sample.Title) ? active.Title : sample.Title;
+        var streamInfo = BuildStreamInfo(active, slot.ChannelId, title, startedAtUtc, sample.ConcurrentViewers ?? 0);
+
+        StatusTransition slotOnlineTransition;
+        if (sample.ConcurrentViewers.HasValue)
+        {
+            slotOnlineTransition = slot.StateMachine.ApplyOnlineSnapshot(streamInfo);
+        }
+        else
+        {
+            slotOnlineTransition = slot.StateMachine.ApplyOnlineWithoutViewerSample(streamInfo);
+        }
+
+        slot.Availability = ChannelMonitoringAvailability.Active;
+        slot.Reason = MonitoringUnavailableReason.None;
+        slot.Detail = null;
+        var isBaseline = !slot.BaselinePublished;
+        slot.BaselinePublished = true;
+
+        if (isActive)
+        {
+            StatusTransition activeTransition;
+            if (sample.ConcurrentViewers.HasValue)
+            {
+                activeTransition = _stateMachine.ApplyOnlineSnapshot(streamInfo);
+                await eventBus.PublishAsync(
+                    new ViewerSampleObserved(
+                        StreamingPlatform.YouTube,
+                        slot.ChannelId,
+                        sample.ConcurrentViewers.Value,
+                        nowUtc,
+                        active.VideoId,
+                        slot.ChannelId),
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            else
+            {
+                activeTransition = _stateMachine.ApplyOnlineWithoutViewerSample(streamInfo);
+            }
+
+            lock (_sync)
+            {
+                _issue = YouTubeMonitorIssue.None;
+            }
+
+            await PublishOnlineOrMetadataAsync(activeTransition, slot.ChannelId).ConfigureAwait(false);
+        }
+
+        if (slotOnlineTransition.Transitioned || slotOnlineTransition.SnapshotChanged || isBaseline)
+        {
+            await PublishSlotObservedAsync(previousSnapshot, slot.ToMonitoringSnapshot(isBaseline), isCatchUp: isBaseline).ConfigureAwait(false);
+        }
+
+        return OnlinePollInterval;
+    }
+
+    private async Task MarkSlotUnavailableAsync(
+        YouTubeChannelSlot slot,
+        MonitoringUnavailableReason reason,
+        string detail,
+        bool isActive)
+    {
+        var previous = slot.ToMonitoringSnapshot();
+        slot.StateMachine.ResetToUnknown();
+        slot.ActiveBroadcast = null;
+        slot.ActiveSelectionVideoId = null;
+        slot.ActiveCandidates = [];
+        slot.Availability = ChannelMonitoringAvailability.Unavailable;
+        slot.Reason = reason;
+        slot.Detail = detail;
+
+        if (isActive)
+        {
+            _stateMachine.ResetToUnknown();
+            YouTubeBroadcastSummary? previousActive;
+            lock (_sync)
+            {
+                _issue = reason == MonitoringUnavailableReason.QuotaExhausted
+                    ? YouTubeMonitorIssue.QuotaExhausted
+                    : YouTubeMonitorIssue.MissingBroadcasterAuth;
+                previousActive = _activeBroadcast;
+                _activeBroadcast = null;
+                _activeSelectionVideoId = null;
+                _activeCandidates = [];
+                _lastLoggedMultiSetKey = null;
+            }
+
+            if (previousActive is not null)
+            {
+                await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+
+        if (previous.Availability != slot.Availability
+            || previous.Reason != slot.Reason
+            || !string.Equals(previous.Detail, slot.Detail, StringComparison.Ordinal))
+        {
+            await PublishSlotStateChangedAsync(slot).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<TimeSpan> HandleQuotaExceededMultiChannelAsync(
+        bool isServerExhausted,
+        string activeChannelId,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (isServerExhausted)
+        {
+            quotaGovernor.MarkExhaustedFromServer(PlatformAuthRole.Broadcaster);
+        }
+
+        YouTubeChannelSlot[] slotsCopy;
+        lock (_sync)
+        {
+            slotsCopy = [.. _slots.Values];
+        }
+
+        foreach (var slot in slotsCopy)
+        {
+            await MarkSlotUnavailableAsync(
+                slot,
+                MonitoringUnavailableReason.QuotaExhausted,
+                "квота исчерпана",
+                isActive: string.Equals(slot.ChannelId, activeChannelId, StringComparison.Ordinal)).ConfigureAwait(false);
+        }
+
+        await PublishMonitoringStatusIfChangedAsync(StreamMonitoringStatus.Failed, "квота исчерпана").ConfigureAwait(false);
+
+        var nowUtc = timeProvider.GetUtcNow();
+        var window = PacificQuotaClock.GetWindow(nowUtc);
+        var remaining = window.NextResetAtUtc - nowUtc;
+        if (remaining <= TimeSpan.Zero)
+        {
+            return TimeSpan.FromSeconds(5);
+        }
+
+        var cap = isServerExhausted ? QuotaWaitCheckCap : OfflinePollInterval;
+        return remaining > cap ? cap : remaining;
+    }
+
+    private static string? CheckContextOwnershipMismatch(YouTubeChannelSlot slot, Auth.YouTubeAccountSettings? account)
+    {
+        if (account is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(account.ChannelId)
+            && !string.Equals(account.ChannelId, slot.ChannelId, StringComparison.Ordinal))
+        {
+            return "выбранный аккаунт ведущего принадлежит другому каналу YouTube";
+        }
+
+        if (!string.IsNullOrWhiteSpace(slot.Entry.BroadcasterVerifiedSubjectId)
+            && !string.Equals(slot.Entry.BroadcasterVerifiedSubjectId, account.ChannelId, StringComparison.Ordinal))
+        {
+            return "авторизация ведущего изменилась – требуется повторная проверка доступа";
+        }
+
+        return null;
+    }
+
+    private static TimeSpan ComputeEffectiveOfflineInterval(int validContextCount, int dailyQuotaBudget)
+    {
+        var usableDailyUnits = Math.Max(1.0, dailyQuotaBudget * 0.35);
+        var secondsPerCheck = (int)Math.Ceiling(Math.Max(1, validContextCount) * 86400.0 / usableDailyUnits);
+        return TimeSpan.FromSeconds(Math.Clamp(secondsPerCheck, (int)OfflinePollInterval.TotalSeconds, (int)QuotaWaitCheckCap.TotalSeconds));
+    }
+
+    private Task PublishSlotObservedAsync(ChannelMonitoringSnapshot previous, ChannelMonitoringSnapshot current, bool isCatchUp)
+    {
+        return eventBus.PublishAsync(new ChannelStreamObserved(previous, current, isCatchUp), CancellationToken.None);
+    }
+
+    private Task PublishSlotStateChangedAsync(YouTubeChannelSlot slot)
+    {
+        return eventBus.PublishAsync(
+            new ChannelMonitoringStateChanged(StreamingPlatform.YouTube, new ChannelKey(StreamingPlatform.YouTube, slot.ChannelId), slot.ToMonitoringSnapshot()),
+            CancellationToken.None);
+    }
+
+    private YouTubeChannelSlot GetOrCreateSlotLocked(ChannelCatalogEntry entry)
+    {
+        if (!_slots.TryGetValue(entry.ChannelId, out var slot))
+        {
+            slot = new(entry, timeProvider);
+            _slots[entry.ChannelId] = slot;
+        }
+
+        return slot;
+    }
+
+    private YouTubeChannelSlot? GetSlot(string channelId)
+    {
+        lock (_sync)
+        {
+            return _slots.TryGetValue(channelId, out var slot) ? slot : null;
+        }
+    }
+
+    private void OnActiveChannelChanged(ActiveChannelChanged @event)
+    {
+        if (@event.Platform != StreamingPlatform.YouTube)
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            _targetChannelId = @event.NewChannel.ChannelId;
+            _activeBroadcast = _slots.TryGetValue(@event.NewChannel.ChannelId, out var slot)
+                ? slot.ActiveBroadcast
+                : null;
+            _stateMachine.ResetToUnknown();
+            if (_slots.TryGetValue(@event.NewChannel.ChannelId, out var newSlot) && newSlot.StateMachine.CurrentStream is { } stream)
+            {
+                _stateMachine.ApplyOnlineWithoutViewerSample(stream);
+                _publishedOnline = true;
+                _lastPublishedChannelId = @event.NewChannel.ChannelId;
+            }
+            else
+            {
+                _publishedOnline = false;
+                _lastPublishedChannelId = null;
+            }
+        }
+
+        Wake();
     }
 
     private async Task<TimeSpan> PollBroadcastDiscoveryAsync(string targetChannelId, CancellationToken ct)
@@ -661,6 +1419,15 @@ internal sealed class YouTubeStreamMonitor(
                 _publishedOnline = false;
                 _lastPublishedChannelId = null;
             }
+
+            foreach (var slot in _slots.Values)
+            {
+                slot.StateMachine.ResetToUnknown();
+                slot.ActiveBroadcast = null;
+                slot.Availability = ChannelMonitoringAvailability.Disabled;
+                slot.Reason = MonitoringUnavailableReason.MonitoringDisabled;
+                slot.Detail = null;
+            }
         }
 
         if (previousActive is not null)
@@ -851,6 +1618,11 @@ internal sealed class YouTubeStreamMonitor(
         }
     }
 
+    private void Wake(object? sender, EventArgs e)
+    {
+        Wake();
+    }
+
     private void Wake()
     {
         CancellationTokenSource? waitCts;
@@ -952,6 +1724,19 @@ internal sealed class YouTubeStreamMonitor(
             CancellationToken.None);
     }
 
+    private static MonitoringUnavailableReason MapIssueToReason(YouTubeMonitorIssue issue)
+    {
+        return issue switch
+        {
+            YouTubeMonitorIssue.MissingBroadcasterAuth => MonitoringUnavailableReason.MissingBroadcasterAuth,
+            YouTubeMonitorIssue.InvalidTargetChannel => MonitoringUnavailableReason.InvalidChannel,
+            YouTubeMonitorIssue.QuotaExhausted => MonitoringUnavailableReason.QuotaExhausted,
+            YouTubeMonitorIssue.MultipleActiveBroadcasts => MonitoringUnavailableReason.MultipleActiveBroadcasts,
+            YouTubeMonitorIssue.TransientError => MonitoringUnavailableReason.TransportDisconnected,
+            _ => MonitoringUnavailableReason.None,
+        };
+    }
+
     private static StreamInfo BuildStreamInfo(
         YouTubeBroadcastSummary broadcast,
         string targetChannelId,
@@ -975,5 +1760,61 @@ internal sealed class YouTubeStreamMonitor(
             StartedAt = DateTime.SpecifyKind(startedAtUtc, DateTimeKind.Utc),
             ThumbnailUrl = thumbnailUrl,
         };
+    }
+
+    private sealed class YouTubeChannelSlot(ChannelCatalogEntry entry, TimeProvider timeProvider)
+    {
+        public string ChannelId { get; } = entry.ChannelId;
+
+        public ChannelCatalogEntry Entry { get; private set; } = entry;
+
+        public StreamStateMachine StateMachine { get; } = new(timeProvider);
+
+        public YouTubeBroadcastSummary? ActiveBroadcast { get; set; }
+
+        public string? ActiveSelectionVideoId { get; set; }
+
+        public IReadOnlyList<YouTubeBroadcastSummary> ActiveCandidates { get; set; } = [];
+
+        public ChannelMonitoringAvailability Availability { get; set; } = ChannelMonitoringAvailability.Active;
+
+        public MonitoringUnavailableReason Reason { get; set; }
+
+        public string? Detail { get; set; }
+
+        public DateTimeOffset? LastPollAt { get; set; }
+
+        public bool BaselinePublished { get; set; }
+
+        public void UpdateMetadata(ChannelCatalogEntry entry)
+        {
+            Entry = entry;
+        }
+
+        public ChannelMonitoringSnapshot ToMonitoringSnapshot(bool isInitialBaseline = false)
+        {
+            var label = !string.IsNullOrWhiteSpace(Entry.DisplayName)
+                ? Entry.DisplayName
+                : (!string.IsNullOrWhiteSpace(Entry.Handle) ? Entry.Handle : ChannelId);
+
+            return new(
+                new ChannelKey(StreamingPlatform.YouTube, ChannelId),
+                label,
+                Availability,
+                Reason,
+                Detail,
+                StateMachine.CurrentStatus,
+                StateMachine.CurrentStream,
+                LastPollAt,
+                isInitialBaseline);
+        }
+    }
+
+    private string ResolveActiveChannelId(PlatformChannelRoutingSettings routing, IReadOnlyList<ChannelCatalogEntry> entries)
+    {
+        return channelRegistry?.GetBinding(StreamingPlatform.YouTube)?.Key.ChannelId
+            ?? channelCatalogStore?.GetPlatformSettings(StreamingPlatform.YouTube).ActiveChannelId
+            ?? routing.ActiveChannelId
+            ?? entries[0].ChannelId;
     }
 }

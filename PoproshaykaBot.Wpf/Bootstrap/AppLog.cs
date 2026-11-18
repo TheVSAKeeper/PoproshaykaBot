@@ -328,4 +328,19 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1607, Level = LogLevel.Warning, Message = "Параметры команды {Command} приняты в памяти: файл настроек не переписан")]
     public static partial void CommandParametersNotWritten(this ILogger logger, string command);
+
+    [LoggerMessage(EventId = 1700, Level = LogLevel.Information, Message = "Пользователь переключил активный канал {Platform} на {Channel}")]
+    public static partial void ChannelSwitchedByUser(this ILogger logger, string platform, string channel);
+
+    [LoggerMessage(EventId = 1701, Level = LogLevel.Information, Message = "Пользователь выбрал следующий канал {Platform}: {Channel}")]
+    public static partial void ChannelPreselectedByUser(this ILogger logger, string platform, string channel);
+
+    [LoggerMessage(EventId = 1702, Level = LogLevel.Information, Message = "Пользователь подтвердил переключение по автопоиску {Platform} -> {Channel}")]
+    public static partial void AutoDiscoverConfirmedByUser(this ILogger logger, string platform, string channel);
+
+    [LoggerMessage(EventId = 1703, Level = LogLevel.Information, Message = "Пользователь отклонил переключение по автопоиску {Platform}")]
+    public static partial void AutoDiscoverDismissedByUser(this ILogger logger, string platform);
+
+    [LoggerMessage(EventId = 1704, Level = LogLevel.Error, Message = "Сбой переключения канала {Platform}")]
+    public static partial void ChannelSwitchOperationFailed(this ILogger logger, Exception? exception, string platform);
 }

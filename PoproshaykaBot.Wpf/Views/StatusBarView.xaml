@@ -42,6 +42,8 @@
                                   ContentTemplate="{StaticResource MonitoringIndicator}" />
                 <ContentPresenter Content="{Binding Broadcaster}"
                                   ContentTemplate="{StaticResource MonitoringIndicator}" />
+                <ContentPresenter Content="{Binding Channels}"
+                                  ContentTemplate="{StaticResource MonitoringIndicator}" />
             </StackPanel>
         </DataTemplate>
     </UserControl.Resources>

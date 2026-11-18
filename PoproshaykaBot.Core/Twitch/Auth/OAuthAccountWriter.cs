@@ -23,10 +23,34 @@ public sealed class OAuthAccountWriter(
         int expiresInSeconds = 0,
         bool publishAuthorizationRefreshed = false)
     {
+        UpdateSettings(
+            role,
+            null,
+            accessToken,
+            refreshToken,
+            newScopes,
+            login,
+            userId,
+            expiresInSeconds,
+            publishAuthorizationRefreshed);
+    }
+
+    public void UpdateSettings(
+        PlatformAuthRole role,
+        string? contextId,
+        string accessToken,
+        string refreshToken,
+        IEnumerable<string>? newScopes,
+        string login,
+        string userId,
+        int expiresInSeconds = 0,
+        bool publishAuthorizationRefreshed = false)
+    {
+        var normalized = AuthContextIds.Normalize(contextId);
         var scopesSnapshot = newScopes?.ToArray();
         var now = timeProvider.GetUtcNow();
 
-        accountsStore.Mutate(role, account =>
+        accountsStore.Mutate(role, normalized, account =>
         {
             account.AccessToken = accessToken;
             account.RefreshToken = refreshToken;
@@ -43,28 +67,40 @@ public sealed class OAuthAccountWriter(
                 : null;
         });
 
-        logger.LogInformation("Токены роли {Role} обновлены в настройках (login={Login}, expiresIn={ExpiresIn}s, scopes={ScopeCount})",
+        logger.LogInformation("Токены роли {Role} (контекст {ContextId}) обновлены в настройках (login={Login}, expiresIn={ExpiresIn}s, scopes={ScopeCount})",
             role,
+            normalized,
             login,
             expiresInSeconds,
             scopesSnapshot?.Length ?? -1);
 
         if (publishAuthorizationRefreshed)
         {
-            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, role));
+            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.Twitch, role, normalized));
         }
     }
 
     public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken)
     {
-        return accountsStore.TryClearAccessToken(role, expectedToken);
+        return TryClearAccessToken(role, null, expectedToken);
+    }
+
+    public bool TryClearAccessToken(PlatformAuthRole role, string? contextId, string expectedToken)
+    {
+        return accountsStore.TryClearAccessToken(role, contextId, expectedToken);
     }
 
     public void ClearTokens(PlatformAuthRole role)
     {
-        accountsStore.Mutate(role, OAuthRoleHelpers.ClearAccountInPlace);
+        ClearTokens(role, null);
+    }
+
+    public void ClearTokens(PlatformAuthRole role, string? contextId)
+    {
+        var normalized = AuthContextIds.Normalize(contextId);
+        accountsStore.Mutate(role, normalized, OAuthRoleHelpers.ClearAccountInPlace);
 
         statusReporter.Report(role, "Токены очищены.");
-        logger.LogInformation("Токены роли {Role} удалены из настроек", role);
+        logger.LogInformation("Токены роли {Role} (контекст {ContextId}) удалены из настроек", role, normalized);
     }
 }

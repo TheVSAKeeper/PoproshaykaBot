@@ -1,19 +1,22 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Net;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
-using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
-using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Streaming;
 
-public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent, IAsyncDisposable
+public sealed class StreamStatusManager : IStreamStatus, IPlatformChannelMonitor, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan RefreshGateDrainTimeout = TimeSpan.FromSeconds(2);
@@ -26,15 +29,21 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
     private readonly IEventBus _eventBus;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<StreamStatusManager> _logger;
+    private readonly ChannelCatalogStore? _channelCatalogStore;
+    private readonly PlatformChannelRegistry? _channelRegistry;
+    private readonly IPlatformAuthService? _authService;
 
-    private readonly StreamStateMachine _state;
-    private readonly StreamMetadataRetryLoop _metadataRetryLoop;
+    private readonly Lock _slotsLock = new();
+    private readonly Dictionary<string, TwitchChannelSlot> _slots = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _subscriptionToChannelId = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly EventSubSubscriptionLedger _ledger;
     private readonly EventSubSubscriptionRetry _retry;
 
+    private string? _activeSlotId;
     private IDisposable? _channelUpdatedSubscription;
+    private IDisposable? _activeChannelChangedSubscription;
     private CancellationTokenSource? _runCts;
     private bool _subscribed;
     private bool _disposed;
@@ -49,7 +58,10 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         SettingsManager settingsManager,
         IEventBus eventBus,
         TimeProvider timeProvider,
-        ILogger<StreamStatusManager> logger)
+        ILogger<StreamStatusManager> logger,
+        ChannelCatalogStore? channelCatalogStore = null,
+        PlatformChannelRegistry? channelRegistry = null,
+        [FromKeyedServices(StreamingPlatform.Twitch)] IPlatformAuthService? authService = null)
     {
         _eventSubClient = eventSubClient;
         _helix = helix;
@@ -59,21 +71,75 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         _eventBus = eventBus;
         _timeProvider = timeProvider;
         _logger = logger;
-        _state = new(timeProvider);
-        _metadataRetryLoop = new(FetchMetadataAttemptAsync, IsCurrentlyOnline, logger);
+        _channelCatalogStore = channelCatalogStore;
+        _channelRegistry = channelRegistry;
+        _authService = authService;
         _ledger = new(helix, logger);
         _retry = new(helix, eventSubClient, timeProvider, logger);
     }
 
-    public StreamStatus CurrentStatus => _state.CurrentStatus;
+    public StreamingPlatform Platform => StreamingPlatform.Twitch;
 
-    public StreamInfo? CurrentStream => _state.CurrentStream;
+    public StreamStatus CurrentStatus => GetActiveSlot()?.State.CurrentStatus ?? StreamStatus.Unknown;
 
-    public StreamStatusSnapshot GetSnapshot() => _state.GetSnapshot();
+    public StreamInfo? CurrentStream => GetActiveSlot()?.State.CurrentStream;
+
+    public StreamStatusSnapshot GetSnapshot() =>
+        GetActiveSlot()?.State.GetSnapshot() ?? new StreamStatusSnapshot(StreamStatus.Unknown, null, null);
+
+    public bool RequiresBackgroundPoll
+    {
+        get
+        {
+            lock (_slotsLock)
+            {
+                return _slots.Values.Any(static s => s.UsesPollingFallback);
+            }
+        }
+    }
+
+    public ChannelMonitoringSnapshot GetSnapshot(ChannelKey channel)
+    {
+        if (channel.Platform != StreamingPlatform.Twitch)
+        {
+            return new(channel, channel.ChannelId, ChannelMonitoringAvailability.Unavailable, MonitoringUnavailableReason.NotSupportedByPlatform, "Неверный тип площадки", StreamStatus.Unknown, null, null, false);
+        }
+
+        lock (_slotsLock)
+        {
+            if (_slots.TryGetValue(channel.ChannelId, out var slot))
+            {
+                return slot.ToMonitoringSnapshot();
+            }
+        }
+
+        var entry = _channelCatalogStore?.FindEntry(channel);
+        var displayName = entry is null ? channel.ChannelId : ResolveEntryLabel(entry);
+        return new(
+            channel,
+            displayName,
+            entry is { MonitoringEnabled: true } ? ChannelMonitoringAvailability.Unavailable : ChannelMonitoringAvailability.Disabled,
+            entry is { MonitoringEnabled: true } ? MonitoringUnavailableReason.TransportDisconnected : MonitoringUnavailableReason.MonitoringDisabled,
+            entry is { MonitoringEnabled: true } ? "Мониторинг не запущен" : "Мониторинг канала выключен",
+            StreamStatus.Unknown,
+            null,
+            null,
+            false);
+    }
+
+    public IReadOnlyList<ChannelMonitoringSnapshot> GetSnapshots()
+    {
+        lock (_slotsLock)
+        {
+            return _slots.Values.Select(static s => s.ToMonitoringSnapshot()).ToArray();
+        }
+    }
 
     public string Name => "Отслеживание статуса стрима";
 
     public int StartOrder => 256;
+
+    internal Task? MetadataRetryTask => GetActiveSlot()?.MetadataRetryLoop.CurrentTask;
 
     private TimeSpan StuckOnlineThreshold =>
         TimeSpan.FromSeconds(_settingsManager.Current.Twitch.Infrastructure.StreamStuckOnlineThresholdSeconds);
@@ -95,6 +161,12 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         _eventSubClient.OnDisconnected += OnDisconnectedAsync;
 
         _channelUpdatedSubscription = _eventBus.SubscribePlatform<ChannelUpdated>(StreamingPlatform.Twitch, OnChannelUpdated);
+        _activeChannelChangedSubscription = _eventBus.Subscribe<ActiveChannelChanged>(OnActiveChannelChanged);
+        if (_channelCatalogStore is not null)
+        {
+            _channelCatalogStore.Changed += OnCatalogChanged;
+        }
+
         _subscribed = true;
 
         _logger.LogInformation("StreamStatusManager: подписки на EventSub установлены");
@@ -117,6 +189,13 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
         _channelUpdatedSubscription?.Dispose();
         _channelUpdatedSubscription = null;
+        _activeChannelChangedSubscription?.Dispose();
+        _activeChannelChangedSubscription = null;
+        if (_channelCatalogStore is not null)
+        {
+            _channelCatalogStore.Changed -= OnCatalogChanged;
+        }
+
         _subscribed = false;
 
         if (_runCts != null)
@@ -124,12 +203,22 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
             await _runCts.CancelAsync().ConfigureAwait(false);
         }
 
-        await _metadataRetryLoop.CancelAndDrainAsync().ConfigureAwait(false);
+        TwitchChannelSlot[] slotsCopy;
+        lock (_slotsLock)
+        {
+            slotsCopy = [.. _slots.Values];
+        }
+
+        foreach (var slot in slotsCopy)
+        {
+            await slot.MetadataRetryLoop.CancelAndDrainAsync().ConfigureAwait(false);
+            slot.State.ResetToUnknown();
+            slot.Availability = ChannelMonitoringAvailability.Disabled;
+            slot.Reason = MonitoringUnavailableReason.TransportDisconnected;
+        }
 
         _runCts?.Dispose();
         _runCts = null;
-
-        _state.ResetToUnknown();
 
         await _retry.CancelAndDrainAsync(cancellationToken).ConfigureAwait(false);
         await _ledger.CloseAsync(cancellationToken).ConfigureAwait(false);
@@ -156,7 +245,16 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
         _retry.Cancel();
 
-        await _metadataRetryLoop.DisposeAsync().ConfigureAwait(false);
+        TwitchChannelSlot[] slotsCopy;
+        lock (_slotsLock)
+        {
+            slotsCopy = [.. _slots.Values];
+        }
+
+        foreach (var slot in slotsCopy)
+        {
+            await slot.MetadataRetryLoop.DisposeAsync().ConfigureAwait(false);
+        }
 
         if (await _refreshGate.WaitAsync(RefreshGateDrainTimeout, CancellationToken.None).ConfigureAwait(false))
         {
@@ -181,13 +279,26 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
             _channelUpdatedSubscription?.Dispose();
             _channelUpdatedSubscription = null;
+            _activeChannelChangedSubscription?.Dispose();
+            _activeChannelChangedSubscription = null;
+            if (_channelCatalogStore is not null)
+            {
+                _channelCatalogStore.Changed -= OnCatalogChanged;
+            }
+
             _subscribed = false;
         }
     }
 
-    public async Task RefreshLiveSnapshotAsync()
+    public Task RefreshLiveSnapshotAsync()
     {
-        var token = _disposeCts.Token;
+        return RefreshAsync(null, _disposeCts.Token);
+    }
+
+    public async Task RefreshAsync(ChannelKey? channel = null, CancellationToken cancellationToken = default)
+    {
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+        var token = linkedCts.Token;
 
         try
         {
@@ -201,65 +312,119 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
         try
         {
-            var broadcasterId = await _broadcasterIdProvider.GetAsync(token);
+            var slots = await EnsureMonitoredSlotsAsync(token).ConfigureAwait(false);
+            if (channel is { Platform: StreamingPlatform.Twitch } targetKey)
+            {
+                slots = slots.Where(s => string.Equals(s.ChannelId, targetKey.ChannelId, StringComparison.Ordinal)).ToArray();
+            }
 
-            if (string.IsNullOrEmpty(broadcasterId))
+            if (slots.Count == 0)
             {
                 _logger.LogDebug("Live-snapshot пропущен: BroadcasterId недоступен");
                 return;
             }
 
-            var stream = await _helix.GetStreamAsync(broadcasterId, token);
+            var streamsByUserId = await FetchStreamsMapAsync(slots, token).ConfigureAwait(false);
 
-            if (stream != null)
+            foreach (var slot in slots)
             {
-                var transition = _state.ApplyOnlineSnapshot(StreamInfoMapper.MapFromHelix(stream));
+                var previousSnapshot = slot.ToMonitoringSnapshot();
+                streamsByUserId.TryGetValue(slot.ChannelId, out var stream);
 
-                if (transition.Transitioned)
+                if (stream != null)
                 {
-                    _logger.LogInformation("Live-snapshot: переход {OldStatus} → Online для BroadcasterId {BroadcasterId}, стрим {StreamId}, начат {StartedAt}",
-                        transition.Previous,
-                        broadcasterId,
-                        stream.Id,
-                        stream.StartedAt);
+                    var transition = slot.State.ApplyOnlineSnapshot(StreamInfoMapper.MapFromHelix(stream));
+                    slot.LastObservedAtUtc = _timeProvider.GetUtcNow();
+                    if (slot.Availability != ChannelMonitoringAvailability.Degraded)
+                    {
+                        slot.Availability = ChannelMonitoringAvailability.Active;
+                        slot.Reason = MonitoringUnavailableReason.None;
+                        slot.Detail = null;
+                    }
 
-                    await PublishStatusTransitionAsync(StreamStatus.Online, true).ConfigureAwait(false);
+                    var isInitialBaseline = !slot.BaselinePublished;
+                    slot.BaselinePublished = true;
+                    var currentSnapshot = slot.ToMonitoringSnapshot(isInitialBaseline);
+
+                    if (transition.Transitioned)
+                    {
+                        _logger.LogInformation("Live-snapshot: переход {OldStatus} → Online для BroadcasterId {BroadcasterId}, стрим {StreamId}, начат {StartedAt}",
+                            transition.Previous,
+                            slot.ChannelId,
+                            stream.Id,
+                            stream.StartedAt);
+
+                        await PublishSlotObservedAsync(previousSnapshot, currentSnapshot, isCatchUp: true).ConfigureAwait(false);
+                        if (IsActiveSlot(slot.ChannelId))
+                        {
+                            await PublishStatusTransitionAsync(slot, StreamStatus.Online, true).ConfigureAwait(false);
+                        }
+                    }
+                    else if (transition.SnapshotChanged)
+                    {
+                        _logger.LogInformation("Live-snapshot: метаданные стрима {StreamId} обновлены без смены статуса", stream.Id);
+
+                        await PublishSlotObservedAsync(previousSnapshot, currentSnapshot, isCatchUp: false).ConfigureAwait(false);
+                        if (IsActiveSlot(slot.ChannelId))
+                        {
+                            await PublishMetadataResolvedAsync(slot).ConfigureAwait(false);
+                        }
+                    }
+
+                    if (IsActiveSlot(slot.ChannelId))
+                    {
+                        await PublishViewerSampleObservedAsync(slot, stream).ConfigureAwait(false);
+                    }
+
+                    continue;
                 }
-                else if (transition.SnapshotChanged)
+
+                var probe = slot.State.ProbeOfflineDivergence(_timeProvider.GetUtcNow().UtcDateTime, StuckOnlineThreshold);
+                switch (probe.Action)
                 {
-                    _logger.LogInformation("Live-snapshot: метаданные стрима {StreamId} обновлены без смены статуса", stream.Id);
+                    case OfflineProbeAction.ForcedOffline:
+                    {
+                        _logger.LogWarning("Принудительный перевод в Offline после {ElapsedSeconds} с расхождения с API для BroadcasterId {BroadcasterId}, стрим {StreamId}",
+                            (int)probe.Elapsed.TotalSeconds, slot.ChannelId, slot.State.CurrentStream?.Id);
 
-                    await PublishMetadataResolvedAsync().ConfigureAwait(false);
+                        slot.LastObservedAtUtc = _timeProvider.GetUtcNow();
+                        var isInitialBaseline = !slot.BaselinePublished;
+                        slot.BaselinePublished = true;
+                        var currentSnapshot = slot.ToMonitoringSnapshot(isInitialBaseline);
+                        await PublishSlotObservedAsync(previousSnapshot, currentSnapshot, isCatchUp: false).ConfigureAwait(false);
+                        if (IsActiveSlot(slot.ChannelId))
+                        {
+                            await PublishStatusTransitionAsync(slot, StreamStatus.Offline).ConfigureAwait(false);
+                        }
+
+                        break;
+                    }
+
+                    case OfflineProbeAction.Pending:
+                        _logger.LogWarning("API сообщает офлайн при локальном Online, ждём подтверждения (расхождение {Elapsed}/{Threshold}), стрим {StreamId}",
+                            probe.Elapsed, StuckOnlineThreshold, slot.State.CurrentStream?.Id);
+                        break;
+
+                    default:
+                        if (!slot.BaselinePublished && slot.State.CurrentStatus == StreamStatus.Unknown)
+                        {
+                            var offlineTransition = slot.State.ApplyOffline();
+                            slot.LastObservedAtUtc = _timeProvider.GetUtcNow();
+                            slot.BaselinePublished = true;
+                            var currentSnapshot = slot.ToMonitoringSnapshot(isInitialBaseline: true);
+                            if (offlineTransition.Transitioned)
+                            {
+                                await PublishSlotObservedAsync(previousSnapshot, currentSnapshot, isCatchUp: true).ConfigureAwait(false);
+                            }
+                        }
+
+                        break;
                 }
-
-                await PublishViewerSampleObservedAsync(stream).ConfigureAwait(false);
-                return;
-            }
-
-            var probe = _state.ProbeOfflineDivergence(_timeProvider.GetUtcNow().UtcDateTime, StuckOnlineThreshold);
-
-            switch (probe.Action)
-            {
-                case OfflineProbeAction.ForcedOffline:
-                    _logger.LogWarning("Принудительный перевод в Offline после {ElapsedSeconds} с расхождения с API для BroadcasterId {BroadcasterId}, стрим {StreamId}",
-                        (int)probe.Elapsed.TotalSeconds, broadcasterId, CurrentStream?.Id);
-
-                    await PublishStatusTransitionAsync(StreamStatus.Offline).ConfigureAwait(false);
-                    return;
-
-                case OfflineProbeAction.Pending:
-                    _logger.LogWarning("API сообщает офлайн при локальном Online, ждём подтверждения (расхождение {Elapsed}/{Threshold}), стрим {StreamId}",
-                        probe.Elapsed, StuckOnlineThreshold, CurrentStream?.Id);
-
-                    return;
-
-                default:
-                    return;
             }
         }
-        catch (OperationCanceledException ex) when (_disposeCts.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (_disposeCts.IsCancellationRequested || cancellationToken.IsCancellationRequested)
         {
-            _logger.LogDebug(ex, "Live-snapshot отменён: StreamStatusManager уничтожается");
+            _logger.LogDebug(ex, "Live-snapshot отменён");
         }
         catch (Exception ex)
         {
@@ -276,7 +441,13 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         _logger.LogInformation("EventSub WebSocket подключен. SessionId: {SessionId}", args.SessionId);
 
         _retry.Cancel();
-        _state.ForgetChannelUpdate();
+        lock (_slotsLock)
+        {
+            foreach (var slot in _slots.Values)
+            {
+                slot.State.ForgetChannelUpdate();
+            }
+        }
 
         await CreateEventSubSubscriptionsAsync(args.SessionId, cancellationToken);
         await InitializeFromApiAsync(cancellationToken);
@@ -291,7 +462,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
                 break;
 
             case "stream.offline":
-                await HandleStreamOfflineAsync();
+                await HandleStreamOfflineAsync(args.Payload);
                 break;
 
             default:
@@ -315,10 +486,18 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         }
 
         _logger.LogWarning("EventSub revocation: id={Id}, type={Type}, status={Status}", args.SubscriptionId, args.SubscriptionType, args.Status);
-        _ledger.Forget(args.SubscriptionType, args.SubscriptionId);
+        string? channelId;
+        lock (_slotsLock)
+        {
+            _subscriptionToChannelId.Remove(args.SubscriptionId, out channelId);
+        }
+
+        var ledgerKey = string.IsNullOrEmpty(channelId)
+            ? args.SubscriptionType
+            : GetLedgerKey(channelId, args.SubscriptionType);
+        _ledger.Forget(ledgerKey, args.SubscriptionId);
 
         var sessionId = _eventSubClient.SessionId;
-
         if (string.IsNullOrEmpty(sessionId))
         {
             _logger.LogDebug("Восстановление подписки {Type} пропущено: SessionId уже отсутствует", args.SubscriptionType);
@@ -329,7 +508,9 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
         try
         {
-            var broadcasterId = await _broadcasterIdProvider.GetAsync(cancellationToken);
+            var broadcasterId = !string.IsNullOrEmpty(channelId)
+                ? channelId
+                : await _broadcasterIdProvider.GetAsync(cancellationToken);
 
             if (string.IsNullOrEmpty(broadcasterId))
             {
@@ -337,6 +518,7 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
                 return;
             }
 
+            var key = GetLedgerKey(broadcasterId, args.SubscriptionType);
             var condition = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 { "broadcaster_user_id", broadcasterId },
@@ -346,19 +528,19 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
                 "1",
                 condition,
                 sessionId,
-                async retried => await _ledger.RecordAsync(generation, args.SubscriptionType, retried),
+                async retried => await RecordSubscriptionAsync(generation, broadcasterId, key, retried),
                 cancellationToken);
 
-            await _ledger.RecordAsync(generation, args.SubscriptionType, result);
+            await RecordSubscriptionAsync(generation, broadcasterId, key, result);
 
             if (result.Outcome == EventSubSubscribeOutcome.Created)
             {
-                _logger.LogInformation("Подписка {Type} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, result.SubscriptionIds[0]);
+                _logger.LogInformation("Подписка {Type} для {BroadcasterId} восстановлена после revocation. Новый id: {Id}", args.SubscriptionType, broadcasterId, result.SubscriptionIds[0]);
             }
             else if (result.Outcome == EventSubSubscribeOutcome.Reused)
             {
-                _logger.LogInformation("Подписка {Type} {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем",
-                    args.SubscriptionType, result.SubscriptionIds);
+                _logger.LogInformation("Подписка {Type} {SubscriptionIds} для {BroadcasterId} уже существует для текущей EventSub-сессии – переиспользуем",
+                    args.SubscriptionType, result.SubscriptionIds, broadcasterId);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -370,13 +552,24 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
     private Task OnDisconnectedAsync(EventSubDisconnectedArgs args, CancellationToken cancellationToken)
     {
-        _logger.LogWarning("EventSub WebSocket отключен ({Reason}) – статус стрима {OldStatus} (стрим {StreamId}) сброшен в Unknown до восстановления соединения",
-            args.Reason,
-            _state.CurrentStatus,
-            CurrentStream?.Id);
+        lock (_slotsLock)
+        {
+            foreach (var slot in _slots.Values)
+            {
+                _logger.LogWarning("EventSub WebSocket отключен ({Reason}) – статус стрима {BroadcasterId} ({OldStatus}, стрим {StreamId}) сброшен в Unknown до восстановления соединения",
+                    args.Reason,
+                    slot.ChannelId,
+                    slot.State.CurrentStatus,
+                    slot.State.CurrentStream?.Id);
+
+                slot.State.ResetToUnknown();
+                slot.Availability = ChannelMonitoringAvailability.Unavailable;
+                slot.Reason = MonitoringUnavailableReason.TransportDisconnected;
+                slot.Detail = "EventSub отключён";
+            }
+        }
 
         _retry.Cancel();
-        _state.ResetToUnknown();
         return Task.CompletedTask;
     }
 
@@ -397,68 +590,89 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
         try
         {
-            var broadcasterId = await _broadcasterIdProvider.GetAsync(token);
+            var slots = await EnsureMonitoredSlotsAsync(token).ConfigureAwait(false);
 
-            if (string.IsNullOrEmpty(broadcasterId))
+            if (slots.Count == 0)
             {
                 _logger.LogDebug("Инициализация по API пропущена: BroadcasterId недоступен");
                 return;
             }
 
-            _logger.LogDebug("Запрос начального статуса стрима через API для BroadcasterId: {BroadcasterId}", broadcasterId);
-            var stream = await _helix.GetStreamAsync(broadcasterId, token);
+            _logger.LogDebug("Запрос начального статуса стримов через API для {Count} каналов Twitch", slots.Count);
+            var streamsByUserId = await FetchStreamsMapAsync(slots, token).ConfigureAwait(false);
 
-            StatusTransition transition;
-            StreamStatus newStatus;
-
-            if (stream != null)
+            foreach (var slot in slots)
             {
-                transition = _state.ApplyOnlineSnapshot(StreamInfoMapper.MapFromHelix(stream));
-                newStatus = StreamStatus.Online;
-            }
-            else
-            {
-                transition = _state.ApplyOffline();
-                newStatus = StreamStatus.Offline;
-            }
+                var previousSnapshot = slot.ToMonitoringSnapshot();
+                streamsByUserId.TryGetValue(slot.ChannelId, out var stream);
 
-            if (transition.Transitioned)
-            {
-                var isCatchUp = transition.Previous == StreamStatus.Unknown;
+                StatusTransition transition;
+                StreamStatus newStatus;
 
-                _logger.LogInformation("Инициализация: статус стрима {OldStatus} → {NewStatus} для BroadcasterId {BroadcasterId}, стрим {StreamId}, начат {StartedAt}, catch-up {IsCatchUp}",
-                    transition.Previous,
-                    newStatus,
-                    broadcasterId,
-                    stream?.Id,
-                    stream?.StartedAt,
-                    isCatchUp);
-
-                await PublishStatusTransitionAsync(newStatus, isCatchUp).ConfigureAwait(false);
-            }
-            else
-            {
-                _logger.LogDebug("Инициализация: статус стрима {Status} подтверждён для BroadcasterId {BroadcasterId}, стрим {StreamId}",
-                    newStatus,
-                    broadcasterId,
-                    stream?.Id);
-
-                if (transition.SnapshotChanged && newStatus == StreamStatus.Online)
+                if (stream != null)
                 {
-                    _logger.LogInformation("Инициализация: метаданные стрима {StreamId} обновлены без смены статуса", stream?.Id);
-
-                    await PublishMetadataResolvedAsync().ConfigureAwait(false);
+                    transition = slot.State.ApplyOnlineSnapshot(StreamInfoMapper.MapFromHelix(stream));
+                    newStatus = StreamStatus.Online;
                 }
-            }
+                else
+                {
+                    transition = slot.State.ApplyOffline();
+                    newStatus = StreamStatus.Offline;
+                }
 
-            if (stream != null)
-            {
-                await PublishViewerSampleObservedAsync(stream).ConfigureAwait(false);
-                _logger.LogInformation("Начальный статус по данным API: онлайн, стрим {StreamId}, начат {StartedAt}", stream.Id, stream.StartedAt);
-            }
-            else
-            {
-                _logger.LogInformation("Начальный статус по данным API: офлайн");
+                slot.LastObservedAtUtc = _timeProvider.GetUtcNow();
+                if (slot.Availability != ChannelMonitoringAvailability.Degraded)
+                {
+                    slot.Availability = ChannelMonitoringAvailability.Active;
+                    slot.Reason = MonitoringUnavailableReason.None;
+                    slot.Detail = null;
+                }
+
+                var isInitialBaseline = !slot.BaselinePublished;
+                slot.BaselinePublished = true;
+                var currentSnapshot = slot.ToMonitoringSnapshot(isInitialBaseline);
+
+                if (transition.Transitioned)
+                {
+                    var isCatchUp = transition.Previous == StreamStatus.Unknown;
+
+                    _logger.LogInformation("Инициализация: статус стрима {OldStatus} → {NewStatus} для BroadcasterId {BroadcasterId}, стрим {StreamId}, начат {StartedAt}, catch-up {IsCatchUp}",
+                        transition.Previous,
+                        newStatus,
+                        slot.ChannelId,
+                        stream?.Id,
+                        stream?.StartedAt,
+                        isCatchUp);
+
+                    await PublishSlotObservedAsync(previousSnapshot, currentSnapshot, isCatchUp).ConfigureAwait(false);
+                    if (IsActiveSlot(slot.ChannelId))
+                    {
+                        await PublishStatusTransitionAsync(slot, newStatus, isCatchUp).ConfigureAwait(false);
+                    }
+                }
+                else
+                {
+                    _logger.LogDebug("Инициализация: статус стрима {Status} подтверждён для BroadcasterId {BroadcasterId}, стрим {StreamId}",
+                        newStatus,
+                        slot.ChannelId,
+                        stream?.Id);
+
+                    if (transition.SnapshotChanged && newStatus == StreamStatus.Online)
+                    {
+                        _logger.LogInformation("Инициализация: метаданные стрима {StreamId} обновлены без смены статуса", stream?.Id);
+
+                        await PublishSlotObservedAsync(previousSnapshot, currentSnapshot, isCatchUp: false).ConfigureAwait(false);
+                        if (IsActiveSlot(slot.ChannelId))
+                        {
+                            await PublishMetadataResolvedAsync(slot).ConfigureAwait(false);
+                        }
+                    }
+                }
+
+                if (stream != null && IsActiveSlot(slot.ChannelId))
+                {
+                    await PublishViewerSampleObservedAsync(slot, stream).ConfigureAwait(false);
+                }
             }
         }
         catch (OperationCanceledException ex) when (token.IsCancellationRequested)
@@ -478,10 +692,25 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
     private void OnChannelUpdated(ChannelUpdated @event)
     {
-        if (_state.ApplyChannelUpdate(@event))
+        TwitchChannelSlot? targetSlot;
+        lock (_slotsLock)
         {
-            _logger.LogInformation("Метаданные стрима обновлены через channel.update: title={Title}, game={GameName}",
-                @event.Title, @event.GameName);
+            if (!string.IsNullOrWhiteSpace(@event.ChannelId))
+            {
+                _slots.TryGetValue(@event.ChannelId, out targetSlot);
+            }
+            else
+            {
+                targetSlot = !string.IsNullOrEmpty(_activeSlotId) && _slots.TryGetValue(_activeSlotId, out var active)
+                    ? active
+                    : _slots.Values.FirstOrDefault();
+            }
+        }
+
+        if (targetSlot is not null && targetSlot.State.ApplyChannelUpdate(@event))
+        {
+            _logger.LogInformation("Метаданные стрима ({BroadcasterId}) обновлены через channel.update: title={Title}, game={GameName}",
+                targetSlot.ChannelId, @event.Title, @event.GameName);
         }
         else
         {
@@ -492,51 +721,96 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
     private async Task HandleStreamOnlineAsync(JsonElement payload)
     {
         var data = payload.Deserialize<EventSubStreamOnlinePayloadDto>(WebJsonOptions);
-
         const bool isCatchUp = false;
 
         var streamId = data?.Event?.Id;
         var startedAt = data?.Event?.StartedAt ?? default;
         var eventType = data?.Event?.Type ?? "live";
+        var broadcasterUserId = data?.Event?.BroadcasterUserId;
+        var broadcasterLogin = data?.Event?.BroadcasterUserLogin;
 
-        _logger.LogInformation("Стрим запущен (EventSub): стрим {StreamId}, начат {StartedAt}, тип {EventType}",
+        var slot = await ResolveOrEnsureSlotAsync(broadcasterUserId, broadcasterLogin).ConfigureAwait(false);
+        if (slot is null)
+        {
+            _logger.LogDebug("EventSub stream.online для неизвестного канала {BroadcasterId} проигнорирован", broadcasterUserId);
+            return;
+        }
+
+        var previousSnapshot = slot.ToMonitoringSnapshot();
+        _logger.LogInformation("Стрим запущен (EventSub): канал {BroadcasterId}, стрим {StreamId}, начат {StartedAt}, тип {EventType}",
+            slot.ChannelId,
             streamId,
             startedAt,
             eventType);
 
-        var transition = _state.MarkOnline(streamId, startedAt);
+        var transition = slot.State.MarkOnline(streamId, startedAt);
+        slot.LastObservedAtUtc = _timeProvider.GetUtcNow();
+        slot.BaselinePublished = true;
+        var currentSnapshot = slot.ToMonitoringSnapshot();
 
         if (transition.Transitioned)
         {
-            _logger.LogInformation("EventSub: переход {OldStatus} → Online, стрим {StreamId}, начат {StartedAt}, catch-up {IsCatchUp}",
+            _logger.LogInformation("EventSub: переход {OldStatus} → Online для {BroadcasterId}, стрим {StreamId}, начат {StartedAt}, catch-up {IsCatchUp}",
                 transition.Previous,
+                slot.ChannelId,
                 streamId,
                 startedAt,
                 isCatchUp);
 
-            await PublishStatusTransitionAsync(StreamStatus.Online, isCatchUp).ConfigureAwait(false);
+            await PublishSlotObservedAsync(previousSnapshot, currentSnapshot, isCatchUp).ConfigureAwait(false);
+            if (IsActiveSlot(slot.ChannelId))
+            {
+                await PublishStatusTransitionAsync(slot, StreamStatus.Online, isCatchUp).ConfigureAwait(false);
+            }
         }
 
         var runToken = _runCts?.Token ?? CancellationToken.None;
-        await _metadataRetryLoop.RestartAsync(runToken).ConfigureAwait(false);
+        await slot.MetadataRetryLoop.RestartAsync(runToken).ConfigureAwait(false);
     }
 
-    private async Task HandleStreamOfflineAsync()
+    private async Task HandleStreamOfflineAsync(JsonElement payload)
     {
-        var streamId = CurrentStream?.Id;
+        EventSubStreamOfflinePayloadDto? data = null;
+        if (payload.ValueKind == JsonValueKind.Object)
+        {
+            try
+            {
+                data = payload.Deserialize<EventSubStreamOfflinePayloadDto>(WebJsonOptions);
+            }
+            catch (JsonException)
+            {
+            }
+        }
 
-        _logger.LogInformation("Стрим завершен (EventSub): стрим {StreamId}", streamId);
+        var broadcasterUserId = data?.Event?.BroadcasterUserId;
+        var slot = await ResolveOrEnsureSlotAsync(broadcasterUserId, data?.Event?.BroadcasterUserLogin).ConfigureAwait(false);
+        if (slot is null)
+        {
+            return;
+        }
 
-        var transition = _state.ApplyOffline();
+        var previousSnapshot = slot.ToMonitoringSnapshot();
+        var streamId = slot.State.CurrentStream?.Id;
+
+        _logger.LogInformation("Стрим завершен (EventSub): канал {BroadcasterId}, стрим {StreamId}", slot.ChannelId, streamId);
+
+        var transition = slot.State.ApplyOffline();
+        slot.LastObservedAtUtc = _timeProvider.GetUtcNow();
+        slot.BaselinePublished = true;
+        var currentSnapshot = slot.ToMonitoringSnapshot();
 
         if (transition.Transitioned)
         {
-            _logger.LogInformation("EventSub: переход {OldStatus} → Offline, стрим {StreamId}", transition.Previous, streamId);
-            await PublishStatusTransitionAsync(StreamStatus.Offline).ConfigureAwait(false);
+            _logger.LogInformation("EventSub: переход {OldStatus} → Offline для {BroadcasterId}, стрим {StreamId}", transition.Previous, slot.ChannelId, streamId);
+            await PublishSlotObservedAsync(previousSnapshot, currentSnapshot, isCatchUp: false).ConfigureAwait(false);
+            if (IsActiveSlot(slot.ChannelId))
+            {
+                await PublishStatusTransitionAsync(slot, StreamStatus.Offline).ConfigureAwait(false);
+            }
         }
     }
 
-    private async Task<bool> FetchMetadataAttemptAsync(int attempt, CancellationToken cancellationToken)
+    private async Task<bool> FetchMetadataAttemptAsync(TwitchChannelSlot slot, int attempt, CancellationToken cancellationToken)
     {
         try
         {
@@ -544,29 +818,29 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
 
             try
             {
-                var broadcasterId = await _broadcasterIdProvider.GetAsync(cancellationToken);
-
-                if (string.IsNullOrEmpty(broadcasterId))
-                {
-                    return false;
-                }
-
-                var stream = await _helix.GetStreamAsync(broadcasterId, cancellationToken);
+                var stream = await WithContextAsync(slot.BotContextId, () => _helix.GetStreamAsync(slot.ChannelId, cancellationToken)).ConfigureAwait(false);
 
                 if (stream == null)
                 {
                     return false;
                 }
 
-                _state.UpdateStreamSnapshot(StreamInfoMapper.MapFromHelix(stream));
+                var previousSnapshot = slot.ToMonitoringSnapshot();
+                slot.State.UpdateStreamSnapshot(StreamInfoMapper.MapFromHelix(stream));
+                slot.LastObservedAtUtc = _timeProvider.GetUtcNow();
 
-                if (_state.CurrentStream == null)
+                if (slot.State.CurrentStream == null)
                 {
                     return false;
                 }
 
-                await PublishMetadataResolvedAsync().ConfigureAwait(false);
-                await PublishViewerSampleObservedAsync(stream).ConfigureAwait(false);
+                await PublishSlotObservedAsync(previousSnapshot, slot.ToMonitoringSnapshot(), isCatchUp: false).ConfigureAwait(false);
+                if (IsActiveSlot(slot.ChannelId))
+                {
+                    await PublishMetadataResolvedAsync(slot).ConfigureAwait(false);
+                    await PublishViewerSampleObservedAsync(slot, stream).ConfigureAwait(false);
+                }
+
                 return true;
             }
             finally
@@ -580,42 +854,45 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка получения метаданных стрима (попытка {Attempt}): {Reason}",
-                attempt, StreamingErrorMessages.SafeMessage(ex));
+            _logger.LogError(ex, "Ошибка получения метаданных стрима {BroadcasterId} (попытка {Attempt}): {Reason}",
+                slot.ChannelId, attempt, StreamingErrorMessages.SafeMessage(ex));
 
             return false;
         }
     }
 
-    private bool IsCurrentlyOnline()
+    private Task PublishSlotObservedAsync(
+        ChannelMonitoringSnapshot previous,
+        ChannelMonitoringSnapshot current,
+        bool isCatchUp)
     {
-        return _state.CurrentStatus == StreamStatus.Online;
+        return _eventBus.PublishAsync(new ChannelStreamObserved(previous, current, isCatchUp), CancellationToken.None);
     }
 
-    private Task PublishStatusTransitionAsync(StreamStatus newStatus, bool isCatchUp = false)
+    private Task PublishStatusTransitionAsync(TwitchChannelSlot slot, StreamStatus newStatus, bool isCatchUp = false)
     {
-        var channel = _targetChannelProvider.Current.Login;
-
+        var channel = ResolvePublishChannelName(slot);
         if (string.IsNullOrWhiteSpace(channel))
         {
             _logger.LogDebug("Публикация события статуса стрима пропущена: имя канала неизвестно");
             return Task.CompletedTask;
         }
 
-        var channelId = string.IsNullOrWhiteSpace(CurrentStream?.UserId) ? null : CurrentStream.UserId;
+        var stream = slot.State.CurrentStream;
+        var channelId = string.IsNullOrWhiteSpace(stream?.UserId) ? slot.ChannelId : stream.UserId;
 
         return newStatus switch
         {
-            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, channel, CurrentStream, isCatchUp, channelId), CancellationToken.None),
+            StreamStatus.Online => _eventBus.PublishAsync(new StreamWentOnline(StreamingPlatform.Twitch, channel, stream, isCatchUp, channelId), CancellationToken.None),
             StreamStatus.Offline => _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.Twitch, channel, isCatchUp, channelId), CancellationToken.None),
             _ => Task.CompletedTask,
         };
     }
 
-    private Task PublishMetadataResolvedAsync()
+    private Task PublishMetadataResolvedAsync(TwitchChannelSlot slot)
     {
-        var channel = _targetChannelProvider.Current.Login;
-        var stream = CurrentStream;
+        var channel = ResolvePublishChannelName(slot);
+        var stream = slot.State.CurrentStream;
 
         if (string.IsNullOrWhiteSpace(channel) || stream == null)
         {
@@ -623,21 +900,20 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
             return Task.CompletedTask;
         }
 
-        var channelId = string.IsNullOrWhiteSpace(stream.UserId) ? null : stream.UserId;
+        var channelId = string.IsNullOrWhiteSpace(stream.UserId) ? slot.ChannelId : stream.UserId;
         return _eventBus.PublishAsync(new StreamMetadataResolved(StreamingPlatform.Twitch, channel, stream, channelId), CancellationToken.None);
     }
 
-    private Task PublishViewerSampleObservedAsync(HelixStreamInfo stream)
+    private Task PublishViewerSampleObservedAsync(TwitchChannelSlot slot, HelixStreamInfo stream)
     {
-        var channel = _targetChannelProvider.Current.Login;
-
+        var channel = ResolvePublishChannelName(slot);
         if (string.IsNullOrWhiteSpace(channel))
         {
             return Task.CompletedTask;
         }
 
-        var sampledAtUtc = _state.GetSnapshot().ViewerSampledAtUtc ?? _timeProvider.GetUtcNow();
-        var channelId = string.IsNullOrWhiteSpace(stream.UserId) ? null : stream.UserId;
+        var sampledAtUtc = slot.State.GetSnapshot().ViewerSampledAtUtc ?? _timeProvider.GetUtcNow();
+        var channelId = string.IsNullOrWhiteSpace(stream.UserId) ? slot.ChannelId : stream.UserId;
 
         return _eventBus.PublishAsync(
             new ViewerSampleObserved(
@@ -653,66 +929,468 @@ public sealed class StreamStatusManager : IStreamStatus, IStreamHostedComponent,
     private async Task CreateEventSubSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
     {
         var generation = await _ledger.BeginSessionAsync(cancellationToken);
-        var broadcasterId = await _broadcasterIdProvider.GetAsync(cancellationToken);
+        var slots = await EnsureMonitoredSlotsAsync(cancellationToken);
 
-        if (string.IsNullOrEmpty(broadcasterId))
+        if (slots.Count == 0)
         {
             _logger.LogWarning("Подписки EventSub пропущены – BroadcasterId недоступен (вероятно, нет токена бота). Подписки создадутся после авторизации.");
             return;
         }
 
-        _logger.LogInformation("Создание подписок EventSub для BroadcasterId: {BroadcasterId}", broadcasterId);
-
-        var subscriptionsCreated = 0;
-        var condition = new Dictionary<string, string>(StringComparer.Ordinal)
+        if (_authService is not null)
         {
-            { "broadcaster_user_id", broadcasterId },
-        };
-
-        foreach (var type in new[] { "stream.online", "stream.offline" })
-        {
-            try
+            foreach (var slot in slots)
             {
-                var result = await _retry.CreateAsync(type,
-                    "1",
-                    condition,
-                    sessionId,
-                    async retried => await _ledger.RecordAsync(generation, type, retried),
-                    cancellationToken);
-
-                if (await _ledger.RecordAsync(generation, type, result) && result.IsSubscribed)
+                var hasToken = AuthContextIds.IsDefault(slot.BotContextId)
+                    ? _authService.HasUsableAccessToken(PlatformAuthRole.Bot)
+                    : _authService.HasUsableAccessToken(PlatformAuthRole.Bot, slot.BotContextId);
+                if (!hasToken)
                 {
-                    subscriptionsCreated++;
+                    slot.Availability = ChannelMonitoringAvailability.Unavailable;
+                    slot.Reason = MonitoringUnavailableReason.MissingBotAuth;
+                    slot.Detail = "нет авторизации бота";
                 }
-
-                if (result.Outcome == EventSubSubscribeOutcome.Created)
+                else if (slot.Reason == MonitoringUnavailableReason.MissingBotAuth)
                 {
-                    _logger.LogInformation("Подписка '{Type}' создана. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}",
-                        type, result.SubscriptionIds[0], sessionId);
+                    slot.Availability = ChannelMonitoringAvailability.Active;
+                    slot.Reason = MonitoringUnavailableReason.None;
+                    slot.Detail = null;
                 }
-                else if (result.Outcome == EventSubSubscribeOutcome.Reused)
-                {
-                    _logger.LogInformation("Подписка '{Type}' {SubscriptionIds} уже существует для текущей EventSub-сессии – переиспользуем (SessionId: {SessionId})",
-                        type, result.SubscriptionIds, sessionId);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка создания подписки {Type} для BroadcasterId {BroadcasterId}: {Reason}",
-                    type, broadcasterId, StreamingErrorMessages.SafeMessage(ex));
             }
         }
 
-        if (subscriptionsCreated == 2)
+        var routing = _channelCatalogStore?.GetPlatformSettings(StreamingPlatform.Twitch);
+        var orderedSlots = slots
+            .OrderBy(s => IsActiveSlot(s.ChannelId) ? 0 : string.Equals(s.ChannelId, routing?.PreselectedNextChannelId, StringComparison.Ordinal) ? 1 : 2)
+            .ThenBy(static s => s.ChannelId, StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var slot in orderedSlots)
         {
-            _logger.LogInformation("Все необходимые подписки EventSub успешно созданы для BroadcasterId: {BroadcasterId}", broadcasterId);
-        }
-        else
-        {
-            _logger.LogWarning("Создано только {CreatedCount}/2 подписок EventSub stream.* для BroadcasterId {BroadcasterId} – статус стрима будет неполным",
-                subscriptionsCreated, broadcasterId);
+            if (slot.Reason == MonitoringUnavailableReason.MissingBotAuth)
+            {
+                await _eventBus.PublishAsync(
+                    new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), slot.ToMonitoringSnapshot()),
+                    CancellationToken.None).ConfigureAwait(false);
+                continue;
+            }
+
+            _logger.LogInformation("Создание подписок EventSub для BroadcasterId: {BroadcasterId}", slot.ChannelId);
+
+            var subscriptionsCreated = 0;
+            var hitCostOrLimit = false;
+            var condition = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                { "broadcaster_user_id", slot.ChannelId },
+            };
+
+            foreach (var type in new[] { "stream.online", "stream.offline" })
+            {
+                try
+                {
+                    var key = GetLedgerKey(slot.ChannelId, type);
+                    var result = await WithContextAsync(
+                        slot.BotContextId,
+                        () => _retry.CreateAsync(type,
+                            "1",
+                            condition,
+                            sessionId,
+                            async retried => await RecordSubscriptionAsync(generation, slot.ChannelId, key, retried),
+                            cancellationToken)).ConfigureAwait(false);
+
+                    if (await RecordSubscriptionAsync(generation, slot.ChannelId, key, result) && result.IsSubscribed)
+                    {
+                        subscriptionsCreated++;
+                    }
+                    else if (result.Outcome == EventSubSubscribeOutcome.TakenByOtherSession)
+                    {
+                        hitCostOrLimit = true;
+                    }
+
+                    if (result.Outcome == EventSubSubscribeOutcome.Created)
+                    {
+                        _logger.LogInformation("Подписка '{Type}' для {BroadcasterId} создана. SubscriptionId: {SubscriptionId}, SessionId: {SessionId}",
+                            type, slot.ChannelId, result.SubscriptionIds[0], sessionId);
+                    }
+                    else if (result.Outcome == EventSubSubscribeOutcome.Reused)
+                    {
+                        _logger.LogInformation("Подписка '{Type}' {SubscriptionIds} для {BroadcasterId} уже существует для текущей EventSub-сессии – переиспользуем (SessionId: {SessionId})",
+                            type, result.SubscriptionIds, slot.ChannelId, sessionId);
+                    }
+                }
+                catch (HelixRequestException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.Forbidden)
+                {
+                    hitCostOrLimit = true;
+                    _logger.LogWarning(ex, "Лимит EventSub для {BroadcasterId} ({Type}): HTTP {Status}; канал переведён на периодический опрос Helix",
+                        slot.ChannelId, type, (int)ex.StatusCode);
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка создания подписки {Type} для BroadcasterId {BroadcasterId}: {Reason}",
+                        type, slot.ChannelId, StreamingErrorMessages.SafeMessage(ex));
+                }
+            }
+
+            if (hitCostOrLimit || subscriptionsCreated < 2)
+            {
+                slot.UsesPollingFallback = true;
+                slot.Availability = hitCostOrLimit ? ChannelMonitoringAvailability.Degraded : ChannelMonitoringAvailability.Active;
+                slot.Reason = hitCostOrLimit ? MonitoringUnavailableReason.SubscriptionLimitReached : MonitoringUnavailableReason.None;
+                slot.Detail = hitCostOrLimit ? "превышен лимит подписок EventSub, включён периодический опрос API" : null;
+
+                if (hitCostOrLimit)
+                {
+                    await _eventBus.PublishAsync(
+                        new ChannelMonitoringStateChanged(StreamingPlatform.Twitch, new ChannelKey(StreamingPlatform.Twitch, slot.ChannelId), slot.ToMonitoringSnapshot()),
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                slot.UsesPollingFallback = false;
+                slot.Availability = ChannelMonitoringAvailability.Active;
+                slot.Reason = MonitoringUnavailableReason.None;
+                slot.Detail = null;
+                _logger.LogInformation("Все необходимые подписки EventSub успешно созданы для BroadcasterId: {BroadcasterId}", slot.ChannelId);
+            }
         }
     }
 
-    internal Task? MetadataRetryTask => _metadataRetryLoop.CurrentTask;
+    private async Task<bool> RecordSubscriptionAsync(
+        long generation,
+        string broadcasterId,
+        string ledgerKey,
+        EventSubSubscribeResult result)
+    {
+        var recorded = await _ledger.RecordAsync(generation, ledgerKey, result).ConfigureAwait(false);
+        if (recorded && result.IsSubscribed)
+        {
+            lock (_slotsLock)
+            {
+                foreach (var id in result.SubscriptionIds)
+                {
+                    _subscriptionToChannelId[id] = broadcasterId;
+                }
+            }
+        }
+
+        return recorded;
+    }
+
+    private async Task<IReadOnlyList<TwitchChannelSlot>> EnsureMonitoredSlotsAsync(CancellationToken cancellationToken)
+    {
+        var entries = _channelCatalogStore?.GetMonitoredChannels(StreamingPlatform.Twitch) ?? [];
+
+        if (entries.Count == 0 || _targetChannelProvider.Current.IsDebugSession)
+        {
+            var broadcasterId = await _broadcasterIdProvider.GetAsync(cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(broadcasterId))
+            {
+                return [];
+            }
+
+            var label = _targetChannelProvider.Current.Login;
+            lock (_slotsLock)
+            {
+                _activeSlotId = broadcasterId;
+                var slot = GetOrCreateSlotLocked(broadcasterId, string.IsNullOrWhiteSpace(label) ? broadcasterId : label);
+                return [slot];
+            }
+        }
+
+        var routing = _channelCatalogStore!.GetPlatformSettings(StreamingPlatform.Twitch);
+        var activeChannelId = _channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.Key.ChannelId
+            ?? routing.ActiveChannelId
+            ?? entries[0].ChannelId;
+
+        var wantedIds = new HashSet<string>(entries.Select(static e => e.ChannelId), StringComparer.Ordinal);
+        List<TwitchChannelSlot> removedSlots = [];
+        TwitchChannelSlot[] result;
+
+        lock (_slotsLock)
+        {
+            _activeSlotId = activeChannelId;
+
+            foreach (var existingId in _slots.Keys.ToArray())
+            {
+                if (!wantedIds.Contains(existingId) && _slots.Remove(existingId, out var removed))
+                {
+                    removedSlots.Add(removed);
+                }
+            }
+
+            foreach (var entry in entries)
+            {
+                var slot = GetOrCreateSlotLocked(entry.ChannelId, ResolveEntryLabel(entry));
+                slot.ChannelLabel = ResolveEntryLabel(entry);
+                slot.BotContextId = AuthContextIds.Normalize(entry.BotContextId);
+            }
+
+            result = [.. _slots.Values];
+        }
+
+        foreach (var removed in removedSlots)
+        {
+            await removed.MetadataRetryLoop.CancelAndDrainAsync().ConfigureAwait(false);
+        }
+
+        return result;
+    }
+
+    private async Task<TwitchChannelSlot?> ResolveOrEnsureSlotAsync(string? broadcasterUserId, string? broadcasterLogin)
+    {
+        if (!string.IsNullOrWhiteSpace(broadcasterUserId))
+        {
+            lock (_slotsLock)
+            {
+                if (_slots.TryGetValue(broadcasterUserId, out var existing))
+                {
+                    return existing;
+                }
+            }
+
+            var entry = _channelCatalogStore?.FindEntry(new(StreamingPlatform.Twitch, broadcasterUserId));
+            if (entry is not null && (entry.MonitoringEnabled || IsActiveSlot(entry.ChannelId)))
+            {
+                lock (_slotsLock)
+                {
+                    return GetOrCreateSlotLocked(entry.ChannelId, ResolveEntryLabel(entry));
+                }
+            }
+
+            if (_slots.Count == 0 && !_targetChannelProvider.Current.IsDebugSession)
+            {
+                var fallbackId = await _broadcasterIdProvider.GetAsync(CancellationToken.None).ConfigureAwait(false);
+                if (string.Equals(fallbackId, broadcasterUserId, StringComparison.Ordinal))
+                {
+                    lock (_slotsLock)
+                    {
+                        _activeSlotId = broadcasterUserId;
+                        return GetOrCreateSlotLocked(broadcasterUserId, string.IsNullOrWhiteSpace(broadcasterLogin) ? broadcasterUserId : broadcasterLogin);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        lock (_slotsLock)
+        {
+            if (!string.IsNullOrEmpty(_activeSlotId) && _slots.TryGetValue(_activeSlotId, out var active))
+            {
+                return active;
+            }
+
+            if (_slots.Count > 0)
+            {
+                return _slots.Values.First();
+            }
+        }
+
+        var ensured = await EnsureMonitoredSlotsAsync(CancellationToken.None).ConfigureAwait(false);
+        return ensured.Count > 0 ? ensured[0] : null;
+    }
+
+    private async Task<Dictionary<string, HelixStreamInfo>> FetchStreamsMapAsync(
+        IReadOnlyList<TwitchChannelSlot> slots,
+        CancellationToken token)
+    {
+        var map = new Dictionary<string, HelixStreamInfo>(StringComparer.Ordinal);
+        foreach (var group in slots.GroupBy(static s => s.BotContextId, StringComparer.Ordinal))
+        {
+            var groupSlots = group.ToArray();
+            if (groupSlots.Length == 1)
+            {
+                var single = await WithContextAsync(group.Key, () => _helix.GetStreamAsync(groupSlots[0].ChannelId, token)).ConfigureAwait(false);
+                if (single is not null)
+                {
+                    map[groupSlots[0].ChannelId] = single;
+                }
+
+                continue;
+            }
+
+            var streams = await WithContextAsync(group.Key, () => _helix.GetStreamsAsync(groupSlots.Select(static s => s.ChannelId), token)).ConfigureAwait(false);
+            foreach (var stream in streams)
+            {
+                if (!string.IsNullOrWhiteSpace(stream.UserId))
+                {
+                    map[stream.UserId] = stream;
+                }
+            }
+        }
+
+        return map;
+    }
+
+    private static async Task<T> WithContextAsync<T>(string contextId, Func<Task<T>> action)
+    {
+        using var _ = PlatformAuthRequestOptions.UseContext(contextId);
+        return await action().ConfigureAwait(false);
+    }
+
+    private TwitchChannelSlot GetOrCreateSlotLocked(string channelId, string channelLabel)
+    {
+        if (!_slots.TryGetValue(channelId, out var slot))
+        {
+            slot = new(channelId, channelLabel, _timeProvider, _logger, FetchMetadataAttemptAsync);
+            _slots[channelId] = slot;
+        }
+
+        return slot;
+    }
+
+    private TwitchChannelSlot? GetActiveSlot()
+    {
+        lock (_slotsLock)
+        {
+            if (!string.IsNullOrEmpty(_activeSlotId) && _slots.TryGetValue(_activeSlotId, out var slot))
+            {
+                return slot;
+            }
+
+            return _slots.Values.FirstOrDefault();
+        }
+    }
+
+    private bool IsActiveSlot(string channelId)
+    {
+        lock (_slotsLock)
+        {
+            return string.Equals(_activeSlotId, channelId, StringComparison.Ordinal);
+        }
+    }
+
+    private string ResolvePublishChannelName(TwitchChannelSlot slot)
+    {
+        var activeLabel = _targetChannelProvider.Current.Login;
+        if (!string.IsNullOrWhiteSpace(activeLabel) && (_slots.Count <= 1 || _targetChannelProvider.Current.IsDebugSession))
+        {
+            return activeLabel;
+        }
+
+        return string.IsNullOrWhiteSpace(slot.ChannelLabel) ? activeLabel : slot.ChannelLabel;
+    }
+
+    private void OnActiveChannelChanged(ActiveChannelChanged @event)
+    {
+        if (@event.Platform != StreamingPlatform.Twitch)
+        {
+            return;
+        }
+
+        lock (_slotsLock)
+        {
+            _activeSlotId = @event.NewChannel.ChannelId;
+        }
+    }
+
+    private void OnCatalogChanged(object? sender, EventArgs e)
+    {
+        var routing = _channelCatalogStore?.GetPlatformSettings(StreamingPlatform.Twitch);
+        if (routing?.ActiveChannelId is { } activeId)
+        {
+            lock (_slotsLock)
+            {
+                _activeSlotId = activeId;
+            }
+        }
+
+        if (_eventSubClient.SessionId is { Length: > 0 } sessionId && !_disposeCts.IsCancellationRequested)
+        {
+            _ = SyncCatalogSubscriptionsAsync(sessionId);
+        }
+    }
+
+    private async Task SyncCatalogSubscriptionsAsync(string sessionId)
+    {
+        try
+        {
+            await CreateEventSubSubscriptionsAsync(sessionId, _disposeCts.Token).ConfigureAwait(false);
+            await RefreshAsync(null, _disposeCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Ошибка обновления фонового мониторинга Twitch после изменения каталога: {Reason}", StreamingErrorMessages.SafeMessage(ex));
+        }
+    }
+
+    private static string ResolveEntryLabel(ChannelCatalogEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Handle))
+        {
+            return entry.Handle;
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.DisplayName))
+        {
+            return entry.DisplayName;
+        }
+
+        return entry.ChannelId;
+    }
+
+    private static string GetLedgerKey(string broadcasterId, string type)
+    {
+        return $"{type}:{broadcasterId}";
+    }
+
+    private sealed class TwitchChannelSlot
+    {
+        public TwitchChannelSlot(
+            string channelId,
+            string channelLabel,
+            TimeProvider timeProvider,
+            ILogger logger,
+            Func<TwitchChannelSlot, int, CancellationToken, Task<bool>> fetchMetadata)
+        {
+            ChannelId = channelId;
+            ChannelLabel = channelLabel;
+            State = new(timeProvider);
+            MetadataRetryLoop = new(
+                (attempt, ct) => fetchMetadata(this, attempt, ct),
+                () => State.CurrentStatus == StreamStatus.Online,
+                logger);
+        }
+
+        public string ChannelId { get; }
+
+        public string ChannelLabel { get; set; }
+
+        public string BotContextId { get; set; } = AuthContextIds.Default;
+
+        public StreamStateMachine State { get; }
+
+        public StreamMetadataRetryLoop MetadataRetryLoop { get; }
+
+        public ChannelMonitoringAvailability Availability { get; set; } = ChannelMonitoringAvailability.Active;
+
+        public MonitoringUnavailableReason Reason { get; set; }
+
+        public string? Detail { get; set; }
+
+        public bool BaselinePublished { get; set; }
+
+        public bool UsesPollingFallback { get; set; }
+
+        public DateTimeOffset? LastObservedAtUtc { get; set; }
+
+        public ChannelMonitoringSnapshot ToMonitoringSnapshot(bool isInitialBaseline = false)
+        {
+            return new(
+                new ChannelKey(StreamingPlatform.Twitch, ChannelId),
+                ChannelLabel,
+                Availability,
+                Reason,
+                Detail,
+                State.CurrentStatus,
+                State.CurrentStream,
+                LastObservedAtUtc,
+                isInitialBaseline);
+        }
+    }
 }

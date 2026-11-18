@@ -159,6 +159,7 @@ internal sealed class YouTubeChatIngestionService(
             _isRunning = true;
             _broadcastSub ??= eventBus.Subscribe<YouTubeActiveBroadcastChanged>(OnActiveBroadcastChangedAsync);
             _authSub ??= eventBus.Subscribe<PlatformAuthorizationRefreshed>(OnAuthorizationRefreshed);
+            sessionContext.Changed += OnSessionContextChanged;
 
             if (settingsStore is not null && !_settingsSubscribed)
             {
@@ -205,6 +206,7 @@ internal sealed class YouTubeChatIngestionService(
             settingsStore.Changed -= Wake;
         }
 
+        sessionContext.Changed -= OnSessionContextChanged;
         broadcastSub?.Dispose();
         authSub?.Dispose();
 
@@ -284,6 +286,7 @@ internal sealed class YouTubeChatIngestionService(
             settingsStore.Changed -= Wake;
         }
 
+        sessionContext.Changed -= OnSessionContextChanged;
         broadcastSub?.Dispose();
         authSub?.Dispose();
 
@@ -348,9 +351,13 @@ internal sealed class YouTubeChatIngestionService(
     internal async Task<TimeSpan> RunSingleIterationAsync(CancellationToken ct)
     {
         var broadcast = streamMonitor.CurrentBroadcast;
+        var session = sessionContext.Current;
+        using var _ = PlatformAuthRequestOptions.UseContext(session?.BotContextId);
 
         if (broadcast is null
             || string.IsNullOrWhiteSpace(broadcast.ChannelId)
+            || (session?.TargetChannelId is { Length: > 0 } expectedTarget
+                && !string.Equals(broadcast.ChannelId, expectedTarget, StringComparison.Ordinal))
             || (string.IsNullOrWhiteSpace(broadcast.LiveChatId) && string.IsNullOrWhiteSpace(broadcast.VideoId)))
         {
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
@@ -362,13 +369,12 @@ internal sealed class YouTubeChatIngestionService(
                 _transport = YouTubeChatTransport.None;
                 _state = ConnectionState.Connecting;
                 _issue = YouTubeChatIssue.WaitingForActiveBroadcast;
-                _channel = sessionContext.Current?.ChannelLabel;
+                _channel = session?.ChannelLabel;
             }
 
             return WaitingBroadcastInterval;
         }
 
-        var session = sessionContext.Current;
         var channelLabel = session?.ChannelLabel;
 
         if (string.IsNullOrWhiteSpace(channelLabel))
@@ -380,7 +386,7 @@ internal sealed class YouTubeChatIngestionService(
 
         if (string.IsNullOrWhiteSpace(botChannelId))
         {
-            botChannelId = accountsStore.Load(PlatformAuthRole.Bot).ChannelId;
+            botChannelId = accountsStore.Load(PlatformAuthRole.Bot, session?.BotContextId).ChannelId;
         }
 
         var broadcasterChannelId = broadcast.ChannelId;
@@ -447,7 +453,10 @@ internal sealed class YouTubeChatIngestionService(
 
         if (IsOfficialTransport(selectedTransport))
         {
-            var botToken = await authService.GetAccessTokenAsync(PlatformAuthRole.Bot, false, ct).ConfigureAwait(false);
+            var botContextId = AuthContextIds.Normalize(sessionContext.Current?.BotContextId);
+            var botToken = AuthContextIds.IsDefault(botContextId)
+                ? await authService.GetAccessTokenAsync(PlatformAuthRole.Bot, false, ct).ConfigureAwait(false)
+                : await authService.GetAccessTokenAsync(PlatformAuthRole.Bot, botContextId, false, ct).ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(botToken))
             {
@@ -1391,6 +1400,11 @@ internal sealed class YouTubeChatIngestionService(
         {
             Wake();
         }
+    }
+
+    private void OnSessionContextChanged(object? sender, EventArgs e)
+    {
+        Wake();
     }
 
     private void Wake()

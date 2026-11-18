@@ -18,13 +18,14 @@ internal abstract class YouTubeAuthHttpHandlerBase(
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        var token = await authService.GetAccessTokenAsync(Role, forceRefresh: false, cancellationToken).ConfigureAwait(false);
+        var contextId = PlatformAuthRequestOptions.ResolveContextId(request);
+        var token = await authService.GetAccessTokenAsync(Role, contextId, forceRefresh: false, cancellationToken).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(token))
         {
             throw new YouTubeApiException(
                 YouTubeApiErrorKind.Unauthorized,
-                $"Токен YouTube для роли {Role} отсутствует или недействителен.",
+                $"Токен YouTube для роли {Role} (контекст {contextId}) отсутствует или недействителен.",
                 statusCode: HttpStatusCode.Unauthorized);
         }
 
@@ -40,25 +41,28 @@ internal abstract class YouTubeAuthHttpHandlerBase(
         if (request.Options.TryGetValue(KeepTokenOnUnauthorized, out var keepToken) && keepToken)
         {
             logger.LogDebug(
-                "YouTube API запрос {Method} {Path} (роль {Role}) вернул 401 – отказ относится к самой операции, токен не очищается",
+                "YouTube API запрос {Method} {Path} (роль {Role}, контекст {ContextId}) вернул 401 – отказ относится к самой операции, токен не очищается",
                 request.Method,
                 request.RequestUri?.AbsolutePath,
-                Role);
+                Role,
+                contextId);
 
             return response;
         }
 
         logger.LogWarning(
-            "YouTube API запрос {Method} {Path} (роль {Role}) вернул 401 – очищаем сохранённый токен",
+            "YouTube API запрос {Method} {Path} (роль {Role}, контекст {ContextId}) вернул 401 – очищаем сохранённый токен",
             request.Method,
             request.RequestUri?.AbsolutePath,
-            Role);
+            Role,
+            contextId);
 
-        if (!authService.TryClearAccessToken(Role, token))
+        if (!authService.TryClearAccessToken(Role, contextId, token))
         {
             logger.LogDebug(
-                "YouTube API 401 (роль {Role}): токен в хранилище уже сменился, оставляем без изменений",
-                Role);
+                "YouTube API 401 (роль {Role}, контекст {ContextId}): токен в хранилище уже сменился, оставляем без изменений",
+                Role,
+                contextId);
         }
 
         return response;

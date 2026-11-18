@@ -16,6 +16,7 @@ public readonly record struct ChannelKey
 
     public StreamingPlatform Platform { get; }
     public string ChannelId { get; }
+    public bool IsValid => Enum.IsDefined(Platform) && !string.IsNullOrWhiteSpace(ChannelId);
 
     internal static ChannelKey? FromId(StreamingPlatform platform, string? channelId)
     {

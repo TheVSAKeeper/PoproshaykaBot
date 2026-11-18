@@ -321,6 +321,7 @@ public class SettingsBlocksTests
         var debugChannel = new DebugChannelSectionViewModel(DebugChannelOverride.None, debugChannelStore, null!, TimeProvider.System, NullLogger<DebugChannelSectionViewModel>.Instance);
         var channelCatalogStore = new ChannelCatalogStore(null, Path.Combine(_root, "channels.json"), gate);
         var userStatistics = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
+        var channelCatalog = new ChannelCatalogSettingsSectionViewModel(channelCatalogStore);
         var channelGroups = new ChannelGroupsSettingsSectionViewModel(channelCatalogStore, userStatistics);
         var mcp = new McpSettingsSectionViewModel(mcpPreferences, new(mcpPreferences, null!, null!, mcpOptions, new EmptyServiceProvider()), mcpOptions, dialogs, null!);
         var dashboardLayout = new DashboardLayoutSectionViewModel(Array.Empty<DashboardTileViewModel>(), uiSettings, layoutStore);
@@ -334,7 +335,7 @@ public class SettingsBlocksTests
             new ObsSettingsSectionContributor(obsIntegration, obsChat, new(kestrel, dialogs, null!), obsIntegrationStore, obsChatStore, dialogs),
             new StreamSettingsSectionContributor(new(), new(), polls),
             new RanksSettingsSectionContributor(new()),
-            new ChannelGroupsSettingsSectionContributor(channelGroups, channelCatalogStore),
+            new ChannelsSettingsSectionContributor(channelCatalog, channelGroups, channelCatalogStore),
             new DashboardSettingsSectionContributor(dashboardLayout, new DashboardLayoutCoordinator(layoutStore)),
             new UpdateSettingsSectionContributor(update, updateStore),
             new DebugChannelSettingsSectionContributor(debugChannel, debugChannelStore),

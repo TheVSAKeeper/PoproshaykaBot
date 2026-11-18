@@ -48,6 +48,7 @@
         <keepshell:ShellLayout.ContentBanner>
             <StackPanel>
                 <views:OnboardingBannerView DataContext="{Binding OnboardingBanner}" />
+                <views:ChannelSwitchPromptBannerView DataContext="{Binding ChannelSwitchBanner}" />
                 <views:UpdateBannerView DataContext="{Binding UpdateBanner}" />
             </StackPanel>
         </keepshell:ShellLayout.ContentBanner>

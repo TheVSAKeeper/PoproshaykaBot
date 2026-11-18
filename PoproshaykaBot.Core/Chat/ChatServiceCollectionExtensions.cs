@@ -47,7 +47,7 @@ public static class ChatServiceCollectionExtensions
             services.AddUserAvatars();
         }
 
-        services.AddSingleton<PlatformChannelRegistry>();
+        services.TryAddSingleton<PlatformChannelRegistry>();
         services.AddSingleton<IChannelProvider>(sp => sp.GetRequiredService<PlatformChannelRegistry>());
 
         services.AddSingleton<TwitchChatMessenger>();

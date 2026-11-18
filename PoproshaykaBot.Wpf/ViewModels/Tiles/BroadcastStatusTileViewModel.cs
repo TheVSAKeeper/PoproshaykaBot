@@ -27,6 +27,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
     private readonly IDialogService _dialogService;
     private readonly IUiDispatcher? _uiDispatcher;
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
+    private readonly ChannelCatalogStore? _catalogStore;
     private readonly List<IDisposable> _subscriptions = [];
 
     private readonly ToolbarItemViewModel _startItem;
@@ -64,7 +65,8 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         IEventBus eventBus,
         IDialogService dialogService,
         YouTubeSettingsStore? youtubeSettingsStore = null,
-        IUiDispatcher? uiDispatcher = null)
+        IUiDispatcher? uiDispatcher = null,
+        ChannelCatalogStore? catalogStore = null)
         : base("broadcast-status", "Рассылка", maxWidth: 360, minHeight: 160)
     {
         _scheduler = scheduler;
@@ -75,6 +77,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         _dialogService = dialogService;
         _youtubeSettingsStore = youtubeSettingsStore;
         _uiDispatcher = uiDispatcher;
+        _catalogStore = catalogStore;
 
         _startItem = new ToolbarItemViewModel(PackIconLucideKind.Play, StartCommand, "Запустить рассылку");
         _stopItem = new ToolbarItemViewModel(PackIconLucideKind.Square, StopCommand, "Остановить рассылку");
@@ -92,6 +95,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         _subscriptions.Add(eventBus.SubscribeOnUi<StreamWentOffline>(_ => RefreshState()));
         _subscriptions.Add(eventBus.SubscribeOnUi<StreamMetadataResolved>(_ => RefreshState()));
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(_ => RefreshState()));
+        _subscriptions.Add(eventBus.SubscribeOnUi<ActiveChannelChanged>(_ => RefreshState()));
 
         if (_youtubeSettingsStore is not null)
         {
@@ -251,7 +255,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         return null;
     }
 
-    private static string FormatTargetPlatforms(IReadOnlySet<StreamingPlatform> targets)
+    private string FormatTargetPlatforms(IReadOnlySet<StreamingPlatform> targets)
     {
         if (targets.Count == 0)
         {
@@ -263,7 +267,17 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         {
             if (targets.Contains(platform))
             {
-                labels.Add(PlatformVisuals.GetDisplayName(platform));
+                var display = PlatformVisuals.GetDisplayName(platform);
+                if (_catalogStore is not null && _catalogStore.GetConfiguredChannels(platform).Count > 1)
+                {
+                    var active = _platformRegistry.GetConfiguredChannel(platform);
+                    if (!string.IsNullOrWhiteSpace(active))
+                    {
+                        display = $"{display} ({active})";
+                    }
+                }
+
+                labels.Add(display);
             }
         }
 

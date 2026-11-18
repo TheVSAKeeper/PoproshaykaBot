@@ -1,10 +1,12 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming.Switching;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.EventSub;
 
@@ -27,12 +29,18 @@ public static class StreamingServiceCollectionExtensions
 
         services.AddSingleton<StreamStatusManager>();
         services.AddSingleton<IStreamStatus>(sp => sp.GetRequiredService<StreamStatusManager>());
+        services.AddSingleton<IPlatformChannelMonitor>(sp => sp.GetRequiredService<StreamStatusManager>());
         services.AddKeyedSingleton<IStreamStatus>(
             StreamingPlatform.Twitch,
             (sp, _) => sp.GetRequiredService<StreamStatusManager>());
         services.AddKeyedSingleton<IStreamHostedComponent>(
             StreamingPlatform.Twitch,
             (sp, _) => sp.GetRequiredService<StreamStatusManager>());
+        services.TryAddSingleton<PlatformChannelRegistry>();
+        services.TryAddSingleton<ChannelCatalogReconciler>();
+        services.TryAddSingleton<ChannelSwitchCoordinator>();
+        services.TryAddSingleton<IChannelSwitchCoordinator>(sp => sp.GetRequiredService<ChannelSwitchCoordinator>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAppLifetimeComponent, ChannelCatalogStartupLifetimeComponent>());
         services.AddSingleton<StreamStatusWatchdog>();
         services.AddKeyedSingleton<IStreamHostedComponent>(
             StreamingPlatform.Twitch,
