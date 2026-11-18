@@ -1,5 +1,6 @@
 ﻿using KeepShell.Diagnostics;
 using KeepShell.Mcp;
+using KeepShell.Bootstrap;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast;
@@ -70,7 +71,6 @@ public partial class App : Application
     private string[]? _galleryArgs;
     private GalleryWorkspace? _galleryWorkspace;
     private GalleryArguments? _galleryArguments;
-    private bool _appLifetimeStarted;
     private AppExitReason _exitReason = AppExitReason.None;
     private string? _startupErrorDetails;
 
@@ -88,7 +88,7 @@ public partial class App : Application
 
     internal static DebugChannelOverride DebugChannel { get; private set; } = DebugChannelOverride.None;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         var startupTimestamp = Stopwatch.GetTimestamp();
         var interactiveWait = TimeSpan.Zero;
@@ -197,37 +197,49 @@ public partial class App : Application
 
             ReportEnvironment(e.Args);
 
-            if (_isFinalizeUpdate)
+            using var splashLoggerFactory = new SerilogLoggerFactory(Log.Logger);
+            using var splash = IsHeadless ? null : new StartupSplash(
+                AppInfo.Name, AppInfo.Version, "Запуск приложения", 4, splashLoggerFactory.CreateLogger<App>());
+
+            using (await BeginStartupPhaseAsync(splash, "Подготовка настроек…"))
             {
-                FinalizeUpdate();
+                if (_isFinalizeUpdate)
+                {
+                    FinalizeUpdate();
+                }
+
+                ViewLocator.InstallIntoApplication();
+
+                if (IsHeadless)
+                {
+                    MigrateLegacySettingsLayout();
+                }
+                else
+                {
+                    uiSettings = OfferLegacyDataImport(uiSettings, uiSettingsPath, out var modalWait);
+                    interactiveWait += modalWait;
+                    await Task.Run(MigrateLegacySettingsLayout);
+                }
             }
 
-            ViewLocator.InstallIntoApplication();
-
-            if (!IsHeadless)
+            using (await BeginStartupPhaseAsync(splash, "Подготовка приложения…"))
             {
-                uiSettings = OfferLegacyDataImport(uiSettings, uiSettingsPath, out var modalWait);
-                interactiveWait += modalWait;
+                var services = new ServiceCollection();
+                ConfigureServices(services, coreUiLogSink, uiSettings);
+                services.AddSingleton(_logging!.Sink);
+                services.AddSingleton(_loggingOptions!);
+                _services = services.BuildServiceProvider(new ServiceProviderOptions
+                {
+                    ValidateOnBuild = true,
+                    ValidateScopes = true,
+                });
+
+                _services.GetRequiredService<IBroadcastDraftCoordinator>().RecoverCompletedDraftOnStartup();
+                _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
+                ReportConfiguration(_services);
+                _services.GetRequiredService<StatisticsPreload>().Start();
+                _appLifetime = _services.GetRequiredService<AppLifetime>();
             }
-
-            MigrateLegacySettingsLayout();
-
-            var services = new ServiceCollection();
-            ConfigureServices(services, coreUiLogSink, uiSettings);
-            services.AddSingleton(_logging!.Sink);
-            services.AddSingleton(_loggingOptions!);
-            _services = services.BuildServiceProvider(new ServiceProviderOptions
-            {
-                ValidateOnBuild = true,
-                ValidateScopes = true,
-            });
-
-            _services.GetRequiredService<IBroadcastDraftCoordinator>().RecoverCompletedDraftOnStartup();
-            _services.ActivateEventSubscribers(typeof(InfrastructureServiceCollectionExtensions).Assembly);
-            ReportConfiguration(_services);
-            _services.GetRequiredService<StatisticsPreload>().Start();
-
-            _appLifetime = _services.GetRequiredService<AppLifetime>();
 
             if (IsHeadless)
             {
@@ -236,11 +248,12 @@ public partial class App : Application
             }
             else
             {
+                using var launchSpan = await BeginStartupPhaseAsync(splash, "Запуск сервисов…");
                 var settingsManager = _services.GetRequiredService<SettingsManager>();
-                _appLifetimeStarted = StartAppLifetime(_appLifetime);
+                await StartAppLifetimeAsync(_appLifetime);
                 _kestrelServer = _services.GetRequiredService<KestrelHttpServer>();
-                _ = StartHttpServerIfNeeded(settingsManager, _kestrelServer);
-                _startedStreamMonitoringHosts.AddRange(StartStreamMonitoring(_services.GetServices<StreamMonitoringHost>()));
+                await StartHttpServerIfNeededAsync(settingsManager, _kestrelServer);
+                await StartStreamMonitoringAsync(_services.GetServices<StreamMonitoringHost>(), _startedStreamMonitoringHosts);
                 _memoryWatchdog = new(new SerilogLoggerFactory(Log.Logger).CreateLogger(nameof(MemoryWatchdog)),
                     Log.CloseAndFlush,
                     _services.GetRequiredService<MemoryUsageSink>());
@@ -252,15 +265,25 @@ public partial class App : Application
                 return;
             }
 
-            var window = _services.GetRequiredService<MainWindow>();
-            MainWindow = window;
-
-            if (IsHeadless)
+            using (await BeginStartupPhaseAsync(splash, "Открытие главного окна…"))
             {
-                OffScreenWindow.Prepare(window, window.Width, window.Height);
+                var window = _services.GetRequiredService<MainWindow>();
+                MainWindow = window;
+
+                if (IsHeadless)
+                {
+                    OffScreenWindow.Prepare(window, window.Width, window.Height);
+                }
+
+                window.Show();
+
+                if (splash is not null)
+                {
+                    await Dispatcher.Yield(DispatcherPriority.Loaded);
+                }
             }
 
-            window.Show();
+            splash?.Dispose();
 
             if (!IsHeadless)
             {
@@ -286,6 +309,18 @@ public partial class App : Application
 
             Shutdown(1);
         }
+    }
+
+    private static async ValueTask<SplashSpan?> BeginStartupPhaseAsync(StartupSplash? splash, string name)
+    {
+        var span = splash?.StartSpan(name);
+
+        if (span is not null)
+        {
+            await Dispatcher.Yield(DispatcherPriority.Loaded);
+        }
+
+        return span;
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -588,9 +623,9 @@ public partial class App : Application
             _startedStreamMonitoringHosts.Clear();
         }
 
-        if (_appLifetimeStarted && _appLifetime is not null)
+        if (_appLifetime is not null)
         {
-            StopAppLifetime(_appLifetime, shutdownToken);
+            StopAppLifetimeAsync(_appLifetime, shutdownToken).GetAwaiter().GetResult();
         }
 
         _services!.GetService<StatisticsPreload>()?.Stop(shutdownToken);

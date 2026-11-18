@@ -97,6 +97,13 @@ public sealed class YouTubeChatPlatform : IChatPlatform
         }
     }
 
+    public string? BuildNativeChatUrl(StreamInfo stream)
+    {
+        return string.IsNullOrWhiteSpace(stream.Id)
+            ? null
+            : $"https://www.youtube.com/live_chat?v={Uri.EscapeDataString(stream.Id.Trim())}&is_popout=1";
+    }
+
     public string? BuildStreamUrl(StreamInfo? stream = null)
     {
         if (!string.IsNullOrWhiteSpace(stream?.Id))

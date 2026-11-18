@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:platformControls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -13,23 +14,44 @@
 
     <DockPanel LastChildFill="True">
         <Border DockPanel.Dock="Top"
+                Padding="8,4"
+                Visibility="{Binding HasMultiplePlatforms, Converter={StaticResource BoolToVisibility}}">
+            <ComboBox Style="{StaticResource ComboBox.Toolbar}"
+                      HorizontalAlignment="Left"
+                      ItemsSource="{Binding Platforms}"
+                      SelectedValuePath="Platform"
+                      SelectedValue="{Binding SelectedPlatform, Mode=TwoWay}"
+                      AutomationProperties.Name="Площадка чата трансляции">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <platformControls:PlatformIconView Platform="{Binding Platform}"
+                                                               Width="14"
+                                                               Height="14"
+                                                               Margin="0,0,6,0" />
+                            <TextBlock Text="{Binding Label}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </Border>
+
+        <Border DockPanel.Dock="Top"
                 Background="{DynamicResource Bg.SurfaceAlt}"
                 BorderBrush="{DynamicResource Border.Subtle}"
                 BorderThickness="1"
                 CornerRadius="6"
                 Padding="8,6"
                 Margin="0,0,0,6"
-                Visibility="{Binding AccountChangeRequiresRestart, Converter={StaticResource BoolToVisibility}}">
+                Visibility="{Binding ShowAccountChangeNotice, Converter={StaticResource BoolToVisibility}}">
             <TextBlock Text="Аккаунт отображения чата изменён. Перезапустите приложение, чтобы чат открылся под новым аккаунтом."
                        Style="{StaticResource TextBlock.Subtle}"
                        TextWrapping="Wrap" />
         </Border>
 
         <Grid>
-        <wv2:WebView2 x:Name="WebView"
-                      ZoomFactor="{Binding ZoomFactor, Mode=TwoWay}">
-            <wv2:WebView2.Style>
-                <Style TargetType="wv2:WebView2">
+            <Grid.Resources>
+                <Style x:Key="ChatWebView" TargetType="wv2:WebView2">
                     <Setter Property="Visibility"
                             Value="Visible" />
                     <Style.Triggers>
@@ -47,6 +69,30 @@
                                      Value="True">
                             <Setter Property="Visibility"
                                     Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Resources>
+
+        <wv2:WebView2 x:Name="WebView"
+                      ZoomFactor="{Binding ZoomFactor, Mode=TwoWay}">
+            <wv2:WebView2.Style>
+                <Style TargetType="wv2:WebView2" BasedOn="{StaticResource ChatWebView}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsTwitchSelected}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </wv2:WebView2.Style>
+        </wv2:WebView2>
+
+        <wv2:WebView2 x:Name="PlatformWebView">
+            <wv2:WebView2.Style>
+                <Style TargetType="wv2:WebView2" BasedOn="{StaticResource ChatWebView}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsTwitchSelected}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
@@ -95,7 +141,7 @@
         <controls:EmptyState Icon="MessageSquareWarning"
                              Heading="{Binding FallbackHeading}"
                              Description="{Binding FallbackDescription}"
-                             ActionText="Скачать WebView2 Runtime"
+                             ActionText="{Binding FallbackActionText}"
                              ActionCommand="{Binding FallbackActionCommand}"
                              DescriptionMaxWidth="320"
                              VerticalAlignment="Center"

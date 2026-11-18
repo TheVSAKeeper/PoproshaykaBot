@@ -5,10 +5,14 @@ using KeepShell.Testing;
 using KeepShell.Views.Controls;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Web.WebView2.Wpf;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Display;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using PoproshaykaBot.Wpf.Views.Tiles;
 using System.IO;
@@ -129,6 +133,69 @@ public sealed class WebViewTileModalHidingTests
                 : "Выход из правки не должен возвращать браузер, пока открыт диалог");
     }
 
+    [Test]
+    public void Переключатель_чата_использует_выбранный_эфир_и_прячет_его_под_диалогом()
+    {
+        var status = new FakeStreamStatus();
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch", new FakeStreamStatus()),
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", status),
+        ]);
+
+        var viewModel = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry);
+        var view = CreateView(Tile.Chat, viewModel);
+        var twitchBrowser = (WebView2)view.FindName("WebView");
+        var youtubeBrowser = (WebView2)view.FindName("PlatformWebView");
+
+        viewModel.SelectedPlatform = StreamingPlatform.YouTube;
+        Layout(view);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.ChannelUri?.Query, Is.EqualTo("?v=selected-video"));
+            Assert.That(viewModel.ExternalUri?.AbsolutePath, Is.EqualTo("/watch"));
+            Assert.That(twitchBrowser.Visibility, Is.EqualTo(Visibility.Collapsed));
+            Assert.That(youtubeBrowser.Visibility, Is.EqualTo(Visibility.Visible));
+        }
+
+        viewModel.IsModalDialogOpen = true;
+        Layout(view);
+        Assert.That(youtubeBrowser.Visibility, Is.EqualTo(Visibility.Collapsed));
+
+        viewModel.IsModalDialogOpen = false;
+        viewModel.SelectedPlatform = StreamingPlatform.Twitch;
+        status.CurrentStatus = StreamStatus.Offline;
+        viewModel.SelectedPlatform = StreamingPlatform.YouTube;
+        Layout(view);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(viewModel.ChannelUri, Is.Null);
+            Assert.That(viewModel.ExternalUri?.AbsolutePath, Is.EqualTo("/@channel"));
+            Assert.That(viewModel.HasFallback, Is.True);
+            Assert.That(youtubeBrowser.Visibility, Is.EqualTo(Visibility.Collapsed));
+        }
+    }
+
+    [Test]
+    public void Ссылка_оффлайн_чата_обновляется_после_настройки_канала()
+    {
+        var settings = new YouTubeSettingsStore(filePath: Path.Combine(_directory.FullName, "youtube.json"));
+        var status = new FakeStreamStatus { CurrentStatus = StreamStatus.Offline };
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", status, () => settings.Load().Channel is { Length: > 0 } channel
+                ? $"https://www.youtube.com/{channel}" : null),
+        ]);
+        var viewModel = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, settings);
+        viewModel.SelectedPlatform = StreamingPlatform.YouTube;
+
+        Assert.That(viewModel.ExternalUri, Is.Null);
+        settings.Mutate(current => current.Channel = "@new-channel");
+
+        Assert.That(viewModel.ExternalUri?.AbsolutePath, Is.EqualTo("/@new-channel"));
+        Assert.That(viewModel.FallbackActionCommand, Is.Not.Null);
+    }
+
     private static UserControl CreateView(Tile tile, DashboardTileViewModel viewModel)
     {
         UserControl view = tile switch
@@ -158,7 +225,8 @@ public sealed class WebViewTileModalHidingTests
         view.UpdateLayout();
     }
 
-    private DashboardTileViewModel CreateViewModel(Tile tile)
+    private DashboardTileViewModel CreateViewModel(Tile tile, IChatPlatformRegistry? platformRegistry = null,
+        YouTubeSettingsStore? youtubeSettings = null)
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"));
 
@@ -170,7 +238,7 @@ public sealed class WebViewTileModalHidingTests
                 new FakeShellLauncher(),
                 new FakeDialogService(),
                 new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
-                new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _directory.FullName)),
+                new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _directory.FullName), platformRegistry, youtubeSettings),
             Tile.OverlayPreview => new ChatOverlayPreviewTileViewModel(settings, NullLogger<ChatOverlayPreviewTileViewModel>.Instance),
             _ => throw new ArgumentOutOfRangeException(nameof(tile)),
         };
@@ -214,6 +282,28 @@ public sealed class WebViewTileModalHidingTests
         public void EndSession()
         {
         }
+    }
+
+    private sealed class FakeStreamStatus : IStreamStatus
+    {
+        public StreamStatus CurrentStatus { get; set; } = StreamStatus.Online;
+        public StreamInfo CurrentStream { get; } = new() { Id = "selected-video" };
+        public StreamStatusSnapshot GetSnapshot() => throw new NotSupportedException();
+        public Task RefreshLiveSnapshotAsync() => Task.CompletedTask;
+    }
+
+    private sealed class FakeChatPlatform(StreamingPlatform id, string name, IStreamStatus status, Func<string?>? offlineUrl = null) : IChatPlatform
+    {
+        public StreamingPlatform Id => id;
+        public string DisplayName => name;
+        public PlatformCapabilities Capabilities => PlatformCapabilities.None;
+        public bool IsEnabled => true;
+        public bool IsConnected => false;
+        public IStreamStatus StreamStatus => status;
+        public IPlatformMessenger Messenger => throw new NotSupportedException();
+        public string BuildNativeChatUrl(StreamInfo stream) => $"https://www.youtube.com/live_chat?v={stream.Id}";
+        public string BuildStreamUrl(StreamInfo? stream = null) => stream is { } info
+            ? $"https://www.youtube.com/watch?v={info.Id}" : offlineUrl is not null ? offlineUrl() : "https://www.youtube.com/@channel";
     }
 
     private sealed class FakeShellLauncher : IShellLauncher

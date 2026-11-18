@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
+using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.Windows;
@@ -12,10 +14,14 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 {
     private readonly CancellationTokenSource _lifetime = new();
     private readonly WebViewThemeBackground _themeBackground;
+    private readonly WebViewThemeBackground _platformThemeBackground;
+    private readonly BrowserState _twitchBrowser = new();
+    private readonly BrowserState _platformBrowser = new();
 
     private bool _initialized;
     private bool _disposed;
-    private bool _reloadAttempted;
+    private bool _webViewRuntimeMissing;
+    private int _openRequest;
     private ChatDisplayTileViewModel? _viewModel;
     private string? _clutterScriptId;
     private int _clutterScriptGeneration;
@@ -27,6 +33,22 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         Unloaded += OnUnloaded;
         Dispatcher.ShutdownStarted += OnShutdownStarted;
         _themeBackground = WebViewThemeBackground.Attach(WebView);
+        _platformThemeBackground = WebViewThemeBackground.Attach(PlatformWebView);
+    }
+
+    private WebView2 CurrentWebView => _viewModel?.IsTwitchSelected != false ? WebView : PlatformWebView;
+
+    private BrowserState StateFor(WebView2 browser) => ReferenceEquals(browser, WebView) ? _twitchBrowser : _platformBrowser;
+
+    private WebView2? BrowserForCore(object? sender)
+    {
+        if (sender is not CoreWebView2 core)
+        {
+            return null;
+        }
+
+        return ReferenceEquals(core, WebView.CoreWebView2) ? WebView
+            : ReferenceEquals(core, PlatformWebView.CoreWebView2) ? PlatformWebView : null;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -48,7 +70,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         _viewModel.ClutterScriptChanged += OnClutterScriptChanged;
         _viewModel.ChannelUriChanged += OnChannelUriChanged;
 
-        await InitializeWebViewAsync(viewModel);
+        await OpenChatAsync();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -84,6 +106,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         Unloaded -= OnUnloaded;
         Dispatcher.ShutdownStarted -= OnShutdownStarted;
         _themeBackground.Detach();
+        _platformThemeBackground.Detach();
         _lifetime.Cancel();
 
         if (_viewModel is not null)
@@ -94,54 +117,69 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             _viewModel.ChannelUriChanged -= OnChannelUriChanged;
         }
 
-        if (WebView.CoreWebView2 is not null)
-        {
-            WebView.CoreWebView2.ProcessFailed -= OnProcessFailed;
-        }
-
-        WebView.NavigationCompleted -= OnNavigationCompleted;
-        WebView.Dispose();
+        ReleaseBrowser(WebView);
+        ReleaseBrowser(PlatformWebView);
         _lifetime.Dispose();
     }
 
-    private async Task InitializeWebViewAsync(ChatDisplayTileViewModel viewModel)
+    private void ReleaseBrowser(WebView2 browser)
     {
-        if (App.IsGallery)
+        if (browser.CoreWebView2 is { } core)
+        {
+            core.ProcessFailed -= OnProcessFailed;
+            core.NavigationStarting -= OnNavigationStarting;
+            core.NavigationCompleted -= OnNavigationCompleted;
+        }
+
+        browser.Dispose();
+    }
+
+    private async Task OpenChatAsync(bool reload = false)
+    {
+        if (_disposed || App.IsGallery || _viewModel is not { } viewModel)
         {
             return;
         }
 
+        var browser = CurrentWebView;
+        var state = StateFor(browser);
+        var request = ++_openRequest;
+        var uri = viewModel.ChannelUri;
+        Task? initialization = null;
+
         try
         {
-            var environment = await WebView2EnvironmentFactory.CreateAsync(
-                viewModel.UserDataFolder,
-                viewModel.Logger,
-                _lifetime.Token);
+            if (uri is null)
+            {
+                if (state.Navigation.Target is not null)
+                {
+                    state.Navigation.Begin(null);
+                    browser.CoreWebView2?.Navigate("about:blank");
+                }
 
-            if (_disposed)
+                return;
+            }
+
+            if (_webViewRuntimeMissing)
+            {
+                viewModel.ShowRuntimeMissingFallback();
+                return;
+            }
+
+            var dataFolder = ReferenceEquals(browser, WebView) ? viewModel.UserDataFolder
+                : AppPaths.Combine("WebView2", "platform-chat");
+            initialization = state.Initialization ??= InitializeBrowserAsync(browser, dataFolder, viewModel);
+            await initialization;
+
+            if (_disposed || request != _openRequest || browser.CoreWebView2 is not { } core)
             {
                 return;
             }
 
-            await WebView.EnsureCoreWebView2Async(environment);
-
-            if (_disposed)
+            if (reload || !state.Navigation.CanReuse(uri))
             {
-                return;
-            }
-
-            WebView.CoreWebView2.ProcessFailed += OnProcessFailed;
-            WebView.NavigationCompleted += OnNavigationCompleted;
-
-            await RegisterClutterScriptAsync(viewModel);
-
-            if (viewModel.ChannelUri is { } channelUri)
-            {
-                WebView.Source = channelUri;
-            }
-            else
-            {
-                viewModel.ShowNoChannelFallback();
+                state.Navigation.Begin(uri);
+                core.Navigate(uri.AbsoluteUri);
             }
         }
         catch (OperationCanceledException)
@@ -149,13 +187,64 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         }
         catch (WebView2RuntimeNotFoundException exception)
         {
-            viewModel.Logger.LogError(exception, "WebView2 Runtime не установлен");
-            viewModel.ShowRuntimeMissingFallback();
+            if (!_disposed && !_webViewRuntimeMissing)
+            {
+                _webViewRuntimeMissing = true;
+                viewModel.Logger.LogError(exception, "WebView2 Runtime не установлен");
+            }
+
+            if (!_disposed && viewModel.ChannelUri is not null)
+            {
+                viewModel.ShowRuntimeMissingFallback();
+            }
         }
         catch (Exception exception)
         {
-            viewModel.Logger.LogError(exception, "Не удалось инициализировать WebView2 для Twitch-чата");
-            viewModel.ShowGenericFallback();
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (initialization is not { IsFaulted: true } || ReferenceEquals(state.Initialization, initialization))
+            {
+                if (initialization is { IsFaulted: true })
+                {
+                    state.Initialization = null;
+                }
+
+                state.Navigation.RequireRetry();
+                viewModel.Logger.LogError(exception, "Не удалось открыть WebView2 для чата трансляции");
+            }
+
+            if (request == _openRequest && uri is not null)
+            {
+                viewModel.ShowGenericFallback();
+            }
+        }
+    }
+
+    private async Task InitializeBrowserAsync(WebView2 browser, string dataFolder, ChatDisplayTileViewModel viewModel)
+    {
+        var environment = await WebView2EnvironmentFactory.CreateAsync(dataFolder, viewModel.Logger, _lifetime.Token);
+        if (_disposed)
+        {
+            return;
+        }
+
+        await browser.EnsureCoreWebView2Async(environment);
+        if (_disposed)
+        {
+            return;
+        }
+
+        var core = browser.CoreWebView2;
+        core.ProcessFailed += OnProcessFailed;
+        core.NavigationStarting += OnNavigationStarting;
+        core.NavigationCompleted += OnNavigationCompleted;
+
+        if (ReferenceEquals(browser, WebView))
+        {
+            await RegisterClutterScriptAsync(viewModel);
         }
     }
 
@@ -218,30 +307,22 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             return;
         }
 
-        WebView.Reload();
+        await RefreshTwitchAfterSettingsChangeAsync();
     }
 
     private void OnChannelUriChanged()
     {
-        if (_disposed || _viewModel?.ChannelUri is not { } channelUri || WebView.CoreWebView2 is null)
-        {
-            return;
-        }
-
-        WebView.Source = channelUri;
+        _ = OpenChatAsync();
     }
 
     private void OnReloadRequested()
     {
-        if (WebView.CoreWebView2 is not null)
-        {
-            WebView.Reload();
-        }
+        _ = OpenChatAsync(reload: true);
     }
 
     private void OnResetSessionRequested()
     {
-        if (_viewModel is not { } viewModel || WebView.CoreWebView2?.Profile is not { } profile)
+        if (_viewModel is not { IsTwitchSelected: true } viewModel || WebView.CoreWebView2?.Profile is not { } profile)
         {
             return;
         }
@@ -271,37 +352,79 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             return;
         }
 
-        WebView.Reload();
+        await RefreshTwitchAfterSettingsChangeAsync();
+    }
+
+    private Task RefreshTwitchAfterSettingsChangeAsync()
+    {
+        _twitchBrowser.Navigation.RequireRetry();
+        return ReferenceEquals(CurrentWebView, WebView) ? OpenChatAsync(reload: true) : Task.CompletedTask;
+    }
+
+    private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+    {
+        if (BrowserForCore(sender) is { } browser)
+        {
+            StateFor(browser).Navigation.Started(e.Uri, e.NavigationId, e.IsRedirected);
+        }
     }
 
     private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
     {
-        _viewModel?.Logger.LogError("WebView2 процесс упал: {Reason}", e.ProcessFailedKind);
-
-        if (_reloadAttempted)
+        if (BrowserForCore(sender) is not { } browser)
         {
             return;
         }
 
-        _reloadAttempted = true;
+        _viewModel?.Logger.LogError("WebView2 процесс упал: {Reason}", e.ProcessFailedKind);
+
+        var navigation = StateFor(browser).Navigation;
+        navigation.RequireRetry();
+        if (!ReferenceEquals(browser, CurrentWebView) || _viewModel?.ChannelUri is null)
+        {
+            return;
+        }
+
+        if (!navigation.TryRecover())
+        {
+            _viewModel?.ShowGenericFallback();
+            return;
+        }
 
         _ = Dispatcher.BeginInvoke(() =>
         {
-            if (WebView.CoreWebView2 is not null)
+            if (!_disposed && ReferenceEquals(browser, CurrentWebView))
             {
-                WebView.Reload();
+                _ = OpenChatAsync(reload: true);
             }
         });
     }
 
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-        if (e.IsSuccess)
+        var success = e.IsSuccess && e.HttpStatusCode < 400;
+        if (BrowserForCore(sender) is not { } browser
+            || !StateFor(browser).Navigation.TryComplete(e.NavigationId, success)
+            || e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled
+            || !ReferenceEquals(browser, CurrentWebView) || _viewModel?.ChannelUri is null)
         {
-            _reloadAttempted = false;
             return;
         }
 
-        _viewModel?.Logger.LogWarning("Twitch-чат не загрузился: status={HttpStatusCode}, error={WebErrorStatus}", e.HttpStatusCode, e.WebErrorStatus);
+        if (success)
+        {
+            _viewModel.ShowChatContent();
+            return;
+        }
+
+        _viewModel.Logger.LogWarning("Чат {Platform} не загрузился: status={HttpStatusCode}, error={WebErrorStatus}",
+            _viewModel.SelectedPlatform, e.HttpStatusCode, e.WebErrorStatus);
+        _viewModel.ShowGenericFallback();
+    }
+
+    private sealed class BrowserState
+    {
+        public Task? Initialization { get; set; }
+        public ChatBrowserNavigation Navigation { get; } = new();
     }
 }

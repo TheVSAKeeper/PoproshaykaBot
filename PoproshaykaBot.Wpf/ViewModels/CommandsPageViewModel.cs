@@ -12,6 +12,7 @@ using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Chat;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
+using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Input;
@@ -20,6 +21,11 @@ namespace PoproshaykaBot.Wpf.ViewModels;
 
 public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeader, IPageRefresh, IUnsavedChangesPage
 {
+    private static readonly PlatformFilterOption GeneralScope = new(null, "Общие");
+    private static readonly PlatformEnablementOption InheritEnablement = new("Как в общих", null);
+    private static readonly PlatformEnablementOption EnableOnPlatform = new("Включена", true);
+    private static readonly PlatformEnablementOption DisableOnPlatform = new("Выключена", false);
+
     private const string WhisperReauthorizationNotice = "Пока у бота нет разрешения на личные сообщения, он отвечает в общем чате. Чтобы включить шёпот, откройте «Настройки → Площадки → Twitch» и войдите заново в строке «Бот» нужного канала.";
 
     private const string NotWrittenNotice = "Параметры применены и работают до перезапуска. В файл они не записаны: туда только что перенесены данные предыдущей версии. Перезапустите приложение и сохраните параметры ещё раз.";
@@ -42,9 +48,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     private CommandRowViewModel? _parametersRow;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTwitchProbe))]
-    [NotifyPropertyChangedFor(nameof(IsYouTubeProbe))]
-    private StreamingPlatform _probePlatform = StreamingPlatform.Twitch;
+    [NotifyPropertyChangedFor(nameof(IsPlatformScope))]
+    private PlatformFilterOption _commandScope = GeneralScope;
 
     [ObservableProperty]
     private CommandRowViewModel? _selectedRow;
@@ -103,6 +108,9 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         _platformRegistry = platformRegistry;
         _logger = logger;
 
+        CommandScopes = [GeneralScope, .. (platformRegistry?.All.Select(platform =>
+            new PlatformFilterOption(platform.Id, platform.DisplayName)) ?? PlatformFilterOption.AllOptions.Skip(1))];
+
         var byName = StringComparer.Create(UiCulture.Russian, ignoreCase: true);
         var capabilities = CapabilitiesFor(ProbePlatform);
 
@@ -120,29 +128,58 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         Reload();
     }
 
-    public bool IsTwitchProbe
+    public IReadOnlyList<PlatformFilterOption> CommandScopes { get; }
+
+    public bool IsPlatformScope => CommandScope.Platform is not null;
+
+    public IReadOnlyList<PlatformEnablementOption> PlatformEnablementOptions { get; } =
+        [InheritEnablement, EnableOnPlatform, DisableOnPlatform];
+
+    public PlatformEnablementOption SelectedPlatformEnablement
     {
-        get => ProbePlatform == StreamingPlatform.Twitch;
+        get => SelectedRow?.PlatformEnabled switch
+        {
+            true => EnableOnPlatform,
+            false => DisableOnPlatform,
+            null => InheritEnablement,
+        };
         set
         {
-            if (value)
+            if (value is null || CommandScope.Platform is not { } platform || SelectedRow is not { } row
+                || value.Enabled == row.PlatformEnabled)
             {
-                ProbePlatform = StreamingPlatform.Twitch;
+                return;
             }
+
+            if (TryMutate(settings =>
+                {
+                    GetOrAddOverride(settings, row.Canonical).SetPlatformEnabled(platform, value.Enabled);
+                    DropRedundantOverride(settings, row.Canonical);
+                }))
+            {
+                row.ApplyPlatformEnablement(value.Enabled);
+                UpdateSummaries();
+
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.CommandEnabledChanged(row.Invocation, $"{CommandScope.Label}: {value.Title}");
+                }
+            }
+
+            NotifyPlatformEnablementChanged();
         }
     }
 
-    public bool IsYouTubeProbe
-    {
-        get => ProbePlatform == StreamingPlatform.YouTube;
-        set
-        {
-            if (value)
-            {
-                ProbePlatform = StreamingPlatform.YouTube;
-            }
-        }
-    }
+    public bool CanSetPlatformEnablement => SelectedRow is { IsClosedByCode: false };
+
+    public string? PlatformEnablementStatus => SelectedRow is not { } row ? null
+        : row.IsClosedByCode ? row.AccessHint
+        : row.IsEnabledInScope ? "Команда включена на площадке" : "Команда выключена на площадке";
+
+    public string? ParametersHeading => IsPlatformScope && Parameters is { } parameters
+        ? $"{parameters.Heading} · общие для площадок" : Parameters?.Heading;
+
+    private StreamingPlatform ProbePlatform => CommandScope.Platform ?? StreamingPlatform.Twitch;
 
     public string PageTitle => "Команды";
 
@@ -291,19 +328,32 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
             : null;
     }
 
-    partial void OnProbePlatformChanged(StreamingPlatform value)
+    partial void OnCommandScopeChanged(PlatformFilterOption value)
     {
-        var capabilities = CapabilitiesFor(value);
+        var platform = value.Platform ?? StreamingPlatform.Twitch;
+        var capabilities = CapabilitiesFor(platform);
+        var settings = _settingsStore.Load();
 
         foreach (var row in _allRows)
         {
+            row.ApplyPlatformEnablement(value.Platform is { } id ? settings.ReadPlatformEnabled(row.Canonical, id) : null);
             if (_commands.TryGetValue(row.Canonical, out var command))
             {
-                row.UpdateCodeAvailability(ProbeCodeLevel(command, value, capabilities), value);
+                row.UpdateCodeAvailability(ProbeCodeLevel(command, platform, capabilities), platform);
             }
         }
 
         RefreshWhisperNotice();
+        UpdateSummaries();
+        OnPropertyChanged(nameof(ParametersHeading));
+        NotifyPlatformEnablementChanged();
+    }
+
+    private void NotifyPlatformEnablementChanged()
+    {
+        OnPropertyChanged(nameof(SelectedPlatformEnablement));
+        OnPropertyChanged(nameof(PlatformEnablementStatus));
+        OnPropertyChanged(nameof(CanSetPlatformEnablement));
     }
 
     private static CommandOverride GetOrAddOverride(CommandSettings settings, string canonical)
@@ -322,7 +372,8 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
     private static void DropRedundantOverride(CommandSettings settings, string canonical)
     {
         if (settings.Commands.TryGetValue(canonical, out var existing)
-            && existing is { Enabled: true, ResponseTarget: null, Access: null })
+            && existing is { Enabled: true, ResponseTarget: null, Access: null }
+            && (existing.EnabledByPlatform is null or { Count: 0 }))
         {
             settings.Commands.Remove(canonical);
         }
@@ -346,7 +397,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
 
             foreach (var row in _allRows)
             {
-                row.ApplySettings(settings);
+                row.ApplySettings(settings, CommandScope.Platform);
             }
         }
         finally
@@ -373,6 +424,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         }
 
         OnPropertyChanged(nameof(HasSelectedRow));
+        NotifyPlatformEnablementChanged();
 
         if (!ConfirmParametersDraft("переключением на другую команду"))
         {
@@ -399,6 +451,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         }
 
         OnPropertyChanged(nameof(HasUnsavedChanges));
+        OnPropertyChanged(nameof(ParametersHeading));
         SaveParametersCommand.NotifyCanExecuteChanged();
     }
 
@@ -476,6 +529,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         }
 
         OnPropertyChanged(nameof(HasSelectedRow));
+        NotifyPlatformEnablementChanged();
     }
 
     private void OnRowEnabledChanged(object? sender, EventArgs args)
@@ -499,6 +553,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         _logger.CommandEnabledChanged(row.Invocation, enabled ? "включена" : "выключена");
 
         UpdateSummaries();
+        NotifyPlatformEnablementChanged();
     }
 
     private void OnRowTargetChanged(object? sender, EventArgs args)
@@ -576,7 +631,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         {
             foreach (var row in _allRows)
             {
-                row.ApplySettings(settings);
+                row.ApplySettings(settings, CommandScope.Platform);
             }
         }
         finally
@@ -635,6 +690,7 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         }
 
         OnPropertyChanged(nameof(HasSelectedRow));
+        NotifyPlatformEnablementChanged();
 
         if (!ReferenceEquals(SelectedRow, _parametersRow))
         {
@@ -655,9 +711,11 @@ public sealed partial class CommandsPageViewModel : ObservableObject, IPageHeade
         return HasUnsavedChanges && ReferenceEquals(row, _parametersRow);
     }
 
+    public sealed record PlatformEnablementOption(string Title, bool? Enabled);
+
     private void UpdateSummaries()
     {
-        var enabled = _allRows.Count(row => row.IsEnabled);
+        var enabled = _allRows.Count(row => row.IsEnabledInScope);
         var total = _allRows.Sum(row => row.TotalCount).ToString("N0", UiCulture.Russian);
         var stream = _allRows.Sum(row => row.StreamCount).ToString("N0", UiCulture.Russian);
         var visible = IsFilterActive ? $" · показано {_rows.Count}" : string.Empty;
