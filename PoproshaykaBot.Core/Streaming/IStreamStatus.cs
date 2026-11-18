@@ -8,5 +8,7 @@ public interface IStreamStatus
 
     StreamStatusSnapshot GetSnapshot();
 
+    bool RequiresBackgroundPoll => false;
+
     Task RefreshLiveSnapshotAsync();
 }

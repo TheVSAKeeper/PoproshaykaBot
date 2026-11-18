@@ -7,4 +7,8 @@ public interface ITargetChannelProvider
     void BeginSession();
 
     void EndSession();
+
+    void SetSessionLogin(string login)
+    {
+    }
 }

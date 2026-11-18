@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace PoproshaykaBot.Core.Streaming;
 
-internal static class StreamingErrorMessages
+public static class StreamingErrorMessages
 {
     public static string SafeMessage(Exception exception)
     {

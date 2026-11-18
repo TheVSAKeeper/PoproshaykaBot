@@ -10,4 +10,7 @@ public enum PlatformCapabilities
     ChannelMetadataEdit = 8,
     EmotePositions = 16,
     ServerChatHistory = 32,
+    BackgroundStreamMonitoring = 64,
+    MultiChannelMonitoring = 128,
+    ViewerCountSampling = 256,
 }

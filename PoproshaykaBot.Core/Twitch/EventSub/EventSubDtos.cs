@@ -60,3 +60,14 @@ internal sealed record EventSubStreamOnlineEventDto(
     string Type,
     [property: JsonPropertyName("started_at")]
     DateTime StartedAt);
+
+internal sealed record EventSubStreamOfflinePayloadDto(
+    [property: JsonPropertyName("event")] EventSubStreamOfflineEventDto? Event);
+
+internal sealed record EventSubStreamOfflineEventDto(
+    [property: JsonPropertyName("broadcaster_user_id")]
+    string BroadcasterUserId,
+    [property: JsonPropertyName("broadcaster_user_login")]
+    string BroadcasterUserLogin,
+    [property: JsonPropertyName("broadcaster_user_name")]
+    string BroadcasterUserName);

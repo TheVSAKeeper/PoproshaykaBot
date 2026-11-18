@@ -86,6 +86,12 @@ public sealed class ChatPipelineHandler :
         _commandResponseTracker.Clear(platform);
     }
 
+    public void ResetChannel(StreamingPlatform platform, ChannelKey? previousChannel)
+    {
+        _audienceTracker.Clear(platform);
+        _commandResponseTracker.Clear(platform);
+    }
+
     public void Dispose()
     {
         foreach (var subscription in _subscriptions)

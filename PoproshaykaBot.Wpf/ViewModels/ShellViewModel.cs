@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Twitch.Auth;
@@ -79,7 +80,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         IUiDispatcher uiDispatcher,
         IUnsavedChangesPrompt unsavedChangesPrompt,
         IMainWindowController mainWindow,
-        IChatPlatformRegistry? platformRegistry = null)
+        IChatPlatformRegistry? platformRegistry = null,
+        ChannelSwitchPromptBannerViewModel? channelSwitchBanner = null)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
@@ -93,6 +95,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         Theme = theme;
         UpdateBanner = updateBanner;
         OnboardingBanner = onboardingBanner;
+        ChannelSwitchBanner = channelSwitchBanner;
         DebugBanner = debugBanner;
         StreamMonitoring = streamMonitoring;
 
@@ -141,6 +144,12 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(OnLifecyclePhaseChanged));
         _subscriptions.Add(eventBus.SubscribeOnUi<PlatformConnectionChanged>(OnPlatformConnectionChanged));
         _subscriptions.Add(eventBus.SubscribeOnUi<BotConnectionStatusUpdated>(statusEvent => SetStatus(statusEvent.Message, StatusSeverity.Info)));
+        _subscriptions.Add(eventBus.SubscribeOnUi<ChannelSwitchFailed>(OnChannelSwitchFailed));
+
+        if (ChannelSwitchBanner is not null)
+        {
+            ChannelSwitchBanner.StatusReported += OnChannelSwitchBannerStatusReported;
+        }
 
         ApplyPhase(_connectionManager.CurrentPhase);
         RefreshPartialFailureStatus();
@@ -151,6 +160,8 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     public UpdateBannerViewModel UpdateBanner { get; }
 
     public OnboardingBannerViewModel OnboardingBanner { get; }
+
+    public ChannelSwitchPromptBannerViewModel? ChannelSwitchBanner { get; }
 
     public DebugBannerViewModel DebugBanner { get; }
 
@@ -213,6 +224,11 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         _streamHistoryPage.UserRequested -= OnUserRequested;
         Overview.UserRequested -= OnUserRequested;
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+
+        if (ChannelSwitchBanner is not null)
+        {
+            ChannelSwitchBanner.StatusReported -= OnChannelSwitchBannerStatusReported;
+        }
 
         foreach (var subscription in _subscriptions)
         {
@@ -708,6 +724,17 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     {
         ShowPlatformMenu = PlatformConnections.Count(static item =>
             item.IsEnabled || item.Phase is not BotLifecyclePhase.Idle and not BotLifecyclePhase.Disconnected) > 1;
+    }
+
+    private void OnChannelSwitchFailed(ChannelSwitchFailed failed)
+    {
+        var severity = failed.KeptPreviousChat ? StatusSeverity.Warning : StatusSeverity.Error;
+        SetStatus(failed.Reason, severity);
+    }
+
+    private void OnChannelSwitchBannerStatusReported(string message, StatusSeverity severity)
+    {
+        SetStatus(message, severity);
     }
 
     private void RefreshPartialFailureStatus()

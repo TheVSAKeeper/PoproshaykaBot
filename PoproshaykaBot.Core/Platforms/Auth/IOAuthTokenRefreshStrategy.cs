@@ -27,6 +27,11 @@ public interface IOAuthTokenRefreshStrategy<in TAccount>
 
     Task HandleScopeMismatchAsync(PlatformAuthRole role, TAccount accountSnapshot, CancellationToken ct);
 
+    Task HandleScopeMismatchAsync(PlatformAuthRole role, string contextId, TAccount accountSnapshot, CancellationToken ct)
+    {
+        return HandleScopeMismatchAsync(role, accountSnapshot, ct);
+    }
+
     bool TryReadBackgroundCredentials(out string clientId, out string clientSecret);
 
     Task<string> RefreshAndSaveAsync(
@@ -36,9 +41,25 @@ public interface IOAuthTokenRefreshStrategy<in TAccount>
         string refreshToken,
         CancellationToken ct);
 
+    Task<string> RefreshAndSaveAsync(
+        PlatformAuthRole role,
+        string contextId,
+        string clientId,
+        string clientSecret,
+        string refreshToken,
+        CancellationToken ct)
+    {
+        return RefreshAndSaveAsync(role, clientId, clientSecret, refreshToken, ct);
+    }
+
     OAuthRefreshFailureKind ClassifyFailure(Exception exception);
 
     Task OnRefreshTokenRejectedAsync(PlatformAuthRole role, Exception exception, CancellationToken ct);
+
+    Task OnRefreshTokenRejectedAsync(PlatformAuthRole role, string contextId, Exception exception, CancellationToken ct)
+    {
+        return OnRefreshTokenRejectedAsync(role, exception, ct);
+    }
 
     void OnCredentialsRejected(PlatformAuthRole role, Exception exception, DateTimeOffset pausedUntil);
 

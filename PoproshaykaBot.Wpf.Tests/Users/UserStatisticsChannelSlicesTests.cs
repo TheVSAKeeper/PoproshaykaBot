@@ -130,8 +130,9 @@ public sealed class UserStatisticsChannelSlicesTests
         catalog.EnsureChannelKnown(YouTubeMain, "Канал A");
 
         var repo = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
+        var catalogVm = new ChannelCatalogSettingsSectionViewModel(catalog);
         var vm = new ChannelGroupsSettingsSectionViewModel(catalog, repo);
-        var contributor = new ChannelGroupsSettingsSectionContributor(vm, catalog);
+        var contributor = new ChannelsSettingsSectionContributor(catalogVm, vm, catalog);
 
         contributor.Load(new SettingsSessionState { Settings = new() });
         using var dirtySub = contributor.SubscribeDirty(new SettingsSessionState { Settings = new() }, static () => { }, static () => { });

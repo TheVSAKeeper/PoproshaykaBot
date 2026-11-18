@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Core.Broadcast;
@@ -12,6 +13,7 @@ public sealed class BroadcastAggregator :
     IEventHandler<StreamWentOffline>,
     IEventSubscriber,
     IBroadcastState,
+    IBroadcastChannelLifecycle,
     IBroadcastOfflineStopCoordinator,
     IDisposable
 {
@@ -112,6 +114,152 @@ public sealed class BroadcastAggregator :
         if (scheduleContinuation)
         {
             _eventBus.ContinueAfterPublish(ProcessOfflineTransitionsAfterPublishAsync);
+        }
+    }
+
+    public async Task LeaveActiveChannelAsync(
+        StreamingPlatform platform,
+        ChannelKey? expectedChannel,
+        CancellationToken cancellationToken = default)
+    {
+        await _transitionSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var now = _timeProvider.GetUtcNow();
+            BroadcastEnded? endedEvent = null;
+            BroadcastPlatformLeft? leftEvent = null;
+
+            lock (_syncLock)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                if (_pendingOffline.TryGetValue(platform, out var pending)
+                    && (expectedChannel is null || MatchesOfflineChannel(new LivePlatformEntry(pending.Channel, pending.ChannelId, null, now), expectedChannel.Value.ChannelId, null)))
+                {
+                    _pendingOffline.Remove(platform);
+                }
+
+                _pendingStops.Remove(platform);
+
+                if (_livePlatforms.TryGetValue(platform, out var liveA)
+                    && (expectedChannel is null || MatchesOfflineChannel(liveA, expectedChannel.Value.ChannelId, null)))
+                {
+                    _livePlatforms.Remove(platform);
+                    if (_currentBroadcastId is { } broadcastId)
+                    {
+                        if (_livePlatforms.Count == 0)
+                        {
+                            _currentBroadcastId = null;
+                            endedEvent = new BroadcastEnded(broadcastId, platform, liveA.Channel, now, IsCatchUp: false, liveA.ChannelId);
+                        }
+                        else
+                        {
+                            leftEvent = new BroadcastPlatformLeft(broadcastId, platform, liveA.Channel, now, IsCatchUp: false, liveA.ChannelId);
+                        }
+                    }
+                }
+            }
+
+            if (endedEvent is not null)
+            {
+                await _eventBus.PublishAsync(endedEvent, cancellationToken).ConfigureAwait(false);
+            }
+            else if (leftEvent is not null)
+            {
+                await _eventBus.PublishAsync(leftEvent, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _transitionSemaphore.Release();
+        }
+    }
+
+    public async Task ReplaceActiveChannelAsync(
+        StreamingPlatform platform,
+        ChannelKey? fromChannel,
+        ChannelCatalogEntry toChannel,
+        StreamInfo? confirmedStream,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(toChannel);
+
+        await _transitionSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var switchAt = _timeProvider.GetUtcNow();
+            var labelB = !string.IsNullOrWhiteSpace(toChannel.DisplayName)
+                ? toChannel.DisplayName
+                : (!string.IsNullOrWhiteSpace(toChannel.Handle) ? toChannel.Handle : toChannel.ChannelId);
+            var streamStart = ResolveStartedAt(confirmedStream, switchAt);
+            var startedAt = streamStart > switchAt ? switchAt : streamStart;
+
+            BroadcastPlatformLeft? leftEvent = null;
+            BroadcastPlatformJoined? joinedEvent = null;
+            BroadcastStarted? startedEvent = null;
+
+            lock (_syncLock)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _pendingOffline.Remove(platform);
+                _pendingStops.Remove(platform);
+
+                if (_currentBroadcastId is { } broadcastId)
+                {
+                    if (_livePlatforms.TryGetValue(platform, out var liveA))
+                    {
+                        if (fromChannel is null || MatchesOfflineChannel(liveA, fromChannel.Value.ChannelId, null))
+                        {
+                            _livePlatforms[platform] = new LivePlatformEntry(labelB, toChannel.ChannelId, confirmedStream, switchAt);
+                            leftEvent = new BroadcastPlatformLeft(broadcastId, platform, liveA.Channel, switchAt, IsCatchUp: false, liveA.ChannelId);
+                            joinedEvent = new BroadcastPlatformJoined(broadcastId, platform, labelB, confirmedStream, switchAt, IsCatchUp: false, toChannel.ChannelId);
+                        }
+                        else
+                        {
+                            _livePlatforms[platform] = new LivePlatformEntry(labelB, toChannel.ChannelId, confirmedStream, switchAt);
+                            joinedEvent = new BroadcastPlatformJoined(broadcastId, platform, labelB, confirmedStream, switchAt, IsCatchUp: false, toChannel.ChannelId);
+                        }
+                    }
+                    else
+                    {
+                        _livePlatforms[platform] = new LivePlatformEntry(labelB, toChannel.ChannelId, confirmedStream, switchAt);
+                        joinedEvent = new BroadcastPlatformJoined(broadcastId, platform, labelB, confirmedStream, switchAt, IsCatchUp: false, toChannel.ChannelId);
+                    }
+                }
+                else
+                {
+                    var newBroadcastId = _draftCoordinator.ResolveBroadcastIdOnStart(platform, labelB, confirmedStream, startedAt);
+                    _currentBroadcastId = newBroadcastId;
+                    _livePlatforms[platform] = new LivePlatformEntry(labelB, toChannel.ChannelId, confirmedStream, startedAt);
+                    startedEvent = new BroadcastStarted(newBroadcastId, platform, labelB, confirmedStream, startedAt, IsCatchUp: false, toChannel.ChannelId);
+                }
+            }
+
+            if (leftEvent is not null)
+            {
+                await _eventBus.PublishAsync(leftEvent, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (joinedEvent is not null)
+            {
+                await _eventBus.PublishAsync(joinedEvent, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (startedEvent is not null)
+            {
+                await _eventBus.PublishAsync(startedEvent, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _transitionSemaphore.Release();
         }
     }
 
@@ -271,6 +419,7 @@ public sealed class BroadcastAggregator :
                 _pendingOffline[@event.Platform] = new PendingOfflineEntry(
                     channel,
                     explicitChannelId ?? live.ChannelId,
+                    live.Stream?.Id,
                     now,
                     @event.IsCatchUp);
             }
@@ -336,6 +485,9 @@ public sealed class BroadcastAggregator :
 
                     if (!_livePlatforms.TryGetValue(platform, out var currentLive)
                         || !MatchesOfflineChannel(currentLive, pending.ChannelId, pending.Channel)
+                        || (!string.IsNullOrEmpty(currentLive.Stream?.Id)
+                            && !string.IsNullOrEmpty(pending.StreamId)
+                            && !string.Equals(currentLive.Stream.Id, pending.StreamId, StringComparison.Ordinal))
                         || !_livePlatforms.Remove(platform))
                     {
                         continue;
@@ -453,5 +605,5 @@ public sealed class BroadcastAggregator :
 
     private sealed record LivePlatformEntry(string Channel, string? ChannelId, StreamInfo? Stream, DateTimeOffset StartedAt);
 
-    private sealed record PendingOfflineEntry(string Channel, string? ChannelId, DateTimeOffset OfflineAt, bool IsCatchUp);
+    private sealed record PendingOfflineEntry(string Channel, string? ChannelId, string? StreamId, DateTimeOffset OfflineAt, bool IsCatchUp);
 }

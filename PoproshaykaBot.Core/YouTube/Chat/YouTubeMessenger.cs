@@ -21,7 +21,8 @@ internal sealed class YouTubeMessenger(
     IYouTubeSentMessageTracker sentMessageTracker,
     CommandResponseTracker commandResponseTracker,
     TimeProvider timeProvider,
-    ILogger<YouTubeMessenger> logger)
+    ILogger<YouTubeMessenger> logger,
+    YouTubeSessionContext? sessionContext = null)
     : IPlatformMessenger, IHostedComponent, IDisposable
 {
     public const int QueueCapacity = 256;
@@ -481,6 +482,7 @@ internal sealed class YouTubeMessenger(
 
             try
             {
+                using var _ = PlatformAuthRequestOptions.UseContext(sessionContext?.Current?.BotContextId);
                 var result = await sendClient.InsertMessageAsync(
                     item.TargetLiveChatId,
                     chunk,

@@ -4,6 +4,7 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Twitch.Helix;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
@@ -18,7 +19,8 @@ public sealed class ChatSender(
     IBotUserIdProvider botUserIdProvider,
     ITargetChannelProvider targetChannelProvider,
     CommandResponseTracker commandResponseTracker,
-    ILogger<ChatSender> logger)
+    ILogger<ChatSender> logger,
+    PlatformChannelRegistry? channelRegistry = null)
     : IHostedComponent
 {
     private const int MaxMessageLength = 500;
@@ -346,6 +348,9 @@ public sealed class ChatSender(
             {
                 return SendOutcome.Done;
             }
+
+            var botContextId = channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.BotContextId;
+            using var _ = PlatformAuthRequestOptions.UseContext(botContextId);
 
             var broadcasterId = item.Origin?.Channel.ChannelId ?? await broadcasterIdProvider.GetAsync(ct);
 

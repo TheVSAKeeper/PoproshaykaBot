@@ -56,6 +56,31 @@ public abstract class TwitchHelixClient(IHttpClientFactory httpClientFactory, IL
         return dto is null ? null : MapStream(dto);
     }
 
+    public async Task<IReadOnlyList<HelixStreamInfo>> GetStreamsAsync(
+        IEnumerable<string> broadcasterIds,
+        CancellationToken cancellationToken = default)
+    {
+        var idList = broadcasterIds
+            .Where(static id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (idList.Length == 0)
+        {
+            return [];
+        }
+
+        var results = new List<HelixStreamInfo>();
+        foreach (var batch in idList.Chunk(MaxUsersPerRequest))
+        {
+            var query = string.Join('&', batch.Select(id => $"user_id={Uri.EscapeDataString(id)}"));
+            var data = await GetCollectionAsync<HelixStreamDto>($"{TwitchEndpoints.HelixStreams}?{query}", cancellationToken);
+            results.AddRange(data.Select(MapStream));
+        }
+
+        return results;
+    }
+
     public async Task<ChannelInfo?> GetChannelInfoAsync(string broadcasterId, CancellationToken cancellationToken = default)
     {
         var dto = await GetSingleAsync<HelixChannelDto>($"{TwitchEndpoints.HelixChannels}?broadcaster_id={Uri.EscapeDataString(broadcasterId)}",

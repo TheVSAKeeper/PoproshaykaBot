@@ -26,6 +26,7 @@ public sealed class StreamStatusBroadcastHandler :
     private readonly IBroadcastMessenger _messenger;
     private readonly IBroadcastState _broadcastState;
     private readonly IBroadcastPlatformTargetsProvider _targetsProvider;
+    private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly SettingsManager _settingsManager;
     private readonly ILogger<StreamStatusBroadcastHandler> _logger;
@@ -53,12 +54,14 @@ public sealed class StreamStatusBroadcastHandler :
         ITargetChannelProvider targetChannelProvider,
         SettingsManager settingsManager,
         IEventBus eventBus,
-        ILogger<StreamStatusBroadcastHandler> logger)
+        ILogger<StreamStatusBroadcastHandler> logger,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         _scheduler = scheduler;
         _messenger = messenger;
         _broadcastState = broadcastState;
         _targetsProvider = targetsProvider;
+        _platformRegistry = platformRegistry;
         _targetChannelProvider = targetChannelProvider;
         _settingsManager = settingsManager;
         _logger = logger;
@@ -194,7 +197,11 @@ public sealed class StreamStatusBroadcastHandler :
 
             if (!@event.IsCatchUp)
             {
-                foreach (var target in Enum.GetValues<StreamingPlatform>())
+                var knownPlatforms = _platformRegistry is not null
+                    ? _platformRegistry.All.Select(static p => p.Id)
+                    : [StreamingPlatform.Twitch, StreamingPlatform.YouTube];
+
+                foreach (var target in knownPlatforms)
                 {
                     if (!_connectedPlatforms.Contains(target))
                     {

@@ -10,6 +10,13 @@ public interface ITwitchHelixClient
 
     Task<HelixStreamInfo?> GetStreamAsync(string broadcasterId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<HelixStreamInfo>> GetStreamsAsync(
+        IEnumerable<string> broadcasterIds,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<HelixStreamInfo>>([]);
+    }
+
     Task<ChannelInfo?> GetChannelInfoAsync(string broadcasterId, CancellationToken cancellationToken = default);
 
     Task PatchChannelAsync(string broadcasterId, PatchChannelRequest request, CancellationToken cancellationToken = default);

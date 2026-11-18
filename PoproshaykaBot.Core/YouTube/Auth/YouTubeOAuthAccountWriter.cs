@@ -18,13 +18,24 @@ public sealed class YouTubeOAuthAccountWriter(
         YouTubeOAuthFlowResult result,
         bool publishAuthorizationRefreshed = true)
     {
+        SaveFlowResult(role, null, result, publishAuthorizationRefreshed);
+    }
+
+    public void SaveFlowResult(
+        PlatformAuthRole role,
+        string? contextId,
+        YouTubeOAuthFlowResult result,
+        bool publishAuthorizationRefreshed = true)
+    {
         ArgumentNullException.ThrowIfNull(result);
 
+        var normalized = AuthContextIds.Normalize(contextId);
         var now = timeProvider.GetUtcNow();
 
-        accountsStore.Mutate(role, account => result.ApplyTo(account, now));
-        logger.LogInformation("Сохранён YouTube OAuth токен для роли {Role} (канал: {ChannelTitle}, id: {ChannelId})",
+        accountsStore.Mutate(role, normalized, account => result.ApplyTo(account, now));
+        logger.LogInformation("Сохранён YouTube OAuth токен для роли {Role} (контекст {ContextId}, канал: {ChannelTitle}, id: {ChannelId})",
             role,
+            normalized,
             result.ChannelTitle,
             result.ChannelId);
 
@@ -32,7 +43,7 @@ public sealed class YouTubeOAuthAccountWriter(
 
         if (publishAuthorizationRefreshed)
         {
-            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, role));
+            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, role, normalized));
         }
     }
 
@@ -44,11 +55,24 @@ public sealed class YouTubeOAuthAccountWriter(
         int expiresInSeconds,
         bool publishAuthorizationRefreshed = true)
     {
+        ApplyRefreshResult(role, null, accessToken, refreshToken, scopes, expiresInSeconds, publishAuthorizationRefreshed);
+    }
+
+    public void ApplyRefreshResult(
+        PlatformAuthRole role,
+        string? contextId,
+        string accessToken,
+        string? refreshToken,
+        IReadOnlyList<string> scopes,
+        int expiresInSeconds,
+        bool publishAuthorizationRefreshed = true)
+    {
         ArgumentException.ThrowIfNullOrEmpty(accessToken);
 
+        var normalized = AuthContextIds.Normalize(contextId);
         var now = timeProvider.GetUtcNow();
 
-        accountsStore.Mutate(role, account =>
+        accountsStore.Mutate(role, normalized, account =>
         {
             account.AccessToken = accessToken;
 
@@ -65,29 +89,41 @@ public sealed class YouTubeOAuthAccountWriter(
             account.AccessTokenExpiresAt = expiresInSeconds > 0 ? now.AddSeconds(expiresInSeconds) : null;
         });
 
-        logger.LogDebug("Обновлён YouTube access-токен роли {Role} (refresh {RefreshAction})",
+        logger.LogDebug("Обновлён YouTube access-токен роли {Role} (контекст {ContextId}, refresh {RefreshAction})",
             role,
+            normalized,
             string.IsNullOrWhiteSpace(refreshToken) ? "сохранён прежний" : "обновлён");
 
         if (publishAuthorizationRefreshed)
         {
-            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, role));
+            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, role, normalized));
         }
     }
 
     public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken)
     {
-        return accountsStore.TryClearAccessToken(role, expectedToken);
+        return TryClearAccessToken(role, null, expectedToken);
+    }
+
+    public bool TryClearAccessToken(PlatformAuthRole role, string? contextId, string expectedToken)
+    {
+        return accountsStore.TryClearAccessToken(role, contextId, expectedToken);
     }
 
     public void ClearAccount(PlatformAuthRole role, bool publishAuthorizationRefreshed = false)
     {
-        accountsStore.Mutate(role, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
+        ClearAccount(role, null, publishAuthorizationRefreshed);
+    }
+
+    public void ClearAccount(PlatformAuthRole role, string? contextId, bool publishAuthorizationRefreshed = false)
+    {
+        var normalized = AuthContextIds.Normalize(contextId);
+        accountsStore.Mutate(role, normalized, YouTubeOAuthRoleHelpers.ClearAccountInPlace);
         statusReporter.Report(role, "Авторизация очищена");
 
         if (publishAuthorizationRefreshed)
         {
-            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, role));
+            _ = eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, role, normalized));
         }
     }
 }

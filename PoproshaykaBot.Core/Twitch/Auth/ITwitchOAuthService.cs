@@ -43,6 +43,11 @@ public interface ITwitchOAuthService
 
     Task<string?> GetAccessTokenAsync(PlatformAuthRole role, CancellationToken ct = default);
 
+    Task<string?> GetAccessTokenAsync(PlatformAuthRole role, string? contextId, CancellationToken ct = default)
+    {
+        return GetAccessTokenAsync(role, ct);
+    }
+
     void UpdateSettings(
         PlatformAuthRole role,
         string accessToken,

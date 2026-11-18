@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Migrations.LegacyImport;
@@ -24,10 +25,11 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
             var state = LoadFile();
 
             logger.LogDebug(
-                "YouTubeAccountsStore инициализирован из {FilePath} (bot.channel={BotChannel}, broadcaster.channel={BroadcasterChannel})",
+                "YouTubeAccountsStore инициализирован из {FilePath} (bot.channel={BotChannel}, broadcaster.channel={BroadcasterChannel}, contexts={ContextCount})",
                 FilePath,
                 string.IsNullOrEmpty(state.BotAccount?.ChannelId) ? "–" : state.BotAccount.ChannelId,
-                string.IsNullOrEmpty(state.BroadcasterAccount?.ChannelId) ? "–" : state.BroadcasterAccount.ChannelId);
+                string.IsNullOrEmpty(state.BroadcasterAccount?.ChannelId) ? "–" : state.BroadcasterAccount.ChannelId,
+                state.Contexts?.Count ?? 0);
         }
     }
 
@@ -53,11 +55,11 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         ArgumentNullException.ThrowIfNull(bot);
         ArgumentNullException.ThrowIfNull(broadcaster);
 
-        var written = SaveFile(new()
+        var written = MutateFile(state =>
         {
-            ClientSecret = clientSecret,
-            BotAccount = bot,
-            BroadcasterAccount = broadcaster,
+            state.ClientSecret = clientSecret;
+            state.BotAccount = bot;
+            state.BroadcasterAccount = broadcaster;
         });
 
         if (written)
@@ -89,6 +91,31 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         {
             state.BroadcasterAccount = account;
         }
+    }
+
+    protected override List<NamedRoleAccount<YouTubeAccountSettings>> GetContexts(YouTubeAccountsFileDto state)
+    {
+        state.Contexts ??= [];
+        return state.Contexts;
+    }
+
+    protected override void ClearContextsIfEmpty(YouTubeAccountsFileDto state)
+    {
+        if (state.Contexts is { Count: 0 })
+        {
+            state.Contexts = null;
+        }
+    }
+
+    protected override string? GetSubjectId(YouTubeAccountSettings account) => account.ChannelId;
+
+    protected override string? GetDisplayLabel(YouTubeAccountSettings account) => account.ChannelTitle;
+
+    protected override void CopyAccountFields(YouTubeAccountSettings source, YouTubeAccountSettings target)
+    {
+        base.CopyAccountFields(source, target);
+        target.ChannelId = source.ChannelId;
+        target.ChannelTitle = source.ChannelTitle;
     }
 
     protected override void OnRoleMutated(PlatformAuthRole role, bool written)
@@ -126,10 +153,7 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
 
     private static string DescribeAccounts(YouTubeAccountsFileDto state)
     {
-        return Describe(
-            state.ClientSecret,
-            state.BotAccount ?? new(),
-            state.BroadcasterAccount ?? new());
+        return $"{Describe(state.ClientSecret, state.BotAccount ?? new(), state.BroadcasterAccount ?? new())}; доп. контекстов {state.Contexts?.Count ?? 0}";
     }
 
     public sealed class YouTubeAccountsFileDto
@@ -139,5 +163,8 @@ public sealed class YouTubeAccountsStore : RoleAccountsStoreBase<YouTubeAccounts
         public YouTubeAccountSettings? BotAccount { get; set; }
 
         public YouTubeAccountSettings? BroadcasterAccount { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<NamedRoleAccount<YouTubeAccountSettings>>? Contexts { get; set; }
     }
 }

@@ -25,6 +25,7 @@ public sealed class StreamSessionStatisticsHandler :
     IEventHandler<ChannelUpdated>,
     IEventHandler<ChatIngestionStarted>,
     IEventHandler<ChatIngestionStopped>,
+    IEventHandler<ChannelStreamObserved>,
     IEventSubscriber,
     IAsyncDisposable
 {
@@ -48,7 +49,7 @@ public sealed class StreamSessionStatisticsHandler :
 
     private readonly Lock _stateLock = new();
     private readonly List<PlatformCollector> _collectors = [];
-    private readonly Dictionary<StreamingPlatform, (string? ChannelId, DateTimeOffset At)> _ingestionSinceByPlatform = [];
+    private readonly Dictionary<(StreamingPlatform Platform, string ChannelIdOrEmpty), DateTimeOffset> _ingestionSinceByChannel = [];
     private readonly List<BroadcastViewerSample> _viewerSeries = [];
 
     private Guid? _activeBroadcastId;
@@ -93,6 +94,7 @@ public sealed class StreamSessionStatisticsHandler :
             eventBus.Subscribe<ChannelUpdated>(this),
             eventBus.Subscribe<ChatIngestionStarted>(this),
             eventBus.Subscribe<ChatIngestionStopped>(this),
+            eventBus.Subscribe<ChannelStreamObserved>(this),
         ];
     }
 
@@ -240,16 +242,27 @@ public sealed class StreamSessionStatisticsHandler :
                 return Task.CompletedTask;
             }
 
+            var previousClosedEnd = _collectors
+                .Where(c => c.Platform == @event.Platform && c.EndedAt is not null)
+                .Select(c => c.EndedAt!.Value)
+                .DefaultIfEmpty()
+                .Max();
+
             var existing = FindCollectorLocked(@event.Platform, channelId, channel, openOnly: false);
             if (existing is not null && (existing.EndedAt is not null || !HasDifferentStreamId(existing, streamId)))
             {
-                ReopenPlatformCollector(existing, channel, channelId, streamId, startedAt, initialTitle, initialGame, initialViewers, now);
+                ReopenPlatformCollector(existing, channel, channelId, streamId, startedAt, initialTitle, initialGame, initialViewers, now, previousClosedEnd);
             }
             else
             {
                 if (existing is { EndedAt: null })
                 {
                     ClosePlatformCollector(existing, startedAt < now ? startedAt : now);
+                }
+
+                if (previousClosedEnd != default && startedAt < previousClosedEnd)
+                {
+                    startedAt = @event.JoinedAt >= previousClosedEnd ? @event.JoinedAt : previousClosedEnd;
                 }
 
                 AddFreshPlatformCollector(@event.Platform, channel, channelId, streamId, startedAt, initialTitle, initialGame, initialViewers, now);
@@ -542,16 +555,16 @@ public sealed class StreamSessionStatisticsHandler :
     public Task HandleAsync(ChatIngestionStarted @event, CancellationToken cancellationToken)
     {
         var shouldCheckpoint = false;
+        var key = (@event.Platform, @event.ChannelId?.Trim() ?? string.Empty);
 
         lock (_stateLock)
         {
-            if (_ingestionSinceByPlatform.TryGetValue(@event.Platform, out var existing)
-                && string.Equals(existing.ChannelId, @event.ChannelId, StringComparison.Ordinal))
+            if (_ingestionSinceByChannel.ContainsKey(key))
             {
                 return Task.CompletedTask;
             }
 
-            _ingestionSinceByPlatform[@event.Platform] = (@event.ChannelId, @event.At);
+            _ingestionSinceByChannel[key] = @event.At;
 
             if (_activeBroadcastId is not null
                 && FindCollectorLocked(@event.Platform, @event.ChannelId, null, openOnly: true) is { } collector)
@@ -572,15 +585,16 @@ public sealed class StreamSessionStatisticsHandler :
     public Task HandleAsync(ChatIngestionStopped @event, CancellationToken cancellationToken)
     {
         var shouldCheckpoint = false;
+        var key = (@event.Platform, @event.ChannelId?.Trim() ?? string.Empty);
 
         lock (_stateLock)
         {
-            if (!_ingestionSinceByPlatform.TryGetValue(@event.Platform, out var since) || @event.At < since.At)
+            if (!_ingestionSinceByChannel.TryGetValue(key, out var sinceAt) || @event.At < sinceAt)
             {
                 return Task.CompletedTask;
             }
 
-            _ingestionSinceByPlatform.Remove(@event.Platform);
+            _ingestionSinceByChannel.Remove(key);
 
             if (_activeBroadcastId is not null
                 && FindCollectorLocked(@event.Platform, @event.ChannelId, null, openOnly: true) is { } collector)
@@ -591,6 +605,64 @@ public sealed class StreamSessionStatisticsHandler :
         }
 
         if (shouldCheckpoint)
+        {
+            Checkpoint();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(ChannelStreamObserved @event, CancellationToken cancellationToken)
+    {
+        var stream = @event.Current.Stream;
+        if (stream is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var changed = false;
+        lock (_stateLock)
+        {
+            if (_activeBroadcastId is null)
+            {
+                return Task.CompletedTask;
+            }
+
+            var collector = FindCollectorLocked(
+                @event.Current.Channel.Platform,
+                @event.Current.Channel.ChannelId,
+                @event.Current.ChannelDisplayName,
+                openOnly: false);
+
+            if (collector is null || collector.EndedAt is null || IsForeignStream(collector, stream.Id))
+            {
+                return Task.CompletedTask;
+            }
+
+            if (collector.StreamId is null && !string.IsNullOrEmpty(stream.Id))
+            {
+                collector.StreamId = stream.Id;
+                changed = true;
+            }
+
+            if (collector.Segments.Count > 0)
+            {
+                var seg = collector.Segments[^1];
+                if (string.IsNullOrWhiteSpace(seg.Title) && !string.IsNullOrWhiteSpace(stream.Title))
+                {
+                    seg.Title = stream.Title;
+                    changed = true;
+                }
+
+                if (string.IsNullOrWhiteSpace(seg.Game) && !string.IsNullOrWhiteSpace(stream.GameName))
+                {
+                    seg.Game = stream.GameName;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
         {
             Checkpoint();
         }
@@ -686,7 +758,8 @@ public sealed class StreamSessionStatisticsHandler :
         string? title,
         string? game,
         int initialViewers,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        DateTimeOffset previousPlatformEnd = default)
     {
         collector.Channel = channel;
         collector.ChannelId ??= channelId;
@@ -697,9 +770,15 @@ public sealed class StreamSessionStatisticsHandler :
         var lastSegment = collector.Segments[^1];
         if (lastSegment.EndedAt is { } previousEnd)
         {
+            var clampedStart = startedAt < previousEnd ? previousEnd : startedAt;
+            if (previousPlatformEnd != default && clampedStart < previousPlatformEnd)
+            {
+                clampedStart = previousPlatformEnd;
+            }
+
             collector.Segments.Add(new SegmentTally
             {
-                StartedAt = startedAt < previousEnd ? previousEnd : startedAt,
+                StartedAt = clampedStart,
                 Title = title ?? lastSegment.Title,
                 Game = game ?? lastSegment.Game,
                 PeakViewers = initialViewers,
@@ -1076,7 +1155,13 @@ public sealed class StreamSessionStatisticsHandler :
 
         foreach (var collector in _collectors)
         {
-            if (!includeEnded && collector.EndedAt is not null)
+            if (collector.StartedAt > tickUtc + FutureSampleTolerance)
+            {
+                continue;
+            }
+
+            if (collector.EndedAt is { } collectorEndedAt
+                && (!includeEnded || collectorEndedAt < tickUtc))
             {
                 continue;
             }
@@ -1316,12 +1401,15 @@ public sealed class StreamSessionStatisticsHandler :
 
     private bool TryGetIngestionSince(StreamingPlatform platform, string? channelId, out DateTimeOffset since)
     {
-        if (_ingestionSinceByPlatform.TryGetValue(platform, out var entry)
-            && (entry.ChannelId is null
-                || channelId is null
-                || string.Equals(entry.ChannelId, channelId, StringComparison.Ordinal)))
+        var normalizedId = channelId?.Trim() ?? string.Empty;
+        if (_ingestionSinceByChannel.TryGetValue((platform, normalizedId), out since))
         {
-            since = entry.At;
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(normalizedId)
+            && _ingestionSinceByChannel.TryGetValue((platform, string.Empty), out since))
+        {
             return true;
         }
 

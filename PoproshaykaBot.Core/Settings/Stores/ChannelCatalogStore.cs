@@ -45,6 +45,7 @@ public sealed class ChannelCatalogStore
             var normalized = Normalize(settings);
             settings.Channels = normalized.Channels;
             settings.Groups = normalized.Groups;
+            settings.Platforms = normalized.Platforms;
         });
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -54,6 +55,49 @@ public sealed class ChannelCatalogStore
     public IReadOnlyList<ChannelGroupDefinition> GetGroups()
     {
         return Normalize(_store.Load()).Groups;
+    }
+
+    public PlatformChannelRoutingSettings GetPlatformSettings(StreamingPlatform platform)
+    {
+        var settings = Normalize(_store.Load());
+        return settings.Platforms.FirstOrDefault(p => p.Platform == platform)
+            ?? new PlatformChannelRoutingSettings { Platform = platform };
+    }
+
+    public IReadOnlyList<ChannelCatalogEntry> GetConfiguredChannels(StreamingPlatform platform)
+    {
+        return Normalize(_store.Load())
+            .Channels
+            .Where(c => c.Platform == platform && c.IsConfigured)
+            .ToArray();
+    }
+
+    public IReadOnlyList<ChannelCatalogEntry> GetMonitoredChannels(StreamingPlatform platform)
+    {
+        var settings = Normalize(_store.Load());
+        var routing = settings.Platforms.FirstOrDefault(p => p.Platform == platform);
+        var activeId = routing?.ActiveChannelId;
+        var preselectedId = routing?.PreselectedNextChannelId;
+
+        return settings.Channels
+            .Where(c => c.Platform == platform
+                && c.IsConfigured
+                && (c.MonitoringEnabled
+                    || string.Equals(c.ChannelId, activeId, StringComparison.Ordinal)
+                    || string.Equals(c.ChannelId, preselectedId, StringComparison.Ordinal)))
+            .ToArray();
+    }
+
+    public ChannelCatalogEntry? FindEntry(ChannelKey key)
+    {
+        if (!key.IsValid)
+        {
+            return null;
+        }
+
+        return _store.Load().Channels.FirstOrDefault(c =>
+            c.Platform == key.Platform
+            && string.Equals(c.ChannelId, key.ChannelId, StringComparison.Ordinal));
     }
 
     public ChannelGroupDefinition? FindGroup(string idOrName)
@@ -149,7 +193,14 @@ public sealed class ChannelCatalogStore
     public static string Describe(ChannelsSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        return $"каналов {settings.Channels.Count}, групп {settings.Groups.Count}";
+        var configured = settings.Channels.Count(static c => c.IsConfigured);
+        var monitored = settings.Channels.Count(static c => c.IsConfigured && c.MonitoringEnabled);
+        var platforms = settings.Platforms.Count == 0
+            ? "режимы по умолчанию"
+            : string.Join(", ", settings.Platforms.Select(static p =>
+                $"{p.Platform}: активный={SettingsDescriber.Value(p.ActiveChannelId)}, режим={p.SwitchMode}, следующий={SettingsDescriber.Value(p.PreselectedNextChannelId)}"));
+
+        return $"каналов {settings.Channels.Count} (настроенных {configured}, мониторинг {monitored}), групп {settings.Groups.Count}; {platforms}";
     }
 
     private static ChannelsSettings Normalize(ChannelsSettings settings)
@@ -177,6 +228,47 @@ public sealed class ChannelCatalogStore
                     existing.DisplayName = entry.DisplayName.Trim();
                 }
 
+                if (!string.IsNullOrWhiteSpace(entry.Handle))
+                {
+                    existing.Handle = entry.Handle.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.ChannelUrl))
+                {
+                    existing.ChannelUrl = entry.ChannelUrl.Trim();
+                }
+
+                existing.IsConfigured |= entry.IsConfigured;
+                existing.MonitoringEnabled |= entry.MonitoringEnabled;
+
+                if (!string.IsNullOrWhiteSpace(entry.BroadcasterContextId))
+                {
+                    existing.BroadcasterContextId = entry.BroadcasterContextId.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.BroadcasterVerifiedSubjectId))
+                {
+                    existing.BroadcasterVerifiedSubjectId = entry.BroadcasterVerifiedSubjectId.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.BotContextId))
+                {
+                    existing.BotContextId = entry.BotContextId.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.BotVerifiedSubjectId))
+                {
+                    existing.BotVerifiedSubjectId = entry.BotVerifiedSubjectId.Trim();
+                }
+
+                foreach (var param in entry.Parameters)
+                {
+                    if (!string.IsNullOrWhiteSpace(param.Key))
+                    {
+                        existing.Parameters[param.Key.Trim()] = param.Value ?? string.Empty;
+                    }
+                }
+
                 foreach (var alias in aliases)
                 {
                     if (!existing.KnownAliases.Contains(alias, StringComparer.OrdinalIgnoreCase))
@@ -187,12 +279,30 @@ public sealed class ChannelCatalogStore
             }
             else
             {
+                var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var param in entry.Parameters)
+                {
+                    if (!string.IsNullOrWhiteSpace(param.Key))
+                    {
+                        parameters[param.Key.Trim()] = param.Value ?? string.Empty;
+                    }
+                }
+
                 channels[key] = new()
                 {
                     Platform = entry.Platform,
                     ChannelId = id,
-                    DisplayName = entry.DisplayName.Trim(),
+                    DisplayName = entry.DisplayName?.Trim() ?? string.Empty,
+                    Handle = entry.Handle?.Trim() ?? string.Empty,
+                    ChannelUrl = entry.ChannelUrl?.Trim() ?? string.Empty,
                     KnownAliases = aliases,
+                    IsConfigured = entry.IsConfigured,
+                    MonitoringEnabled = entry.MonitoringEnabled,
+                    BroadcasterContextId = NormalizeOptional(entry.BroadcasterContextId),
+                    BroadcasterVerifiedSubjectId = NormalizeOptional(entry.BroadcasterVerifiedSubjectId),
+                    BotContextId = NormalizeOptional(entry.BotContextId),
+                    BotVerifiedSubjectId = NormalizeOptional(entry.BotVerifiedSubjectId),
+                    Parameters = parameters,
                 };
             }
         }
@@ -234,10 +344,44 @@ public sealed class ChannelCatalogStore
             });
         }
 
+        var platforms = new Dictionary<StreamingPlatform, PlatformChannelRoutingSettings>();
+        foreach (var platformSettings in settings.Platforms)
+        {
+            if (!Enum.IsDefined(platformSettings.Platform))
+            {
+                continue;
+            }
+
+            var activeChannelId = NormalizeOptional(platformSettings.ActiveChannelId);
+            var preselectedNext = NormalizeOptional(platformSettings.PreselectedNextChannelId);
+            if (string.Equals(preselectedNext, activeChannelId, StringComparison.Ordinal))
+            {
+                preselectedNext = null;
+            }
+
+            var switchMode = Enum.IsDefined(platformSettings.SwitchMode)
+                ? platformSettings.SwitchMode
+                : ChannelSwitchMode.Manual;
+
+            platforms[platformSettings.Platform] = new()
+            {
+                Platform = platformSettings.Platform,
+                ActiveChannelId = activeChannelId,
+                SwitchMode = switchMode,
+                PreselectedNextChannelId = preselectedNext,
+            };
+        }
+
         return new()
         {
             Channels = [.. channels.Values],
             Groups = groups,
+            Platforms = [.. platforms.Values.OrderBy(static p => p.Platform)],
         };
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

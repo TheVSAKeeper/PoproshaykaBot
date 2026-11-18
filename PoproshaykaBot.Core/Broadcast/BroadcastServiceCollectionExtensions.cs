@@ -23,6 +23,7 @@ public static class BroadcastServiceCollectionExtensions
         services.AddSingleton<IBroadcastDraftCoordinator>(sp => sp.GetRequiredService<BroadcastDraftCoordinator>());
         services.TryAddSingleton<BroadcastAggregator>();
         services.AddSingleton<IBroadcastState>(sp => sp.GetRequiredService<BroadcastAggregator>());
+        services.AddSingleton<IBroadcastChannelLifecycle>(sp => sp.GetRequiredService<BroadcastAggregator>());
         services.AddSingleton<IBroadcastOfflineStopCoordinator>(sp => sp.GetRequiredService<BroadcastAggregator>());
         services.AddSingleton<BroadcastScheduler>();
         services.AddSingleton<IBroadcastScheduler>(sp => sp.GetRequiredService<BroadcastScheduler>());

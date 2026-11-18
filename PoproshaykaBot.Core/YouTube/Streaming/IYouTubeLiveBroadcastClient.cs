@@ -6,5 +6,15 @@ internal interface IYouTubeLiveBroadcastClient
 
     Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(string? contextId, CancellationToken cancellationToken)
+    {
+        return ListActiveBroadcastsAsync(cancellationToken);
+    }
+
     Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, CancellationToken cancellationToken);
+
+    Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, string? contextId, CancellationToken cancellationToken)
+    {
+        return GetVideoLiveSampleAsync(videoId, cancellationToken);
+    }
 }

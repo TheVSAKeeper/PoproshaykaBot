@@ -84,6 +84,11 @@ public sealed class TwitchOAuthService(
         return await refresher.GetAccessTokenAsync(role, forceRefresh: false, ct);
     }
 
+    public async Task<string?> GetAccessTokenAsync(PlatformAuthRole role, string? contextId, CancellationToken ct = default)
+    {
+        return await refresher.GetAccessTokenAsync(role, contextId, forceRefresh: false, ct);
+    }
+
     ValueTask<string?> IPlatformAuthService.GetAccessTokenAsync(
         PlatformAuthRole role,
         bool forceRefresh,
@@ -92,9 +97,23 @@ public sealed class TwitchOAuthService(
         return refresher.GetAccessTokenAsync(role, forceRefresh, ct);
     }
 
+    ValueTask<string?> IPlatformAuthService.GetAccessTokenAsync(
+        PlatformAuthRole role,
+        string? contextId,
+        bool forceRefresh,
+        CancellationToken ct)
+    {
+        return refresher.GetAccessTokenAsync(role, contextId, forceRefresh, ct);
+    }
+
     public bool HasUsableAccessToken(PlatformAuthRole role)
     {
         return refresher.HasUsableAccessToken(role);
+    }
+
+    public bool HasUsableAccessToken(PlatformAuthRole role, string? contextId)
+    {
+        return refresher.HasUsableAccessToken(role, contextId);
     }
 
     public bool TryClearAccessToken(PlatformAuthRole role, string failedAccessToken)
@@ -102,9 +121,19 @@ public sealed class TwitchOAuthService(
         return accountWriter.TryClearAccessToken(role, failedAccessToken);
     }
 
+    public bool TryClearAccessToken(PlatformAuthRole role, string? contextId, string failedAccessToken)
+    {
+        return accountWriter.TryClearAccessToken(role, contextId, failedAccessToken);
+    }
+
     public void ResetRetryState(PlatformAuthRole role)
     {
         refresher.ResetRetryState(role);
+    }
+
+    public void ResetRetryState(PlatformAuthRole role, string? contextId)
+    {
+        refresher.ResetRetryState(role, contextId);
     }
 
     public void UpdateSettings(

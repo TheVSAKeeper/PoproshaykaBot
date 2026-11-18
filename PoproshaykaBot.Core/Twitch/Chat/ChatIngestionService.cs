@@ -5,6 +5,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
@@ -21,7 +22,8 @@ public sealed class ChatIngestionService(
     SettingsManager settingsManager,
     IEventBus eventBus,
     TimeProvider timeProvider,
-    ILogger<ChatIngestionService> logger)
+    ILogger<ChatIngestionService> logger,
+    PlatformChannelRegistry? channelRegistry = null)
     : IHostedComponent
 {
     private const string ChatMessageSubscriptionType = "channel.chat.message";
@@ -94,6 +96,24 @@ public sealed class ChatIngestionService(
         await EventSubSubscriptions.DeleteAsync(helix, ChatMessageSubscriptionType, subscriptionIds, logger, cancellationToken);
     }
 
+    public async Task RetargetChannelAsync(ChannelKey channel, string? botContextId, CancellationToken cancellationToken)
+    {
+        if (channel.Platform != StreamingPlatform.Twitch || string.IsNullOrWhiteSpace(channel.ChannelId))
+        {
+            return;
+        }
+
+        await _retry.CancelAndDrainAsync(cancellationToken).ConfigureAwait(false);
+        await MarkLeftAsync(out var generation, out var previousSubscriptionIds).ConfigureAwait(false);
+        await EventSubSubscriptions.DeleteAsync(helix, ChatMessageSubscriptionType, previousSubscriptionIds, logger, cancellationToken).ConfigureAwait(false);
+
+        if (eventSubClient.SessionId is { Length: > 0 } sessionId)
+        {
+            using var _ = PlatformAuthRequestOptions.UseContext(botContextId);
+            await SubscribeCoreAsync(generation, sessionId, throwOnFailure: true, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     private static DateTimeOffset? ToTimestamp(long utcTicks)
     {
         return utcTicks == 0 ? null : new DateTimeOffset(utcTicks, TimeSpan.Zero);
@@ -104,19 +124,26 @@ public sealed class ChatIngestionService(
         logger.LogInformation("ChatIngestionService: EventSub сессия открыта ({SessionId}), регистрируем channel.chat.message", args.SessionId);
 
         await MarkLeftAsync(out var generation, out _);
-        await SubscribeAsync(generation, args.SessionId, ct);
+        await SubscribeCoreAsync(generation, args.SessionId, throwOnFailure: false, ct);
     }
 
-    private async Task SubscribeAsync(long generation, string sessionId, CancellationToken ct)
+    private async Task SubscribeCoreAsync(long generation, string sessionId, bool throwOnFailure, CancellationToken ct)
     {
         try
         {
+            var botContextId = channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.BotContextId;
+            using var _ = PlatformAuthRequestOptions.UseContext(botContextId);
             var settings = settingsManager.Current.Twitch;
 
             var broadcasterId = await broadcasterIdProvider.GetAsync(ct);
             if (string.IsNullOrEmpty(broadcasterId))
             {
                 logger.LogError("ChatIngestionService: не удалось получить broadcaster id для канала '{Channel}'", settings.Channel);
+                if (throwOnFailure)
+                {
+                    throw new InvalidOperationException("Не удалось определить идентификатор целевого канала Twitch для подписки на чат.");
+                }
+
                 return;
             }
 
@@ -124,6 +151,11 @@ public sealed class ChatIngestionService(
             if (string.IsNullOrEmpty(botId))
             {
                 logger.LogError("ChatIngestionService: не удалось получить user id бота через токен");
+                if (throwOnFailure)
+                {
+                    throw new InvalidOperationException("Не удалось получить идентификатор бота Twitch для подписки на чат.");
+                }
+
                 return;
             }
 
@@ -154,6 +186,11 @@ public sealed class ChatIngestionService(
 
                     if (!result.IsSubscribed || !await JoinAsync(generation, broadcasterId, result))
                     {
+                        if (throwOnFailure)
+                        {
+                            throw new InvalidOperationException("Подписка на чат целевого канала Twitch не подтверждена.");
+                        }
+
                         return;
                     }
 
@@ -178,9 +215,18 @@ public sealed class ChatIngestionService(
             }
 
             logger.LogError(lastError, "ChatIngestionService: не удалось подписаться на чат Twitch – все {Max} попытки создать подписку channel.chat.message провалились", delays.Length);
+            if (throwOnFailure)
+            {
+                throw lastError ?? new InvalidOperationException("Не удалось подписаться на чат целевого канала Twitch.");
+            }
         }
         catch (Exception ex)
         {
+            if (throwOnFailure)
+            {
+                throw;
+            }
+
             logger.LogError(ex, "ChatIngestionService: ошибка создания EventSub подписки channel.chat.message");
         }
     }
@@ -206,6 +252,8 @@ public sealed class ChatIngestionService(
 
         try
         {
+            var botContextId = channelRegistry?.GetBinding(StreamingPlatform.Twitch)?.BotContextId;
+            using var _ = PlatformAuthRequestOptions.UseContext(botContextId);
             var botId = await botUserIdProvider.GetAsync(ct);
             var chatMessage = EventSubChatMessageMapper.Map(args.Payload, botId);
             if (!origin.IsCurrent || !string.Equals(chatMessage.ChannelId, origin.Channel.ChannelId, StringComparison.Ordinal))
@@ -256,7 +304,7 @@ public sealed class ChatIngestionService(
             return;
         }
 
-        await SubscribeAsync(generation, sessionId, ct);
+        await SubscribeCoreAsync(generation, sessionId, throwOnFailure: false, ct);
     }
 
     private async Task<bool> JoinAsync(long generation, string broadcasterId, EventSubSubscribeResult result)

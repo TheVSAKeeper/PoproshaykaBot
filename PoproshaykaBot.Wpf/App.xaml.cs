@@ -230,6 +230,7 @@ public partial class App : Application
 
             if (IsHeadless)
             {
+                _services.GetRequiredService<ChannelSwitchPromptBannerViewModel>().Suppress();
                 HostLog.Information("Запуск в режиме UI smoke-теста. HTTP сервер и сетевые подсистемы отключены");
             }
             else
@@ -486,6 +487,7 @@ public partial class App : Application
         services.AddSingleton<ShellPreferences>();
         services.AddSingleton<UpdateBannerViewModel>();
         services.AddSingleton<OnboardingBannerViewModel>();
+        services.AddSingleton<ChannelSwitchPromptBannerViewModel>();
         services.AddSingleton<DebugBannerViewModel>();
         services.AddSingleton<IUnsavedChangesPrompt, UnsavedChangesPrompt>();
         services.AddSingleton<IOnboardingWizardLauncher, OnboardingWizardLauncher>();
@@ -518,6 +520,7 @@ public partial class App : Application
         services.AddSingleton<UpdateSettingsSectionViewModel>();
         services.AddTransient<DashboardLayoutSectionViewModel>();
         services.AddTransient<RanksSettingsSectionViewModel>();
+        services.AddTransient<ChannelCatalogSettingsSectionViewModel>();
         services.AddTransient<ChannelGroupsSettingsSectionViewModel>();
         services.AddTransient<DebugChannelSectionViewModel>();
         services.AddSingleton<McpSettingsSectionViewModel>();
@@ -530,7 +533,7 @@ public partial class App : Application
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.ObsSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.StreamSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.RanksSettingsSectionContributor>();
-        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.ChannelGroupsSettingsSectionContributor>();
+        services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.ChannelsSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.DashboardSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.UpdateSettingsSectionContributor>();
         services.AddTransient<ISettingsSectionContributor, ViewModels.Settings.Contributors.DebugChannelSettingsSectionContributor>();
