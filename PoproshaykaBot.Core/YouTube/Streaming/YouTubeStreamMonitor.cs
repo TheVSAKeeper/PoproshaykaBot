@@ -482,7 +482,7 @@ internal sealed class YouTubeStreamMonitor
         var monitoredEntries = channelCatalogStore?.GetMonitoredChannels(StreamingPlatform.YouTube) ?? [];
         if (monitoredEntries.Count > 0)
         {
-            return await PollMultiChannelAsync(settings, monitoredEntries, forceActiveSample, ct).ConfigureAwait(false);
+            return await PollMultiChannelAsync(settings, monitoredEntries, forceActiveSample, settingsRevision, ct).ConfigureAwait(false);
         }
 
         lock (_sync)
@@ -664,6 +664,7 @@ internal sealed class YouTubeStreamMonitor
         YouTubeSettings settings,
         IReadOnlyList<ChannelCatalogEntry> entries,
         bool forceActiveSample,
+        long settingsRevision,
         CancellationToken ct)
     {
         var routing = channelCatalogStore!.GetPlatformSettings(StreamingPlatform.YouTube);
@@ -702,6 +703,11 @@ internal sealed class YouTubeStreamMonitor
 
         foreach (var entry in entries)
         {
+            if (!IsCurrentSettings(settingsRevision))
+            {
+                return TimeSpan.Zero;
+            }
+
             var slot = GetSlot(entry.ChannelId)!;
             var broadcasterAssignment = entry.GetAccountAssignment(PlatformAuthRole.Broadcaster);
             var broadcasterContextId = AuthContextIds.Normalize(broadcasterAssignment?.ContextId ?? entry.BroadcasterContextId);
@@ -712,6 +718,11 @@ internal sealed class YouTubeStreamMonitor
             var botAssignment = entry.GetAccountAssignment(PlatformAuthRole.Bot);
             var botContextId = AuthContextIds.Normalize(botAssignment?.ContextId ?? entry.BotContextId);
             var botToken = await GetTokenAsync(PlatformAuthRole.Bot, botContextId, ct).ConfigureAwait(false);
+            if (!IsCurrentSettings(settingsRevision))
+            {
+                return TimeSpan.Zero;
+            }
+
             var botAccount = accountsStore?.Load(PlatformAuthRole.Bot, botContextId);
             var botMismatch = CheckBotContextOwnershipMismatch(slot, botAccount);
             var hasUsableBot = publicDiscovery is not null && !string.IsNullOrWhiteSpace(botToken) && botMismatch is null;
@@ -832,6 +843,11 @@ internal sealed class YouTubeStreamMonitor
 
         foreach (var (contextId, contextSlots) in broadcasterGroups)
         {
+            if (!IsCurrentSettings(settingsRevision))
+            {
+                return TimeSpan.Zero;
+            }
+
             try
             {
                 var now = timeProvider.GetUtcNow();
@@ -923,6 +939,11 @@ internal sealed class YouTubeStreamMonitor
                 if (needsDiscovery)
                 {
                     broadcasts = await broadcastClient.ListActiveBroadcastsAsync(contextId, ct).ConfigureAwait(false);
+                    if (!IsCurrentSettings(settingsRevision))
+                    {
+                        return TimeSpan.Zero;
+                    }
+
                     var discoveryCompletedAt = timeProvider.GetUtcNow();
                     _lastDiscoveryByContext[contextId] = discoveryCompletedAt;
                     foreach (var discoveredSlot in contextSlots)
@@ -988,6 +1009,7 @@ internal sealed class YouTubeStreamMonitor
                                         contextId,
                                         routing,
                                         entries,
+                                        settingsRevision,
                                         ct).ConfigureAwait(false);
 
                                     if (string.Equals(slot.ChannelId, ResolveActiveChannelId(routing, entries), StringComparison.Ordinal))
@@ -1031,6 +1053,7 @@ internal sealed class YouTubeStreamMonitor
                         initialSample: null,
                         routing,
                         entries,
+                        settingsRevision,
                         ct).ConfigureAwait(false);
 
                     if (string.Equals(slot.ChannelId, ResolveActiveChannelId(routing, entries), StringComparison.Ordinal))
@@ -1046,6 +1069,10 @@ internal sealed class YouTubeStreamMonitor
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (Exception ex) when (ex is YouTubeApiException or HttpRequestException && !IsCurrentSettings(settingsRevision))
+            {
+                return TimeSpan.Zero;
             }
             catch (YouTubeApiException ex) when (ex.Kind is YouTubeApiErrorKind.QuotaExceeded or YouTubeApiErrorKind.LocalQuotaBudgetReached)
             {
@@ -1163,6 +1190,11 @@ internal sealed class YouTubeStreamMonitor
 
         foreach (var (slot, botContextId) in botOnlySlots)
         {
+            if (!IsCurrentSettings(settingsRevision))
+            {
+                return TimeSpan.Zero;
+            }
+
             try
             {
                 var now = timeProvider.GetUtcNow();
@@ -1223,6 +1255,7 @@ internal sealed class YouTubeStreamMonitor
                         botContextId,
                         routing,
                         entries,
+                        settingsRevision,
                         ct).ConfigureAwait(false);
 
                     if (string.Equals(slot.ChannelId, ResolveActiveChannelId(routing, entries), StringComparison.Ordinal))
@@ -1286,6 +1319,10 @@ internal sealed class YouTubeStreamMonitor
                 }
 
                 var discovered = await publicDiscovery!.FindActiveLiveVideoAsync(slot.ChannelId, ct).ConfigureAwait(false);
+                if (!IsCurrentSettings(settingsRevision))
+                {
+                    return TimeSpan.Zero;
+                }
 
                 currentActiveId = ResolveActiveChannelId(routing, entries);
                 lock (_sync)
@@ -1305,6 +1342,10 @@ internal sealed class YouTubeStreamMonitor
                         PlatformAuthRole.Bot,
                         botContextId,
                         ct).ConfigureAwait(false);
+                    if (!IsCurrentSettings(settingsRevision))
+                    {
+                        return TimeSpan.Zero;
+                    }
 
                     slot.LastSampleAtUtc = timeProvider.GetUtcNow();
                     currentActiveId = ResolveActiveChannelId(routing, entries);
@@ -1340,7 +1381,10 @@ internal sealed class YouTubeStreamMonitor
                                 channelTitle,
                                 liveChatId,
                                 title,
-                                startedAt.ToUniversalTime()),
+                                startedAt.ToUniversalTime())
+                            {
+                                IsChatDisabled = initialSample.HasLiveStreamingDetails && liveChatId.Length == 0,
+                            },
                         ];
                     }
                 }
@@ -1364,6 +1408,7 @@ internal sealed class YouTubeStreamMonitor
                     initialSample,
                     routing,
                     entries,
+                    settingsRevision,
                     ct).ConfigureAwait(false);
 
                 if (string.Equals(slot.ChannelId, ResolveActiveChannelId(routing, entries), StringComparison.Ordinal))
@@ -1381,6 +1426,10 @@ internal sealed class YouTubeStreamMonitor
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (Exception ex) when (ex is YouTubeApiException or HttpRequestException && !IsCurrentSettings(settingsRevision))
+            {
+                return TimeSpan.Zero;
             }
             catch (YouTubeApiException ex) when (ex.Kind is YouTubeApiErrorKind.QuotaExceeded or YouTubeApiErrorKind.LocalQuotaBudgetReached)
             {
@@ -1465,6 +1514,11 @@ internal sealed class YouTubeStreamMonitor
             }
         }
 
+        if (!IsCurrentSettings(settingsRevision))
+        {
+            return TimeSpan.Zero;
+        }
+
         var finalActiveId = ResolveActiveChannelId(routing, entries);
         var statusRole = activeSlotRole
             ?? (botOnlySlots.Any(x => string.Equals(x.Slot.ChannelId, finalActiveId, StringComparison.Ordinal))
@@ -1520,8 +1574,14 @@ internal sealed class YouTubeStreamMonitor
         YouTubeVideoLiveSample? initialSample,
         PlatformChannelRoutingSettings routing,
         IReadOnlyList<ChannelCatalogEntry> entries,
+        long settingsRevision,
         CancellationToken ct)
     {
+        if (!IsCurrentSettings(settingsRevision))
+        {
+            return;
+        }
+
         var previousSnapshot = slot.ToMonitoringSnapshot();
         var nowUtc = timeProvider.GetUtcNow();
         slot.LastPollAt = nowUtc;
@@ -1651,13 +1711,20 @@ internal sealed class YouTubeStreamMonitor
                 publishStatus: false,
                 statusRole: role,
                 routing: routing,
-                entries: entries).ConfigureAwait(false);
+                entries: entries,
+                expectedSettingsRevision: settingsRevision).ConfigureAwait(false);
             if (initialSample is null
                 && !string.IsNullOrWhiteSpace(selected.VideoId)
+                && IsCurrentSettings(settingsRevision)
                 && IsStillActiveChannel(slot.ChannelId, routing, entries))
             {
-                _ = await PollSlotActiveVideoSampleAsync(slot, selected, role, contextId, routing, entries, ct).ConfigureAwait(false);
+                _ = await PollSlotActiveVideoSampleAsync(slot, selected, role, contextId, routing, entries, settingsRevision, ct).ConfigureAwait(false);
             }
+        }
+
+        if (!IsCurrentSettings(settingsRevision))
+        {
+            return;
         }
 
         if (slotTransition.Transitioned || slotTransition.SnapshotChanged || isInitial || previousSnapshot.Availability != ChannelMonitoringAvailability.Active)
@@ -1678,10 +1745,16 @@ internal sealed class YouTubeStreamMonitor
         string contextId,
         PlatformChannelRoutingSettings routing,
         IReadOnlyList<ChannelCatalogEntry> entries,
+        long settingsRevision,
         CancellationToken ct)
     {
         var previousSnapshot = slot.ToMonitoringSnapshot();
         var sample = await GetVideoLiveSampleForRoleAsync(active.VideoId, role, contextId, ct).ConfigureAwait(false);
+        if (!IsCurrentSettings(settingsRevision))
+        {
+            return TimeSpan.Zero;
+        }
+
         var nowUtc = timeProvider.GetUtcNow();
         slot.LastPollAt = nowUtc;
         slot.LastSampleAtUtc = nowUtc;
@@ -1734,16 +1807,20 @@ internal sealed class YouTubeStreamMonitor
                 {
                     var activeTransition = _stateMachine.ApplyOffline();
                     await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(null), CancellationToken.None).ConfigureAwait(false);
-                    await PublishOfflineIfNeededAsync(activeTransition, slot.ChannelId).ConfigureAwait(false);
+                    if (IsCurrentSettings(settingsRevision))
+                    {
+                        await PublishOfflineIfNeededAsync(activeTransition, slot.ChannelId).ConfigureAwait(false);
+                    }
                 }
             }
 
-            if (slotTransition.Transitioned)
+            if (IsCurrentSettings(settingsRevision) && slotTransition.Transitioned)
             {
                 await PublishSlotObservedAsync(previousSnapshot, slot.ToMonitoringSnapshot(), isCatchUp: false).ConfigureAwait(false);
             }
 
-            if (previousSnapshot.Availability != slot.Availability || previousSnapshot.Reason != slot.Reason)
+            if (IsCurrentSettings(settingsRevision)
+                && (previousSnapshot.Availability != slot.Availability || previousSnapshot.Reason != slot.Reason))
             {
                 await PublishSlotStateChangedAsync(slot).ConfigureAwait(false);
             }
@@ -1751,28 +1828,11 @@ internal sealed class YouTubeStreamMonitor
             return OfflinePollInterval;
         }
 
-        var normalizedLiveChatId = string.IsNullOrWhiteSpace(sample.ActiveLiveChatId) ? null : sample.ActiveLiveChatId.Trim();
-        var effectiveBroadcast = active;
-        var chatChanged = false;
-        var chatAvailableAfterChange = false;
-
-        if (sample.HasLiveStreamingDetails)
+        var effectiveBroadcast = ApplyChatSample(active, sample);
+        var chatChanged = !ReferenceEquals(effectiveBroadcast, active);
+        if (chatChanged)
         {
-            var targetLiveChatId = normalizedLiveChatId ?? string.Empty;
-            if (!string.Equals(targetLiveChatId, active.LiveChatId, StringComparison.Ordinal))
-            {
-                effectiveBroadcast = active with { LiveChatId = targetLiveChatId };
-                slot.ActiveBroadcast = effectiveBroadcast;
-                chatChanged = true;
-                chatAvailableAfterChange = !string.IsNullOrWhiteSpace(targetLiveChatId);
-            }
-        }
-        else if (normalizedLiveChatId is not null && !string.Equals(normalizedLiveChatId, active.LiveChatId, StringComparison.Ordinal))
-        {
-            effectiveBroadcast = active with { LiveChatId = normalizedLiveChatId };
             slot.ActiveBroadcast = effectiveBroadcast;
-            chatChanged = true;
-            chatAvailableAfterChange = string.IsNullOrWhiteSpace(active.LiveChatId);
         }
 
         if (chatChanged && isActive)
@@ -1790,13 +1850,19 @@ internal sealed class YouTubeStreamMonitor
             if (stillActiveLocked)
             {
                 await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(effectiveBroadcast), CancellationToken.None).ConfigureAwait(false);
-                if (sample.HasLiveStreamingDetails || chatAvailableAfterChange)
+                if (IsCurrentSettings(settingsRevision)
+                    && (sample.HasLiveStreamingDetails || string.IsNullOrWhiteSpace(active.LiveChatId)))
                 {
                     await eventBus.PublishAsync(
-                        new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, chatAvailableAfterChange),
+                        new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, !effectiveBroadcast.IsChatDisabled),
                         CancellationToken.None).ConfigureAwait(false);
                 }
             }
+        }
+
+        if (!IsCurrentSettings(settingsRevision))
+        {
+            return TimeSpan.Zero;
         }
 
         var startedAtUtc = (sample.ActualStartTimeUtc ?? effectiveBroadcast.StartedAtUtc).UtcDateTime;
@@ -1852,16 +1918,17 @@ internal sealed class YouTubeStreamMonitor
                     activeTransition = _stateMachine.ApplyOnlineWithoutViewerSample(streamInfo);
                 }
 
-                await PublishOnlineOrMetadataAsync(activeTransition, slot.ChannelId, streamInfo, routing, entries).ConfigureAwait(false);
+                await PublishOnlineOrMetadataAsync(activeTransition, slot.ChannelId, streamInfo, routing, entries, settingsRevision).ConfigureAwait(false);
             }
         }
 
-        if (slotOnlineTransition.Transitioned || slotOnlineTransition.SnapshotChanged || isBaseline)
+        if (IsCurrentSettings(settingsRevision) && (slotOnlineTransition.Transitioned || slotOnlineTransition.SnapshotChanged || isBaseline))
         {
             await PublishSlotObservedAsync(previousSnapshot, slot.ToMonitoringSnapshot(isBaseline), isCatchUp: isBaseline).ConfigureAwait(false);
         }
 
-        if (previousSnapshot.Availability != slot.Availability || previousSnapshot.Reason != slot.Reason)
+        if (IsCurrentSettings(settingsRevision)
+            && (previousSnapshot.Availability != slot.Availability || previousSnapshot.Reason != slot.Reason))
         {
             await PublishSlotStateChangedAsync(slot).ConfigureAwait(false);
         }
@@ -2212,7 +2279,10 @@ internal sealed class YouTubeStreamMonitor
             channelTitle,
             liveChatId,
             title,
-            startedAt.ToUniversalTime());
+            startedAt.ToUniversalTime())
+        {
+            IsChatDisabled = initialSample.HasLiveStreamingDetails && liveChatId.Length == 0,
+        };
 
         await ActivateBroadcastAsync(
             targetChannelId,
@@ -2280,33 +2350,9 @@ internal sealed class YouTubeStreamMonitor
             return OfflinePollInterval;
         }
 
-        var normalizedLiveChatId = string.IsNullOrWhiteSpace(sample.ActiveLiveChatId) ? null : sample.ActiveLiveChatId.Trim();
-        var effectiveBroadcast = active;
-        if (sample.HasLiveStreamingDetails)
+        var effectiveBroadcast = ApplyChatSample(active, sample);
+        if (!ReferenceEquals(effectiveBroadcast, active))
         {
-            var targetLiveChatId = normalizedLiveChatId ?? string.Empty;
-            if (!string.Equals(targetLiveChatId, active.LiveChatId, StringComparison.Ordinal))
-            {
-                effectiveBroadcast = active with { LiveChatId = targetLiveChatId };
-                lock (_sync)
-                {
-                    if (!CanMutateActiveChannelLocked(targetChannelId, expectedSettingsRevision: expectedSettingsRevision))
-                    {
-                        return TimeSpan.Zero;
-                    }
-
-                    _activeBroadcast = effectiveBroadcast;
-                }
-
-                await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(effectiveBroadcast), CancellationToken.None).ConfigureAwait(false);
-                await eventBus.PublishAsync(
-                    new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, !string.IsNullOrWhiteSpace(targetLiveChatId)),
-                    CancellationToken.None).ConfigureAwait(false);
-            }
-        }
-        else if (normalizedLiveChatId is not null && !string.Equals(normalizedLiveChatId, active.LiveChatId, StringComparison.Ordinal))
-        {
-            effectiveBroadcast = active with { LiveChatId = normalizedLiveChatId };
             lock (_sync)
             {
                 if (!CanMutateActiveChannelLocked(targetChannelId, expectedSettingsRevision: expectedSettingsRevision))
@@ -2318,10 +2364,15 @@ internal sealed class YouTubeStreamMonitor
             }
 
             await eventBus.PublishAsync(new YouTubeActiveBroadcastChanged(effectiveBroadcast), CancellationToken.None).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(active.LiveChatId))
+            if (!IsCurrentSettings(expectedSettingsRevision))
+            {
+                return TimeSpan.Zero;
+            }
+
+            if (sample.HasLiveStreamingDetails || string.IsNullOrWhiteSpace(active.LiveChatId))
             {
                 await eventBus.PublishAsync(
-                    new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true),
+                    new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, !effectiveBroadcast.IsChatDisabled),
                     CancellationToken.None).ConfigureAwait(false);
             }
         }
@@ -2395,6 +2446,20 @@ internal sealed class YouTubeStreamMonitor
         return string.IsNullOrWhiteSpace(videoId) ? null : videoId.Trim();
     }
 
+    private static YouTubeBroadcastSummary ApplyChatSample(YouTubeBroadcastSummary broadcast, YouTubeVideoLiveSample sample)
+    {
+        var liveChatId = sample.ActiveLiveChatId?.Trim() ?? string.Empty;
+        var isChatDisabled = liveChatId.Length == 0;
+        if (isChatDisabled && !sample.HasLiveStreamingDetails)
+        {
+            return broadcast;
+        }
+
+        return broadcast.IsChatDisabled == isChatDisabled && string.Equals(broadcast.LiveChatId, liveChatId, StringComparison.Ordinal)
+            ? broadcast
+            : broadcast with { LiveChatId = liveChatId, IsChatDisabled = isChatDisabled };
+    }
+
     private async Task ActivateBroadcastAsync(
         string targetChannelId,
         YouTubeBroadcastSummary selected,
@@ -2411,7 +2476,8 @@ internal sealed class YouTubeStreamMonitor
         var switchedBroadcast = previousActive is not null
             && (!string.Equals(previousActive.VideoId, selected.VideoId, StringComparison.Ordinal)
                 || !string.Equals(previousActive.ChannelId, targetChannelId, StringComparison.Ordinal)
-                || !string.Equals(previousActive.LiveChatId, selected.LiveChatId, StringComparison.Ordinal));
+                || !string.Equals(previousActive.LiveChatId, selected.LiveChatId, StringComparison.Ordinal)
+                || previousActive.IsChatDisabled != selected.IsChatDisabled);
 
         if (!switchedBroadcast && previousActive is not null && _stateMachine.CurrentStatus == StreamStatus.Online)
         {
@@ -2525,7 +2591,7 @@ internal sealed class YouTubeStreamMonitor
                 CancellationToken.None).ConfigureAwait(false);
         }
 
-        if (!string.IsNullOrWhiteSpace(selected.LiveChatId))
+        if (selected.IsChatDisabled || !string.IsNullOrWhiteSpace(selected.LiveChatId))
         {
             lock (_sync)
             {
@@ -2536,7 +2602,7 @@ internal sealed class YouTubeStreamMonitor
             }
 
             await eventBus.PublishAsync(
-                new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, true),
+                new PlatformChatAvailabilityChanged(StreamingPlatform.YouTube, !selected.IsChatDisabled),
                 CancellationToken.None).ConfigureAwait(false);
         }
 
@@ -2963,6 +3029,8 @@ internal sealed class YouTubeStreamMonitor
             Wake();
         }
     }
+
+    private bool IsCurrentSettings(long revision) => !_disposed && Volatile.Read(ref _settingsRevision) == revision;
 
     private void Wake(object? sender, EventArgs e)
     {
