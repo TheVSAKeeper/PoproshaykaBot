@@ -27,13 +27,26 @@ internal sealed class AvatarEndpoint(
             string? url;
             if (!string.IsNullOrWhiteSpace(userId))
             {
-                url = await avatarCache.GetUrlAsync(userId, ctx.RequestAborted);
+                var lookup = await avatarCache.ResolveUrlAsync(userId, ctx.RequestAborted);
+                if (lookup.Status == AvatarUrlLookupStatus.TransientFailure)
+                {
+                    return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                }
+
+                url = lookup.Url;
             }
             else
             {
                 var helix = serviceProvider.GetRequiredKeyedService<ITwitchHelixClient>(TwitchEndpoints.HelixBotClient);
-                var user = await helix.GetUserByLoginAsync(login!, ctx.RequestAborted);
-                url = user?.ProfileImageUrl;
+                try
+                {
+                    var user = await helix.GetUserByLoginAsync(login!, ctx.RequestAborted);
+                    url = user?.ProfileImageUrl;
+                }
+                catch (Exception) when (!ctx.RequestAborted.IsCancellationRequested)
+                {
+                    return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                }
             }
 
             if (string.IsNullOrEmpty(url))

@@ -24,5 +24,7 @@ public interface IUpdateCoordinator
 
     Task<bool> DiscardPreparedUpdateAsync(CancellationToken cancellationToken);
 
+    Task CancelPendingDownloadsAsync(CancellationToken cancellationToken);
+
     void SkipVersion(string version);
 }

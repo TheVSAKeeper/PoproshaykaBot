@@ -660,7 +660,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         transform: translateX(0) scale(1);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -678,7 +678,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         transform: translateX(0);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -696,7 +696,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         transform: translateX(0);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -714,7 +714,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         transform: scale(1);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -732,7 +732,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         transform: translateY(0) scale(1);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -750,7 +750,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         filter: blur(0) brightness(1);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -768,7 +768,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         transform: translateY(0);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -786,7 +786,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         transform: translateY(0);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -804,7 +804,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         transform: rotate(0) scale(1);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -822,7 +822,7 @@ body::-webkit-scrollbar {
     0% {
         opacity: 1;
         filter: contrast(1) blur(0);
-        max-height: 100px;
+        max-height: var(--exit-max-height, 1000px);
         margin: var(--chat-margin);
         padding: var(--chat-padding);
     }
@@ -834,6 +834,10 @@ body::-webkit-scrollbar {
         padding: 0;
         overflow: hidden;
     }
+}
+
+.message[data-exit-anim] {
+    box-sizing: border-box;
 }
 
 .message[data-exit-anim="fade-out"] {

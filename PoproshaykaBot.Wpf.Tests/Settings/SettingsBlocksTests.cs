@@ -437,6 +437,8 @@ public class SettingsBlocksTests
 
         public Task<bool> DiscardPreparedUpdateAsync(CancellationToken cancellationToken) => Task.FromResult(false);
 
+        public Task CancelPendingDownloadsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
         public void SkipVersion(string version)
         {
         }

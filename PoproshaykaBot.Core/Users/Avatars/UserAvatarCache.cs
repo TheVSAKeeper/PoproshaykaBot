@@ -32,7 +32,7 @@ public sealed class UserAvatarCache : IUserAvatarCache
 
     private readonly Lock _lock = new();
     private readonly Dictionary<string, AvatarEntry> _entries = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Task<string?>> _inflight = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Task<AvatarUrlLookupResult>> _inflight = new(StringComparer.Ordinal);
     private readonly HashSet<string> _changedOutsidePass = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _resolveGate = new(1, 1);
     private readonly SemaphoreSlim _downloadGate = new(1, 1);
@@ -61,15 +61,21 @@ public sealed class UserAvatarCache : IUserAvatarCache
 
     public async Task<string?> GetUrlAsync(string userId, CancellationToken cancellationToken = default)
     {
+        var result = await ResolveUrlAsync(userId, cancellationToken).ConfigureAwait(false);
+        return result.Url;
+    }
+
+    public async Task<AvatarUrlLookupResult> ResolveUrlAsync(string userId, CancellationToken cancellationToken = default)
+    {
         if (!TryNormalizeId(userId, out var id))
         {
-            return null;
+            return AvatarUrlLookupResult.NotFound;
         }
 
         EnsureIndexLoaded();
 
-        TaskCompletionSource<string?>? owner = null;
-        Task<string?>? pending;
+        TaskCompletionSource<AvatarUrlLookupResult>? owner = null;
+        Task<AvatarUrlLookupResult>? pending;
 
         lock (_lock)
         {
@@ -80,12 +86,19 @@ public sealed class UserAvatarCache : IUserAvatarCache
             {
                 Touch(entry, now);
 
-                return entry.Url;
+                return AvatarUrlLookupResult.Found(entry.Url!);
             }
 
-            if (_options.CacheOnly || (entry is not null && IsMissFresh(entry, now)))
+            if (_options.CacheOnly)
             {
-                return entry?.Url;
+                return entry?.Url is { } cachedUrl
+                    ? AvatarUrlLookupResult.Found(cachedUrl)
+                    : AvatarUrlLookupResult.NotFound;
+            }
+
+            if (entry is not null && IsMissFresh(entry, now))
+            {
+                return AvatarUrlLookupResult.NotFound;
             }
 
             if (!_inflight.TryGetValue(id, out pending))
@@ -443,13 +456,13 @@ public sealed class UserAvatarCache : IUserAvatarCache
         return entry.ImageFailedAt is { } failedAt && failedAt <= now && now - failedAt < _options.MissLifetime;
     }
 
-    private async Task CompleteResolveAsync(string id, TaskCompletionSource<string?> owner)
+    private async Task CompleteResolveAsync(string id, TaskCompletionSource<AvatarUrlLookupResult> owner)
     {
-        string? url = null;
+        var result = AvatarUrlLookupResult.TransientFailure;
 
         try
         {
-            url = await ResolveOneAsync(id).ConfigureAwait(false);
+            result = await ResolveOneAsync(id).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -462,11 +475,11 @@ public sealed class UserAvatarCache : IUserAvatarCache
                 _inflight.Remove(id);
             }
 
-            owner.TrySetResult(url);
+            owner.TrySetResult(result);
         }
     }
 
-    private async Task<string?> ResolveOneAsync(string id)
+    private async Task<AvatarUrlLookupResult> ResolveOneAsync(string id)
     {
         IReadOnlyList<UserInfo> users;
 
@@ -480,7 +493,9 @@ public sealed class UserAvatarCache : IUserAvatarCache
 
             lock (_lock)
             {
-                return _entries.TryGetValue(id, out var stale) ? stale.Url : null;
+                return _entries.TryGetValue(id, out var stale) && stale.Url is not null
+                    ? AvatarUrlLookupResult.Found(stale.Url)
+                    : AvatarUrlLookupResult.TransientFailure;
             }
         }
 
@@ -494,7 +509,9 @@ public sealed class UserAvatarCache : IUserAvatarCache
 
         SaveIndexIfDirty();
 
-        return url;
+        return url is not null
+            ? AvatarUrlLookupResult.Found(url)
+            : AvatarUrlLookupResult.NotFound;
     }
 
     private string? Apply(string id, UserInfo? user, DateTimeOffset now, ISet<string> changed)

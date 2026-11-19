@@ -42,28 +42,28 @@ public sealed class UpdateBackgroundService(
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_cts is null)
+        if (_cts is not null)
         {
-            return;
+            await _cts.CancelAsync().ConfigureAwait(false);
+
+            if (_loop is not null)
+            {
+                try
+                {
+                    await _loop.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // ожидаемо при остановке
+                }
+            }
+
+            _cts.Dispose();
+            _cts = null;
+            _loop = null;
         }
 
-        await _cts.CancelAsync().ConfigureAwait(false);
-
-        if (_loop is not null)
-        {
-            try
-            {
-                await _loop.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // ожидаемо при остановке
-            }
-        }
-
-        _cts.Dispose();
-        _cts = null;
-        _loop = null;
+        await coordinator.CancelPendingDownloadsAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RunLoopAsync(CancellationToken cancellationToken)

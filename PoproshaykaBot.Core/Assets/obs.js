@@ -22,6 +22,7 @@
     let scrollAnimationDuration = 300;
     let autoScrollEnabled = true;
     let scrollPaused = false;
+    let scrollPauseTimerId = null;
     let scrollToBottomThreshold = 100;
     let scrollPauseAfterUserMs = 3000;
     let lastScrollTime = 0;
@@ -60,28 +61,46 @@
     const avatarMemoryCache = new Map();
     const avatarStorageKeyPrefix = 'poproshaykabot.avatar.';
     const avatarStorageTtlMs = 24 * 60 * 60 * 1000;
+    const avatarMissTtlMs = 30 * 60 * 1000;
+
+    function formatTimestamp(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+            return '';
+        }
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
+    }
 
     function readAvatarFromStorage(userId) {
         try {
             const raw = globalThis.localStorage.getItem(avatarStorageKeyPrefix + userId);
-            if (!raw) return null;
+            if (!raw) return undefined;
             const parsed = JSON.parse(raw);
             if (!parsed || typeof parsed.exp !== 'number' || Date.now() > parsed.exp) {
                 globalThis.localStorage.removeItem(avatarStorageKeyPrefix + userId);
-                return null;
+                return undefined;
             }
-            return parsed.url || null;
+            const url = typeof parsed.url === 'string' ? parsed.url : '';
+            const maxTtl = url ? avatarStorageTtlMs : avatarMissTtlMs;
+            const maxExp = Date.now() + maxTtl;
+            const exp = Math.min(parsed.exp, maxExp);
+            if (parsed.exp > maxExp) {
+                writeAvatarToStorage(userId, url, maxTtl);
+            }
+            return { url, exp };
         } catch (e) {
             console.debug('Не удалось прочитать аватар из localStorage', e);
-            return null;
+            return undefined;
         }
     }
 
-    function writeAvatarToStorage(userId, url) {
+    function writeAvatarToStorage(userId, url, ttlMs = avatarStorageTtlMs) {
         try {
             globalThis.localStorage.setItem(
                 avatarStorageKeyPrefix + userId,
-                JSON.stringify({ url: url || '', exp: Date.now() + avatarStorageTtlMs })
+                JSON.stringify({ url: url || '', exp: Date.now() + ttlMs })
             );
         } catch (e) {
             console.debug('localStorage недоступен или переполнен', e);
@@ -111,36 +130,55 @@
     function resolveAvatar(userId, platform) {
         if (!userId || !isTwitchPlatform(platform)) return Promise.resolve(null);
 
-        if (avatarMemoryCache.has(userId)) {
-            return avatarMemoryCache.get(userId);
+        const cached = avatarMemoryCache.get(userId);
+        if (cached) {
+            if (cached.exp === null || Date.now() < cached.exp) {
+                return cached.promise;
+            }
+            avatarMemoryCache.delete(userId);
         }
 
         const stored = readAvatarFromStorage(userId);
-        if (stored !== null) {
-            const resolved = Promise.resolve(stored || null);
-            avatarMemoryCache.set(userId, resolved);
+        if (stored !== undefined) {
+            const resolved = Promise.resolve(stored.url || null);
+            avatarMemoryCache.set(userId, { promise: resolved, exp: stored.exp });
             return resolved;
         }
 
-        const promise = fetch('/api/user-avatar?id=' + encodeURIComponent(userId))
+        const entry = { promise: null, exp: null };
+        entry.promise = fetch('/api/user-avatar?id=' + encodeURIComponent(userId))
             .then(response => {
                 if (response.status === 404) {
-                    writeAvatarToStorage(userId, '');
+                    writeAvatarToStorage(userId, '', avatarMissTtlMs);
+                    entry.exp = Date.now() + avatarMissTtlMs;
                     return null;
                 }
                 if (!response.ok) {
+                    if (avatarMemoryCache.get(userId) === entry) {
+                        avatarMemoryCache.delete(userId);
+                    }
                     return null;
                 }
                 return response.json().then(payload => {
                     const url = payload?.url ?? null;
-                    if (url) writeAvatarToStorage(userId, url);
+                    if (url) {
+                        writeAvatarToStorage(userId, url, avatarStorageTtlMs);
+                        entry.exp = Date.now() + avatarStorageTtlMs;
+                    } else if (avatarMemoryCache.get(userId) === entry) {
+                        avatarMemoryCache.delete(userId);
+                    }
                     return url;
                 });
             })
-            .catch(() => null);
+            .catch(() => {
+                if (avatarMemoryCache.get(userId) === entry) {
+                    avatarMemoryCache.delete(userId);
+                }
+                return null;
+            });
 
-        avatarMemoryCache.set(userId, promise);
-        return promise;
+        avatarMemoryCache.set(userId, entry);
+        return entry.promise;
     }
 
     function attachAvatar(messageDiv, userId, platform) {
@@ -233,17 +271,27 @@
         return chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight <= scrollToBottomThreshold;
     }
 
+    function clearScrollPauseTimer() {
+        if (scrollPauseTimerId !== null) {
+            clearTimeout(scrollPauseTimerId);
+            scrollPauseTimerId = null;
+        }
+    }
+
     function handleUserScroll() {
         if (!isNearBottom()) {
             scrollPaused = true;
+            clearScrollPauseTimer();
             if (scrollPauseAfterUserMs > 0) {
-                setTimeout(() => {
+                scrollPauseTimerId = setTimeout(() => {
+                    scrollPauseTimerId = null;
                     scrollPaused = false;
                 }, scrollPauseAfterUserMs);
             }
             return;
         }
 
+        clearScrollPauseTimer();
         scrollPaused = false;
         hideNewMessagesIndicator();
     }
@@ -283,6 +331,7 @@
     if (newMessagesIndicator) {
         newMessagesIndicator.addEventListener('click', () => {
             hideNewMessagesIndicator();
+            clearScrollPauseTimer();
             scrollPaused = false;
             smoothScrollToBottom(true);
         });
@@ -463,6 +512,11 @@
             return;
         }
 
+        const measuredHeight = Math.ceil(messageDiv.offsetHeight);
+        if (measuredHeight > 0) {
+            messageDiv.style.setProperty('--exit-max-height', `${measuredHeight}px`);
+        }
+
         messageDiv.dataset.exitAnim = fadeOutAnimationType;
 
         setTimeout(() => messageDiv.remove(), fadeOutDuration);
@@ -604,7 +658,7 @@
         applyFirstTimeMarker(messageDiv, message);
 
         const timestampDate = new Date(message.timestamp);
-        const timestampLabel = timestampDate.toLocaleTimeString();
+        const timestampLabel = formatTimestamp(timestampDate);
         const timestampIso = Number.isNaN(timestampDate.getTime()) ? '' : timestampDate.toISOString();
         const isSystemMessage = message.messageType !== 'UserMessage';
 
@@ -717,6 +771,7 @@
             });
 
             if (chatContainer.children.length === 0) {
+                clearScrollPauseTimer();
                 scrollPaused = false;
                 hideNewMessagesIndicator();
             }
@@ -727,6 +782,7 @@
         chatContainer.replaceChildren();
         seenMessageIds.clear();
         seenMessageIdsOrder.length = 0;
+        clearScrollPauseTimer();
         scrollPaused = false;
         hideNewMessagesIndicator();
     }
@@ -1078,7 +1134,7 @@
         const timeElement = document.createElement('time');
         timeElement.className = 'timestamp';
         timeElement.dateTime = now.toISOString();
-        timeElement.textContent = now.toLocaleTimeString();
+        timeElement.textContent = formatTimestamp(now);
 
         const text = document.createElement('span');
         text.className = 'system-message';

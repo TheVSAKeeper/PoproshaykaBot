@@ -253,6 +253,16 @@
         return badge;
     }
 
+    function formatTimestamp(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+            return '';
+        }
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
+    }
+
     function buildMessage(role) {
         const pick = pickSampleMessage();
 
@@ -275,7 +285,7 @@
 
         const timestamp = document.createElement('time');
         timestamp.className = 'timestamp';
-        timestamp.textContent = new Date().toLocaleTimeString();
+        timestamp.textContent = formatTimestamp(new Date());
         headerEl.appendChild(timestamp);
 
         headerEl.appendChild(buildPlatformBadge());
@@ -356,6 +366,10 @@
         } else {
             fresh.classList.remove('no-animation');
             requestAnimationFrame(function () {
+                const measuredHeight = Math.ceil(fresh.offsetHeight);
+                if (measuredHeight > 0) {
+                    fresh.style.setProperty('--exit-max-height', `${measuredHeight}px`);
+                }
                 fresh.dataset.exitAnim = animationValue;
             });
         }

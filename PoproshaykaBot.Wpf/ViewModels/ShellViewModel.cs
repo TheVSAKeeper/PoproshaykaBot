@@ -14,6 +14,7 @@ using PoproshaykaBot.Core.YouTube.Client;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.Infrastructure.Platforms;
+using PoproshaykaBot.Wpf.ViewModels.Settings;
 using System.ComponentModel;
 using System.Net.Http;
 using System.Windows;
@@ -42,6 +43,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
     private readonly NavigationItem _overviewSection;
     private readonly IUnsavedChangesPrompt _unsavedChangesPrompt;
     private readonly IMainWindowController _mainWindow;
+    private readonly UpdateSettingsSectionViewModel? _updateSettings;
     private NavigationItem? _current;
     private bool _returningToPage;
     private string? _lastPartialFailureKey;
@@ -81,11 +83,13 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         IUnsavedChangesPrompt unsavedChangesPrompt,
         IMainWindowController mainWindow,
         IChatPlatformRegistry? platformRegistry = null,
-        ChannelSwitchPromptBannerViewModel? channelSwitchBanner = null)
+        ChannelSwitchPromptBannerViewModel? channelSwitchBanner = null,
+        UpdateSettingsSectionViewModel? updateSettings = null)
         : base(modal)
     {
         _unsavedChangesPrompt = unsavedChangesPrompt;
         _mainWindow = mainWindow;
+        _updateSettings = updateSettings;
         _connectionManager = connectionManager;
         _platformRegistry = platformRegistry;
         _logger = logger;
@@ -194,6 +198,7 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
         if (!await ConfirmDirtyPagesOnCloseAsync())
         {
             UpdateBanner.ResetInstallState();
+            _updateSettings?.ResetInstallState();
 
             if (App.IsRestartRequested)
             {
@@ -202,6 +207,13 @@ public sealed partial class ShellViewModel : ShellViewModelBase, IDisposable
             }
 
             return false;
+        }
+
+        await UpdateBanner.CancelInstallAsync();
+
+        if (_updateSettings is not null)
+        {
+            await _updateSettings.CancelInstallAsync();
         }
 
         try

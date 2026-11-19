@@ -3,6 +3,7 @@ using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Update;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Settings.Update;
+using System.Runtime.ExceptionServices;
 
 namespace PoproshaykaBot.Core.Update;
 
@@ -16,9 +17,17 @@ public sealed class UpdateCoordinator(
     : IUpdateCoordinator, IDisposable
 {
     private readonly SemaphoreSlim _prepareGate = new(1, 1);
+    private readonly CancellationTokenSource _shutdownCts = new();
     private readonly Lock _syncLock = new();
+    private readonly List<DeferredDiscard> _deferredDiscards = [];
 
     private UpdateCandidate? _latestCandidate;
+    private TaskCompletionSource? _activePrepare;
+    private int _gateUsers;
+    private bool _stopping;
+    private bool _disposed;
+
+    internal Action? BeforePrepareGateRelease { get; set; }
 
     public UpdateKind Kind => environment.Kind;
 
@@ -50,7 +59,63 @@ public sealed class UpdateCoordinator(
 
     public void Dispose()
     {
-        _prepareGate.Dispose();
+        bool canDisposeResources;
+
+        lock (_syncLock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _stopping = true;
+            canDisposeResources = _gateUsers == 0 && _activePrepare is null;
+        }
+
+        try
+        {
+            _shutdownCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        if (canDisposeResources)
+        {
+            _prepareGate.Dispose();
+            _shutdownCts.Dispose();
+        }
+    }
+
+    public async Task CancelPendingDownloadsAsync(CancellationToken cancellationToken)
+    {
+        Task? active;
+
+        lock (_syncLock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _stopping = true;
+            active = _activePrepare?.Task;
+        }
+
+        try
+        {
+            await _shutdownCts.CancelAsync().ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        if (active is not null)
+        {
+            await active.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task<UpdateCandidate?> CheckNowAsync(CancellationToken cancellationToken)
@@ -143,14 +208,11 @@ public sealed class UpdateCoordinator(
 
     public async Task<bool> DiscardPreparedUpdateAsync(CancellationToken cancellationToken)
     {
-        var discarded = DiscardIfIdle(null, "автоустановка при выходе выключена");
+        var discarded = RequestDiscard(null, "автоустановка при выходе выключена");
 
-        if (discarded is not null)
-        {
-            await eventBus.PublishAsync(new UpdateDiscarded(discarded), cancellationToken).ConfigureAwait(false);
-        }
+        await PublishDiscardedAsync(discarded, cancellationToken).ConfigureAwait(false);
 
-        return discarded is not null;
+        return discarded.Count > 0;
     }
 
     public void SkipVersion(string version)
@@ -161,7 +223,7 @@ public sealed class UpdateCoordinator(
         settings.SkippedVersion = version;
         store.Save(settings);
 
-        DiscardIfIdle(version, "версия пропущена");
+        RequestDiscard(version, "версия пропущена");
 
         lock (_syncLock)
         {
@@ -200,72 +262,337 @@ public sealed class UpdateCoordinator(
 
         var version = candidate.Version.ToString();
 
-        await _prepareGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        lock (_syncLock)
+        {
+            if (_disposed)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
 
-        string? discardReason;
-        var discarded = false;
+            _gateUsers++;
+        }
+
+        TaskCompletionSource? activeDone = null;
+        var discardedVersions = new List<string>();
+        string? discardReason = null;
+        string? discardedViaReason = null;
+        var matchedCurrentVersion = false;
+        var preparedSucceeded = false;
+        ExceptionDispatchInfo? failure = null;
+        CancellationToken effectiveToken;
 
         try
         {
-            if (string.Equals(PreparedVersion, version, StringComparison.Ordinal))
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdownCts.Token);
+            effectiveToken = linkedCts.Token;
+
+            await _prepareGate.WaitAsync(effectiveToken).ConfigureAwait(false);
+
+            try
             {
-                progress?.Report(100);
+                try
+                {
+                    lock (_syncLock)
+                    {
+                        if (_stopping)
+                        {
+                            throw new OperationCanceledException(_shutdownCts.Token);
+                        }
+
+                        activeDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                        _activePrepare = activeDone;
+                    }
+
+                    if (string.Equals(PreparedVersion, version, StringComparison.Ordinal))
+                    {
+                        progress?.Report(100);
+                    }
+                    else
+                    {
+                        await installer.PrepareAsync(candidate, progress, effectiveToken).ConfigureAwait(false);
+                    }
+
+                    preparedSucceeded = true;
+                    discardReason = DiscardReason(store.Load(), version, silent);
+
+                    if (discardReason is not null)
+                    {
+                        matchedCurrentVersion = true;
+                        discardedViaReason = version;
+
+                        if (TryDiscard(version, discardReason))
+                        {
+                            discardedVersions.Add(version);
+                        }
+                    }
+                }
+                catch (Exception exception)
+                {
+                    failure = ExceptionDispatchInfo.Capture(exception);
+                }
+                finally
+                {
+                    try
+                    {
+                        var preserveVersion = preparedSucceeded && !silent && discardReason is null ? version : null;
+                        var fallbackPreparedVersion = preparedSucceeded && discardedViaReason is null ? version : null;
+
+                        DrainDeferredDiscardsLocked(
+                            discardedVersions,
+                            ref matchedCurrentVersion,
+                            currentVersion: preparedSucceeded ? version : null,
+                            preserveVersion: preserveVersion,
+                            skipVersion: discardedViaReason,
+                            fallbackPreparedVersion: fallbackPreparedVersion);
+
+                        BeforePrepareGateRelease?.Invoke();
+                    }
+                    finally
+                    {
+                        _prepareGate.Release();
+                    }
+                }
+
+                if (HasDeferredDiscards())
+                {
+                    var preserveVersion = preparedSucceeded && !silent && discardReason is null ? version : null;
+                    var fallbackPreparedVersion = preparedSucceeded && discardedViaReason is null && !matchedCurrentVersion ? version : null;
+
+                    DrainDeferredDiscardsIfIdle(
+                        discardedVersions,
+                        ref matchedCurrentVersion,
+                        currentVersion: preparedSucceeded ? version : null,
+                        preserveVersion: preserveVersion,
+                        skipVersion: discardedViaReason,
+                        fallbackPreparedVersion: fallbackPreparedVersion);
+                }
             }
-            else
+            finally
             {
-                await installer.PrepareAsync(candidate, progress, cancellationToken).ConfigureAwait(false);
+                lock (_syncLock)
+                {
+                    if (ReferenceEquals(_activePrepare, activeDone))
+                    {
+                        _activePrepare = null;
+                    }
+                }
+
+                activeDone?.TrySetResult();
             }
 
-            discardReason = DiscardReason(store.Load(), version, silent);
-
-            if (discardReason is not null)
+            if (failure is not null)
             {
-                discarded = TryDiscard(version, discardReason);
+                await PublishDiscardedBestEffortAsync(discardedVersions).ConfigureAwait(false);
+                failure.Throw();
             }
+
+            if (discardReason is not null
+                || matchedCurrentVersion
+                || DiscardReason(store.Load(), version, silent) is not null)
+            {
+                await PublishDiscardedAsync(discardedVersions, effectiveToken).ConfigureAwait(false);
+                return false;
+            }
+
+            await PublishDiscardedAsync(discardedVersions, effectiveToken).ConfigureAwait(false);
+            await eventBus.PublishAsync(new UpdatePrepared(version), effectiveToken).ConfigureAwait(false);
+            return true;
         }
         finally
         {
-            _prepareGate.Release();
+            ReleaseGateUser();
         }
-
-        if (discardReason is not null)
-        {
-            if (discarded)
-            {
-                await eventBus.PublishAsync(new UpdateDiscarded(version), cancellationToken).ConfigureAwait(false);
-            }
-
-            return false;
-        }
-
-        await eventBus.PublishAsync(new UpdatePrepared(version), cancellationToken).ConfigureAwait(false);
-        return true;
     }
 
-    private string? DiscardIfIdle(string? version, string reason)
+    private List<string> RequestDiscard(string? version, string reason)
     {
-        if (!_prepareGate.Wait(0))
+        lock (_syncLock)
         {
-            logger.LogDebug("Идёт загрузка обновления – удаление загруженного ({Reason}) проверит она сама", reason);
-            return null;
+            _deferredDiscards.Add(new(version, reason));
+        }
+
+        var discardedVersions = new List<string>();
+        var matched = false;
+
+        if (!DrainDeferredDiscardsIfIdle(discardedVersions, ref matched))
+        {
+            logger.LogDebug("Идёт загрузка обновления – удаление загруженного ({Reason}) выполнится после её завершения", reason);
+        }
+
+        return discardedVersions;
+    }
+
+    private bool HasDeferredDiscards()
+    {
+        lock (_syncLock)
+        {
+            return _deferredDiscards.Count > 0;
+        }
+    }
+
+    private bool DrainDeferredDiscardsIfIdle(
+        List<string> discardedVersions,
+        ref bool matchedCurrentVersion,
+        string? currentVersion = null,
+        string? preserveVersion = null,
+        string? skipVersion = null,
+        string? fallbackPreparedVersion = null)
+    {
+        lock (_syncLock)
+        {
+            if (_disposed)
+            {
+                return false;
+            }
+
+            _gateUsers++;
+        }
+
+        var acquiredAny = false;
+
+        try
+        {
+            while (true)
+            {
+                if (!_prepareGate.Wait(0))
+                {
+                    return acquiredAny;
+                }
+
+                acquiredAny = true;
+
+                try
+                {
+                    DrainDeferredDiscardsLocked(
+                        discardedVersions,
+                        ref matchedCurrentVersion,
+                        currentVersion: currentVersion,
+                        preserveVersion: preserveVersion,
+                        skipVersion: skipVersion,
+                        fallbackPreparedVersion: fallbackPreparedVersion);
+                }
+                finally
+                {
+                    _prepareGate.Release();
+                }
+
+                if (!HasDeferredDiscards())
+                {
+                    return true;
+                }
+            }
+        }
+        finally
+        {
+            ReleaseGateUser();
+        }
+    }
+
+    private void ReleaseGateUser()
+    {
+        bool disposeResources;
+
+        lock (_syncLock)
+        {
+            _gateUsers--;
+            disposeResources = _disposed && _gateUsers == 0 && _activePrepare is null;
+        }
+
+        if (disposeResources)
+        {
+            _prepareGate.Dispose();
+            _shutdownCts.Dispose();
+        }
+    }
+
+    private void DrainDeferredDiscardsLocked(
+        List<string> discardedVersions,
+        ref bool matchedCurrentVersion,
+        string? currentVersion = null,
+        string? preserveVersion = null,
+        string? skipVersion = null,
+        string? fallbackPreparedVersion = null)
+    {
+        List<DeferredDiscard> batch;
+
+        lock (_syncLock)
+        {
+            if (_deferredDiscards.Count == 0)
+            {
+                return;
+            }
+
+            batch = [.. _deferredDiscards];
+            _deferredDiscards.Clear();
+        }
+
+        var attemptedVersions = new HashSet<string>(StringComparer.Ordinal);
+
+        if (skipVersion is not null)
+        {
+            attemptedVersions.Add(skipVersion);
+        }
+
+        foreach (var version in discardedVersions)
+        {
+            attemptedVersions.Add(version);
+        }
+
+        foreach (var request in batch)
+        {
+            var prepared = PreparedVersion ?? fallbackPreparedVersion;
+
+            if (prepared is null || attemptedVersions.Contains(prepared))
+            {
+                continue;
+            }
+
+            if (request.Version is not null && !string.Equals(prepared, request.Version, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (request.Version is null && string.Equals(prepared, preserveVersion, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (currentVersion is not null && string.Equals(prepared, currentVersion, StringComparison.Ordinal))
+            {
+                matchedCurrentVersion = true;
+            }
+
+            attemptedVersions.Add(prepared);
+
+            if (TryDiscard(prepared, request.Reason) && !discardedVersions.Contains(prepared, StringComparer.Ordinal))
+            {
+                discardedVersions.Add(prepared);
+            }
+        }
+    }
+
+    private async Task PublishDiscardedAsync(List<string> versions, CancellationToken cancellationToken)
+    {
+        foreach (var version in versions)
+        {
+            await eventBus.PublishAsync(new UpdateDiscarded(version), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task PublishDiscardedBestEffortAsync(List<string> versions)
+    {
+        if (versions.Count == 0)
+        {
+            return;
         }
 
         try
         {
-            var prepared = PreparedVersion;
-
-            if (prepared is null
-                || (version is not null && !string.Equals(prepared, version, StringComparison.Ordinal))
-                || !TryDiscard(prepared, reason))
-            {
-                return null;
-            }
-
-            return prepared;
+            await PublishDiscardedAsync(versions, CancellationToken.None).ConfigureAwait(false);
         }
-        finally
+        catch (Exception exception)
         {
-            _prepareGate.Release();
+            logger.LogDebug(exception, "Не удалось уведомить об удалении загруженного обновления после ошибки загрузки");
         }
     }
 
@@ -280,4 +607,6 @@ public sealed class UpdateCoordinator(
         logger.LogInformation("Загруженное обновление {Version} удалено: {Reason}", version, reason);
         return true;
     }
+
+    private readonly record struct DeferredDiscard(string? Version, string Reason);
 }

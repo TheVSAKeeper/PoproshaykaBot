@@ -18,6 +18,11 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IMainWindowController _mainWindow;
     private readonly List<IDisposable> _subscriptions = [];
+    private readonly Lock _installLock = new();
+    private readonly CancellationTokenSource _closeCts = new();
+
+    private Task? _activeInstallTask;
+    private bool _disposed;
 
     [ObservableProperty]
     private bool _autoCheckEnabled;
@@ -115,12 +120,86 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 
     public void Dispose()
     {
+        bool canDisposeCts;
+
+        lock (_installLock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            canDisposeCts = _activeInstallTask is null;
+        }
+
+        try
+        {
+            _closeCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        if (canDisposeCts)
+        {
+            _closeCts.Dispose();
+        }
+
         foreach (var sub in _subscriptions)
         {
             sub.Dispose();
         }
 
         _subscriptions.Clear();
+    }
+
+    public void ResetInstallState()
+    {
+        lock (_installLock)
+        {
+            if (_activeInstallTask is { IsCompleted: false })
+            {
+                return;
+            }
+        }
+
+        if (!IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = false;
+        RefreshStatus();
+    }
+
+    public async Task CancelInstallAsync()
+    {
+        Task? active;
+
+        lock (_installLock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            active = _activeInstallTask;
+        }
+
+        try
+        {
+            await _closeCts.CancelAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        if (active is not null)
+        {
+            await active.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
     }
 
     [RelayCommand]
@@ -178,6 +257,18 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             return;
         }
 
+        CancellationToken token;
+
+        lock (_installLock)
+        {
+            if (_disposed || _closeCts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            token = _closeCts.Token;
+        }
+
         IsBusy = true;
         DownloadProgress = 0;
 
@@ -187,16 +278,37 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
             DownloadProgress = pct;
         });
 
+        Task? prepareTask = null;
+
         try
         {
             using (progress.StartScope())
             {
-                await _coordinator.PrepareAsync(candidate, progress.Progress, CancellationToken.None);
+                prepareTask = _coordinator.PrepareAsync(candidate, progress.Progress, token);
+
+                lock (_installLock)
+                {
+                    _activeInstallTask = prepareTask;
+                }
+
+                await prepareTask;
+            }
+
+            if (token.IsCancellationRequested)
+            {
+                IsBusy = false;
+                RefreshStatus();
+                return;
             }
 
             _dialogService.Info("Установка обновления", "Обновление загружено. Приложение закроется и установит новую версию.");
 
             _mainWindow.RequestClose();
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested || IsDisposed())
+        {
+            IsBusy = false;
+            RefreshStatus();
         }
         catch (Exception exception)
         {
@@ -206,11 +318,38 @@ public sealed partial class UpdateSettingsSectionViewModel : ObservableObject, I
 
             IsBusy = false;
         }
+        finally
+        {
+            var disposeCts = false;
+
+            lock (_installLock)
+            {
+                if (ReferenceEquals(_activeInstallTask, prepareTask))
+                {
+                    _activeInstallTask = null;
+                }
+
+                disposeCts = _disposed && _activeInstallTask is null;
+            }
+
+            if (disposeCts)
+            {
+                _closeCts.Dispose();
+            }
+        }
     }
 
     private bool CanActNow() => !IsBusy && IsUpdatableNow();
 
     private bool CanInstall() => !IsBusy && IsUpdatableNow() && _coordinator.LatestCandidate is not null;
+
+    private bool IsDisposed()
+    {
+        lock (_installLock)
+        {
+            return _disposed;
+        }
+    }
 
     partial void OnAllowFrameworkDependentChanged(bool value) => RefreshStatus();
 
