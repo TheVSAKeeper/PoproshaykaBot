@@ -34,6 +34,11 @@ internal sealed class FakeAvatarCache : IUserAvatarCache
         return Task.FromResult<string?>(null);
     }
 
+    public Task<AvatarUrlLookupResult> ResolveUrlAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(AvatarUrlLookupResult.NotFound);
+    }
+
     public Task<IReadOnlyCollection<string>> ResolveAsync(
         IReadOnlyCollection<string> userIds,
         CancellationToken cancellationToken = default)

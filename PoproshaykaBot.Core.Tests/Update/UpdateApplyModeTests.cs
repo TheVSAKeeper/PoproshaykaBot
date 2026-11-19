@@ -317,6 +317,159 @@ public sealed class UpdateApplyModeTests
     }
 
     [Test]
+    public async Task SkipVersion_DuringAnotherVersionsFailedDownload_DiscardsPreviousPending()
+    {
+        var installer = Substitute.For<IUpdateInstaller>();
+        var eventBus = Substitute.For<IEventBus>();
+        var download = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        installer.ReadPending().Returns(Pending("3.1.0.5"));
+        installer.DiscardPending("3.1.0.5").Returns(true);
+        installer.PrepareAsync(Arg.Any<UpdateCandidate>(), Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(download.Task);
+        using var coordinator = Coordinator(Store(UpdateApplyMode.SilentOnExit), installer, UpdateKind.Portable, eventBus);
+
+        var silent = coordinator.TryPrepareSilentlyAsync(Candidate("3.1.0.7"), CancellationToken.None);
+
+        coordinator.SkipVersion("3.1.0.5");
+        installer.DidNotReceiveWithAnyArgs().DiscardPending(default!);
+
+        download.SetException(new UpdateException("Обрыв сети"));
+
+        Assert.That(await silent, Is.False);
+        installer.Received(1).DiscardPending("3.1.0.5");
+        await eventBus.Received(1).PublishAsync(Arg.Is<UpdateDiscarded>(e => e.Version == "3.1.0.5"), Arg.Any<CancellationToken>());
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task DiscardPreparedUpdateAsync_DuringAnotherVersionsFailedDownload_DiscardsPreviousPending(bool silent)
+    {
+        var installer = Substitute.For<IUpdateInstaller>();
+        var eventBus = Substitute.For<IEventBus>();
+        var download = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        installer.ReadPending().Returns(Pending("3.1.0.5"));
+        installer.DiscardPending("3.1.0.5").Returns(true);
+        installer.PrepareAsync(Arg.Any<UpdateCandidate>(), Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(download.Task);
+        var store = Store(UpdateApplyMode.SilentOnExit);
+        using var coordinator = Coordinator(store, installer, UpdateKind.Portable, eventBus);
+
+        Task activeDownload = silent
+            ? coordinator.TryPrepareSilentlyAsync(Candidate("3.1.0.7"), CancellationToken.None)
+            : coordinator.PrepareAsync(Candidate("3.1.0.7"), null, CancellationToken.None);
+
+        SetStored(store, settings => settings.ApplyMode = UpdateApplyMode.NotifyAndConfirm);
+        var discardedImmediately = await coordinator.DiscardPreparedUpdateAsync(CancellationToken.None);
+
+        Assert.That(discardedImmediately, Is.False);
+        installer.DidNotReceiveWithAnyArgs().DiscardPending(default!);
+
+        download.SetException(new UpdateException("Обрыв сети"));
+
+        if (silent)
+        {
+            Assert.That(await (Task<bool>)activeDownload, Is.False);
+        }
+        else
+        {
+            Assert.ThrowsAsync<UpdateException>(async () => await activeDownload);
+        }
+
+        installer.Received(1).DiscardPending("3.1.0.5");
+        await eventBus.Received(1).PublishAsync(Arg.Is<UpdateDiscarded>(e => e.Version == "3.1.0.5"), Arg.Any<CancellationToken>());
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task DiscardInWindowBetweenDiscardReasonAndGateRelease_DeletesPreparedVersion(bool skip)
+    {
+        var installer = Substitute.For<IUpdateInstaller>();
+        var eventBus = Substitute.For<IEventBus>();
+        var store = Store(UpdateApplyMode.SilentOnExit);
+        PendingUpdate? pendingOnDisk = null;
+        installer.ReadPending().Returns(_ => pendingOnDisk);
+        installer.PrepareAsync(Arg.Any<UpdateCandidate>(), Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                pendingOnDisk = Pending(PreparedVersion);
+                return Task.CompletedTask;
+            });
+        installer.DiscardPending(PreparedVersion).Returns(_ =>
+        {
+            pendingOnDisk = null;
+            return true;
+        });
+
+        using var coordinator = Coordinator(store, installer, UpdateKind.Portable, eventBus);
+        coordinator.BeforePrepareGateRelease = () =>
+        {
+            if (skip)
+            {
+                coordinator.SkipVersion(PreparedVersion);
+            }
+            else
+            {
+                SetStored(store, settings => settings.ApplyMode = UpdateApplyMode.NotifyAndConfirm);
+                var discardedNow = coordinator.DiscardPreparedUpdateAsync(CancellationToken.None).GetAwaiter().GetResult();
+                Assert.That(discardedNow, Is.False);
+            }
+        };
+
+        var prepared = await coordinator.TryPrepareSilentlyAsync(Candidate(), CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(prepared, Is.False);
+            Assert.That(pendingOnDisk, Is.Null);
+            installer.Received(1).DiscardPending(PreparedVersion);
+            await eventBus.Received(1).PublishAsync(Arg.Is<UpdateDiscarded>(e => e.Version == PreparedVersion), Arg.Any<CancellationToken>());
+            await eventBus.DidNotReceive().PublishAsync(Arg.Any<UpdatePrepared>(), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Test]
+    public async Task CancelPendingDownloadsAsync_CancelsAndAwaitsActiveManualDownload()
+    {
+        var installer = Substitute.For<IUpdateInstaller>();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowCleanupFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        installer.PrepareAsync(Arg.Any<UpdateCandidate>(), Arg.Any<IProgress<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var token = call.ArgAt<CancellationToken>(2);
+                started.TrySetResult();
+
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    cancelled.TrySetResult();
+                    await allowCleanupFinish.Task;
+                    throw;
+                }
+            });
+
+        using var coordinator = Coordinator(Store(UpdateApplyMode.NotifyAndConfirm), installer, UpdateKind.Portable);
+
+        var manualDownload = coordinator.PrepareAsync(Candidate(), null, CancellationToken.None);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var stopTask = coordinator.CancelPendingDownloadsAsync(CancellationToken.None);
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.That(stopTask.IsCompleted, Is.False, "Остановка должна дожидаться завершения отмены и очистки .part до ApplyPendingUpdate");
+
+        allowCleanupFinish.SetResult();
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.CatchAsync<OperationCanceledException>(async () => await manualDownload);
+    }
+
+    [Test]
     public void DiscardPending_RemovesOnlyTheNamedVersion_AndNothingOutsideStaging()
     {
         var staging = Path.Combine(_root, "update");
@@ -398,7 +551,11 @@ public sealed class UpdateApplyModeTests
         var received = await handedOver.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await service.StopAsync(CancellationToken.None);
 
-        Assert.That(received, Is.SameAs(candidate));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(received, Is.SameAs(candidate));
+            await coordinator.Received(1).CancelPendingDownloadsAsync(Arg.Any<CancellationToken>());
+        }
     }
 
     private sealed class ShortDelaysOnlyTimeProvider : TimeProvider

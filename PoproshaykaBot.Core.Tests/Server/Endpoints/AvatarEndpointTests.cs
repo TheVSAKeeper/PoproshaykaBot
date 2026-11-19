@@ -112,6 +112,75 @@ public sealed class AvatarEndpointTests
         }
     }
 
+    [Test]
+    public async Task Временный_сбой_Helix_отдаёт_503_и_после_восстановления_аватарка_возвращается()
+    {
+        var helix = Substitute.For<ITwitchHelixClient>();
+        var attempts = 0;
+        helix.GetUsersByIdsAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                attempts++;
+                return attempts == 1
+                    ? Task.FromException<IReadOnlyList<UserInfo>>(new HttpRequestException("временный сбой"))
+                    : Task.FromResult<IReadOnlyList<UserInfo>>(
+                        [new UserInfo("42", "viewer", "Viewer", "", "", null, ProfileImage, null, DateTime.UnixEpoch)]);
+            });
+
+        using var server = await CreateServerAsync(CreateCache(helix));
+        using var client = server.CreateClient();
+
+        using var first = await client.GetAsync("/api/user-avatar?id=42");
+        using var second = await client.GetAsync("/api/user-avatar?id=42");
+        using var body = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
+            Assert.That(second.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(body.RootElement.GetProperty("url").GetString(), Is.EqualTo(ProfileImage));
+        }
+    }
+
+    [Test]
+    public async Task Временный_сбой_Helix_после_истечения_кеша_отдаёт_прежний_адрес()
+    {
+        var time = new TestTimeProvider { UtcNow = new(2026, 9, 29, 12, 0, 0, TimeSpan.Zero) };
+        var helix = Substitute.For<ITwitchHelixClient>();
+        var attempts = 0;
+        helix.GetUsersByIdsAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                attempts++;
+                return attempts == 1
+                    ? Task.FromResult<IReadOnlyList<UserInfo>>(
+                        [new UserInfo("42", "viewer", "Viewer", "", "", null, ProfileImage, null, DateTime.UnixEpoch)])
+                    : Task.FromException<IReadOnlyList<UserInfo>>(new HttpRequestException("временный сбой"));
+            });
+
+        var cache = new UserAvatarCache(
+            helix,
+            Substitute.For<IHttpClientFactory>(),
+            time,
+            new() { Directory = _directory },
+            NullLogger<UserAvatarCache>.Instance);
+
+        using var server = await CreateServerAsync(cache);
+        using var client = server.CreateClient();
+
+        using var first = await client.GetAsync("/api/user-avatar?id=42");
+        time.UtcNow += UserAvatarCacheOptions.DefaultUrlLifetime + TimeSpan.FromMinutes(1);
+        using var second = await client.GetAsync("/api/user-avatar?id=42");
+        using var body = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(second.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(body.RootElement.GetProperty("url").GetString(), Is.EqualTo(ProfileImage));
+        }
+    }
+
     private UserAvatarCache CreateCache(ITwitchHelixClient helix)
     {
         return new(

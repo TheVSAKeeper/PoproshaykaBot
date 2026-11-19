@@ -430,6 +430,8 @@ public class SettingsPageRanksSaveTests
                 : Task.FromResult(false);
         }
 
+        public Task CancelPendingDownloadsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
         public void SkipVersion(string version)
         {
         }

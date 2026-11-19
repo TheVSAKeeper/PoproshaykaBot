@@ -4,6 +4,8 @@ public interface IUserAvatarCache
 {
     Task<string?> GetUrlAsync(string userId, CancellationToken cancellationToken = default);
 
+    Task<AvatarUrlLookupResult> ResolveUrlAsync(string userId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyCollection<string>> ResolveAsync(
         IReadOnlyCollection<string> userIds,
         CancellationToken cancellationToken = default);

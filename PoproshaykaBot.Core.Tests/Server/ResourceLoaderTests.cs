@@ -35,4 +35,23 @@ public sealed class ResourceLoaderTests
             .Or.StartWith("<html")
             .IgnoreCase);
     }
+
+    [Test]
+    public void ObsAssets_RespectExplicitTimeFormat_ExitHeight_AndScrollPauseReset()
+    {
+        var js = ResourceLoader.LoadResourceText("PoproshaykaBot.Core.Assets.obs.js");
+        var css = ResourceLoader.LoadResourceText("PoproshaykaBot.Core.Assets.obs.css");
+        var demoJs = ResourceLoader.LoadResourceText("PoproshaykaBot.Core.Assets.animations-demo.js");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(js, Does.Not.Contain("toLocaleTimeString()"));
+            Assert.That(demoJs, Does.Not.Contain("toLocaleTimeString()"));
+            Assert.That(js, Does.Contain("clearScrollPauseTimer"));
+            Assert.That(js, Does.Contain("--exit-max-height"));
+            Assert.That(js, Does.Contain("avatarMissTtlMs"));
+            Assert.That(css, Does.Not.Contain("max-height: 100px"));
+            Assert.That(css, Does.Contain("var(--exit-max-height"));
+        }
+    }
 }
