@@ -15,4 +15,6 @@ public sealed class YouTubeApiException(
     public string? Reason { get; } = reason;
 
     public HttpStatusCode? StatusCode { get; } = statusCode;
+
+    internal bool QuotaExhaustionRecorded { get; init; }
 }

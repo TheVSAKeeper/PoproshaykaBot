@@ -5,4 +5,8 @@ internal sealed record YouTubeVideoLiveSample(
     string Title,
     DateTimeOffset? ActualStartTimeUtc,
     DateTimeOffset? ActualEndTimeUtc,
-    int? ConcurrentViewers);
+    int? ConcurrentViewers,
+    string? ChannelId = null,
+    string? ChannelTitle = null,
+    string? ActiveLiveChatId = null,
+    bool HasLiveStreamingDetails = false);

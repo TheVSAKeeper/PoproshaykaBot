@@ -3,9 +3,11 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Infrastructure.Events.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events.Streaming;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
+using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
@@ -649,6 +651,981 @@ public class YouTubeStreamMonitorTests
         Assert.That(_monitor.CurrentStream?.ThumbnailUrl, Is.EqualTo("https://i.ytimg.com/vi/vid-thumb/hqdefault.jpg"));
     }
 
+    [Test]
+    public async Task MultiChannel_BotOnly_Offline_Uses_Zero_DataApi_Calls_And_Publishes_Bot_Status()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-offline.json"));
+        const string foreignChannelId = "UC0000000000000000000002";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = foreignChannelId,
+                    DisplayName = "Foreign",
+                    IsConfigured = true,
+                    MonitoringEnabled = true,
+                    BotAccountId = "UC_BOT",
+                    BotContextId = "yt-bot-1",
+                    BotVerifiedSubjectId = "UC_BOT",
+                },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = foreignChannelId }],
+        });
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns((YouTubePublicLiveVideo?)null);
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, "yt-bot-1", "bot-token");
+        _accountsStore.UpsertContext(PlatformAuthRole.Bot, "yt-bot-1", "Bot", new YouTubeAccountSettings { ChannelId = "UC_BOT" });
+
+        var statuses = new List<StreamMonitoringStatusChanged>();
+        using var statusSub = _eventBus.Subscribe<StreamMonitoringStatusChanged>(statuses.Add);
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.RefreshLiveSnapshotAsync();
+
+        var snap = monitor.GetSnapshot(new ChannelKey(StreamingPlatform.YouTube, foreignChannelId));
+        Assert.Multiple(() =>
+        {
+            Assert.That(snap.Availability, Is.EqualTo(ChannelMonitoringAvailability.Active));
+            Assert.That(snap.Status, Is.EqualTo(StreamStatus.Offline));
+            Assert.That(statuses.Any(s => s.Role == PlatformAuthRole.Bot && s.Status == StreamMonitoringStatus.Connected), Is.True);
+        });
+
+        await _broadcastClient.DidNotReceiveWithAnyArgs().ListActiveBroadcastsAsync(default, default);
+        await _broadcastClient.DidNotReceiveWithAnyArgs().GetVideoLiveSampleAsync(default!, default, default, default);
+    }
+
+    [Test]
+    public async Task MultiChannel_BotOnly_Online_And_Subsequent_Poll_And_End()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-online.json"));
+        const string foreignChannelId = "UC0000000000000000000002";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = foreignChannelId,
+                    DisplayName = "Foreign",
+                    IsConfigured = true,
+                    MonitoringEnabled = true,
+                    BotAccountId = "UC_BOT",
+                    BotContextId = "yt-bot-1",
+                    BotVerifiedSubjectId = "UC_BOT",
+                },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = foreignChannelId }],
+        });
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-bot-1", foreignChannelId, "Foreign", "Bot Discovery Live", _clock.UtcNow));
+
+        var sampleCalls = 0;
+        _broadcastClient.GetVideoLiveSampleAsync("vid-bot-1", PlatformAuthRole.Bot, "yt-bot-1", Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                sampleCalls++;
+                return sampleCalls <= 2
+                    ? new YouTubeVideoLiveSample("vid-bot-1", "API Live Title", _clock.UtcNow, null, 333, foreignChannelId, "Foreign", "chat-bot-1")
+                    : new YouTubeVideoLiveSample("vid-bot-1", "API Live Title", _clock.UtcNow, _clock.UtcNow, 0, foreignChannelId, "Foreign", "chat-bot-1");
+            });
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, "yt-bot-1", "bot-token");
+        _accountsStore.UpsertContext(PlatformAuthRole.Bot, "yt-bot-1", "Bot", new YouTubeAccountSettings { ChannelId = "UC_BOT" });
+
+        var onlineEvents = new List<StreamWentOnline>();
+        var offlineEvents = new List<StreamWentOffline>();
+        var viewerEvents = new List<ViewerSampleObserved>();
+        var broadcastEvents = new List<YouTubeActiveBroadcastChanged>();
+        var chatAvailabilityEvents = new List<PlatformChatAvailabilityChanged>();
+        using var s1 = _eventBus.Subscribe<StreamWentOnline>(onlineEvents.Add);
+        using var s2 = _eventBus.Subscribe<StreamWentOffline>(offlineEvents.Add);
+        using var s3 = _eventBus.Subscribe<ViewerSampleObserved>(viewerEvents.Add);
+        using var s4 = _eventBus.Subscribe<YouTubeActiveBroadcastChanged>(broadcastEvents.Add);
+        using var s5 = _eventBus.Subscribe<PlatformChatAvailabilityChanged>(chatAvailabilityEvents.Add);
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sampleCalls, Is.EqualTo(1));
+            Assert.That(monitor.CurrentStatus, Is.EqualTo(StreamStatus.Online));
+            Assert.That(monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-bot-1"));
+            Assert.That(monitor.CurrentBroadcast?.LiveChatId, Is.EqualTo("chat-bot-1"));
+            Assert.That(onlineEvents, Has.Count.EqualTo(1));
+            Assert.That(viewerEvents, Has.Count.EqualTo(1));
+            Assert.That(viewerEvents[0].ViewerCount, Is.EqualTo(333));
+            Assert.That(broadcastEvents[^1].ActiveBroadcast?.LiveChatId, Is.EqualTo("chat-bot-1"));
+            Assert.That(chatAvailabilityEvents.Any(e => e.Platform == StreamingPlatform.YouTube && e.IsAvailable), Is.True);
+        });
+
+        await monitor.RefreshLiveSnapshotAsync();
+        Assert.That(sampleCalls, Is.EqualTo(2));
+        await publicDiscovery.Received(1).FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>());
+
+        await monitor.RefreshLiveSnapshotAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(monitor.CurrentStatus, Is.EqualTo(StreamStatus.Offline));
+            Assert.That(monitor.CurrentBroadcast, Is.Null);
+            Assert.That(offlineEvents, Has.Count.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task MultiChannel_Mixed_Uses_Broadcaster_For_Own_And_BotOnly_For_Foreign()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-mixed.json"));
+        const string foreignChannelId = "UC0000000000000000000002";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = ChannelId,
+                    DisplayName = "Own",
+                    IsConfigured = true,
+                    MonitoringEnabled = true,
+                },
+                new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = foreignChannelId,
+                    DisplayName = "Foreign",
+                    IsConfigured = true,
+                    MonitoringEnabled = true,
+                },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = ChannelId }],
+        });
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-foreign", foreignChannelId, "Foreign", "Foreign Live", _clock.UtcNow));
+
+        _broadcastClient.ListActiveBroadcastsAsync(AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns([BuildBroadcast("vid-own", "chat-own", "Own Live")]);
+        _broadcastClient.GetVideoLiveSampleAsync("vid-own", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-own", "Own Live", _clock.UtcNow, null, 100));
+        _broadcastClient.GetVideoLiveSampleAsync("vid-foreign", PlatformAuthRole.Bot, AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-foreign", "Foreign Live", _clock.UtcNow, null, 200, foreignChannelId, "Foreign", "chat-foreign"));
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Broadcaster, AuthContextIds.Default, "broadcaster-token");
+        roleAuth.SetToken(PlatformAuthRole.Bot, AuthContextIds.Default, "bot-token");
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.RefreshLiveSnapshotAsync();
+
+        var ownSnap = monitor.GetSnapshot(new ChannelKey(StreamingPlatform.YouTube, ChannelId));
+        var foreignSnap = monitor.GetSnapshot(new ChannelKey(StreamingPlatform.YouTube, foreignChannelId));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ownSnap.Availability, Is.EqualTo(ChannelMonitoringAvailability.Active));
+            Assert.That(ownSnap.Status, Is.EqualTo(StreamStatus.Online));
+            Assert.That(ownSnap.Stream?.Id, Is.EqualTo("vid-own"));
+            Assert.That(foreignSnap.Availability, Is.EqualTo(ChannelMonitoringAvailability.Active));
+            Assert.That(foreignSnap.Status, Is.EqualTo(StreamStatus.Online));
+            Assert.That(foreignSnap.Stream?.Id, Is.EqualTo("vid-foreign"));
+        });
+
+        await publicDiscovery.DidNotReceive().FindActiveLiveVideoAsync(ChannelId, Arg.Any<CancellationToken>());
+        await publicDiscovery.Received(1).FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task MultiChannel_BotOnly_NegativeCases_Unauthorized_Quota_Transient_And_AuthWake()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-neg.json"));
+        const string foreignChannelId = "UC0000000000000000000002";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = foreignChannelId,
+                    DisplayName = "Foreign",
+                    IsConfigured = true,
+                    MonitoringEnabled = true,
+                    BotAccountId = "UC_BOT",
+                    BotContextId = "yt-bot-1",
+                    BotVerifiedSubjectId = "UC_BOT",
+                },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = foreignChannelId }],
+        });
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, "yt-bot-1", "bot-token");
+        _accountsStore.UpsertContext(PlatformAuthRole.Bot, "yt-bot-1", "Bot", new YouTubeAccountSettings { ChannelId = "UC_BOT" });
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-neg", foreignChannelId, "Foreign", "Live", _clock.UtcNow));
+        _broadcastClient.GetVideoLiveSampleAsync("vid-neg", PlatformAuthRole.Bot, "yt-bot-1", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-neg", "Live", _clock.UtcNow, null, 50, foreignChannelId, "Foreign", "chat-neg"));
+
+        await monitor.RefreshLiveSnapshotAsync();
+        Assert.That(monitor.CurrentStatus, Is.EqualTo(StreamStatus.Online));
+
+        _broadcastClient.GetVideoLiveSampleAsync("vid-neg", PlatformAuthRole.Bot, "yt-bot-1", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new YouTubeApiException(YouTubeApiErrorKind.Transient, "503"));
+        await monitor.RefreshLiveSnapshotAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(monitor.CurrentStatus, Is.EqualTo(StreamStatus.Online));
+            Assert.That(monitor.CaptureDiagnostics().Issue, Is.EqualTo(YouTubeMonitorIssue.TransientError));
+        });
+
+        _broadcastClient.GetVideoLiveSampleAsync("vid-neg", PlatformAuthRole.Bot, "yt-bot-1", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new YouTubeApiException(YouTubeApiErrorKind.Unauthorized, "401"));
+        await monitor.RefreshLiveSnapshotAsync();
+        var unauthSnap = monitor.GetSnapshot(new ChannelKey(StreamingPlatform.YouTube, foreignChannelId));
+        Assert.Multiple(() =>
+        {
+            Assert.That(unauthSnap.Availability, Is.EqualTo(ChannelMonitoringAvailability.Unavailable));
+            Assert.That(unauthSnap.Reason, Is.EqualTo(MonitoringUnavailableReason.MissingBotAuth));
+            Assert.That(monitor.CaptureDiagnostics().Issue, Is.EqualTo(YouTubeMonitorIssue.MissingBotAuth));
+        });
+
+        _broadcastClient.GetVideoLiveSampleAsync("vid-neg", PlatformAuthRole.Bot, "yt-bot-1", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new YouTubeApiException(YouTubeApiErrorKind.QuotaExceeded, "quotaExceeded", "quotaExceeded"));
+        await monitor.RefreshLiveSnapshotAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(monitor.CaptureDiagnostics().Issue, Is.EqualTo(YouTubeMonitorIssue.QuotaExhausted));
+            Assert.That(_governor.CaptureDiagnostics().ExhaustedByServer, Is.True);
+        });
+
+        var wokenTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var failedObservedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var unauthSub = _eventBus.Subscribe<ChannelMonitoringStateChanged>(e =>
+        {
+            if (e.Snapshot.Reason == MonitoringUnavailableReason.MissingBotAuth)
+            {
+                failedObservedTcs.TrySetResult();
+            }
+        });
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                wokenTcs.TrySetResult();
+                return (YouTubePublicLiveVideo?)null;
+            });
+
+        roleAuth.ClearTokens();
+        await monitor.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        try
+        {
+            await failedObservedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            roleAuth.SetToken(PlatformAuthRole.Bot, "yt-bot-1", "fresh-bot-token");
+            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot));
+            await wokenTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await monitor.StopAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        }
+    }
+
+    [Test]
+    public async Task SingleChannel_Legacy_BotOnly_Resolves_Handle_And_Monitors_Hybrid()
+    {
+        _settingsStore.Save(new YouTubeSettings
+        {
+            Enabled = true,
+            ProjectId = "proj",
+            Channel = "@foreignstreamer",
+        });
+
+        const string foreignChannelId = "UC0000000000000000000002";
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-legacy-bot", foreignChannelId, "Foreign", "Legacy Bot Live", _clock.UtcNow));
+
+        _broadcastClient.ResolveChannelIdByHandleAsync("@foreignstreamer", PlatformAuthRole.Bot, null, Arg.Any<CancellationToken>())
+            .Returns(foreignChannelId);
+        _broadcastClient.GetVideoLiveSampleAsync("vid-legacy-bot", PlatformAuthRole.Bot, null, Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-legacy-bot", "Legacy Bot Live", _clock.UtcNow, null, 88, foreignChannelId, "Foreign", "chat-legacy"));
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, AuthContextIds.Default, "bot-token");
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            accountsStore: _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(monitor.CurrentStatus, Is.EqualTo(StreamStatus.Online));
+            Assert.That(monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-legacy-bot"));
+            Assert.That(monitor.CurrentBroadcast?.LiveChatId, Is.EqualTo("chat-legacy"));
+            Assert.That(monitor.CurrentStream?.ViewerCount, Is.EqualTo(88));
+        });
+    }
+
+    [Test]
+    public async Task MultiChannel_Active_Channel_Switch_Mid_Discovery_Does_Not_Overwrite_Active_With_Old_Channel()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-switch-race.json"));
+        const string channelA = "UC000000000000000000000A";
+        const string channelB = "UC000000000000000000000B";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = channelA, DisplayName = "Channel A", IsConfigured = true, MonitoringEnabled = true },
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = channelB, DisplayName = "Channel B", IsConfigured = true, MonitoringEnabled = true },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = channelA }],
+        });
+
+        var sampleEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSample = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(channelA, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-a", channelA, "Channel A", "Live A", _clock.UtcNow));
+        publicDiscovery.FindActiveLiveVideoAsync(channelB, Arg.Any<CancellationToken>())
+            .Returns((YouTubePublicLiveVideo?)null);
+
+        _broadcastClient.GetVideoLiveSampleAsync("vid-a", PlatformAuthRole.Bot, AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                sampleEntered.TrySetResult();
+                await releaseSample.Task.WaitAsync(call.Arg<CancellationToken>()).ConfigureAwait(false);
+                return (YouTubeVideoLiveSample?)new YouTubeVideoLiveSample("vid-a", "Live A", _clock.UtcNow, null, 120, channelA, "Channel A", "chat-a");
+            });
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, AuthContextIds.Default, "bot-token");
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        var refreshTask = monitor.RefreshLiveSnapshotAsync();
+        await sampleEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        catalogStore.Mutate(s => s.Platforms[0].ActiveChannelId = channelB);
+        await _eventBus.PublishAsync(new ActiveChannelChanged(
+            StreamingPlatform.YouTube,
+            new(StreamingPlatform.YouTube, channelA),
+            new(StreamingPlatform.YouTube, channelB),
+            "Channel B",
+            ChannelSwitchMode.Manual));
+        releaseSample.TrySetResult();
+        await refreshTask;
+
+        var snapA = monitor.GetSnapshot(new ChannelKey(StreamingPlatform.YouTube, channelA));
+        Assert.Multiple(() =>
+        {
+            Assert.That(monitor.CurrentBroadcast, Is.Null);
+            Assert.That(snapA.Status, Is.EqualTo(StreamStatus.Online));
+            Assert.That(snapA.Stream?.Id, Is.EqualTo("vid-a"));
+        });
+    }
+
+    [Test]
+    public async Task Becoming_Broadcaster_Eligible_Invalidates_Bot_Discovery_And_Runs_ListActiveBroadcasts()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-role-switch.json"));
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = ChannelId, DisplayName = "Main", IsConfigured = true, MonitoringEnabled = true },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = ChannelId }],
+        });
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(ChannelId, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-bot", ChannelId, "Main", "Bot Live", _clock.UtcNow));
+        _broadcastClient.GetVideoLiveSampleAsync("vid-bot", PlatformAuthRole.Bot, AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-bot", "Bot Live", _clock.UtcNow, null, 50, ChannelId, "Main", "chat-bot"));
+        _broadcastClient.ListActiveBroadcastsAsync(AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns([BuildBroadcast("vid-bc", "chat-bc", "Broadcaster Live")]);
+        _broadcastClient.GetVideoLiveSampleAsync("vid-bc", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-bc", "Broadcaster Live", _clock.UtcNow, null, 80, ChannelId, "Main", "chat-bc"));
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, AuthContextIds.Default, "bot-token");
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.RefreshLiveSnapshotAsync();
+        Assert.That(monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-bot"));
+
+        roleAuth.SetToken(PlatformAuthRole.Broadcaster, AuthContextIds.Default, "bc-token");
+        await monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-bc"));
+            Assert.That(monitor.CurrentBroadcast?.LiveChatId, Is.EqualTo("chat-bc"));
+        });
+        await _broadcastClient.Received(1).ListActiveBroadcastsAsync(AuthContextIds.Default, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Unverified_Or_Drifted_Bot_And_Active_Bot_Failure_Report_AccessUnverified_And_Bot_Role()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-role-status.json"));
+        const string foreignChannelId = "UC0000000000000000000002";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = ChannelId, DisplayName = "OwnBg", IsConfigured = true, MonitoringEnabled = true },
+                new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = foreignChannelId,
+                    DisplayName = "ForeignActive",
+                    IsConfigured = true,
+                    MonitoringEnabled = true,
+                    BotAccountId = "UC_OLD_BOT",
+                    BotContextId = "yt-bot-1",
+                    BotVerifiedSubjectId = "UC_OLD_BOT",
+                },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = foreignChannelId }],
+        });
+
+        _accountsStore.UpsertContext(PlatformAuthRole.Bot, "yt-bot-1", "Bot", new YouTubeAccountSettings { ChannelId = "UC_NEW_BOT" });
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Broadcaster, AuthContextIds.Default, "bc-token");
+        roleAuth.SetToken(PlatformAuthRole.Bot, "yt-bot-1", "bot-token");
+
+        _broadcastClient.ListActiveBroadcastsAsync(AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<YouTubeBroadcastSummary>());
+
+        var statuses = new List<StreamMonitoringStatusChanged>();
+        using var statusSub = _eventBus.Subscribe<StreamMonitoringStatusChanged>(statuses.Add);
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.RefreshLiveSnapshotAsync();
+
+        var snap = monitor.GetSnapshot(new ChannelKey(StreamingPlatform.YouTube, foreignChannelId));
+        Assert.Multiple(() =>
+        {
+            Assert.That(snap.Availability, Is.EqualTo(ChannelMonitoringAvailability.Unavailable));
+            Assert.That(snap.Reason, Is.EqualTo(MonitoringUnavailableReason.AccessUnverified));
+            Assert.That(monitor.CaptureDiagnostics().Issue, Is.EqualTo(YouTubeMonitorIssue.AccessUnverified));
+            Assert.That(statuses.Any(s => s.Role == PlatformAuthRole.Bot), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task Recovery_From_Bot_401_Publishes_Active_ChannelMonitoringStateChanged()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-recovery.json"));
+        const string foreignChannelId = "UC0000000000000000000002";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = foreignChannelId, DisplayName = "Foreign", IsConfigured = true, MonitoringEnabled = true },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = foreignChannelId }],
+        });
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-rec", foreignChannelId, "Foreign", "Live", _clock.UtcNow));
+
+        var call = 0;
+        _broadcastClient.GetVideoLiveSampleAsync("vid-rec", PlatformAuthRole.Bot, AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                call++;
+                if (call == 1)
+                {
+                    throw new YouTubeApiException(YouTubeApiErrorKind.Unauthorized, "401");
+                }
+
+                return new YouTubeVideoLiveSample("vid-rec", "Live", _clock.UtcNow, null, 20, foreignChannelId, "Foreign", "chat-rec");
+            });
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, AuthContextIds.Default, "bot-token");
+
+        var stateChanges = new List<ChannelMonitoringStateChanged>();
+        using var sub = _eventBus.Subscribe<ChannelMonitoringStateChanged>(stateChanges.Add);
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.RefreshLiveSnapshotAsync();
+        Assert.That(stateChanges[^1].Snapshot.Availability, Is.EqualTo(ChannelMonitoringAvailability.Unavailable));
+
+        await monitor.RefreshLiveSnapshotAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(stateChanges[^1].Snapshot.Availability, Is.EqualTo(ChannelMonitoringAvailability.Active));
+            Assert.That(stateChanges[^1].Snapshot.Reason, Is.EqualTo(MonitoringUnavailableReason.None));
+        });
+    }
+
+    [Test]
+    public async Task Broadcaster_Quota_Hit_Still_Runs_Bot_Zero_Quota_Offline_Discovery()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-quota-isolation.json"));
+        const string foreignChannelId = "UC0000000000000000000002";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = ChannelId, DisplayName = "Own", IsConfigured = true, MonitoringEnabled = true },
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = foreignChannelId, DisplayName = "Foreign", IsConfigured = true, MonitoringEnabled = true },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = foreignChannelId }],
+        });
+
+        _broadcastClient.ListActiveBroadcastsAsync(AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new YouTubeApiException(YouTubeApiErrorKind.QuotaExceeded, "quotaExceeded", "quotaExceeded"));
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>())
+            .Returns((YouTubePublicLiveVideo?)null);
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Broadcaster, AuthContextIds.Default, "bc-token");
+        roleAuth.SetToken(PlatformAuthRole.Bot, AuthContextIds.Default, "bot-token");
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.RefreshLiveSnapshotAsync();
+
+        var ownSnap = monitor.GetSnapshot(new ChannelKey(StreamingPlatform.YouTube, ChannelId));
+        var foreignSnap = monitor.GetSnapshot(new ChannelKey(StreamingPlatform.YouTube, foreignChannelId));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ownSnap.Availability, Is.EqualTo(ChannelMonitoringAvailability.Unavailable));
+            Assert.That(ownSnap.Reason, Is.EqualTo(MonitoringUnavailableReason.QuotaExhausted));
+            Assert.That(foreignSnap.Availability, Is.EqualTo(ChannelMonitoringAvailability.Active));
+            Assert.That(foreignSnap.Status, Is.EqualTo(StreamStatus.Offline));
+        });
+        await publicDiscovery.Received(1).FindActiveLiveVideoAsync(foreignChannelId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Failing_Background_Bot_Slot_Does_Not_Trigger_Early_Foreground_VideosList()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-cadence.json"));
+        const string activeChannel = "UC0000000000000000000002";
+        const string bgChannel = "UC0000000000000000000003";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = activeChannel, DisplayName = "Active", IsConfigured = true, MonitoringEnabled = true },
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = bgChannel, DisplayName = "Bg", IsConfigured = true, MonitoringEnabled = true },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = activeChannel }],
+        });
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(activeChannel, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-act", activeChannel, "Active", "Live", _clock.UtcNow));
+
+        var bgCalls = 0;
+        var secondBgAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstLoopParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        publicDiscovery.FindActiveLiveVideoAsync(bgChannel, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                bgCalls++;
+                if (bgCalls == 1)
+                {
+                    firstLoopParked.TrySetResult();
+                    throw new YouTubeApiException(YouTubeApiErrorKind.Transient, "503");
+                }
+
+                secondBgAttempt.TrySetResult();
+                return (YouTubePublicLiveVideo?)null;
+            });
+
+        var activeSampleCalls = 0;
+        _broadcastClient.GetVideoLiveSampleAsync("vid-act", PlatformAuthRole.Bot, AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                activeSampleCalls++;
+                return new YouTubeVideoLiveSample("vid-act", "Live", _clock.UtcNow, null, 100, activeChannel, "Active", "chat-act");
+            });
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, AuthContextIds.Default, "bot-token");
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            catalogStore,
+            _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.StartAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        try
+        {
+            await firstLoopParked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            _clock.UtcNow += TimeSpan.FromSeconds(15);
+            await _eventBus.PublishAsync(new PlatformAuthorizationRefreshed(StreamingPlatform.YouTube, PlatformAuthRole.Bot));
+            await secondBgAttempt.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(Volatile.Read(ref bgCalls), Is.GreaterThanOrEqualTo(2));
+                Assert.That(Volatile.Read(ref activeSampleCalls), Is.EqualTo(1));
+                Assert.That(monitor.CaptureDiagnostics().ConsecutiveFailures, Is.EqualTo(0));
+            });
+        }
+        finally
+        {
+            await monitor.StopAsync(new Progress<string>(_ => { }), CancellationToken.None);
+        }
+    }
+
+    [Test]
+    public async Task MidStream_Disabled_Chat_Clears_LiveChatId_And_Publishes_ChatAvailability_False()
+    {
+        var broadcast = BuildBroadcast("vid-1", "chat-1", "Live");
+        _broadcastClient.ListActiveBroadcastsAsync(Arg.Any<CancellationToken>()).Returns([broadcast]);
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        var chatAvailabilityEvents = new List<PlatformChatAvailabilityChanged>();
+        var broadcastEvents = new List<YouTubeActiveBroadcastChanged>();
+        using var s1 = _eventBus.Subscribe<PlatformChatAvailabilityChanged>(chatAvailabilityEvents.Add);
+        using var s2 = _eventBus.Subscribe<YouTubeActiveBroadcastChanged>(broadcastEvents.Add);
+
+        _broadcastClient.GetVideoLiveSampleAsync("vid-1", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample(
+                "vid-1",
+                "Live",
+                _clock.UtcNow,
+                null,
+                50,
+                ChannelId,
+                "MainChannel",
+                ActiveLiveChatId: null,
+                HasLiveStreamingDetails: true));
+
+        await _monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_monitor.CurrentBroadcast?.LiveChatId, Is.EqualTo(string.Empty));
+            Assert.That(broadcastEvents, Has.Count.EqualTo(1));
+            Assert.That(broadcastEvents[0].ActiveBroadcast?.LiveChatId, Is.EqualTo(string.Empty));
+            Assert.That(chatAvailabilityEvents, Has.Count.EqualTo(1));
+            Assert.That(chatAvailabilityEvents[0].IsAvailable, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task MultiChannel_Broadcaster_401_Falls_Back_To_Bot_Hybrid_In_Same_Poll()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-bc401.json"));
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new()
+                {
+                    Platform = StreamingPlatform.YouTube,
+                    ChannelId = ChannelId,
+                    DisplayName = "OwnChannel",
+                    IsConfigured = true,
+                    MonitoringEnabled = true,
+                    BroadcasterContextId = AuthContextIds.Default,
+                    BotContextId = "yt-bot-1",
+                },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = ChannelId }],
+        });
+
+        _accountsStore.SaveAll(
+            "secret",
+            new YouTubeAccountSettings { ChannelId = "UC_BOT" },
+            new YouTubeAccountSettings { ChannelId = ChannelId, ChannelTitle = "OwnChannel" });
+        _accountsStore.UpsertContext(PlatformAuthRole.Bot, "yt-bot-1", "Bot", new YouTubeAccountSettings { ChannelId = "UC_BOT" });
+
+        _broadcastClient.ListActiveBroadcastsAsync(AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new YouTubeApiException(YouTubeApiErrorKind.Unauthorized, "401"));
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(ChannelId, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-bc401-fb", ChannelId, "OwnChannel", "Live via Bot", _clock.UtcNow));
+        _broadcastClient.GetVideoLiveSampleAsync("vid-bc401-fb", PlatformAuthRole.Bot, "yt-bot-1", Arg.Any<CancellationToken>())
+            .Returns(new YouTubeVideoLiveSample("vid-bc401-fb", "Live via Bot", _clock.UtcNow, null, 77, ChannelId, "OwnChannel", "chat-fb", HasLiveStreamingDetails: true));
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Broadcaster, AuthContextIds.Default, "bad-bc-token");
+        roleAuth.SetToken(PlatformAuthRole.Bot, "yt-bot-1", "good-bot-token");
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            channelCatalogStore: catalogStore,
+            accountsStore: _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        await monitor.RefreshLiveSnapshotAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(monitor.CurrentStatus, Is.EqualTo(StreamStatus.Online));
+            Assert.That(monitor.CurrentBroadcast?.VideoId, Is.EqualTo("vid-bc401-fb"));
+            Assert.That(monitor.CurrentBroadcast?.LiveChatId, Is.EqualTo("chat-fb"));
+        });
+    }
+
+    [Test]
+    public async Task MultiChannel_BotOnly_MidStream_Chat_Disable_And_ReEnable_Updates_Broadcast()
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-chat-toggle.json"));
+        const string foreignId = "UC0000000000000000000055";
+        catalogStore.Save(new()
+        {
+            Channels =
+            [
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = foreignId, DisplayName = "Foreign", IsConfigured = true, MonitoringEnabled = true },
+            ],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = foreignId }],
+        });
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(foreignId, Arg.Any<CancellationToken>())
+            .Returns(new YouTubePublicLiveVideo("vid-chat-toggle", foreignId, "Foreign", "Live", _clock.UtcNow));
+
+        _broadcastClient.GetVideoLiveSampleAsync("vid-chat-toggle", PlatformAuthRole.Bot, AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns(
+                new YouTubeVideoLiveSample("vid-chat-toggle", "Live", _clock.UtcNow, null, 20, foreignId, "Foreign", "chat-1", HasLiveStreamingDetails: true),
+                new YouTubeVideoLiveSample("vid-chat-toggle", "Live", _clock.UtcNow, null, 25, foreignId, "Foreign", null, HasLiveStreamingDetails: true),
+                new YouTubeVideoLiveSample("vid-chat-toggle", "Live", _clock.UtcNow, null, 30, foreignId, "Foreign", "chat-2", HasLiveStreamingDetails: true));
+
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, AuthContextIds.Default, "bot-token");
+
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient,
+            resolver,
+            _selectionStore,
+            roleAuth,
+            _settingsStore,
+            _governor,
+            _eventBus,
+            _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance,
+            channelCatalogStore: catalogStore,
+            accountsStore: _accountsStore,
+            publicDiscovery: publicDiscovery);
+
+        var chatAvailabilities = new List<bool>();
+        using var sub = _eventBus.Subscribe<PlatformChatAvailabilityChanged>(e => chatAvailabilities.Add(e.IsAvailable));
+
+        await monitor.RefreshLiveSnapshotAsync();
+        await monitor.RefreshLiveSnapshotAsync();
+        var afterDisable = monitor.CurrentBroadcast?.LiveChatId;
+        await monitor.RefreshLiveSnapshotAsync();
+        var afterReEnable = monitor.CurrentBroadcast?.LiveChatId;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterDisable, Is.EqualTo(string.Empty));
+            Assert.That(afterReEnable, Is.EqualTo("chat-2"));
+            Assert.That(chatAvailabilities, Is.EqualTo(new[] { true, false, true }));
+        });
+    }
+
+    [Test]
+    public void QuotaGovernor_Late_Exhaustion_On_Old_Project_Or_Day_Does_Not_Exhaust_New_Project_Or_Day()
+    {
+        _settingsStore.Save(new YouTubeSettings { Enabled = true, ProjectId = "proj-old", DailyQuotaBudget = 10_000 });
+        Assert.That(_governor.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 1, out var oldLease), Is.True);
+
+        _settingsStore.Save(new YouTubeSettings { Enabled = true, ProjectId = "proj-new", DailyQuotaBudget = 10_000 });
+        oldLease.MarkExhaustedFromServer();
+        oldLease.Dispose();
+
+        Assert.That(_governor.CaptureDiagnostics().ExhaustedByServer, Is.False);
+
+        Assert.That(_governor.TryReserve(PlatformAuthRole.Bot, YouTubeQuotaPriority.CriticalReadAndMonitor, 1, out var yesterdayLease), Is.True);
+        _clock.UtcNow = _clock.UtcNow.AddDays(2);
+        yesterdayLease.MarkExhaustedFromServer();
+        yesterdayLease.Dispose();
+
+        Assert.That(_governor.CaptureDiagnostics().ExhaustedByServer, Is.False);
+    }
+
     private YouTubeBroadcastSummary BuildBroadcast(string videoId, string liveChatId, string title)
     {
         return new(videoId, ChannelId, "MainChannel", liveChatId, title, _clock.UtcNow);
@@ -684,6 +1661,37 @@ public class YouTubeStreamMonitorTests
 
         public void ResetRetryState(PlatformAuthRole role)
             => refresher.ResetRetryState(role);
+    }
+
+    private sealed class RoleAwareStubAuthService : IPlatformAuthService
+    {
+        private readonly Dictionary<(PlatformAuthRole Role, string ContextId), string> _tokens = new();
+
+        public StreamingPlatform Platform => StreamingPlatform.YouTube;
+
+        public void SetToken(PlatformAuthRole role, string contextId, string token)
+        {
+            _tokens[(role, AuthContextIds.Normalize(contextId))] = token;
+        }
+
+        public void ClearTokens() => _tokens.Clear();
+
+        public bool HasUsableAccessToken(PlatformAuthRole role) => HasUsableAccessToken(role, AuthContextIds.Default);
+
+        public bool HasUsableAccessToken(PlatformAuthRole role, string? contextId)
+            => _tokens.ContainsKey((role, AuthContextIds.Normalize(contextId)));
+
+        public ValueTask<string?> GetAccessTokenAsync(PlatformAuthRole role, bool forceRefresh = false, CancellationToken ct = default)
+            => GetAccessTokenAsync(role, AuthContextIds.Default, forceRefresh, ct);
+
+        public ValueTask<string?> GetAccessTokenAsync(PlatformAuthRole role, string? contextId, bool forceRefresh = false, CancellationToken ct = default)
+            => ValueTask.FromResult(_tokens.GetValueOrDefault((role, AuthContextIds.Normalize(contextId))));
+
+        public bool TryClearAccessToken(PlatformAuthRole role, string failedAccessToken) => false;
+
+        public void ResetRetryState(PlatformAuthRole role)
+        {
+        }
     }
 
     private sealed class StubAuthService : IPlatformAuthService

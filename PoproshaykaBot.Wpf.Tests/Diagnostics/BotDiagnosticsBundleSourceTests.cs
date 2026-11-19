@@ -75,7 +75,41 @@ public class BotDiagnosticsBundleSourceTests
         }
     }
 
-    private static ServiceProvider BuildProvider(bool withYouTubeSources)
+    [Test]
+    public async Task Снимок_форматирует_нехватку_авторизации_бота_YouTube()
+    {
+        await using var provider = BuildProvider(
+            withYouTubeSources: true,
+            youtubeMonitor: new StubYouTubeMonitorMissingBotAuth());
+        var source = new BotDiagnosticsBundleSource(
+            provider.GetServices<ISettingsSnapshotContributor>(),
+            provider.GetRequiredService<DiagnosticsSnapshotSource>(),
+            NullLogger<BotDiagnosticsBundleSource>.Instance);
+
+        var snapshotEntry = source.Collect().Single(entry => entry.Name == "bot-snapshot.txt");
+
+        Assert.That(snapshotEntry.Text, Does.Contain("состояние: нужна авторизация бота"));
+    }
+
+    [Test]
+    public async Task Снимок_форматирует_неподтверждённый_доступ_аккаунта_YouTube()
+    {
+        await using var provider = BuildProvider(
+            withYouTubeSources: true,
+            youtubeMonitor: new StubYouTubeMonitorAccessUnverified());
+        var source = new BotDiagnosticsBundleSource(
+            provider.GetServices<ISettingsSnapshotContributor>(),
+            provider.GetRequiredService<DiagnosticsSnapshotSource>(),
+            NullLogger<BotDiagnosticsBundleSource>.Instance);
+
+        var snapshotEntry = source.Collect().Single(entry => entry.Name == "bot-snapshot.txt");
+
+        Assert.That(snapshotEntry.Text, Does.Contain("состояние: доступ аккаунта не подтверждён"));
+    }
+
+    private static ServiceProvider BuildProvider(
+        bool withYouTubeSources,
+        IYouTubeMonitorDiagnostics? youtubeMonitor = null)
     {
         var services = new ServiceCollection();
         services
@@ -96,7 +130,7 @@ public class BotDiagnosticsBundleSourceTests
 
         if (withYouTubeSources)
         {
-            services.AddSingleton<IYouTubeMonitorDiagnostics>(new StubYouTubeMonitorDiagnostics());
+            services.AddSingleton<IYouTubeMonitorDiagnostics>(youtubeMonitor ?? new StubYouTubeMonitorDiagnostics());
             services.AddSingleton<IYouTubeChatDiagnostics>(new StubYouTubeChatDiagnostics());
             services.AddSingleton<IYouTubeQuotaGovernor>(new StubYouTubeQuotaGovernor());
         }
@@ -110,6 +144,36 @@ public class BotDiagnosticsBundleSourceTests
             ValidateOnBuild = true,
             ValidateScopes = true,
         });
+    }
+
+    private sealed class StubYouTubeMonitorMissingBotAuth : IYouTubeMonitorDiagnostics
+    {
+        public YouTubeMonitoringStatus CaptureDiagnostics() =>
+            new(
+                Enabled: true,
+                StreamStatus.Unknown,
+                YouTubeMonitorIssue.MissingBotAuth,
+                "UCtarget",
+                null,
+                null,
+                0,
+                DateTimeOffset.UtcNow,
+                0);
+    }
+
+    private sealed class StubYouTubeMonitorAccessUnverified : IYouTubeMonitorDiagnostics
+    {
+        public YouTubeMonitoringStatus CaptureDiagnostics() =>
+            new(
+                Enabled: true,
+                StreamStatus.Unknown,
+                YouTubeMonitorIssue.AccessUnverified,
+                "UCtarget",
+                null,
+                null,
+                0,
+                DateTimeOffset.UtcNow,
+                0);
     }
 
     private sealed class StubYouTubeMonitorDiagnostics : IYouTubeMonitorDiagnostics

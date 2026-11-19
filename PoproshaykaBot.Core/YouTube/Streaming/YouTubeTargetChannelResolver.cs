@@ -15,7 +15,16 @@ internal sealed partial class YouTubeTargetChannelResolver(
     private readonly Dictionary<(string ProjectKey, string NormalizedHandle), string> _handleCache = new();
     private string? _lastWarnedMismatchKey;
 
-    public async Task<string?> ResolveAsync(YouTubeSettings settings, CancellationToken cancellationToken)
+    public Task<string?> ResolveAsync(YouTubeSettings settings, CancellationToken cancellationToken)
+    {
+        return ResolveAsync(settings, PlatformAuthRole.Broadcaster, null, cancellationToken);
+    }
+
+    public async Task<string?> ResolveAsync(
+        YouTubeSettings settings,
+        PlatformAuthRole resolveRole,
+        string? contextId,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -55,8 +64,10 @@ internal sealed partial class YouTubeTargetChannelResolver(
             }
             else
             {
-                resolvedChannelId = await client.ResolveChannelIdByHandleAsync(normalizedHandle, cancellationToken)
-                    .ConfigureAwait(false);
+                resolvedChannelId = resolveRole == PlatformAuthRole.Broadcaster && AuthContextIds.IsDefault(contextId)
+                    ? await client.ResolveChannelIdByHandleAsync(normalizedHandle, cancellationToken).ConfigureAwait(false)
+                    : await client.ResolveChannelIdByHandleAsync(normalizedHandle, resolveRole, contextId, cancellationToken)
+                        .ConfigureAwait(false);
 
                 if (!string.IsNullOrWhiteSpace(resolvedChannelId))
                 {
@@ -68,7 +79,8 @@ internal sealed partial class YouTubeTargetChannelResolver(
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(resolvedChannelId)
+        if (resolveRole == PlatformAuthRole.Broadcaster
+            && !string.IsNullOrWhiteSpace(resolvedChannelId)
             && !string.IsNullOrWhiteSpace(broadcasterChannelId)
             && !string.Equals(broadcasterChannelId, resolvedChannelId, StringComparison.Ordinal))
         {

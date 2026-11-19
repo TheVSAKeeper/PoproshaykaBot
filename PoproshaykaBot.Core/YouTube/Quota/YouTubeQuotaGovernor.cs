@@ -90,6 +90,15 @@ internal sealed class YouTubeQuotaGovernor(
 
         var settings = settingsStore.Load();
         var projectKey = YouTubeQuotaPolicy.NormalizeProjectKey(settings);
+        var window = PacificQuotaClock.GetWindow(timeProvider.GetUtcNow());
+        MarkExhaustedFromServer(projectKey, window.PacificDate, role);
+    }
+
+    internal void MarkExhaustedFromServer(string projectKey, DateOnly leaseDate, PlatformAuthRole role)
+    {
+        EnsureHydrated();
+
+        var settings = settingsStore.Load();
         var dailyBudget = YouTubeQuotaPolicy.NormalizeBudget(settings.DailyQuotaBudget);
         var utcNow = timeProvider.GetUtcNow();
         var window = PacificQuotaClock.GetWindow(utcNow);
@@ -101,6 +110,10 @@ internal sealed class YouTubeQuotaGovernor(
         lock (_sync)
         {
             var bucket = GetOrRolloverBucketLocked(projectKey, dailyBudget, window.PacificDate, out _);
+            if (bucket.PacificDate != leaseDate)
+            {
+                return;
+            }
 
             if (!bucket.ExhaustedByServer || !bucket.ExhaustedWarningLogged)
             {

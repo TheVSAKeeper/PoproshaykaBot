@@ -81,6 +81,7 @@ public static class YouTubeServiceCollectionExtensions
         services.AddSingleton<IYouTubeQuotaGovernor, YouTubeQuotaGovernor>();
 
         services.AddSingleton<YouTubeTargetChannelResolver>();
+        services.AddSingleton<IYouTubePublicLiveDiscoveryClient, InnerTubeLiveDiscoveryClient>();
         services.AddSingleton<IYouTubeLiveBroadcastClient, YouTubeLiveBroadcastClient>();
         services.TryAddSingleton<IYouTubeBroadcastSelectionStore, InMemoryYouTubeBroadcastSelectionStore>();
         services.AddSingleton<YouTubeStreamMonitor>();

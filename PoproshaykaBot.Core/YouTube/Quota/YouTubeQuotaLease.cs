@@ -56,6 +56,11 @@ public sealed class YouTubeQuotaLease : IDisposable
         _governor.Refund(_projectKey, _pacificDate, Cost);
     }
 
+    public void MarkExhaustedFromServer()
+    {
+        _governor?.MarkExhaustedFromServer(_projectKey, _pacificDate, _role);
+    }
+
     public void Dispose()
     {
         Refund();
