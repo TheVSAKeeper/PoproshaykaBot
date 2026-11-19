@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using KeepShell.Services.Platform;
 using KeepShell.ViewModels;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Chat;
@@ -16,6 +17,7 @@ using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Streaming.Switching;
 using PoproshaykaBot.Core.Twitch.Auth;
+using PoproshaykaBot.Core.YouTube.Client;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels;
 using PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -266,14 +268,61 @@ public sealed class Stage3MultiChannelWpfTests
         Assert.That(target.Platforms[0].PreselectedNextChannelId, Is.Null);
     }
 
+    [Test]
+    public async Task AddChannel_on_youtube_logs_failure_and_reports_youtube_error_instead_of_twitch()
+    {
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels3.json"));
+        var adapter = new NullResolveAdapter(
+            StreamingPlatform.YouTube,
+            resolve: (_, _, _) => Task.FromException<ResolvedChannelIdentity?>(
+                new YouTubeApiException(YouTubeApiErrorKind.Unauthorized, "Токен отсутствует.")));
+        var logger = new CapturingLogger<ChannelCatalogSettingsSectionViewModel>();
+        var catalogVm = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter], logger: logger);
+        catalogVm.Load();
+        catalogVm.SelectedPlatform = StreamingPlatform.YouTube;
+        catalogVm.NewChannelInput = "https://www.youtube.com/@bob217games";
+
+        await catalogVm.AddChannelCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(catalogVm.StatusNoticeSeverity, Is.EqualTo(StatusSeverity.Error));
+            Assert.That(catalogVm.StatusNotice, Does.Contain("YouTube").And.Not.Contains("Twitch"));
+            Assert.That(logger.Warnings, Has.Count.EqualTo(1));
+            Assert.That(logger.Warnings[0].Exception, Is.InstanceOf<YouTubeApiException>());
+        });
+    }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, Exception? Exception, string Message)> Warnings { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Warning;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Warning)
+            {
+                Warnings.Add((logLevel, exception, formatter(state, exception)));
+            }
+        }
+    }
+
     private sealed class NullResolveAdapter(
         StreamingPlatform platform,
-        Func<ChannelKey, PlatformAuthRole, string, ChannelAccessVerification>? verify = null) : IPlatformChannelAdapter
+        Func<ChannelKey, PlatformAuthRole, string, ChannelAccessVerification>? verify = null,
+        Func<string, string?, CancellationToken, Task<ResolvedChannelIdentity?>>? resolve = null) : IPlatformChannelAdapter
     {
         public StreamingPlatform Platform => platform;
         public PlatformCapabilities Capabilities => PlatformCapabilities.BackgroundStreamMonitoring;
         public Task<ResolvedChannelIdentity?> ResolveChannelIdentityAsync(string rawInput, string? preferredContextId, CancellationToken cancellationToken)
-            => Task.FromResult<ResolvedChannelIdentity?>(null);
+            => resolve?.Invoke(rawInput, preferredContextId, cancellationToken) ?? Task.FromResult<ResolvedChannelIdentity?>(null);
         public Task<ChannelAccessVerification> VerifyChannelAccessAsync(ChannelKey channel, PlatformAuthRole role, string contextId, CancellationToken cancellationToken)
             => Task.FromResult(verify?.Invoke(channel, role, contextId) ?? new(true, "sub"));
         public Task<ChannelLiveProbeResult> ProbeChannelLiveAsync(ChannelCatalogEntry channel, CancellationToken cancellationToken)
