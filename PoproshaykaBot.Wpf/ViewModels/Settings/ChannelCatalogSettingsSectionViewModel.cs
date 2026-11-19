@@ -581,9 +581,11 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         ResolvedChannelIdentity? resolved;
         try
         {
-            var contextId = ListAccounts(targetPlatform).SelectMany(account => account.Authorizations)
-                .FirstOrDefault(grant => grant.HasToken
-                    && (targetPlatform != StreamingPlatform.YouTube || grant.Role == PlatformAuthRole.Broadcaster))?.ContextId;
+            var contextId = ListAccounts(targetPlatform)
+                .SelectMany(account => account.Authorizations)
+                .Where(grant => grant.HasToken)
+                .OrderBy(grant => targetPlatform == StreamingPlatform.YouTube && grant.Role == PlatformAuthRole.Bot ? 0 : 1)
+                .FirstOrDefault()?.ContextId;
             resolved = await adapter.ResolveChannelIdentityAsync(input, contextId, CancellationToken.None).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

@@ -6,7 +6,9 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.YouTube.Auth;
+using PoproshaykaBot.Core.YouTube.Streaming;
 
 namespace PoproshaykaBot.Core.YouTube;
 
@@ -19,7 +21,8 @@ internal sealed class YouTubePlatformConnectionAdapter(
     ITargetChannelProvider targetChannelProvider,
     [FromKeyedServices(StreamingPlatform.YouTube)] PlatformHost platformHost,
     ILogger<YouTubePlatformConnectionAdapter> logger,
-    ChannelCatalogStore? channelCatalogStore = null)
+    ChannelCatalogStore? channelCatalogStore = null,
+    YouTubeTargetChannelResolver? channelResolver = null)
     : IPlatformConnectionAdapter
 {
     public StreamingPlatform Platform => StreamingPlatform.YouTube;
@@ -57,7 +60,7 @@ internal sealed class YouTubePlatformConnectionAdapter(
             : ResolveChannelLabel(settings.Channel, broadcaster.ChannelTitle, broadcaster.ChannelId, bot.ChannelId);
         var targetChannelId = activeEntry is not null
             ? activeEntry.ChannelId
-            : (string.IsNullOrWhiteSpace(broadcaster.ChannelId) ? null : broadcaster.ChannelId.Trim());
+            : await ResolveLegacyTargetChannelIdAsync(settings, broadcaster, botContextId, cancellationToken).ConfigureAwait(false);
         var botChannelId = string.IsNullOrWhiteSpace(bot.ChannelId) ? null : bot.ChannelId.Trim();
         var botChannelTitle = string.IsNullOrWhiteSpace(bot.ChannelTitle) ? null : bot.ChannelTitle.Trim();
 
@@ -132,6 +135,51 @@ internal sealed class YouTubePlatformConnectionAdapter(
 
         logger.LogInformation("Перенацеливание чата YouTube на канал {Channel} ({ChannelId})", channelLabel, target.Channel.ChannelId);
         return channelLabel;
+    }
+
+    private async Task<string?> ResolveLegacyTargetChannelIdAsync(
+        YouTubeSettings settings,
+        YouTubeAccountSettings broadcaster,
+        string botContextId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(settings.Channel))
+        {
+            return string.IsNullOrWhiteSpace(broadcaster.ChannelId) ? null : broadcaster.ChannelId.Trim();
+        }
+
+        if (YouTubeTargetChannelResolver.TryExtractDirectChannelId(settings.Channel, out var directId))
+        {
+            return directId;
+        }
+
+        if (channelResolver is null)
+        {
+            throw new InvalidOperationException($"Не удалось определить идентификатор канала YouTube «{settings.Channel.Trim()}».");
+        }
+
+        string? resolved;
+        try
+        {
+            resolved = await channelResolver
+                .ResolveAsync(settings, PlatformAuthRole.Bot, botContextId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Не удалось определить целевой канал YouTube {Channel} при запуске сессии", settings.Channel);
+            throw new InvalidOperationException(
+                $"Не удалось определить канал YouTube «{settings.Channel.Trim()}»: {StreamingErrorMessages.SafeMessage(ex)}",
+                ex);
+        }
+
+        if (string.IsNullOrWhiteSpace(resolved))
+        {
+            throw new InvalidOperationException(
+                $"Не удалось найти канал YouTube «{settings.Channel.Trim()}». Проверьте адрес канала и авторизацию бота.");
+        }
+
+        return resolved.Trim();
     }
 
     private static void VerifyBotAssignment(ChannelCatalogEntry? entry, YouTubeAccountSettings bot, string contextId)

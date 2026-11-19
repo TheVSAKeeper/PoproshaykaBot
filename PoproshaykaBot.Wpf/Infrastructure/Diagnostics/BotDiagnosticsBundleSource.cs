@@ -133,10 +133,12 @@ public sealed class BotDiagnosticsBundleSource(
             var issueText = ytMonitor.Issue switch
             {
                 YouTubeMonitorIssue.MissingBroadcasterAuth => "нужна авторизация ведущего",
+                YouTubeMonitorIssue.MissingBotAuth => "нужна авторизация бота",
                 YouTubeMonitorIssue.InvalidTargetChannel => "целевой канал не найден",
                 YouTubeMonitorIssue.MultipleActiveBroadcasts => $"несколько активных трансляций ({ytMonitor.ActiveCandidateCount})",
                 YouTubeMonitorIssue.QuotaExhausted => "квота исчерпана",
                 YouTubeMonitorIssue.TransientError => $"ошибка опроса (сбоев: {ytMonitor.ConsecutiveFailures})",
+                YouTubeMonitorIssue.AccessUnverified => "доступ аккаунта не подтверждён",
                 _ => "без замечаний",
             };
 

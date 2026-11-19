@@ -293,6 +293,57 @@ public sealed class Stage3MultiChannelWpfTests
         });
     }
 
+    [Test]
+    public async Task AddChannel_on_youtube_with_bot_only_account_passes_bot_context_and_adds_channel()
+    {
+        var accountsPath = Path.Combine(_root, "yt-accounts.json");
+        var ytAccounts = new YouTubeAccountsStore(
+            NullLogger<YouTubeAccountsStore>.Instance,
+            accountsPath);
+        ytAccounts.UpsertContext(
+            PlatformAuthRole.Bot,
+            "yt-bot-only",
+            "YouTube Bot",
+            new()
+            {
+                ChannelId = "UC_BOT",
+                ChannelTitle = "YouTube Bot",
+                AccessToken = "bot-token",
+            });
+
+        var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "yt-channels.json"));
+        string? capturedContext = null;
+        var resolvedKey = new ChannelKey(StreamingPlatform.YouTube, "UC_FOREIGN");
+        var adapter = new NullResolveAdapter(
+            StreamingPlatform.YouTube,
+            resolve: (raw, preferredContext, _) =>
+            {
+                capturedContext = preferredContext;
+                return Task.FromResult<ResolvedChannelIdentity?>(new(
+                    resolvedKey,
+                    raw,
+                    raw,
+                    "https://youtube.com/@foreign"));
+            });
+
+        var catalogVm = new ChannelCatalogSettingsSectionViewModel(
+            catalog,
+            [adapter],
+            youtubeAccountsStore: ytAccounts);
+        catalogVm.Load();
+        catalogVm.SelectedPlatform = StreamingPlatform.YouTube;
+        catalogVm.NewChannelInput = "@foreign";
+
+        await catalogVm.AddChannelCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(capturedContext, Is.EqualTo("yt-bot-only"));
+            Assert.That(catalogVm.VisibleChannels, Has.Count.EqualTo(1));
+            Assert.That(catalogVm.VisibleChannels[0].ChannelId, Is.EqualTo("UC_FOREIGN"));
+        });
+    }
+
     private sealed class CapturingLogger<T> : ILogger<T>
     {
         public List<(LogLevel Level, Exception? Exception, string Message)> Warnings { get; } = [];

@@ -264,11 +264,21 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
             lines.Add(ytBotScopes);
             hasCritical |= ytBotScopes.Status == ValidationStatus.Failure;
 
-            var ytBroadcasterScopes = ValidateScopes("Доступы YouTube стримера",
-                _context.YouTubeBroadcasterAccount.Scopes,
-                YouTubeScopes.BroadcasterRequired);
-            lines.Add(ytBroadcasterScopes);
-            hasCritical |= ytBroadcasterScopes.Status == ValidationStatus.Failure;
+            var hasBroadcaster = !string.IsNullOrWhiteSpace(_context.YouTubeBroadcasterAccount.AccessToken)
+                || !string.IsNullOrWhiteSpace(_context.YouTubeBroadcasterAccount.RefreshToken)
+                || _context.YouTubeBroadcasterAccount.Scopes.Length > 0;
+            if (!hasBroadcaster)
+            {
+                lines.Add(new ValidationLine("Доступы YouTube стримера", ValidationStatus.Success, "не подключён (режим «только бот»)"));
+            }
+            else
+            {
+                var ytBroadcasterScopes = ValidateScopes("Доступы YouTube стримера",
+                    _context.YouTubeBroadcasterAccount.Scopes,
+                    YouTubeScopes.BroadcasterRequired);
+                lines.Add(ytBroadcasterScopes);
+                hasCritical |= ytBroadcasterScopes.Status == ValidationStatus.Failure;
+            }
         }
 
         var loginConsistency = ValidateBroadcasterLogin(_context);

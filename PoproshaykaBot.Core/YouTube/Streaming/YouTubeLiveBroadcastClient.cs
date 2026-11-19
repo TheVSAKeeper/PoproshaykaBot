@@ -19,14 +19,24 @@ internal sealed class YouTubeLiveBroadcastClient(
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<string?> ResolveChannelIdByHandleAsync(string handle, CancellationToken cancellationToken)
+    public Task<string?> ResolveChannelIdByHandleAsync(string handle, CancellationToken cancellationToken)
+    {
+        return ResolveChannelIdByHandleAsync(handle, PlatformAuthRole.Broadcaster, PlatformAuthRequestOptions.CurrentContextId, cancellationToken);
+    }
+
+    public async Task<string?> ResolveChannelIdByHandleAsync(
+        string handle,
+        PlatformAuthRole role,
+        string? contextId,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(handle);
+        using var _ = PlatformAuthRequestOptions.UseContext(contextId);
 
         var normalized = handle.StartsWith('@') ? handle : "@" + handle;
         var uri = $"youtube/v3/channels?part=snippet&forHandle={Uri.EscapeDataString(normalized)}";
 
-        var json = await SendBroadcasterGetAsync(uri, "channels.list", cancellationToken).ConfigureAwait(false);
+        var json = await SendAuthorizedGetAsync(role, uri, "channels.list", cancellationToken).ConfigureAwait(false);
         var dto = DeserializeResponse<ChannelsListResponseDto>(json, "channels.list");
         var channelId = dto?.Items?.FirstOrDefault()?.Id;
 
@@ -35,7 +45,7 @@ internal sealed class YouTubeLiveBroadcastClient(
 
     public Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(CancellationToken cancellationToken)
     {
-        return ListActiveBroadcastsAsync(null, cancellationToken);
+        return ListActiveBroadcastsAsync(PlatformAuthRequestOptions.CurrentContextId, cancellationToken);
     }
 
     public async Task<IReadOnlyList<YouTubeBroadcastSummary>> ListActiveBroadcastsAsync(string? contextId, CancellationToken cancellationToken)
@@ -53,7 +63,7 @@ internal sealed class YouTubeLiveBroadcastClient(
                 uri += $"&pageToken={Uri.EscapeDataString(pageToken)}";
             }
 
-            var json = await SendBroadcasterGetAsync(uri, "liveBroadcasts.list", cancellationToken).ConfigureAwait(false);
+            var json = await SendAuthorizedGetAsync(PlatformAuthRole.Broadcaster, uri, "liveBroadcasts.list", cancellationToken).ConfigureAwait(false);
             var dto = DeserializeResponse<LiveBroadcastsListResponseDto>(json, "liveBroadcasts.list");
 
             if (dto?.Items is not null)
@@ -87,16 +97,25 @@ internal sealed class YouTubeLiveBroadcastClient(
 
     public Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, CancellationToken cancellationToken)
     {
-        return GetVideoLiveSampleAsync(videoId, null, cancellationToken);
+        return GetVideoLiveSampleAsync(videoId, PlatformAuthRole.Broadcaster, PlatformAuthRequestOptions.CurrentContextId, cancellationToken);
     }
 
-    public async Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, string? contextId, CancellationToken cancellationToken)
+    public Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(string videoId, string? contextId, CancellationToken cancellationToken)
+    {
+        return GetVideoLiveSampleAsync(videoId, PlatformAuthRole.Broadcaster, contextId, cancellationToken);
+    }
+
+    public async Task<YouTubeVideoLiveSample?> GetVideoLiveSampleAsync(
+        string videoId,
+        PlatformAuthRole role,
+        string? contextId,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoId);
         using var _ = PlatformAuthRequestOptions.UseContext(contextId);
 
         var uri = $"youtube/v3/videos?part=snippet,liveStreamingDetails&id={Uri.EscapeDataString(videoId)}";
-        var json = await SendBroadcasterGetAsync(uri, "videos.list", cancellationToken).ConfigureAwait(false);
+        var json = await SendAuthorizedGetAsync(role, uri, "videos.list", cancellationToken).ConfigureAwait(false);
         var dto = DeserializeResponse<VideosListResponseDto>(json, "videos.list");
         var item = dto?.Items?.FirstOrDefault();
 
@@ -105,20 +124,31 @@ internal sealed class YouTubeLiveBroadcastClient(
             return null;
         }
 
+        var channelId = string.IsNullOrWhiteSpace(item.Snippet?.ChannelId) ? null : item.Snippet.ChannelId.Trim();
+        var channelTitle = string.IsNullOrWhiteSpace(item.Snippet?.ChannelTitle) ? null : item.Snippet.ChannelTitle.Trim();
+        var activeLiveChatId = string.IsNullOrWhiteSpace(item.LiveStreamingDetails?.ActiveLiveChatId)
+            ? null
+            : item.LiveStreamingDetails.ActiveLiveChatId.Trim();
+
         return new(
             item.Id,
             item.Snippet?.Title ?? string.Empty,
             item.LiveStreamingDetails?.ActualStartTime,
             item.LiveStreamingDetails?.ActualEndTime,
-            ParseNullableInt(item.LiveStreamingDetails?.ConcurrentViewers));
+            ParseNullableInt(item.LiveStreamingDetails?.ConcurrentViewers),
+            channelId,
+            channelTitle,
+            activeLiveChatId,
+            HasLiveStreamingDetails: item.LiveStreamingDetails is not null);
     }
 
-    private async Task<string> SendBroadcasterGetAsync(
+    private async Task<string> SendAuthorizedGetAsync(
+        PlatformAuthRole role,
         string relativeUri,
         string operation,
         CancellationToken cancellationToken)
     {
-        if (!quotaGovernor.TryReserve(PlatformAuthRole.Broadcaster, YouTubeQuotaPriority.CriticalReadAndMonitor, 1, out var lease))
+        if (!quotaGovernor.TryReserve(role, YouTubeQuotaPriority.CriticalReadAndMonitor, 1, out var lease))
         {
             throw new YouTubeApiException(
                 YouTubeApiErrorKind.LocalQuotaBudgetReached,
@@ -126,8 +156,12 @@ internal sealed class YouTubeLiveBroadcastClient(
                 reason: "localBudgetReached");
         }
 
+        var clientName = role == PlatformAuthRole.Bot
+            ? YouTubeEndpoints.BotApiHttpClient
+            : YouTubeEndpoints.BroadcasterApiHttpClient;
+
         using (lease)
-        using (var client = httpClientFactory.CreateClient(YouTubeEndpoints.BroadcasterApiHttpClient))
+        using (var client = httpClientFactory.CreateClient(clientName))
         {
             HttpResponseMessage response;
 
@@ -172,7 +206,22 @@ internal sealed class YouTubeLiveBroadcastClient(
                     lease.Commit();
                 }
 
-                throw YouTubeErrorClassifier.FromHttpResponse(response.StatusCode, body, operation);
+                var apiEx = YouTubeErrorClassifier.FromHttpResponse(response.StatusCode, body, operation);
+                if (apiEx.Kind == YouTubeApiErrorKind.QuotaExceeded)
+                {
+                    lease.MarkExhaustedFromServer();
+                    throw new YouTubeApiException(
+                        apiEx.Kind,
+                        apiEx.Message,
+                        apiEx.Reason,
+                        apiEx.StatusCode,
+                        apiEx.InnerException)
+                    {
+                        QuotaExhaustionRecorded = true,
+                    };
+                }
+
+                throw apiEx;
             }
         }
     }
@@ -312,6 +361,12 @@ internal sealed class YouTubeLiveBroadcastClient(
 
     private sealed class VideoSnippetDto
     {
+        [JsonPropertyName("channelId")]
+        public string? ChannelId { get; set; }
+
+        [JsonPropertyName("channelTitle")]
+        public string? ChannelTitle { get; set; }
+
         [JsonPropertyName("title")]
         public string? Title { get; set; }
     }
@@ -326,5 +381,8 @@ internal sealed class YouTubeLiveBroadcastClient(
 
         [JsonPropertyName("concurrentViewers")]
         public JsonElement? ConcurrentViewers { get; set; }
+
+        [JsonPropertyName("activeLiveChatId")]
+        public string? ActiveLiveChatId { get; set; }
     }
 }

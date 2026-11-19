@@ -20,6 +20,8 @@ public class YouTubeLiveBroadcastClientTests
     private YouTubeQuotaStore _quotaStore = null!;
     private YouTubeQuotaGovernor _governor = null!;
     private List<HttpRequestMessage> _requests = null!;
+    private List<HttpRequestMessage> _broadcasterRequests = null!;
+    private List<HttpRequestMessage> _botRequests = null!;
 
     [SetUp]
     public void SetUp()
@@ -27,6 +29,8 @@ public class YouTubeLiveBroadcastClientTests
         _directory = Path.Combine(Path.GetTempPath(), $"yt-broadcast-client-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_directory);
         _requests = [];
+        _broadcasterRequests = [];
+        _botRequests = [];
 
         var clock = new TestTimeProvider { UtcNow = new DateTimeOffset(2026, 11, 15, 19, 0, 0, TimeSpan.Zero) };
         _settingsStore = new YouTubeSettingsStore(NullLogger<YouTubeSettingsStore>.Instance, Path.Combine(_directory, "youtube.json"));
@@ -161,8 +165,10 @@ public class YouTubeLiveBroadcastClientTests
             Assert.That(first, Is.Not.Null);
             Assert.That(first!.ConcurrentViewers, Is.EqualTo(345));
             Assert.That(first.Title, Is.EqualTo("Live Title"));
+            Assert.That(first.HasLiveStreamingDetails, Is.True);
             Assert.That(second, Is.Not.Null);
             Assert.That(second!.ConcurrentViewers, Is.Null);
+            Assert.That(second.HasLiveStreamingDetails, Is.True);
         });
     }
 
@@ -220,11 +226,134 @@ public class YouTubeLiveBroadcastClientTests
         });
     }
 
+    [Test]
+    public async Task Bot_Role_Uses_BotApiHttpClient_Reserves_Bot_Quota_And_Maps_Sample_Metadata()
+    {
+        var client = CreateClient(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("channels", StringComparison.Ordinal))
+            {
+                return JsonResponse("""{"items":[{"id":"UC_BOT_RESOLVED"}]}""");
+            }
+
+            return JsonResponse("""
+                {
+                  "items": [
+                    {
+                      "id": "vid-bot-1",
+                      "snippet": {
+                        "channelId": "UC_TARGET",
+                        "channelTitle": "Target Channel",
+                        "title": "Bot Sample Title"
+                      },
+                      "liveStreamingDetails": {
+                        "actualStartTime": "2026-11-15T18:00:00Z",
+                        "concurrentViewers": "412",
+                        "activeLiveChatId": "lc-bot-1"
+                      }
+                    }
+                  ]
+                }
+                """);
+        });
+
+        var resolvedId = await client.ResolveChannelIdByHandleAsync("@target", PlatformAuthRole.Bot, "yt-bot-1", CancellationToken.None);
+        var sample = await client.GetVideoLiveSampleAsync("vid-bot-1", PlatformAuthRole.Bot, "yt-bot-1", CancellationToken.None);
+        var quota = _governor.CaptureDiagnostics();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(resolvedId, Is.EqualTo("UC_BOT_RESOLVED"));
+            Assert.That(sample, Is.Not.Null);
+            Assert.That(sample!.ChannelId, Is.EqualTo("UC_TARGET"));
+            Assert.That(sample.ChannelTitle, Is.EqualTo("Target Channel"));
+            Assert.That(sample.Title, Is.EqualTo("Bot Sample Title"));
+            Assert.That(sample.ConcurrentViewers, Is.EqualTo(412));
+            Assert.That(sample.ActiveLiveChatId, Is.EqualTo("lc-bot-1"));
+            Assert.That(quota.BotCommittedUnits, Is.EqualTo(2));
+            Assert.That(quota.BroadcasterCommittedUnits, Is.EqualTo(0));
+            Assert.That(_botRequests, Has.Count.EqualTo(2));
+            Assert.That(_broadcasterRequests, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void QuotaExceeded_Marks_QuotaGovernor_Exhausted_From_Server()
+    {
+        var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
+        {
+            Content = new StringContent(
+                """{"error":{"code":403,"errors":[{"reason":"quotaExceeded"}]}}""",
+                Encoding.UTF8,
+                "application/json"),
+        });
+
+        var ex = Assert.ThrowsAsync<YouTubeApiException>(() =>
+            client.GetVideoLiveSampleAsync("vid-1", PlatformAuthRole.Bot, "yt-bot-1", CancellationToken.None));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ex!.Kind, Is.EqualTo(YouTubeApiErrorKind.QuotaExceeded));
+            Assert.That(_governor.CaptureDiagnostics().ExhaustedByServer, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task Two_Arg_Broadcaster_Overloads_Preserve_Ambient_ContextId()
+    {
+        string? observedResolveContext = null;
+        string? observedListContext = null;
+        string? observedSampleContext = null;
+
+        var client = CreateClient(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("channels", StringComparison.Ordinal))
+            {
+                observedResolveContext = PlatformAuthRequestOptions.CurrentContextId;
+                return JsonResponse("""{"items":[{"id":"UC_NAMED"}]}""");
+            }
+
+            if (path.EndsWith("liveBroadcasts", StringComparison.Ordinal))
+            {
+                observedListContext = PlatformAuthRequestOptions.CurrentContextId;
+                return JsonResponse("""{"items":[]}""");
+            }
+
+            observedSampleContext = PlatformAuthRequestOptions.CurrentContextId;
+            return JsonResponse("""{"items":[{"id":"vid-1","snippet":{"title":"T"}}]}""");
+        });
+
+        using (PlatformAuthRequestOptions.UseContext("yt-named-broadcaster"))
+        {
+            var channelId = await client.ResolveChannelIdByHandleAsync("@named", CancellationToken.None);
+            var broadcasts = await client.ListActiveBroadcastsAsync(CancellationToken.None);
+            var sample = await client.GetVideoLiveSampleAsync("vid-1", CancellationToken.None);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(channelId, Is.EqualTo("UC_NAMED"));
+                Assert.That(broadcasts, Is.Empty);
+                Assert.That(sample, Is.Not.Null);
+                Assert.That(sample!.HasLiveStreamingDetails, Is.False);
+                Assert.That(observedResolveContext, Is.EqualTo("yt-named-broadcaster"));
+                Assert.That(observedListContext, Is.EqualTo("yt-named-broadcaster"));
+                Assert.That(observedSampleContext, Is.EqualTo("yt-named-broadcaster"));
+            });
+        }
+    }
+
     private YouTubeLiveBroadcastClient CreateClient(Func<HttpRequestMessage, HttpResponseMessage> handler)
     {
         var httpClientFactory = Substitute.For<IHttpClientFactory>();
         httpClientFactory.CreateClient(YouTubeEndpoints.BroadcasterApiHttpClient)
-            .Returns(_ => new HttpClient(new RecordingHandler(_requests, handler))
+            .Returns(_ => new HttpClient(new RecordingHandler(_requests, _broadcasterRequests, handler))
+            {
+                BaseAddress = YouTubeEndpoints.RestApiBaseUri,
+            });
+        httpClientFactory.CreateClient(YouTubeEndpoints.BotApiHttpClient)
+            .Returns(_ => new HttpClient(new RecordingHandler(_requests, _botRequests, handler))
             {
                 BaseAddress = YouTubeEndpoints.RestApiBaseUri,
             });
@@ -241,13 +370,15 @@ public class YouTubeLiveBroadcastClientTests
     }
 
     private sealed class RecordingHandler(
-        List<HttpRequestMessage> requests,
+        List<HttpRequestMessage> allRequests,
+        List<HttpRequestMessage> roleRequests,
         Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            requests.Add(request);
+            allRequests.Add(request);
+            roleRequests.Add(request);
             return Task.FromResult(responder(request));
         }
     }

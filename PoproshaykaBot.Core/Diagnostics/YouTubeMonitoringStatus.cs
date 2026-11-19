@@ -10,6 +10,8 @@ public enum YouTubeMonitorIssue
     MultipleActiveBroadcasts = 3,
     QuotaExhausted = 4,
     TransientError = 5,
+    MissingBotAuth = 6,
+    AccessUnverified = 7,
 }
 
 public sealed record YouTubeMonitoringStatus(

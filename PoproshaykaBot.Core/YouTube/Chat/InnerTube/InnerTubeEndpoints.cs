@@ -16,6 +16,9 @@ internal static class InnerTubeEndpoints
     public static string BuildWatchPath(string videoId) =>
         $"/watch?v={Uri.EscapeDataString(videoId)}";
 
+    public static string BuildChannelLivePath(string channelId) =>
+        $"/channel/{Uri.EscapeDataString(channelId)}/live";
+
     public static string BuildGetLiveChatPath(string apiKey) =>
         $"/youtubei/v1/live_chat/get_live_chat?key={Uri.EscapeDataString(apiKey)}&prettyPrint=false";
 }
