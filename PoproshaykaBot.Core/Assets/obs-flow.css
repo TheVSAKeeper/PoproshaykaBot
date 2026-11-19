@@ -1,0 +1,320 @@
+﻿html[data-overlay-theme="flow"] {
+    --line-height: 1.22;
+    --flow-gap: 4px;
+    --flow-rim: rgba(255, 255, 255, 0.24);
+    --flow-gold: #d9b45a;
+}
+
+html[data-overlay-theme="flow"] #chat .message {
+    --flow-ring: var(--flow-rim);
+    --flow-path: inset(50%);
+    --hx: 30px;
+    --hy: 30px;
+    --hr: 30px;
+    box-sizing: border-box;
+    display: flow-root;
+    overflow: visible;
+    isolation: isolate;
+    margin: 3px 0;
+    padding: 2px 10px 4px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    animation: none;
+}
+
+html[data-overlay-theme="flow"] #chat .message:not(.no-animation):not(.entry-done) {
+    animation: flow-grow var(--chat-animation-duration) ease-out both;
+}
+
+html[data-overlay-theme="flow"] #chat .message[data-exit-anim] {
+    animation: flow-shrink var(--fade-out-duration, var(--chat-animation-duration)) ease-in forwards !important;
+}
+
+@keyframes flow-grow {
+    0% { clip-path: circle(0px at var(--hx) var(--hy)); }
+    40% { clip-path: circle(var(--hr) at var(--hx) var(--hy)); }
+    100% { clip-path: circle(var(--flow-reach, 150vmax) at var(--hx) var(--hy)); }
+}
+
+@keyframes flow-shrink {
+    0% {
+        clip-path: circle(var(--flow-reach, 150vmax) at var(--hx) var(--hy));
+        max-height: var(--exit-max-height, var(--flow-h));
+    }
+    60% {
+        clip-path: circle(var(--hr) at var(--hx) var(--hy));
+        max-height: var(--exit-max-height, var(--flow-h));
+        margin-block: 3px;
+        padding-block: 2px 4px;
+        opacity: 1;
+    }
+    100% {
+        clip-path: circle(0px at var(--hx) var(--hy));
+        max-height: 0;
+        margin-block: 0;
+        padding-block: 0;
+        opacity: 0;
+    }
+}
+
+html[data-overlay-theme="flow"] #chat .flow-shape {
+    position: absolute;
+    z-index: -2;
+    top: 0;
+    left: 0;
+    overflow: visible;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+html[data-overlay-theme="flow"] #chat .message.no-shadows .flow-shape {
+    filter: none;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-shape path {
+    fill: var(--chat-bg-color);
+    stroke: transparent;
+    stroke-width: 1.5px;
+}
+
+html[data-overlay-theme="flow"] #chat .message.first-time .flow-shape path {
+    stroke: var(--firsttime-color);
+}
+
+html[data-overlay-theme="flow"] #chat .message.first-time.no-first-time-effects .flow-shape path {
+    stroke: transparent;
+}
+
+html[data-overlay-theme="flow"] #chat .message.broadcaster.special-effect:not(.no-special-effects) .flow-shape path {
+    stroke: var(--broadcaster-color);
+    animation: flow-pulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes flow-pulse {
+    from { stroke-opacity: 0.2; }
+    to { stroke-opacity: 0.85; }
+}
+
+html[data-overlay-theme="flow"] #chat .message.vip.special-effect:not(.no-special-effects)::before {
+    z-index: -1;
+    clip-path: var(--flow-path);
+    transform: none;
+    opacity: 1;
+    background: linear-gradient(105deg, transparent 42%, rgba(132, 94, 247, 0.34) 50%, transparent 58%) no-repeat 0 0 / 300% 100%;
+    animation: flow-glint 3s ease-in-out infinite;
+}
+
+html[data-overlay-theme="flow"] #chat .message.no-special-effects.vip.special-effect::before {
+    content: none;
+    animation: none;
+}
+
+@keyframes flow-glint {
+    from { background-position: 100% 0; }
+    to { background-position: 0 0; }
+}
+
+html[data-overlay-theme="flow"] #chat .message.first-time:where(:not(.no-first-time-effects)) { --flow-ring: var(--firsttime-color); }
+html[data-overlay-theme="flow"] #chat .message.subscriber { --flow-ring: var(--subscriber-color); }
+html[data-overlay-theme="flow"] #chat .message.vip { --flow-ring: var(--vip-color); }
+html[data-overlay-theme="flow"] #chat .message.moderator { --flow-ring: var(--moderator-color); }
+html[data-overlay-theme="flow"] #chat .message.broadcaster { --flow-ring: var(--broadcaster-color); }
+html[data-overlay-theme="flow"] #chat .message.no-borders { --flow-ring: var(--flow-rim); }
+
+html[data-overlay-theme="flow"] #chat .flow-head {
+    position: relative;
+    float: left;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: calc(var(--avatar-size) + 2 * var(--flow-gap));
+    height: calc(var(--avatar-size) + 2 * var(--flow-gap));
+    margin: 0 3px 0 -10px;
+    shape-outside: circle(50%);
+    shape-margin: 1px;
+    border-radius: 50%;
+}
+
+html[data-overlay-theme="flow"] #chat .message.no-avatars .flow-head {
+    display: none;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-head::before,
+html[data-overlay-theme="flow"] #chat .message .flow-head .avatar {
+    grid-area: 1 / 1;
+    box-sizing: border-box;
+    width: var(--avatar-size);
+    height: var(--avatar-size);
+    margin: 0;
+    border: 3px solid var(--flow-ring);
+    border-radius: 50%;
+    box-shadow: none;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-head::before {
+    display: grid;
+    place-items: center;
+    content: attr(data-initial);
+    font-size: calc(var(--avatar-size) * 0.44);
+    font-weight: 700;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.86);
+    background: linear-gradient(150deg, #3b3452, #1c1926);
+    text-shadow: none;
+}
+
+html[data-overlay-theme="flow"] #chat .message .flow-head .avatar {
+    float: none;
+    background: #1c1926;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-medal {
+    position: absolute;
+    top: calc(50% + var(--avatar-size) * 0.3 - 13.5px);
+    left: calc(50% + var(--avatar-size) * 0.3 - 13.5px);
+    box-sizing: border-box;
+    width: 27px;
+    height: 27px;
+    border: 1.5px solid var(--flow-gold);
+    border-radius: 50%;
+    background: #17131f;
+    color: #f6ead0;
+    font: 400 21px/1 "Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans", serif;
+    letter-spacing: 0;
+    text-shadow: none;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-medal b {
+    display: block;
+    font-weight: 400;
+    line-height: 24px;
+    text-align: center;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-medal:not([data-tier="0"]) b {
+    line-height: 21px;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-tier {
+    position: absolute;
+    top: calc(100% + 0.75px);
+    left: 50%;
+    display: flex;
+    gap: 2px;
+    padding: 2px 3px;
+    border-radius: 999px;
+    background: #17131f;
+    box-shadow: 0 0 0 1px rgba(217, 180, 90, 0.55);
+    transform: translate(-50%, -50%);
+}
+
+html[data-overlay-theme="flow"] #chat .flow-tier i {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--flow-gold);
+}
+
+html[data-overlay-theme="flow"] #chat .message-header .flow-medal {
+    position: relative;
+    top: auto;
+    left: auto;
+    display: inline-block;
+    margin: -2px 5px 3px 0;
+    vertical-align: middle;
+}
+
+html[data-overlay-theme="flow"] #chat .message-text {
+    margin-top: 0;
+}
+
+html[data-overlay-theme="flow"] #chat .badge {
+    margin-right: 4px;
+    vertical-align: -2px;
+}
+
+html[data-overlay-theme="flow"] #chat .emote {
+    margin: -3px 1px;
+}
+
+html[data-overlay-theme="flow"] #chat .mention {
+    padding: 0 4px;
+    border-radius: 7px;
+}
+
+html[data-overlay-theme="flow"] #chat .message-images {
+    margin-top: 4px;
+}
+
+html[data-overlay-theme="flow"] #chat .message-image {
+    border-radius: 12px;
+}
+
+html[data-overlay-theme="flow"] #chat .message.flow-capsule {
+    padding: 2px 12px 4px 10px;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-capsule .system-message {
+    font-size: 0.86em;
+    line-height: 1.24;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-chip {
+    float: left;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: 30px;
+    height: 30px;
+    margin: -2px 4px -8px -8px;
+    border: 3px solid transparent;
+    border-radius: 50%;
+    background: var(--chat-system-color) padding-box;
+    color: #17131f;
+    font: 700 14px/1 "Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans", sans-serif;
+    text-shadow: none;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-chip[data-kind="BotResponse"] {
+    background-color: var(--chat-username-color);
+    color: #fff;
+}
+
+html[data-overlay-theme="flow"] #chat .flow-chip[data-kind="reload"] {
+    background-color: #8f8a9e;
+}
+
+html[data-overlay-theme="flow"] #new-messages-indicator {
+    gap: 8px;
+    padding: 4px 14px 4px 4px;
+    font-size: 15px;
+    border-radius: 999px;
+    background: var(--chat-bg-color);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+html[data-overlay-theme="flow"] #new-messages-indicator .new-messages-indicator-arrow {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--chat-username-color);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[data-overlay-theme="flow"] #chat .message,
+    html[data-overlay-theme="flow"] #chat .message[data-exit-anim],
+    html[data-overlay-theme="flow"] #chat .message::before,
+    html[data-overlay-theme="flow"] #chat .message::after,
+    html[data-overlay-theme="flow"] #chat .flow-shape path,
+    html[data-overlay-theme="flow"] #new-messages-indicator {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        animation-delay: 0ms !important;
+        transition-duration: 1ms !important;
+    }
+}

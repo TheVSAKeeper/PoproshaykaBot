@@ -3,6 +3,8 @@ using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Server.Endpoints;
 using PoproshaykaBot.Core.Server.Images;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Server;
 
@@ -30,6 +32,9 @@ public static class ServerServiceCollectionExtensions
                 ConnectCallback = PublicAddressConnector.ConnectAsync,
             });
 
+        services.AddSingleton(sp => new OverlayUserRankResolver(
+            sp.GetService<IUserStatisticsRepository>(),
+            sp.GetService<UserRankService>()));
         services.AddSingleton<SseDropMetrics>();
         services.AddSingleton<SseClientRegistry>();
         services.AddSingleton<SseService>();

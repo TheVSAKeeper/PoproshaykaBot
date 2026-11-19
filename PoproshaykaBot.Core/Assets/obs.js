@@ -10,6 +10,27 @@
     const urlParams = new URLSearchParams(globalThis.location.search);
     const isPreview = urlParams.get('preview') === 'true';
 
+    function normalizeOverlayTheme(value) {
+        return typeof value === 'string' && value.trim().toLowerCase() === 'flow' ? 'flow' : 'classic';
+    }
+
+    function parseThemeOverride(value) {
+        if (typeof value !== 'string') return null;
+        const normalized = value.trim().toLowerCase();
+        return normalized === 'flow' || normalized === 'classic' ? normalized : null;
+    }
+
+    const themeQueryOverride = parseThemeOverride(urlParams.get('theme'));
+    let configuredOverlayTheme = 'classic';
+    let activeOverlayTheme = themeQueryOverride ?? configuredOverlayTheme;
+    document.documentElement.dataset.overlayTheme = activeOverlayTheme;
+
+    function isFlowTheme() {
+        return activeOverlayTheme === 'flow';
+    }
+
+    const messageMeta = new WeakMap();
+
     let showUserTypeBorders = true;
     let highlightFirstTimeUsers = true;
     let isHighlightMentions = true;
@@ -181,18 +202,23 @@
         return entry.promise;
     }
 
-    function attachAvatar(messageDiv, userId, platform) {
-        if (!isTwitchPlatform(platform)) return;
-        const placeholder = messageDiv.querySelector('.avatar[data-user-id="' + escapeAttr(userId) + '"]');
+    function attachAvatar(messageDiv, placeholder, userId, platform) {
         if (!placeholder) return;
 
         resolveAvatar(userId, platform).then(url => {
             if (!url) {
                 placeholder.classList.add('avatar-missing');
+                scheduleFlowShape(messageDiv);
                 return;
             }
+            placeholder.addEventListener('load', () => scheduleFlowShape(messageDiv), { once: true });
+            placeholder.addEventListener('error', () => {
+                placeholder.classList.add('avatar-missing');
+                scheduleFlowShape(messageDiv);
+            }, { once: true });
             placeholder.src = url;
             placeholder.classList.add('avatar-loaded');
+            scheduleFlowShape(messageDiv);
         });
     }
 
@@ -203,6 +229,417 @@
     }
 
     const fadeTimers = new WeakMap();
+
+    const flowSvgNs = 'http://www.w3.org/2000/svg';
+    const flowPieces = ['♚', '♛', '♜', '♝', '♞', '♟'];
+    const flowRoman = ['', 'I', 'II', 'III'];
+    const flowChips = { BotResponse: '✦', SystemNotification: '!', reload: '↻' };
+    const flowPad = { x: 10, top: 2, bottom: 4 };
+    const flowStepFloor = 12;
+    const flowSmoothing = 8;
+    const pendingShapeNodes = new Set();
+    let shapeRafId = null;
+
+    const flowResizeObserver = typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(entries => entries.forEach(entry => {
+            if (isFlowTheme() && entry.target instanceof HTMLElement && entry.target.classList.contains('flow')) {
+                shapeFlowMessage(entry.target);
+            }
+        }))
+        : null;
+
+    if (document.fonts && typeof document.fonts.addEventListener === 'function') {
+        document.fonts.addEventListener('loadingdone', () => {
+            if (!isFlowTheme() || !chatContainer) return;
+            chatContainer.querySelectorAll('.message.flow').forEach(scheduleFlowShape);
+        });
+    }
+
+    function removeMessageNode(node) {
+        if (!node) return;
+        cancelFadeOut(node);
+        flowResizeObserver?.unobserve(node);
+        pendingShapeNodes.delete(node);
+        node.remove();
+    }
+
+    function createFlowMedal(rank) {
+        const icon = typeof rank?.emoji === 'string' ? rank.emoji.trim() : '';
+        if (!icon) return null;
+
+        const tier = Math.max(0, Math.min(3, Math.trunc(Number(rank.tier) || 0)));
+        const medal = document.createElement('span');
+        medal.className = 'flow-medal';
+        medal.dataset.tier = String(tier);
+        medal.title = tier ? `${rank.name} ${flowRoman[tier]}` : String(rank.name ?? '');
+
+        const glyph = document.createElement('b');
+        const piece = icon.replace(/[\uFE0E\uFE0F]$/, '');
+        glyph.textContent = flowPieces.includes(piece) ? `${piece}\uFE0E` : icon;
+        medal.append(glyph);
+
+        if (tier) {
+            const dots = document.createElement('span');
+            dots.className = 'flow-tier';
+            for (let i = 0; i < tier; i++) {
+                dots.append(document.createElement('i'));
+            }
+            medal.append(dots);
+        }
+
+        return medal;
+    }
+
+    function ensureFlowHead(node, meta, existingAvatar) {
+        let head = node.querySelector(':scope > .flow-head');
+        if (head) return head;
+
+        const name = meta?.displayName || node.querySelector('.username')?.textContent || '';
+        head = document.createElement('span');
+        head.className = 'flow-head';
+        head.dataset.initial = name.trim().charAt(0).toUpperCase();
+
+        const avatar = existingAvatar || node.querySelector(':scope > .avatar');
+        if (avatar) {
+            head.append(avatar);
+        } else if (showUserAvatars && meta?.userId && isTwitchPlatform(meta.platform)) {
+            const img = document.createElement('img');
+            img.className = 'avatar';
+            img.dataset.userId = meta.userId;
+            img.alt = '';
+            img.src = '';
+            img.loading = 'lazy';
+            head.append(img);
+            attachAvatar(node, img, meta.userId, meta.platform);
+        }
+
+        const content = node.querySelector(':scope > .message-content');
+        if (content) {
+            node.insertBefore(head, content);
+        } else {
+            node.prepend(head);
+        }
+
+        return head;
+    }
+
+    function syncFlowMedalPlacement(node) {
+        const medal = node.querySelector('.flow-medal');
+        if (!medal) return;
+
+        const head = node.querySelector(':scope > .flow-head');
+        const header = node.querySelector('.message-header');
+        if (showUserAvatars && head) {
+            if (medal.parentElement !== head) {
+                head.append(medal);
+            }
+        } else if (header && medal.parentElement !== header) {
+            header.prepend(medal);
+        }
+    }
+
+    function decorateFlowMessage(node) {
+        if (!(node instanceof HTMLElement) || !node.classList.contains('message') || node.classList.contains('flow')) {
+            return;
+        }
+
+        const meta = messageMeta.get(node);
+        node.classList.add('flow');
+
+        if (node.querySelector('.message-content')) {
+            const avatar = node.querySelector(':scope > .avatar');
+            const medal = createFlowMedal(meta?.rank);
+            const needHead = Boolean(avatar) || (showUserAvatars && (Boolean(meta?.displayName) || !isTwitchPlatform(meta?.platform)));
+            const head = needHead ? ensureFlowHead(node, meta, avatar) : null;
+
+            if (medal) {
+                if (showUserAvatars && head) {
+                    head.append(medal);
+                } else {
+                    node.querySelector('.message-header')?.prepend(medal);
+                }
+            }
+        } else {
+            const kind = meta?.isReloadBanner || node.classList.contains('reload-banner')
+                ? 'reload'
+                : meta?.messageType === 'BotResponse'
+                    ? 'BotResponse'
+                    : 'SystemNotification';
+            const chip = document.createElement('span');
+            chip.className = 'flow-chip';
+            chip.dataset.kind = kind;
+            chip.setAttribute('aria-hidden', 'true');
+            chip.textContent = flowChips[kind] || flowChips.SystemNotification;
+            node.classList.add('flow-capsule');
+            node.prepend(chip);
+        }
+
+        const svg = document.createElementNS(flowSvgNs, 'svg');
+        svg.classList.add('flow-shape');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.append(document.createElementNS(flowSvgNs, 'path'));
+        node.prepend(svg);
+
+        flowResizeObserver?.observe(node);
+    }
+
+    function undecorateFlowMessage(node) {
+        if (!(node instanceof HTMLElement) || !node.classList.contains('flow')) {
+            return;
+        }
+
+        flowResizeObserver?.unobserve(node);
+        pendingShapeNodes.delete(node);
+
+        node.querySelector(':scope > .flow-shape')?.remove();
+        node.querySelector(':scope > .flow-chip')?.remove();
+        node.querySelector('.flow-medal')?.remove();
+
+        const head = node.querySelector(':scope > .flow-head');
+        if (head) {
+            const avatar = head.querySelector(':scope > .avatar');
+            const content = node.querySelector(':scope > .message-content');
+            if (avatar && content) {
+                node.insertBefore(avatar, content);
+            }
+            head.remove();
+        }
+
+        node.classList.remove('flow', 'flow-capsule');
+        ['--flow-path', '--flow-h', '--flow-reach', '--hx', '--hy', '--hr'].forEach(prop => node.style.removeProperty(prop));
+    }
+
+    function addRectToBoxes(r, boxes) {
+        if (r.width < 1 || r.height < 1) return;
+        const row = boxes.find(b => Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) > Math.min(b.bottom - b.top, r.height) / 2);
+        if (row) {
+            row.left = Math.min(row.left, r.left);
+            row.right = Math.max(row.right, r.right);
+            row.top = Math.min(row.top, r.top);
+            row.bottom = Math.max(row.bottom, r.bottom);
+        } else {
+            boxes.push({ left: r.left, right: r.right, top: r.top, bottom: r.bottom });
+        }
+    }
+
+    function lineBoxes(element, boxes) {
+        if (!element || !element.getClientRects().length) return;
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        for (const r of range.getClientRects()) {
+            addRectToBoxes(r, boxes);
+        }
+    }
+
+    function bandsOf(node) {
+        const origin = node.getBoundingClientRect();
+        const boxes = [];
+
+        if (node.classList.contains('flow-capsule')) {
+            const ts = node.querySelector(':scope > .timestamp');
+            const badge = node.querySelector(':scope > .platform-badge');
+            const sys = node.querySelector(':scope > .system-message');
+            if (ts && ts.offsetHeight > 0) lineBoxes(ts, boxes);
+            if (badge && badge.offsetWidth > 0 && badge.offsetHeight > 0) {
+                addRectToBoxes(badge.getBoundingClientRect(), boxes);
+            }
+            if (sys && sys.offsetHeight > 0) lineBoxes(sys, boxes);
+        } else {
+            const header = node.querySelector('.message-header');
+            if (header) {
+                lineBoxes(header, boxes);
+                const badge = header.querySelector('.platform-badge');
+                if (badge && badge.offsetWidth > 0 && badge.offsetHeight > 0) {
+                    addRectToBoxes(badge.getBoundingClientRect(), boxes);
+                }
+            }
+            const msgText = node.querySelector('.message-text');
+            if (msgText && msgText.offsetHeight > 0) {
+                lineBoxes(msgText, boxes);
+            }
+            const picture = node.querySelector('.message-images img');
+            if (picture && picture.offsetHeight > 0) {
+                addRectToBoxes(picture.getBoundingClientRect(), boxes);
+            }
+        }
+
+        boxes.sort((a, b) => a.top - b.top);
+        const bands = boxes.map((box, i) => ({
+            left: box.left - origin.left - flowPad.x,
+            right: box.right - origin.left + flowPad.x,
+            top: (i ? (boxes[i - 1].bottom + box.top) / 2 : box.top - flowPad.top) - origin.top,
+            bottom: (i < boxes.length - 1 ? (box.bottom + boxes[i + 1].top) / 2 : box.bottom + flowPad.bottom) - origin.top,
+        }));
+
+        for (let changed = true; changed;) {
+            changed = false;
+            for (let i = 1; i < bands.length; i++) {
+                const a = bands[i - 1];
+                const b = bands[i];
+                if (a.right !== b.right && Math.abs(a.right - b.right) < flowStepFloor) {
+                    a.right = b.right = Math.max(a.right, b.right);
+                    changed = true;
+                }
+                if (a.left !== b.left && Math.abs(a.left - b.left) < flowStepFloor) {
+                    a.left = b.left = Math.min(a.left, b.left);
+                    changed = true;
+                }
+            }
+        }
+
+        return bands;
+    }
+
+    const flowEase = t => t * t * (3 - 2 * t);
+
+    function flowEdge(bands, circle, y, top, bottom, side) {
+        const key = side > 0 ? 'right' : 'left';
+        const reach = i => side * bands[i][key];
+        const disc = circle && Math.abs(y - circle.y) < circle.r
+            ? side * circle.x + Math.sqrt(circle.r ** 2 - (y - circle.y) ** 2)
+            : -Infinity;
+        const at = bands.findIndex(b => y >= b.top && y <= b.bottom);
+        const floor = Math.max(disc, at < 0 ? -Infinity : reach(at));
+        if (floor === -Infinity) return side * floor;
+
+        let x = floor;
+        bands.forEach((band, i) => {
+            const v = reach(i);
+            if (v <= floor) return;
+            for (const dir of [1, -1]) {
+                const gap = dir > 0 ? y - band.bottom : band.top - y;
+                if (gap <= 0) continue;
+                const n = i + dir;
+                let span;
+                if (n < 0 || n >= bands.length) {
+                    span = dir > 0 ? bottom - band.bottom : band.top - top;
+                } else {
+                    if (reach(n) >= v) continue;
+                    span = bands[n].bottom - bands[n].top;
+                    const far = n + dir;
+                    if (far >= 0 && far < bands.length && reach(far) > reach(n)) span /= 2;
+                }
+                if (span > 0 && gap < span) x = Math.max(x, floor + (v - floor) * (1 - flowEase(gap / span)));
+            }
+        });
+
+        return side * x;
+    }
+
+    function flowOutline(bands, circle) {
+        const top = Math.min(bands.length ? bands[0].top : Infinity, circle ? circle.y - circle.r : Infinity);
+        const bottom = Math.max(bands.length ? bands[bands.length - 1].bottom : -Infinity, circle ? circle.y + circle.r : -Infinity);
+        if (!Number.isFinite(top) || !Number.isFinite(bottom) || bottom <= top) return '';
+
+        const right = [];
+        const left = [];
+        for (let y = top; ; y = Math.min(y + 1, bottom)) {
+            const l = flowEdge(bands, circle, y, top, bottom, -1);
+            const r = flowEdge(bands, circle, y, top, bottom, 1);
+            if (l < r) {
+                right.push([r, y]);
+                left.push([l, y]);
+            }
+            if (y >= bottom) break;
+        }
+
+        const corners = right.concat(left.reverse());
+        if (corners.length < 3) return '';
+
+        const even = [];
+        corners.forEach(([x1, y1], i) => {
+            const [x2, y2] = corners[(i + 1) % corners.length];
+            const steps = Math.max(1, Math.round(Math.hypot(x2 - x1, y2 - y1)));
+            for (let s = 0; s < steps; s++) {
+                even.push([x1 + (x2 - x1) * s / steps, y1 + (y2 - y1) * s / steps]);
+            }
+        });
+
+        let points = even;
+        for (let pass = 0; pass < 2; pass++) {
+            const n = points.length;
+            points = points.map((_, i) => {
+                let sx = 0;
+                let sy = 0;
+                for (let j = -flowSmoothing; j <= flowSmoothing; j++) {
+                    const [px, py] = points[(i + j + n) % n];
+                    sx += px;
+                    sy += py;
+                }
+                return [sx / (2 * flowSmoothing + 1), sy / (2 * flowSmoothing + 1)];
+            });
+        }
+
+        return 'M' + points.filter((_, i) => i % 2 === 0).map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') + 'Z';
+    }
+
+    function shapeFlowMessage(node) {
+        if (!node || !node.isConnected || !node.classList.contains('flow') || node.dataset.exitAnim) {
+            return;
+        }
+
+        const head = node.querySelector(':scope > .flow-head, :scope > .flow-chip');
+        const circle = head && head.offsetWidth
+            ? { x: head.offsetLeft + head.offsetWidth / 2, y: head.offsetTop + head.offsetHeight / 2, r: head.offsetWidth / 2 }
+            : null;
+        const bands = bandsOf(node);
+        if (!bands.length && !circle) return;
+
+        const d = flowOutline(bands, circle);
+        if (!d) return;
+
+        const svg = node.querySelector(':scope > .flow-shape');
+        if (!svg || !svg.firstChild) return;
+
+        const width = node.offsetWidth;
+        const height = node.offsetHeight;
+        const { x, y, r } = circle ?? { x: 30, y: 30, r: 30 };
+        const reach = Math.ceil(Math.hypot(width, height)) + Math.max(r, flowPad.x);
+
+        svg.setAttribute('width', String(width));
+        svg.setAttribute('height', String(height));
+        svg.firstChild.setAttribute('d', d);
+        node.style.setProperty('--flow-path', `path("${d}")`);
+        node.style.setProperty('--flow-h', `${height}px`);
+        node.style.setProperty('--flow-reach', `${reach}px`);
+        node.style.setProperty('--hx', `${x}px`);
+        node.style.setProperty('--hy', `${y}px`);
+        node.style.setProperty('--hr', `${r}px`);
+    }
+
+    function scheduleFlowShape(node) {
+        if (!node || !isFlowTheme()) return;
+        pendingShapeNodes.add(node);
+        if (shapeRafId !== null) return;
+        shapeRafId = requestAnimationFrame(() => {
+            shapeRafId = null;
+            const nodes = Array.from(pendingShapeNodes);
+            pendingShapeNodes.clear();
+            if (!isFlowTheme()) return;
+            nodes.forEach(shapeFlowMessage);
+        });
+    }
+
+    function syncAllFlowMessages() {
+        if (!chatContainer) return;
+        const messages = chatContainer.querySelectorAll('.message');
+        if (isFlowTheme()) {
+            messages.forEach(node => {
+                if (!node.classList.contains('flow')) {
+                    decorateFlowMessage(node);
+                } else if (node.querySelector('.message-content')) {
+                    if (showUserAvatars && !node.querySelector(':scope > .flow-head')) {
+                        const meta = messageMeta.get(node);
+                        ensureFlowHead(node, meta, null);
+                    }
+                    syncFlowMedalPlacement(node);
+                }
+                scheduleFlowShape(node);
+            });
+        } else {
+            messages.forEach(undecorateFlowMessage);
+        }
+    }
 
     const newMessagesIndicator = document.getElementById('new-messages-indicator');
     const newMessagesIndicatorCount = document.getElementById('new-messages-indicator-count');
@@ -508,7 +945,7 @@
         messageDiv.dataset.fading = 'true';
 
         if (fadeOutAnimationType === 'no-animation' || !validExitAnimations.has(fadeOutAnimationType)) {
-            setTimeout(() => messageDiv.remove(), 100);
+            setTimeout(() => removeMessageNode(messageDiv), 100);
             return;
         }
 
@@ -519,7 +956,7 @@
 
         messageDiv.dataset.exitAnim = fadeOutAnimationType;
 
-        setTimeout(() => messageDiv.remove(), fadeOutDuration);
+        setTimeout(() => removeMessageNode(messageDiv), fadeOutDuration);
     }
 
     function cancelFadeOut(messageDiv) {
@@ -636,6 +1073,14 @@
 
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message';
+        messageMeta.set(messageDiv, {
+            messageType: message.messageType || 'UserMessage',
+            rank: message.rank ?? null,
+            displayName: message.displayName || message.username || '',
+            platform: message.platform || '',
+            userId: message.userId || '',
+            isReloadBanner: false,
+        });
         messageDiv.dataset.messageId = message.messageId || '';
         messageDiv.dataset.userId = message.userId || '';
         messageDiv.dataset.platform = message.platform || '';
@@ -708,7 +1153,7 @@
             ${contentHtml}
         `;
 
-                attachAvatar(messageDiv, message.userId, message.platform);
+                attachAvatar(messageDiv, messageDiv.querySelector(':scope > .avatar'), message.userId, message.platform);
             } else {
                 messageDiv.innerHTML = contentHtml;
             }
@@ -722,13 +1167,17 @@
             chatContainer.appendChild(messageDiv);
         }
 
+        if (isFlowTheme()) {
+            decorateFlowMessage(messageDiv);
+            shapeFlowMessage(messageDiv);
+        }
+
         scheduleFadeOut(messageDiv);
 
         while (chatContainer.children.length > maxMessages) {
             const removed = chatContainer.firstChild;
             if (removed) {
-                cancelFadeOut(removed);
-                removed.remove();
+                removeMessageNode(removed);
             }
         }
 
@@ -751,8 +1200,7 @@
             chatContainer.querySelectorAll('.message').forEach(el => {
                 const msgTs = Number(el.dataset.timestampMs || '0');
                 if (el.classList.contains('reload-banner') || msgTs <= cutoffMs) {
-                    cancelFadeOut(el);
-                    el.remove();
+                    removeMessageNode(el);
                 }
             });
 
@@ -779,6 +1227,7 @@
             return;
         }
 
+        chatContainer.querySelectorAll('.message').forEach(removeMessageNode);
         chatContainer.replaceChildren();
         seenMessageIds.clear();
         seenMessageIdsOrder.length = 0;
@@ -819,8 +1268,7 @@
             const matchesById = Boolean(msgId && messageIds.has(msgId));
             const matchesByUser = Boolean(targetUserId && msgUserId === targetUserId && (!hasCutoff || msgTimestampMs <= cutoffMs));
             if (matchesById || matchesByUser) {
-                cancelFadeOut(messageDiv);
-                messageDiv.remove();
+                removeMessageNode(messageDiv);
             }
         });
     }
@@ -886,11 +1334,13 @@
         image.addEventListener('error', () => {
             const container = image.closest('.message-images');
             if (container) container.remove();
+            scheduleFlowShape(messageDiv);
         }, { once: true });
 
         image.addEventListener('load', () => {
             image.classList.add('message-image-loaded');
             messageDiv.classList.add('has-message-image');
+            scheduleFlowShape(messageDiv);
         }, { once: true });
     }
 
@@ -1106,6 +1556,12 @@
         }
         const root = document.documentElement;
 
+        if (settings.overlayTheme !== undefined) {
+            configuredOverlayTheme = normalizeOverlayTheme(settings.overlayTheme);
+            activeOverlayTheme = themeQueryOverride ?? configuredOverlayTheme;
+        }
+        root.dataset.overlayTheme = activeOverlayTheme;
+
         applyCssVariables(settings, root);
         applyClassToggleSettings(settings);
 
@@ -1117,6 +1573,8 @@
         if (applyFadeSettings(settings, root)) {
             rescheduleAllFades();
         }
+
+        syncAllFlowMessages();
 
         console.log('Настройки чата обновлены:', settings);
     }
@@ -1130,6 +1588,14 @@
         const banner = document.createElement('div');
         banner.classList.add('message', 'reload-banner', 'no-animation', 'entry-done');
         banner.style.transition = 'opacity ' + reloadBannerFadeMs + 'ms ease';
+        messageMeta.set(banner, {
+            messageType: 'SystemNotification',
+            rank: null,
+            displayName: '',
+            platform: '',
+            userId: '',
+            isReloadBanner: true,
+        });
 
         const timeElement = document.createElement('time');
         timeElement.className = 'timestamp';
@@ -1144,11 +1610,16 @@
         banner.appendChild(text);
         chatContainer.appendChild(banner);
 
+        if (isFlowTheme()) {
+            decorateFlowMessage(banner);
+            shapeFlowMessage(banner);
+        }
+
         requestAnimationFrame(() => smoothScrollToBottom(true));
 
         setTimeout(() => {
             banner.style.opacity = '0';
-            setTimeout(() => banner.remove(), reloadBannerFadeMs);
+            setTimeout(() => removeMessageNode(banner), reloadBannerFadeMs);
         }, reloadBannerLifetimeMs);
     }
 

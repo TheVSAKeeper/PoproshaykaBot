@@ -3,9 +3,12 @@ using Microsoft.Extensions.DependencyInjection;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Chat.Commands;
 using PoproshaykaBot.Core.Infrastructure.Events;
+using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Server.Endpoints;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
+using PoproshaykaBot.Core.Statistics;
+using PoproshaykaBot.Core.Users;
 using System.Net;
 using System.Text.Json;
 
@@ -49,7 +52,9 @@ public sealed class ChatHistoryEndpointTests
     private ChatHistoryManager _historyManager = null!;
     private ObsChatStore _obsChatStore = null!;
 
-    private Task<EndpointTestServer> CreateServerAsync(ChatSettingsStore? chatSettingsStore = null)
+    private Task<EndpointTestServer> CreateServerAsync(
+        ChatSettingsStore? chatSettingsStore = null,
+        OverlayUserRankResolver? rankResolver = null)
     {
         return EndpointTestServer.CreateAsync(services =>
             {
@@ -60,7 +65,8 @@ public sealed class ChatHistoryEndpointTests
             sp => new ChatHistoryEndpoint(
                 sp.GetRequiredService<ChatHistoryManager>(),
                 sp.GetRequiredService<ObsChatStore>(),
-                chatSettingsStore));
+                chatSettingsStore,
+                rankResolver: rankResolver));
     }
 
     private static ChatMessageData NewMessage(string id, DateTime timestamp, string text = "msg")
@@ -283,6 +289,52 @@ public sealed class ChatHistoryEndpointTests
             Assert.That(doc[0].GetProperty("messageId").GetString(), Is.EqualTo("current-stream-msg"));
             Assert.That(doc[0].GetProperty("channelId").GetString(), Is.EqualTo("UC-1"));
             Assert.That(doc[0].GetProperty("chatSessionId").GetString(), Is.EqualTo("live-2"));
+        }
+    }
+
+    [Test]
+    public async Task GetHistory_IncludesResolvedRankWhenRankResolverProvided()
+    {
+        var repo = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
+        var channel = new ChannelKey(StreamingPlatform.Twitch, "1");
+        var user = new PlatformUserKey(StreamingPlatform.Twitch, "u1");
+        for (var i = 0; i < 150; i++)
+        {
+            repo.TrackMessage(channel, user, "alice");
+        }
+
+        var rankService = new UserRankService(_settingsManager);
+        var expectedRank = rankService.GetRank(150);
+        var resolver = new OverlayUserRankResolver(repo, rankService);
+
+        _obsChatStore.Save(new() { EnableMessageFadeOut = false });
+        _historyManager.AddMessage(new()
+        {
+            Platform = StreamingPlatform.Twitch,
+            Channel = "chan",
+            ChannelId = "1",
+            MessageId = "ranked-msg",
+            Timestamp = DateTime.UtcNow,
+            UserId = "u1",
+            DisplayName = "alice",
+            Message = "hello",
+            MessageType = ChatMessageType.UserMessage,
+        });
+
+        using var server = await CreateServerAsync(rankResolver: resolver);
+        using var client = server.CreateClient();
+
+        var json = await client.GetStringAsync("/api/history");
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.GetArrayLength(), Is.EqualTo(1));
+            var rankEl = root[0].GetProperty("rank");
+            Assert.That(rankEl.GetProperty("emoji").GetString(), Is.EqualTo(expectedRank.Emoji));
+            Assert.That(rankEl.GetProperty("name").GetString(), Is.EqualTo(expectedRank.Name));
+            Assert.That(rankEl.GetProperty("tier").GetInt32(), Is.EqualTo(expectedRank.Tier));
         }
     }
 }

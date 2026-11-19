@@ -115,6 +115,43 @@ public sealed class ChannelUserStatisticsTests
     }
 
     [Test]
+    public void Viewer_lookup_uses_only_counters_in_the_requested_slice_for_linked_accounts()
+    {
+        var repo = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);
+        var twitch = new ChannelKey(StreamingPlatform.Twitch, "tw");
+        var youtube = new ChannelKey(StreamingPlatform.YouTube, "yt");
+        var twitchUser = new PlatformUserKey(StreamingPlatform.Twitch, "viewer");
+        var youtubeUser = new PlatformUserKey(StreamingPlatform.YouTube, "viewer");
+        var youtubeAlias = new PlatformUserKey(StreamingPlatform.YouTube, "alias");
+        var unrelated = new PlatformUserKey(StreamingPlatform.YouTube, "unrelated");
+
+        repo.TrackMessage(twitch, twitchUser, "Viewer");
+        repo.TrackMessage(youtube, youtubeUser, "Viewer");
+        repo.TrackMessage(youtube, youtubeAlias, "Alias");
+        repo.TrackMessage(youtube, unrelated, "Unrelated");
+        repo.TrackMessage(youtube, unrelated, "Unrelated");
+        repo.IncrementBonusPoints(StatisticsCounterTarget.ForChannel(youtube), youtubeAlias, 10);
+        repo.IncrementPenaltyPoints(StatisticsCounterTarget.ForChannel(youtube), youtubeUser, 5);
+
+        var status = repo.LinkAccounts(
+            [twitchUser, youtubeUser, youtubeAlias],
+            AccountLinkOrigin.StreamerManual,
+            new(AccountLinkAuthorKind.Streamer, StreamingPlatform.Twitch, "streamer", "Streamer"),
+            allowMergeExistingGroups: false,
+            out _);
+        Assert.That(status, Is.EqualTo(AccountLinkOperationStatus.Linked));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(repo.FindViewerById(StatisticsSlice.ForChannel(youtube), twitchUser)?.Points, Is.EqualTo(7));
+            Assert.That(repo.FindViewerById(StatisticsSlice.ForChannel(twitch), youtubeUser)?.Points, Is.EqualTo(1));
+            Assert.That(repo.FindViewerById(StatisticsSlice.ForPlatform(StreamingPlatform.YouTube), twitchUser)?.Points, Is.EqualTo(7));
+            Assert.That(repo.FindViewerById(StatisticsSlice.All(), youtubeAlias)?.Points, Is.EqualTo(8));
+            Assert.That(repo.FindViewerById(StatisticsSlice.ForChannel(twitch), unrelated), Is.Null);
+        }
+    }
+
+    [Test]
     public void Channel_groups_deduplicate_members_and_All_never_double_counts_overlapping_groups()
     {
         var repo = new UserStatisticsRepository(NullLogger<UserStatisticsRepository>.Instance);

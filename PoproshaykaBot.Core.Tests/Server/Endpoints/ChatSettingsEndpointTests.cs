@@ -240,4 +240,45 @@ public sealed class ChatSettingsEndpointTests
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
+
+    [Test]
+    public async Task ChatSettings_OverlayThemeRoundtrip_AndNormalizesUnknownValue()
+    {
+        var store = CreateStore();
+
+        using var server = await EndpointTestServer.CreateAsync(services =>
+            {
+                services.AddRouting();
+                services.AddSingleton(store);
+            },
+            sp => new ChatSettingsEndpoint(sp.GetRequiredService<ObsChatStore>()));
+
+        using var client = server.CreateClient();
+
+        var flowPayload = JsonSerializer.Serialize(new ObsChatSettings
+        {
+            OverlayTheme = ObsOverlayTheme.Flow,
+        }, JsonStoreOptions.Default);
+
+        using var flowPost = await client.PostAsync("/api/chat-settings", JsonBody(flowPayload));
+        var flowJson = await client.GetStringAsync("/api/chat-settings");
+        using var flowDoc = JsonDocument.Parse(flowJson);
+
+        var unknownPayload = JsonSerializer.Serialize(new ObsChatSettings
+        {
+            OverlayTheme = "neon-retro",
+        }, JsonStoreOptions.Default);
+
+        using var unknownPost = await client.PostAsync("/api/chat-settings", JsonBody(unknownPayload));
+        var unknownJson = await client.GetStringAsync("/api/chat-settings");
+        using var unknownDoc = JsonDocument.Parse(unknownJson);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(flowPost.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(flowDoc.RootElement.GetProperty("overlayTheme").GetString(), Is.EqualTo(ObsOverlayTheme.Flow));
+            Assert.That(unknownPost.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(unknownDoc.RootElement.GetProperty("overlayTheme").GetString(), Is.EqualTo(ObsOverlayTheme.Classic));
+        }
+    }
 }
