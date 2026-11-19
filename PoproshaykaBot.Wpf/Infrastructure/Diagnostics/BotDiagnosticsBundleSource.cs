@@ -164,10 +164,10 @@ public sealed class BotDiagnosticsBundleSource(
 
             var issueSuffix = ytChat.Issue switch
             {
-                YouTubeChatIssue.MissingBotAuth => ", нужна авторизация бота",
-                YouTubeChatIssue.WaitingForActiveBroadcast => ", ожидание активной трансляции",
-                YouTubeChatIssue.QuotaExhausted => ", квота исчерпана",
-                YouTubeChatIssue.TransientError => ", ошибка чтения",
+                ChatReadIssue.MissingBotAuth => ", нужна авторизация бота",
+                ChatReadIssue.WaitingForActiveBroadcast => ", ожидание активной трансляции",
+                ChatReadIssue.QuotaExhausted => ", квота исчерпана",
+                ChatReadIssue.TransientError => ", ошибка чтения",
                 _ => string.Empty,
             };
 

@@ -135,11 +135,16 @@ public class YouTubeGrpcLiveChatStreamClientTests
         });
     }
 
-    [Test]
-    public void Unauthenticated_Status_Clears_Token_And_Refunds_Quota()
+    [TestCase(null, "bot-grpc-token")]
+    [TestCase("assigned-bot", "assigned-grpc-token")]
+    public void Unauthenticated_Status_Clears_Token_And_Refunds_Quota(string? contextId, string expectedToken)
     {
-        var handler = new FakeGrpcHttpHandler((_, _) =>
+        using var context = PlatformAuthRequestOptions.UseContext(contextId);
+        var normalizedContextId = AuthContextIds.Normalize(contextId);
+        string? requestToken = null;
+        var handler = new FakeGrpcHttpHandler((request, _) =>
         {
+            requestToken = request.Headers.Authorization?.Parameter;
             var response = new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Version = HttpVersion.Version20,
@@ -166,7 +171,8 @@ public class YouTubeGrpcLiveChatStreamClientTests
         Assert.Multiple(() =>
         {
             Assert.That(ex!.Kind, Is.EqualTo(YouTubeApiErrorKind.Unauthorized));
-            Assert.That(_authService.ClearedTokens, Is.EqualTo(new[] { (PlatformAuthRole.Bot, "bot-grpc-token") }));
+            Assert.That(requestToken, Is.EqualTo(expectedToken));
+            Assert.That(_authService.ClearedTokens, Is.EqualTo(new[] { (PlatformAuthRole.Bot, normalizedContextId, expectedToken) }));
             Assert.That(quota.CommittedUnits, Is.EqualTo(0));
             Assert.That(quota.ReservedUnits, Is.EqualTo(0));
         });
@@ -224,18 +230,30 @@ public class YouTubeGrpcLiveChatStreamClientTests
 
     private sealed class StubGrpcAuthService : IPlatformAuthService
     {
-        public List<(PlatformAuthRole Role, string Token)> ClearedTokens { get; } = [];
+        public List<(PlatformAuthRole Role, string? ContextId, string Token)> ClearedTokens { get; } = [];
 
         public StreamingPlatform Platform => StreamingPlatform.YouTube;
 
         public bool HasUsableAccessToken(PlatformAuthRole role) => true;
 
         public ValueTask<string?> GetAccessTokenAsync(PlatformAuthRole role, bool forceRefresh = false, CancellationToken ct = default)
-            => ValueTask.FromResult<string?>("bot-grpc-token");
+            => GetAccessTokenAsync(role, null, forceRefresh, ct);
+
+        public ValueTask<string?> GetAccessTokenAsync(
+            PlatformAuthRole role, string? contextId, bool forceRefresh = false, CancellationToken ct = default)
+            => ValueTask.FromResult<string?>(AuthContextIds.Normalize(contextId) switch
+            {
+                AuthContextIds.Default => "bot-grpc-token",
+                "assigned-bot" => "assigned-grpc-token",
+                _ => null,
+            });
 
         public bool TryClearAccessToken(PlatformAuthRole role, string failedAccessToken)
+            => TryClearAccessToken(role, null, failedAccessToken);
+
+        public bool TryClearAccessToken(PlatformAuthRole role, string? contextId, string failedAccessToken)
         {
-            ClearedTokens.Add((role, failedAccessToken));
+            ClearedTokens.Add((role, AuthContextIds.Normalize(contextId), failedAccessToken));
             return true;
         }
 

@@ -163,7 +163,7 @@ internal sealed class YouTubeChatIngestionHybridTests
         {
             Assert.That(received, Has.Count.EqualTo(2));
             Assert.That(ingestion.CaptureDiagnostics().Transport, Is.EqualTo(YouTubeChatTransport.InnerTube));
-            Assert.That(ingestion.CaptureDiagnostics().Issue, Is.EqualTo(YouTubeChatIssue.None));
+            Assert.That(ingestion.CaptureDiagnostics().Issue, Is.EqualTo(ChatReadIssue.None));
             Assert.That(streamCalls, Is.EqualTo(0));
             Assert.That(_quotaGovernor.CaptureDiagnostics().CommittedUnits, Is.EqualTo(0));
             Assert.That(_quotaGovernor.CaptureDiagnostics().ReservedUnits, Is.EqualTo(0));
@@ -178,7 +178,7 @@ internal sealed class YouTubeChatIngestionHybridTests
             Assert.That(_quotaGovernor.CaptureDiagnostics().ExhaustedByServer, Is.False);
             Assert.That(_quotaGovernor.CaptureDiagnostics().CommittedUnits, Is.EqualTo(0));
             Assert.That(_quotaGovernor.CaptureDiagnostics().ReservedUnits, Is.EqualTo(0));
-            Assert.That(diagAfterFallbackWithoutAuth.Issue, Is.EqualTo(YouTubeChatIssue.MissingBotAuth));
+            Assert.That(diagAfterFallbackWithoutAuth.Issue, Is.EqualTo(ChatReadIssue.MissingBotAuth));
             Assert.That(gaps, Is.Empty);
         });
 

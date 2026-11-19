@@ -2,7 +2,6 @@
 using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
-using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Wpf.Infrastructure;
@@ -33,13 +32,7 @@ public sealed partial class OnboardingBannerViewModel : ObservableObject, IDispo
         _wizardLauncher.Closed += OnWizardClosed;
 
         _subscriptions.Add(eventBus.SubscribeOnUi<BotLifecyclePhaseChanged>(_ => Refresh()));
-        _subscriptions.Add(eventBus.SubscribeOnUi<PlatformAuthorizationRefreshed>(evt =>
-        {
-            if (evt.Platform == StreamingPlatform.Twitch)
-            {
-                Refresh();
-            }
-        }));
+        _subscriptions.Add(eventBus.SubscribeOnUi<PlatformAuthorizationRefreshed>(_ => Refresh()));
 
         Refresh();
     }

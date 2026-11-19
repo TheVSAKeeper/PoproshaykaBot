@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast;
 using PoproshaykaBot.Core.Debugging;
 using PoproshaykaBot.Core.Infrastructure.Events;
-using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Platforms;
@@ -116,23 +115,8 @@ public sealed class DiagnosticsSnapshotSource(
     {
         var phase = botConnection.GetPhase(StreamingPlatform.Twitch);
 
-        var state = phase switch
-        {
-            BotLifecyclePhase.Connecting => ConnectionState.Connecting,
-            BotLifecyclePhase.Connected => chatIngestion.IsJoined ? ConnectionState.Connected : ConnectionState.Connecting,
-            BotLifecyclePhase.Disconnecting => ConnectionState.Disconnected,
-            BotLifecyclePhase.Disconnected => ConnectionState.Disconnected,
-            BotLifecyclePhase.Cancelled => ConnectionState.Disconnected,
-            BotLifecyclePhase.Failed => ConnectionState.Failed,
-            _ => ConnectionState.Unknown,
-        };
-
         var channel = targetChannelProvider.Current.Login;
-
-        return new(state,
-            string.IsNullOrWhiteSpace(channel) ? null : channel,
-            chatIngestion.JoinedAt,
-            chatIngestion.LastMessageAt);
+        return chatIngestion.CaptureChatStatus(phase, string.IsNullOrWhiteSpace(channel) ? null : channel);
     }
 
     private ObsConnectionStatus CaptureObs()

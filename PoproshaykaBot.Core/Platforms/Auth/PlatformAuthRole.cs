@@ -32,4 +32,7 @@ public static class PlatformAuthRoles
             throw new ArgumentOutOfRangeException(nameof(role), role, null);
         }
     }
+
+    public static bool HasCredentials(string? accessToken, string? refreshToken) =>
+        !string.IsNullOrWhiteSpace(accessToken) || !string.IsNullOrWhiteSpace(refreshToken);
 }

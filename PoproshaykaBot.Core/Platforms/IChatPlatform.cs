@@ -1,4 +1,6 @@
 ﻿using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Diagnostics;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Streaming;
 
 namespace PoproshaykaBot.Core.Platforms;
@@ -24,6 +26,8 @@ public interface IChatPlatform
     PlatformBotIdentity? BotIdentity => null;
 
     string? ConfiguredChannel => null;
+
+    ChatConnectionStatus? CaptureChatStatus(BotLifecyclePhase phase) => null;
 
     string? BuildStreamUrl(StreamInfo? stream = null) => null;
 

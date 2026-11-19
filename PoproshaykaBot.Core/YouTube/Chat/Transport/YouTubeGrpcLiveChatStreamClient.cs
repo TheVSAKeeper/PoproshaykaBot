@@ -29,7 +29,8 @@ internal sealed class YouTubeGrpcLiveChatStreamClient(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(liveChatId);
 
-        var token = await authService.GetAccessTokenAsync(PlatformAuthRole.Bot, forceRefresh: false, cancellationToken)
+        var botContextId = PlatformAuthRequestOptions.CurrentContextId;
+        var token = await authService.GetAccessTokenAsync(PlatformAuthRole.Bot, botContextId, forceRefresh: false, cancellationToken)
             .ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(token))
@@ -88,7 +89,7 @@ internal sealed class YouTubeGrpcLiveChatStreamClient(
 
                     if (ex.StatusCode == StatusCode.Unauthenticated)
                     {
-                        authService.TryClearAccessToken(PlatformAuthRole.Bot, token);
+                        authService.TryClearAccessToken(PlatformAuthRole.Bot, botContextId, token);
                         logger.LogWarning(ex, "YouTube StreamList вернул Unauthenticated – очищаем сохранённый токен роли Bot");
                     }
 

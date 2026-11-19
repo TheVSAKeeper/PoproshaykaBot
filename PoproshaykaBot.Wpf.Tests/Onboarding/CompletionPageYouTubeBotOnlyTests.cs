@@ -15,6 +15,7 @@ using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Server;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Settings.Onboarding;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Statistics;
 using PoproshaykaBot.Core.Streaming;
@@ -34,8 +35,9 @@ namespace PoproshaykaBot.Wpf.Tests.Onboarding;
 [TestFixture]
 public sealed class CompletionPageYouTubeBotOnlyTests
 {
-    [Test]
-    public async Task YouTube_BotOnly_Without_Broadcaster_Allows_Completing_Onboarding()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task BotOnly_Without_Broadcaster_Allows_Completing_Onboarding(bool twitchBroadcasterAuthorized)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"yt-onboard-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -66,8 +68,10 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                 {
                     Twitch = new TwitchSettings { ClientId = "tw-client", ClientSecret = "tw-secret", Channel = "streamer" },
                 },
-                new TwitchAccountSettings { Login = "twbot", Scopes = [.. TwitchScopes.BotRequired] },
-                new TwitchAccountSettings { Login = "streamer", Scopes = [.. TwitchScopes.BroadcasterRequired] },
+                new TwitchAccountSettings { Login = "twbot", AccessToken = "tw-bot-token", Scopes = [.. TwitchScopes.BotRequired] },
+                twitchBroadcasterAuthorized
+                    ? new TwitchAccountSettings { Login = "streamer", AccessToken = "tw-streamer-token", Scopes = [.. TwitchScopes.BroadcasterRequired] }
+                    : new TwitchAccountSettings(),
                 new YouTubeSettings { Enabled = true, ClientId = "yt-client", Channel = "@foreign" },
                 "yt-secret",
                 new YouTubeAccountSettings
@@ -76,7 +80,11 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                     AccessToken = "yt-bot-token",
                     Scopes = [.. YouTubeScopes.BotRequired],
                 },
-                new YouTubeAccountSettings());
+                new YouTubeAccountSettings { Scopes = [.. YouTubeScopes.BroadcasterRequired] });
+
+            Assert.That(settingsManager.SaveSettings(context.Settings), Is.True);
+            Assert.That(accountsStore.SaveAll(context.BotAccount, context.BroadcasterAccount), Is.True);
+            Assert.That(new OnboardingChecklist(settingsManager, accountsStore).IsComplete, Is.True);
 
             var doneTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             page.PropertyChanged += (_, args) =>
@@ -98,6 +106,10 @@ public sealed class CompletionPageYouTubeBotOnlyTests
                 Assert.That(page.CanAdvance, Is.True);
                 Assert.That(page.IsValidationFailure, Is.False);
                 Assert.That(page.ValidationText, Does.Contain("режим «только бот»"));
+                if (!twitchBroadcasterAuthorized)
+                {
+                    Assert.That(page.ValidationText, Does.Contain("Доступы аккаунта стримера: не подключён (режим «только бот»)"));
+                }
             });
         }
         finally

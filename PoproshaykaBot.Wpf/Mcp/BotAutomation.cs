@@ -195,16 +195,18 @@ public sealed class BotAutomation(
         {
             var status = platform.StreamStatus;
             var currentStream = status.CurrentStream;
+            var phase = connectionManager.GetPhase(platform.Id);
             list.Add(new BotStateDto.PlatformStateDto(
                 platform.Id,
                 platform.DisplayName,
                 platform.IsEnabled,
                 platform.IsConnected,
-                connectionManager.GetPhase(platform.Id),
+                phase,
                 connectionManager.IsPlatformBusy(platform.Id),
                 platform.ConfiguredChannel,
                 ToStreamDto(status.CurrentStatus, currentStream),
-                platform.BuildStreamUrl(currentStream)));
+                platform.BuildStreamUrl(currentStream),
+                platform.CaptureChatStatus(phase)));
         }
 
         return list;
