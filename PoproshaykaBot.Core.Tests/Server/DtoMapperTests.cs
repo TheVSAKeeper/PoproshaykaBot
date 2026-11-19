@@ -85,4 +85,34 @@ public sealed class DtoMapperTests
 
         Assert.That(doc.RootElement.GetProperty("color").GetString(), Is.EqualTo("#FF7F50"));
     }
+
+    [Test]
+    public void ToServerMessage_IncludesRankWhenProvided_AndNullWhenOmitted()
+    {
+        var data = new ChatMessageData
+        {
+            Platform = StreamingPlatform.Twitch,
+            Timestamp = DateTime.UtcNow,
+            DisplayName = "alice",
+            Message = "hi",
+            MessageType = ChatMessageType.UserMessage,
+        };
+
+        var withoutRankJson = JsonSerializer.Serialize(DtoMapper.ToServerMessage(data, new()), CamelCaseOptions);
+        var withRankJson = JsonSerializer.Serialize(
+            DtoMapper.ToServerMessage(data, new(), new("♛", "ФЕРЗЬ", 100, 2)),
+            CamelCaseOptions);
+
+        using var withoutDoc = JsonDocument.Parse(withoutRankJson);
+        using var withDoc = JsonDocument.Parse(withRankJson);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withoutDoc.RootElement.GetProperty("rank").ValueKind, Is.EqualTo(JsonValueKind.Null));
+            var rankEl = withDoc.RootElement.GetProperty("rank");
+            Assert.That(rankEl.GetProperty("emoji").GetString(), Is.EqualTo("♛"));
+            Assert.That(rankEl.GetProperty("name").GetString(), Is.EqualTo("ФЕРЗЬ"));
+            Assert.That(rankEl.GetProperty("tier").GetInt32(), Is.EqualTo(2));
+        }
+    }
 }

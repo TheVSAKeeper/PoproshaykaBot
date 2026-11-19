@@ -12,7 +12,8 @@ internal sealed class ChatHistoryEndpoint(
     ChatHistoryManager chatHistoryManager,
     ObsChatStore obsChatStore,
     IChatHistorySettingsProvider? chatSettingsProvider = null,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    OverlayUserRankResolver? rankResolver = null)
     : IEndpointMapper
 {
     public void Map(IEndpointRouteBuilder endpoints)
@@ -36,7 +37,7 @@ internal sealed class ChatHistoryEndpoint(
 
             var finalHistory = history
                 .TakeLast(maxMessages)
-                .Select(message => DtoMapper.ToServerMessage(message, obsSettings));
+                .Select(message => DtoMapper.ToServerMessage(message, obsSettings, rankResolver?.Resolve(message)));
 
             return Results.Json(finalHistory, ServerJsonOptions.Default);
         });

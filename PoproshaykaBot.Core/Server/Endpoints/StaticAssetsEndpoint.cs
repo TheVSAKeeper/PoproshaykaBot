@@ -9,6 +9,7 @@ internal sealed class StaticAssetsEndpoint : IEndpointMapper
     private static readonly string OverlayHtml = ResourceLoader.LoadResourceText("PoproshaykaBot.Core.Assets.ObsOverlay.html");
     private static readonly string AnimationsDemoHtml = ResourceLoader.LoadResourceText("PoproshaykaBot.Core.Assets.animations-demo.html");
     private static readonly byte[] ObsCssBytes = ResourceLoader.LoadResourceBytes("PoproshaykaBot.Core.Assets.obs.css");
+    private static readonly byte[] ObsFlowCssBytes = ResourceLoader.LoadResourceBytes("PoproshaykaBot.Core.Assets.obs-flow.css");
     private static readonly byte[] ObsJsBytes = ResourceLoader.LoadResourceBytes("PoproshaykaBot.Core.Assets.obs.js");
     private static readonly byte[] AnimationsDemoCssBytes = ResourceLoader.LoadResourceBytes("PoproshaykaBot.Core.Assets.animations-demo.css");
     private static readonly byte[] AnimationsDemoJsBytes = ResourceLoader.LoadResourceBytes("PoproshaykaBot.Core.Assets.animations-demo.js");
@@ -20,6 +21,7 @@ internal sealed class StaticAssetsEndpoint : IEndpointMapper
         endpoints.MapGet("/chat", () => Results.Content(OverlayHtml, "text/html; charset=utf-8"));
         endpoints.MapGet("/animations-demo", () => Results.Content(AnimationsDemoHtml, "text/html; charset=utf-8"));
         endpoints.MapGet("/assets/obs.css", () => Results.Bytes(ObsCssBytes, "text/css; charset=utf-8"));
+        endpoints.MapGet("/assets/obs-flow.css", () => Results.Bytes(ObsFlowCssBytes, "text/css; charset=utf-8"));
         endpoints.MapGet("/assets/obs.js", () => Results.Bytes(ObsJsBytes, "application/javascript; charset=utf-8"));
         endpoints.MapGet("/assets/animations-demo.css", () => Results.Bytes(AnimationsDemoCssBytes, "text/css; charset=utf-8"));
         endpoints.MapGet("/assets/animations-demo.js", () => Results.Bytes(AnimationsDemoJsBytes, "application/javascript; charset=utf-8"));

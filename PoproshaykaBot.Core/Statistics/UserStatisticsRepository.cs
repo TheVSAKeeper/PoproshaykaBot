@@ -183,7 +183,10 @@ public sealed class UserStatisticsRepository(
 
         lock (_lock)
         {
-            return QuerySliceLocked(slice).FirstOrDefault(viewer => viewer.MatchesAccount(key));
+            var identity = ResolveIdentityLocked(key);
+            return slice.Channel is { } channel
+                ? FindChannelViewerLocked(slice, channel, identity)
+                : QuerySliceLocked(slice, identity).SingleOrDefault();
         }
     }
 
@@ -928,7 +931,28 @@ public sealed class UserStatisticsRepository(
         return result;
     }
 
-    private List<ViewerAggregateStatistics> QuerySliceLocked(StatisticsSlice slice)
+    private ViewerAggregateStatistics? FindChannelViewerLocked(
+        StatisticsSlice slice,
+        ChannelKey channel,
+        ViewerIdentityKey identity)
+    {
+        IEnumerable<PlatformUserKey> members = identity.Kind == ViewerIdentityKind.LinkedGroup
+            ? _linkGroups[identity.GroupId].Members.Select(static member => member.Key)
+            : [identity.StandaloneUser];
+        ViewerAggregateBuilder? builder = null;
+
+        foreach (var member in members)
+        {
+            if (member.Platform == channel.Platform && _channelCounters.TryGetValue(new(channel, member), out var counter))
+            {
+                (builder ??= new(identity)).AddBreakdown(counter);
+            }
+        }
+
+        return builder?.Build(slice, _accounts, _linkGroups);
+    }
+
+    private List<ViewerAggregateStatistics> QuerySliceLocked(StatisticsSlice slice, ViewerIdentityKey? filter = null)
     {
         var builders = new Dictionary<ViewerIdentityKey, ViewerAggregateBuilder>();
 
@@ -940,20 +964,18 @@ public sealed class UserStatisticsRepository(
             }
 
             var identity = ResolveIdentityLocked(counter.UserKey);
+            if (filter.HasValue && identity != filter.Value)
+            {
+                continue;
+            }
+
             if (!builders.TryGetValue(identity, out var builder))
             {
                 builder = new(identity);
                 builders[identity] = builder;
             }
 
-            builder.AddBreakdown(
-                counter.UserKey,
-                StatisticsCounterTarget.ForChannel(counter.ChannelKey),
-                counter.MessageCount,
-                counter.BonusPoints,
-                counter.PenaltyPoints,
-                counter.FirstSeen,
-                counter.LastSeen);
+            builder.AddBreakdown(counter);
         }
 
         foreach (var counter in _unattributedCounters.Values)
@@ -964,6 +986,11 @@ public sealed class UserStatisticsRepository(
             }
 
             var identity = ResolveIdentityLocked(counter.UserKey);
+            if (filter.HasValue && identity != filter.Value)
+            {
+                continue;
+            }
+
             if (!builders.TryGetValue(identity, out var builder))
             {
                 builder = new(identity);
@@ -1045,6 +1072,18 @@ public sealed class UserStatisticsRepository(
         private ulong _penalty;
         private DateTime _firstSeen;
         private DateTime _lastSeen;
+
+        public void AddBreakdown(ChannelUserCounterRecord counter)
+        {
+            AddBreakdown(
+                counter.UserKey,
+                StatisticsCounterTarget.ForChannel(counter.ChannelKey),
+                counter.MessageCount,
+                counter.BonusPoints,
+                counter.PenaltyPoints,
+                counter.FirstSeen,
+                counter.LastSeen);
+        }
 
         public void AddBreakdown(
             PlatformUserKey userKey,

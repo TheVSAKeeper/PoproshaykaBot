@@ -1,12 +1,13 @@
 ﻿using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Server.Images;
 using PoproshaykaBot.Core.Settings.Obs;
+using PoproshaykaBot.Core.Users;
 
 namespace PoproshaykaBot.Core.Server;
 
 public static class DtoMapper
 {
-    public static object ToServerMessage(ChatMessageData chatMessage, ObsChatSettings obsChatSettings)
+    public static object ToServerMessage(ChatMessageData chatMessage, ObsChatSettings obsChatSettings, UserRank? rank = null)
     {
         var images = MessageImagePolicy.BuildImages(chatMessage, obsChatSettings);
 
@@ -26,6 +27,14 @@ public static class DtoMapper
             isFirstTime = chatMessage.IsFirstTime,
             status = chatMessage.Status,
             color = chatMessage.Color,
+            rank = rank is null
+                ? null
+                : new
+                {
+                    emoji = rank.Emoji,
+                    name = rank.Name,
+                    tier = rank.Tier,
+                },
             emotes = chatMessage.Emotes.Select(e => new
                 {
                     id = e.Id,

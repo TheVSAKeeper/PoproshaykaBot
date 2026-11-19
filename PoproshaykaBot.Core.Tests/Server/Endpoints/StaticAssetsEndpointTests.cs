@@ -15,6 +15,7 @@ public sealed class StaticAssetsEndpointTests
 
     [TestCase("/chat", "text/html")]
     [TestCase("/assets/obs.css", "text/css")]
+    [TestCase("/assets/obs-flow.css", "text/css")]
     [TestCase("/assets/obs.js", "application/javascript")]
     [TestCase("/favicon.ico", "image/x-icon")]
     public async Task GetStaticAsset_ReturnsExpectedContentType(string path, string expectedContentTypePrefix)

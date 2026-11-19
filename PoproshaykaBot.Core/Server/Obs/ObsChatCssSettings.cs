@@ -53,6 +53,7 @@ public sealed class ObsChatCssSettings
     public int MessageLifetimeSeconds { get; set; } = 30;
     public string FadeOutAnimationType { get; set; } = MessageAnimationType.FadeOut;
     public int FadeOutAnimationDurationMs { get; set; } = 1000;
+    public string OverlayTheme { get; set; } = ObsOverlayTheme.Classic;
 
     public static ObsChatCssSettings FromObsChatSettings(ObsChatSettings? settings)
     {
@@ -108,6 +109,7 @@ public sealed class ObsChatCssSettings
             MessageLifetimeSeconds = ObsChatRanges.Clamp(safeSettings.MessageLifetimeSeconds, ObsChatRanges.MessageLifetimeMin, ObsChatRanges.MessageLifetimeMax),
             FadeOutAnimationType = safeSettings.FadeOutAnimationType,
             FadeOutAnimationDurationMs = ObsChatRanges.Clamp(safeSettings.FadeOutAnimationDurationMs, ObsChatRanges.FadeOutAnimationDurationMin, ObsChatRanges.FadeOutAnimationDurationMax),
+            OverlayTheme = ObsOverlayTheme.Normalize(safeSettings.OverlayTheme),
         };
     }
 

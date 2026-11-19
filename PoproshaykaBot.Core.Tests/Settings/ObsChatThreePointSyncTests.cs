@@ -151,6 +151,12 @@ public sealed class ObsChatThreePointSyncTests
                 prop.SetValue(target, i + 1);
                 return true;
 
+            case string s when prop.Name == nameof(ObsChatSettings.OverlayTheme):
+                prop.SetValue(target, string.Equals(s, ObsOverlayTheme.Flow, StringComparison.Ordinal)
+                    ? ObsOverlayTheme.Classic
+                    : ObsOverlayTheme.Flow);
+                return true;
+
             case string s when prop.Name.Contains("Animation"):
                 prop.SetValue(target, MessageAnimationType.None);
                 return !string.Equals((string?)prop.GetValue(target), s, StringComparison.Ordinal);

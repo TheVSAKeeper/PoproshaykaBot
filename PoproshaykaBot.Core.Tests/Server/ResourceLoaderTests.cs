@@ -7,6 +7,7 @@ public sealed class ResourceLoaderTests
 {
     [TestCase("PoproshaykaBot.Core.Assets.ObsOverlay.html")]
     [TestCase("PoproshaykaBot.Core.Assets.obs.css")]
+    [TestCase("PoproshaykaBot.Core.Assets.obs-flow.css")]
     [TestCase("PoproshaykaBot.Core.Assets.obs.js")]
     [TestCase("PoproshaykaBot.Core.Assets.icon.ico")]
     public void ObsOverlayAssetsAreEmbedded(string resourceName)
@@ -52,6 +53,21 @@ public sealed class ResourceLoaderTests
             Assert.That(js, Does.Contain("avatarMissTtlMs"));
             Assert.That(css, Does.Not.Contain("max-height: 100px"));
             Assert.That(css, Does.Contain("var(--exit-max-height"));
+        }
+    }
+
+    [Test]
+    public void ObsFlowAssets_AreEmbeddedAndScopedUnderFlowTheme()
+    {
+        var html = ResourceLoader.LoadResourceText("PoproshaykaBot.Core.Assets.ObsOverlay.html");
+        var flowCss = ResourceLoader.LoadResourceText("PoproshaykaBot.Core.Assets.obs-flow.css");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(html, Does.Contain("/assets/obs-flow.css"));
+            Assert.That(flowCss, Does.Contain("data-overlay-theme=\"flow\""));
+            Assert.That(flowCss, Does.Contain("flow-shape"));
+            Assert.That(flowCss, Does.Contain("flow-medal"));
         }
     }
 }

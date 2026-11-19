@@ -19,6 +19,7 @@ public sealed class SseService : IAsyncDisposable
     private readonly SseChannelOptions _options;
     private readonly SseClientRegistry _registry;
     private readonly SseDropMetrics _metrics;
+    private readonly OverlayUserRankResolver? _rankResolver;
 
     private readonly Channel<SseEnvelope> _messageChannel;
     private readonly Lock _lifecycleLock = new();
@@ -37,7 +38,8 @@ public sealed class SseService : IAsyncDisposable
         ILogger<SseService> logger,
         SseChannelOptions options,
         SseClientRegistry registry,
-        SseDropMetrics metrics)
+        SseDropMetrics metrics,
+        OverlayUserRankResolver? rankResolver = null)
     {
         _settingsManager = settingsManager;
         _obsChatStore = obsChatStore;
@@ -45,6 +47,7 @@ public sealed class SseService : IAsyncDisposable
         _options = options;
         _registry = registry;
         _metrics = metrics;
+        _rankResolver = rankResolver;
 
         _messageChannel = Channel.CreateBounded<SseEnvelope>(new BoundedChannelOptions(_options.GlobalChannelCapacity)
         {
@@ -195,7 +198,8 @@ public sealed class SseService : IAsyncDisposable
         try
         {
             var settings = _chatSettings ??= _obsChatStore.Load();
-            var json = JsonSerializer.Serialize(DtoMapper.ToServerMessage(chatMessage, settings), ServerJsonOptions.Default);
+            var rank = _rankResolver?.Resolve(chatMessage);
+            var json = JsonSerializer.Serialize(DtoMapper.ToServerMessage(chatMessage, settings, rank), ServerJsonOptions.Default);
             Enqueue(new("message", json));
         }
         catch (Exception ex)

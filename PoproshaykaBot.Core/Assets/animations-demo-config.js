@@ -184,6 +184,7 @@
         if (!settings) return;
 
         const root = document.documentElement;
+        root.dataset.overlayTheme = settings.overlayTheme === 'flow' ? 'flow' : 'classic';
         Object.keys(cssVarMap).forEach(key => {
             if (settings[key] === undefined || settings[key] === null) return;
             const entry = cssVarMap[key];
@@ -360,6 +361,7 @@
     }
 
     function bindAll() {
+        bindControl('cfg-overlayTheme', 'overlayTheme', 'select');
         bindControl('cfg-fontFamily', 'fontFamily', 'text');
         bindControl('cfg-fontSize', 'fontSize', 'range');
         bindControl('cfg-fontBold', 'fontBold', 'checkbox');

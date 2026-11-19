@@ -64,6 +64,7 @@ public static class ObsChatSettingsValidator
             MessageLifetimeSeconds = ObsChatRanges.Clamp(source.MessageLifetimeSeconds, ObsChatRanges.MessageLifetimeMin, ObsChatRanges.MessageLifetimeMax),
             FadeOutAnimationType = NormalizeAnimation(source.FadeOutAnimationType, MessageAnimationType.ExitValues, MessageAnimationType.FadeOut),
             FadeOutAnimationDurationMs = ObsChatRanges.Clamp(source.FadeOutAnimationDurationMs, ObsChatRanges.FadeOutAnimationDurationMin, ObsChatRanges.FadeOutAnimationDurationMax),
+            OverlayTheme = ObsOverlayTheme.Normalize(source.OverlayTheme),
         };
     }
 

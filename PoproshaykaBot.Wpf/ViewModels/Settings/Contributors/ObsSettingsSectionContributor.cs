@@ -20,6 +20,7 @@ public sealed class ObsSettingsSectionContributor : ISettingsSectionContributor
         nameof(ObsIntegrationSectionViewModel.StatusText),
         nameof(ObsIntegrationSectionViewModel.StatusSeverity),
         nameof(ObsIntegrationSectionViewModel.OverlayUrl),
+        nameof(ObsChatSettingsSectionViewModel.IsFlowTheme),
         "HasErrors",
     };
 
@@ -68,7 +69,7 @@ public sealed class ObsSettingsSectionContributor : ISettingsSectionContributor
             SectionKey,
             "OBS",
             PackIconLucideKind.MonitorPlay,
-            "websocket подключение хост пароль сцена браузер источник оверлей чат цвета шрифт анимация http сервер порт",
+            "websocket подключение хост пароль сцена браузер источник оверлей чат тема flow обтекаемый цвета шрифт анимация http сервер порт",
             [
                 new SettingsSubsection("connection", "Подключение к OBS"),
                 new SettingsSubsection("overlay", "Оформление чат-оверлея"),

@@ -23,6 +23,10 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
     private ObsChatSettings _baseline = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFlowTheme))]
+    private string _overlayTheme = ObsOverlayTheme.Classic;
+
+    [ObservableProperty]
     private Color _backgroundColor;
 
     [ObservableProperty]
@@ -168,6 +172,10 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
         _dialogService = dialogService;
         _shellLauncher = shellLauncher;
 
+        OverlayThemeOptions = ObsOverlayTheme.Themes
+            .Select(option => new OverlayThemeOption(option.Value, option.DisplayName))
+            .ToArray();
+
         EntryAnimationOptions = MessageAnimationType.EntryAnimations
             .Select(option => new AnimationOption(option.Value, option.DisplayName))
             .ToArray();
@@ -181,15 +189,21 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
     public string Title => "Чат OBS";
 
+    public IReadOnlyList<OverlayThemeOption> OverlayThemeOptions { get; }
+
     public IReadOnlyList<AnimationOption> EntryAnimationOptions { get; }
 
     public IReadOnlyList<AnimationOption> ExitAnimationOptions { get; }
+
+    public bool IsFlowTheme => string.Equals(OverlayTheme, ObsOverlayTheme.Flow, StringComparison.Ordinal);
 
     public void LoadFrom(ObsChatSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
         _baseline = settings;
+
+        OverlayTheme = ObsOverlayTheme.Normalize(settings.OverlayTheme);
 
         BackgroundColor = settings.BackgroundColor;
         TextColor = settings.TextColor;
@@ -256,6 +270,8 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
         ArgumentNullException.ThrowIfNull(target);
 
         var current = BuildCurrent();
+
+        target.OverlayTheme = current.OverlayTheme;
 
         target.BackgroundColor = current.BackgroundColor;
         target.TextColor = current.TextColor;
@@ -554,6 +570,8 @@ public sealed partial class ObsChatSettingsSectionViewModel : ObservableValidato
 
         var built = new ObsChatSettings
         {
+            OverlayTheme = OverlayTheme,
+
             BackgroundColor = BackgroundColor,
             TextColor = TextColor,
             UsernameColor = UsernameColor,

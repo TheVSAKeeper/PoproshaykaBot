@@ -75,4 +75,5 @@ public sealed class ObsChatSettings
     public int MessageLifetimeSeconds { get; set; } = 30;
     public string FadeOutAnimationType { get; set; } = MessageAnimationType.FadeOut;
     public int FadeOutAnimationDurationMs { get; set; } = 1000;
+    public string OverlayTheme { get; set; } = ObsOverlayTheme.Classic;
 }

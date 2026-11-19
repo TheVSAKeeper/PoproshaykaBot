@@ -253,7 +253,8 @@ public sealed class JsonStoreFormatContractTests
               "enableMessageFadeOut": true,
               "messageLifetimeSeconds": 30,
               "fadeOutAnimationType": "fade-out",
-              "fadeOutAnimationDurationMs": 1000
+              "fadeOutAnimationDurationMs": 1000,
+              "overlayTheme": "classic"
             }
             """);
 

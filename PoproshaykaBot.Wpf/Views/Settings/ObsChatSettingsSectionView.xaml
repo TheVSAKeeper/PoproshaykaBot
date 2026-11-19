@@ -27,9 +27,24 @@
 
     <StackPanel>
 
+        <DockPanel Margin="0,0,0,8">
+            <TextBlock Text="Тема оверлея"
+                       Style="{StaticResource Setting.RowLabel}" />
+            <ComboBox Style="{StaticResource RowCombo}"
+                      Width="{DynamicResource Setting.ShortFieldWidth}"
+                      ItemsSource="{Binding OverlayThemeOptions}"
+                      DisplayMemberPath="DisplayName"
+                      SelectedValuePath="Value"
+                      AutomationProperties.Name="Тема оверлея"
+                      SelectedValue="{Binding OverlayTheme, Mode=TwoWay}" />
+        </DockPanel>
+
+        <TextBlock Text="В теме «Обтекаемый (Flow)» силуэт сообщения, отступы, скругление и вид анимаций задаются обтекаемым макетом и рангом зрителя – цвета, шрифт, аватары, рамки ролей и длительность анимаций продолжают действовать."
+                   Style="{StaticResource Setting.BlockHint}" />
+
         <TextBlock Text="Цвета"
                    Style="{StaticResource Setting.GroupHeading}"
-                   Margin="0,0,0,10" />
+                   Margin="0,6,0,10" />
 
         <DockPanel Margin="0,0,0,8">
             <TextBlock Text="Фон"
