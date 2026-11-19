@@ -891,14 +891,16 @@ public sealed class ChannelSwitchCoordinator :
         ChannelCatalogEntry entryB,
         CancellationToken cancellationToken)
     {
-        if (entryB.GetAccountAssignment(PlatformAuthRole.Bot) is { IsVerified: false })
-        {
-            return $"Подтвердите доступ аккаунта бота к каналу «{ResolveDisplayName(entryB)}».";
-        }
-
         if (!_authRegistry.TryGet(platform, out var authService))
         {
-            return null;
+            return entryB.GetAccountAssignment(PlatformAuthRole.Bot) is { IsVerified: false }
+                ? $"Подтвердите доступ аккаунта бота к каналу «{ResolveDisplayName(entryB)}»."
+                : null;
+        }
+
+        if (entryB.GetAccountAssignment(PlatformAuthRole.Bot) is not { IsVerified: true })
+        {
+            return $"Подтвердите доступ аккаунта бота к каналу «{ResolveDisplayName(entryB)}».";
         }
 
         var botContextId = AuthContextIds.Normalize(entryB.BotContextId);

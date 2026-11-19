@@ -674,6 +674,12 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
     private async Task VerifyAccessAsync(ChannelCatalogItemViewModel item, ChannelAccountRoleViewModel role)
     {
+        if (string.IsNullOrWhiteSpace(role.AccountId))
+        {
+            role.SetStatus("Сначала выберите или подключите аккаунт.", StatusSeverity.Warning);
+            return;
+        }
+
         if (!_adapters.TryGetValue(item.Platform, out var adapter))
         {
             role.SetStatus("Адаптер площадки не зарегистрирован.", StatusSeverity.Error);
@@ -701,8 +707,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
         if (_allChannels.Contains(item) && contextId == role.ContextId && accountId == role.AccountId)
         {
-            if (!result.IsAllowed || string.IsNullOrWhiteSpace(result.SubjectId)
-                || (accountId is not null && accountId != result.SubjectId))
+            if (!result.IsAllowed || string.IsNullOrWhiteSpace(result.SubjectId) || accountId != result.SubjectId)
             {
                 _logger?.ChannelRoleVerificationDenied(role.Role, item.ChannelId, item.Platform);
             }
