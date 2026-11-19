@@ -6,4 +6,7 @@ public sealed record YouTubeBroadcastSummary(
     string ChannelTitle,
     string LiveChatId,
     string Title,
-    DateTimeOffset StartedAtUtc);
+    DateTimeOffset StartedAtUtc)
+{
+    internal bool IsChatDisabled { get; init; }
+}

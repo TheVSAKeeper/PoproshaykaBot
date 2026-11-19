@@ -92,6 +92,29 @@ internal sealed class YouTubeChatIngestionHybridTests
         }
     }
 
+    [TestCase(true, 0)]
+    [TestCase(false, 1)]
+    public async Task InnerTube_Probes_By_VideoId_Only_When_Chat_Is_Not_Confirmed_Disabled(bool isChatDisabled, int expectedRequests)
+    {
+        _broadcastSource.CurrentBroadcast = _broadcastSource.CurrentBroadcast! with
+        {
+            LiveChatId = string.Empty,
+            IsChatDisabled = isChatDisabled,
+        };
+        var requests = 0;
+        using var handler = new QueueHttpMessageHandler((_, _) =>
+        {
+            requests++;
+            return QueueHttpMessageHandler.TextResponse(HttpStatusCode.TooManyRequests, string.Empty, "text/html");
+        });
+        using var ingestion = CreateHybridService(handler, new MutableAuthService(botToken: null),
+            new StubStreamClient((_, _) => EmptyStreamAsync()));
+
+        await ingestion.RunSingleIterationAsync(CancellationToken.None);
+
+        Assert.That(requests, Is.EqualTo(expectedRequests));
+    }
+
     [Test]
     public async Task InnerTube_Reads_Without_Bot_OAuth_And_Never_Touches_Quota_Even_On_429()
     {

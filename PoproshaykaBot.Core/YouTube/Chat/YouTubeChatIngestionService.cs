@@ -351,6 +351,7 @@ internal sealed class YouTubeChatIngestionService(
     internal async Task<TimeSpan> RunSingleIterationAsync(CancellationToken ct)
     {
         var broadcast = streamMonitor.CurrentBroadcast;
+        var broadcastKey = GetBroadcastKey(broadcast);
         var session = sessionContext.Current;
         using var _ = PlatformAuthRequestOptions.UseContext(session?.BotContextId);
 
@@ -358,7 +359,7 @@ internal sealed class YouTubeChatIngestionService(
             || string.IsNullOrWhiteSpace(broadcast.ChannelId)
             || (session?.TargetChannelId is { Length: > 0 } expectedTarget
                 && !string.Equals(broadcast.ChannelId, expectedTarget, StringComparison.Ordinal))
-            || (string.IsNullOrWhiteSpace(broadcast.LiveChatId) && string.IsNullOrWhiteSpace(broadcast.VideoId)))
+            || broadcastKey is null)
         {
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
 
@@ -401,8 +402,6 @@ internal sealed class YouTubeChatIngestionService(
             broadcasterChannelId,
             YouTubeChatMode.LiveChat,
             RequiresOfficialMessageIds: isSharedAccount);
-
-        var broadcastKey = GetBroadcastKey(broadcast)!;
 
         YouTubeChatSessionCursor cursor;
         bool switchedChat;
@@ -853,7 +852,7 @@ internal sealed class YouTubeChatIngestionService(
 
     private static string? GetBroadcastKey(YouTubeBroadcastSummary? broadcast)
     {
-        if (broadcast is null)
+        if (broadcast is null || broadcast.IsChatDisabled)
         {
             return null;
         }
@@ -1376,6 +1375,7 @@ internal sealed class YouTubeChatIngestionService(
     {
         return current is not null
             && candidate is not null
+            && current.IsChatDisabled == candidate.IsChatDisabled
             && string.Equals(current.VideoId, candidate.VideoId, StringComparison.Ordinal)
             && string.Equals(current.ChannelId, candidate.ChannelId, StringComparison.Ordinal)
             && string.Equals(current.LiveChatId, candidate.LiveChatId, StringComparison.Ordinal);

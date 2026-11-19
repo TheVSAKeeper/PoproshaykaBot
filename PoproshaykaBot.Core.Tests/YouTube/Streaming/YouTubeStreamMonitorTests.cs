@@ -1122,6 +1122,72 @@ public class YouTubeStreamMonitorTests
         });
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task MultiChannel_BotOnly_Disabled_During_Discovery_Drops_The_Result(bool blockPublicLookup)
+    {
+        var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-disable-race.json"));
+        catalogStore.Save(new()
+        {
+            Channels = [new() { Platform = StreamingPlatform.YouTube, ChannelId = ChannelId, IsConfigured = true, MonitoringEnabled = true }],
+            Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = ChannelId }],
+        });
+        var lookupEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseLookup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task WaitForSettingsChangeAsync(CancellationToken ct)
+        {
+            lookupEntered.TrySetResult();
+            await releaseLookup.Task.WaitAsync(ct).ConfigureAwait(false);
+        }
+
+        var publicDiscovery = Substitute.For<IYouTubePublicLiveDiscoveryClient>();
+        publicDiscovery.FindActiveLiveVideoAsync(ChannelId, Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                if (blockPublicLookup)
+                {
+                    await WaitForSettingsChangeAsync(call.Arg<CancellationToken>()).ConfigureAwait(false);
+                }
+
+                return (YouTubePublicLiveVideo?)new YouTubePublicLiveVideo("vid-a", ChannelId, "Main", "Live", _clock.UtcNow);
+            });
+        _broadcastClient.GetVideoLiveSampleAsync("vid-a", PlatformAuthRole.Bot, AuthContextIds.Default, Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                if (!blockPublicLookup)
+                {
+                    await WaitForSettingsChangeAsync(call.Arg<CancellationToken>()).ConfigureAwait(false);
+                }
+
+                return (YouTubeVideoLiveSample?)new YouTubeVideoLiveSample("vid-a", "Live", _clock.UtcNow, null, 20, ChannelId, "Main", "chat-a");
+            });
+        var roleAuth = new RoleAwareStubAuthService();
+        roleAuth.SetToken(PlatformAuthRole.Bot, AuthContextIds.Default, "bot-token");
+        var resolver = new YouTubeTargetChannelResolver(_broadcastClient, _accountsStore, NullLogger<YouTubeTargetChannelResolver>.Instance);
+        using var monitor = new YouTubeStreamMonitor(
+            _broadcastClient, resolver, _selectionStore, roleAuth, _settingsStore, _governor, _eventBus, _clock,
+            NullLogger<YouTubeStreamMonitor>.Instance, catalogStore, _accountsStore, publicDiscovery: publicDiscovery);
+        var onlineEvents = new List<StreamWentOnline>();
+        using var sub = _eventBus.Subscribe<StreamWentOnline>(onlineEvents.Add);
+
+        var refresh = monitor.RefreshLiveSnapshotAsync();
+        await lookupEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var settings = _settingsStore.Load();
+        settings.Enabled = false;
+        _settingsStore.Save(settings);
+        releaseLookup.TrySetResult();
+        await refresh.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(monitor.CurrentBroadcast, Is.Null);
+            Assert.That(onlineEvents, Is.Empty);
+        });
+        await _broadcastClient.Received(blockPublicLookup ? 0 : 1)
+            .GetVideoLiveSampleAsync("vid-a", PlatformAuthRole.Bot, AuthContextIds.Default, Arg.Any<CancellationToken>());
+    }
+
     [Test]
     public async Task Becoming_Broadcaster_Eligible_Invalidates_Bot_Discovery_And_Runs_ListActiveBroadcasts()
     {
@@ -1474,6 +1540,7 @@ public class YouTubeStreamMonitorTests
         Assert.Multiple(() =>
         {
             Assert.That(_monitor.CurrentBroadcast?.LiveChatId, Is.EqualTo(string.Empty));
+            Assert.That(_monitor.CurrentBroadcast?.IsChatDisabled, Is.True);
             Assert.That(broadcastEvents, Has.Count.EqualTo(1));
             Assert.That(broadcastEvents[0].ActiveBroadcast?.LiveChatId, Is.EqualTo(string.Empty));
             Assert.That(chatAvailabilityEvents, Has.Count.EqualTo(1));
@@ -1547,8 +1614,12 @@ public class YouTubeStreamMonitorTests
         });
     }
 
-    [Test]
-    public async Task MultiChannel_BotOnly_MidStream_Chat_Disable_And_ReEnable_Updates_Broadcast()
+    [TestCase(false, false)]
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public async Task MultiChannel_BotOnly_Chat_Disable_And_ReEnable_Updates_Broadcast(
+        bool initiallyDisabled,
+        bool stopMonitoringOnChatDisable)
     {
         var catalogStore = new ChannelCatalogStore(null, Path.Combine(_directory, "channels-chat-toggle.json"));
         const string foreignId = "UC0000000000000000000055";
@@ -1567,8 +1638,9 @@ public class YouTubeStreamMonitorTests
 
         _broadcastClient.GetVideoLiveSampleAsync("vid-chat-toggle", PlatformAuthRole.Bot, AuthContextIds.Default, Arg.Any<CancellationToken>())
             .Returns(
-                new YouTubeVideoLiveSample("vid-chat-toggle", "Live", _clock.UtcNow, null, 20, foreignId, "Foreign", "chat-1", HasLiveStreamingDetails: true),
-                new YouTubeVideoLiveSample("vid-chat-toggle", "Live", _clock.UtcNow, null, 25, foreignId, "Foreign", null, HasLiveStreamingDetails: true),
+                new YouTubeVideoLiveSample("vid-chat-toggle", "Live", _clock.UtcNow, null, 20, foreignId, "Foreign",
+                    initiallyDisabled ? null : "chat-1", HasLiveStreamingDetails: true),
+                new YouTubeVideoLiveSample("vid-chat-toggle", "Updated title", _clock.UtcNow, null, 25, foreignId, "Foreign", null, HasLiveStreamingDetails: true),
                 new YouTubeVideoLiveSample("vid-chat-toggle", "Live", _clock.UtcNow, null, 30, foreignId, "Foreign", "chat-2", HasLiveStreamingDetails: true));
 
         var roleAuth = new RoleAwareStubAuthService();
@@ -1593,16 +1665,43 @@ public class YouTubeStreamMonitorTests
         using var sub = _eventBus.Subscribe<PlatformChatAvailabilityChanged>(e => chatAvailabilities.Add(e.IsAvailable));
 
         await monitor.RefreshLiveSnapshotAsync();
+        var initial = monitor.CurrentBroadcast;
+        var observations = new List<ChannelStreamObserved>();
+        using var observedSub = _eventBus.Subscribe<ChannelStreamObserved>(observations.Add);
+        using var stopSub = _eventBus.Subscribe<YouTubeActiveBroadcastChanged>(e =>
+        {
+            if (stopMonitoringOnChatDisable && e.ActiveBroadcast?.IsChatDisabled == true)
+            {
+                var settings = _settingsStore.Load();
+                settings.Enabled = false;
+                _settingsStore.Save(settings);
+            }
+        });
         await monitor.RefreshLiveSnapshotAsync();
-        var afterDisable = monitor.CurrentBroadcast?.LiveChatId;
+        var afterDisable = monitor.CurrentBroadcast;
+        if (stopMonitoringOnChatDisable)
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(afterDisable?.IsChatDisabled, Is.True);
+                Assert.That(_settingsStore.Load().Enabled, Is.False);
+                Assert.That(observations, Is.Empty);
+                Assert.That(chatAvailabilities, Is.EqualTo(new[] { true }));
+            });
+            return;
+        }
+
         await monitor.RefreshLiveSnapshotAsync();
-        var afterReEnable = monitor.CurrentBroadcast?.LiveChatId;
+        var afterReEnable = monitor.CurrentBroadcast;
 
         Assert.Multiple(() =>
         {
-            Assert.That(afterDisable, Is.EqualTo(string.Empty));
-            Assert.That(afterReEnable, Is.EqualTo("chat-2"));
-            Assert.That(chatAvailabilities, Is.EqualTo(new[] { true, false, true }));
+            Assert.That(initial?.IsChatDisabled, Is.EqualTo(initiallyDisabled));
+            Assert.That(afterDisable?.LiveChatId, Is.EqualTo(string.Empty));
+            Assert.That(afterDisable?.IsChatDisabled, Is.True);
+            Assert.That(afterReEnable?.LiveChatId, Is.EqualTo("chat-2"));
+            Assert.That(afterReEnable?.IsChatDisabled, Is.False);
+            Assert.That(chatAvailabilities, Is.EqualTo(initiallyDisabled ? new[] { false, true } : new[] { true, false, true }));
         });
     }
 
