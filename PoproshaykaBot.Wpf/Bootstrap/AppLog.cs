@@ -217,6 +217,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 1218, Level = LogLevel.Information, Message = "Доступ роли {Role} к каналу {ChannelId} площадки {Platform} не подтверждён")]
     public static partial void ChannelRoleVerificationDenied(this ILogger logger, PlatformAuthRole role, string channelId, StreamingPlatform platform);
 
+    [LoggerMessage(EventId = 1219, Level = LogLevel.Warning, Message = "Не удалось определить канал на площадке {Platform} ({ErrorType})")]
+    public static partial void ChannelResolveFailed(this ILogger logger, Exception? exception, StreamingPlatform platform, string errorType);
+
     [LoggerMessage(EventId = 1202, Level = LogLevel.Information, Message = "Порт HTTP сервера обновлён с {OldPort} на {NewPort} в соответствии с RedirectUri")]
     public static partial void SettingsHttpPortUpdated(this ILogger logger, int oldPort, int newPort);
 
@@ -362,4 +365,37 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 1704, Level = LogLevel.Error, Message = "Сбой переключения канала {Platform}")]
     public static partial void ChannelSwitchOperationFailed(this ILogger logger, Exception? exception, string platform);
+
+    [LoggerMessage(EventId = 1800, Level = LogLevel.Warning, Message = "Не удалось получить текущие параметры канала для редактирования профиля")]
+    public static partial void BroadcastProfileChannelFetchFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1801, Level = LogLevel.Warning, Message = "Не удалось применить профиль трансляции")]
+    public static partial void BroadcastProfileApplyFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1802, Level = LogLevel.Warning, Message = "Не удалось применить профиль «{ProfileName}» после изменения номера серии")]
+    public static partial void BroadcastProfileNumberAdjustFailed(this ILogger logger, Exception? exception, string profileName);
+
+    [LoggerMessage(EventId = 1803, Level = LogLevel.Warning, Message = "Профиль трансляции отклонён при сохранении")]
+    public static partial void BroadcastProfileSaveRejected(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1804, Level = LogLevel.Warning, Message = "Не удалось завершить голосование")]
+    public static partial void PollEndFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1805, Level = LogLevel.Warning, Message = "Не удалось запустить голосование по профилю «{ProfileName}»")]
+    public static partial void PollStartFailed(this ILogger logger, Exception? exception, string profileName);
+
+    [LoggerMessage(EventId = 1806, Level = LogLevel.Error, Message = "Не удалось изменить баланс пользователя")]
+    public static partial void UserBalanceAdjustmentFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1807, Level = LogLevel.Warning, Message = "Не удалось подготовить папку с настройками: {Path}")]
+    public static partial void SettingsFolderPrepareFailed(this ILogger logger, Exception? exception, string path);
+
+    [LoggerMessage(EventId = 1808, Level = LogLevel.Error, Message = "Ошибка сброса настроек к значениям по умолчанию")]
+    public static partial void SettingsResetFailed(this ILogger logger, Exception? exception);
+
+    [LoggerMessage(EventId = 1809, Level = LogLevel.Warning, Message = "Не удалось прочитать файл импорта профилей: {Path}")]
+    public static partial void BroadcastProfilesImportReadFailed(this ILogger logger, Exception? exception, string path);
+
+    [LoggerMessage(EventId = 1810, Level = LogLevel.Warning, Message = "Ошибка поиска категорий игр в автодополнении")]
+    public static partial void GameAutocompleteSearchFailed(this ILogger logger, Exception? exception);
 }

@@ -1,8 +1,10 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.IO;
@@ -21,6 +23,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
     private readonly IShellLauncher _shellLauncher;
     private readonly IFilePicker _filePicker;
     private readonly ILegacyImportDialog _legacyImportDialog;
+    private readonly ILogger<MiscSettingsSectionViewModel>? _logger;
 
     public MiscSettingsSectionViewModel(
         SettingsManager settingsManager,
@@ -28,7 +31,8 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         IDialogService dialogService,
         IShellLauncher shellLauncher,
         IFilePicker filePicker,
-        ILegacyImportDialog legacyImportDialog)
+        ILegacyImportDialog legacyImportDialog,
+        ILogger<MiscSettingsSectionViewModel>? logger = null)
     {
         _settingsManager = settingsManager;
         _broadcastProfiles = broadcastProfiles;
@@ -36,6 +40,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         _shellLauncher = shellLauncher;
         _filePicker = filePicker;
         _legacyImportDialog = legacyImportDialog;
+        _logger = logger;
     }
 
     public void Dispose()
@@ -64,6 +69,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         }
         catch (Exception ex)
         {
+            _logger?.SettingsFolderPrepareFailed(ex, dir);
             _dialogService.Error("Ошибка", $"Ошибка открытия папки с настройками: {ex.Message}");
             return;
         }
@@ -98,6 +104,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         }
         catch (Exception ex)
         {
+            _logger?.SettingsResetFailed(ex);
             _dialogService.Error("Ошибка", $"Ошибка сброса настроек: {ex.Message}");
         }
     }
@@ -121,6 +128,7 @@ public sealed partial class MiscSettingsSectionViewModel : ObservableObject, IDi
         }
         catch (Exception ex)
         {
+            _logger?.BroadcastProfilesImportReadFailed(ex, path);
             _dialogService.Error("Ошибка импорта", $"Не удалось прочитать файл: {ex.Message}");
             return;
         }

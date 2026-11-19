@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepShell.Services.Platform;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
@@ -44,6 +45,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
     private readonly IUiDispatcher? _uiDispatcher;
     private readonly ChannelCatalogStore? _channelCatalog;
     private readonly IAccountLinkingService? _accountLinking;
+    private readonly ILogger<UserStatisticsPageViewModel>? _logger;
     private readonly List<UserStatisticsRowViewModel> _allRows = [];
     private readonly ObservableCollection<UserStatisticsRowViewModel> _rows = [];
     private readonly ObservableCollection<UserStatisticsSliceOption> _sliceOptions = [];
@@ -174,7 +176,8 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         StatisticsPreload? preload = null,
         IUiDispatcher? uiDispatcher = null,
         ChannelCatalogStore? channelCatalog = null,
-        IAccountLinkingService? accountLinking = null)
+        IAccountLinkingService? accountLinking = null,
+        ILogger<UserStatisticsPageViewModel>? logger = null)
     {
         _userStatistics = userStatistics;
         _statisticsAutoSaver = statisticsAutoSaver;
@@ -190,6 +193,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         _uiDispatcher = uiDispatcher;
         _channelCatalog = channelCatalog;
         _accountLinking = accountLinking;
+        _logger = logger;
         _isBalanceExpanded = settings.GetBool(SettingsKeys.UserBalanceExpanded, true);
         _isSummaryExpanded = settings.GetBool(SettingsKeys.UserSummaryExpanded, true);
 
@@ -752,6 +756,7 @@ public sealed partial class UserStatisticsPageViewModel : ObservableObject, IPag
         }
         catch (Exception ex)
         {
+            _logger?.UserBalanceAdjustmentFailed(ex);
             var verb = delta < 0 ? "наказать" : "поощрить";
             _dialogService.Error("Ошибка", $"Не удалось {verb} пользователя: {ex.Message}");
         }

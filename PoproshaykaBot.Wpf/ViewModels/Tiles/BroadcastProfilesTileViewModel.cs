@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using KeepShell.ViewModels;
 using MahApps.Metro.IconPacks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
@@ -12,6 +13,7 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch;
 using PoproshaykaBot.Core.Twitch.Helix;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Collections.Generic;
@@ -37,6 +39,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
     private readonly IBroadcasterIdProvider _broadcasterId;
     private readonly IDialogService _dialogService;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<BroadcastProfilesTileViewModel>? _logger;
     private readonly List<IDisposable> _subs = [];
 
     private Guid? _activeProfileId;
@@ -74,7 +77,8 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         IBroadcasterIdProvider broadcasterId,
         IDialogService dialogService,
         IServiceScopeFactory scopeFactory,
-        IEventBus bus)
+        IEventBus bus,
+        ILogger<BroadcastProfilesTileViewModel>? logger = null)
         : base("broadcast-profiles", "Профиль трансляции", maxWidth: 500, maxHeight: 320, minHeight: 144)
     {
         _manager = manager;
@@ -85,6 +89,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         _broadcasterId = broadcasterId;
         _dialogService = dialogService;
         _scopeFactory = scopeFactory;
+        _logger = logger;
 
         HeaderActions.Add(new ToolbarItemViewModel(PackIconLucideKind.Plus, AddCommand, toolTip: "Добавить профиль"));
         HeaderActions.Add(new ToolbarItemViewModel(PackIconLucideKind.Pen, EditCurrentCommand, toolTip: "Из текущих настроек"));
@@ -155,6 +160,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
         catch (Exception ex)
         {
+            _logger?.BroadcastProfileChannelFetchFailed(ex);
             ShowStatus($"✗ {HelixErrorMessages.SafeMessage(ex)}", true);
             return;
         }
@@ -196,6 +202,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
         catch (InvalidOperationException ex)
         {
+            _logger?.BroadcastProfileSaveRejected(ex);
             ShowStatus(ex.Message, true);
             return;
         }
@@ -270,6 +277,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
         catch (InvalidOperationException ex)
         {
+            _logger?.BroadcastProfileSaveRejected(ex);
             ShowStatus(ex.Message, true);
         }
     }
@@ -287,6 +295,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
         catch (Exception ex)
         {
+            _logger?.BroadcastProfileApplyFailed(ex);
             ShowStatus($"✗ {HelixErrorMessages.SafeMessage(ex)}", true);
         }
     }
@@ -375,6 +384,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
         catch (Exception ex)
         {
+            _logger?.BroadcastProfileApplyFailed(ex);
             SetApplyInFlight(item.Profile.Id, false);
             ShowStatus($"✗ {ex.Message}", true);
         }
@@ -399,6 +409,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
         catch (InvalidOperationException ex)
         {
+            _logger?.BroadcastProfileSaveRejected(ex);
             ShowStatus($"✗ {ex.Message}", true);
             return;
         }
@@ -416,6 +427,7 @@ public sealed partial class BroadcastProfilesTileViewModel : DashboardTileViewMo
         }
         catch (Exception ex)
         {
+            _logger?.BroadcastProfileNumberAdjustFailed(ex, copy.Name);
             ShowStatus($"✗ {ex.Message}", true);
         }
     }

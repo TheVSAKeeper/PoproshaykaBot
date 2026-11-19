@@ -588,6 +588,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            _logger?.ChannelResolveFailed(ex, targetPlatform, ex.GetType().Name);
             if (draft == _draftGeneration && SelectedPlatform == targetPlatform)
             {
                 SetNotice($"Не удалось определить канал. {StreamingErrorMessages.SafeMessage(ex)}", StatusSeverity.Error);

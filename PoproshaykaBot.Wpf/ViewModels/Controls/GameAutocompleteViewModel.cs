@@ -1,6 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Wpf.Bootstrap;
 using System.Collections.ObjectModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Controls;
@@ -11,6 +13,7 @@ public sealed partial class GameAutocompleteViewModel : ObservableObject, IDispo
 
     private readonly IGameCategoryResolver _resolver;
     private readonly IUiTimer _debounce;
+    private readonly ILogger<GameAutocompleteViewModel>? _logger;
     private CancellationTokenSource? _cts;
     private bool _suppress;
 
@@ -23,10 +26,14 @@ public sealed partial class GameAutocompleteViewModel : ObservableObject, IDispo
     [ObservableProperty]
     private GameSuggestion? _selected;
 
-    public GameAutocompleteViewModel(IGameCategoryResolver resolver, IUiDispatcher uiDispatcher)
+    public GameAutocompleteViewModel(
+        IGameCategoryResolver resolver,
+        IUiDispatcher uiDispatcher,
+        ILogger<GameAutocompleteViewModel>? logger = null)
     {
         _resolver = resolver;
         _debounce = uiDispatcher.CreateTimer(TimeSpan.FromMilliseconds(300), OnDebounceTick);
+        _logger = logger;
     }
 
     public ObservableCollection<GameSuggestion> Suggestions { get; } = [];
@@ -113,8 +120,9 @@ public sealed partial class GameAutocompleteViewModel : ObservableObject, IDispo
         catch (OperationCanceledException)
         {
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger?.GameAutocompleteSearchFailed(ex);
             Suggestions.Clear();
             IsSuggestionsOpen = false;
         }

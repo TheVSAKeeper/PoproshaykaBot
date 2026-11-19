@@ -1,9 +1,11 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MahApps.Metro.IconPacks;
+using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Polling;
 using PoproshaykaBot.Core.Polls;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
 using System.Collections.ObjectModel;
@@ -15,6 +17,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
     private readonly IPollController _controller;
     private readonly PollProfilesManager _profiles;
     private readonly IDialogService _dialogService;
+    private readonly ILogger<PollsTileViewModel>? _logger;
     private readonly List<IDisposable> _subs = [];
     private readonly IUiTimer _liveTimer;
 
@@ -52,11 +55,13 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         PollSnapshotStore snapshotStore,
         IEventBus bus,
         IDialogService dialogService,
-        IUiDispatcher uiDispatcher) : base("polls-control", "Опросы", maxWidth: 500, maxHeight: 320, minHeight: 144)
+        IUiDispatcher uiDispatcher,
+        ILogger<PollsTileViewModel>? logger = null) : base("polls-control", "Опросы", maxWidth: 500, maxHeight: 320, minHeight: 144)
     {
         _controller = controller;
         _profiles = profiles;
         _dialogService = dialogService;
+        _logger = logger;
 
         HeaderActions.Add(new ToolbarItemViewModel(PackIconLucideKind.Plus, CreateAdHocCommand, toolTip: "Создать опрос"));
         HeaderActions.Add(new ToolbarItemViewModel(PackIconLucideKind.List, CreateFromProfileCommand, toolTip: "Из профиля…"));
@@ -148,11 +153,13 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
 
             if (!ok)
             {
+                _logger?.PollEndFailed(null);
                 ShowStatus("✗ Не удалось завершить голосование");
             }
         }
         catch (Exception ex)
         {
+            _logger?.PollEndFailed(ex);
             ShowStatus($"✗ {ex.Message}");
         }
     }
@@ -167,6 +174,7 @@ public sealed partial class PollsTileViewModel : DashboardTileViewModel, IDispos
         }
         catch (Exception ex)
         {
+            _logger?.PollStartFailed(ex, profile.Name);
             ShowStatus($"✗ {ex.Message}");
         }
     }
