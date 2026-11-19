@@ -2,6 +2,8 @@
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using PoproshaykaBot.Core.Infrastructure;
+using PoproshaykaBot.Core.Platforms;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.Windows;
@@ -31,6 +33,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         Dispatcher.ShutdownStarted += OnShutdownStarted;
+        ThemeManager.Changed += OnThemeChanged;
         _themeBackground = WebViewThemeBackground.Attach(WebView);
         _platformThemeBackground = WebViewThemeBackground.Attach(PlatformWebView);
     }
@@ -93,6 +96,14 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         Release();
     }
 
+    private void OnThemeChanged(object? sender, ThemeDefinition theme)
+    {
+        if (_viewModel?.PlatformChat.Platform == StreamingPlatform.YouTube)
+        {
+            _ = OpenChatAsync(PlatformWebView);
+        }
+    }
+
     private void Release()
     {
         if (_disposed)
@@ -104,6 +115,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
         Dispatcher.ShutdownStarted -= OnShutdownStarted;
+        ThemeManager.Changed -= OnThemeChanged;
         _themeBackground.Detach();
         _platformThemeBackground.Detach();
         _lifetime.Cancel();
@@ -147,6 +159,8 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         }
 
         var uri = pane.ChannelUri;
+        var isYouTube = pane.Platform == StreamingPlatform.YouTube;
+        var isDarkTheme = ThemeManager.Current?.IsDark == true;
         Task? initialization = null;
 
         try
@@ -169,6 +183,11 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
                 return;
             }
 
+            if (isYouTube)
+            {
+                uri = BuildYouTubeChatUri(uri, isDarkTheme);
+            }
+
             var dataFolder = ReferenceEquals(browser, WebView) ? viewModel.UserDataFolder
                 : AppPaths.Combine("WebView2", "platform-chat");
             initialization = state.Initialization ??= InitializeBrowserAsync(browser, dataFolder, viewModel);
@@ -181,6 +200,13 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
             if (reload || !state.Navigation.CanReuse(uri))
             {
+                if (isYouTube)
+                {
+                    core.Profile.PreferredColorScheme = isDarkTheme
+                        ? CoreWebView2PreferredColorScheme.Dark
+                        : CoreWebView2PreferredColorScheme.Light;
+                }
+
                 state.Navigation.Begin(uri);
                 core.Navigate(uri.AbsoluteUri);
             }
@@ -225,6 +251,15 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
                 pane.ShowGenericFallback();
             }
         }
+    }
+
+    private static Uri BuildYouTubeChatUri(Uri uri, bool isDarkTheme)
+    {
+        var builder = new UriBuilder(uri);
+        var query = builder.Query.TrimStart('?');
+        var themeParameter = isDarkTheme ? "dark_theme=1" : "dark_theme=0";
+        builder.Query = query.Length == 0 ? themeParameter : $"{query}&{themeParameter}";
+        return builder.Uri;
     }
 
     private async Task InitializeBrowserAsync(WebView2 browser, string dataFolder, ChatDisplayTileViewModel viewModel)
