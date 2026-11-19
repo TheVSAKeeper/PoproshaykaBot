@@ -8,6 +8,7 @@ public static class SettingsKeys
     public const string NavCollapsed = "ui.shell.nav_collapsed";
     public const string LastPage = "ui.shell.last_page";
     public const string SettingsSection = "ui.settings.section";
+    public const string ChatTileDisplayMode = "ui.chat_tile.display_mode";
     public const string LegacyImportDismissed = "ui.migration.legacy_import_dismissed";
 
     public const string StreamTrendMetric = "ui.streams.trend_metric";

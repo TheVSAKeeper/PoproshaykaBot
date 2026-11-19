@@ -21,7 +21,6 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
     private bool _initialized;
     private bool _disposed;
     private bool _webViewRuntimeMissing;
-    private int _openRequest;
     private ChatDisplayTileViewModel? _viewModel;
     private string? _clutterScriptId;
     private int _clutterScriptGeneration;
@@ -36,7 +35,8 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         _platformThemeBackground = WebViewThemeBackground.Attach(PlatformWebView);
     }
 
-    private WebView2 CurrentWebView => _viewModel?.IsTwitchSelected != false ? WebView : PlatformWebView;
+    private ChatDisplayPaneViewModel? PaneFor(WebView2 browser) =>
+        ReferenceEquals(browser, WebView) ? _viewModel?.TwitchChat : _viewModel?.PlatformChat;
 
     private BrowserState StateFor(WebView2 browser) => ReferenceEquals(browser, WebView) ? _twitchBrowser : _platformBrowser;
 
@@ -65,12 +65,11 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
         _initialized = true;
         _viewModel = viewModel;
-        _viewModel.ReloadRequested += OnReloadRequested;
+        _viewModel.OpenRequested += OnOpenRequested;
         _viewModel.ResetSessionRequested += OnResetSessionRequested;
         _viewModel.ClutterScriptChanged += OnClutterScriptChanged;
-        _viewModel.ChannelUriChanged += OnChannelUriChanged;
 
-        await OpenChatAsync();
+        await Task.WhenAll(OpenChatAsync(WebView), OpenChatAsync(PlatformWebView));
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -111,10 +110,9 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
         if (_viewModel is not null)
         {
-            _viewModel.ReloadRequested -= OnReloadRequested;
+            _viewModel.OpenRequested -= OnOpenRequested;
             _viewModel.ResetSessionRequested -= OnResetSessionRequested;
             _viewModel.ClutterScriptChanged -= OnClutterScriptChanged;
-            _viewModel.ChannelUriChanged -= OnChannelUriChanged;
         }
 
         ReleaseBrowser(WebView);
@@ -134,17 +132,21 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         browser.Dispose();
     }
 
-    private async Task OpenChatAsync(bool reload = false)
+    private async Task OpenChatAsync(WebView2 browser, bool reload = false)
     {
-        if (_disposed || App.IsGallery || _viewModel is not { } viewModel)
+        if (_disposed || App.IsGallery || _viewModel is not { } viewModel || PaneFor(browser) is not { } pane)
         {
             return;
         }
 
-        var browser = CurrentWebView;
         var state = StateFor(browser);
-        var request = ++_openRequest;
-        var uri = viewModel.ChannelUri;
+        var request = ++state.OpenRequest;
+        if (!pane.IsShown)
+        {
+            return;
+        }
+
+        var uri = pane.ChannelUri;
         Task? initialization = null;
 
         try
@@ -162,7 +164,8 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
             if (_webViewRuntimeMissing)
             {
-                viewModel.ShowRuntimeMissingFallback();
+                pane.ShowRuntimeMissingFallback();
+                viewModel.UpdateWebViewActions();
                 return;
             }
 
@@ -171,7 +174,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
             initialization = state.Initialization ??= InitializeBrowserAsync(browser, dataFolder, viewModel);
             await initialization;
 
-            if (_disposed || request != _openRequest || browser.CoreWebView2 is not { } core)
+            if (_disposed || request != state.OpenRequest || browser.CoreWebView2 is not { } core)
             {
                 return;
             }
@@ -193,9 +196,10 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
                 viewModel.Logger.LogError(exception, "WebView2 Runtime не установлен");
             }
 
-            if (!_disposed && viewModel.ChannelUri is not null)
+            if (!_disposed && pane.IsShown && pane.ChannelUri is not null)
             {
-                viewModel.ShowRuntimeMissingFallback();
+                pane.ShowRuntimeMissingFallback();
+                viewModel.UpdateWebViewActions();
             }
         }
         catch (Exception exception)
@@ -216,9 +220,9 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
                 viewModel.Logger.LogError(exception, "Не удалось открыть WebView2 для чата трансляции");
             }
 
-            if (request == _openRequest && uri is not null)
+            if (request == state.OpenRequest && uri is not null)
             {
-                viewModel.ShowGenericFallback();
+                pane.ShowGenericFallback();
             }
         }
     }
@@ -310,19 +314,15 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         await RefreshTwitchAfterSettingsChangeAsync();
     }
 
-    private void OnChannelUriChanged()
+    private void OnOpenRequested(ChatDisplayPaneViewModel pane, bool reload)
     {
-        _ = OpenChatAsync();
-    }
-
-    private void OnReloadRequested()
-    {
-        _ = OpenChatAsync(reload: true);
+        var browser = ReferenceEquals(pane, _viewModel?.TwitchChat) ? WebView : PlatformWebView;
+        _ = OpenChatAsync(browser, reload);
     }
 
     private void OnResetSessionRequested()
     {
-        if (_viewModel is not { IsTwitchSelected: true } viewModel || WebView.CoreWebView2?.Profile is not { } profile)
+        if (_viewModel is not { TwitchChat.IsShown: true } viewModel || WebView.CoreWebView2?.Profile is not { } profile)
         {
             return;
         }
@@ -358,7 +358,7 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
     private Task RefreshTwitchAfterSettingsChangeAsync()
     {
         _twitchBrowser.Navigation.RequireRetry();
-        return ReferenceEquals(CurrentWebView, WebView) ? OpenChatAsync(reload: true) : Task.CompletedTask;
+        return OpenChatAsync(WebView, reload: true);
     }
 
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
@@ -380,22 +380,22 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
 
         var navigation = StateFor(browser).Navigation;
         navigation.RequireRetry();
-        if (!ReferenceEquals(browser, CurrentWebView) || _viewModel?.ChannelUri is null)
+        if (PaneFor(browser) is not { IsShown: true, ChannelUri: not null } pane)
         {
             return;
         }
 
         if (!navigation.TryRecover())
         {
-            _viewModel?.ShowGenericFallback();
+            pane.ShowGenericFallback();
             return;
         }
 
         _ = Dispatcher.BeginInvoke(() =>
         {
-            if (!_disposed && ReferenceEquals(browser, CurrentWebView))
+            if (!_disposed && pane.IsShown)
             {
-                _ = OpenChatAsync(reload: true);
+                _ = OpenChatAsync(browser, reload: true);
             }
         });
     }
@@ -406,24 +406,25 @@ public partial class ChatDisplayTileView : UserControl, IView<ChatDisplayTileVie
         if (BrowserForCore(sender) is not { } browser
             || !StateFor(browser).Navigation.TryComplete(e.NavigationId, success)
             || e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled
-            || !ReferenceEquals(browser, CurrentWebView) || _viewModel?.ChannelUri is null)
+            || PaneFor(browser) is not { IsShown: true, ChannelUri: not null } pane)
         {
             return;
         }
 
         if (success)
         {
-            _viewModel.ShowChatContent();
+            pane.HasFallback = false;
             return;
         }
 
-        _viewModel.Logger.LogWarning("Чат {Platform} не загрузился: status={HttpStatusCode}, error={WebErrorStatus}",
-            _viewModel.SelectedPlatform, e.HttpStatusCode, e.WebErrorStatus);
-        _viewModel.ShowGenericFallback();
+        _viewModel?.Logger.LogWarning("Чат {Platform} не загрузился: status={HttpStatusCode}, error={WebErrorStatus}",
+            pane.Platform, e.HttpStatusCode, e.WebErrorStatus);
+        pane.ShowGenericFallback();
     }
 
     private sealed class BrowserState
     {
+        public int OpenRequest { get; set; }
         public Task? Initialization { get; set; }
         public ChatBrowserNavigation Navigation { get; } = new();
     }

@@ -1,4 +1,5 @@
-﻿using KeepShell.Services;
+﻿using KeepShell.Bootstrap;
+using KeepShell.Services;
 using KeepShell.Services.Modal;
 using KeepShell.Services.Platform;
 using KeepShell.Testing;
@@ -14,6 +15,7 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
+using PoproshaykaBot.Wpf.Views;
 using PoproshaykaBot.Wpf.Views.Tiles;
 using System.IO;
 using System.Windows;
@@ -147,13 +149,13 @@ public sealed class WebViewTileModalHidingTests
         var twitchBrowser = (WebView2)view.FindName("WebView");
         var youtubeBrowser = (WebView2)view.FindName("PlatformWebView");
 
-        viewModel.SelectedPlatform = StreamingPlatform.YouTube;
+        SelectMode(viewModel, StreamingPlatform.YouTube);
         Layout(view);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(viewModel.ChannelUri?.Query, Is.EqualTo("?v=selected-video"));
-            Assert.That(viewModel.ExternalUri?.AbsolutePath, Is.EqualTo("/watch"));
+            Assert.That(viewModel.PlatformChat.ChannelUri?.Query, Is.EqualTo("?v=selected-video"));
+            Assert.That(viewModel.PlatformChat.ExternalUri?.AbsolutePath, Is.EqualTo("/watch"));
             Assert.That(twitchBrowser.Visibility, Is.EqualTo(Visibility.Collapsed));
             Assert.That(youtubeBrowser.Visibility, Is.EqualTo(Visibility.Visible));
         }
@@ -163,16 +165,16 @@ public sealed class WebViewTileModalHidingTests
         Assert.That(youtubeBrowser.Visibility, Is.EqualTo(Visibility.Collapsed));
 
         viewModel.IsModalDialogOpen = false;
-        viewModel.SelectedPlatform = StreamingPlatform.Twitch;
+        SelectMode(viewModel, StreamingPlatform.Twitch);
         status.CurrentStatus = StreamStatus.Offline;
-        viewModel.SelectedPlatform = StreamingPlatform.YouTube;
+        SelectMode(viewModel, StreamingPlatform.YouTube);
         Layout(view);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(viewModel.ChannelUri, Is.Null);
-            Assert.That(viewModel.ExternalUri?.AbsolutePath, Is.EqualTo("/@channel"));
-            Assert.That(viewModel.HasFallback, Is.True);
+            Assert.That(viewModel.PlatformChat.ChannelUri, Is.Null);
+            Assert.That(viewModel.PlatformChat.ExternalUri?.AbsolutePath, Is.EqualTo("/@channel"));
+            Assert.That(viewModel.PlatformChat.HasFallback, Is.True);
             Assert.That(youtubeBrowser.Visibility, Is.EqualTo(Visibility.Collapsed));
         }
     }
@@ -187,14 +189,106 @@ public sealed class WebViewTileModalHidingTests
                 ? $"https://www.youtube.com/{channel}" : null),
         ]);
         var viewModel = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, settings);
-        viewModel.SelectedPlatform = StreamingPlatform.YouTube;
+        SelectMode(viewModel, StreamingPlatform.YouTube);
 
-        Assert.That(viewModel.ExternalUri, Is.Null);
+        Assert.That(viewModel.PlatformChat.ExternalUri, Is.Null);
         settings.Mutate(current => current.Channel = "@new-channel");
 
-        Assert.That(viewModel.ExternalUri?.AbsolutePath, Is.EqualTo("/@new-channel"));
-        Assert.That(viewModel.FallbackActionCommand, Is.Not.Null);
+        Assert.That(viewModel.PlatformChat.ExternalUri?.AbsolutePath, Is.EqualTo("/@new-channel"));
+        Assert.That(viewModel.PlatformChat.FallbackActionCommand, Is.Not.Null);
     }
+
+    [TestCase(ChatDisplayLayout.Columns)]
+    [TestCase(ChatDisplayLayout.Rows)]
+    public void Обе_площадки_размещены_в_одной_плитке_и_восстанавливают_режим(ChatDisplayLayout layout)
+    {
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch", new FakeStreamStatus()),
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()),
+        ]);
+        var settings = new MemorySettings();
+        var model = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, uiSettings: settings);
+        var view = CreateView(Tile.Chat, model);
+        var twitch = (WebView2)view.FindName("WebView");
+        var youtube = (WebView2)view.FindName("PlatformWebView");
+
+        SelectMode(model, StreamingPlatform.YouTube, layout);
+        Layout(view);
+        var first = twitch.TranslatePoint(new Point(), view);
+        var second = youtube.TranslatePoint(new Point(), view);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(twitch.Visibility, Is.EqualTo(Visibility.Visible));
+            Assert.That(youtube.Visibility, Is.EqualTo(Visibility.Visible));
+            Assert.That(twitch.ActualWidth, Is.GreaterThan(0));
+            Assert.That(twitch.ActualHeight, Is.GreaterThan(0));
+            Assert.That(youtube.ActualWidth, Is.EqualTo(twitch.ActualWidth).Within(1));
+            Assert.That(youtube.ActualHeight, Is.EqualTo(twitch.ActualHeight).Within(1));
+            Assert.That(second.X - first.X, layout == ChatDisplayLayout.Columns
+                ? Is.GreaterThanOrEqualTo(twitch.ActualWidth) : Is.EqualTo(0));
+            Assert.That(second.Y - first.Y, layout == ChatDisplayLayout.Rows
+                ? Is.GreaterThanOrEqualTo(twitch.ActualHeight) : Is.EqualTo(0));
+        }
+
+        model.IsModalDialogOpen = true;
+        Layout(view);
+        Assert.That(new[] { twitch.Visibility, youtube.Visibility }, Is.All.EqualTo(Visibility.Collapsed));
+        model.IsModalDialogOpen = false;
+        model.PlatformChat.ShowGenericFallback();
+        Layout(view);
+        Assert.That(twitch.Visibility, Is.EqualTo(Visibility.Visible));
+        Assert.That(youtube.Visibility, Is.EqualTo(Visibility.Collapsed));
+
+        model.Dispose();
+        var restored = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry, uiSettings: settings);
+        Assert.That(restored.SelectedMode, Is.EqualTo(model.SelectedMode));
+        SelectMode(restored, StreamingPlatform.Twitch);
+        Assert.That(restored.PlatformChat.IsShown, Is.False);
+    }
+
+    [Test]
+    public void Пункт_меню_в_заголовке_переключает_плитку_на_два_чата()
+    {
+        var registry = new ChatPlatformRegistry([
+            new FakeChatPlatform(StreamingPlatform.Twitch, "Twitch", new FakeStreamStatus()),
+            new FakeChatPlatform(StreamingPlatform.YouTube, "YouTube", new FakeStreamStatus()),
+        ]);
+        var model = (ChatDisplayTileViewModel)CreateViewModel(Tile.Chat, registry);
+        var dashboard = new DashboardView();
+        var template = (DataTemplate)dashboard.Resources["ChatTilePlatformSelector"];
+        var header = (Grid)template.LoadContent();
+        header.DataContext = model;
+        var button = header.Children.OfType<Button>().Single();
+        var window = new Window
+        {
+            Content = header, Width = 160, Height = 80,
+            Left = -32000, Top = -32000, ShowActivated = false, ShowInTaskbar = false,
+        };
+
+        try
+        {
+            window.Show();
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var menu = button.ContextMenu!;
+            menu.UpdateLayout();
+            Assert.That(menu.IsOpen, Is.True);
+            var columns = model.Modes.Single(mode => mode.Layout == ChatDisplayLayout.Columns);
+            var item = (MenuItem)menu.ItemContainerGenerator.ContainerFromItem(columns);
+            Assert.That(item.Header, Is.EqualTo(columns.Label));
+            Assert.That(item.Command, Is.SameAs(model.SelectModeCommand));
+            item.Command.Execute(item.CommandParameter);
+            Assert.That(model.SelectedMode, Is.SameAs(columns));
+        }
+        finally
+        {
+            button.ContextMenu!.IsOpen = false;
+            window.Close();
+        }
+    }
+
+    private static void SelectMode(ChatDisplayTileViewModel model, StreamingPlatform platform,
+        ChatDisplayLayout layout = ChatDisplayLayout.Single) =>
+        model.SelectModeCommand.Execute(model.Modes.Single(mode => mode.Platform == platform && mode.Layout == layout));
 
     private static UserControl CreateView(Tile tile, DashboardTileViewModel viewModel)
     {
@@ -213,6 +307,11 @@ public sealed class WebViewTileModalHidingTests
 
     private static EmptyState Placeholder(UserControl view, string heading)
     {
+        if (view.FindName("HiddenChat") is EmptyState chat)
+        {
+            return chat;
+        }
+
         var grid = (Grid)((FrameworkElement)view.FindName("WebView")).Parent;
 
         return grid.Children.OfType<EmptyState>().Single(state => state.Heading == heading);
@@ -226,7 +325,7 @@ public sealed class WebViewTileModalHidingTests
     }
 
     private DashboardTileViewModel CreateViewModel(Tile tile, IChatPlatformRegistry? platformRegistry = null,
-        YouTubeSettingsStore? youtubeSettings = null)
+        YouTubeSettingsStore? youtubeSettings = null, ISettingsStore? uiSettings = null)
     {
         var settings = new SettingsManager(NullLogger<SettingsManager>.Instance, Path.Combine(_directory.FullName, "settings.json"));
 
@@ -238,7 +337,7 @@ public sealed class WebViewTileModalHidingTests
                 new FakeShellLauncher(),
                 new FakeDialogService(),
                 new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance),
-                new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _directory.FullName), platformRegistry, youtubeSettings),
+                new ChatDisplayStore(NullLogger<ChatDisplayStore>.Instance, _directory.FullName), platformRegistry, youtubeSettings, uiSettings: uiSettings),
             Tile.OverlayPreview => new ChatOverlayPreviewTileViewModel(settings, NullLogger<ChatOverlayPreviewTileViewModel>.Instance),
             _ => throw new ArgumentOutOfRangeException(nameof(tile)),
         };
