@@ -56,8 +56,8 @@ public sealed class ThirdPlatformPipelineTests
         {
             s.Channels =
             [
-                new() { Platform = StreamingPlatform.VkLive, ChannelId = vkChanA.ChannelId, DisplayName = "AlphaVK", IsConfigured = true, MonitoringEnabled = true },
-                new() { Platform = StreamingPlatform.VkLive, ChannelId = vkChanB.ChannelId, DisplayName = "BetaVK", IsConfigured = true, MonitoringEnabled = true },
+                new() { Platform = StreamingPlatform.VkLive, ChannelId = vkChanA.ChannelId, DisplayName = "AlphaVK", IsConfigured = true, MonitoringEnabled = true, BotAccountId = "vk-bot", BotVerifiedSubjectId = "vk-bot" },
+                new() { Platform = StreamingPlatform.VkLive, ChannelId = vkChanB.ChannelId, DisplayName = "BetaVK", IsConfigured = true, MonitoringEnabled = true, BotAccountId = "vk-bot", BotVerifiedSubjectId = "vk-bot" },
             ];
             s.Platforms = [new() { Platform = StreamingPlatform.VkLive, ActiveChannelId = vkChanA.ChannelId, SwitchMode = ChannelSwitchMode.Manual }];
         });

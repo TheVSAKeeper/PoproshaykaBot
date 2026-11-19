@@ -326,27 +326,41 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _memoryWatchdog?.Dispose();
-        _services?.GetService<ISettingsStore>()?.Close();
 
         if (_services is not null)
         {
-            Task.Run(StopAllComponents).GetAwaiter().GetResult();
+            var stoppedCleanly = false;
+            try
+            {
+                _services.GetService<ISettingsStore>()?.Close();
+                Task.Run(StopAllComponents).GetAwaiter().GetResult();
+                stoppedCleanly = true;
+            }
+            catch (Exception exception)
+            {
+                HostLog.Error(exception, "Ошибка остановки сервисов при завершении работы");
+            }
 
             if (_exitReason is AppExitReason.None)
             {
-                _exitReason = IsRestartRequested ? AppExitReason.Restart : AppExitReason.Normal;
+                _exitReason = !stoppedCleanly
+                    ? AppExitReason.Failed
+                    : IsRestartRequested ? AppExitReason.Restart : AppExitReason.Normal;
             }
 
-            var updateApplied = !IsHeadless && !IsFatalShutdown && ApplyPendingUpdate();
-
-            if (updateApplied)
+            if (stoppedCleanly)
             {
-                _exitReason = AppExitReason.UpdatePending;
-            }
+                var updateApplied = !IsHeadless && !IsFatalShutdown && ApplyPendingUpdate();
 
-            if (AppRestart.ShouldLaunch(IsRestartRequested, updateApplied, IsFatalShutdown))
-            {
-                LaunchReplacement();
+                if (updateApplied)
+                {
+                    _exitReason = AppExitReason.UpdatePending;
+                }
+
+                if (AppRestart.ShouldLaunch(IsRestartRequested, updateApplied, IsFatalShutdown))
+                {
+                    LaunchReplacement();
+                }
             }
         }
 

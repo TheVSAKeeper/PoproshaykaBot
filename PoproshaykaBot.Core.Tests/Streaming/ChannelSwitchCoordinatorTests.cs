@@ -311,8 +311,8 @@ public sealed class ChannelSwitchCoordinatorTests
         {
             s.Channels =
             [
-                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_A", DisplayName = "Канал A", IsConfigured = true, MonitoringEnabled = true },
-                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_B", DisplayName = "Канал B", IsConfigured = true, MonitoringEnabled = true },
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_A", DisplayName = "Канал A", IsConfigured = true, MonitoringEnabled = true, BotAccountId = "bot-1", BotVerifiedSubjectId = "bot-1" },
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_B", DisplayName = "Канал B", IsConfigured = true, MonitoringEnabled = true, BotAccountId = "bot-1", BotVerifiedSubjectId = "bot-1" },
             ];
             s.Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "UC_A", SwitchMode = ChannelSwitchMode.Manual }];
         });
@@ -359,15 +359,37 @@ public sealed class ChannelSwitchCoordinatorTests
         });
     }
 
+    [Test]
+    public async Task Manual_switch_rejects_channel_without_bot_assignment_before_retargeting()
+    {
+        _catalog.Mutate(s =>
+        {
+            var target = s.Channels.Single(c => c.ChannelId == "UC_B");
+            target.BotAccountId = null;
+            target.BotVerifiedSubjectId = null;
+        });
+
+        _adapter.Probes[ChanB] = new(true, true, new() { Id = "s-b-unassigned", StartedAt = _time.GetUtcNow().UtcDateTime });
+        var result = await _coordinator.SwitchActiveChannelAsync(StreamingPlatform.YouTube, ChanB);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ChannelSwitchOutcome.FailedKeptPrevious));
+            Assert.That(result.ErrorMessage, Does.Contain("Подтвердите доступ"));
+            Assert.That(_connectionAdapter.RetargetedTo, Is.Empty);
+            Assert.That(_channelRegistry.GetBinding(StreamingPlatform.YouTube)?.Key, Is.EqualTo(ChanA));
+        });
+    }
+
     private void SeedThreeChannels(ChannelSwitchMode mode)
     {
         _catalog.Mutate(s =>
         {
             s.Channels =
             [
-                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_A", DisplayName = "Канал A", IsConfigured = true, MonitoringEnabled = true },
-                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_B", DisplayName = "Канал B", IsConfigured = true, MonitoringEnabled = true },
-                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_C", DisplayName = "Канал C", IsConfigured = true, MonitoringEnabled = true },
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_A", DisplayName = "Канал A", IsConfigured = true, MonitoringEnabled = true, BotAccountId = "bot-1", BotVerifiedSubjectId = "bot-1" },
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_B", DisplayName = "Канал B", IsConfigured = true, MonitoringEnabled = true, BotAccountId = "bot-1", BotVerifiedSubjectId = "bot-1" },
+                new() { Platform = StreamingPlatform.YouTube, ChannelId = "UC_C", DisplayName = "Канал C", IsConfigured = true, MonitoringEnabled = true, BotAccountId = "bot-1", BotVerifiedSubjectId = "bot-1" },
             ];
             s.Platforms = [new() { Platform = StreamingPlatform.YouTube, ActiveChannelId = "UC_A", SwitchMode = mode }];
         });

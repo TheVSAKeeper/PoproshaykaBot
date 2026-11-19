@@ -94,15 +94,23 @@ public sealed class Stage3MultiChannelWpfTests
         });
         var catalog = new ChannelCatalogStore(filePath: Path.Combine(_root, "channels.json"));
         catalog.Save(new() { Channels = [new() { Platform = StreamingPlatform.Twitch, ChannelId = "10", IsConfigured = true }] });
-        var editor = new ChannelCatalogSettingsSectionViewModel(catalog, twitchAccountsStore: accounts);
+        var adapter = new NullResolveAdapter(StreamingPlatform.Twitch, (_, _, _) => new(true, "90"));
+        var editor = new ChannelCatalogSettingsSectionViewModel(catalog, [adapter], twitchAccountsStore: accounts);
         editor.Load();
         editor.NewChannelInput = "https://twitch.tv/unresolved";
 
         await editor.AddChannelCommand.ExecuteAsync(null);
         var role = editor.VisibleChannels.Single().Roles.Single(value => value.Role == PlatformAuthRole.Bot);
-        Assert.That(role.SelectedAccount, Is.Null);
-        Assert.That(editor.StatusNoticeSeverity, Is.EqualTo(StatusSeverity.Error));
+        Assert.Multiple(() =>
+        {
+            Assert.That(role.SelectedAccount, Is.Null);
+            Assert.That(role.VerifyCommand.CanExecute(null), Is.False);
+            Assert.That(editor.StatusNoticeSeverity, Is.EqualTo(StatusSeverity.Error));
+        });
+        role.SetVerification(new(true, "90"));
+        Assert.That(role.AccountId, Is.Null);
         role.SelectedAccount = role.Accounts.Single();
+        Assert.That(role.VerifyCommand.CanExecute(null), Is.True);
         Assert.That(editor.ValidateAssignments(), Is.Not.Null);
     }
 

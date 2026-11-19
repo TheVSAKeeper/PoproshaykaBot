@@ -97,6 +97,7 @@ public sealed class MultiChannelBroadcastLifecycleTests
             new() { Id = "same-id", StartedAt = t0.UtcDateTime, ViewerCount = 40 },
             ChannelId: "UC_A"));
 
+        await _time.WaitForPendingTimersAsync(1);
         _time.Advance(TimeSpan.FromMinutes(1));
         await WaitForSamplerAsync(1);
 
@@ -172,8 +173,9 @@ public sealed class MultiChannelBroadcastLifecycleTests
         await _eventBus.PublishAsync(new ChannelStreamObserved(snapYtAOffline, snapYtAOffline));
         await _eventBus.PublishAsync(new ChannelStreamObserved(snapYtBOnline, snapYtBOnline));
 
+        await _time.WaitForPendingTimersAsync(1);
         _time.Advance(TimeSpan.FromMinutes(1));
-        await Task.Delay(30);
+        await WaitForSamplerAsync(2);
 
         _time.Advance(TimeSpan.FromMinutes(19));
         await _eventBus.PublishAsync(new StreamWentOffline(StreamingPlatform.YouTube, "Канал B", ChannelId: "UC_B"));
@@ -260,7 +262,8 @@ public sealed class MultiChannelBroadcastLifecycleTests
         });
     }
 
-    private static Task WaitForSamplerAsync(int _) => Task.Delay(30);
+    private Task WaitForSamplerAsync(int expectedSamples) =>
+        WaitUntilAsync(() => (_activeStore.Load()?.ViewerSeries.Count ?? 0) >= expectedSamples);
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {

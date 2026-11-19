@@ -125,20 +125,21 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         _verifiedId = null;
         SetStatus("Требуется проверка", StatusSeverity.Warning);
         OnPropertyChanged(nameof(SelectedAccount));
+        VerifyCommand.NotifyCanExecuteChanged();
         _onEdited();
     }
 
     public void SetVerification(ChannelAccessVerification result)
     {
         var verified = result.IsAllowed && !string.IsNullOrWhiteSpace(result.SubjectId)
-            && (AccountId is null || AccountId == result.SubjectId);
+            && !string.IsNullOrWhiteSpace(AccountId)
+            && AccountId == result.SubjectId;
         var verifiedId = verified ? result.SubjectId : null;
         SetStatus(verified ? "Доступ подтверждён" : result.FailureReason ?? "Площадка не подтвердила доступ назначенного аккаунта",
             verified ? StatusSeverity.Success : StatusSeverity.Error);
         if (_verifiedId != verifiedId)
         {
             _verifiedId = verifiedId;
-            AccountId ??= verifiedId;
             OnPropertyChanged(nameof(SelectedAccount));
             _onEdited();
         }
@@ -168,7 +169,7 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 
     private bool CanAuthorizeNow() => CanAuthorize && !IsBusy;
 
-    private bool CanVerifyNow() => !IsBusy;
+    private bool CanVerifyNow() => !IsBusy && !string.IsNullOrWhiteSpace(AccountId);
 
     [RelayCommand(CanExecute = nameof(CanAuthorizeNow))]
     private async Task AuthorizeAsync()
