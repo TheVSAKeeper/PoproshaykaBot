@@ -1,12 +1,15 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
+using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Chat;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Core.Twitch.EventSub;
 using PoproshaykaBot.Core.Twitch.Helix;
 
@@ -23,7 +26,8 @@ public sealed class ChatIngestionService(
     IEventBus eventBus,
     TimeProvider timeProvider,
     ILogger<ChatIngestionService> logger,
-    PlatformChannelRegistry? channelRegistry = null)
+    PlatformChannelRegistry? channelRegistry = null,
+    [FromKeyedServices(TwitchEndpoints.EventSubBotSession)] EventSubConnectionHost? connectionHost = null)
     : IHostedComponent
 {
     private const string ChatMessageSubscriptionType = "channel.chat.message";
@@ -32,6 +36,7 @@ public sealed class ChatIngestionService(
     private readonly EventSubSubscriptionRetry _retry = new(helix, eventSubClient, timeProvider, logger);
     private bool _subscribed;
     private long _generation;
+    private bool _joinFailed;
     private ChatOrigin? _origin;
     private IReadOnlyList<string> _subscriptionIds = [];
     private long _joinedAtUtcTicks;
@@ -46,6 +51,29 @@ public sealed class ChatIngestionService(
     public DateTimeOffset? JoinedAt => ToTimestamp(Interlocked.Read(ref _joinedAtUtcTicks));
 
     public DateTimeOffset? LastMessageAt => ToTimestamp(Interlocked.Read(ref _lastMessageAtUtcTicks));
+
+    public ChatConnectionStatus CaptureChatStatus(BotLifecyclePhase phase, string? channel)
+    {
+        DateTimeOffset? joinedAt;
+        bool joinFailed;
+        lock (_joinLock)
+        {
+            joinedAt = JoinedAt;
+            joinFailed = _joinFailed;
+        }
+
+        var chatIssue = phase == BotLifecyclePhase.Connected && joinFailed ? ChatReadIssue.SubscriptionFailed : ChatReadIssue.None;
+        var state = ChatConnectionStatus.InactiveState(phase) ?? (connectionHost?.CurrentStatus switch
+        {
+            StreamMonitoringStatus.Failed => ConnectionState.Failed,
+            _ when joinedAt.HasValue => ConnectionState.Connected,
+            StreamMonitoringStatus.Reconnecting => ConnectionState.Reconnecting,
+            _ when joinFailed => ConnectionState.Failed,
+            _ => ConnectionState.Connecting,
+        });
+
+        return new(state, channel, joinedAt, LastMessageAt, chatIssue);
+    }
 
     public Task StartAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
@@ -229,6 +257,16 @@ public sealed class ChatIngestionService(
 
             logger.LogError(ex, "ChatIngestionService: ошибка создания EventSub подписки channel.chat.message");
         }
+        finally
+        {
+            lock (_joinLock)
+            {
+                if (generation == _generation && _origin is null && !ct.IsCancellationRequested)
+                {
+                    _joinFailed = true;
+                }
+            }
+        }
     }
 
     private async Task HandleNotificationAsync(EventSubNotificationArgs args, CancellationToken ct)
@@ -351,6 +389,7 @@ public sealed class ChatIngestionService(
             }
 
             _subscriptionIds = subscriptionIds;
+            _joinFailed = false;
             _origin ??= new(new(StreamingPlatform.Twitch, broadcasterId), broadcasterId);
 
             if (Interlocked.Exchange(ref _joinedAtUtcTicks, now.UtcTicks) != 0)
@@ -375,6 +414,7 @@ public sealed class ChatIngestionService(
         lock (_joinLock)
         {
             generation = ++_generation;
+            _joinFailed = false;
             subscriptionIds = _subscriptionIds;
             _subscriptionIds = [];
             leftChannelId = _origin?.Channel.ChannelId;

@@ -2,10 +2,13 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Diagnostics;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
+using PoproshaykaBot.Core.Twitch.Chat;
 
 namespace PoproshaykaBot.Core.Twitch;
 
@@ -17,7 +20,8 @@ public sealed class TwitchChatPlatform(
     AccountsStore accountsStore,
     ILogger<TwitchChatPlatform>? logger = null,
     ITargetChannelProvider? targetChannelProvider = null,
-    TwitchChannelAuthorization? authorization = null) : IChatPlatform
+    TwitchChannelAuthorization? authorization = null,
+    ChatIngestionService? chatIngestion = null) : IChatPlatform
 {
     private const string BotFallbackDisplayName = "PoproshaykaBot";
 
@@ -35,6 +39,9 @@ public sealed class TwitchChatPlatform(
     public bool IsEnabled => true;
 
     public bool IsConnected => !string.IsNullOrWhiteSpace(channels.GetChannel(StreamingPlatform.Twitch));
+
+    public ChatConnectionStatus? CaptureChatStatus(BotLifecyclePhase phase) =>
+        chatIngestion?.CaptureChatStatus(phase, ConfiguredChannel);
 
     public IStreamStatus StreamStatus => streamStatus;
 

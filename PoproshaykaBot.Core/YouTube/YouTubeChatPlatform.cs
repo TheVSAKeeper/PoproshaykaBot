@@ -2,6 +2,8 @@
 using Microsoft.Extensions.Logging;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Debugging;
+using PoproshaykaBot.Core.Diagnostics;
+using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Platforms.Auth;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -20,6 +22,7 @@ public sealed class YouTubeChatPlatform : IChatPlatform
     private readonly YouTubeAccountsStore _accountsStore;
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly ILogger<YouTubeChatPlatform>? _logger;
+    private readonly IYouTubeChatDiagnostics? _chatDiagnostics;
 
     internal YouTubeChatPlatform(
         [FromKeyedServices(StreamingPlatform.YouTube)] IStreamStatus streamStatus,
@@ -29,7 +32,8 @@ public sealed class YouTubeChatPlatform : IChatPlatform
         YouTubeSettingsStore settingsStore,
         YouTubeAccountsStore accountsStore,
         ITargetChannelProvider targetChannelProvider,
-        ILogger<YouTubeChatPlatform>? logger = null)
+        ILogger<YouTubeChatPlatform>? logger = null,
+        IYouTubeChatDiagnostics? chatDiagnostics = null)
     {
         _streamStatus = streamStatus;
         _sessionContext = sessionContext;
@@ -39,6 +43,7 @@ public sealed class YouTubeChatPlatform : IChatPlatform
         _accountsStore = accountsStore;
         _targetChannelProvider = targetChannelProvider;
         _logger = logger;
+        _chatDiagnostics = chatDiagnostics;
     }
 
     public StreamingPlatform Id => StreamingPlatform.YouTube;
@@ -54,6 +59,14 @@ public sealed class YouTubeChatPlatform : IChatPlatform
         && !string.IsNullOrWhiteSpace(_activeBroadcastSource.CurrentBroadcast?.LiveChatId);
 
     public IStreamStatus StreamStatus => _streamStatus;
+
+    public ChatConnectionStatus? CaptureChatStatus(BotLifecyclePhase phase)
+    {
+        var chat = _chatDiagnostics?.CaptureDiagnostics().ToChatConnectionStatus();
+        return chat is not null && ChatConnectionStatus.InactiveState(phase) is { } state
+            ? chat with { State = state, Issue = ChatReadIssue.None }
+            : chat;
+    }
 
     public IPlatformMessenger Messenger => _messenger;
 

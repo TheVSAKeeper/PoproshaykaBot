@@ -325,7 +325,7 @@ public sealed class DiagnosticsSnapshotSourceTests
         var chatStatus = new YouTubeChatStatus(
             ConnectionState.Connected,
             YouTubeChatTransport.GrpcStream,
-            YouTubeChatIssue.None,
+            ChatReadIssue.None,
             "@creator",
             "chat-1",
             now.AddMinutes(-5),

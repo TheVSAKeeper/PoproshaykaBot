@@ -1,4 +1,5 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
+using PoproshaykaBot.Core.Diagnostics;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Streaming;
 
@@ -43,7 +44,8 @@ public sealed record BotStateDto(
         bool IsBusy,
         string? ConfiguredChannel,
         StreamStateDto Stream,
-        string? StreamUrl);
+        string? StreamUrl,
+        ChatConnectionStatus? Chat = null);
 
     public sealed record BroadcastStateDto(
         bool IsAnyLive,

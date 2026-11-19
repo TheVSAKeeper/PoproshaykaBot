@@ -80,7 +80,7 @@ internal sealed class YouTubeChatIngestionService(
     private YouTubeChatSessionCursor? _cursor;
     private ConnectionState _state = ConnectionState.Disconnected;
     private YouTubeChatTransport _transport;
-    private YouTubeChatIssue _issue;
+    private ChatReadIssue _issue;
     private string? _channel;
     private string? _liveChatId;
     private ChatOrigin? _origin;
@@ -197,7 +197,7 @@ internal sealed class YouTubeChatIngestionService(
             CloseOrigin();
             _state = ConnectionState.Disconnected;
             _transport = YouTubeChatTransport.None;
-            _issue = YouTubeChatIssue.None;
+            _issue = ChatReadIssue.None;
             _connectedSince = null;
         }
 
@@ -369,7 +369,7 @@ internal sealed class YouTubeChatIngestionService(
                 _connectedSince = null;
                 _transport = YouTubeChatTransport.None;
                 _state = ConnectionState.Connecting;
-                _issue = YouTubeChatIssue.WaitingForActiveBroadcast;
+                _issue = ChatReadIssue.WaitingForActiveBroadcast;
                 _channel = session?.ChannelLabel;
             }
 
@@ -444,7 +444,7 @@ internal sealed class YouTubeChatIngestionService(
                 _connectedSince = null;
                 _transport = YouTubeChatTransport.None;
                 _state = ConnectionState.Connecting;
-                _issue = YouTubeChatIssue.WaitingForActiveBroadcast;
+                _issue = ChatReadIssue.WaitingForActiveBroadcast;
             }
 
             return WaitingBroadcastInterval;
@@ -464,7 +464,7 @@ internal sealed class YouTubeChatIngestionService(
                 lock (_sync)
                 {
                     _state = ConnectionState.Disconnected;
-                    _issue = YouTubeChatIssue.MissingBotAuth;
+                    _issue = ChatReadIssue.MissingBotAuth;
                     _transport = YouTubeChatTransport.None;
                     _connectedSince = null;
                 }
@@ -534,7 +534,7 @@ internal sealed class YouTubeChatIngestionService(
                     lock (_sync)
                     {
                         _state = ConnectionState.Disconnected;
-                        _issue = YouTubeChatIssue.MissingBotAuth;
+                        _issue = ChatReadIssue.MissingBotAuth;
                         _transport = YouTubeChatTransport.None;
                         _connectedSince = null;
                     }
@@ -547,7 +547,7 @@ internal sealed class YouTubeChatIngestionService(
                     return TimeSpan.FromSeconds(1);
                 }
 
-                return HandleTransientFailure(ex, YouTubeChatIssue.TransientError, countTowardsGrpcFallback: false);
+                return HandleTransientFailure(ex, ChatReadIssue.TransientError, countTowardsGrpcFallback: false);
             }
 
             CoreLog.YouTubeInnerTubeChatEnded(logger, cursor.LiveChatId);
@@ -578,17 +578,17 @@ internal sealed class YouTubeChatIngestionService(
         catch (YouTubeApiException ex) when (ex.Kind == YouTubeApiErrorKind.Unauthorized)
         {
             await MarkIngestionStoppedAsync(timeProvider.GetUtcNow(), ct).ConfigureAwait(false);
-            return HandleTransientFailure(ex, YouTubeChatIssue.MissingBotAuth, countTowardsGrpcFallback: false);
+            return HandleTransientFailure(ex, ChatReadIssue.MissingBotAuth, countTowardsGrpcFallback: false);
         }
         catch (YouTubeApiException ex) when (ex.Kind == YouTubeApiErrorKind.RateLimitExceeded)
         {
-            return HandleTransientFailure(ex, YouTubeChatIssue.TransientError, countTowardsGrpcFallback: false);
+            return HandleTransientFailure(ex, ChatReadIssue.TransientError, countTowardsGrpcFallback: false);
         }
         catch (Exception ex) when (ex is YouTubeApiException or HttpRequestException)
         {
             return HandleTransientFailure(
                 ex,
-                YouTubeChatIssue.TransientError,
+                ChatReadIssue.TransientError,
                 countTowardsGrpcFallback: selectedTransport == YouTubeChatTransportKind.OfficialGrpc);
         }
         finally
@@ -662,7 +662,7 @@ internal sealed class YouTubeChatIngestionService(
         {
             _state = ConnectionState.Connected;
             _transport = mappedTransport;
-            _issue = YouTubeChatIssue.None;
+            _issue = ChatReadIssue.None;
             _connectedSince ??= openedAt;
         }
 
@@ -1104,7 +1104,7 @@ internal sealed class YouTubeChatIngestionService(
         {
             _state = ConnectionState.Disconnected;
             _transport = YouTubeChatTransport.None;
-            _issue = YouTubeChatIssue.QuotaExhausted;
+            _issue = ChatReadIssue.QuotaExhausted;
             _connectedSince = null;
         }
 
@@ -1208,7 +1208,7 @@ internal sealed class YouTubeChatIngestionService(
         logger.LogWarning("YouTube чат: переключение на REST polling ({Reason}); повторная проба gRPC через 10 мин", reason);
     }
 
-    private TimeSpan HandleTransientFailure(Exception exception, YouTubeChatIssue issue, bool countTowardsGrpcFallback)
+    private TimeSpan HandleTransientFailure(Exception exception, ChatReadIssue issue, bool countTowardsGrpcFallback)
     {
         var switchedToRest = countTowardsGrpcFallback
             && (_compositeReader?.RecordGrpcTransientFailure() ?? false);

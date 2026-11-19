@@ -244,41 +244,31 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
         var lines = new List<ValidationLine>();
         var hasCritical = false;
 
-        var botScopes = ValidateScopes("Доступы аккаунта бота",
-            _context.BotAccount.Scopes,
-            TwitchScopes.BotRequired);
+        var twitchBot = _context.BotAccount;
+        var twitchBroadcaster = _context.BroadcasterAccount;
+        var botScopes = ValidateRole("Доступы аккаунта бота", twitchBot.AccessToken, twitchBot.RefreshToken,
+            twitchBot.StoredScopes, twitchBot.Scopes, TwitchScopes.BotRequired, optional: false);
         lines.Add(botScopes);
         hasCritical |= botScopes.Status == ValidationStatus.Failure;
 
-        var broadcasterScopes = ValidateScopes("Доступы аккаунта стримера",
-            _context.BroadcasterAccount.Scopes,
-            TwitchScopes.BroadcasterRequired);
+        var broadcasterScopes = ValidateRole("Доступы аккаунта стримера", twitchBroadcaster.AccessToken, twitchBroadcaster.RefreshToken,
+            twitchBroadcaster.StoredScopes, twitchBroadcaster.Scopes, TwitchScopes.BroadcasterRequired, optional: true);
         lines.Add(broadcasterScopes);
         hasCritical |= broadcasterScopes.Status == ValidationStatus.Failure;
 
         if (_context.YouTubeSettings.Enabled)
         {
-            var ytBotScopes = ValidateScopes("Доступы YouTube бота",
-                _context.YouTubeBotAccount.Scopes,
-                YouTubeScopes.BotRequired);
+            var youtubeBot = _context.YouTubeBotAccount;
+            var youtubeBroadcaster = _context.YouTubeBroadcasterAccount;
+            var ytBotScopes = ValidateRole("Доступы YouTube бота", youtubeBot.AccessToken, youtubeBot.RefreshToken,
+                youtubeBot.StoredScopes, youtubeBot.Scopes, YouTubeScopes.BotRequired, optional: false);
             lines.Add(ytBotScopes);
             hasCritical |= ytBotScopes.Status == ValidationStatus.Failure;
 
-            var hasBroadcaster = !string.IsNullOrWhiteSpace(_context.YouTubeBroadcasterAccount.AccessToken)
-                || !string.IsNullOrWhiteSpace(_context.YouTubeBroadcasterAccount.RefreshToken)
-                || _context.YouTubeBroadcasterAccount.Scopes.Length > 0;
-            if (!hasBroadcaster)
-            {
-                lines.Add(new ValidationLine("Доступы YouTube стримера", ValidationStatus.Success, "не подключён (режим «только бот»)"));
-            }
-            else
-            {
-                var ytBroadcasterScopes = ValidateScopes("Доступы YouTube стримера",
-                    _context.YouTubeBroadcasterAccount.Scopes,
-                    YouTubeScopes.BroadcasterRequired);
-                lines.Add(ytBroadcasterScopes);
-                hasCritical |= ytBroadcasterScopes.Status == ValidationStatus.Failure;
-            }
+            var ytBroadcasterScopes = ValidateRole("Доступы YouTube стримера", youtubeBroadcaster.AccessToken, youtubeBroadcaster.RefreshToken,
+                youtubeBroadcaster.StoredScopes, youtubeBroadcaster.Scopes, YouTubeScopes.BroadcasterRequired, optional: true);
+            lines.Add(ytBroadcasterScopes);
+            hasCritical |= ytBroadcasterScopes.Status == ValidationStatus.Failure;
         }
 
         var loginConsistency = ValidateBroadcasterLogin(_context);
@@ -415,6 +405,19 @@ public sealed partial class CompletionPageViewModel : OnboardingPageViewModelBas
                     ? $"HTTP сервер не удалось перезапустить на порту {newPort}.\nНастройки сохранены – потребуется перезапуск приложения."
                     : $"HTTP сервер не удалось перезапустить на порту {newPort}.");
         }
+    }
+
+    private static ValidationLine ValidateRole(string title, string? accessToken, string? refreshToken,
+        IReadOnlyCollection<string> granted, IReadOnlyCollection<string> requested, IReadOnlyList<string> required, bool optional)
+    {
+        if (!PlatformAuthRoles.HasCredentials(accessToken, refreshToken))
+        {
+            return optional
+                ? new(title, ValidationStatus.Skipped, "не подключён (режим «только бот»)")
+                : new(title, ValidationStatus.Failure, "требуется авторизация бота");
+        }
+
+        return ValidateScopes(title, granted.Count > 0 ? granted : requested, required);
     }
 
     private static ValidationLine ValidateScopes(string title, IReadOnlyCollection<string> actual, IReadOnlyList<string> required)

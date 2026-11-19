@@ -9,7 +9,9 @@ public sealed class OnboardingChecklist(
     SettingsManager settingsManager,
     AccountsStore accountsStore,
     ChannelCatalogStore? channelCatalog = null,
-    TwitchChannelAuthorization? authorization = null)
+    TwitchChannelAuthorization? authorization = null,
+    YouTubeSettingsStore? youtubeSettings = null,
+    YouTubeAccountsStore? youtubeAccounts = null)
 {
     public bool IsComplete => GetMissingItems().Count == 0;
 
@@ -35,9 +37,24 @@ public sealed class OnboardingChecklist(
             missing.Add("авторизация бота");
         }
 
-        if (!HasAuthorization(PlatformAuthRole.Broadcaster))
+        if (youtubeSettings?.Load() is { Enabled: true } youtube)
         {
-            missing.Add("авторизация стримера");
+            var channel = channelCatalog?.GetActiveChannel(StreamingPlatform.YouTube);
+            var bot = youtubeAccounts?.Load(PlatformAuthRole.Bot, channel?.BotContextId);
+            if (string.IsNullOrWhiteSpace(youtube.ClientId))
+            {
+                missing.Add("Client ID YouTube");
+            }
+
+            if (channel is null && string.IsNullOrWhiteSpace(youtube.Channel))
+            {
+                missing.Add("канал YouTube");
+            }
+
+            if (!PlatformAuthRoles.HasCredentials(bot?.AccessToken, bot?.RefreshToken))
+            {
+                missing.Add("авторизация бота YouTube");
+            }
         }
 
         return missing;
@@ -46,7 +63,6 @@ public sealed class OnboardingChecklist(
     private bool HasAuthorization(PlatformAuthRole role)
     {
         var account = authorization is null ? accountsStore.Load(role) : authorization.GetAccount(role);
-        return account is not null
-            && (!string.IsNullOrWhiteSpace(account.AccessToken) || !string.IsNullOrWhiteSpace(account.RefreshToken));
+        return PlatformAuthRoles.HasCredentials(account?.AccessToken, account?.RefreshToken);
     }
 }

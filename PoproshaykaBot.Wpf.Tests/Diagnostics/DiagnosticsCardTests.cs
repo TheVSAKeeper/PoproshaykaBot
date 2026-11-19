@@ -90,6 +90,41 @@ public class DiagnosticsCardTests
     }
 
     [Test]
+    public void Чат_показывает_отказ_YouTube_при_подключённом_Twitch()
+    {
+        var snapshot = DiagnosticsSnapshots.Full() with
+        {
+            YouTubeChat = new(ConnectionState.Reconnecting, YouTubeChatTransport.GrpcStream, ChatReadIssue.MissingBotAuth,
+                "@VissGames", "chat", null, null, null, 0, 0, 1),
+        };
+        var card = Activate(publisher => new ChatDiagnosticsCardViewModel(publisher), snapshot);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(card.State, Is.EqualTo(DiagnosticsCardState.Error));
+            Assert.That(card.Rows.Single(row => row.Key == "Twitch").Value, Is.EqualTo("подключено"));
+            Assert.That(card.Rows.Single(row => row.Key == "YouTube").Value, Does.Contain("токен бота недоступен"));
+        }
+    }
+
+    [Test]
+    public void Отключённый_YouTube_не_меняет_состояние_работающего_чата_Twitch()
+    {
+        var snapshot = DiagnosticsSnapshots.Full() with
+        {
+            YouTubeChat = new(ConnectionState.Disconnected, YouTubeChatTransport.None, ChatReadIssue.None,
+                null, null, null, null, null, 0, 0, 0),
+        };
+        var card = Activate(publisher => new ChatDiagnosticsCardViewModel(publisher), snapshot);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(card.State, Is.EqualTo(DiagnosticsCardState.Ok));
+            Assert.That(card.Rows.Single(row => row.Key == "YouTube").Value, Is.EqualTo("отключено"));
+        }
+    }
+
+    [Test]
     public void Отказ_источника_соединения_виден_как_нет_данных()
     {
         var snapshot = DiagnosticsSnapshots.Full() with { Obs = null, Sse = null };

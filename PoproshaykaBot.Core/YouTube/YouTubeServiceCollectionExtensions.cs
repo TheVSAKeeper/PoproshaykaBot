@@ -140,7 +140,8 @@ public static class YouTubeServiceCollectionExtensions
             provider.GetRequiredService<YouTubeSettingsStore>(),
             provider.GetRequiredService<YouTubeAccountsStore>(),
             provider.GetRequiredService<ITargetChannelProvider>(),
-            provider.GetService<ILogger<YouTubeChatPlatform>>()));
+            provider.GetService<ILogger<YouTubeChatPlatform>>(),
+            provider.GetRequiredService<IYouTubeChatDiagnostics>()));
         services.AddSingleton<IChatPlatform>(static provider => provider.GetRequiredService<YouTubeChatPlatform>());
 
         services.AddSingleton<ISettingsSnapshotContributor>(static provider => new DelegateSettingsSnapshotContributor(() =>

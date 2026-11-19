@@ -197,7 +197,7 @@ public class BotDiagnosticsBundleSourceTests
             new(
                 ConnectionState.Connected,
                 YouTubeChatTransport.GrpcStream,
-                YouTubeChatIssue.None,
+                ChatReadIssue.None,
                 "@creator",
                 "chat-1",
                 DateTimeOffset.UtcNow.AddMinutes(-5),

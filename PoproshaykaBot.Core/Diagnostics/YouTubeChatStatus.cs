@@ -8,19 +8,10 @@ public enum YouTubeChatTransport
     InnerTube = 3,
 }
 
-public enum YouTubeChatIssue
-{
-    None = 0,
-    MissingBotAuth = 1,
-    WaitingForActiveBroadcast = 2,
-    QuotaExhausted = 3,
-    TransientError = 4,
-}
-
 public sealed record YouTubeChatStatus(
     ConnectionState State,
     YouTubeChatTransport Transport,
-    YouTubeChatIssue Issue,
+    ChatReadIssue Issue,
     string? Channel,
     string? LiveChatId,
     DateTimeOffset? ConnectedSince,
@@ -28,7 +19,11 @@ public sealed record YouTubeChatStatus(
     DateTimeOffset? LastMessageAt,
     long ReceivedMessages,
     int GapCount,
-    int ReconnectAttempt);
+    int ReconnectAttempt)
+{
+    public ChatConnectionStatus ToChatConnectionStatus() =>
+        new(State, Channel, ConnectedSince, LastMessageAt, Issue);
+}
 
 public interface IYouTubeChatDiagnostics
 {

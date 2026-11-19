@@ -205,7 +205,7 @@ public class YouTubeChatIngestionServiceTests
         {
             Assert.That(restCalled, Is.False);
             Assert.That(diag.State, Is.EqualTo(ConnectionState.Disconnected));
-            Assert.That(diag.Issue, Is.EqualTo(YouTubeChatIssue.QuotaExhausted));
+            Assert.That(diag.Issue, Is.EqualTo(ChatReadIssue.QuotaExhausted));
             Assert.That(_quotaGovernor.CaptureDiagnostics().ExhaustedByServer, Is.True);
         });
     }
@@ -620,7 +620,7 @@ public class YouTubeChatIngestionServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(diag.State, Is.EqualTo(ConnectionState.Disconnected));
-            Assert.That(diag.Issue, Is.EqualTo(YouTubeChatIssue.QuotaExhausted));
+            Assert.That(diag.Issue, Is.EqualTo(ChatReadIssue.QuotaExhausted));
             Assert.That(ingestion.IsConnected, Is.False);
             Assert.That(_quotaGovernor.CaptureDiagnostics().ExhaustedByServer, Is.False);
         });
@@ -861,7 +861,7 @@ public class YouTubeChatIngestionServiceTests
         {
             Assert.That(_quotaGovernor.CaptureDiagnostics().ExhaustedByServer, Is.False);
             Assert.That(diag.State, Is.EqualTo(ConnectionState.Reconnecting));
-            Assert.That(diag.Issue, Is.EqualTo(YouTubeChatIssue.TransientError));
+            Assert.That(diag.Issue, Is.EqualTo(ChatReadIssue.TransientError));
             Assert.That(diag.Transport, Is.Not.EqualTo(YouTubeChatTransport.RestPolling));
             Assert.That(delay, Is.EqualTo(TimeSpan.FromSeconds(5)));
         });

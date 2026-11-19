@@ -79,7 +79,7 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         : "Авторизация бота";
 
     public string IntroText => _role == PlatformAuthRole.Broadcaster
-        ? "Авторизуйте аккаунт стримера. Этот токен нужен для управления опросами и информацией трансляции."
+        ? "Для режима «только бот» укажите канал вручную на шаге «Учётные данные приложения» и пропустите этот шаг. Авторизация стримера нужна для опросов и управления эфиром."
         : "Авторизуйте аккаунт бота. От его имени бот будет писать в чат и слушать сообщения.";
 
     public string OpenBrowserButtonText => HasToken
@@ -393,15 +393,16 @@ public abstract partial class AuthorizationPageViewModelBase : OnboardingPageVie
         }
         else
         {
+            var canSkip = _role == PlatformAuthRole.Broadcaster && !string.IsNullOrWhiteSpace(_context?.Settings.Twitch.Channel);
             if (_authCts is null)
             {
                 ResultText = "Не авторизован";
-                ResultSeverity = StatusSeverity.Error;
-                StatusMessage = "Откройте ссылку в браузере и подтвердите доступ.";
+                ResultSeverity = canSkip ? StatusSeverity.None : StatusSeverity.Error;
+                StatusMessage = canSkip ? "Можно продолжить с аккаунтом бота." : "Откройте ссылку в браузере и подтвердите доступ.";
                 StatusMessageSeverity = StatusSeverity.None;
             }
 
-            CanAdvance = false;
+            CanAdvance = canSkip;
         }
     }
 
