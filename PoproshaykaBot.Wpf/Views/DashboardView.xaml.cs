@@ -101,6 +101,15 @@ public partial class DashboardView : UserControl, IView<DashboardViewModel>
         peer?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
     }
 
+    private void OnChatPlatformMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { ContextMenu: { } menu } button)
+        {
+            menu.PlacementTarget = button;
+            menu.IsOpen = true;
+        }
+    }
+
     private void OnTileStatusUpdated(object? sender, System.Windows.Data.DataTransferEventArgs e)
     {
         if (sender is not TextBlock text)

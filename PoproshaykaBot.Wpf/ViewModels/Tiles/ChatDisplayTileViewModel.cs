@@ -15,20 +15,17 @@ using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure;
-using PoproshaykaBot.Wpf.Infrastructure.Platforms;
+using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Core.Twitch.Auth;
 using PoproshaykaBot.Wpf.ViewModels.Dialogs;
-using System.Windows.Input;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
 public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, IDisposable
 {
-    private const string WebView2RuntimeDownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
-
     private readonly ITargetChannelProvider _targetChannelProvider;
     private readonly ChatDisplayStore _store;
-    private readonly IShellLauncher _shellLauncher;
+    private readonly ISettingsStore? _uiSettings;
     private readonly IDialogService _dialogService;
     private readonly IChatPlatformRegistry? _platformRegistry;
     private readonly YouTubeSettingsStore? _youtubeSettingsStore;
@@ -40,9 +37,11 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     private readonly ToolbarItemViewModel _resetSessionAction;
     private readonly ToolbarItemViewModel _blockersAction;
 
+    private readonly ToolbarItemViewModel _openInBrowserAction;
+
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTwitchSelected), nameof(ShowAccountChangeNotice))]
-    private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
+    [NotifyPropertyChangedFor(nameof(ShowAccountChangeNotice))]
+    private ChatDisplayMode _selectedMode;
 
     private PlatformAuthRole _chatDisplayAccount;
 
@@ -52,23 +51,6 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowAccountChangeNotice))]
     private bool _accountChangeRequiresRestart;
-
-    [ObservableProperty]
-    private bool _hasFallback;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FallbackActionCommand), nameof(FallbackActionText))]
-    private bool _showRuntimeDownload;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FallbackActionCommand), nameof(FallbackActionText))]
-    private Uri? _externalUri;
-
-    [ObservableProperty]
-    private string _fallbackHeading = string.Empty;
-
-    [ObservableProperty]
-    private string _fallbackDescription = string.Empty;
 
     public ChatDisplayTileViewModel(
         SettingsManager settings,
@@ -80,11 +62,14 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         ChatDisplayStore store,
         IChatPlatformRegistry? platformRegistry = null,
         YouTubeSettingsStore? youtubeSettingsStore = null,
-        IUiDispatcher? uiDispatcher = null)
+        IUiDispatcher? uiDispatcher = null,
+        ISettingsStore? uiSettings = null)
         : base("twitch-chat", "Чат трансляции", minWidth: 280, minHeight: 234)
     {
         _targetChannelProvider = targetChannelProvider;
-        _shellLauncher = shellLauncher;
+        _uiSettings = uiSettings;
+        TwitchChat = new(shellLauncher);
+        PlatformChat = new(shellLauncher);
         _dialogService = dialogService;
         _store = store;
         _platformRegistry = platformRegistry;
@@ -96,8 +81,30 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         _chatDisplayAccount = twitch.ChatDisplayAccount;
         UserDataFolder = WebView2UserDataFolders.Resolve(twitch.ChatDisplayAccount);
         AccountLabel = ResolveAccountLabel(twitch.ChatDisplayAccount);
-        Platforms = platformRegistry?.All.Select(platform => new PlatformFilterOption(platform.Id, platform.DisplayName))
-            .ToArray() ?? [new(StreamingPlatform.Twitch, "Twitch")];
+        var modes = new List<ChatDisplayMode>();
+        if (platformRegistry is not null)
+        {
+            modes.AddRange(platformRegistry.All.Select(platform =>
+                new ChatDisplayMode(platform.Id, ChatDisplayLayout.Single, platform.DisplayName)));
+        }
+
+        if (modes.Count == 0)
+        {
+            modes.Add(new(StreamingPlatform.Twitch, ChatDisplayLayout.Single, "Twitch"));
+        }
+
+        if (modes.Any(mode => mode.Platform == StreamingPlatform.Twitch))
+        {
+            foreach (var other in modes.Where(mode => mode.Platform != StreamingPlatform.Twitch).ToArray())
+            {
+                modes.Add(new(other.Platform, ChatDisplayLayout.Columns, $"Twitch и {other.Label} в две колонки"));
+                modes.Add(new(other.Platform, ChatDisplayLayout.Rows, $"Twitch и {other.Label} в две строки"));
+            }
+        }
+
+        Modes = modes;
+        var savedMode = _uiSettings?.GetStringValue(SettingsKeys.ChatTileDisplayMode);
+        _selectedMode = modes.Find(mode => mode.SettingsValue == savedMode) ?? modes[0];
 
         _subscriptions.Add(bus.SubscribeOnUi<ChatDisplaySettingsChanged>(OnChatDisplaySettingsChanged));
         _subscriptions.Add(bus.SubscribeOnUi<ActiveChannelChanged>(_ => RefreshChat()));
@@ -107,7 +114,7 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         _subscriptions.Add(bus.SubscribeOnUi<YouTubeActiveBroadcastChanged>(_ => RefreshChat()));
         _subscriptions.Add(bus.SubscribeOnUi<PlatformAuthorizationRefreshed>(change =>
         {
-            if (change.Platform == SelectedPlatform)
+            if (change.Platform == SelectedMode.Platform || (SelectedMode.IsSplit && change.Platform == StreamingPlatform.Twitch))
             {
                 RefreshChat();
             }
@@ -120,12 +127,13 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         _resetSessionAction = new(PackIconLucideKind.Trash2, ResetSessionCommand, "Очистить куки и кэш активного аккаунта (бот или стример)");
         _blockersAction = new(PackIconLucideKind.Ban, EditBlockersCommand, "Блокировка баннеров: скрыть лишние элементы чата");
 
+        _openInBrowserAction = new(PackIconLucideKind.ExternalLink, OpenInBrowserCommand, "Открыть текущую страницу в системном браузере");
         HeaderActions.Add(_reloadAction);
         HeaderActions.Add(_resetZoomAction);
-        HeaderActions.Add(new(PackIconLucideKind.ExternalLink, OpenInBrowserCommand, "Открыть текущую страницу в системном браузере"));
+        HeaderActions.Add(_openInBrowserAction);
         HeaderActions.Add(_resetSessionAction);
         HeaderActions.Add(_blockersAction);
-        RefreshChat(force: true);
+        RefreshChat();
 
         if (_youtubeSettingsStore is not null)
         {
@@ -133,13 +141,11 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         }
     }
 
-    public event Action? ReloadRequested;
+    public event Action<ChatDisplayPaneViewModel, bool>? OpenRequested;
 
     public event Action? ResetSessionRequested;
 
     public event Action? ClutterScriptChanged;
-
-    public event Action? ChannelUriChanged;
 
     public override PackIconLucideKind Icon => PackIconLucideKind.MessageSquare;
 
@@ -151,23 +157,17 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
 
     public string UserDataFolder { get; }
 
-    public IReadOnlyList<PlatformFilterOption> Platforms { get; }
+    public IReadOnlyList<ChatDisplayMode> Modes { get; }
 
-    public bool HasMultiplePlatforms => Platforms.Count > 1;
+    public ChatDisplayPaneViewModel TwitchChat { get; }
 
-    public bool IsTwitchSelected => SelectedPlatform == StreamingPlatform.Twitch;
+    public ChatDisplayPaneViewModel PlatformChat { get; }
 
-    public bool ShowAccountChangeNotice => IsTwitchSelected && AccountChangeRequiresRestart;
+    public bool HasMultiplePlatforms => Modes.Count > 1;
+
+    public bool ShowAccountChangeNotice => TwitchChat.IsShown && AccountChangeRequiresRestart;
 
     public string AccountLabel { get; private set; }
-
-    public Uri? ChannelUri { get; private set; }
-
-    public ICommand? FallbackActionCommand => ShowRuntimeDownload ? OpenRuntimeDownloadCommand
-        : ExternalUri is not null ? OpenInBrowserCommand : null;
-
-    public string? FallbackActionText => ShowRuntimeDownload ? "Скачать WebView2 Runtime"
-        : ExternalUri is not null ? "Открыть в браузере" : null;
 
     public void Dispose()
     {
@@ -199,51 +199,15 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         return _store.BuildHideClutterScript();
     }
 
-    private void ShowNoChannelFallback()
-    {
-        HasFallback = true;
-        ShowRuntimeDownload = false;
-        FallbackHeading = IsTwitchSelected ? "Канал не указан" : "Чат эфира недоступен";
-        FallbackDescription = IsTwitchSelected
-            ? "Укажите канал в настройках Twitch, чтобы открыть чат."
-            : "Чат появится, когда у выбранного канала начнётся эфир с доступным чатом.";
-    }
-
-    public void ShowRuntimeMissingFallback()
-    {
-        HasFallback = true;
-        ShowRuntimeDownload = true;
-        FallbackHeading = "Требуется Microsoft Edge WebView2 Runtime";
-        FallbackDescription = "Установите его, чтобы открыть чат в приложении.";
-        DisableWebViewActions();
-    }
-
-    public void ShowGenericFallback()
-    {
-        HasFallback = true;
-        ShowRuntimeDownload = false;
-        FallbackHeading = $"Не удалось открыть чат {PlatformVisuals.GetDisplayName(SelectedPlatform)}";
-        FallbackDescription = ExternalUri is not null ? "Откройте чат в браузере или попробуйте обновить его."
-            : "Попробуйте обновить чат. Подробности – в журнале.";
-    }
-
-    public void ShowChatContent()
-    {
-        HasFallback = false;
-        ShowRuntimeDownload = false;
-    }
-
     partial void OnZoomFactorChanged(double value)
     {
         _store.SaveZoom(value);
     }
 
-    partial void OnSelectedPlatformChanged(StreamingPlatform value)
+    partial void OnSelectedModeChanged(ChatDisplayMode value)
     {
-        _resetZoomAction.IsVisible = IsTwitchSelected;
-        _resetSessionAction.IsVisible = IsTwitchSelected;
-        _blockersAction.IsVisible = IsTwitchSelected;
-        RefreshChat(force: true);
+        RefreshChat();
+        _uiSettings?.SetValue(SettingsKeys.ChatTileDisplayMode, value.SettingsValue);
     }
 
     private static Uri? BuildChannelUri(string? channel)
@@ -272,56 +236,61 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
         RefreshChat();
     }
 
-    private void RefreshChat(bool force = false)
+    private void RefreshChat()
     {
-        var platform = _platformRegistry?.Find(SelectedPlatform);
+        var mode = SelectedMode;
+        var twitchShown = mode.Platform == StreamingPlatform.Twitch || mode.IsSplit;
+        var twitchUri = BuildChannelUri(_targetChannelProvider.Current.Login);
+        var twitchChanged = TwitchChat.SetTarget(StreamingPlatform.Twitch, twitchUri, twitchUri, twitchShown);
+
+        var platformShown = mode.Platform != StreamingPlatform.Twitch;
+        var platform = platformShown ? _platformRegistry?.Find(mode.Platform) : null;
         var stream = platform?.StreamStatus is { CurrentStatus: StreamStatus.Online } status ? status.CurrentStream : null;
-        var uri = IsTwitchSelected ? BuildChannelUri(_targetChannelProvider.Current.Login)
-            : stream is not null ? ParseWebUri(platform?.BuildNativeChatUrl(stream)) : null;
-        ExternalUri = IsTwitchSelected ? uri : ParseWebUri(platform?.BuildStreamUrl(stream));
+        var uri = stream is not null ? ParseWebUri(platform?.BuildNativeChatUrl(stream)) : null;
+        var platformChanged = PlatformChat.SetTarget(mode.Platform, uri, ParseWebUri(platform?.BuildStreamUrl(stream)), platformShown);
 
-        if (!force && uri == ChannelUri)
+        _resetZoomAction.IsVisible = twitchShown;
+        _resetSessionAction.IsVisible = twitchShown;
+        _blockersAction.IsVisible = twitchShown;
+        _openInBrowserAction.IsVisible = !mode.IsSplit;
+        UpdateWebViewActions();
+        if (twitchChanged)
         {
-            return;
+            OpenRequested?.Invoke(TwitchChat, false);
         }
 
-        ChannelUri = uri;
-        _reloadAction.IsEnabled = uri is not null;
-        _resetZoomAction.IsEnabled = uri is not null;
-        _resetSessionAction.IsEnabled = uri is not null;
-
-        if (uri is null)
+        if (platformChanged)
         {
-            ShowNoChannelFallback();
+            OpenRequested?.Invoke(PlatformChat, false);
         }
-        else
-        {
-            ShowChatContent();
-        }
+    }
 
-        ChannelUriChanged?.Invoke();
+    internal void UpdateWebViewActions()
+    {
+        var twitchReady = TwitchChat is { IsShown: true, RuntimeMissing: false, ChannelUri: not null };
+        _reloadAction.IsEnabled = twitchReady || PlatformChat is { IsShown: true, RuntimeMissing: false, ChannelUri: not null };
+        _resetZoomAction.IsEnabled = twitchReady;
+        _resetSessionAction.IsEnabled = twitchReady;
     }
 
     private static Uri? ParseWebUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) ? uri : null;
 
-    private void DisableWebViewActions()
-    {
-        _reloadAction.IsEnabled = false;
-        _resetZoomAction.IsEnabled = false;
-        _resetSessionAction.IsEnabled = false;
-    }
+    [RelayCommand]
+    private void SelectMode(ChatDisplayMode mode) => SelectedMode = mode;
 
     [RelayCommand]
     private void Reload()
     {
-        if (ChannelUri is null)
+        if (TwitchChat is { IsShown: true, ChannelUri: not null })
         {
-            return;
+            OpenRequested?.Invoke(TwitchChat, true);
         }
 
-        HasFallback = false;
-        ReloadRequested?.Invoke();
+        if (PlatformChat is { IsShown: true, ChannelUri: not null })
+        {
+            OpenRequested?.Invoke(PlatformChat, true);
+        }
     }
 
     [RelayCommand]
@@ -339,18 +308,8 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     [RelayCommand]
     private void OpenInBrowser()
     {
-        if (ExternalUri is null)
-        {
-            return;
-        }
-
-        _shellLauncher.Open(ExternalUri.ToString());
-    }
-
-    [RelayCommand]
-    private void OpenRuntimeDownload()
-    {
-        _shellLauncher.Open(WebView2RuntimeDownloadUrl);
+        var pane = TwitchChat.IsShown ? TwitchChat : PlatformChat;
+        pane.OpenInBrowserCommand.Execute(null);
     }
 
     [RelayCommand]

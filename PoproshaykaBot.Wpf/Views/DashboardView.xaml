@@ -5,6 +5,7 @@
              xmlns:tiles="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:dashboard="clr-namespace:PoproshaykaBot.Wpf.Infrastructure.Dashboard"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
+             xmlns:platformControls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
              xmlns:keepshell="https://schemas.keepshell.dev/wpf"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -15,6 +16,57 @@
              d:DesignWidth="1100">
 
     <UserControl.Resources>
+        <DataTemplate x:Key="ChatTilePlatformSelector"
+                      DataType="{x:Type tiles:ChatDisplayTileViewModel}">
+            <Grid Margin="0,0,8,0">
+                <iconPacks:PackIconLucide Kind="{Binding Icon}"
+                                          Width="14"
+                                          Height="14"
+                                          Foreground="{DynamicResource Accent.Text}"
+                                          VerticalAlignment="Center"
+                                          Visibility="{Binding HasMultiplePlatforms, Converter={StaticResource InverseBoolToVisibility}}" />
+                <Button Click="OnChatPlatformMenuClick"
+                        ToolTip="{Binding SelectedMode.Label, StringFormat=Режим чата – {0}}"
+                        AutomationProperties.Name="Площадка чата трансляции"
+                        AutomationProperties.HelpText="{Binding SelectedMode.Label}"
+                        Visibility="{Binding HasMultiplePlatforms, Converter={StaticResource BoolToVisibility}}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+                            <Setter Property="Height" Value="{DynamicResource Control.Height.Compact}" />
+                            <Setter Property="MinHeight" Value="{DynamicResource Control.Height.Compact}" />
+                            <Setter Property="Padding" Value="4,0" />
+                        </Style>
+                    </Button.Style>
+                    <StackPanel Orientation="Horizontal">
+                        <platformControls:PlatformIconView Platform="Twitch" Width="14" Height="14" Margin="0,0,3,0"
+                                                           Visibility="{Binding SelectedMode.IsSplit, Converter={StaticResource BoolToVisibility}}" />
+                        <platformControls:PlatformIconView Platform="{Binding SelectedMode.Platform}"
+                                                           Width="14"
+                                                           Height="14"
+                                                           VerticalAlignment="Center" />
+                        <iconPacks:PackIconLucide Kind="{x:Static iconPacks:PackIconLucideKind.ChevronDown}"
+                                                 Width="10"
+                                                 Height="10"
+                                                 Margin="4,0,0,0"
+                                                 VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Button.ContextMenu>
+                        <ContextMenu Placement="Bottom"
+                                     ItemsSource="{Binding PlacementTarget.DataContext.Modes, RelativeSource={RelativeSource Self}}">
+                            <ContextMenu.ItemContainerStyle>
+                                <Style TargetType="MenuItem">
+                                    <Setter Property="Header" Value="{Binding Label}" />
+                                    <Setter Property="Command"
+                                            Value="{Binding PlacementTarget.DataContext.SelectModeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <Setter Property="CommandParameter" Value="{Binding}" />
+                                </Style>
+                            </ContextMenu.ItemContainerStyle>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+            </Grid>
+        </DataTemplate>
+
         <DataTemplate x:Key="DashboardTileChrome"
                       DataType="{x:Type tiles:DashboardTileViewModel}">
             <Border x:Name="TileRoot"
@@ -110,6 +162,11 @@
                                 </iconPacks:PackIconLucide>
                             </Button>
                         </StackPanel>
+
+                        <ContentControl x:Name="TilePlatformSelector"
+                                        DockPanel.Dock="Left"
+                                        VerticalAlignment="Center"
+                                        Focusable="False" />
 
                         <iconPacks:PackIconLucide x:Name="TileIcon"
                                                   DockPanel.Dock="Left"
@@ -294,6 +351,12 @@
             </Border>
 
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding TypeId}" Value="twitch-chat">
+                    <Setter TargetName="TilePlatformSelector" Property="Content" Value="{Binding}" />
+                    <Setter TargetName="TilePlatformSelector" Property="ContentTemplate" Value="{StaticResource ChatTilePlatformSelector}" />
+                    <Setter TargetName="TileIcon" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+
                 <DataTrigger Binding="{Binding IsCollapsed}"
                              Value="True">
                     <Setter TargetName="TileHeaderBar"
@@ -335,6 +398,7 @@
 
                 <DataTrigger Binding="{Binding IsLayoutEditing}"
                              Value="True">
+                    <Setter TargetName="TilePlatformSelector" Property="IsEnabled" Value="False" />
                     <Setter TargetName="TileEditCollapse"
                             Property="Visibility"
                             Value="Visible" />

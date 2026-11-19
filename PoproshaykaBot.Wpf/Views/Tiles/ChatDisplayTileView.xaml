@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:PoproshaykaBot.Wpf.ViewModels.Tiles"
              xmlns:controls="clr-namespace:KeepShell.Views.Controls;assembly=KeepShell"
-             xmlns:platformControls="clr-namespace:PoproshaykaBot.Wpf.Views.Controls"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -13,29 +12,6 @@
              d:DesignHeight="460">
 
     <DockPanel LastChildFill="True">
-        <Border DockPanel.Dock="Top"
-                Padding="8,4"
-                Visibility="{Binding HasMultiplePlatforms, Converter={StaticResource BoolToVisibility}}">
-            <ComboBox Style="{StaticResource ComboBox.Toolbar}"
-                      HorizontalAlignment="Left"
-                      ItemsSource="{Binding Platforms}"
-                      SelectedValuePath="Platform"
-                      SelectedValue="{Binding SelectedPlatform, Mode=TwoWay}"
-                      AutomationProperties.Name="Площадка чата трансляции">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Orientation="Horizontal">
-                            <platformControls:PlatformIconView Platform="{Binding Platform}"
-                                                               Width="14"
-                                                               Height="14"
-                                                               Margin="0,0,6,0" />
-                            <TextBlock Text="{Binding Label}" />
-                        </StackPanel>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-        </Border>
-
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource Bg.SurfaceAlt}"
                 BorderBrush="{DynamicResource Border.Subtle}"
@@ -52,101 +28,97 @@
         <Grid>
             <Grid.Resources>
                 <Style x:Key="ChatWebView" TargetType="wv2:WebView2">
-                    <Setter Property="Visibility"
-                            Value="Visible" />
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding HasFallback}"
-                                     Value="True">
-                            <Setter Property="Visibility"
-                                    Value="Collapsed" />
+                        <DataTrigger Binding="{Binding IsShown}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed" />
                         </DataTrigger>
-                        <DataTrigger Binding="{Binding IsLayoutEditing}"
-                                     Value="True">
-                            <Setter Property="Visibility"
-                                    Value="Collapsed" />
+                        <DataTrigger Binding="{Binding HasFallback}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
                         </DataTrigger>
-                        <DataTrigger Binding="{Binding IsModalDialogOpen}"
-                                     Value="True">
-                            <Setter Property="Visibility"
-                                    Value="Collapsed" />
+                        <DataTrigger Binding="{Binding DataContext.IsLayoutEditing, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding DataContext.IsModalDialogOpen, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
                         </DataTrigger>
                     </Style.Triggers>
+                </Style>
+                <DataTemplate x:Key="ChatFallback">
+                    <controls:EmptyState Icon="MessageSquareWarning"
+                                         Heading="{Binding FallbackHeading}"
+                                         Description="{Binding FallbackDescription}"
+                                         ActionText="{Binding FallbackActionText}"
+                                         ActionCommand="{Binding FallbackActionCommand}"
+                                         DescriptionMaxWidth="320"
+                                         VerticalAlignment="Center"
+                                         HorizontalAlignment="Center" />
+                </DataTemplate>
+                <Style x:Key="ChatPaneTitle" TargetType="TextBlock" BasedOn="{StaticResource TextBlock.Subtle}">
+                    <Setter Property="Margin" Value="8,2" />
+                    <Setter Property="Visibility" Value="{Binding DataContext.SelectedMode.IsSplit, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
                 </Style>
             </Grid.Resources>
 
-        <wv2:WebView2 x:Name="WebView"
-                      ZoomFactor="{Binding ZoomFactor, Mode=TwoWay}">
-            <wv2:WebView2.Style>
-                <Style TargetType="wv2:WebView2" BasedOn="{StaticResource ChatWebView}">
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsTwitchSelected}" Value="False">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </wv2:WebView2.Style>
-        </wv2:WebView2>
+            <UniformGrid x:Name="ChatPanes">
+                <UniformGrid.Style>
+                    <Style TargetType="UniformGrid">
+                        <Setter Property="Rows" Value="1" />
+                        <Setter Property="Columns" Value="1" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsLayoutEditing}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsModalDialogOpen}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding SelectedMode.Layout}" Value="Columns">
+                                <Setter Property="Columns" Value="2" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding SelectedMode.Layout}" Value="Rows">
+                                <Setter Property="Rows" Value="2" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </UniformGrid.Style>
+                <DockPanel DataContext="{Binding TwitchChat}" ClipToBounds="True"
+                           Visibility="{Binding IsShown, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}" />
+                    <Grid>
+                        <wv2:WebView2 x:Name="WebView" Style="{StaticResource ChatWebView}"
+                                      ZoomFactor="{Binding DataContext.ZoomFactor, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}" />
+                        <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource ChatFallback}"
+                                          Visibility="{Binding HasFallback, Converter={StaticResource BoolToVisibility}}" />
+                    </Grid>
+                </DockPanel>
+                <DockPanel DataContext="{Binding PlatformChat}" ClipToBounds="True"
+                           Visibility="{Binding IsShown, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding DisplayName}" Style="{StaticResource ChatPaneTitle}" />
+                    <Grid>
+                        <wv2:WebView2 x:Name="PlatformWebView" Style="{StaticResource ChatWebView}" />
+                        <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource ChatFallback}"
+                                          Visibility="{Binding HasFallback, Converter={StaticResource BoolToVisibility}}" />
+                    </Grid>
+                </DockPanel>
+            </UniformGrid>
 
-        <wv2:WebView2 x:Name="PlatformWebView">
-            <wv2:WebView2.Style>
-                <Style TargetType="wv2:WebView2" BasedOn="{StaticResource ChatWebView}">
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsTwitchSelected}" Value="True">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </wv2:WebView2.Style>
-        </wv2:WebView2>
-
-        <controls:EmptyState Icon="MessageSquare"
-                             Heading="Чат скрыт"
-                             DescriptionMaxWidth="320"
-                             VerticalAlignment="Center"
-                             HorizontalAlignment="Center">
-            <controls:EmptyState.Style>
-                <Style TargetType="controls:EmptyState">
-                    <Setter Property="Visibility"
-                            Value="Collapsed" />
-                    <Setter Property="Description"
-                            Value="Окно чата вернётся, когда закончится настройка дашборда." />
-                    <Style.Triggers>
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding IsLayoutEditing}"
-                                           Value="True" />
-                                <Condition Binding="{Binding HasFallback}"
-                                           Value="False" />
-                            </MultiDataTrigger.Conditions>
-                            <Setter Property="Visibility"
-                                    Value="Visible" />
-                        </MultiDataTrigger>
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding IsModalDialogOpen}"
-                                           Value="True" />
-                                <Condition Binding="{Binding HasFallback}"
-                                           Value="False" />
-                            </MultiDataTrigger.Conditions>
-                            <Setter Property="Visibility"
-                                    Value="Visible" />
-                            <Setter Property="Description"
-                                    Value="Окно чата вернётся, когда закроется диалог." />
-                        </MultiDataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </controls:EmptyState.Style>
-        </controls:EmptyState>
-
-        <controls:EmptyState Icon="MessageSquareWarning"
-                             Heading="{Binding FallbackHeading}"
-                             Description="{Binding FallbackDescription}"
-                             ActionText="{Binding FallbackActionText}"
-                             ActionCommand="{Binding FallbackActionCommand}"
-                             DescriptionMaxWidth="320"
-                             VerticalAlignment="Center"
-                             HorizontalAlignment="Center"
-                             Visibility="{Binding HasFallback, Converter={StaticResource BoolToVisibility}}" />
+            <controls:EmptyState x:Name="HiddenChat" Icon="MessageSquare" Heading="Чат скрыт"
+                                 DescriptionMaxWidth="320" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <controls:EmptyState.Style>
+                    <Style TargetType="controls:EmptyState">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Setter Property="Description" Value="Окно чата вернётся, когда закончится настройка дашборда." />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsLayoutEditing}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsModalDialogOpen}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Setter Property="Description" Value="Окно чата вернётся, когда закроется диалог." />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </controls:EmptyState.Style>
+            </controls:EmptyState>
         </Grid>
     </DockPanel>
 </UserControl>
