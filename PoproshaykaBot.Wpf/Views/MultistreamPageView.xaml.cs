@@ -1,9 +1,9 @@
 ﻿using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Threading;
+using KeepShell.Bootstrap;
 using KeepShell.Views;
 using PoproshaykaBot.Wpf.ViewModels;
 
@@ -11,14 +11,24 @@ namespace PoproshaykaBot.Wpf.Views;
 
 public partial class MultistreamPageView : UserControl, IView<MultistreamPageViewModel>
 {
+    public static readonly DependencyProperty IsCompactLayoutProperty = DependencyProperty.Register(
+        nameof(IsCompactLayout),
+        typeof(bool),
+        typeof(MultistreamPageView),
+        new PropertyMetadata(false));
+
+    private const double CompactEnterWidth = 880;
+    private const double CompactExitWidth = 920;
+
     private MultistreamPageViewModel? _page;
     private bool _revealingSection;
 
     public MultistreamPageView()
     {
         InitializeComponent();
-        Loaded += (_, _) => AttachPage(DataContext as MultistreamPageViewModel);
-        Unloaded += (_, _) => AttachPage(null);
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        SizeChanged += (_, _) => UpdateResponsiveLayout();
         DataContextChanged += (_, e) =>
         {
             if (IsLoaded)
@@ -37,6 +47,58 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
                 }
             }
         };
+    }
+
+    public bool IsCompactLayout
+    {
+        get => (bool)GetValue(IsCompactLayoutProperty);
+        set => SetValue(IsCompactLayoutProperty, value);
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        FontScaleManager.Changed -= OnFontScaleChanged;
+        FontScaleManager.Changed += OnFontScaleChanged;
+        UpdateResponsiveLayout();
+        AttachPage(DataContext as MultistreamPageViewModel);
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        FontScaleManager.Changed -= OnFontScaleChanged;
+        AttachPage(null);
+    }
+
+    private void OnFontScaleChanged(object? sender, double _) => UpdateResponsiveLayout();
+
+    private void UpdateResponsiveLayout()
+    {
+        var next = ResolveCompactLayout(IsCompactLayout, ActualWidth, FontScaleManager.Current);
+        if (next != IsCompactLayout)
+        {
+            IsCompactLayout = next;
+        }
+    }
+
+    internal static bool ResolveCompactLayout(bool currentCompact, double width, double fontScale)
+    {
+        if (width <= 0)
+        {
+            return currentCompact;
+        }
+
+        var scale = Math.Max(1.0, fontScale);
+        if (!currentCompact && width < CompactEnterWidth * scale)
+        {
+            return true;
+        }
+
+        if (currentCompact && width >= CompactExitWidth * scale)
+        {
+            return false;
+        }
+
+        return currentCompact;
     }
 
     private void AttachPage(MultistreamPageViewModel? page)
@@ -84,13 +146,16 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
                 return;
             }
 
-            PageScroll.UpdateLayout();
+            DetailScroll.UpdateLayout();
             var target = section switch
             {
+                MultistreamSection.Parameters => FindControl(PlatformSettingsHost, control =>
+                        AutomationProperties.GetAutomationId(control) == "MultistreamEnableYouTube")
+                    ?? FindControl(PlatformSettingsHost, control => control.IsTabStop),
                 MultistreamSection.Platforms => FindPlatformTarget(page.SelectedCard),
-                MultistreamSection.Automation => FindControl(AutomationSection, control => control is ToggleButton),
+                MultistreamSection.Automation => FindControl(AutomationSection, control => control.IsTabStop),
                 MultistreamSection.BotAuthorization => FindControl(ChannelEditor, control =>
-                    AutomationProperties.GetAutomationId(control) is "ChannelBotAuthorization" or "DefaultBotAuthorization")
+                        AutomationProperties.GetAutomationId(control) is "ChannelBotAuthorization" or "DefaultBotAuthorization")
                     ?? FindChannelTarget(),
                 _ => FindChannelTarget(),
             };
@@ -103,8 +168,11 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
             try
             {
                 target.Focus();
-                var top = target.TransformToAncestor(PageScroll).Transform(default).Y + PageScroll.VerticalOffset;
-                PageScroll.ScrollToVerticalOffset(Math.Max(0, top - 12));
+                if (target.IsDescendantOf(DetailScroll))
+                {
+                    var top = target.TransformToAncestor(DetailScroll).Transform(default).Y + DetailScroll.VerticalOffset;
+                    DetailScroll.ScrollToVerticalOffset(Math.Max(0, top - 12));
+                }
             }
             finally
             {
@@ -115,17 +183,12 @@ public partial class MultistreamPageView : UserControl, IView<MultistreamPageVie
 
     private Control? FindPlatformTarget(MultistreamPlatformCard? card)
     {
-        if (card is null || PlatformCards.ItemContainerGenerator.ContainerFromItem(card) is not ContentPresenter presenter)
+        if (card is null)
         {
             return null;
         }
 
-        var template = presenter.ContentTemplate;
-        return !card.Status.IsBlockedByDebugSession
-                && template.FindName("PlatformControls", presenter) is ContentControl platformControls
-                && FindControl(platformControls, control => control.IsTabStop) is { } setup
-            ? setup
-            : template.FindName("OpenPlatform", presenter) as Button;
+        return PlatformCards.ItemContainerGenerator.ContainerFromItem(card) as Control;
     }
 
     private Control? FindChannelTarget() =>
