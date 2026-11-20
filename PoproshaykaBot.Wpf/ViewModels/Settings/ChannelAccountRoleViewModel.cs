@@ -12,6 +12,7 @@ public sealed record ChannelAccountOption(string AccountId, string DisplayName, 
 public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 {
     private const string ReauthorizationNotice = "Войдите в назначенный аккаунт заново.";
+    private const string NeedsAuthSuffix = " · нужен вход";
 
     private readonly Action _onEdited;
     private readonly Func<ChannelAccountRoleViewModel, Task> _verify;
@@ -77,7 +78,32 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 
     internal bool IsEdited => _saved != (AccountId, ContextId, _verifiedId);
 
-    internal void AcceptEdits() => _saved = (AccountId, ContextId, _verifiedId);
+    internal void AcceptEdits()
+    {
+        _saved = (AccountId, ContextId, _verifiedId);
+        OnPropertyChanged(nameof(NeedsVerification));
+    }
+
+    public string? AccountDisplayName
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(AccountId))
+            {
+                return null;
+            }
+
+            var display = SelectedAccount?.DisplayName;
+            if (string.IsNullOrWhiteSpace(display))
+            {
+                return AccountId;
+            }
+
+            return display.EndsWith(NeedsAuthSuffix, StringComparison.Ordinal)
+                ? display[..^NeedsAuthSuffix.Length]
+                : display;
+        }
+    }
 
     public ChannelAccountOption? SelectedAccount
     {
@@ -120,7 +146,7 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
                     hasAssignedAuthorization = grant.HasToken;
                 }
 
-                var label = grant.HasToken ? account.DisplayName : $"{account.DisplayName} · нужен вход";
+                var label = grant.HasToken ? account.DisplayName : $"{account.DisplayName}{NeedsAuthSuffix}";
                 options.Add(new(account.Key.AccountId, label, grant.ContextId));
             }
         }
@@ -131,7 +157,7 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
             SetStatus(ReauthorizationNotice, StatusSeverity.Warning);
             if (selected is null)
             {
-                options.Add(new(assigned, $"{assigned} · нужен вход", ContextId));
+                options.Add(new(assigned, $"{assigned}{NeedsAuthSuffix}", ContextId));
             }
         }
         else if (selected is null)
@@ -157,6 +183,9 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
 
     private void NotifyAccountOptionsChanged()
     {
+        OnPropertyChanged(nameof(AccountId));
+        OnPropertyChanged(nameof(AccountDisplayName));
+        OnPropertyChanged(nameof(NeedsVerification));
         OnPropertyChanged(nameof(CanAuthorize));
         OnPropertyChanged(nameof(CanManageAccount));
         OnPropertyChanged(nameof(CanSelectAccount));
@@ -176,6 +205,9 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         ContextId = contextId;
         _verifiedId = null;
         SetStatus("Требуется проверка", StatusSeverity.Warning);
+        OnPropertyChanged(nameof(AccountId));
+        OnPropertyChanged(nameof(AccountDisplayName));
+        OnPropertyChanged(nameof(NeedsVerification));
         OnPropertyChanged(nameof(SelectedAccount));
         VerifyCommand.NotifyCanExecuteChanged();
         _onEdited();
@@ -192,6 +224,8 @@ public sealed partial class ChannelAccountRoleViewModel : ObservableObject
         if (_verifiedId != verifiedId)
         {
             _verifiedId = verifiedId;
+            OnPropertyChanged(nameof(NeedsVerification));
+            OnPropertyChanged(nameof(AccountDisplayName));
             OnPropertyChanged(nameof(SelectedAccount));
             _onEdited();
         }

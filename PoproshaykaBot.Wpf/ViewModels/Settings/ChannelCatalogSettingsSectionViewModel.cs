@@ -58,7 +58,8 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
     private YouTubeSettingsSectionViewModel? _youtubeCredentials;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanResolveChannel), nameof(SupportsOwnChannelAuthorization), nameof(SupportsDefaultBotAuthorization))]
+    [NotifyPropertyChangedFor(nameof(CanResolveChannel), nameof(SupportsOwnChannelAuthorization), nameof(SupportsDefaultBotAuthorization),
+        nameof(PlatformDisplayName), nameof(PlatformChannelsTitle), nameof(SelectedSwitchModeDescription))]
     [NotifyCanExecuteChangedFor(nameof(AddChannelCommand), nameof(AuthorizeOwnChannelCommand), nameof(AuthorizeDefaultBotCommand))]
     private StreamingPlatform _selectedPlatform = StreamingPlatform.Twitch;
 
@@ -117,6 +118,20 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         _youtubeCredentials = youtube;
     }
 
+    public string PlatformDisplayName =>
+        _platformRegistry?.Find(SelectedPlatform)?.DisplayName ?? PlatformVisuals.GetDisplayName(SelectedPlatform);
+
+    public string PlatformChannelsTitle => $"Каналы {PlatformDisplayName}";
+
+    public int VisibleChannelCount => VisibleChannels.Count;
+
+    public string SelectedSwitchModeDescription => SelectedSwitchModeOption.Mode switch
+    {
+        ChannelSwitchMode.PreselectedNext => "При запуске эфира на заранее выбранном канале бот переключится на него автоматически.",
+        ChannelSwitchMode.AutoDiscover => "Бот отслеживает все наблюдаемые каналы и переключается на тот, где начался эфир.",
+        _ => "Активный канал переключается вручную кнопкой «Сделать активным».",
+    };
+
     public IReadOnlyList<ChannelSwitchModeOption> SwitchModeOptions =>
         SupportsAutomaticSwitching ? AllSwitchModeOptions : [AllSwitchModeOptions[0]];
 
@@ -167,6 +182,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             }
 
             _draftPreselectedNext[SelectedPlatform] = nextId;
+            RefreshPreselectedNextFlags(SelectedPlatform);
             OnPropertyChanged();
             NotifyEdited();
         }
@@ -213,8 +229,10 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             }
 
             _switchModes[SelectedPlatform] = value.Mode;
+            RefreshPreselectedNextFlags(SelectedPlatform);
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsPreselectedNextMode));
+            OnPropertyChanged(nameof(SelectedSwitchModeDescription));
             NotifyEdited();
         }
     }
@@ -413,8 +431,10 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
         }
 
         RefreshPreselectedNextOptions();
+        RefreshPreselectedNextFlags(SelectedPlatform);
         OnPropertyChanged(nameof(SelectedSwitchModeOption));
         OnPropertyChanged(nameof(IsPreselectedNextMode));
+        OnPropertyChanged(nameof(SelectedSwitchModeDescription));
     }
 
     public string? ValidateAssignments()
@@ -837,6 +857,7 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
             candidate.IsActive = ReferenceEquals(candidate, item);
         }
 
+        RefreshPreselectedNextFlags(item.Platform);
         NotifyEdited();
     }
 
@@ -878,14 +899,30 @@ public sealed partial class ChannelCatalogSettingsSectionViewModel : ObservableO
 
         RefreshAccountOptions(SelectedPlatform);
         RefreshPreselectedNextOptions();
+        RefreshPreselectedNextFlags(SelectedPlatform);
         SelectedChannel = VisibleChannels.FirstOrDefault(channel => channel.ChannelId == selectedId)
             ?? VisibleChannels.FirstOrDefault(channel => channel.IsActive)
             ?? VisibleChannels.FirstOrDefault();
         OnPropertyChanged(nameof(HasChannels));
+        OnPropertyChanged(nameof(VisibleChannelCount));
         OnPropertyChanged(nameof(SwitchModeOptions));
         OnPropertyChanged(nameof(SelectedSwitchModeOption));
         OnPropertyChanged(nameof(IsPreselectedNextMode));
+        OnPropertyChanged(nameof(SelectedSwitchModeDescription));
         AuthorizeDefaultBotCommand.NotifyCanExecuteChanged();
+    }
+
+    private void RefreshPreselectedNextFlags(StreamingPlatform platform)
+    {
+        var isPreselectedMode = HasCapability(platform, PlatformCapabilities.MultiChannelMonitoring)
+            && _switchModes.GetValueOrDefault(platform, ChannelSwitchMode.Manual) == ChannelSwitchMode.PreselectedNext;
+        var nextId = _draftPreselectedNext.GetValueOrDefault(platform);
+        foreach (var item in _allChannels.Where(c => c.Platform == platform))
+        {
+            item.IsPreselectedNext = isPreselectedMode
+                && !item.IsActive
+                && string.Equals(item.ChannelId, nextId, StringComparison.Ordinal);
+        }
     }
 
     private void RefreshPreselectedNextOptions()
@@ -954,6 +991,7 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
     private bool _savedMonitoring;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomationSummary), nameof(EditorHeading))]
     private string _displayName;
 
     [ObservableProperty]
@@ -963,7 +1001,12 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
     private bool _monitoringEnabled;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomationSummary))]
     private bool _isActive;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomationSummary))]
+    private bool _isPreselectedNext;
 
     public ChannelCatalogItemViewModel(
         ChannelCatalogEntry entry,
@@ -997,17 +1040,77 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
             new(entry, PlatformAuthRole.Bot, onEdited, role => verifyAsync(this, role), role => authorizeAsync(this, role)),
             new(entry, PlatformAuthRole.Broadcaster, onEdited, role => verifyAsync(this, role), role => authorizeAsync(this, role)),
         ];
+        foreach (var role in Roles)
+        {
+            role.PropertyChanged += (_, _) => NotifyRoleSummaries();
+        }
     }
 
     public StreamingPlatform Platform { get; }
 
     public string ChannelId { get; }
 
+    public string EditorHeading => $"Настройка канала «{DisplayName}»";
+
     public bool SupportsMonitoring { get; }
 
     public IReadOnlyList<ChannelAccountRoleViewModel> Roles { get; }
 
+    public string BotSummaryText => DescribeRoleSummary(Roles[0], "Бот", emptyLabel: "не назначен").Text;
+
+    public StatusSeverity BotSummarySeverity => DescribeRoleSummary(Roles[0], "Бот", emptyLabel: "не назначен").Severity;
+
+    public string BroadcasterSummaryText => DescribeRoleSummary(Roles[1], "Стример", emptyLabel: "–").Text;
+
+    public StatusSeverity BroadcasterSummarySeverity => DescribeRoleSummary(Roles[1], "Стример", emptyLabel: "–").Severity;
+
+    public string MonitoringSummaryText => MonitoringEnabled ? "Мониторинг: вкл." : "Мониторинг: выкл.";
+
+    public string AutomationSummary => string.Join(", ", new[]
+    {
+        DisplayName,
+        IsActive ? "Активный" : null,
+        IsPreselectedNext ? "Следующий" : null,
+        BotSummaryText,
+        BroadcasterSummaryText,
+        SupportsMonitoring ? MonitoringSummaryText : null,
+    }.Where(static part => !string.IsNullOrWhiteSpace(part)));
+
     internal bool IsNew { get; set; }
+
+    private void NotifyRoleSummaries()
+    {
+        OnPropertyChanged(nameof(BotSummaryText));
+        OnPropertyChanged(nameof(BotSummarySeverity));
+        OnPropertyChanged(nameof(BroadcasterSummaryText));
+        OnPropertyChanged(nameof(BroadcasterSummarySeverity));
+        OnPropertyChanged(nameof(AutomationSummary));
+    }
+
+    private static (string Text, StatusSeverity Severity) DescribeRoleSummary(
+        ChannelAccountRoleViewModel role, string label, string emptyLabel)
+    {
+        if (!role.CanManageAccount)
+        {
+            return (string.Empty, StatusSeverity.None);
+        }
+
+        if (string.IsNullOrWhiteSpace(role.AccountId))
+        {
+            return ($"{label}: {emptyLabel}", role.Role == PlatformAuthRole.Bot ? StatusSeverity.Warning : StatusSeverity.None);
+        }
+
+        var name = role.AccountDisplayName ?? role.AccountId;
+        if (!role.NeedsVerification && role.StatusSeverity == StatusSeverity.Success)
+        {
+            return ($"{label}: {name} ✓", StatusSeverity.Success);
+        }
+
+        var severity = role.StatusSeverity == StatusSeverity.None && role.NeedsVerification
+            ? StatusSeverity.Warning
+            : role.StatusSeverity;
+        return ($"{label}: {name}", severity);
+    }
 
     internal void AcceptEdits()
     {
@@ -1067,7 +1170,12 @@ public sealed partial class ChannelCatalogItemViewModel : ObservableObject
 
     partial void OnDisplayNameChanged(string value) => _onEdited();
     partial void OnHandleChanged(string value) => _onEdited();
-    partial void OnMonitoringEnabledChanged(bool value) => _onEdited();
+    partial void OnMonitoringEnabledChanged(bool value)
+    {
+        OnPropertyChanged(nameof(MonitoringSummaryText));
+        OnPropertyChanged(nameof(AutomationSummary));
+        _onEdited();
+    }
 
     [RelayCommand]
     private void MakeActive() => _setActive(this);
