@@ -178,7 +178,7 @@
                 <Button Style="{StaticResource Button.Primary}"
                         Content="{Binding ConnectButtonText}"
                         Command="{Binding ToggleConnectCommand}"
-                        ToolTip="Управление ботом на всех включённых площадках"
+                        ToolTip="{Binding ConnectButtonTooltip}"
                         VerticalAlignment="Center"
                         Margin="0,0,10,0"
                         MinHeight="26"

@@ -82,6 +82,18 @@ public sealed class MultistreamTileViewModel : DashboardTileViewModel, IDisposab
 
     public override bool GrowsWithSpace => true;
 
+    internal void ApplyPlatformControls(IEnumerable<IMultistreamPlatformControls> platformControls)
+    {
+        ArgumentNullException.ThrowIfNull(platformControls);
+
+        var controlsByPlatform = platformControls.ToDictionary(static control => control.Platform);
+        foreach (var row in Rows)
+        {
+            row.CanEnableFromSettings = controlsByPlatform.TryGetValue(row.Platform, out var controls)
+                && controls.CanEnableFromSettings;
+        }
+    }
+
     public void SetOnScreen(bool onScreen) => SetSurfaceVisibility(ref _tileOnScreen, onScreen);
 
     public void SetPageOnScreen(bool onScreen) => SetSurfaceVisibility(ref _pageOnScreen, onScreen);
@@ -147,6 +159,7 @@ public sealed class MultistreamTileViewModel : DashboardTileViewModel, IDisposab
         {
             var platform = row.Source;
             var active = platform.UsesChannelCatalog ? _catalog.GetActiveChannel(platform.Id) : null;
+            var channelCount = platform.UsesChannelCatalog ? _catalog.GetConfiguredChannels(platform.Id).Count : 0;
             var phase = _connectionManager.GetPhase(platform.Id);
             var enabled = platform.IsEnabled;
             var blockedByDebug = !enabled && platform.Id == StreamingPlatform.YouTube && _youtubeSettings.Load().Enabled;
@@ -155,6 +168,7 @@ public sealed class MultistreamTileViewModel : DashboardTileViewModel, IDisposab
                 ? monitor.GetSnapshot(active.Key)
                 : null;
 
+            row.ChannelCount = channelCount;
             row.ChannelName = active is null
                 ? platform.ConfiguredChannel ?? "Канал не настроен"
                 : string.IsNullOrWhiteSpace(active.DisplayName) ? active.ChannelId : active.DisplayName;
@@ -181,33 +195,53 @@ public sealed partial class MultistreamPlatformRowViewModel(
     public string DisplayName => Source.DisplayName;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomationSummary))]
     private string _channelName = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMultipleChannels), nameof(ChannelCountText))]
+    private int _channelCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDisabled), nameof(StatusBadgeText), nameof(StatusBadgeSeverity),
+        nameof(PlatformActionLabel), nameof(PlatformActionName), nameof(AutomationSummary))]
+    private bool _isPlatformEnabled = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomationSummary))]
     private string _broadcastText = string.Empty;
 
     [ObservableProperty]
     private StatusSeverity _broadcastSeverity;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomationSummary))]
     private string _chatText = string.Empty;
 
     [ObservableProperty]
     private StatusSeverity _chatSeverity;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ConnectionActionName))]
+    [NotifyPropertyChangedFor(nameof(ConnectionActionName), nameof(ConnectionActionWithPlatform))]
     private string _connectionActionLabel = "Подключить";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PlatformActionLabel))]
-    [NotifyPropertyChangedFor(nameof(PlatformActionName))]
+    [NotifyPropertyChangedFor(nameof(ConnectionActionWithPlatform))]
+    private BotLifecyclePhase _lifecyclePhase;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlatformActionLabel), nameof(PlatformActionName),
+        nameof(StatusBadgeText), nameof(StatusBadgeSeverity), nameof(AutomationSummary))]
     private bool _needsBotAuthorization;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PlatformActionLabel))]
-    [NotifyPropertyChangedFor(nameof(PlatformActionName))]
+    [NotifyPropertyChangedFor(nameof(IsDisabled), nameof(PlatformActionLabel), nameof(PlatformActionName),
+        nameof(StatusBadgeText), nameof(StatusBadgeSeverity), nameof(AutomationSummary))]
     private bool _isBlockedByDebugSession;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlatformActionLabel), nameof(PlatformActionName))]
+    private bool _canEnableFromSettings;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ToggleConnectionCommand))]
@@ -219,13 +253,48 @@ public sealed partial class MultistreamPlatformRowViewModel(
     [ObservableProperty]
     private bool _showConnectionAction;
 
+    public bool HasMultipleChannels => ChannelCount > 1;
+
+    public string? ChannelCountText => ChannelCount <= 1 ? null : FormatChannelCount(ChannelCount);
+
+    public bool IsDisabled => !IsPlatformEnabled && !IsBlockedByDebugSession;
+
+    public string? StatusBadgeText => IsDisabled
+        ? "Отключён"
+        : IsBlockedByDebugSession
+            ? "Отладка Twitch"
+            : NeedsBotAuthorization
+                ? "Нужен вход бота"
+                : null;
+
+    public StatusSeverity StatusBadgeSeverity => NeedsBotAuthorization ? StatusSeverity.Warning : StatusSeverity.Info;
+
+    public string ConnectionActionWithPlatform => LifecyclePhase switch
+    {
+        BotLifecyclePhase.Connecting or BotLifecyclePhase.Disconnecting => ConnectionActionLabel,
+        _ => $"{ConnectionActionLabel} {DisplayName}",
+    };
+
     public string PlatformActionLabel => IsBlockedByDebugSession
         ? "Подробнее"
-        : NeedsBotAuthorization ? "Войти как бот" : "Настроить";
+        : NeedsBotAuthorization
+            ? "Войти как бот"
+            : IsDisabled && CanEnableFromSettings
+                ? "Включить"
+                : "Настроить";
 
     public string PlatformActionName => $"{PlatformActionLabel} – {DisplayName}";
 
     public string ConnectionActionName => $"{ConnectionActionLabel} – {DisplayName}";
+
+    public string AutomationSummary => string.Join(", ", new[]
+    {
+        DisplayName,
+        ChannelName,
+        StatusBadgeText,
+        BroadcastText,
+        ChatText,
+    }.Where(static part => !string.IsNullOrWhiteSpace(part)));
 
     [RelayCommand(CanExecute = nameof(CanToggleConnection))]
     private void ToggleConnection() => toggleConnection();
@@ -235,6 +304,7 @@ public sealed partial class MultistreamPlatformRowViewModel(
 
     internal void ApplyBroadcast(bool enabled, bool blockedByDebug, StreamStatus status, MonitoringUnavailableReason? reason)
     {
+        IsPlatformEnabled = enabled;
         (BroadcastText, BroadcastSeverity) = (enabled, blockedByDebug, status) switch
         {
             (_, true, _) => ("Эфир: недоступен в режиме отладки Twitch", StatusSeverity.Info),
@@ -248,10 +318,12 @@ public sealed partial class MultistreamPlatformRowViewModel(
     internal void ApplyChat(
         bool enabled, bool blockedByDebug, BotLifecyclePhase phase, ChatConnectionStatus? chat, bool lacksBotAuthorization)
     {
+        IsPlatformEnabled = enabled;
         IsBlockedByDebugSession = blockedByDebug;
         NeedsBotAuthorization = enabled && (chat?.Issue == ChatReadIssue.MissingBotAuth
             || (chat?.State != ConnectionState.Connected && lacksBotAuthorization));
         IsSetupRequired = !enabled || NeedsBotAuthorization;
+        LifecyclePhase = phase;
         ConnectionActionLabel = phase switch
         {
             BotLifecyclePhase.Connecting => "Отменить подключение",
@@ -315,6 +387,20 @@ public sealed partial class MultistreamPlatformRowViewModel(
                 _ => ("Чат: не подключён", StatusSeverity.Info),
             },
         };
+    }
+
+    private static string FormatChannelCount(int count)
+    {
+        var mod100 = count % 100;
+        var mod10 = count % 10;
+        var noun = mod100 is >= 11 and <= 14
+            ? "каналов"
+            : mod10 == 1
+                ? "канал"
+                : mod10 is >= 2 and <= 4
+                    ? "канала"
+                    : "каналов";
+        return $"{count} {noun}";
     }
 
     private static string DescribeUnknownBroadcast(MonitoringUnavailableReason? reason) => reason switch
