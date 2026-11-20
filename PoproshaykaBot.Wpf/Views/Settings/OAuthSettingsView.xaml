@@ -38,12 +38,6 @@
         <TextBlock Text="{Binding ChannelHintText}"
                    TextWrapping="Wrap"
                    FontSize="{DynamicResource Font.Size.S}"
-                   keepshell:SeverityBrushBehavior.Foreground="{Binding ChannelHintSeverity}"
-                   Margin="0,0,0,12" />
-
-        <Button Style="{StaticResource Button.Link}"
-                Content="Запустить мастер настройки"
-                HorizontalAlignment="Left"
-                Command="{Binding LaunchOnboardingCommand}" />
+                   keepshell:SeverityBrushBehavior.Foreground="{Binding ChannelHintSeverity}" />
     </StackPanel>
 </UserControl>

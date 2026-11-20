@@ -19,13 +19,138 @@
     </UserControl.Resources>
 
     <StackPanel>
-        <Button Content="Подключить свой канал"
-                Command="{Binding AuthorizeOwnChannelCommand}"
-                Style="{StaticResource Button.Primary}"
-                HorizontalAlignment="Left"
-                Margin="0,0,0,10" />
+        <DockPanel Margin="0,0,0,8"
+                   Visibility="{Binding HasChannels, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="Канал"
+                       Style="{StaticResource Setting.RowLabel}" />
+            <ComboBox ItemsSource="{Binding VisibleChannels}"
+                      SelectedItem="{Binding SelectedChannel, Mode=TwoWay}"
+                      TextSearch.TextPath="DisplayName"
+                      Style="{StaticResource ComboBox.Form}"
+                      AutomationProperties.Name="Канал"
+                      AutomationProperties.AutomationId="ChannelCatalogSelection">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+                <ComboBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:ChannelCatalogItemViewModel}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right"
+                                       Text="Активный"
+                                       Foreground="{DynamicResource State.SuccessText}"
+                                       Margin="8,0,0,0"
+                                       Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Text="{Binding DisplayName}"
+                                       TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </DockPanel>
 
-        <DockPanel Margin="0,0,0,12">
+        <ContentControl Content="{Binding SelectedChannel}"
+                        Visibility="{Binding SelectedChannel, Converter={StaticResource NullToVisibility}}">
+            <ContentControl.ContentTemplate>
+                <DataTemplate DataType="{x:Type vm:ChannelCatalogItemViewModel}">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,4">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
+                                <Button Content="Сделать активным"
+                                        Style="{StaticResource Button.Secondary}"
+                                        Command="{Binding MakeActiveCommand}"
+                                        Margin="0,0,8,0"
+                                        Visibility="{Binding IsActive, Converter={StaticResource InverseBoolToVisibility}}" />
+                                <Button Content="Удалить"
+                                        Style="{StaticResource Button.Secondary}"
+                                        Command="{Binding RemoveCommand}" />
+                            </StackPanel>
+                            <TextBlock Text="Название"
+                                       Style="{StaticResource Setting.RowLabel}" />
+                            <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource TextBox.Form}"
+                                     AutomationProperties.Name="Название канала" />
+                        </DockPanel>
+
+                        <TextBlock Text="{Binding ChannelId}"
+                                   Style="{StaticResource Form.Hint}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding ChannelId}"
+                                   Margin="0,0,0,8" />
+
+                        <ItemsControl ItemsSource="{Binding Roles}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:ChannelAccountRoleViewModel}">
+                                    <StackPanel Margin="0,0,0,12"
+                                                Visibility="{Binding CanManageAccount, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="{Binding Title}"
+                                                   Style="{StaticResource Form.Label}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,4" />
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right"
+                                                    Content="{Binding AuthorizationLabel}"
+                                                    AutomationProperties.AutomationId="{Binding AuthorizationAutomationId}"
+                                                    Style="{StaticResource Button.Secondary}"
+                                                    Command="{Binding AuthorizeCommand}"
+                                                    Visibility="{Binding CanAuthorize, Converter={StaticResource BoolToVisibility}}"
+                                                    Margin="8,0,0,0" />
+                                            <Button DockPanel.Dock="Right"
+                                                    Content="Проверить"
+                                                    AutomationProperties.Name="{Binding Title, StringFormat='Проверить доступ. {0}'}"
+                                                    Style="{StaticResource Button.Secondary}"
+                                                    Command="{Binding VerifyCommand}"
+                                                    Margin="8,0,0,0" />
+                                            <ComboBox ItemsSource="{Binding Accounts}"
+                                                      SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
+                                                      IsSynchronizedWithCurrentItem="False"
+                                                      DisplayMemberPath="DisplayName"
+                                                      Style="{StaticResource ComboBox.Form}"
+                                                      AutomationProperties.Name="{Binding Title}"
+                                                      IsEnabled="{Binding CanSelectAccount}" />
+                                        </DockPanel>
+                                        <TextBlock Text="{Binding Status}"
+                                                   Style="{StaticResource Form.Hint}"
+                                                   keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <CheckBox Content="Фоновый мониторинг эфира"
+                                  IsChecked="{Binding MonitoringEnabled, Mode=TwoWay}"
+                                  IsEnabled="{Binding SupportsMonitoring}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ContentControl.ContentTemplate>
+        </ContentControl>
+
+        <Button Content="Войти как бот"
+                AutomationProperties.AutomationId="DefaultBotAuthorization"
+                Command="{Binding AuthorizeDefaultBotCommand}"
+                HorizontalAlignment="Left">
+            <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding HasChannels}" Value="False" />
+                                <Condition Binding="{Binding SupportsDefaultBotAuthorization}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility" Value="Visible" />
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Button.Style>
+        </Button>
+
+        <TextBlock Text="Добавление канала"
+                   Style="{StaticResource Setting.BlockTitle}" />
+        <DockPanel Margin="0,0,0,8" IsEnabled="{Binding CanResolveChannel}">
             <Button DockPanel.Dock="Right"
                     Content="Добавить канал"
                     Style="{StaticResource Button.Secondary}"
@@ -36,125 +161,39 @@
                      keepshell:PlaceholderBehavior.Placeholder="Логин, ID или ссылка на канал"
                      AutomationProperties.Name="Логин, ID или ссылка на канал" />
         </DockPanel>
-
-        <DockPanel Margin="0,0,0,12">
-            <TextBlock Text="Режим переключения"
-                       Style="{StaticResource Setting.RowLabel}"
-                       VerticalAlignment="Center" />
-            <ComboBox ItemsSource="{Binding SwitchModeOptions}"
-                      SelectedItem="{Binding SelectedSwitchModeOption, Mode=TwoWay}"
-                      DisplayMemberPath="DisplayName"
-                      Style="{StaticResource ComboBox.Form}" />
-        </DockPanel>
-
-        <DockPanel Margin="0,0,0,12"
-                   Visibility="{Binding IsPreselectedNextMode, Converter={StaticResource BoolToVisibility}}">
-            <TextBlock Text="Следующий канал"
-                       Style="{StaticResource Setting.RowLabel}"
-                       VerticalAlignment="Center" />
-            <ComboBox ItemsSource="{Binding PreselectedNextOptions}"
-                      SelectedItem="{Binding SelectedPreselectedNextOption, Mode=TwoWay}"
-                      DisplayMemberPath="DisplayName"
-                      Style="{StaticResource ComboBox.Form}" />
-        </DockPanel>
+        <Button Content="Подключить свой канал"
+                Command="{Binding AuthorizeOwnChannelCommand}"
+                Visibility="{Binding SupportsOwnChannelAuthorization, Converter={StaticResource BoolToVisibility}}"
+                Style="{StaticResource Button.Secondary}"
+                HorizontalAlignment="Left" />
 
         <TextBlock Text="{Binding StatusNotice}"
                    Style="{StaticResource Form.Hint}"
                    keepshell:SeverityBrushBehavior.Foreground="{Binding StatusNoticeSeverity}"
                    TextWrapping="Wrap"
-                   Margin="0,0,0,8"
+                   Margin="0,4,0,0"
                    Visibility="{Binding StatusNotice, Converter={StaticResource NullToVisibility}}" />
 
-        <ItemsControl ItemsSource="{Binding VisibleChannels}"
-                      Visibility="{Binding HasChannels, Converter={StaticResource BoolToVisibility}}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type vm:ChannelCatalogItemViewModel}">
-                    <Border BorderBrush="{DynamicResource Border.Subtle}"
-                            BorderThickness="0,0,0,1"
-                            Padding="0,8,0,10"
-                            Margin="0,0,0,6">
-                        <StackPanel>
-                            <DockPanel Margin="0,0,0,6">
-                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                    <Button Content="Сделать активным"
-                                            Style="{StaticResource Button.Secondary}"
-                                            Command="{Binding MakeActiveCommand}"
-                                            Margin="0,0,6,0"
-                                            Visibility="{Binding IsActive, Converter={StaticResource InverseBoolToVisibility}}" />
-                                    <TextBlock Text="Активный"
-                                               Foreground="{DynamicResource State.SuccessText}"
-                                               FontWeight="SemiBold"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,8,0"
-                                               Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}" />
-                                    <Button Content="Удалить"
-                                            Style="{StaticResource Button.Secondary}"
-                                            Command="{Binding RemoveCommand}" />
-                                </StackPanel>
-
-                                <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
-                                         Style="{StaticResource TextBox.Form}"
-                                         AutomationProperties.Name="Название канала"
-                                         Margin="0,0,8,0" />
-                            </DockPanel>
-
-                            <TextBlock Text="{Binding ChannelId}"
-                                       Style="{StaticResource Form.Hint}"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding ChannelId}"
-                                       Margin="0,0,0,6" />
-
-                            <CheckBox Content="Фоновый мониторинг эфира"
-                                      IsChecked="{Binding MonitoringEnabled, Mode=TwoWay}"
-                                      Margin="0,0,0,6" />
-
-                            <ItemsControl ItemsSource="{Binding Roles}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:ChannelAccountRoleViewModel}">
-                                        <StackPanel Margin="0,8,0,0">
-                                            <TextBlock Text="{Binding Title}"
-                                                       Style="{StaticResource Form.Label}"
-                                                       FontWeight="SemiBold"
-                                                       Margin="0,0,0,4" />
-                                            <DockPanel>
-                                                <Button DockPanel.Dock="Right"
-                                                        Content="Войти"
-                                                        AutomationProperties.Name="{Binding Title, StringFormat='Войти как {0}'}"
-                                                        Style="{StaticResource Button.Secondary}"
-                                                        Command="{Binding AuthorizeCommand}"
-                                                        Margin="8,0,0,0" />
-                                                <Button DockPanel.Dock="Right"
-                                                        Content="Проверить"
-                                                        AutomationProperties.Name="{Binding Title, StringFormat='Проверить доступ. {0}'}"
-                                                        Style="{StaticResource Button.Secondary}"
-                                                        Command="{Binding VerifyCommand}"
-                                                        Margin="8,0,0,0" />
-                                                <ComboBox ItemsSource="{Binding Accounts}"
-                                                          SelectedItem="{Binding SelectedAccount, Mode=TwoWay}"
-                                                          IsSynchronizedWithCurrentItem="False"
-                                                          DisplayMemberPath="DisplayName"
-                                                          Style="{StaticResource ComboBox.Form}"
-                                                          AutomationProperties.Name="{Binding Title}"
-                                                          IsEnabled="{Binding CanSelectAccount}" />
-                                            </DockPanel>
-                                            <TextBlock Text="{Binding Status}"
-                                                       Style="{StaticResource Form.Hint}"
-                                                       keepshell:SeverityBrushBehavior.Foreground="{Binding StatusSeverity}"
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,4,0,0" />
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <TextBlock Text="Подключите свой канал через вход или добавьте канал по логину, ID или ссылке."
-                   Style="{StaticResource Form.Hint}"
-                   TextWrapping="Wrap"
-                   Visibility="{Binding HasChannels, Converter={StaticResource InverseBoolToVisibility}}" />
+        <TextBlock Text="Переключение каналов"
+                   Style="{StaticResource Setting.BlockTitle}" />
+        <DockPanel Margin="0,0,0,8">
+            <TextBlock Text="Режим"
+                       Style="{StaticResource Setting.RowLabel}" />
+            <ComboBox ItemsSource="{Binding SwitchModeOptions}"
+                      SelectedItem="{Binding SelectedSwitchModeOption, Mode=TwoWay}"
+                      DisplayMemberPath="DisplayName"
+                      Style="{StaticResource ComboBox.Form}"
+                      AutomationProperties.Name="Режим переключения" />
+        </DockPanel>
+        <DockPanel Visibility="{Binding IsPreselectedNextMode, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="Следующий канал"
+                       Style="{StaticResource Setting.RowLabel}" />
+            <ComboBox ItemsSource="{Binding PreselectedNextOptions}"
+                      SelectedItem="{Binding SelectedPreselectedNextOption, Mode=TwoWay}"
+                      IsSynchronizedWithCurrentItem="False"
+                      DisplayMemberPath="DisplayName"
+                      Style="{StaticResource ComboBox.Form}"
+                      AutomationProperties.Name="Следующий канал" />
+        </DockPanel>
     </StackPanel>
 </UserControl>

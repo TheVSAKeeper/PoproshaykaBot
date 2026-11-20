@@ -68,8 +68,8 @@ public sealed partial class ChatDisplayTileViewModel : DashboardTileViewModel, I
     {
         _targetChannelProvider = targetChannelProvider;
         _uiSettings = uiSettings;
-        TwitchChat = new(shellLauncher);
-        PlatformChat = new(shellLauncher);
+        TwitchChat = new(shellLauncher, platformRegistry);
+        PlatformChat = new(shellLauncher, platformRegistry);
         _dialogService = dialogService;
         _store = store;
         _platformRegistry = platformRegistry;

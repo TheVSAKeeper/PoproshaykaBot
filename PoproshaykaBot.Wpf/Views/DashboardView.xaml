@@ -26,8 +26,8 @@
                                           VerticalAlignment="Center"
                                           Visibility="{Binding HasMultiplePlatforms, Converter={StaticResource InverseBoolToVisibility}}" />
                 <Button Click="OnChatPlatformMenuClick"
-                        ToolTip="{Binding SelectedMode.Label, StringFormat=Режим чата – {0}}"
-                        AutomationProperties.Name="Площадка чата трансляции"
+                        ToolTip="{Binding SelectedMode.Label, StringFormat='Как показывать чат трансляции – {0}'}"
+                        AutomationProperties.Name="Отображение чата трансляции"
                         AutomationProperties.HelpText="{Binding SelectedMode.Label}"
                         Visibility="{Binding HasMultiplePlatforms, Converter={StaticResource BoolToVisibility}}">
                     <Button.Style>

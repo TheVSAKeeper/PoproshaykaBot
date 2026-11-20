@@ -23,27 +23,27 @@ public sealed class TilePlatformSelection
 
     public bool HasMultiplePlatforms => AvailablePlatforms.Count > 1;
 
-    public string SelectedDisplayName => PlatformVisuals.GetDisplayName(SelectedPlatform);
+    public string SelectedDisplayName => GetSelectedPlatform()?.DisplayName ?? PlatformVisuals.GetDisplayName(SelectedPlatform);
 
     public IChatPlatform? GetSelectedPlatform() => _platformRegistry.Find(SelectedPlatform);
 
     public bool Refresh()
     {
         var previousSelected = SelectedPlatform;
-        var available = new List<StreamingPlatform>(PlatformVisuals.OrderedPlatforms.Count);
+        var platforms = _platformRegistry.All;
+        var available = new List<StreamingPlatform>(platforms.Count);
 
-        foreach (var platformId in PlatformVisuals.OrderedPlatforms)
+        foreach (var platform in platforms)
         {
-            if (_platformRegistry.TryGet(platformId, out var platform)
-                && (platform.IsEnabled || platform.StreamStatus.CurrentStatus == StreamStatus.Online))
+            if (platform.IsEnabled || platform.StreamStatus.CurrentStatus == StreamStatus.Online)
             {
-                available.Add(platformId);
+                available.Add(platform.Id);
             }
         }
 
         if (available.Count == 0)
         {
-            var first = _platformRegistry.All.Count > 0 ? _platformRegistry.All[0].Id : StreamingPlatform.Twitch;
+            var first = platforms.Count > 0 ? platforms[0].Id : StreamingPlatform.Twitch;
             available.Add(first);
         }
 

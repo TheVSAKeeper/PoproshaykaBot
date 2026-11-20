@@ -14,6 +14,7 @@ public sealed partial class ChannelGroupsSettingsSectionViewModel : ObservableOb
     private readonly ChannelCatalogStore _catalogStore;
     private readonly IUserStatisticsRepository _statisticsRepository;
     private readonly BroadcastHistoryStore? _broadcastHistory;
+    private readonly IChatPlatformRegistry? _platformRegistry;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedGroup))]
@@ -26,7 +27,8 @@ public sealed partial class ChannelGroupsSettingsSectionViewModel : ObservableOb
     public ChannelGroupsSettingsSectionViewModel(
         ChannelCatalogStore catalogStore,
         IUserStatisticsRepository statisticsRepository,
-        BroadcastHistoryStore? broadcastHistory = null)
+        BroadcastHistoryStore? broadcastHistory = null,
+        IChatPlatformRegistry? platformRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(catalogStore);
         ArgumentNullException.ThrowIfNull(statisticsRepository);
@@ -34,6 +36,7 @@ public sealed partial class ChannelGroupsSettingsSectionViewModel : ObservableOb
         _catalogStore = catalogStore;
         _statisticsRepository = statisticsRepository;
         _broadcastHistory = broadcastHistory;
+        _platformRegistry = platformRegistry;
     }
 
     public event EventHandler? Edited;
@@ -199,9 +202,9 @@ public sealed partial class ChannelGroupsSettingsSectionViewModel : ObservableOb
             .. map
                 .OrderBy(static pair => pair.Key.Platform)
                 .ThenBy(static pair => pair.Value, StringComparer.OrdinalIgnoreCase)
-                .Select(static pair => new ChannelCatalogChoice(
+                .Select(pair => new ChannelCatalogChoice(
                     pair.Key,
-                    $"{PlatformVisuals.GetDisplayName(pair.Key.Platform)} · {pair.Value}")),
+                    $"{PlatformVisuals.GetDisplayName(pair.Key.Platform, _platformRegistry)} · {pair.Value}")),
         ];
     }
 }

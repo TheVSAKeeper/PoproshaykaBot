@@ -518,6 +518,8 @@ public partial class App : Application
         services.AddSingleton<DashboardTileViewModel, ChatDisplayTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, ChatOverlayPreviewTileViewModel>();
         services.AddSingleton<DashboardTileViewModel, MultiplatformChatTileViewModel>();
+        services.AddSingleton<MultistreamTileViewModel>();
+        services.AddSingleton<DashboardTileViewModel>(static provider => provider.GetRequiredService<MultistreamTileViewModel>());
 
         services.AddSingleton<StatisticsPreload>(static provider => new(
             provider.GetRequiredService<UserStatisticsLoader>(),
@@ -532,6 +534,8 @@ public partial class App : Application
                 action();
             }));
         services.AddSingleton<DashboardViewModel>();
+        services.AddSingleton<IMultistreamPlatformControls, YouTubeMultistreamPlatformControls>();
+        services.AddSingleton<MultistreamPageViewModel>();
         services.AddSingleton<LogsViewModel>();
         services.AddSingleton<UserStatisticsPageViewModel>();
         services.AddSingleton<GameBoxArtProvider>();

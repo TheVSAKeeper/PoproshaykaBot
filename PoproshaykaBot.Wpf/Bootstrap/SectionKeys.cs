@@ -3,6 +3,7 @@
 public static class SectionKeys
 {
     public const string Overview = "overview";
+    public const string Multistream = "multistream";
     public const string Users = "users";
     public const string Streams = "streams";
     public const string Commands = "commands";
@@ -28,7 +29,7 @@ public static class SectionKeys
     public const string OverviewObsFull = Overview + ObsFullSuffix;
     public const string OverviewEdit = Overview + EditSuffix;
 
-    public static IReadOnlyList<string> All { get; } = [Overview, Users, Streams, Commands, Logs, Diagnostics, Settings];
+    public static IReadOnlyList<string> All { get; } = [Overview, Multistream, Users, Streams, Commands, Logs, Diagnostics, Settings];
 
     public static IReadOnlyList<string> Selected { get; } = [UsersSelected, StreamsSelected, CommandsSelected];
 

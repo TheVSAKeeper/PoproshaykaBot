@@ -11,7 +11,6 @@ using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Bootstrap;
 using PoproshaykaBot.Wpf.Infrastructure;
-using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Globalization;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -81,7 +80,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
         _switchPlatformToolbarItem = new ToolbarItemViewModel(
             PackIconLucideKind.ArrowLeftRight,
             SwitchPlatformCommand,
-            toolTip: "Переключить площадку")
+            toolTip: "Сменить площадку в превью стрима")
         {
             IsVisible = _platformSelection.HasMultiplePlatforms,
         };
@@ -113,7 +112,7 @@ public sealed partial class StreamPreviewTileViewModel : DashboardTileViewModel,
 
     public override bool ContentFillsTile => Thumbnail is not null;
 
-    public string SelectedPlatformName => PlatformVisuals.GetDisplayName(SelectedPlatform);
+    public string SelectedPlatformName => _platformSelection.SelectedDisplayName;
 
     public int DecodeWidth { get; private set; } = MinDecodeWidth;
 

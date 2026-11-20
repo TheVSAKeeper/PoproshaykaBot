@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.Input;
 using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Users;
-using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using System.Globalization;
 using System.Windows.Media;
 
@@ -38,7 +37,8 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
         bool isBot,
         bool isFirstTime,
         string authorColorHex,
-        Action<PlatformUserKey>? openUser)
+        Action<PlatformUserKey>? openUser,
+        string platformDisplayName)
     {
         Key = key;
         Channel = channel;
@@ -48,7 +48,7 @@ public sealed partial class ChatFeedMessageItemViewModel : ChatFeedItemViewModel
         _messageText = messageText;
         UserId = userId;
         UserKey = new PlatformUserKey(key.Platform, userId);
-        PlatformDisplayName = PlatformVisuals.GetDisplayName(key.Platform);
+        PlatformDisplayName = platformDisplayName;
         IsHistorical = isHistorical;
         IsBot = isBot;
         IsFirstTime = isFirstTime;
@@ -172,10 +172,15 @@ public sealed class ChatFeedHistoryBoundaryItemViewModel : ChatFeedItemViewModel
 
 public sealed class ChatFeedGapItemViewModel : ChatFeedItemViewModel
 {
-    public ChatFeedGapItemViewModel(StreamingPlatform platform, string channel, string liveChatId, DateTimeOffset detectedAtUtc)
+    public ChatFeedGapItemViewModel(
+        StreamingPlatform platform,
+        string channel,
+        string liveChatId,
+        DateTimeOffset detectedAtUtc,
+        string platformDisplayName)
     {
         Platform = platform;
-        PlatformDisplayName = PlatformVisuals.GetDisplayName(platform);
+        PlatformDisplayName = platformDisplayName;
         Channel = channel;
         LiveChatId = liveChatId;
         DetectedAtUtc = detectedAtUtc;

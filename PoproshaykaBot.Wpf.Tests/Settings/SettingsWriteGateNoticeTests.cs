@@ -8,6 +8,7 @@ using PoproshaykaBot.Core.Infrastructure;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Lifecycle;
 using PoproshaykaBot.Core.Infrastructure.Hosting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Polls;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
@@ -199,7 +200,8 @@ public class SettingsWriteGateNoticeTests
             null!,
             new FakeDialogService(_ => { }),
             null!,
-            bus);
+            bus,
+            new ChatPlatformRegistry([]));
 
         tile.Items[0].DuplicateCommand.Execute(null);
 

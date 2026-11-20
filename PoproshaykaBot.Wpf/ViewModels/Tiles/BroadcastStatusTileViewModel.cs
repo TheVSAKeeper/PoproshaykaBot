@@ -13,7 +13,6 @@ using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Wpf.Infrastructure;
-using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Tiles;
 
@@ -48,7 +47,7 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
     private string _modeText = "Ручной";
 
     [ObservableProperty]
-    private string _platformsText = "Twitch";
+    private string _platformsText = "–";
 
     [ObservableProperty]
     private int _sentCount;
@@ -220,32 +219,27 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
 
     private string? ResolvePrimaryChannel()
     {
-        foreach (var platformId in PlatformVisuals.OrderedPlatforms)
+        var platforms = _platformRegistry.All;
+        foreach (var platform in platforms)
         {
-            if (!_broadcastState.IsPlatformLive(platformId))
-            {
-                continue;
-            }
-
-            if (!string.IsNullOrWhiteSpace(_platformRegistry.GetConfiguredChannel(platformId)))
-            {
-                return _platformRegistry.GetConfiguredChannel(platformId);
-            }
-        }
-
-        foreach (var platformId in PlatformVisuals.OrderedPlatforms)
-        {
-            if (_platformRegistry.TryGet(platformId, out var platform)
-                && platform.IsEnabled
+            if (_broadcastState.IsPlatformLive(platform.Id)
                 && !string.IsNullOrWhiteSpace(platform.ConfiguredChannel))
             {
                 return platform.ConfiguredChannel;
             }
         }
 
-        foreach (var platformId in PlatformVisuals.OrderedPlatforms)
+        foreach (var platform in platforms)
         {
-            var configured = _platformRegistry.GetConfiguredChannel(platformId);
+            if (platform.IsEnabled && !string.IsNullOrWhiteSpace(platform.ConfiguredChannel))
+            {
+                return platform.ConfiguredChannel;
+            }
+        }
+
+        foreach (var platform in platforms)
+        {
+            var configured = platform.ConfiguredChannel;
             if (!string.IsNullOrWhiteSpace(configured))
             {
                 return configured;
@@ -263,25 +257,22 @@ public sealed partial class BroadcastStatusTileViewModel : DashboardTileViewMode
         }
 
         var labels = new List<string>(targets.Count);
-        foreach (var platform in PlatformVisuals.OrderedPlatforms)
+        foreach (var platform in targets.Order())
         {
-            if (targets.Contains(platform))
+            var display = _platformRegistry.GetDisplayName(platform);
+            if (_catalogStore is not null && _catalogStore.GetConfiguredChannels(platform).Count > 1)
             {
-                var display = PlatformVisuals.GetDisplayName(platform);
-                if (_catalogStore is not null && _catalogStore.GetConfiguredChannels(platform).Count > 1)
+                var active = _platformRegistry.GetConfiguredChannel(platform);
+                if (!string.IsNullOrWhiteSpace(active))
                 {
-                    var active = _platformRegistry.GetConfiguredChannel(platform);
-                    if (!string.IsNullOrWhiteSpace(active))
-                    {
-                        display = $"{display} ({active})";
-                    }
+                    display = $"{display} ({active})";
                 }
-
-                labels.Add(display);
             }
+
+            labels.Add(display);
         }
 
-        return labels.Count > 0 ? string.Join(", ", labels) : "–";
+        return string.Join(", ", labels);
     }
 
     private static (string text, StatusSeverity severity) ResolveStatus(bool isActive, bool isAuto, bool streamOnline)

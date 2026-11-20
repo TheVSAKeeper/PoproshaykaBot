@@ -1,5 +1,6 @@
 ﻿using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Settings;
+using PoproshaykaBot.Core.Platforms;
 using System.ComponentModel;
 
 namespace PoproshaykaBot.Wpf.ViewModels.Settings;
@@ -10,6 +11,8 @@ public sealed record SettingsSectionBlockDescriptor(
     string? Hint,
     object Content) : INotifyPropertyChanged
 {
+    public StreamingPlatform? Platform { get; init; }
+
     public event PropertyChangedEventHandler? PropertyChanged
     {
         add { }
@@ -49,7 +52,8 @@ public sealed record SettingsSectionEvent(
 public sealed record SettingsSectionSaveOutcome(
     bool Written,
     IReadOnlyList<SettingsSectionEvent> Events,
-    bool RequiresHttpServerRestart = false)
+    bool RequiresHttpServerRestart = false,
+    string? FailureMessage = null)
 {
     public static readonly SettingsSectionSaveOutcome Clean = new(true, []);
 

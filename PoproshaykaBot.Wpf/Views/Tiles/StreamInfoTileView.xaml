@@ -110,27 +110,18 @@
             </StackPanel>
         </Grid>
 
-        <StackPanel Margin="0,0,0,8"
-                    Visibility="{Binding HasMultipleChannels, Converter={StaticResource BoolToVisibility}}">
-            <DockPanel LastChildFill="True">
-                <TextBlock DockPanel.Dock="Left"
-                           Text="Канал"
-                           Style="{StaticResource TextBlock.Subtle}"
-                           FontSize="{DynamicResource Font.Size.XS}"
-                           VerticalAlignment="Center"
-                           Margin="0,0,8,0" />
-                <ComboBox ItemsSource="{Binding ConfiguredChannels}"
-                          SelectedItem="{Binding SelectedChannelOption}"
-                          DisplayMemberPath="DisplayName"
-                          IsEnabled="{Binding CanSwitchChannel}"
-                          FontSize="{DynamicResource Font.Size.XS}" />
-            </DockPanel>
-            <TextBlock Text="{Binding PreselectedNextText}"
-                       Style="{StaticResource TextBlock.Subtle}"
-                       FontSize="{DynamicResource Font.Size.XS}"
-                       Margin="0,3,0,0"
-                       Visibility="{Binding HasPreselectedNext, Converter={StaticResource BoolToVisibility}}" />
-        </StackPanel>
+        <TextBlock Text="{Binding ActiveChannelDisplayName, StringFormat='Активный канал: {0}'}"
+                   ToolTip="{Binding ActiveChannelDisplayName}"
+                   Style="{StaticResource TextBlock.Subtle}"
+                   FontSize="{DynamicResource Font.Size.XS}"
+                   TextTrimming="CharacterEllipsis"
+                   Visibility="{Binding HasActiveChannel, Converter={StaticResource BoolToVisibility}}" />
+        <TextBlock Text="{Binding PreselectedNextText}"
+                   Style="{StaticResource TextBlock.Subtle}"
+                   FontSize="{DynamicResource Font.Size.XS}"
+                   TextWrapping="Wrap"
+                   Margin="0,3,0,0"
+                   Visibility="{Binding HasPreselectedNext, Converter={StaticResource BoolToVisibility}}" />
 
         <TextBlock Text="Найдено несколько активных трансляций YouTube"
                    Foreground="{DynamicResource State.WarningText}"

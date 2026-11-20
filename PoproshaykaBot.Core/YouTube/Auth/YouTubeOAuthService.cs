@@ -89,6 +89,9 @@ public sealed class YouTubeOAuthService(
         return tokenRefresher.HasUsableAccessToken(role, contextId);
     }
 
+    public bool? HasAuthorizationMaterial(PlatformAuthRole role, string? contextId) =>
+        accountWriter.HasAuthorizationMaterial(role, contextId);
+
     public bool TryClearAccessToken(PlatformAuthRole role, string expectedToken)
     {
         return accountWriter.TryClearAccessToken(role, expectedToken);

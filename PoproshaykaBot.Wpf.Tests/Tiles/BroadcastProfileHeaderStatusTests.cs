@@ -3,11 +3,14 @@ using KeepShell.Services.Modal;
 using KeepShell.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 using PoproshaykaBot.Core.Broadcast.Profiles;
+using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Infrastructure.Events;
 using PoproshaykaBot.Core.Infrastructure.Events.Broadcasting;
+using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
 using PoproshaykaBot.Core.Streaming;
 using PoproshaykaBot.Wpf.Infrastructure.Dashboard;
+using PoproshaykaBot.Wpf.ViewModels.Settings;
 using PoproshaykaBot.Wpf.ViewModels.Tiles;
 using System.IO;
 
@@ -98,7 +101,7 @@ public class BroadcastProfileHeaderStatusTests
             var manager = new BroadcastProfilesManager(store, null!, bus, TimeProvider.System, NullLogger<BroadcastProfilesManager>.Instance);
             manager.Upsert(new() { Name = "Вечер" });
 
-            using var tile = new BroadcastProfilesTileViewModel(manager, store, new IdleStreamStatus(), null!, null!, null!, new SilentDialogService(), null!, bus);
+            using var tile = new BroadcastProfilesTileViewModel(manager, store, new IdleStreamStatus(), null!, null!, null!, new SilentDialogService(), null!, bus, new ChatPlatformRegistry([]));
             var profile = manager.GetAll()[0];
 
             await bus.PublishAsync(new BroadcastProfileApplying(profile));
@@ -118,6 +121,55 @@ public class BroadcastProfileHeaderStatusTests
         {
             File.Delete(path);
         }
+    }
+
+    [Test]
+    public void BroadcastProfileViews_share_saved_targets_and_show_the_registered_name()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"broadcast-profiles-{Guid.NewGuid():N}.json");
+        var platformsPath = Path.ChangeExtension(path, ".platforms.json");
+
+        try
+        {
+            var registry = new ChatPlatformRegistry([new VkPlatform()]);
+            var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+            var store = new BroadcastProfilesStore(null, path);
+            var platformsStore = new BroadcastProfilePlatformsStore(null, platformsPath);
+            var manager = new BroadcastProfilesManager(store, null!, bus, TimeProvider.System, NullLogger<BroadcastProfilesManager>.Instance, platformsStore);
+            var profile = new BroadcastProfile { Name = "Вечер" };
+            manager.Upsert(profile, [StreamingPlatform.VkLive, StreamingPlatform.YouTube]);
+
+            using var tile = new BroadcastProfilesTileViewModel(manager, store, new IdleStreamStatus(), null!, null!, null!, new SilentDialogService(), null!, bus, registry);
+            var settings = new BroadcastProfilesSettingsSectionViewModel(tile);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(settings.Profiles.Items, Is.SameAs(tile.Items));
+                Assert.That(tile.Items.Single().TargetPlatforms, Is.EqualTo(new[]
+                {
+                    new BroadcastProfileTarget(StreamingPlatform.YouTube, "YouTube"),
+                    new BroadcastProfileTarget(StreamingPlatform.VkLive, "VK Live"),
+                }));
+                Assert.That(new BroadcastProfilePlatformsStore(null, platformsPath).GetPlatformsOrDefault(profile.Id),
+                    Is.EquivalentTo(new[] { StreamingPlatform.VkLive, StreamingPlatform.YouTube }));
+            });
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(platformsPath);
+        }
+    }
+
+    private sealed class VkPlatform : IChatPlatform
+    {
+        public StreamingPlatform Id => StreamingPlatform.VkLive;
+        public string DisplayName => "VK Live";
+        public PlatformCapabilities Capabilities => PlatformCapabilities.None;
+        public bool IsEnabled => true;
+        public bool IsConnected => false;
+        public IStreamStatus StreamStatus { get; } = new IdleStreamStatus();
+        public IPlatformMessenger Messenger => throw new NotSupportedException();
     }
 
     private sealed class IdleStreamStatus : IStreamStatus
@@ -162,6 +214,7 @@ public class BroadcastProfileHeaderStatusTests
             (_, _) => Task.CompletedTask,
             _ => Task.CompletedTask,
             _ => { },
-            _ => { });
+            _ => { },
+            []);
     }
 }

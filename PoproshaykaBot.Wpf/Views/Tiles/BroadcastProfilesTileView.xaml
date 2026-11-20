@@ -96,11 +96,15 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <platformControls:PlatformIconView Platform="{Binding Mode=OneWay}"
-                                                                           Width="12"
-                                                                           Height="12"
-                                                                           Margin="0,0,4,0"
-                                                                           VerticalAlignment="Center" />
+                                        <Border Background="Transparent"
+                                                ToolTip="{Binding DisplayName}"
+                                                Margin="0,0,4,0"
+                                                VerticalAlignment="Center">
+                                            <platformControls:PlatformIconView Platform="{Binding Platform, Mode=OneWay}"
+                                                                               AutomationProperties.Name="{Binding DisplayName}"
+                                                                               Width="12"
+                                                                               Height="12" />
+                                        </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

@@ -203,6 +203,14 @@ public sealed class Stage8Layer3Tests
         Assert.That(dialog.GetSelectedPlatforms(), Is.EquivalentTo(new[] { StreamingPlatform.Twitch, StreamingPlatform.YouTube }));
         Assert.That(dialog.ConfirmCommand.CanExecute(null), Is.True);
 
+        dialog.LoadFrom(new BroadcastProfile { Name = "Сохранённый профиль" },
+            new HashSet<StreamingPlatform> { StreamingPlatform.VkLive });
+        Assert.Multiple(() =>
+        {
+            Assert.That(dialog.GetSelectedPlatforms(), Is.EqualTo(new[] { StreamingPlatform.VkLive }));
+            Assert.That(dialog.ConfirmCommand.CanExecute(null), Is.True);
+        });
+
         foreach (var option in dialog.TargetPlatforms)
         {
             option.IsSelected = false;

@@ -116,6 +116,9 @@ public sealed class TwitchOAuthService(
         return refresher.HasUsableAccessToken(role, contextId);
     }
 
+    public bool? HasAuthorizationMaterial(PlatformAuthRole role, string? contextId) =>
+        accountWriter.HasAuthorizationMaterial(role, contextId);
+
     public bool TryClearAccessToken(PlatformAuthRole role, string failedAccessToken)
     {
         return accountWriter.TryClearAccessToken(role, failedAccessToken);

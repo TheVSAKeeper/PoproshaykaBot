@@ -53,6 +53,9 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
         _chatSettingsProvider = chatSettingsProvider;
         _platformRegistry = platformRegistry;
         _uiDispatcher = uiDispatcher;
+        PlatformOptions = platformRegistry is null
+            ? PlatformFilterOption.AllOptions
+            : [PlatformFilterOption.All, .. platformRegistry.All.Select(static platform => new PlatformFilterOption(platform.Id, platform.DisplayName))];
 
         _subscriptions.Add(eventBus.SubscribeOnUi<ChatHistoryLoaded>(OnChatHistoryLoaded));
         _subscriptions.Add(eventBus.SubscribeOnUi<ChatMessageReceived>(OnChatMessageReceived));
@@ -78,7 +81,7 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
 
     public override bool GrowsWithSpace => true;
 
-    public IReadOnlyList<PlatformFilterOption> PlatformOptions => PlatformFilterOption.AllOptions;
+    public IReadOnlyList<PlatformFilterOption> PlatformOptions { get; }
 
     public ObservableCollection<ChatFeedItemViewModel> Items { get; } = [];
 
@@ -328,7 +331,8 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
             gapEvent.Platform,
             gapEvent.Channel,
             gapEvent.LiveChatId,
-            gapEvent.DetectedAtUtc);
+            gapEvent.DetectedAtUtc,
+            PlatformVisuals.GetDisplayName(gapEvent.Platform, _platformRegistry));
         _allItems.Add(gapItem);
         TrimAndEnsureHistoryBoundary();
         RebuildVisibleItems();
@@ -360,7 +364,8 @@ public sealed partial class MultiplatformChatTileViewModel : DashboardTileViewMo
             entry.IsBot,
             entry.IsFirstTime,
             entry.Color,
-            key => UserRequested?.Invoke(this, key));
+            key => UserRequested?.Invoke(this, key),
+            PlatformVisuals.GetDisplayName(entry.Platform, _platformRegistry));
     }
 
     private bool ShouldDisplayEntry(ChatMessageData entry, CommandResponseMark? responseOverride = null)

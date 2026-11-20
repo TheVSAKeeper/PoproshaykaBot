@@ -58,7 +58,7 @@ public sealed class YouTubeConnectionSettingsContributor : ISettingsSectionContr
                 "youtube/project",
                 "Google-проект",
                 "Ваш собственный проект Google Cloud и реквизиты Desktop-клиента.",
-                _youTube),
+                _youTube) { Platform = PoproshaykaBot.Core.Platforms.StreamingPlatform.YouTube },
             new(
                 "youtube/bot",
                 "Аккаунт бота",

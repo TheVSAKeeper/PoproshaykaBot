@@ -6,7 +6,6 @@ using PoproshaykaBot.Core.Chat;
 using PoproshaykaBot.Core.Obs;
 using PoproshaykaBot.Core.Platforms;
 using PoproshaykaBot.Core.Settings.Stores;
-using PoproshaykaBot.Wpf.Infrastructure.Platforms;
 using PoproshaykaBot.Wpf.ViewModels.Controls;
 using PoproshaykaBot.Wpf.Bootstrap;
 using System.Collections.ObjectModel;
@@ -17,7 +16,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
 {
     private readonly ObsIntegrationService _obsIntegration;
     private readonly ObsIntegrationStore _obsIntegrationStore;
-    private readonly IChatPlatformRegistry? _platformRegistry;
+    private readonly IChatPlatformRegistry _platformRegistry;
     private readonly ILogger<BroadcastProfileEditDialogViewModel> _logger;
 
     private bool _nameRequired = true;
@@ -58,7 +57,7 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
         ObsIntegrationService obsIntegration,
         ObsIntegrationStore obsIntegrationStore,
         ILogger<BroadcastProfileEditDialogViewModel> logger,
-        IChatPlatformRegistry? platformRegistry = null)
+        IChatPlatformRegistry platformRegistry)
     {
         Game = game;
         _obsIntegration = obsIntegration;
@@ -129,17 +128,14 @@ public sealed partial class BroadcastProfileEditDialogViewModel : ObservableObje
             existing.PropertyChanged -= OnTargetPlatformPropertyChanged;
         }
 
-        var ordered = _platformRegistry is not null
-            ? _platformRegistry.All.Select(static p => (p.Id, p.DisplayName))
-            : PlatformVisuals.OrderedPlatforms.Select(static p => (p, PlatformVisuals.GetDisplayName(p)));
+        var registered = _platformRegistry.All.Select(static platform => platform.Id);
+        var platforms = (selected is null ? registered : registered.Union(selected)).Order().ToArray();
 
         TargetPlatforms.Clear();
-        foreach (var (platform, displayName) in ordered)
+        foreach (var platform in platforms)
         {
-            var isSelected = selected is not null
-                ? selected.Contains(platform)
-                : platform == StreamingPlatform.Twitch;
-            var option = new ProfilePlatformOptionViewModel(platform, displayName, isSelected);
+            var isSelected = selected?.Contains(platform) ?? platform == platforms[0];
+            var option = new ProfilePlatformOptionViewModel(platform, _platformRegistry.GetDisplayName(platform), isSelected);
             option.PropertyChanged += OnTargetPlatformPropertyChanged;
             TargetPlatforms.Add(option);
         }
