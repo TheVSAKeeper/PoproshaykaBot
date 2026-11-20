@@ -93,6 +93,7 @@
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Right"
                                Text="Выберите канал для настройки ролей и мониторинга"
+                               TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource Fg.Muted}"
                                FontSize="{DynamicResource Font.Size.S}"
                                FontWeight="Normal"
@@ -157,57 +158,75 @@
                              ScrollViewer.VerticalScrollBarVisibility="Disabled"
                              AutomationProperties.Name="Список каналов площадки"
                              AutomationProperties.AutomationId="ChannelCatalogSelection">
+                        <ListBox.Template>
+                            <ControlTemplate TargetType="ListBox">
+                                <ItemsPresenter />
+                            </ControlTemplate>
+                        </ListBox.Template>
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ChannelCatalogItemViewModel}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition MinHeight="28" Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
-                                    <WrapPanel Grid.Row="0"
-                                               Grid.Column="0"
-                                               VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding DisplayName}"
+                                    <Grid Grid.Row="0"
+                                          Grid.Column="0"
+                                          HorizontalAlignment="Left"
+                                          VerticalAlignment="Center">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding DisplayName}"
+                                                   ToolTip="{Binding DisplayName}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextWrapping="NoWrap"
                                                    Foreground="{DynamicResource Fg.Primary}"
                                                    FontWeight="{DynamicResource Font.Weight.SemiBold}"
                                                    VerticalAlignment="Center"
                                                    Margin="0,0,8,0" />
-                                        <Border Style="{StaticResource Badge.Success}"
+                                        <Border Grid.Column="1"
+                                                Style="{StaticResource Badge.Success}"
                                                 VerticalAlignment="Center"
                                                 Margin="0,0,6,0"
                                                 Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
                                             <TextBlock Text="Активный"
                                                        FontSize="{DynamicResource Font.Size.Caption}" />
                                         </Border>
-                                        <Border Style="{StaticResource Badge.Info}"
+                                        <Border Grid.Column="2"
+                                                Style="{StaticResource Badge.Info}"
                                                 VerticalAlignment="Center"
                                                 Margin="0,0,6,0"
                                                 Visibility="{Binding IsPreselectedNext, Converter={StaticResource BoolToVisibility}}">
                                             <TextBlock Text="Следующий"
                                                        FontSize="{DynamicResource Font.Size.Caption}" />
                                         </Border>
-                                    </WrapPanel>
+                                    </Grid>
 
                                     <WrapPanel VerticalAlignment="Center">
                                         <WrapPanel.Style>
                                             <Style TargetType="WrapPanel">
-                                                <Setter Property="Grid.Row" Value="0" />
-                                                <Setter Property="Grid.Column" Value="1" />
-                                                <Setter Property="Grid.ColumnSpan" Value="1" />
-                                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                                <Setter Property="Margin" Value="12,0,0,0" />
+                                                <Setter Property="Grid.Row" Value="1" />
+                                                <Setter Property="Grid.Column" Value="0" />
+                                                <Setter Property="Grid.ColumnSpan" Value="3" />
+                                                <Setter Property="HorizontalAlignment" Value="Left" />
+                                                <Setter Property="Margin" Value="0,4,0,0" />
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsNarrowLayout, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
-                                                        <Setter Property="Grid.Row" Value="1" />
-                                                        <Setter Property="Grid.Column" Value="0" />
-                                                        <Setter Property="Grid.ColumnSpan" Value="2" />
-                                                        <Setter Property="HorizontalAlignment" Value="Left" />
-                                                        <Setter Property="Margin" Value="0,6,0,0" />
+                                                    <DataTrigger Binding="{Binding IsTwoColumnCards, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                                        <Setter Property="Grid.Row" Value="0" />
+                                                        <Setter Property="Grid.Column" Value="1" />
+                                                        <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                        <Setter Property="HorizontalAlignment" Value="Right" />
+                                                        <Setter Property="Margin" Value="12,0,0,0" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -252,18 +271,22 @@
                                                    FontSize="{DynamicResource Font.Size.S}"
                                                    Foreground="{DynamicResource Fg.Muted}"
                                                    VerticalAlignment="Center"
-                                                   Margin="0,0,10,0"
+                                                   Margin="0"
                                                    Visibility="{Binding SupportsMonitoring, Converter={StaticResource BoolToVisibility}}" />
-                                        <Button Content="Сделать активным"
-                                                Style="{StaticResource Button.Secondary}"
-                                                Command="{Binding MakeActiveCommand}"
-                                                AutomationProperties.Name="{Binding DisplayName, StringFormat='Сделать активным – {0}'}"
-                                                MinHeight="26"
-                                                Padding="10,2"
-                                                FontSize="{DynamicResource Font.Size.S}"
-                                                VerticalAlignment="Center"
-                                                Visibility="{Binding IsActive, Converter={StaticResource InverseBoolToVisibility}}" />
                                     </WrapPanel>
+
+                                    <Button Grid.Row="0"
+                                            Grid.Column="2"
+                                            Content="Сделать активным"
+                                            Style="{StaticResource Button.Secondary}"
+                                            Command="{Binding MakeActiveCommand}"
+                                            AutomationProperties.Name="{Binding DisplayName, StringFormat='Сделать активным – {0}'}"
+                                            MinHeight="26"
+                                            Padding="10,2"
+                                            FontSize="{DynamicResource Font.Size.S}"
+                                            Margin="10,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding IsActive, Converter={StaticResource InverseBoolToVisibility}}" />
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
